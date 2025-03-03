@@ -1,366 +1,182 @@
 ## Overview
 
-This document outlines the technical architecture for an AI-based IDE built using NestJS, TypeORM, and TypeScript. The system follows a modular microservices architecture with event-driven communication patterns.
+This document outlines the technical architecture for a modern web application built using Next.js 15, Prisma, and TypeScript. The system follows a full-stack architecture with tRPC for type-safe API communication.
 
 ## Technology Stack
 
-- **Backend Framework**: NestJS
-- **Database ORM**: TypeORM
+- **Framework**: Next.js 15
+- **Database ORM**: Prisma
 - **Language**: TypeScript
-- **Event Bus**: RabbitMQ
-- **Database**: PostgreSQL
-- **Authentication**: JWT + OAuth2
+- **Authentication**: NextAuth.js v5
+- **API Layer**: tRPC
+- **Styling**: Tailwind CSS
+- **Components**: Radix UI
+- **State Management**: TanStack Query (React Query)
 
-## Core Modules
+## Core Features
 
-### 1. API Gateway Module
+### 1. API Layer (tRPC)
 
 ```typescript
-// src/gateway/gateway.module.ts
-@Module({
-  imports: [
-    ClientsModule.register([
-      {
-        name: "AUTH_SERVICE",
-        transport: Transport.RMQ,
-        options: {
-          urls: ["amqp://localhost:5672"],
-          queue: "auth_queue",
-        },
+// src/server/api/root.ts
+import { createTRPCRouter } from "./trpc";
+
+export const appRouter = createTRPCRouter({
+  // Route definitions
+});
+
+export type AppRouter = typeof appRouter;
+```
+
+### 2. Authentication (NextAuth.js)
+
+```typescript
+// src/server/auth.ts
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import NextAuth from "next-auth";
+import { db } from "./db";
+
+export const { 
+  handlers: { GET, POST },
+  auth,
+  signIn,
+  signOut,
+} = NextAuth({
+  adapter: PrismaAdapter(db),
+  // Auth configuration
+});
+```
+
+### 3. Database Schema (Prisma)
+
+```prisma
+// prisma/schema.prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  // Other user fields
+}
+```
+
+### 4. Frontend Components
+
+```typescript
+// src/components/ui/button.tsx
+import { cva } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+
+export const buttonVariants = cva(
+  "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+        // Other variants
       },
-    ]),
-  ],
-  controllers: [ApiGatewayController],
-  providers: [ApiGatewayService],
-})
-export class ApiGatewayModule {}
-```
-
-### 2. Authentication Module
-
-```typescript
-// src/auth/entities/user.entity.ts
-@Entity()
-export class User {
-  @PrimaryGeneratedColumn("uuid")
-  id: string;
-
-  @Column({ unique: true })
-  email: string;
-
-  @Column()
-  password: string;
-
-  @Column({ type: "json", nullable: true })
-  preferences: Record<string, any>;
-}
-
-// src/auth/auth.service.ts
-@Injectable()
-export class AuthService {
-  constructor(
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
-    private jwtService: JwtService
-  ) {}
-
-  async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.userRepository.findOne({ where: { email } });
-    if (user && (await bcrypt.compare(password, user.password))) {
-      return user;
-    }
-    return null;
+    },
+    defaultVariants: {
+      variant: "default",
+    },
   }
-}
+);
 ```
-
-### 3. User Module
-
-```typescript
-// src/user/entities/profile.entity.ts
-@Entity()
-export class Profile {
-  @PrimaryGeneratedColumn("uuid")
-  id: string;
-
-  @OneToOne(() => User)
-  @JoinColumn()
-  user: User;
-
-  @Column({ type: "json" })
-  ideSettings: Record<string, any>;
-
-  @Column({ type: "json" })
-  aiPreferences: Record<string, any>;
-}
-```
-
-### 4. Product Module (IDE Core)
-
-```typescript
-// src/ide/entities/project.entity.ts
-@Entity()
-export class Project {
-  @PrimaryGeneratedColumn("uuid")
-  id: string;
-
-  @ManyToOne(() => User)
-  owner: User;
-
-  @Column()
-  name: string;
-
-  @Column({ type: "json" })
-  configuration: Record<string, any>;
-
-  @Column({ type: "jsonb" })
-  aiContext: Record<string, any>;
-}
-```
-
-## Event-Driven Architecture
-
-### Event Bus Configuration
-
-```typescript
-// src/common/event-bus/event-bus.module.ts
-@Module({
-  imports: [
-    ClientsModule.register([
-      {
-        name: "EVENT_BUS",
-        transport: Transport.RMQ,
-        options: {
-          urls: ["amqp://localhost:5672"],
-          queue: "main_event_queue",
-        },
-      },
-    ]),
-  ],
-  providers: [EventBusService],
-  exports: [EventBusService],
-})
-export class EventBusModule {}
-```
-
-### Event Handlers
-
-```typescript
-// src/ide/events/code-analysis.handler.ts
-@Injectable()
-export class CodeAnalysisHandler {
-  @EventPattern("code.analysis.requested")
-  async handleCodeAnalysis(@Payload() data: CodeAnalysisEvent) {
-    // AI-powered code analysis logic
-  }
-}
-```
-
-## Database Schema
-
-### TypeORM Configuration
-
-```typescript
-// src/config/typeorm.config.ts
-export const typeOrmConfig: TypeOrmModuleOptions = {
-  type: "postgres",
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT, 10),
-  username: process.env.DB_USERNAME,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_DATABASE,
-  entities: [User, Profile, Project],
-  migrations: ["dist/migrations/*.js"],
-  synchronize: false,
-  logging: true,
-};
-```
-
-## AI Integration Services
-
-### Code Analysis Service
-
-```typescript
-// src/ide/services/ai-analysis.service.ts
-@Injectable()
-export class AIAnalysisService {
-  constructor(
-    private readonly httpService: HttpService,
-    private readonly eventBus: EventBusService
-  ) {}
-
-  async analyzeCode(code: string, context: AIContext): Promise<AnalysisResult> {
-    // AI model integration logic
-  }
-}
-```
-
-### Code Completion Service
-
-```typescript
-// src/ide/services/code-completion.service.ts
-@Injectable()
-export class CodeCompletionService {
-  constructor(
-    private readonly aiService: AIService,
-    private readonly codeContextService: CodeContextService
-  ) {}
-
-  async getCompletion(
-    code: string,
-    position: Position,
-    context: CompletionContext
-  ): Promise<CompletionSuggestion[]> {
-    // Code completion logic
-  }
-}
-```
-
-## Security Implementations
-
-### Authentication Guard
-
-```typescript
-// src/auth/guards/jwt-auth.guard.ts
-@Injectable()
-export class JwtAuthGuard extends AuthGuard("jwt") {
-  constructor(private reflector: Reflector) {
-    super();
-  }
-
-  canActivate(context: ExecutionContext) {
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-
-    if (isPublic) {
-      return true;
-    }
-
-    return super.canActivate(context);
-  }
-}
-```
-
-## Deployment Architecture
-
-### Docker Configuration
-
-```dockerfile
-# Dockerfile
-FROM node:16-alpine
-
-WORKDIR /usr/src/app
-
-COPY package*.json ./
-RUN npm install
-
-COPY . .
-RUN npm run build
-
-EXPOSE 3000
-
-CMD ["npm", "run", "start:prod"]
-```
-
-### Docker Compose Setup
-
-```yaml
-# docker-compose.yml
-version: "3.8"
-services:
-  api:
-    build: .
-    ports:
-      - "3000:3000"
-    depends_on:
-      - postgres
-      - rabbitmq
-
-  postgres:
-    image: postgres:13
-    environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-```
-
-## Scaling Considerations
-
-1. **Horizontal Scaling**
-
-   - Use Kubernetes for container orchestration
-   - Implement load balancing at the API Gateway level
-   - Scale individual microservices independently
-
-2. **Performance Optimization**
-
-   - Implement caching strategies using Redis
-   - Optimize database queries and indexes
-   - Use WebSocket for real-time features
-
-3. **Monitoring and Logging**
-   - Implement ELK stack for centralized logging
-   - Use Prometheus and Grafana for metrics
-   - Set up application performance monitoring
 
 ## Development Workflow
 
 1. **Local Development**
 
    ```bash
-   # Start development environment
-   npm run start:dev
+   # Start development server
+   npm run dev
 
-   # Run database migrations
-   npm run typeorm migration:run
-
-   # Generate new migration
-   npm run typeorm migration:generate -- -n MigrationName
+   # Database operations
+   npm run db:generate  # Generate Prisma client
+   npm run db:push     # Push schema changes
+   npm run db:studio   # Open Prisma Studio
    ```
 
-2. **Testing Strategy**
+2. **Code Quality**
 
-   ```typescript
-   // src/ide/tests/code-analysis.service.spec.ts
-   describe("CodeAnalysisService", () => {
-     let service: CodeAnalysisService;
+   ```bash
+   # Type checking
+   npm run typecheck
 
-     beforeEach(async () => {
-       const module: TestingModule = await Test.createTestingModule({
-         providers: [CodeAnalysisService],
-       }).compile();
+   # Linting
+   npm run lint
+   npm run lint:fix
 
-       service = module.get<CodeAnalysisService>(CodeAnalysisService);
-     });
-
-     it("should analyze code correctly", async () => {
-       // Test implementation
-     });
-   });
+   # Formatting
+   npm run format:check
+   npm run format:write
    ```
+
+## Deployment
+
+The application is designed for deployment on modern hosting platforms like Vercel:
+
+```bash
+# Production build
+npm run build
+
+# Start production server
+npm run start
+```
+
+## Security Implementations
+
+- NextAuth.js for secure authentication
+- Environment variable validation using Zod
+- Type-safe API calls with tRPC
+- Secure headers and CSP configuration
+- Database connection pooling
+
+## Performance Optimizations
+
+1. **Next.js Features**
+   - App Router for improved routing
+   - Server Components for reduced client-side JS
+   - Automatic image optimization
+   - Edge runtime support
+
+2. **Data Fetching**
+   - TanStack Query for efficient caching
+   - Optimistic updates
+   - Automatic background revalidation
+
+3. **Build Optimizations**
+   - Tree shaking
+   - Code splitting
+   - Route prefetching
+
+## Monitoring and Analytics
+
+- Vercel Analytics integration
+- PostHog for product analytics
+- Error tracking and performance monitoring
 
 ## Future Considerations
 
-1. **AI Model Integration**
+1. **Feature Expansion**
+   - Enhanced authentication flows
+   - Real-time functionality
+   - Advanced caching strategies
 
-   - Support for multiple AI models
-   - Custom model training capabilities
-   - Model versioning and A/B testing
-
-2. **Extensibility**
-
-   - Plugin architecture
-   - Custom extension marketplace
-   - API versioning strategy
+2. **Performance**
+   - Edge Functions adoption
+   - Streaming SSR
+   - Partial prerendering
 
 3. **Developer Experience**
-   - Interactive documentation
-   - Developer portal
-   - API playground
+   - Enhanced type safety
+   - Improved testing infrastructure
+   - CI/CD pipeline optimization

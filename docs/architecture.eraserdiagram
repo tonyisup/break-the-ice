@@ -1,84 +1,72 @@
-cloud-architecture-diagram
-// External services
-QBO [icon: qlik, color:green]
-Stripe [icon: stripe]
-SendGrid [icon: azure-sendgrid-accounts]
-KotaPay [icon: dollar-sign]
+modern-web-app-architecture
+// External Services
+NextAuth [icon: key]
+Prisma [icon: database]
+PostHog [icon: analytics]
+Vercel [icon: cloud]
 
-// Main Features
-App [icon: azure-web-app, color:green]
-DB [icon:azure-sql-database]
-
-// Check Printing and Mailing
-PAM [icon: paper-plane] {
-  PAM Processing [icon: azure-function-apps] // Checkrun.PrintAndMail.Functions
-  PAM Printing [icon: printer]
-  PAM Billing [icon: money]
-  PAM Service Bus [icon: azure-service-bus]
-  PAM Storage [icon: azure-storage-blobs]
-  Check Rendering [icon: azure-function-apps]
+// Main Application
+NextApp [icon: react] {
+  // Server Components
+  ServerComponents [icon: server] {
+    AppRouter [icon: route]
+    APIRoutes [icon: api]
+    tRPCRouter [icon: network]
+  }
+  
+  // Client Components
+  ClientComponents [icon: browser] {
+    Pages [icon: file]
+    UIComponents [icon: component]
+    Hooks [icon: hook]
+  }
+  
+  // Data Layer
+  DataLayer [icon: database] {
+    PrismaClient [icon: database]
+    tRPCClient [icon: network]
+    QueryClient [icon: cache]
+  }
 }
 
-// Notifications
-Notifier [icon: mail] {
-  Notifier Dispatch [icon: azure-function-apps] // Checkrun.Notifier.Functions
-  Notifier Process [icon: azure-function-apps]
-  Notifier Service Bus [icon: azure-service-bus]
+// Database
+PostgreSQL [icon: postgresql]
+
+// Authentication
+AuthSystem [icon: key] {
+  NextAuthHandlers [icon: api]
+  OAuthProviders [icon: oauth]
+  PrismaAdapter [icon: adapter]
 }
 
-// QuickBooks Integration
-QBO Webhooks [icon: http] {
-  QBO Webhooks Dispatch [icon: azure-function-apps] // Checkrun.QuickBooks.Functions
-  QBO Webhooks Process [icon: azure-function-apps]
-  QBO Webhooks Service Bus [icon: azure-service-bus]
-}
+// Frontend Libraries
+TailwindCSS [icon: style]
+RadixUI [icon: ui]
 
-// Stripe Integration
-Stripe Accounting [icon: bank] {
-  Stripe Functions [icon: azure-function-apps] // Checkrun.Functions.Stripe
-  Stripe Models [icon: code-block]
-  Stripe Support [icon: support]
-}
-
-// PDF Imaging Services
-PDFImaging [icon: file-text] {
-  DynamicPDFRenderingEngine [icon: azure-function-apps]
-  TemplatesQuickBooks [icon: file]
-  PDFRenderingServiceCommon [icon: settings]
-  PDFImagingCommon [icon: tool]
-}
-
-// Common Utilities
-Utilities [icon: tool] {
-  Common Utility [icon: wrench]
+// Analytics & Monitoring
+Analytics [icon: chart] {
+  VercelAnalytics [icon: analytics]
+  PostHogClient [icon: tracking]
 }
 
 // Connections
-DB <> App, PAM, Notifier, QBO Webhooks, Stripe Accounting
-QBO <> QBO Webhooks
-Stripe <> Stripe Accounting
-App <> PAM, Notifier, QBO Webhooks, Stripe Accounting
+NextApp <> PostgreSQL
+NextApp <> AuthSystem
+AuthSystem <> NextAuth
+DataLayer <> Prisma
+ClientComponents <> TailwindCSS, RadixUI
+NextApp <> Analytics
+Analytics <> PostHog, Vercel
 
-// PAM Connections
-PAM Processing <> PAM Service Bus, PAM Storage, Check Rendering
-PAM Printing <> PAM Processing
-PAM Billing <> Stripe
+// Development Tools
+DevTools [icon: tools] {
+  TypeScript [icon: typescript]
+  ESLint [icon: lint]
+  Prettier [icon: format]
+}
 
-// PDF Imaging Connections
-Check Rendering <> PDFImaging
-DynamicPDFRenderingEngine <> PDFRenderingServiceCommon
-TemplatesQuickBooks <> PDFRenderingServiceCommon
-PDFRenderingServiceCommon <> PDFImagingCommon
-
-// Notifier Connections
-Notifier Dispatch <> Notifier Service Bus
-Notifier Service Bus <> Notifier Process
-Notifier Process <> SendGrid
-
-// QBO Connections
-QBO Webhooks Dispatch <> QBO Webhooks Service Bus
-QBO Webhooks Service Bus <> QBO Webhooks Process
-
-// Note: Components from v1 not present in current folder
-// Note: ACH, Admin, QBO Sync, DB Maintenance, Slack integration, Docusign
-// Note: These components exist in the full system but are not part of the current project scope
+// Build & Deploy
+BuildSystem [icon: build] {
+  NextBuild [icon: compile]
+  VercelDeploy [icon: deploy]
+}
