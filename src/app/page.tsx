@@ -7,7 +7,7 @@ export default async function Home() {
 
   return (
     <HydrateClient>
-      <main className="flex min-h-screen flex-col items-center justify-between bg-[#121212]">
+      <main className="flex min-h-screen flex-col items-center dark:bg-[#121212] light:bg-[#fafafa]">
         <header className="flex w-full justify-start p-4">
           {/* 
             TODO: display  menu
@@ -19,8 +19,7 @@ export default async function Home() {
             </button> */}
           <ModeToggle />
         </header>
-        <div className="container flex flex-col items-center justify-center gap-12 px-4 py-16">
-
+        <div className="flex justify-center items-center gap-12 px-4 py-16">
           {question && <QuestionComponent initialQuestion={question} />}
         </div>
       </main>
