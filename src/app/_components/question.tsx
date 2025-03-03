@@ -15,6 +15,8 @@ export function QuestionComponent({
 }) {
   const [currentQuestion, setCurrentQuestion] = useState(initialQuestion);
   const [nextQuestion, setNextQuestion] = useState<Question | null>(null);
+  const [questionHistory, setQuestionHistory] = useState<Question[]>([initialQuestion]);
+  const [historyIndex, setHistoryIndex] = useState(0);
 
   const { refetch: fetchNewQuestion } = api.questions.getRandom.useQuery(
     undefined,
@@ -35,6 +37,17 @@ export function QuestionComponent({
 
   const showNextQuestion = async () => {
     if (nextQuestion) {
+      // Add current question to history if we're at the end
+      if (historyIndex === questionHistory.length - 1) {
+        setQuestionHistory([...questionHistory, nextQuestion]);
+      } else {
+        // Replace forward history with new path
+        setQuestionHistory([
+          ...questionHistory.slice(0, historyIndex + 1),
+          nextQuestion
+        ]);
+      }
+      setHistoryIndex(historyIndex + 1);
       setCurrentQuestion(nextQuestion);
       setNextQuestion(null);
       // Fetch the next question for future use
@@ -42,8 +55,27 @@ export function QuestionComponent({
     } else {
       // Fallback in case next question isn't cached yet
       const newQuestionResult = await fetchNewQuestion();
-      if (newQuestionResult.data) setCurrentQuestion(newQuestionResult.data);
+      if (newQuestionResult.data) {
+        if (historyIndex === questionHistory.length - 1) {
+          setQuestionHistory([...questionHistory, newQuestionResult.data]);
+        } else {
+          setQuestionHistory([
+            ...questionHistory.slice(0, historyIndex + 1),
+            newQuestionResult.data
+          ]);
+        }
+        setHistoryIndex(historyIndex + 1);
+        setCurrentQuestion(newQuestionResult.data);
+      }
       void fetchAndCacheNextQuestion();
+    }
+  }
+
+  const showPreviousQuestion = () => {
+    if (historyIndex > 0) {
+      const previousIndex = historyIndex - 1;
+      setHistoryIndex(previousIndex);
+      setCurrentQuestion(questionHistory[previousIndex]!);
     }
   }
 
@@ -52,7 +84,7 @@ export function QuestionComponent({
       void showNextQuestion();
     },
     onSwipedRight: () => {
-      void showNextQuestion();
+      showPreviousQuestion();
     },
     trackMouse: true,
     delta: 10, // min distance(px) before a swipe starts
@@ -65,8 +97,18 @@ export function QuestionComponent({
       <div {...handlers} className="flex-1 h-full flex flex-col items-center justify-center">
         <QuestionCard question={currentQuestion.text} />
       </div>
-      <div className="flex justify-center">
-        <Button onClick={() => void showNextQuestion()}>Next Question</Button>
+      <div className="flex justify-around gap-4">
+        <Button 
+          onClick={showPreviousQuestion}
+          disabled={historyIndex === 0}
+        >
+          Previous
+        </Button>
+        <Button
+          onClick={() => void showNextQuestion()}
+        >
+          Random
+        </Button>
       </div>
     </div>
   );
