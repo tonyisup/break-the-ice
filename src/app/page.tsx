@@ -2,13 +2,14 @@ import { api } from "~/trpc/server";
 import { HydrateClient } from "~/trpc/server";
 import { QuestionComponent } from "./_components/question";
 import { ModeToggle } from "./_components/mode-toggle";
+
 export default async function Home() {
   const question = await api.questions.getRandom();
 
   return (
     <HydrateClient>
-      <main className="flex min-h-screen flex-col items-center dark:bg-[#121212] light:bg-[#fafafa]">
-        <header className="flex w-full justify-start p-4">
+      <main className="min-h-screen p-4 flex flex-col dark:bg-[#121212] light:bg-[#fafafa]">
+        <header className="pb-4">
           {/* 
             TODO: display  menu
             <button
@@ -19,9 +20,7 @@ export default async function Home() {
             </button> */}
           <ModeToggle />
         </header>
-        <div className="flex justify-center items-center gap-12 px-4 py-16">
-          {question && <QuestionComponent initialQuestion={question} />}
-        </div>
+        {question && <QuestionComponent initialQuestion={question} />}
       </main>
     </HydrateClient>
   );

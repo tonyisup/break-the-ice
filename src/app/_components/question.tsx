@@ -15,7 +15,6 @@ export function QuestionComponent({
 }) {
   const [currentQuestion, setCurrentQuestion] = useState(initialQuestion);
   const [nextQuestion, setNextQuestion] = useState<Question | null>(null);
-  const utils = api.useUtils();
 
   const { refetch: fetchNewQuestion } = api.questions.getRandom.useQuery(
     undefined,
@@ -62,9 +61,13 @@ export function QuestionComponent({
   });
 
   return (
-    <div {...handlers} className="w-full max-w-2xl p-4 flex flex-col items-center justify-center gap-4">
-      <QuestionCard question={currentQuestion.text} />
-      <Button onClick={() => void showNextQuestion()}>Next Question</Button>
+    <div className="flex-1 h-full p-8 flex flex-col gap-8">
+      <div {...handlers} className="flex-1 h-full flex flex-col items-center justify-center">
+        <QuestionCard question={currentQuestion.text} />
+      </div>
+      <div className="flex justify-center">
+        <Button onClick={() => void showNextQuestion()}>Next Question</Button>
+      </div>
     </div>
   );
 } 
