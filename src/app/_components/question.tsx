@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useSwipeable } from "react-swipeable";
 import { api, RouterOutputs } from "~/trpc/react";
+import { QuestionCard } from "./questionCard";
+import { Button } from "~/components/ui/button";
 
 type Question = NonNullable<RouterOutputs["questions"]["getRandom"]>;
 
@@ -61,12 +63,8 @@ export function QuestionComponent({
 
   return (
     <div {...handlers} className="w-full max-w-2xl p-4 flex flex-col items-center justify-center gap-4">
-      <div className="rounded-lg bg-white/10 p-6 text-center">
-        <p className="text-xl">{currentQuestion.text}</p>
-      </div>
-      <button 
-        className="rounded-full bg-white/10 p-4 text-white hover:bg-white/20" 
-        onClick={() => void showNextQuestion()}>Next Question</button>
+      <QuestionCard question={currentQuestion.text} />
+      <Button onClick={() => void showNextQuestion()}>Next Question</Button>
     </div>
   );
 } 
