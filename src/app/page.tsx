@@ -21,6 +21,9 @@ export default async function Home() {
           <ModeToggle />
         </header>
         {question && <QuestionComponent initialQuestion={question} />}
+        <footer className="pb-4">
+          &nbsp;
+        </footer>
       </main>
     </HydrateClient>
   );
