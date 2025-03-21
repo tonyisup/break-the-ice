@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { cn } from "~/lib/utils";
-import { api, RouterOutputs } from "~/trpc/react";
+import { api, type RouterOutputs } from "~/trpc/react";
 import { QuestionCard } from "./questionCard";
 import { Button } from "~/components/ui/button";
 
@@ -18,12 +18,6 @@ export function QuestionComponent({
   const [cards, setCards] = useState(initialQuestions);
   const [direction, setDirection] = useState<"left" | "right" | null>(null);
 
-  const { refetch: fetchOneQuestion } = api.questions.getRandom.useQuery(
-    undefined,
-    {
-      enabled: false,
-    }
-  );
   const { refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
     undefined,
     {
@@ -58,15 +52,10 @@ export function QuestionComponent({
     removeCard(id);
   };
 
-  const removeCard = async (id: string) => {
+  const removeCard = (id: string) => {
     if (!id) return;  
     setDirection(null);
     setCards((prev) => prev.filter((card) => card.id !== id));
-    //fetch a new question
-/*     const newQuestion = await fetchOneQuestion();
-    if (newQuestion.data) {
-      setCards((prev) => [newQuestion.data as Question, ...prev]);
-    } */
   };
 
   const handleDrag = (info: PanInfo, id: string) => {

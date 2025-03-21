@@ -1,5 +1,5 @@
 import GameCard from "./game-card";
-import { RouterOutputs } from "~/trpc/react";
+import { type RouterOutputs } from "~/trpc/react";
 import { cn } from "~/lib/utils";
 type Question = NonNullable<RouterOutputs["questions"]["getRandom"]>;
 
