@@ -118,8 +118,8 @@ export function QuestionComponent({
                   drag={index === 0}
                   dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
                   dragElastic={0.9}
-                  onDrag={(_: any, info: PanInfo) => handleDrag(info, card.id)}
-                  onDragEnd={(_: any, info: PanInfo) => handleDragEnd(info, card.id)}
+                  onDrag={(_, info: PanInfo) => handleDrag(info, card.id)}
+                  onDragEnd={(_, info: PanInfo) => handleDragEnd(info, card.id)}
                   whileDrag={{ scale: 1.05 }}
                   initial={{ scale: 0.95, opacity: 0, y: 20 }}
                   animate={{ scale: 1, opacity: 1, y: 0 }}
