@@ -6,6 +6,8 @@ import { cn } from "~/lib/utils";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { QuestionCard } from "./questionCard";
 import { Button } from "~/components/ui/button";
+import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { HeartIcon, RedoIcon, ShuffleIcon, SkipForwardIcon, Undo, UndoIcon, XIcon } from "lucide-react";
 
 type Question = NonNullable<RouterOutputs["questions"]["getRandom"]>;
 
@@ -14,6 +16,7 @@ export function QuestionComponent({
 }: { 
   initialQuestions: Question[];
 }) {
+  const [undoHistory, setUndoHistory] = useState<Question[]>([]);
   const [cardHistory, setCardHistory] = useState<Question[]>([]);
   const [cards, setCards] = useState(initialQuestions);
   const [direction, setDirection] = useState<"left" | "right" | null>(null);
@@ -49,6 +52,10 @@ export function QuestionComponent({
   const skipCard = (id: string) => {
     if (!id) return;
     setDirection("left");
+    const question = cards.find((card) => card.id === id);
+    if (question) {
+      setUndoHistory((prev) => [...prev, question]);
+    }
     removeCard(id);
   };
 
@@ -111,8 +118,8 @@ export function QuestionComponent({
                   drag={index === 0}
                   dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
                   dragElastic={0.9}
-                  onDrag={(_, info) => handleDrag(info, card.id)}
-                  onDragEnd={(_, info) => handleDragEnd(info, card.id)}
+                  onDrag={(_: any, info: PanInfo) => handleDrag(info, card.id)}
+                  onDragEnd={(_: any, info: PanInfo) => handleDragEnd(info, card.id)}
                   whileDrag={{ scale: 1.05 }}
                   initial={{ scale: 0.95, opacity: 0, y: 20 }}
                   animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -131,7 +138,7 @@ export function QuestionComponent({
                       <>
                         <div
                           className={cn(
-                            "absolute top-6 left-6 bg-red-500 text-white rounded-lg px-4 py-2 font-bold transform -rotate-12 opacity-0",
+                            "absolute top-6 left-6  rounded-lg px-4 py-2 font-bold transform -rotate-12 opacity-0",
                             "transition-opacity duration-200",
                             direction === "left" && "opacity-100"
                           )}
@@ -140,12 +147,12 @@ export function QuestionComponent({
                         </div>
                         <div
                           className={cn(
-                            "absolute top-6 right-6 bg-green-500 text-white rounded-lg px-4 py-2 font-bold transform rotate-12 opacity-0",
+                            "absolute top-6 right-6  rounded-lg px-4 py-2 font-bold transform rotate-12 opacity-0",
                             "transition-opacity duration-200",
                             direction === "right" && "opacity-100"
                           )}
                         >
-                          LIKE
+                          SKIP
                         </div>
                       </>
                     )}
@@ -167,21 +174,62 @@ export function QuestionComponent({
             </div>
           ) : (
           <div className="flex justify-center gap-8">
+            
             <Button
-              onClick={() => skipCard(cards[0]?.id ?? "")}
+              onClick={() => goBack()}
             >
-              Skip
+              <UndoIcon className="w-4 h-4" />
+              Previous
+              {undoHistory.length > 0 && (
+                <span className="ml-2 bg-yellow-600 text-xs rounded-full px-2 py-0.5">
+                  {undoHistory.length}
+                </span>
+              )}
+            </Button>
+          <Button
+            onClick={() => skipCard(cards[0]?.id ?? "")}
+          >
+            <ShuffleIcon className="w-4 h-4" />
+            Random
+          </Button>
+            {/* <Button
+              className="bg-blue-800 text-white"
+              onClick={goBack}
+            >
+              <RedoIcon className="w-4 h-4" /> 
+              Likes
+              {cardHistory.length > 0 && (
+                <span className="ml-2 bg-blue-600 text-xs rounded-full px-2 py-0.5">
+                  {cardHistory.length}
+                </span>
+              )}
             </Button>
             <Button
+              className="bg-green-800 text-white"
               onClick={() => likeCard(cards[0]?.id ?? "")}
             >
+              <HeartIcon className="w-4 h-4" />
               Like
             </Button>
             <Button
-              onClick={goBack}
+              className="bg-red-800 text-white"
+              onClick={() => skipCard(cards[0]?.id ?? "")}
             >
-              Back
+              <XIcon className="w-4 h-4" />
+              Skip
             </Button>
+            <Button
+              className="bg-yellow-800 text-white"
+              onClick={() => goBack()}
+            >
+              <UndoIcon className="w-4 h-4" />
+              Undo
+              {undoHistory.length > 0 && (
+                <span className="ml-2 bg-yellow-600 text-xs rounded-full px-2 py-0.5">
+                  {undoHistory.length}
+                </span>
+              )}
+            </Button> */}
           </div>
         )}
       </div>
