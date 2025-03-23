@@ -14,7 +14,20 @@ export const questionsRouter = createTRPCRouter({
     
     return question;
   }),
-  
+  getRandomStack: publicProcedure.query(async ({ ctx }) => {
+    const count = await ctx.db.question.count();
+    const skip = Math.floor(Math.random() * Math.max(0, count - 5));
+    
+    const questions = await ctx.db.question.findMany({
+      take: 5,
+      skip,
+      orderBy: {
+        id: 'asc',
+      },  
+    });
+    
+    return questions;
+  }),
   // Admin procedures (protected by auth)
   create: protectedProcedure
     .input(z.object({

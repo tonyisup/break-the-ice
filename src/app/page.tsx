@@ -1,10 +1,10 @@
 import { api } from "~/trpc/server";
 import { HydrateClient } from "~/trpc/server";
-import { QuestionComponent } from "./_components/question";
+import { QuestionComponent } from "./_components/questions";
 import { ModeToggle } from "./_components/mode-toggle";
 
 export default async function Home() {
-  const question = await api.questions.getRandom();
+  const questions = await api.questions.getRandomStack();
 
   return (
     <HydrateClient>
@@ -20,8 +20,8 @@ export default async function Home() {
             </button> */}
           <ModeToggle />
         </header>
-        {question && <QuestionComponent initialQuestion={question} />}
-        <footer className="pb-4">
+        {questions && questions.length > 0 && <QuestionComponent initialQuestions={questions} />}
+        <footer>
           &nbsp;
         </footer>
       </main>
