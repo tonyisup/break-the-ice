@@ -16,7 +16,6 @@ export function QuestionComponent({
 }: { 
   initialQuestions: Question[];
 }) {
-  const [undoHistory, setUndoHistory] = useState<Question[]>([]);
   const [cardHistory, setCardHistory] = useState<Question[]>([]);
   const [cards, setCards] = useState(initialQuestions);
   const [direction, setDirection] = useState<"left" | "right" | null>(null);
@@ -54,7 +53,7 @@ export function QuestionComponent({
     setDirection("left");
     const question = cards.find((card) => card.id === id);
     if (question) {
-      setUndoHistory((prev) => [...prev, question]);
+      setCardHistory((prev) => [...prev, question]);
     }
     removeCard(id);
   };
@@ -176,13 +175,13 @@ export function QuestionComponent({
           <div className="flex justify-center gap-8">
             
             <Button
-              onClick={() => goBack()}
+              onClick={goBack}
             >
               <UndoIcon className="w-4 h-4" />
               Previous
-              {undoHistory.length > 0 && (
-                <span className="ml-2 bg-yellow-600 text-xs rounded-full px-2 py-0.5">
-                  {undoHistory.length}
+              {cardHistory.length > 0 && (
+                <span className="ml-2 text-xs rounded-full px-2 py-0.5">
+                  {cardHistory.length}
                 </span>
               )}
             </Button>
