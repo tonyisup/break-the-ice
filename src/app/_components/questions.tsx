@@ -64,7 +64,7 @@ export function QuestionComponent({
     setCards((prev) => {
       const newCards = prev.filter((card) => card.id !== id);
 
-      if (newCards.length === 1) {
+      if (newCards.length === 2) {
         getMoreCards().catch((error) => {
           console.error("Failed to get more cards:", error);
           // Optionally show user-friendly error message
