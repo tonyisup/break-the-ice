@@ -6,8 +6,7 @@ import { cn } from "~/lib/utils";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { QuestionCard } from "./questionCard";
 import { Button } from "~/components/ui/button";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
-import { HeartIcon, RedoIcon, ShuffleIcon, SkipForwardIcon, Undo, UndoIcon, XIcon } from "lucide-react";
+import { ShuffleIcon, UndoIcon } from "lucide-react";
 
 type Question = NonNullable<RouterOutputs["questions"]["getRandom"]>;
 
@@ -19,6 +18,7 @@ export function QuestionComponent({
   const [cardHistory, setCardHistory] = useState<Question[]>([]);
   const [cards, setCards] = useState(initialQuestions);
   const [direction, setDirection] = useState<"left" | "right" | null>(null);
+  const [skipping, setSkipping] = useState(false);
 
   const { refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
     undefined,
@@ -61,7 +61,18 @@ export function QuestionComponent({
   const removeCard = (id: string) => {
     if (!id) return;  
     setDirection(null);
-    setCards((prev) => prev.filter((card) => card.id !== id));
+    setCards((prev) => {
+      const newCards = prev.filter((card) => card.id !== id);
+
+      if (newCards.length === 1) {
+        getMoreCards().catch((error) => {
+          console.error("Failed to get more cards:", error);
+          // Optionally show user-friendly error message
+        });
+      }
+
+      return newCards;
+    });
   };
 
   const handleDrag = (info: PanInfo, id: string) => {
@@ -71,6 +82,14 @@ export function QuestionComponent({
       setDirection("right");
     } else if (info.offset.x < -threshold) {
       setDirection("left");
+    }
+    const skippingThreashold = 100;
+    if (info.offset.x > skippingThreashold) {
+      setSkipping(true);
+    } else if (info.offset.x < -skippingThreashold) {
+      setSkipping(true);
+    } else {
+      setSkipping(false);
     }
   };
 
@@ -89,7 +108,7 @@ export function QuestionComponent({
   const getMoreCards = async () => {
     const newQuestions = await fetchNewQuestions();
     if (newQuestions.data) {
-      setCards((prev) => [...newQuestions.data, ...prev]);
+      setCards((prev) => [...prev,...newQuestions.data]);
     }
   };
 
@@ -139,7 +158,7 @@ export function QuestionComponent({
                           className={cn(
                             "absolute top-6 left-6  rounded-lg px-4 py-2 font-bold transform -rotate-12 opacity-0",
                             "transition-opacity duration-200",
-                            direction === "left" && "opacity-100"
+                            (skipping && direction === "right") && "opacity-100"
                           )}
                         >
                           SKIP
@@ -148,7 +167,7 @@ export function QuestionComponent({
                           className={cn(
                             "absolute top-6 right-6  rounded-lg px-4 py-2 font-bold transform rotate-12 opacity-0",
                             "transition-opacity duration-200",
-                            direction === "right" && "opacity-100"
+                            (skipping && direction === "left") && "opacity-100"
                           )}
                         >
                           SKIP

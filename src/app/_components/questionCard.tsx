@@ -9,5 +9,5 @@ interface QuestionCardProps {
 }
 
 export function QuestionCard({ question, className }: QuestionCardProps) {
-  return <GameCard text={question.text} className={cn("bg-[#eaeaea] dark:bg-[#222222]", className)} />
+  return <GameCard text={question.text} description={question.category} className={cn("bg-[#eaeaea] dark:bg-[#222222]", className)} />
 }
