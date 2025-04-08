@@ -18,24 +18,33 @@ export const questionsRouter = createTRPCRouter({
   }),
   getRandomStack: publicProcedure
     .input(z.object({
-      skips: z.array(z.object({
-        id: z.string(),
-        text: z.string(),
-        category: z.string(),
-      })).optional(),
-      likes: z.array(z.object({
-        id: z.string(),
-        text: z.string(),
-        category: z.string(),
-      })).optional(),
+      skipIds: z.array(z.string()).optional(),
+      likeIds: z.array(z.string()).optional(),
     }))
     .query(async ({ ctx, input }) => {      
       
-      const skip = input.skips?.length ?? 0;
-      const like = input.likes?.length ?? 0;
+      const skip = input.skipIds?.length ?? 0;
+      const like = input.likeIds?.length ?? 0;
 
-      const skipIDs = input.skips?.map(question => question.id).join(',') + 
-        (like ? `,${input.likes?.map(question => question.id).join(',')}` : '');
+      const skipIDs = input.skipIds?.join(',') + 
+        (like ? `,${input.likeIds?.join(',')}` : '');
+
+      // Fetch skipped and liked questions from the database
+      const skippedQuestions = skip > 0 
+        ? await ctx.db.$queryRaw<Question[]>`
+          SELECT [id], [text], [category]
+          FROM [ice].[Question]
+          WHERE [id] IN (${input.skipIds?.join(',')})
+        ` 
+        : [];
+      
+      const likedQuestions = like > 0
+        ? await ctx.db.$queryRaw<Question[]>`
+          SELECT [id], [text], [category]
+          FROM [ice].[Question]
+          WHERE [id] IN (${input.likeIds?.join(',')})
+        `
+        : [];
 
       // Run database query and AI generation in parallel
       const [dbQuestions, aiQuestionText] = await Promise.all([
@@ -55,15 +64,23 @@ export const questionsRouter = createTRPCRouter({
           FROM [ice].[Question]
           ORDER BY newid()
         ` ,
-        generateIcebreakerQuestion(input.skips ?? [], input.likes ?? []),
+        generateIcebreakerQuestion(skippedQuestions, likedQuestions),
       ]);
       
-      const aiQuestion: Question = {
-        id: 'ai-' + Date.now(), // Generate a unique ID for the AI question
-        text: aiQuestionText,
-        category: 'ai-generated',
-      };
       
+      // Insert the AI-generated question into the database
+      const aiQuestion = await ctx.db.question.create({
+        data: {
+          text: aiQuestionText,
+          category: 'ai-generated',
+        },
+        select: {
+          id: true,
+          text: true,
+          category: true,
+        },
+      });
+
       const questions: Question[] = [...dbQuestions, aiQuestion];
       
       // Randomize the order of questions before returning
