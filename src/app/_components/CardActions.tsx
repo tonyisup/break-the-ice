@@ -1,5 +1,5 @@
 import { Button } from "~/components/ui/button";
-import { ShuffleIcon, UndoIcon } from "lucide-react";
+import { TrashIcon, UndoIcon } from "lucide-react";
 import type { Question } from "./types";
 import type { CardAction } from "./hooks/useCardStack";
 
@@ -54,8 +54,8 @@ export function CardActions({
         onClick={() => onCardAction(cards[0]?.id ?? "", 'skip')}
         aria-label="Skip current question"
       >
-        <ShuffleIcon className="w-4 h-4" aria-hidden="true" />
-        Random
+        <TrashIcon className="w-4 h-4" aria-hidden="true" />
+        Discard
       </Button>
     </div>
   );
