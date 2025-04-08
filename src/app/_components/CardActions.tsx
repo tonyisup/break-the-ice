@@ -1,5 +1,5 @@
 import { Button } from "~/components/ui/button";
-import { TrashIcon, UndoIcon, HeartIcon, RedoIcon, RefreshCwIcon } from "lucide-react";
+import { TrashIcon, UndoIcon, HeartIcon, RedoIcon, RefreshCwIcon, LayoutListIcon, ListCheckIcon } from "lucide-react";
 import type { Question } from "./types";
 import type { CardAction } from "./hooks/useCardStack";
 
@@ -13,6 +13,8 @@ interface CardActionsProps {
   onRedoLike: () => void;
   onGetMore: () => void;
   onReset: () => void;
+  onManageSkips: () => void;
+  onManageLikes: () => void;
 }
 
 export function CardActions({
@@ -25,19 +27,50 @@ export function CardActions({
   onRedoLike,
   onGetMore,
   onReset,
+  onManageSkips,
+  onManageLikes,
 }: CardActionsProps) {
-  
+
   if (cards.length === 0) {
     return (
-      <div className="text-center">
+      <div className="text-center flex flex-col gap-8">
         <p className="text-xl mb-4">No more questions!</p>
-        <Button 
+        <Button
           onClick={onGetMore}
           disabled={isLoading}
           aria-label={isLoading ? "Loading more questions..." : "Get more questions"}
         >
           {isLoading ? "Loading..." : "Get More Questions"}
         </Button>
+        <p>Getting questions will consider your skips and likes.</p>
+        <div className="flex justify-center justify-around">
+
+          <Button
+            onClick={onManageSkips}
+            disabled={skips.length === 0}
+            aria-label={`Manage skips`}
+          >
+            <LayoutListIcon className="text-red-500" aria-hidden="true" />
+            {skips.length}
+          </Button>
+          <Button
+            onClick={onReset}
+            variant="outline"
+            aria-label="reset card stack"
+          >
+            Reset
+            <RefreshCwIcon className="text-red-500" aria-hidden="true" />
+          </Button>
+
+          <Button
+            onClick={onManageLikes}
+            disabled={likes.length === 0}
+            aria-label={`Manage likes`}
+          >
+            {likes.length}
+            <ListCheckIcon className="text-green-500" aria-hidden="true" />
+          </Button>
+        </div>
       </div>
     );
   }
@@ -56,9 +89,9 @@ export function CardActions({
 
   return (
     <div className="flex flex-col gap-2">
-      
+
       <div className="flex justify-center gap-4">
-        
+
         <Button
           onClick={onUndoSkip}
           disabled={skips.length === 0}
@@ -69,7 +102,7 @@ export function CardActions({
             <UndoIcon className="text-red-500" aria-hidden="true" />
           </span>
         </Button>
-        
+
         <Button
           onClick={handleSkip}
           aria-label="skip current question"
@@ -97,6 +130,15 @@ export function CardActions({
         </Button>
       </div>
       <div className="flex justify-center">
+        
+      <Button
+            onClick={onManageSkips}
+            disabled={skips.length === 0}
+            aria-label={`Manage skips`}
+          >
+            <LayoutListIcon className="text-red-500" aria-hidden="true" />
+            {skips.length}
+          </Button>
         <Button
           onClick={onReset}
           variant="outline"
@@ -104,6 +146,14 @@ export function CardActions({
         >
           Reset
           <RefreshCwIcon className="text-red-500" aria-hidden="true" />
+        </Button>
+        <Button
+          onClick={onManageLikes}
+          disabled={likes.length === 0}
+          aria-label={`Manage likes`}
+        >
+          {likes.length}
+          <ListCheckIcon className="text-green-500" aria-hidden="true" />
         </Button>
       </div>
     </div>
