@@ -54,7 +54,10 @@ export function useCardStack({ initialQuestions, storedSkips, storedLikes }: Use
   const [isLoading, setIsLoading] = useState(false);
 
   const { refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
-    { skips, likes },
+    { 
+      skipIds: skips.map(q => q.id), 
+      likeIds: likes.map(q => q.id) 
+    },
     {
       enabled: false,
     }
@@ -85,7 +88,7 @@ export function useCardStack({ initialQuestions, storedSkips, storedLikes }: Use
       const result = await fetchNewQuestions();
       if (result.data) {
         const newQuestions = result.data;
-        setCards((prev) => [...newQuestions, ...prev]);
+        setCards((prev) => [...prev, ...newQuestions]);
       }
     } catch (error) {
       console.error("Failed to fetch new questions:", error);

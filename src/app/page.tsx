@@ -3,7 +3,7 @@ import { QuestionComponent } from "./_components/questions";
 import { ModeToggle } from "./_components/mode-toggle";
 
 export default async function Home() {
-  const questions = await api.questions.getRandomStack({ skips: [], likes: [] });
+  const questions = await api.questions.getRandomStack({ skipIds: [], likeIds: [] });
 
   return (
     <HydrateClient>
