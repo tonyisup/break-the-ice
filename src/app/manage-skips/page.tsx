@@ -1,0 +1,86 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getSkippedQuestions, removeSkippedQuestion } from "~/lib/localStorage";
+import { QuestionGrid } from "~/app/_components/QuestionGrid";
+import { Button } from "~/components/ui/button";
+import { ArrowLeft, Trash2 } from "lucide-react";
+import type { Question } from "~/app/_components/types";
+
+export default function ManageSkipsPage() {
+  const router = useRouter();
+  const [skippedQuestions, setSkippedQuestions] = useState<Question[]>([]);
+
+  useEffect(() => {
+    const questions = getSkippedQuestions();
+    setSkippedQuestions(questions);
+  }, []);
+
+  const handleRemove = (id: string) => {
+    removeSkippedQuestion(id);
+    setSkippedQuestions((prev) => prev.filter((q) => q.id !== id));
+  };
+
+  const handleClearAll = () => {
+    if (window.confirm("Are you sure you want to remove all skipped questions?")) {
+      setSkippedQuestions([]);
+      // Clear all skipped questions from localStorage
+      localStorage.removeItem("break-the-ice-skipped-questions");
+    }
+  };
+
+  return (
+    <div className="container mx-auto py-8 px-4">
+      <div className="flex justify-between items-center mb-6">
+        <Button
+          variant="outline"
+          onClick={() => router.push("/")}
+          className="flex items-center gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Questions
+        </Button>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            {skippedQuestions.length} skipped questions
+          </span>
+          {skippedQuestions.length > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleClearAll}
+              className="flex items-center gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear All
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <h1 className="text-3xl font-bold mb-6">Manage Skipped Questions</h1>
+
+      {skippedQuestions.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-lg text-muted-foreground">
+            You haven&apos;t skipped any questions yet.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => router.push("/")}
+            className="mt-4"
+          >
+            Go to Questions
+          </Button>
+        </div>
+      ) : (
+        <QuestionGrid
+          questions={skippedQuestions}
+          type="skips"
+          onRemove={handleRemove}
+        />
+      )}
+    </div>
+  );
+} 
