@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { cn } from "~/lib/utils";
 import { QuestionCard } from "./questionCard";
 import type { Question } from "./types";
@@ -8,19 +8,24 @@ interface CardStackProps {
   cards: Question[];
   direction: CardDirection;
   skipping: boolean;
-  onDrag: (info: any, id: string) => void;
-  onDragEnd: (info: any, id: string) => void;
+  cardSize?: {
+    width?: number;
+    height?: number;
+  };
+  onDrag: (info: PanInfo, id: string) => void;
+  onDragEnd: (info: PanInfo, id: string) => void;
 }
 
 export function CardStack({ 
   cards, 
   direction, 
   skipping, 
+  cardSize,
   onDrag, 
   onDragEnd 
 }: CardStackProps) {
   return (
-    <div className="flex-1 w-[280px] h-[480px]">
+    <div className="flex-1" style={{ width: cardSize?.width ?? 280, height: cardSize?.height ?? 480 }}>
       <div className="relative h-full w-full">
         {cards && cards.length > 0 && (
           <AnimatePresence>
@@ -32,7 +37,7 @@ export function CardStack({
                   "cursor-grab active:cursor-grabbing",
                 )}
                 style={{
-                  height: "420px",
+                  height: (cardSize?.height ?? 480) - 60, // Subtracting 60 to maintain same ratio as original
                   zIndex: cards.length - index,
                   top: index * 4,
                   left: index * 2,
