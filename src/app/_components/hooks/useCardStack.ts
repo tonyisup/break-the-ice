@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { type PanInfo } from "framer-motion";
 import { api } from "~/trpc/react";
 import type { Question } from "../types";
-import { saveSkippedQuestion, saveLikedQuestion, removeLikedQuestion, removeSkippedQuestion } from "~/lib/localStorage";
+import { saveSkippedQuestion, saveLikedQuestion, removeLikedQuestion, removeSkippedQuestion, clearSkippedQuestions, clearLikedQuestions } from "~/lib/localStorage";
 
 // Constants
 const DRAG_THRESHOLD = 10;
@@ -32,13 +32,22 @@ interface UseCardStackReturn {
   undoSkip: () => void;
   redoLike: () => void;
   getMoreCards: () => Promise<void>;
+  reset: () => void;
 }
 
 
 export function useCardStack({ initialQuestions, storedSkips, storedLikes }: UseCardStackProps): UseCardStackReturn {
   const [skips, setSkips] = useState<Question[]>(storedSkips);
   const [likes, setLikes] = useState<Question[]>(storedLikes);
-  const [cards, setCards] = useState<Question[]>(initialQuestions);
+  const [cards, setCards] = useState<Question[]>(() => {
+    if (initialQuestions.length === 0) return [];
+    if (storedSkips.length === 0 && storedLikes.length === 0) return initialQuestions;
+    
+    return initialQuestions.filter(question => 
+      !storedSkips.some(skip => skip.id === question.id) && 
+      !storedLikes.some(like => like.id === question.id)
+    );
+  });
   const [direction, setDirection] = useState<CardDirection>(null);
   const [skipping, setSkipping] = useState(false);
   const [liking, setLiking] = useState(false);
@@ -149,6 +158,14 @@ export function useCardStack({ initialQuestions, storedSkips, storedLikes }: Use
     }
   }, [handleCardAction]);
 
+  const reset = useCallback(() => {
+    setSkips([]);
+    setLikes([]);
+    clearSkippedQuestions();
+    clearLikedQuestions();
+    setCards(initialQuestions);
+  }, [initialQuestions]);
+
   return {
     cards,
     skips,
@@ -163,5 +180,6 @@ export function useCardStack({ initialQuestions, storedSkips, storedLikes }: Use
     undoSkip,
     redoLike,
     getMoreCards,
+    reset,
   };
 } 

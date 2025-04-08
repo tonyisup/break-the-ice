@@ -66,6 +66,11 @@ export function removeSkippedQuestion(questionId: string): void {
   }
 } 
 
+export function clearSkippedQuestions(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(SKIPPED_QUESTIONS_KEY);
+}
+
 /**
  * Save a liked question to local storage
  */
@@ -127,4 +132,9 @@ export function removeLikedQuestion(questionId: string): void {
   } catch (error) {
     console.error("Failed to remove liked question from local storage:", error);
   }
+}
+
+export function clearLikedQuestions(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LIKED_QUESTIONS_KEY);
 }

@@ -32,6 +32,7 @@ export function QuestionComponent({
     undoSkip,
     redoLike,
     getMoreCards,
+    reset,
   } = useCardStack({ initialQuestions, storedSkips, storedLikes });
 
   return (
@@ -53,6 +54,7 @@ export function QuestionComponent({
         onUndoSkip={undoSkip}
         onRedoLike={redoLike}
         onGetMore={getMoreCards}
+        onReset={reset}
       />
     </div>
   );
