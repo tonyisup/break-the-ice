@@ -1,25 +1,30 @@
 import { Button } from "~/components/ui/button";
-import { TrashIcon, UndoIcon } from "lucide-react";
+import { TrashIcon, UndoIcon, HeartIcon, RedoIcon } from "lucide-react";
 import type { Question } from "./types";
 import type { CardAction } from "./hooks/useCardStack";
 
 interface CardActionsProps {
   cards: Question[];
-  cardHistory: Question[];
+  likes: Question[];
+  skips: Question[];
   isLoading: boolean;
   onCardAction: (id: string, action: CardAction) => void;
-  onGoBack: () => void;
+  onUndoSkip: () => void;
+  onRedoLike: () => void;
   onGetMore: () => void;
 }
 
 export function CardActions({
   cards,
-  cardHistory,
+  likes,
+  skips,
   isLoading,
   onCardAction,
-  onGoBack,
+  onUndoSkip,
+  onRedoLike,
   onGetMore,
 }: CardActionsProps) {
+  
   if (cards.length === 0) {
     return (
       <div className="text-center">
@@ -35,27 +40,56 @@ export function CardActions({
     );
   }
 
+  const handleLike = () => {
+    const currentCard = cards[0];
+    if (!currentCard) return;
+    onCardAction(currentCard.id, 'like');
+  };
+
+  const handleSkip = () => {
+    const currentCard = cards[0];
+    if (!currentCard) return;
+    onCardAction(currentCard.id, 'skip');
+  };
+
   return (
     <div className="flex justify-center gap-8">
       
-      {cardHistory.length > 0 && (
       <Button
-        onClick={onGoBack}
-        disabled={cardHistory.length === 0}
-        aria-label={`Go back to previous card${cardHistory.length > 0 ? ` (${cardHistory.length} cards in history)` : ''}`}
+        onClick={onUndoSkip}
+        disabled={skips.length === 0}
+        aria-label={`Restore last skipped card`}
       >
-          <span className="ml-2 text-xs rounded-full px-2 py-0.5">
-            {cardHistory.length}
-            <UndoIcon className="w-4 h-4" aria-hidden="true" />
-          </span>
-        </Button>
-      )}
+        <span className="text-xs rounded-full">
+          {skips.length}
+          <UndoIcon className="text-red-500" aria-hidden="true" />
+        </span>
+      </Button>
+      
       <Button
-        onClick={() => onCardAction(cards[0]?.id ?? "", 'skip')}
-        aria-label="Skip current question"
+        onClick={handleSkip}
+        aria-label="skip current question"
       >
-        <TrashIcon className="w-4 h-4" aria-hidden="true" />
-        Dislike
+        <TrashIcon className="mr-2 text-red-500" aria-hidden="true" />
+        Skip
+      </Button>
+      <Button
+        onClick={handleLike}
+        variant="outline"
+        aria-label="like current question"
+      >
+        <HeartIcon className="mr-2 text-green-500" aria-hidden="true" />
+        Like
+      </Button>
+      <Button
+        onClick={onRedoLike}
+        disabled={likes.length === 0}
+        aria-label={`Restore last liked card`}
+      >
+        <span className="text-xs rounded-full">
+          {likes.length}
+          <RedoIcon className="text-green-500" aria-hidden="true" />
+        </span>
       </Button>
     </div>
   );

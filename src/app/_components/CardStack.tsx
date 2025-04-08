@@ -1,13 +1,14 @@
 import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { cn } from "~/lib/utils";
 import { QuestionCard } from "./questionCard";
-import type { Question } from "./types";
 import type { CardDirection } from "./hooks/useCardStack";
+import type { Question } from "./types";
 
 interface CardStackProps {
   cards: Question[];
   direction: CardDirection;
   skipping: boolean;
+  liking: boolean;
   cardSize?: {
     width?: number;
     height?: number;
@@ -20,6 +21,7 @@ export function CardStack({
   cards, 
   direction, 
   skipping, 
+  liking,
   cardSize,
   onDrag, 
   onDragEnd 
@@ -70,16 +72,18 @@ export function CardStack({
                       <div
                         className={cn(
                           "absolute top-6 left-6 rounded-lg px-4 py-2 font-bold transform -rotate-12 opacity-0",
+                          "bg-green-500 text-white",
                           "transition-opacity duration-200",
-                          (skipping && direction === "right") && "opacity-100"
+                          (liking && direction === "right") && "opacity-100"
                         )}
                         aria-hidden="true"
                       >
-                        SKIP
+                        LIKE
                       </div>
                       <div
                         className={cn(
                           "absolute top-6 right-6 rounded-lg px-4 py-2 font-bold transform rotate-12 opacity-0",
+                          "bg-red-500 text-white",
                           "transition-opacity duration-200",
                           (skipping && direction === "left") && "opacity-100"
                         )}

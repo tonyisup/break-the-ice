@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { type PanInfo } from "framer-motion";
 import { api } from "~/trpc/react";
 import type { Question } from "../types";
-import type { RouterOutputs } from "~/trpc/react";
+import { saveSkippedQuestion, saveLikedQuestion, removeLikedQuestion, removeSkippedQuestion } from "~/lib/localStorage";
 
 // Constants
 const DRAG_THRESHOLD = 10;
@@ -14,44 +14,76 @@ export type CardDirection = 'left' | 'right' | null;
 
 interface UseCardStackProps {
   initialQuestions: Question[];
+  storedSkips: Question[];
+  storedLikes: Question[];
 }
 
 interface UseCardStackReturn {
   cards: Question[];
-  cardHistory: Question[];
+  skips: Question[];
+  likes: Question[];
   direction: CardDirection;
   skipping: boolean;
+  liking: boolean;
   isLoading: boolean;
   handleCardAction: (id: string, action: CardAction) => void;
   handleDrag: (info: PanInfo, id: string) => void;
   handleDragEnd: (info: PanInfo, id: string) => void;
-  goBack: () => void;
+  undoSkip: () => void;
+  redoLike: () => void;
   getMoreCards: () => Promise<void>;
 }
 
-type QuestionStack = RouterOutputs["questions"]["getRandomStack"];
 
-export function useCardStack({ initialQuestions }: UseCardStackProps): UseCardStackReturn {
-  const [cardHistory, setCardHistory] = useState<Question[]>([]);
+export function useCardStack({ initialQuestions, storedSkips, storedLikes }: UseCardStackProps): UseCardStackReturn {
+  const [skips, setSkips] = useState<Question[]>(storedSkips);
+  const [likes, setLikes] = useState<Question[]>(storedLikes);
   const [cards, setCards] = useState<Question[]>(initialQuestions);
   const [direction, setDirection] = useState<CardDirection>(null);
   const [skipping, setSkipping] = useState(false);
+  const [liking, setLiking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const { refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
-    { discardPile: cardHistory },
+    { skips, likes },
     {
       enabled: false,
     }
   );
 
-  const goBack = useCallback(() => {
-    const latestCard = cardHistory[cardHistory.length - 1];
-    setCardHistory((prev) => prev.slice(0, -1));
+  const undoSkip = useCallback(() => {
+    const latestCard = skips[skips.length - 1];
+    setSkips((prev) => prev.slice(0, -1));
     if (latestCard) {
       setCards((prev) => [latestCard, ...prev]);
+      removeSkippedQuestion(latestCard.id);
     }
-  }, [cardHistory]);
+  }, [skips]);
+
+  const redoLike = useCallback(() => {
+    const latestCard = likes[likes.length - 1];
+    setLikes((prev) => prev.slice(0, -1));
+    if (latestCard) { 
+      setCards((prev) => [latestCard, ...prev]);
+      removeLikedQuestion(latestCard.id);
+    }
+  }, [likes]);
+
+
+  const getMoreCards = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const result = await fetchNewQuestions();
+      if (result.data) {
+        const newQuestions = result.data;
+        setCards((prev) => [...newQuestions, ...prev]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch new questions:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchNewQuestions]);
 
   const removeCard = useCallback((id: string) => {
     if (!id) return;  
@@ -67,14 +99,21 @@ export function useCardStack({ initialQuestions }: UseCardStackProps): UseCardSt
 
       return newCards;
     });
-  }, []);
+  }, [getMoreCards]);
 
   const handleCardAction = useCallback((id: string, action: CardAction) => {
     if (!id) return;
     setDirection(action === 'like' ? 'right' : 'left');
     const question = cards.find((card) => card.id === id);
-    if (question) {
-      setCardHistory((prev) => [...prev, question]);
+    if (question) {      
+      // Save to local storage if the action is 'skip' (dislike)
+      if (action === 'skip') {
+        saveSkippedQuestion(question);
+        setSkips((prev) => [question, ...prev]);
+      } else if (action === 'like') {
+        saveLikedQuestion(question);
+        setLikes((prev) => [question, ...prev]);
+      }
     }
     removeCard(id);
   }, [cards, removeCard]);
@@ -87,9 +126,14 @@ export function useCardStack({ initialQuestions }: UseCardStackProps): UseCardSt
       setDirection("left");
     }
     
-    if (Math.abs(info.offset.x) > SKIPPING_THRESHOLD) {
+    if (info.offset.x > SKIPPING_THRESHOLD) {
+      setLiking(true);
+      setSkipping(false);
+    } else if (info.offset.x < -SKIPPING_THRESHOLD) {
+      setLiking(false);
       setSkipping(true);
     } else {
+      setLiking(false);
       setSkipping(false);
     }
   }, []);
@@ -105,31 +149,19 @@ export function useCardStack({ initialQuestions }: UseCardStackProps): UseCardSt
     }
   }, [handleCardAction]);
 
-  const getMoreCards = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const result = await fetchNewQuestions();
-      if (result.data) {
-        const newQuestions = result.data;
-        setCards((prev) => [...prev, ...newQuestions]);
-      }
-    } catch (error) {
-      console.error("Failed to fetch new questions:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [fetchNewQuestions]);
-
   return {
     cards,
-    cardHistory,
+    skips,
+    likes,
     direction,
     skipping,
+    liking,
     isLoading,
     handleCardAction,
     handleDrag,
     handleDragEnd,
-    goBack,
+    undoSkip,
+    redoLike,
     getMoreCards,
   };
 } 
