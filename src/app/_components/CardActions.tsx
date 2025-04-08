@@ -42,11 +42,11 @@ export function CardActions({
         disabled={cardHistory.length === 0}
         aria-label={`Go back to previous card${cardHistory.length > 0 ? ` (${cardHistory.length} cards in history)` : ''}`}
       >
-        <UndoIcon className="w-4 h-4" aria-hidden="true" />
-        Previous
+        Discard Pile
         {cardHistory.length > 0 && (
           <span className="ml-2 text-xs rounded-full px-2 py-0.5">
             {cardHistory.length}
+            <UndoIcon className="w-4 h-4" aria-hidden="true" />
           </span>
         )}
       </Button>
