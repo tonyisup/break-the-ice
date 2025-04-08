@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { type PanInfo } from "framer-motion";
 import { api } from "~/trpc/react";
 import type { Question } from "../types";
+import type { RouterOutputs } from "~/trpc/react";
 
 // Constants
 const DRAG_THRESHOLD = 10;
@@ -28,15 +29,17 @@ interface UseCardStackReturn {
   getMoreCards: () => Promise<void>;
 }
 
+type QuestionStack = RouterOutputs["questions"]["getRandomStack"];
+
 export function useCardStack({ initialQuestions }: UseCardStackProps): UseCardStackReturn {
   const [cardHistory, setCardHistory] = useState<Question[]>([]);
-  const [cards, setCards] = useState(initialQuestions);
+  const [cards, setCards] = useState<Question[]>(initialQuestions);
   const [direction, setDirection] = useState<CardDirection>(null);
   const [skipping, setSkipping] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const { refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
-    undefined,
+    { discardPile: cardHistory },
     {
       enabled: false,
     }
@@ -105,9 +108,10 @@ export function useCardStack({ initialQuestions }: UseCardStackProps): UseCardSt
   const getMoreCards = useCallback(async () => {
     setIsLoading(true);
     try {
-      const newQuestions = await fetchNewQuestions();
-      if (newQuestions.data) {
-        setCards((prev) => [...prev, ...newQuestions.data]);
+      const result = await fetchNewQuestions();
+      if (result.data) {
+        const newQuestions = result.data;
+        setCards((prev) => [...prev, ...newQuestions]);
       }
     } catch (error) {
       console.error("Failed to fetch new questions:", error);

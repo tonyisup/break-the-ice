@@ -1,10 +1,9 @@
-import { api } from "~/trpc/server";
-import { HydrateClient } from "~/trpc/server";
+import { api, HydrateClient } from "~/trpc/server";
 import { QuestionComponent } from "./_components/questions";
 import { ModeToggle } from "./_components/mode-toggle";
 
 export default async function Home() {
-  const questions = await api.questions.getRandomStack();
+  const questions = await api.questions.getRandomStack({ discardPile: [] });
 
   return (
     <HydrateClient>

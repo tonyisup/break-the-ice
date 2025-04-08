@@ -37,25 +37,25 @@ export function CardActions({
 
   return (
     <div className="flex justify-center gap-8">
+      
+      {cardHistory.length > 0 && (
       <Button
         onClick={onGoBack}
         disabled={cardHistory.length === 0}
         aria-label={`Go back to previous card${cardHistory.length > 0 ? ` (${cardHistory.length} cards in history)` : ''}`}
       >
-        Discard Pile
-        {cardHistory.length > 0 && (
           <span className="ml-2 text-xs rounded-full px-2 py-0.5">
             {cardHistory.length}
             <UndoIcon className="w-4 h-4" aria-hidden="true" />
           </span>
-        )}
-      </Button>
+        </Button>
+      )}
       <Button
         onClick={() => onCardAction(cards[0]?.id ?? "", 'skip')}
         aria-label="Skip current question"
       >
         <TrashIcon className="w-4 h-4" aria-hidden="true" />
-        Discard
+        Dislike
       </Button>
     </div>
   );
