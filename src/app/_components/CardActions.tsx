@@ -55,6 +55,7 @@ export function CardActions({
           </Button>
           <Button
             onClick={onReset}
+            disabled={skips.length === 0 && likes.length === 0}
             variant="outline"
             aria-label="reset card stack"
           >
@@ -93,17 +94,6 @@ export function CardActions({
       <div className="flex justify-center gap-4">
 
         <Button
-          onClick={onUndoSkip}
-          disabled={skips.length === 0}
-          aria-label={`Restore last skipped card`}
-        >
-          <span className="text-xs rounded-full">
-            {skips.length}
-            <UndoIcon className="text-red-500" aria-hidden="true" />
-          </span>
-        </Button>
-
-        <Button
           onClick={handleSkip}
           aria-label="skip current question"
         >
@@ -118,29 +108,20 @@ export function CardActions({
           <HeartIcon className="mr-2 text-green-500" aria-hidden="true" />
           Like
         </Button>
-        <Button
-          onClick={onRedoLike}
-          disabled={likes.length === 0}
-          aria-label={`Restore last liked card`}
-        >
-          <span className="text-xs rounded-full">
-            {likes.length}
-            <RedoIcon className="text-green-500" aria-hidden="true" />
-          </span>
-        </Button>
       </div>
       <div className="flex justify-center">
-        
-      <Button
-            onClick={onManageSkips}
-            disabled={skips.length === 0}
-            aria-label={`Manage skips`}
-          >
-            <LayoutListIcon className="text-red-500" aria-hidden="true" />
-            {skips.length}
-          </Button>
+
+        <Button
+          onClick={onManageSkips}
+          disabled={skips.length === 0}
+          aria-label={`Manage skips`}
+        >
+          <LayoutListIcon className="text-red-500" aria-hidden="true" />
+          {skips.length}
+        </Button>
         <Button
           onClick={onReset}
+          disabled={skips.length === 0 && likes.length === 0}
           variant="outline"
           aria-label="reset card stack"
         >
