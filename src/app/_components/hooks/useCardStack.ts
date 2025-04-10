@@ -100,18 +100,8 @@ export function useCardStack({ initialQuestions, storedSkips, storedLikes }: Use
   const removeCard = useCallback((id: string) => {
     if (!id) return;  
     setDirection(null);
-    setCards((prev) => {
-      const newCards = prev.filter((card) => card.id !== id);
-
-      if (newCards.length === CARD_STACK_LIMIT) {
-        getMoreCards().catch((error) => {
-          console.error("Failed to get more cards:", error);
-        });
-      }
-
-      return newCards;
-    });
-  }, [getMoreCards]);
+    setCards((prev) => prev.filter((card) => card.id !== id));
+  }, []);
 
   const handleCardAction = useCallback((id: string, action: CardAction) => {
     if (!id) return;

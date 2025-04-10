@@ -20,47 +20,36 @@ interface QuestionWithTags {
   tags: QuestionTag[];
 }
 
+interface TagForQuestion {
+  questionId: string;
+  id: string;
+  name: string;
+}
+
 export const questionsRouter = createTRPCRouter({
   // Get a random question
-  getRandom: publicProcedure.query(async ({ ctx }) => {
-    const count = await ctx.db.question.count();
-    const skip = Math.floor(Math.random() * count);
-    
-    const question = await ctx.db.question.findFirst({
-      skip,
-      include: {
-        tags: {
-          include: {
-            tag: true
-          }
-        }
-      }
-    });
-    
-    return question;
-  }),
   getRandomStack: publicProcedure
     .input(z.object({
       skipIds: z.array(z.string()).optional(),
       likeIds: z.array(z.string()).optional(),
     }))
-    .query(async ({ ctx, input }) => {      
-      
+    .query(async ({ ctx, input }) => {
+
       const skip = input.skipIds?.length ?? 0;
       const like = input.likeIds?.length ?? 0;
 
-      const skipIDs = input.skipIds?.join(',') + 
+      const skipIDs = input.skipIds?.join(',') +
         (like ? `,${input.likeIds?.join(',')}` : '');
 
       // Fetch skipped and liked questions from the database
-      const skippedQuestions = skip > 0 
+      const skippedQuestions = skip > 0
         ? await ctx.db.$queryRaw<Question[]>`
           SELECT [id], [text], [category]
           FROM [ice].[Question]
           WHERE [id] IN (${input.skipIds?.join(',')})
-        ` 
+        `
         : [];
-      
+
       const likedQuestions = like > 0
         ? await ctx.db.$queryRaw<Question[]>`
           SELECT [id], [text], [category]
@@ -89,44 +78,60 @@ export const questionsRouter = createTRPCRouter({
         ` ,
         generateIcebreakerQuestion(skippedQuestions, likedQuestions),
       ]);
-      
-      
+
       // Insert the AI-generated question into the database with its tags
-      const aiQuestion = await ctx.db.question.create({
-        data: {
-          text: aiQuestionData.text,
-          category: 'ai-generated',
-          tags: {
-            create: aiQuestionData.tags.map(tagName => ({
-              tag: {
-                connectOrCreate: {
-                  where: { name: tagName },
-                  create: { name: tagName }
+      const [aiQuestion, dbQuestionsWIthTags] = await Promise.all([
+        ctx.db.question.create({
+          data: {
+            text: aiQuestionData.text,
+            category: 'ai-generated',
+            tags: {
+              create: aiQuestionData.tags.map(tagName => ({
+                tag: {
+                  connectOrCreate: {
+                    where: { name: tagName },
+                    create: { name: tagName }
+                  }
                 }
+              }))
+            }
+          },
+          include: {
+            tags: {
+              include: {
+                tag: true
               }
-            }))
-          }
-        },
-        include: {
-          tags: {
-            include: {
-              tag: true
             }
           }
-        }
-      }) as QuestionWithTags;
-
+        }),
+        ctx.db.questionTag.findMany({
+          where: {
+            questionId: {
+              in: dbQuestions.map(q => q.id)
+            }
+          },
+          include: {
+            tag: true
+          }
+        })
+      ])
+      dbQuestions.forEach(question => {
+        question.tags = dbQuestionsWIthTags.filter(q => q.questionId == question.id).map(t => ({
+          id: t.tag.id,
+          name: t.tag.name
+        }))
+      })
       const questions: Question[] = [...dbQuestions];
       questions.push({
         id: aiQuestion.id,
         text: aiQuestion.text,
         category: aiQuestion.category,
-        tags: aiQuestion.tags.map(t => ({
+        tags: (aiQuestion as QuestionWithTags).tags.map(t => ({
           id: t.tag.id,
           name: t.tag.name
         }))
       });
-      
+
       // Randomize the order of questions before returning
       return questions.sort(() => Math.random() - 0.5);
     }),
