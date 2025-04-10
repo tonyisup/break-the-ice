@@ -10,21 +10,25 @@ export const questionsRouter = createTRPCRouter({
     .input(z.object({
       skipIds: z.array(z.string()).optional(),
       likeIds: z.array(z.string()).optional(),
+      skipCategories: z.array(z.string()).optional(),
+      likeCategories: z.array(z.string()).optional(),
+      skipTags: z.array(z.string()).optional(),
+      likeTags: z.array(z.string()).optional(),
     }))
     .query(async ({ ctx, input }) => {
 
       const skip = input.skipIds?.length ?? 0;
       const like = input.likeIds?.length ?? 0;
 
-      const skipIDs = input.skipIds?.join(',') +
-        (like ? `,${input.likeIds?.join(',')}` : '');
-
+      const skipIDs = input.skipIds?.join(',');
+      const likeIDs = input.likeIds?.join(',');
+      
       // Fetch skipped and liked questions from the database
       const skippedQuestions = skip > 0
         ? await ctx.db.$queryRaw<Question[]>`
           SELECT [id], [text], [category]
           FROM [ice].[Question]
-          WHERE [id] IN (${input.skipIds?.join(',')})
+          WHERE [id] IN (${skipIDs})
         `
         : [];
 
@@ -32,29 +36,36 @@ export const questionsRouter = createTRPCRouter({
         ? await ctx.db.$queryRaw<Question[]>`
           SELECT [id], [text], [category]
           FROM [ice].[Question]
-          WHERE [id] IN (${input.likeIds?.join(',')})
+          WHERE [id] IN (${likeIDs})
         `
         : [];
 
       // Run database query and AI generation in parallel
       const [dbQuestions, aiQuestionData] = await Promise.all([
-        skip ? ctx.db.$queryRaw<Question[]>`
+        ctx.db.$queryRaw<Question[]>`
           SELECT top 4 
-            [id]
-            ,[text]
-            ,[category]
-          FROM [ice].[Question]
-          WHERE [id] NOT IN (${skipIDs})
+            [q].[id]
+            ,[q].[text]
+            ,[q].[category]
+          FROM [ice].[Question] [q]
+          LEFT JOIN [ice].[QuestionTag] [qt] ON [q].[id] = [qt].[questionId]
+          LEFT JOIN [ice].[Tag] [t] ON [qt].[tagId] = [t].[id]
+          WHERE (${skip} = 0 or [id] NOT IN (${skipIDs}))
+          AND (${like} = 0 or [id] IN (${likeIDs}))
+          AND (${input.skipCategories?.length ?? 0} = 0 or [category] NOT IN (${input.skipCategories}))
+          AND (${input.likeCategories?.length ?? 0} = 0 or [category] IN (${input.likeCategories}))
+          AND (${input.skipTags?.length ?? 0} = 0 or [t].[name] NOT IN (${input.skipTags}))
+          AND (${input.likeTags?.length ?? 0} = 0 or [t].[name] IN (${input.likeTags}))
+
           ORDER BY newid()
-        ` : ctx.db.$queryRaw<Question[]>`
-          SELECT top 4 
-            [id]
-            ,[text]
-            ,[category]
-          FROM [ice].[Question]
-          ORDER BY newid()
-        ` ,
-        generateIcebreakerQuestion(skippedQuestions, likedQuestions),
+        `,
+        generateIcebreakerQuestion({ 
+          skips: skippedQuestions, 
+          likes: likedQuestions, 
+          skipTags: input.skipTags ?? [], 
+          likeTags: input.likeTags ?? [], 
+          skipCategories: input.skipCategories ?? [], 
+          likeCategories: input.likeCategories ?? [] }),
       ]);
 
       // Insert the AI-generated question into the database with its tags

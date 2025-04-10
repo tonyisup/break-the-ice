@@ -17,7 +17,16 @@ interface AIResponse {
   tags: string[];
 }
 
-export async function generateIcebreakerQuestion(skips: Question[] = [], likes: Question[] = []): Promise<GeneratedQuestion> {
+interface GenerateIcebreakerQuestionProps {
+  skips: Question[];
+  likes: Question[];
+  skipTags: string[];
+  likeTags: string[];
+  skipCategories: string[];
+  likeCategories: string[];
+}
+
+export async function generateIcebreakerQuestion({ skips, likes, skipTags, likeTags, skipCategories, likeCategories }: GenerateIcebreakerQuestionProps): Promise<GeneratedQuestion> {
   try {
     const skipsText = skips.length > 0 
       ? `\n\n- Here are some example questions that have been discarded, please generate a different type of question:\n${skips.map(q => `- ${q.text}`).join('\n')}`
@@ -27,12 +36,28 @@ export async function generateIcebreakerQuestion(skips: Question[] = [], likes: 
       ? `\n\n- Here are some example questions that have been liked, please generate more of the same type of question:\n${likes.map(q => `- ${q.text}`).join('\n')}`
       : '';
 
+    const skipTagsText = skipTags.length > 0 
+      ? `\n\n- Here are some example tags that have been discarded, please generate a different type of tag:\n${skipTags.join('\n')}`
+      : ''; 
+
+    const likeTagsText = likeTags.length > 0 
+      ? `\n\n- Here are some example tags that have been liked, please generate more of the same type of tag:\n${likeTags.join('\n')}`
+      : '';
+
+    const skipCategoriesText = skipCategories.length > 0 
+      ? `\n\n- Here are some example categories that have been discarded, please generate a different type of category:\n${skipCategories.join('\n')}`
+      : '';
+
+    const likeCategoriesText = likeCategories.length > 0 
+      ? `\n\n- Here are some example categories that have been liked, please generate more of the same type of category:\n${likeCategories.join('\n')}`
+      : '';
+
     const prompt = `Generate a fun, engaging icebreaker question that would be suitable for a social gathering or team building activity. The question should be:
 - Light-hearted
 - Open-ended enough to spark interesting conversations
 - Suitable for most adults
 - Creative and unique
-- Feel free to add some sass and personality to the question${skipsText}${likesText}
+- Feel free to add some sass and personality to the question${skipsText}${likesText}${skipTagsText}${likeTagsText}${skipCategoriesText}${likeCategoriesText}
 
 Also, generate 3-5 relevant tags for this question. Tags should be short, descriptive words or phrases that categorize the question.
 

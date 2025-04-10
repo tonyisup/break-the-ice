@@ -2,34 +2,55 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getSkippedIds, removeSkippedQuestion } from "~/lib/localStorage";
+import { getSkippedIds, removeSkippedQuestion, getSkippedCategories, getSkippedTags, removeSkippedCategory, removeSkippedTag, saveSkippedCategory, saveSkippedTag } from "~/lib/localStorage";
 import { QuestionGrid } from "~/app/_components/QuestionGrid";
 import { Button } from "~/components/ui/button";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2, Tag, Folder, X, FileQuestionIcon } from "lucide-react";
 import { api } from "~/trpc/react";
+import { Badge } from "~/components/ui/badge";
 
 export default function ManageSkipsPage() {
   const router = useRouter();
   const [skippedQuestionIDs, setSkippedQuestionIDs] = useState<string[]>([]);
+  const [skippedCategories, setSkippedCategories] = useState<string[]>([]);
+  const [skippedTags, setSkippedTags] = useState<string[]>([]);
   const { data: skippedQuestions } = api.questions.getByIDs.useQuery({
     ids: skippedQuestionIDs
   });
 
   useEffect(() => {
     const questions = getSkippedIds();
+    const categories = getSkippedCategories();
+    const tags = getSkippedTags();
     setSkippedQuestionIDs(questions);
+    setSkippedCategories(categories);
+    setSkippedTags(tags);
   }, []);
 
-  const handleRemove = (id: string) => {
+  const handleRemoveQuestion = (id: string) => {
     removeSkippedQuestion(id);
     setSkippedQuestionIDs((prev) => prev.filter((q) => q !== id));
   };
 
+  const handleRemoveCategory = (category: string) => {
+    removeSkippedCategory(category);
+    setSkippedCategories((prev) => prev.filter((c) => c !== category));
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    removeSkippedTag(tag);
+    setSkippedTags((prev) => prev.filter((t) => t !== tag));
+  };
+
   const handleClearAll = () => {
-    if (window.confirm("Are you sure you want to remove all skipped questions?")) {
+    if (window.confirm("Are you sure you want to remove all skipped questions, categories, and tags?")) {
       setSkippedQuestionIDs([]);
-      // Clear all skipped questions from localStorage
+      setSkippedCategories([]);
+      setSkippedTags([]);
+      // Clear all skipped data from localStorage
       localStorage.removeItem("break-the-ice-skipped-ids");
+      localStorage.removeItem("break-the-ice-skipped-categories");
+      localStorage.removeItem("break-the-ice-skipped-tags");
     }
   };
 
@@ -48,7 +69,7 @@ export default function ManageSkipsPage() {
           <span className="text-sm text-muted-foreground">
             {skippedQuestionIDs.length} skipped questions
           </span>
-          {skippedQuestionIDs.length > 0 && (
+          {(skippedQuestionIDs.length > 0 || skippedCategories.length > 0 || skippedTags.length > 0) && (
             <Button
               variant="destructive"
               size="sm"
@@ -56,34 +77,97 @@ export default function ManageSkipsPage() {
               className="flex items-center gap-2"
             >
               <Trash2 className="h-4 w-4" />
-              Unskip All
+              Clear All
             </Button>
           )}
         </div>
       </div>
 
-      <h1 className="text-3xl font-bold mb-6">Manage Skipped Questions</h1>
-
-      {skippedQuestionIDs.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-lg text-muted-foreground">
-            You haven&apos;t skipped any questions yet.
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => router.push("/")}
-            className="mt-4"
-          >
-            Go to Questions
-          </Button>
+      {/* Skipped Categories Section */}
+      {skippedCategories.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Folder className="h-5 w-5" />
+            Skipped Categories
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {skippedCategories.map((category) => (
+              <Badge
+                key={category}
+                variant="secondary"
+                className="flex items-center gap-2"
+              >
+                {category}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-4 w-4 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                  onClick={() => handleRemoveCategory(category)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </Badge>
+            ))}
+          </div>
         </div>
-      ) : (
-        skippedQuestions && <QuestionGrid
-          questions={skippedQuestions}
-          type="skips"
-          onRemove={handleRemove}
-        />
       )}
+
+      {/* Skipped Tags Section */}
+      {skippedTags.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Tag className="h-5 w-5" />
+            Skipped Tags
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {skippedTags.map((tag) => (
+              <Badge
+                key={tag}
+                variant="secondary"
+                className="flex items-center gap-2"
+              >
+                {tag}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-4 w-4 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                  onClick={() => handleRemoveTag(tag)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Skipped Questions Section */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <FileQuestionIcon className="h-5 w-5" />
+          Skipped Questions
+        </h2>
+        {skippedQuestionIDs.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-lg text-muted-foreground">
+              You haven&apos;t skipped any questions yet.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => router.push("/")}
+              className="mt-4"
+            >
+              Go to Questions
+            </Button>
+          </div>
+        ) : (
+          skippedQuestions && <QuestionGrid
+            questions={skippedQuestions}
+            type="skips"
+            onRemove={handleRemoveQuestion}
+          />
+        )}
+      </div>
     </div>
   );
 } 

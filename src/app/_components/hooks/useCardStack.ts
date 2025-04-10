@@ -15,6 +15,10 @@ interface UseCardStackProps {
   initialQuestions: Question[];
   storedSkipIDs: string[];
   storedLikeIDs: string[];
+  storedSkipCategories: string[];
+  storedLikeCategories: string[];
+  storedSkipTags: string[];
+  storedLikeTags: string[];
 }
 
 interface UseCardStackReturn {
@@ -33,17 +37,37 @@ interface UseCardStackReturn {
 }
 
 
-export function useCardStack({ initialQuestions, storedSkipIDs, storedLikeIDs }: UseCardStackProps): UseCardStackReturn {
+export function useCardStack({ initialQuestions, storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags }: UseCardStackProps): UseCardStackReturn {
   const [skips, setSkips] = useState<string[]>(storedSkipIDs);
   const [likes, setLikes] = useState<string[]>(storedLikeIDs);
+  const [likesCategories, setLikesCategories] = useState<string[]>(storedLikeCategories);
+  const [likesTags, setLikesTags] = useState<string[]>(storedLikeTags);
+  const [skipCategories, setSkipCategories] = useState<string[]>(storedSkipCategories);
+  const [skipTags, setSkipTags] = useState<string[]>(storedSkipTags);
   const [cards, setCards] = useState<Question[]>(() => {
     if (initialQuestions.length === 0) return [];
-    if (storedSkipIDs.length === 0 && storedLikeIDs.length === 0) return initialQuestions;
+    if (
+      storedSkipIDs.length === 0 
+      && storedLikeIDs.length === 0
+      && storedSkipCategories.length === 0
+      && storedLikeCategories.length === 0
+      && storedSkipTags.length === 0
+      && storedLikeTags.length === 0
+    ) return initialQuestions;
     
-    return initialQuestions.filter(question => 
+    const result = initialQuestions.filter(question => 
       !storedSkipIDs.some(skip => skip === question.id) && 
-      !storedLikeIDs.some(like => like === question.id)
+      !storedLikeIDs.some(like => like === question.id) &&
+      !storedSkipCategories.some(category => category === question.category) &&
+      !storedLikeCategories.some(category => category === question.category) &&
+      !storedSkipTags.some(tag => tag === question.tags.map(t => t.tag.name).join(',')) &&
+      !storedLikeTags.some(tag => tag === question.tags.map(t => t.tag.name).join(','))
     );
+    if (result.length === 0) {
+      getMoreCards().catch(console.error);
+      return [];
+    }
+    return result;
   });
   const [direction, setDirection] = useState<CardDirection>(null);
   const [skipping, setSkipping] = useState(false);
@@ -53,7 +77,11 @@ export function useCardStack({ initialQuestions, storedSkipIDs, storedLikeIDs }:
   const { refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
     { 
       skipIds: skips, 
-      likeIds: likes 
+      likeIds: likes,
+      skipCategories: skipCategories,
+      likeCategories: likesCategories,
+      skipTags: skipTags,
+      likeTags: likesTags
     },
     {
       enabled: false,
