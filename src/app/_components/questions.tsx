@@ -4,8 +4,8 @@ import { useCardStack } from "./hooks/useCardStack";
 import { CardStack } from "./CardStack";
 import { CardActions } from "./CardActions";
 import type { Question } from "./types";
-import { getSkippedQuestions, getLikedQuestions } from "~/lib/localStorage";
 import { useRouter } from "next/navigation";
+import { getSkippedIds, getLikedIds } from "~/lib/localStorage";
 /**
  * QuestionComponent displays a stack of question cards that can be swiped left or right
  * @param initialQuestions - Initial set of questions to display
@@ -17,8 +17,8 @@ export function QuestionComponent({
 }) {
   const router = useRouter();
   //get stored skips and likes
-  const storedSkips = getSkippedQuestions();
-  const storedLikes = getLikedQuestions();
+  const storedSkipIDs = getSkippedIds();
+  const storedLikeIDs = getLikedIds();
 
   const {
     cards,
@@ -31,11 +31,9 @@ export function QuestionComponent({
     handleCardAction,
     handleDrag,
     handleDragEnd,
-    undoSkip,
-    redoLike,
     getMoreCards,
     reset,
-  } = useCardStack({ initialQuestions, storedSkips, storedLikes });
+  } = useCardStack({ initialQuestions, storedSkipIDs, storedLikeIDs });
 
   const handleManageSkips = () => {
     router.push("/manage-skips");
@@ -43,6 +41,9 @@ export function QuestionComponent({
 
   const handleManageLikes = () => {
     router.push("/manage-likes");
+  };
+  const handleInspectCard = (id: string) => {
+    router.push(`/inspect-card?id=${id}`);
   };
   return (
     <div className="flex-1 p-8 h-full flex flex-col justify-center items-center" role="region" aria-label="Question cards">
@@ -60,12 +61,11 @@ export function QuestionComponent({
         likes={likes}
         isLoading={isLoading}
         onCardAction={handleCardAction}
-        onUndoSkip={undoSkip}
-        onRedoLike={redoLike}
         onGetMore={getMoreCards}
         onReset={reset}
         onManageSkips={handleManageSkips}
         onManageLikes={handleManageLikes}
+        onInspectCard={handleInspectCard}
       />
     </div>
   );

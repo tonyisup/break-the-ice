@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc";
 import { generateIcebreakerQuestion } from "~/server/openai";
 import type { Question } from "~/app/_components/types";
+import { TRPCError } from "@trpc/server";
 
 interface Tag {
   id: string;
@@ -166,5 +167,39 @@ export const questionsRouter = createTRPCRouter({
           }
         }
       });
+    }),
+  // Get a question by ID
+  getById: publicProcedure
+    .input(z.object({
+      id: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const question = await ctx.db.question.findUnique({
+        where: { id: input.id },
+        include: {
+          tags: {
+            include: {
+              tag: true
+            }
+          }
+        }
+      });
+
+      if (!question) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Question not found",
+        });
+      }
+
+      return {
+        id: question.id,
+        text: question.text,
+        category: question.category,
+        tags: question.tags.map(t => ({
+          id: t.tag.id,
+          name: t.tag.name
+        }))
+      };
     }),
 });

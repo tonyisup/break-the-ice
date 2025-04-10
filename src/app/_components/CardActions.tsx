@@ -1,20 +1,19 @@
 import { Button } from "~/components/ui/button";
-import { TrashIcon, UndoIcon, HeartIcon, RedoIcon, RefreshCwIcon, LayoutListIcon, ListCheckIcon } from "lucide-react";
+import { TrashIcon, HeartIcon, RefreshCwIcon, LayoutListIcon, ListCheckIcon, FilterIcon } from "lucide-react";
 import type { Question } from "./types";
 import type { CardAction } from "./hooks/useCardStack";
 
 interface CardActionsProps {
   cards: Question[];
-  likes: Question[];
-  skips: Question[];
+  likes: string[];
+  skips: string[];
   isLoading: boolean;
   onCardAction: (id: string, action: CardAction) => void;
-  onUndoSkip: () => void;
-  onRedoLike: () => void;
   onGetMore: () => void;
   onReset: () => void;
   onManageSkips: () => void;
   onManageLikes: () => void;
+  onInspectCard: (id: string) => void;
 }
 
 export function CardActions({
@@ -23,12 +22,11 @@ export function CardActions({
   skips,
   isLoading,
   onCardAction,
-  onUndoSkip,
-  onRedoLike,
   onGetMore,
   onReset,
   onManageSkips,
   onManageLikes,
+  onInspectCard,
 }: CardActionsProps) {
 
   if (cards.length === 0) {
@@ -88,6 +86,12 @@ export function CardActions({
     onCardAction(currentCard.id, 'skip');
   };
 
+  const handleInspectCard = () => {
+    const currentCard = cards[0];
+    if (!currentCard) return;
+    onInspectCard(currentCard.id);
+  };
+
   return (
     <div className="flex flex-col gap-2">
 
@@ -99,6 +103,14 @@ export function CardActions({
         >
           <TrashIcon className="mr-2 text-red-500" aria-hidden="true" />
           Skip
+        </Button>
+        <Button
+          onClick={handleInspectCard}
+          variant="outline"
+          aria-label="filter questions"
+        >
+          <FilterIcon className="mr-2 text-blue-500" aria-hidden="true" />
+          Filter
         </Button>
         <Button
           onClick={handleLike}
