@@ -5,4 +5,9 @@ export type Question = {
   id: string;
   text: string;
   category: string;
+} & {
+  tags: {
+    id: string;
+    name: string;
+  }[];
 };

@@ -53,11 +53,7 @@ export function QuestionGrid({ questions, type, onRemove }: QuestionGridProps) {
                     onClick={() => handleRemove(question.id)}
                     aria-label={`Remove ${type === "likes" ? "liked" : "skipped"} question`}
                   >
-                    {type === "likes" ? (
-                      <Heart className="h-4 w-4 text-red-500" />
-                    ) : (
-                      <X className="h-4 w-4 text-gray-500" />
-                    )}
+                    <X className="h-4 w-4 text-red-500" />
                   </Button>
                 </CardFooter>
               </Card>

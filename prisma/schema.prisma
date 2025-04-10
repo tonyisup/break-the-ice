@@ -8,9 +8,28 @@ datasource db {
 }
 
 model Question {
-  id        String    @id @default(dbgenerated("newid()")) @db.UniqueIdentifier
+  id        String        @id @default(dbgenerated("newid()")) @db.UniqueIdentifier
   text      String
-  category  String    @default("general") @db.NVarChar(100)
-  createdAt DateTime  @default(dbgenerated("getutcdate()")) @db.Date
-  updatedAt DateTime? @db.Date
+  category  String        @default("general") @db.NVarChar(100)
+  createdAt DateTime      @default(dbgenerated("getutcdate()")) @db.Date
+  updatedAt DateTime?     @db.Date
+  tags      QuestionTag[]
+}
+
+model Tag {
+  id        String        @id @default(dbgenerated("newid()")) @db.UniqueIdentifier
+  name      String        @unique @db.NVarChar(100)
+  createdAt DateTime      @default(dbgenerated("getutcdate()")) @db.Date
+  updatedAt DateTime?     @db.Date
+  questions QuestionTag[]
+}
+
+model QuestionTag {
+  questionId String    @db.UniqueIdentifier
+  tagId      String    @db.UniqueIdentifier
+  createdAt  DateTime  @default(dbgenerated("getutcdate()")) @db.Date
+  question   Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag        Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, tagId])
 }

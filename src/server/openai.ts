@@ -7,7 +7,17 @@ const openai = new OpenAI({
   apiKey: env.OPENAI_API_KEY,
 });
 
-export async function generateIcebreakerQuestion(skips: Question[] = [], likes: Question[] = []): Promise<string> {
+export type GeneratedQuestion = {
+  text: string;
+  tags: string[];
+};
+
+interface AIResponse {
+  question: string;
+  tags: string[];
+}
+
+export async function generateIcebreakerQuestion(skips: Question[] = [], likes: Question[] = []): Promise<GeneratedQuestion> {
   try {
     const skipsText = skips.length > 0 
       ? `\n\n- Here are some example questions that have been discarded, please generate a different type of question:\n${skips.map(q => `- ${q.text}`).join('\n')}`
@@ -24,14 +34,20 @@ export async function generateIcebreakerQuestion(skips: Question[] = [], likes: 
 - Creative and unique
 - Feel free to add some sass and personality to the question${skipsText}${likesText}
 
-Format the response as just the question text, without any additional commentary or formatting.`;
+Also, generate 3-5 relevant tags for this question. Tags should be short, descriptive words or phrases that categorize the question.
+
+Format the response as a JSON object with the following structure:
+{
+  "question": "Your question text here",
+  "tags": ["tag1", "tag2", "tag3"]
+}`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant that generates engaging icebreaker questions."
+          content: "You are a helpful assistant that generates engaging icebreaker questions with relevant tags."
         },
         {
           role: "user",
@@ -39,15 +55,27 @@ Format the response as just the question text, without any additional commentary
         }
       ],
       temperature: 0.8,
-      max_tokens: 100,
+      max_tokens: 300
     });
 
-    const question = response.choices[0]?.message?.content?.trim();
-    if (!question) {
+    const content = response.choices[0]?.message?.content?.trim();
+    if (!content) {
       throw new Error("Failed to generate question");
     }
     
-    return question;
+    try {
+      const parsedContent = JSON.parse(content) as AIResponse;
+      return {
+        text: parsedContent.question,
+        tags: parsedContent.tags
+      };
+    } catch (parseError) {
+      console.error("Error parsing AI response:", parseError);
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to parse AI response",
+      });
+    }
   } catch (error) {
     console.error("Error generating AI question:", error);
     throw new TRPCError({

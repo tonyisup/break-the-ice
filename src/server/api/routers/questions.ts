@@ -4,6 +4,22 @@ import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc";
 import { generateIcebreakerQuestion } from "~/server/openai";
 import type { Question } from "~/app/_components/types";
 
+interface Tag {
+  id: string;
+  name: string;
+}
+
+interface QuestionTag {
+  tag: Tag;
+}
+
+interface QuestionWithTags {
+  id: string;
+  text: string;
+  category: string;
+  tags: QuestionTag[];
+}
+
 export const questionsRouter = createTRPCRouter({
   // Get a random question
   getRandom: publicProcedure.query(async ({ ctx }) => {
@@ -12,6 +28,13 @@ export const questionsRouter = createTRPCRouter({
     
     const question = await ctx.db.question.findFirst({
       skip,
+      include: {
+        tags: {
+          include: {
+            tag: true
+          }
+        }
+      }
     });
     
     return question;
@@ -47,7 +70,7 @@ export const questionsRouter = createTRPCRouter({
         : [];
 
       // Run database query and AI generation in parallel
-      const [dbQuestions, aiQuestionText] = await Promise.all([
+      const [dbQuestions, aiQuestionData] = await Promise.all([
         skip ? ctx.db.$queryRaw<Question[]>`
           SELECT top 4 
             [id]
@@ -68,20 +91,41 @@ export const questionsRouter = createTRPCRouter({
       ]);
       
       
-      // Insert the AI-generated question into the database
+      // Insert the AI-generated question into the database with its tags
       const aiQuestion = await ctx.db.question.create({
         data: {
-          text: aiQuestionText,
+          text: aiQuestionData.text,
           category: 'ai-generated',
+          tags: {
+            create: aiQuestionData.tags.map(tagName => ({
+              tag: {
+                connectOrCreate: {
+                  where: { name: tagName },
+                  create: { name: tagName }
+                }
+              }
+            }))
+          }
         },
-        select: {
-          id: true,
-          text: true,
-          category: true,
-        },
-      });
+        include: {
+          tags: {
+            include: {
+              tag: true
+            }
+          }
+        }
+      }) as QuestionWithTags;
 
-      const questions: Question[] = [...dbQuestions, aiQuestion];
+      const questions: Question[] = [...dbQuestions];
+      questions.push({
+        id: aiQuestion.id,
+        text: aiQuestion.text,
+        category: aiQuestion.category,
+        tags: aiQuestion.tags.map(t => ({
+          id: t.tag.id,
+          name: t.tag.name
+        }))
+      });
       
       // Randomize the order of questions before returning
       return questions.sort(() => Math.random() - 0.5);
@@ -91,13 +135,31 @@ export const questionsRouter = createTRPCRouter({
     .input(z.object({
       text: z.string().min(5),
       category: z.string().default("general"),
+      tags: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.question.create({
         data: {
           text: input.text,
           category: input.category,
+          tags: input.tags ? {
+            create: input.tags.map(tagName => ({
+              tag: {
+                connectOrCreate: {
+                  where: { name: tagName },
+                  create: { name: tagName }
+                }
+              }
+            }))
+          } : undefined
         },
+        include: {
+          tags: {
+            include: {
+              tag: true
+            }
+          }
+        }
       });
     }),
 });
