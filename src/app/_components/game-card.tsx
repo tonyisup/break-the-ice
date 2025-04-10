@@ -19,8 +19,8 @@ export default function GameCard({ question, image, className }: GameCardProps) 
         {question.tags && (
           <div className="flex flex-wrap gap-2 mt-2">
             {question.tags.map(tag => (
-              <span key={tag.id} className="px-2 py-1 text-sm rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
-                {tag.name}
+              <span key={tag.tag.id} className="px-2 py-1 text-sm rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                {tag.tag.name}
               </span>
             ))}
           </div>

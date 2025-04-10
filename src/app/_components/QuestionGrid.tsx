@@ -1,13 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { type Question } from "./types";
-import { removeLikedQuestion, removeSkippedQuestion } from "~/lib/localStorage";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import { X, Heart, Trash2 } from "lucide-react";
+import { FilterIcon, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import type { Question } from "./types";
 
 interface QuestionGridProps {
   questions: Question[];
@@ -16,18 +14,17 @@ interface QuestionGridProps {
 }
 
 export function QuestionGrid({ questions, type, onRemove }: QuestionGridProps) {
-  const [removedIds, setRemovedIds] = useState<string[]>([]);
-
   const handleRemove = (id: string) => {
-    setRemovedIds((prev) => [...prev, id]);
     onRemove(id);
   };
 
+  const handleInspect = (id: string) => {
+    window.location.href = `/inspect-card?id=${id}`;
+  };
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
       <AnimatePresence>
         {questions
-          .filter((q) => !removedIds.includes(q.id))
           .map((question) => (
             <motion.div
               key={question.id}
@@ -44,16 +41,35 @@ export function QuestionGrid({ questions, type, onRemove }: QuestionGridProps) {
                 </CardHeader>
                 <CardContent className="flex-grow">
                   <p className="text-lg">{question.text}</p>
+                  <Badge variant="outline">{question.category}</Badge>
+                  {question.tags && question.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {question.tags.map((tag) => (
+                        <Badge key={tag.tag.id} variant="secondary" className="text-xs">
+                          {tag.tag.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
                 <CardFooter className="pt-2 flex justify-between">
-                  <Badge variant="outline">{question.category}</Badge>
                   <Button
-                    variant="ghost"
-                    size="icon"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleInspect(question.id)}
+                    aria-label="Inspect question details"
+                  >
+                    <FilterIcon className="h-4 w-4 mr-2 text-blue-500" />
+                    Inspect
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleRemove(question.id)}
                     aria-label={`Remove ${type === "likes" ? "liked" : "skipped"} question`}
                   >
-                    <X className="h-4 w-4 text-red-500" />
+                    <X className="h-4 w-4 mr-2 text-red-500" />
+                    Unskip
                   </Button>
                 </CardFooter>
               </Card>

@@ -3,29 +3,6 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc";
 import { generateIcebreakerQuestion } from "~/server/openai";
 import type { Question } from "~/app/_components/types";
-import { TRPCError } from "@trpc/server";
-
-interface Tag {
-  id: string;
-  name: string;
-}
-
-interface QuestionTag {
-  tag: Tag;
-}
-
-interface QuestionWithTags {
-  id: string;
-  text: string;
-  category: string;
-  tags: QuestionTag[];
-}
-
-interface TagForQuestion {
-  questionId: string;
-  id: string;
-  name: string;
-}
 
 export const questionsRouter = createTRPCRouter({
   // Get a random question
@@ -118,20 +95,13 @@ export const questionsRouter = createTRPCRouter({
       ])
       dbQuestions.forEach(question => {
         question.tags = dbQuestionsWIthTags.filter(q => q.questionId == question.id).map(t => ({
-          id: t.tag.id,
-          name: t.tag.name
+          tag: {
+            id: t.tag.id,
+            name: t.tag.name
+          }
         }))
       })
-      const questions: Question[] = [...dbQuestions];
-      questions.push({
-        id: aiQuestion.id,
-        text: aiQuestion.text,
-        category: aiQuestion.category,
-        tags: (aiQuestion as QuestionWithTags).tags.map(t => ({
-          id: t.tag.id,
-          name: t.tag.name
-        }))
-      });
+      const questions: Question[] = [...dbQuestions, aiQuestion];
 
       // Randomize the order of questions before returning
       return questions.sort(() => Math.random() - 0.5);
@@ -174,7 +144,7 @@ export const questionsRouter = createTRPCRouter({
       id: z.string(),
     }))
     .query(async ({ ctx, input }) => {
-      const question = await ctx.db.question.findUnique({
+      return await ctx.db.question.findUnique({
         where: { id: input.id },
         include: {
           tags: {
@@ -184,22 +154,23 @@ export const questionsRouter = createTRPCRouter({
           }
         }
       });
+    }),
+  getByIDs: publicProcedure
+    .input(z.object({
+      ids: z.array(z.string()),
+    }))
+    .query(async ({ ctx, input }) => {
+      if (input.ids.length === 0) return [];
 
-      if (!question) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Question not found",
-        });
-      }
-
-      return {
-        id: question.id,
-        text: question.text,
-        category: question.category,
-        tags: question.tags.map(t => ({
-          id: t.tag.id,
-          name: t.tag.name
-        }))
-      };
+      return await ctx.db.question.findMany({
+        where: { id: { in: input.ids } },
+        include: {
+          tags: {
+            include: {
+              tag: true
+            }
+          }
+        }
+      });
     }),
 });

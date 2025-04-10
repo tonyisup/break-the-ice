@@ -2,29 +2,31 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getLikedQuestions, removeLikedQuestion } from "~/lib/localStorage";
+import { getLikedIds, removeLikedQuestion } from "~/lib/localStorage";
 import { QuestionGrid } from "~/app/_components/QuestionGrid";
 import { Button } from "~/components/ui/button";
 import { ArrowLeft, Trash2 } from "lucide-react";
-import type { Question } from "~/app/_components/types";
+import { api } from "~/trpc/react";
 
 export default function ManageLikesPage() {
   const router = useRouter();
-  const [likedQuestions, setLikedQuestions] = useState<Question[]>([]);
-
+  const [likedQuestionIDs, setLikedQuestionIDs] = useState<string[]>([]);
+  const { data: likedQuestions } = api.questions.getByIDs.useQuery({
+    ids: likedQuestionIDs
+  });
   useEffect(() => {
-    const questions = getLikedQuestions();
-    setLikedQuestions(questions);
+    const questions = getLikedIds();
+    setLikedQuestionIDs(questions);
   }, []);
 
   const handleRemove = (id: string) => {
     removeLikedQuestion(id);
-    setLikedQuestions((prev) => prev.filter((q) => q.id !== id));
+    setLikedQuestionIDs((prev) => prev.filter((q) => q !== id));
   };
 
   const handleClearAll = () => {
     if (window.confirm("Are you sure you want to remove all liked questions?")) {
-      setLikedQuestions([]);
+      setLikedQuestionIDs([]);
       // Clear all liked questions from localStorage
       localStorage.removeItem("break-the-ice-liked-questions");
     }
@@ -43,9 +45,9 @@ export default function ManageLikesPage() {
         </Button>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
-            {likedQuestions.length} liked questions
+            {likedQuestionIDs.length} liked questions
           </span>
-          {likedQuestions.length > 0 && (
+          {likedQuestionIDs.length > 0 && (
             <Button
               variant="destructive"
               size="sm"
@@ -61,7 +63,7 @@ export default function ManageLikesPage() {
 
       <h1 className="text-3xl font-bold mb-6">Manage Liked Questions</h1>
 
-      {likedQuestions.length === 0 ? (
+      {likedQuestionIDs.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-lg text-muted-foreground">
             You haven&apos;t liked any questions yet.
@@ -75,7 +77,7 @@ export default function ManageLikesPage() {
           </Button>
         </div>
       ) : (
-        <QuestionGrid
+        likedQuestions && <QuestionGrid
           questions={likedQuestions}
           type="likes"
           onRemove={handleRemove}
