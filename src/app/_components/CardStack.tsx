@@ -102,7 +102,7 @@ export function CardStack({
                       </div>
                       <div
                         className={cn(
-                          "absolute top-6 rounded-lg px-4 py-2 font-bold transform opacity-0",
+                          "absolute top-6 left-1/2 -translate-x-1/2 rounded-lg px-4 py-2 font-bold transform opacity-0",
                           "bg-blue-500 text-white",
                           "transition-opacity duration-200",
                           (filtering && direction === "down") && "opacity-100"

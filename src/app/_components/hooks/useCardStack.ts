@@ -10,7 +10,8 @@ type Question = PrismaQuestion & {
   }>;
 };
 // Constants
-const DRAG_THRESHOLD = 10;
+const X_DRAG_THRESHOLD = 10;
+const Y_DRAG_THRESHOLD = 80;
 const ACTION_THRESHOLD = 100;
 
 export type PreferenceAction = 'like' | 'skip';
@@ -116,26 +117,30 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
         setLikes((prev) => [question.id, ...prev]);
       }
     }
+    setDirection(null);
+    setLiking(false);
+    setSkipping(false);
+    setFiltering(false);
     removeCard(id);
   }, [cards, removeCard]);
 
   const handleDrag = useCallback((info: PanInfo, id: number) => {
     if (!id) return;
-    if (info.offset.x > DRAG_THRESHOLD) {
+    if (info.offset.x > X_DRAG_THRESHOLD) {
       setDirection("right");
-    } else if (info.offset.x < -DRAG_THRESHOLD) {
+    } else if (info.offset.x < -X_DRAG_THRESHOLD) {
       setDirection("left");
     }
-    if (info.offset.y > DRAG_THRESHOLD) {
+    if (info.offset.y > Y_DRAG_THRESHOLD) {
       setDirection("down");
-    } else if (info.offset.y < -DRAG_THRESHOLD) {
+    } else if (info.offset.y < -Y_DRAG_THRESHOLD) {
       setDirection("up");
     }
-    if (info.offset.x > ACTION_THRESHOLD) {
+    if (info.offset.x > X_DRAG_THRESHOLD) {
       setLiking(true);
       setSkipping(false);
       setFiltering(false);
-    } else if (info.offset.x < -ACTION_THRESHOLD) {
+    } else if (info.offset.x < -X_DRAG_THRESHOLD) {
       setLiking(false);
       setSkipping(true);
       setFiltering(false);
@@ -144,11 +149,11 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
       setSkipping(false);
       setFiltering(false);
     }
-    if (info.offset.y > ACTION_THRESHOLD) {
+    if (info.offset.y > Y_DRAG_THRESHOLD) {
       setLiking(false);
       setSkipping(false);
       setFiltering(true);
-    } else if (info.offset.y < -ACTION_THRESHOLD) {
+    } else if (info.offset.y < -Y_DRAG_THRESHOLD) {
       setLiking(false);
       setSkipping(false);
       setFiltering(true);
@@ -167,9 +172,11 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
       handleInspectCard();
     } else if (info.offset.y < -ACTION_THRESHOLD) {
       removeCard(id);
-    } else {
-      setDirection(null);
     }
+    setDirection(null);
+    setLiking(false);
+    setSkipping(false);
+    setFiltering(false);
   }, [handleCardAction, removeCard, handleInspectCard]);
 
   const reset = useCallback(() => {
