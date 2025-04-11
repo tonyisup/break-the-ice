@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc";
 import { generateIcebreakerQuestion } from "~/server/openai";
 import type { Question as PrismaQuestion, Tag } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 type Question = PrismaQuestion & {
   tags: Array<{
@@ -21,34 +22,28 @@ export const questionsRouter = createTRPCRouter({
       likeTags: z.array(z.string()).optional(),
     }))
     .query(async ({ ctx, input }) => {
-
-      const skip = input.skipIds?.length ?? 0;
-      const like = input.likeIds?.length ?? 0;
-
-      const skipIDs = input.skipIds?.join(',');
-      const likeIDs = input.likeIds?.join(',');
       
       // Fetch skipped and liked questions from the database
-      const skippedQuestions = skip > 0
+      const skippedQuestions = input.skipIds && input.skipIds.length > 0
         ? await ctx.db.$queryRaw<Question[]>`
           SELECT [id], [text], [category]
           FROM [ice].[Question]
-          WHERE [id] IN (${skipIDs})
+          WHERE [id] IN (${Prisma.join(input.skipIds)})
         `
         : [];
 
-      const likedQuestions = like > 0
+      const likedQuestions = input.likeIds && input.likeIds.length > 0
         ? await ctx.db.$queryRaw<Question[]>`
           SELECT [id], [text], [category]
           FROM [ice].[Question]
-          WHERE [id] IN (${likeIDs})
+          WHERE [id] IN (${Prisma.join(input.likeIds)})
         `
         : [];
 
       // Run database query and AI generation in parallel
       const [dbQuestions, aiQuestionData] = await Promise.all([
         ctx.db.$queryRaw<Question[]>`
-          SELECT top 4 
+          SELECT top 4
             [q].[id]
             ,[q].[text]
             ,[q].[category]
@@ -56,12 +51,12 @@ export const questionsRouter = createTRPCRouter({
           LEFT JOIN [ice].[QuestionTag] [qt] ON [q].[id] = [qt].[questionId]
           LEFT JOIN [ice].[Tag] [t] ON [qt].[tagId] = [t].[id]
           WHERE (1=1)
-          AND (1=${skip > 0 ? `1 and [q].[id] NOT IN (${skipIDs})` : "1"})
-          AND (1=${like > 0 ? `1 and [q].[id] IN (${likeIDs})` : "1"})
-          AND (${input.skipCategories?.length ?? 0} = 0 or [q].[category] NOT IN (${input.skipCategories}))
-          AND (${input.likeCategories?.length ?? 0} = 0 or [q].[category] IN (${input.likeCategories}))
-          AND (${input.skipTags?.length ?? 0} = 0 or [t].[name] NOT IN (${input.skipTags}))
-          AND (${input.likeTags?.length ?? 0} = 0 or [t].[name] IN (${input.likeTags}))
+          AND (0=${input?.skipIds?.length ?? 0} or [q].[id] NOT IN (${input?.skipIds?.length ?? 0 > 0 ? Prisma.join(input.skipIds ?? [0]) : "0"}))
+          AND (0=${input?.likeIds?.length ?? 0} or [q].[id] NOT IN (${input?.likeIds?.length ?? 0 > 0 ? Prisma.join(input.likeIds ?? [0]) : "0"}))
+          AND (0=${input.skipCategories?.length ?? 0} or [q].[category] NOT IN (${input.skipCategories?.length ?? 0 > 0 ? Prisma.join(input.skipCategories ?? [""]) : "0"}))
+          AND (0=${input.likeCategories?.length ?? 0} or [q].[category] IN (${input.likeCategories?.length ?? 0 > 0 ? Prisma.join(input.likeCategories ?? [""]) : "0"}))
+          AND (0=${input.skipTags?.length ?? 0} or [t].[name] NOT IN (${input.skipTags?.length ?? 0 > 0 ? Prisma.join(input.skipTags ?? [""]) : "0"}))
+          AND (0=${input.likeTags?.length ?? 0} or [t].[name] IN (${input.likeTags?.length ?? 0 > 0 ? Prisma.join(input.likeTags ?? [""]) : "0"}))
 
           ORDER BY newid()
         `,

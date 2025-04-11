@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { type PanInfo } from "framer-motion";
 import { api } from "~/trpc/react";
 import type { Question } from "@prisma/client";
@@ -48,8 +48,9 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
   const [skipping, setSkipping] = useState(false);
   const [liking, setLiking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [firstLoad, setFirstLoad] = useState(true);
 
-  const { refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
+  const { data: newQuestions, refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
     { 
       skipIds: skips, 
       likeIds: likes,
@@ -59,9 +60,18 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
       likeTags: likesTags
     },
     {
-      enabled: false,
-    }
+      enabled: (cards.length === 0) && firstLoad,
+    },
   );
+
+
+  useEffect(() => {
+    if (newQuestions) {
+      setCards((prev) => [...prev, ...newQuestions]);
+      setFirstLoad(false);
+    }
+  }, [newQuestions]);
+
 
   const getMoreCards = useCallback(async () => {
     setIsLoading(true);
