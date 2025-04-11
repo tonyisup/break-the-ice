@@ -8,7 +8,6 @@ import os
 import json
 import time
 import argparse
-import uuid
 import pyodbc
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -27,7 +26,6 @@ def get_db_connection():
         raise ValueError("DATABASE_URL environment variable is not set")
     
     # Parse the connection string to extract components
-    # Format: sqlserver://localhost;database=name;integratedSecurity=true
     if "integratedSecurity=true" in connection_string:
         # For integrated security, we don't need credentials
         parts = connection_string.replace("sqlserver://", "").split(";")
@@ -37,18 +35,14 @@ def get_db_connection():
         conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};DATABASE={database};Trusted_Connection=yes;"
     else:
         # Handle standard connection string with credentials
-        parts = connection_string.replace("sqlserver://", "").split("@") 
-        credentials = parts[0].split(":")
-        username = credentials[0]
-        password = credentials[1] if len(credentials) > 1 else ""
-    
-        server_parts = parts[1].split("/")
-        server = server_parts[0]
-        database = server_parts[1] if len(server_parts) > 1 else ""
+        parts = connection_string.replace("sqlserver://", "").split(";")
+        server = parts[0]
+        database = next((p.split("=")[1] for p in parts if p.startswith("database=")), "")
+        username = next((p.split("=")[1] for p in parts if p.startswith("user=")), "")
+        password = next((p.split("=")[1] for p in parts if p.startswith("password=")), "")
         
         # Create connection string for pyodbc
         conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};DATABASE={database};UID={username};PWD={password}"
-    
     return pyodbc.connect(conn_str)
 
 def generate_tags_for_question(question_text):
@@ -113,12 +107,17 @@ def get_or_create_tag(conn, tag_name):
             tag_id = result[0]
         else:
             # Create new tag
-            tag_id = str(uuid.uuid4())
             cursor.execute(
-                "INSERT INTO [ice].[Tag] (id, name, createdAt) VALUES (?, ?, GETUTCDATE())",
-                tag_id, tag_name
+                "INSERT INTO [ice].[Tag] (name, createdAt) VALUES (?, GETUTCDATE())",
+                tag_name
             )
             conn.commit()
+            # Get the newly created tag's ID
+            cursor.execute("SELECT id FROM [ice].[Tag] WHERE name = ?", tag_name)
+            result = cursor.fetchone()
+            if not result:
+                raise Exception(f"Failed to retrieve ID for newly created tag: {tag_name}")
+            tag_id = result[0]
         
         return tag_id
     except Exception as e:
