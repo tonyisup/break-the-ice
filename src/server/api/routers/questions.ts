@@ -50,10 +50,11 @@ export const questionsRouter = createTRPCRouter({
           FROM [ice].[Question] [q]
           LEFT JOIN [ice].[QuestionTag] [qt] ON [q].[id] = [qt].[questionId]
           LEFT JOIN [ice].[Tag] [t] ON [qt].[tagId] = [t].[id]
-          WHERE (${skip} = 0 or [id] NOT IN (${skipIDs}))
-          AND (${like} = 0 or [id] IN (${likeIDs}))
-          AND (${input.skipCategories?.length ?? 0} = 0 or [category] NOT IN (${input.skipCategories}))
-          AND (${input.likeCategories?.length ?? 0} = 0 or [category] IN (${input.likeCategories}))
+          WHERE (1=1)
+          AND (1=${skip > 0 ? `1 and [q].[id] NOT IN (${skipIDs})` : "1"})
+          AND (1=${like > 0 ? `1 and [q].[id] IN (${likeIDs})` : "1"})
+          AND (${input.skipCategories?.length ?? 0} = 0 or [q].[category] NOT IN (${input.skipCategories}))
+          AND (${input.likeCategories?.length ?? 0} = 0 or [q].[category] IN (${input.likeCategories}))
           AND (${input.skipTags?.length ?? 0} = 0 or [t].[name] NOT IN (${input.skipTags}))
           AND (${input.likeTags?.length ?? 0} = 0 or [t].[name] IN (${input.likeTags}))
 

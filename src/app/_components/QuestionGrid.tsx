@@ -69,7 +69,7 @@ export function QuestionGrid({ questions, type, onRemove }: QuestionGridProps) {
                     aria-label={`Remove ${type === "likes" ? "liked" : "skipped"} question`}
                   >
                     <X className="h-4 w-4 mr-2 text-red-500" />
-                    Unskip
+                    {type === "likes" ? "Unlike" : "Unskip"}
                   </Button>
                 </CardFooter>
               </Card>
