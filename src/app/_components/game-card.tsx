@@ -21,7 +21,7 @@ export default function GameCard({ question, image, className }: GameCardProps) 
         <Image src={image} alt={question.text} fill className="object-cover" />
       </div>}
       <div className="p-4">
-        <h2 className="text-xl font-bold">{question.text}</h2>
+        <h2 className={cn("text-xl font-bold", question.text.length > 150 ? "text-md" : "text-xl")}>{question.text}</h2>
         {question.category && <p className="text-gray-600">{question.category}</p>}
         {question.tags && (
           <div className="flex flex-wrap gap-2 mt-2">
