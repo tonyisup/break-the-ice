@@ -175,9 +175,13 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
       setSkipping(false);
       setFiltering(false);
     } else if (info.offset.y < -ACTION_THRESHOLD) {
-      removeCard(id);
+      // removeCard(id);
+      setDirection(null);
+      setLiking(false);
+      setSkipping(false);
+      setFiltering(false);
     }
-  }, [handleCardAction, removeCard, handleInspectCard]);
+  }, [handleCardAction, handleInspectCard]);
 
   const reset = useCallback(() => {
     setSkips([]);

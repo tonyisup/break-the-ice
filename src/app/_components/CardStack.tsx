@@ -111,7 +111,7 @@ export function CardStack({
                       >
                         FILTER
                       </div>
-                      <div
+                      {/* <div
                         className={cn(
                           "absolute bottom-6 left-6 rounded-lg px-4 py-2 font-bold transform rotate-12 opacity-0",
                           "bg-gray-500 text-white",
@@ -121,7 +121,7 @@ export function CardStack({
                         aria-hidden="true"
                       >
                         DISCARD
-                      </div>
+                      </div> */}
                     </>
                   )}
                 </div>

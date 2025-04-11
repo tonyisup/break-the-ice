@@ -28,14 +28,16 @@ interface GenerateIcebreakerQuestionProps {
 
 export async function generateIcebreakerQuestion({ skips, likes, skipTags, likeTags, skipCategories, likeCategories }: GenerateIcebreakerQuestionProps): Promise<GeneratedQuestion> {
   try {
-    const skipsText = skips.length > 0 
-      ? `\n\n- Here are some example questions that have been discarded, please generate a different type of question:\n${skips.map(q => `- ${q.text}`).join('\n')}`
-      : '';
+    // const skipsText = skips.length > 0 
+    //   ? `\n\n- Here are some example questions that have been discarded, please generate a different type of question:\n${skips.map(q => `- ${q.text}`).join('\n')}`
+    //   : '';
 
-    const likesText = likes.length > 0 
-      ? `\n\n- Here are some example questions that have been liked, please generate more of the same type of question:\n${likes.map(q => `- ${q.text}`).join('\n')}`
-      : '';
-
+    // const likesText = likes.length > 0 
+    //   ? `\n\n- Here are some example questions that have been liked, please generate more of the same type of question:\n${likes.map(q => `- ${q.text}`).join('\n')}`
+    //   : '';
+    const skipsText = '';
+    const likesText = '';
+    
     const skipTagsText = skipTags.length > 0 
       ? `\n\n- Here are some example tags that have been discarded, please generate a different type of tag:\n${skipTags.join('\n')}`
       : ''; 
