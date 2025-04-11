@@ -100,6 +100,9 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
   const removeCard = useCallback((id: number) => {
     if (!id) return;  
     setDirection(null);
+    setLiking(false);
+    setSkipping(false);
+    setFiltering(false);
     setCards((prev) => prev.filter((card) => card.id !== id));
   }, []);
 
@@ -117,10 +120,6 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
         setLikes((prev) => [question.id, ...prev]);
       }
     }
-    setDirection(null);
-    setLiking(false);
-    setSkipping(false);
-    setFiltering(false);
     removeCard(id);
   }, [cards, removeCard]);
 
@@ -170,13 +169,13 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
       handleCardAction(id, 'skip');
     } else if (info.offset.y > ACTION_THRESHOLD) {
       handleInspectCard();
+      setDirection(null);
+      setLiking(false);
+      setSkipping(false);
+      setFiltering(false);
     } else if (info.offset.y < -ACTION_THRESHOLD) {
       removeCard(id);
     }
-    setDirection(null);
-    setLiking(false);
-    setSkipping(false);
-    setFiltering(false);
   }, [handleCardAction, removeCard, handleInspectCard]);
 
   const reset = useCallback(() => {
