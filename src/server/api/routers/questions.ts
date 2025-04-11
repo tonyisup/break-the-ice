@@ -2,14 +2,19 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc";
 import { generateIcebreakerQuestion } from "~/server/openai";
-import type { Question } from "~/app/_components/types";
+import type { Question as PrismaQuestion, Tag } from "@prisma/client";
 
+type Question = PrismaQuestion & {
+  tags: Array<{
+    tag: Tag;
+  }>;
+};
 export const questionsRouter = createTRPCRouter({
   // Get a random question
   getRandomStack: publicProcedure
     .input(z.object({
-      skipIds: z.array(z.string()).optional(),
-      likeIds: z.array(z.string()).optional(),
+      skipIds: z.array(z.number()).optional(),
+      likeIds: z.array(z.number()).optional(),
       skipCategories: z.array(z.string()).optional(),
       likeCategories: z.array(z.string()).optional(),
       skipTags: z.array(z.string()).optional(),
@@ -106,12 +111,7 @@ export const questionsRouter = createTRPCRouter({
         })
       ])
       dbQuestions.forEach(question => {
-        question.tags = dbQuestionsWIthTags.filter(q => q.questionId == question.id).map(t => ({
-          tag: {
-            id: t.tag.id,
-            name: t.tag.name
-          }
-        }))
+        question.tags = dbQuestionsWIthTags.filter(q => q.questionId == question.id)
       })
       const questions: Question[] = [...dbQuestions, aiQuestion];
 
@@ -153,7 +153,7 @@ export const questionsRouter = createTRPCRouter({
   // Get a question by ID
   getById: publicProcedure
     .input(z.object({
-      id: z.string(),
+      id: z.number(),
     }))
     .query(async ({ ctx, input }) => {
       return await ctx.db.question.findUnique({
@@ -169,7 +169,7 @@ export const questionsRouter = createTRPCRouter({
     }),
   getByIDs: publicProcedure
     .input(z.object({
-      ids: z.array(z.string()),
+      ids: z.array(z.number()),
     }))
     .query(async ({ ctx, input }) => {
       if (input.ids.length === 0) return [];

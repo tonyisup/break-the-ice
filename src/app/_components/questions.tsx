@@ -3,18 +3,12 @@
 import { useCardStack } from "./hooks/useCardStack";
 import { CardStack } from "./CardStack";
 import { CardActions } from "./CardActions";
-import type { Question } from "./types";
 import { useRouter } from "next/navigation";
 import { getSkippedIds, getLikedIds, getSkippedCategories, getLikedTags, getSkippedTags, getLikedCategories } from "~/lib/localStorage";
 /**
  * QuestionComponent displays a stack of question cards that can be swiped left or right
- * @param initialQuestions - Initial set of questions to display
  */
-export function QuestionComponent({ 
-  initialQuestions 
-}: { 
-  initialQuestions: Question[];
-}) {
+export function QuestionComponent() {
   const router = useRouter();
   //get stored skips and likes
   const storedSkipIDs = getSkippedIds();
@@ -38,7 +32,7 @@ export function QuestionComponent({
     handleDragEnd,
     getMoreCards,
     reset,
-  } = useCardStack({ initialQuestions, storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags });
+  } = useCardStack({ storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags });
 
   const handleManageSkips = () => {
     router.push("/manage-skips");
@@ -47,7 +41,7 @@ export function QuestionComponent({
   const handleManageLikes = () => {
     router.push("/manage-likes");
   };
-  const handleInspectCard = (id: string) => {
+  const handleInspectCard = (id: number) => {
     router.push(`/inspect-card?id=${id}`);
   };
   return (

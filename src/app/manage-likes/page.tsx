@@ -11,7 +11,7 @@ import { Badge } from "~/components/ui/badge";
 
 export default function ManageLikesPage() {
   const router = useRouter();
-  const [likedQuestionIDs, setLikedQuestionIDs] = useState<string[]>([]);
+  const [likedQuestionIDs, setLikedQuestionIDs] = useState<number[]>([]);
   const [likedCategories, setLikedCategories] = useState<string[]>([]);
   const [likedTags, setLikedTags] = useState<string[]>([]);
   const { data: likedQuestions } = api.questions.getByIDs.useQuery({
@@ -27,7 +27,7 @@ export default function ManageLikesPage() {
     setLikedTags(tags);
   }, []);
 
-  const handleRemoveQuestion = (id: string) => {
+  const handleRemoveQuestion = (id: number) => {
     removeLikedQuestion(id);
     setLikedQuestionIDs((prev) => prev.filter((q) => q !== id));
   };

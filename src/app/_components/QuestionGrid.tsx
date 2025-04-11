@@ -5,20 +5,26 @@ import { Card, CardContent, CardFooter, CardHeader } from "~/components/ui/card"
 import { Badge } from "~/components/ui/badge";
 import { FilterIcon, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Question } from "./types";
+import type { Question as PrismaQuestion, Tag } from "@prisma/client";
+
+type Question = PrismaQuestion & {
+  tags: Array<{
+    tag: Tag;
+  }>;
+};
 
 interface QuestionGridProps {
   questions: Question[];
   type: "likes" | "skips";
-  onRemove: (id: string) => void;
+  onRemove: (id: number) => void;
 }
 
 export function QuestionGrid({ questions, type, onRemove }: QuestionGridProps) {
-  const handleRemove = (id: string) => {
+  const handleRemove = (id: number) => {
     onRemove(id);
   };
 
-  const handleInspect = (id: string) => {
+  const handleInspect = (id: number) => {
     window.location.href = `/inspect-card?id=${id}`;
   };
   return (

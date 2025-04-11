@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
 import { type PanInfo } from "framer-motion";
 import { api } from "~/trpc/react";
-import type { Question } from "../types";
-import { saveSkippedQuestion, saveLikedQuestion, clearSkippedQuestions, clearLikedQuestions } from "~/lib/localStorage";
+import type { Question } from "@prisma/client";
+import { saveSkippedQuestion, saveLikedQuestion, clearSkippedQuestions, clearLikedQuestions, clearSkippedCategories, clearLikedCategories, clearSkippedTags, clearLikedTags } from "~/lib/localStorage";
 
 // Constants
 const DRAG_THRESHOLD = 10;
@@ -12,9 +12,8 @@ export type CardAction = 'like' | 'skip';
 export type CardDirection = 'left' | 'right' | null;
 
 interface UseCardStackProps {
-  initialQuestions: Question[];
-  storedSkipIDs: string[];
-  storedLikeIDs: string[];
+  storedSkipIDs: number[];
+  storedLikeIDs: number[];
   storedSkipCategories: string[];
   storedLikeCategories: string[];
   storedSkipTags: string[];
@@ -23,53 +22,29 @@ interface UseCardStackProps {
 
 interface UseCardStackReturn {
   cards: Question[];
-  skips: string[];
-  likes: string[];
+  skips: number[];
+  likes: number[];
   direction: CardDirection;
   skipping: boolean;
   liking: boolean;
   isLoading: boolean;
-  handleCardAction: (id: string, action: CardAction) => void;
-  handleDrag: (info: PanInfo, id: string) => void;
-  handleDragEnd: (info: PanInfo, id: string) => void;
+  handleCardAction: (id: number, action: CardAction) => void;
+  handleDrag: (info: PanInfo, id: number) => void;
+  handleDragEnd: (info: PanInfo, id: number) => void;
   getMoreCards: () => Promise<void>;
   reset: () => void;
 }
 
 
-export function useCardStack({ initialQuestions, storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags }: UseCardStackProps): UseCardStackReturn {
-  const [skips, setSkips] = useState<string[]>(storedSkipIDs);
-  const [likes, setLikes] = useState<string[]>(storedLikeIDs);
+export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags }: UseCardStackProps): UseCardStackReturn {
+  const [skips, setSkips] = useState<number[]>(storedSkipIDs);
+  const [likes, setLikes] = useState<number[]>(storedLikeIDs);
   const [likesCategories, setLikesCategories] = useState<string[]>(storedLikeCategories);
   const [likesTags, setLikesTags] = useState<string[]>(storedLikeTags);
   const [skipCategories, setSkipCategories] = useState<string[]>(storedSkipCategories);
   const [skipTags, setSkipTags] = useState<string[]>(storedSkipTags);
-  const [cards, setCards] = useState<Question[]>(() => {
-    if (initialQuestions.length === 0) return [];
-    if (
-      storedSkipIDs.length === 0 
-      && storedLikeIDs.length === 0
-      && storedSkipCategories.length === 0
-      && storedLikeCategories.length === 0
-      && storedSkipTags.length === 0
-      && storedLikeTags.length === 0
-    ) return initialQuestions;
-    
-    const result = initialQuestions.filter(question => 
-      !storedSkipIDs.some(skip => skip === question.id) && 
-      !storedLikeIDs.some(like => like === question.id) &&
-      !storedSkipCategories.some(category => category === question.category) &&
-      !storedLikeCategories.some(category => category === question.category) &&
-      !storedSkipTags.some(tag => tag === question.tags.map(t => t.tag.name).join(',')) &&
-      !storedLikeTags.some(tag => tag === question.tags.map(t => t.tag.name).join(','))
-    );
-    if (result.length === 0) {
-      getMoreCards().catch(console.error);
-      return [];
-    }
-    return result;
-  });
-  const [direction, setDirection] = useState<CardDirection>(null);
+  const [cards, setCards] = useState<Question[]>([]);
+  const [direction, setDirection] = useState<CardDirection | null>(null);
   const [skipping, setSkipping] = useState(false);
   const [liking, setLiking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -103,13 +78,13 @@ export function useCardStack({ initialQuestions, storedSkipIDs, storedLikeIDs, s
     }
   }, [fetchNewQuestions]);
 
-  const removeCard = useCallback((id: string) => {
+  const removeCard = useCallback((id: number) => {
     if (!id) return;  
     setDirection(null);
     setCards((prev) => prev.filter((card) => card.id !== id));
   }, []);
 
-  const handleCardAction = useCallback((id: string, action: CardAction) => {
+  const handleCardAction = useCallback((id: number, action: CardAction) => {
     if (!id) return;
     setDirection(action === 'like' ? 'right' : 'left');
     const question = cards.find((card) => card.id === id);
@@ -126,7 +101,7 @@ export function useCardStack({ initialQuestions, storedSkipIDs, storedLikeIDs, s
     removeCard(id);
   }, [cards, removeCard]);
 
-  const handleDrag = useCallback((info: PanInfo, id: string) => {
+  const handleDrag = useCallback((info: PanInfo, id: number) => {
     if (!id) return;
     if (info.offset.x > DRAG_THRESHOLD) {
       setDirection("right");
@@ -146,7 +121,7 @@ export function useCardStack({ initialQuestions, storedSkipIDs, storedLikeIDs, s
     }
   }, []);
 
-  const handleDragEnd = useCallback((info: PanInfo, id: string) => {
+  const handleDragEnd = useCallback((info: PanInfo, id: number) => {
     if (!id) return;
     if (info.offset.x > SKIPPING_THRESHOLD) {
       handleCardAction(id, 'like');
@@ -162,8 +137,11 @@ export function useCardStack({ initialQuestions, storedSkipIDs, storedLikeIDs, s
     setLikes([]);
     clearSkippedQuestions();
     clearLikedQuestions();
-    setCards(initialQuestions);
-  }, [initialQuestions]);
+    clearSkippedCategories();
+    clearLikedCategories();
+    clearSkippedTags();
+    clearLikedTags();
+  }, []);
 
   return {
     cards,

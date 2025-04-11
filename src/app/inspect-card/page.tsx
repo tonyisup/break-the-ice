@@ -39,7 +39,7 @@ export default function InspectCard() {
   const id = searchParams.get("id");
 
   const { data: question, isLoading, error } = api.questions.getById.useQuery(
-    { id: id ?? "" },
+    { id: id ? parseInt(id) : 0 },
     { enabled: !!id }
   );
 

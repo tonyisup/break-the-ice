@@ -8,7 +8,7 @@ datasource db {
 }
 
 model Question {
-  id        String        @id @default(dbgenerated("newid()")) @db.UniqueIdentifier
+  id        Int           @id @default(autoincrement())
   text      String
   category  String        @default("general") @db.NVarChar(100)
   createdAt DateTime      @default(dbgenerated("getutcdate()")) @db.Date
@@ -17,7 +17,7 @@ model Question {
 }
 
 model Tag {
-  id        String        @id @default(dbgenerated("newid()")) @db.UniqueIdentifier
+  id        Int           @id @default(autoincrement())
   name      String        @unique @db.NVarChar(100)
   createdAt DateTime      @default(dbgenerated("getutcdate()")) @db.Date
   updatedAt DateTime?     @db.Date
@@ -25,8 +25,8 @@ model Tag {
 }
 
 model QuestionTag {
-  questionId String    @db.UniqueIdentifier
-  tagId      String    @db.UniqueIdentifier
+  questionId Int
+  tagId      Int
   createdAt  DateTime  @default(dbgenerated("getutcdate()")) @db.Date
   question   Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
   tag        Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)

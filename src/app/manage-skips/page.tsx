@@ -11,7 +11,7 @@ import { Badge } from "~/components/ui/badge";
 
 export default function ManageSkipsPage() {
   const router = useRouter();
-  const [skippedQuestionIDs, setSkippedQuestionIDs] = useState<string[]>([]);
+  const [skippedQuestionIDs, setSkippedQuestionIDs] = useState<number[]>([]);
   const [skippedCategories, setSkippedCategories] = useState<string[]>([]);
   const [skippedTags, setSkippedTags] = useState<string[]>([]);
   const { data: skippedQuestions } = api.questions.getByIDs.useQuery({
@@ -27,7 +27,7 @@ export default function ManageSkipsPage() {
     setSkippedTags(tags);
   }, []);
 
-  const handleRemoveQuestion = (id: string) => {
+  const handleRemoveQuestion = (id: number) => {
     removeSkippedQuestion(id);
     setSkippedQuestionIDs((prev) => prev.filter((q) => q !== id));
   };

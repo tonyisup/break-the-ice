@@ -1,4 +1,4 @@
-import type { Question } from "~/app/_components/types";
+import type { Question } from "@prisma/client"; 
 
 const SKIPPED_IDS_KEY = "break-the-ice-skipped-ids";
 const LIKED_IDS_KEY = "break-the-ice-liked-ids";
@@ -27,14 +27,14 @@ export function saveSkippedQuestion(question: Question): void {
 /**
  * Get all skipped question IDs from local storage
  */
-export function getSkippedIds(): string[] {
+export function getSkippedIds(): number[] {
   if (typeof window === "undefined") return [];
   
   try {
-    const storedData = localStorage.getItem(SKIPPED_IDS_KEY);
-    return storedData ? JSON.parse(storedData) as string[] : [];
+    const skippedIds = localStorage.getItem(SKIPPED_IDS_KEY);
+    return skippedIds ? (JSON.parse(skippedIds) as number[]) : [];
   } catch (error) {
-    console.error("Failed to get skipped question IDs from local storage:", error);
+    console.error("Failed to get skipped IDs from local storage:", error);
     return [];
   }
 }
@@ -42,7 +42,7 @@ export function getSkippedIds(): string[] {
 /**
  * Check if a question has been skipped
  */
-export function isQuestionSkipped(questionId: string): boolean {
+export function isQuestionSkipped(questionId: number): boolean {
   if (typeof window === "undefined") return false;
   
   try {
@@ -57,9 +57,9 @@ export function isQuestionSkipped(questionId: string): boolean {
 /**
  * Remove a question from the skipped list
  */
-export function removeSkippedQuestion(questionId: string): void {
+export function removeSkippedQuestion(questionId: number): void {
   if (typeof window === "undefined") return;
-  
+
   try {
     const skippedIds = getSkippedIds();
     const updatedIds = skippedIds.filter(id => id !== questionId);
@@ -89,14 +89,14 @@ export function saveLikedQuestion(question: Question): void {
 /**
  * Get all liked question IDs from local storage
  */
-export function getLikedIds(): string[] {
+export function getLikedIds(): number[] {
   if (typeof window === "undefined") return [];
-
+  
   try {
-    const storedData = localStorage.getItem(LIKED_IDS_KEY);
-    return storedData ? JSON.parse(storedData) as string[] : [];
+    const likedIds = localStorage.getItem(LIKED_IDS_KEY);
+    return likedIds ? (JSON.parse(likedIds) as number[]) : [];
   } catch (error) {
-    console.error("Failed to get liked question IDs from local storage:", error);
+    console.error("Failed to get liked IDs from local storage:", error);
     return [];
   }
 }
@@ -104,7 +104,7 @@ export function getLikedIds(): string[] {
 /**
  * Check if a question has been liked
  */
-export function isQuestionLiked(questionId: string): boolean {
+export function isQuestionLiked(questionId: number): boolean {
   if (typeof window === "undefined") return false;
 
   try {
@@ -119,7 +119,7 @@ export function isQuestionLiked(questionId: string): boolean {
 /**
  * Remove a question from the liked list
  */
-export function removeLikedQuestion(questionId: string): void {
+export function removeLikedQuestion(questionId: number): void {
   if (typeof window === "undefined") return;
 
   try {
@@ -392,3 +392,28 @@ export function clearLikedQuestions(): void {
   localStorage.removeItem(LIKED_TAGS_KEY);
   localStorage.removeItem(LIKED_CATEGORIES_KEY);
 }
+
+export function clearSkippedCategories(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(SKIPPED_CATEGORIES_KEY);
+} 
+
+export function clearSkippedTags(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(SKIPPED_TAGS_KEY);
+}
+
+export function clearLikedCategories(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LIKED_CATEGORIES_KEY);
+}
+
+export function clearLikedTags(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LIKED_TAGS_KEY);
+}
+
+
+
+
+

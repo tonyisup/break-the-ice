@@ -1,19 +1,20 @@
 import { Button } from "~/components/ui/button";
 import { TrashIcon, HeartIcon, RefreshCwIcon, LayoutListIcon, ListCheckIcon, FilterIcon } from "lucide-react";
-import type { Question } from "./types";
+
 import type { CardAction } from "./hooks/useCardStack";
+import type { Question } from "@prisma/client";
 
 interface CardActionsProps {
   cards: Question[];
-  likes: string[];
-  skips: string[];
+  likes: number[];
+  skips: number[];
   isLoading: boolean;
-  onCardAction: (id: string, action: CardAction) => void;
+  onCardAction: (id: number, action: CardAction) => void;
   onGetMore: () => void;
   onReset: () => void;
   onManageSkips: () => void;
   onManageLikes: () => void;
-  onInspectCard: (id: string) => void;
+  onInspectCard: (id: number) => void;
 }
 
 export function CardActions({

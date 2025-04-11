@@ -2,7 +2,7 @@ import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { cn } from "~/lib/utils";
 import { QuestionCard } from "./questionCard";
 import type { CardDirection } from "./hooks/useCardStack";
-import type { Question } from "./types";
+import type { Question } from "@prisma/client";
 
 interface CardStackProps {
   cards: Question[];
@@ -13,8 +13,8 @@ interface CardStackProps {
     width?: number;
     height?: number;
   };
-  onDrag: (info: PanInfo, id: string) => void;
-  onDragEnd: (info: PanInfo, id: string) => void;
+  onDrag: (info: PanInfo, id: number) => void;
+  onDragEnd: (info: PanInfo, id: number) => void;
 }
 
 export function CardStack({ 
