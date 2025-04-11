@@ -56,7 +56,7 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
   const [skipping, setSkipping] = useState(false);
   const [liking, setLiking] = useState(false);
   const [filtering, setFiltering] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [firstLoad, setFirstLoad] = useState(true);
 
   const { data: newQuestions, refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
@@ -78,6 +78,7 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
     if (newQuestions) {
       setCards((prev) => [...prev, ...newQuestions]);
       setFirstLoad(false);
+      setIsLoading(false);
     }
   }, [newQuestions]);
 
