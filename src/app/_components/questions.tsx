@@ -18,22 +18,6 @@ export function QuestionComponent() {
   const storedSkipTags = getSkippedTags();
   const storedLikeTags = getLikedTags();
 
-
-  const {
-    cards,
-    skips,
-    likes,
-    direction,
-    skipping,
-    liking,
-    isLoading,
-    handleCardAction,
-    handleDrag,
-    handleDragEnd,
-    getMoreCards,
-    reset,
-  } = useCardStack({ storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags });
-
   const handleManageSkips = () => {
     router.push("/manage-skips");
   };
@@ -41,9 +25,27 @@ export function QuestionComponent() {
   const handleManageLikes = () => {
     router.push("/manage-likes");
   };
-  const handleInspectCard = (id: number) => {
-    router.push(`/inspect-card?id=${id}`);
+  const handleInspectCard = () => {
+    const currentCard = cards[0];
+    if (!currentCard) return;
+    router.push(`/inspect-card?id=${currentCard.id}`);
   };
+  const {
+    cards,
+    skips,
+    likes,
+    direction,
+    skipping,
+    liking,
+    filtering,
+    isLoading,
+    handleCardAction,
+    handleDrag,
+    handleDragEnd,
+    getMoreCards,
+    reset,
+  } = useCardStack({ storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard });
+
   return (
     <div className="flex-1 p-8 h-full flex flex-col justify-center items-center" role="region" aria-label="Question cards">
       <CardStack
@@ -51,6 +53,7 @@ export function QuestionComponent() {
         direction={direction}
         skipping={skipping}
         liking={liking}
+        filtering={filtering}
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
       />

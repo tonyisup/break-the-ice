@@ -14,7 +14,7 @@ interface CardActionsProps {
   onReset: () => void;
   onManageSkips: () => void;
   onManageLikes: () => void;
-  onInspectCard: (id: number) => void;
+  onInspectCard: () => void;
 }
 
 export function CardActions({
@@ -87,12 +87,6 @@ export function CardActions({
     onCardAction(currentCard.id, 'skip');
   };
 
-  const handleInspectCard = () => {
-    const currentCard = cards[0];
-    if (!currentCard) return;
-    onInspectCard(currentCard.id);
-  };
-
   return (
     <div className="flex flex-col gap-2">
 
@@ -106,7 +100,7 @@ export function CardActions({
           Skip
         </Button>
         <Button
-          onClick={handleInspectCard}
+          onClick={onInspectCard}
           variant="outline"
           aria-label="filter questions"
         >

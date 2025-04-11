@@ -1,15 +1,20 @@
 import { useState, useCallback, useEffect } from "react";
 import { type PanInfo } from "framer-motion";
 import { api } from "~/trpc/react";
-import type { Question } from "@prisma/client";
 import { saveSkippedQuestion, saveLikedQuestion, clearSkippedQuestions, clearLikedQuestions, clearSkippedCategories, clearLikedCategories, clearSkippedTags, clearLikedTags } from "~/lib/localStorage";
+import type { Question as PrismaQuestion, Tag } from "@prisma/client";
 
+type Question = PrismaQuestion & {
+  tags: Array<{
+    tag: Tag;
+  }>;
+};
 // Constants
 const DRAG_THRESHOLD = 10;
-const SKIPPING_THRESHOLD = 100;
+const ACTION_THRESHOLD = 100;
 
 export type PreferenceAction = 'like' | 'skip';
-export type CardDirection = 'left' | 'right' | null;
+export type CardDirection = 'left' | 'right' | 'up' | 'down' | null;
 
 interface UseCardStackProps {
   storedSkipIDs: number[];
@@ -18,6 +23,7 @@ interface UseCardStackProps {
   storedLikeCategories: string[];
   storedSkipTags: string[];
   storedLikeTags: string[];
+  handleInspectCard: () => void;
 }
 
 interface UseCardStackReturn {
@@ -27,6 +33,7 @@ interface UseCardStackReturn {
   direction: CardDirection;
   skipping: boolean;
   liking: boolean;
+  filtering: boolean;
   isLoading: boolean;
   handleCardAction: (id: number, action: PreferenceAction) => void;
   handleDrag: (info: PanInfo, id: number) => void;
@@ -36,7 +43,7 @@ interface UseCardStackReturn {
 }
 
 
-export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags }: UseCardStackProps): UseCardStackReturn {
+export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard }: UseCardStackProps): UseCardStackReturn {
   const [skips, setSkips] = useState<number[]>(storedSkipIDs);
   const [likes, setLikes] = useState<number[]>(storedLikeIDs);
   const [likesCategories] = useState<string[]>(storedLikeCategories);
@@ -47,6 +54,7 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
   const [direction, setDirection] = useState<CardDirection | null>(null);
   const [skipping, setSkipping] = useState(false);
   const [liking, setLiking] = useState(false);
+  const [filtering, setFiltering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [firstLoad, setFirstLoad] = useState(true);
 
@@ -118,29 +126,51 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
     } else if (info.offset.x < -DRAG_THRESHOLD) {
       setDirection("left");
     }
-    
-    if (info.offset.x > SKIPPING_THRESHOLD) {
+    if (info.offset.y > DRAG_THRESHOLD) {
+      setDirection("down");
+    } else if (info.offset.y < -DRAG_THRESHOLD) {
+      setDirection("up");
+    }
+    if (info.offset.x > ACTION_THRESHOLD) {
       setLiking(true);
       setSkipping(false);
-    } else if (info.offset.x < -SKIPPING_THRESHOLD) {
+      setFiltering(false);
+    } else if (info.offset.x < -ACTION_THRESHOLD) {
       setLiking(false);
       setSkipping(true);
+      setFiltering(false);
     } else {
       setLiking(false);
       setSkipping(false);
+      setFiltering(false);
+    }
+    if (info.offset.y > ACTION_THRESHOLD) {
+      setLiking(false);
+      setSkipping(false);
+      setFiltering(true);
+    } else if (info.offset.y < -ACTION_THRESHOLD) {
+      setLiking(false);
+      setSkipping(false);
+      setFiltering(true);
+    } else {
+      setFiltering(false);
     }
   }, []);
 
   const handleDragEnd = useCallback((info: PanInfo, id: number) => {
     if (!id) return;
-    if (info.offset.x > SKIPPING_THRESHOLD) {
+    if (info.offset.x > ACTION_THRESHOLD) {
       handleCardAction(id, 'like');
-    } else if (info.offset.x < -SKIPPING_THRESHOLD) {
+    } else if (info.offset.x < -ACTION_THRESHOLD) {
       handleCardAction(id, 'skip');
+    } else if (info.offset.y > ACTION_THRESHOLD) {
+      handleInspectCard();
+    } else if (info.offset.y < -ACTION_THRESHOLD) {
+      removeCard(id);
     } else {
       setDirection(null);
     }
-  }, [handleCardAction]);
+  }, [handleCardAction, removeCard, handleInspectCard]);
 
   const reset = useCallback(() => {
     setSkips([]);
@@ -160,6 +190,7 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
     direction,
     skipping,
     liking,
+    filtering,
     isLoading,
     handleCardAction,
     handleDrag,

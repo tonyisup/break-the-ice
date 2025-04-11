@@ -2,13 +2,21 @@ import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { cn } from "~/lib/utils";
 import { QuestionCard } from "./questionCard";
 import type { CardDirection } from "./hooks/useCardStack";
-import type { Question } from "@prisma/client";
+import { FilterIcon } from "lucide-react";
 
+import type { Question as PrismaQuestion, Tag } from "@prisma/client";
+
+type Question = PrismaQuestion & {
+  tags: Array<{
+    tag: Tag;
+  }>;
+};
 interface CardStackProps {
   cards: Question[];
   direction: CardDirection;
   skipping: boolean;
   liking: boolean;
+  filtering: boolean;
   cardSize?: {
     width?: number;
     height?: number;
@@ -22,6 +30,7 @@ export function CardStack({
   direction, 
   skipping, 
   liking,
+  filtering,
   cardSize,
   onDrag, 
   onDragEnd 
@@ -74,7 +83,7 @@ export function CardStack({
                           "absolute top-6 left-6 rounded-lg px-4 py-2 font-bold transform -rotate-12 opacity-0",
                           "bg-green-500 text-white",
                           "transition-opacity duration-200",
-                          (liking && direction === "right") && "opacity-100"
+                          liking && "opacity-100"
                         )}
                         aria-hidden="true"
                       >
@@ -85,11 +94,33 @@ export function CardStack({
                           "absolute top-6 right-6 rounded-lg px-4 py-2 font-bold transform rotate-12 opacity-0",
                           "bg-red-500 text-white",
                           "transition-opacity duration-200",
-                          (skipping && direction === "left") && "opacity-100"
+                          skipping && "opacity-100"
                         )}
                         aria-hidden="true"
                       >
                         SKIP
+                      </div>
+                      <div
+                        className={cn(
+                          "absolute top-6 rounded-lg px-4 py-2 font-bold transform opacity-0",
+                          "bg-blue-500 text-white",
+                          "transition-opacity duration-200",
+                          (filtering && direction === "down") && "opacity-100"
+                        )}
+                        aria-hidden="true"
+                      >
+                        FILTER
+                      </div>
+                      <div
+                        className={cn(
+                          "absolute bottom-6 left-6 rounded-lg px-4 py-2 font-bold transform rotate-12 opacity-0",
+                          "bg-gray-500 text-white",
+                          "transition-opacity duration-200",
+                          (filtering && direction === "up") && "opacity-100"
+                        )}
+                        aria-hidden="true"
+                      >
+                        DISCARD
                       </div>
                     </>
                   )}
