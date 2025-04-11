@@ -8,7 +8,7 @@ import { saveSkippedQuestion, saveLikedQuestion, clearSkippedQuestions, clearLik
 const DRAG_THRESHOLD = 10;
 const SKIPPING_THRESHOLD = 100;
 
-export type CardAction = 'like' | 'skip';
+export type PreferenceAction = 'like' | 'skip';
 export type CardDirection = 'left' | 'right' | null;
 
 interface UseCardStackProps {
@@ -28,7 +28,7 @@ interface UseCardStackReturn {
   skipping: boolean;
   liking: boolean;
   isLoading: boolean;
-  handleCardAction: (id: number, action: CardAction) => void;
+  handleCardAction: (id: number, action: PreferenceAction) => void;
   handleDrag: (info: PanInfo, id: number) => void;
   handleDragEnd: (info: PanInfo, id: number) => void;
   getMoreCards: () => Promise<void>;
@@ -39,10 +39,10 @@ interface UseCardStackReturn {
 export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags }: UseCardStackProps): UseCardStackReturn {
   const [skips, setSkips] = useState<number[]>(storedSkipIDs);
   const [likes, setLikes] = useState<number[]>(storedLikeIDs);
-  const [likesCategories, setLikesCategories] = useState<string[]>(storedLikeCategories);
-  const [likesTags, setLikesTags] = useState<string[]>(storedLikeTags);
-  const [skipCategories, setSkipCategories] = useState<string[]>(storedSkipCategories);
-  const [skipTags, setSkipTags] = useState<string[]>(storedSkipTags);
+  const [likesCategories] = useState<string[]>(storedLikeCategories);
+  const [likesTags] = useState<string[]>(storedLikeTags);
+  const [skipCategories] = useState<string[]>(storedSkipCategories);
+  const [skipTags] = useState<string[]>(storedSkipTags);
   const [cards, setCards] = useState<Question[]>([]);
   const [direction, setDirection] = useState<CardDirection | null>(null);
   const [skipping, setSkipping] = useState(false);
@@ -94,7 +94,7 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
     setCards((prev) => prev.filter((card) => card.id !== id));
   }, []);
 
-  const handleCardAction = useCallback((id: number, action: CardAction) => {
+  const handleCardAction = useCallback((id: number, action: PreferenceAction) => {
     if (!id) return;
     setDirection(action === 'like' ? 'right' : 'left');
     const question = cards.find((card) => card.id === id);

@@ -1,7 +1,7 @@
 import { Button } from "~/components/ui/button";
 import { TrashIcon, HeartIcon, RefreshCwIcon, LayoutListIcon, ListCheckIcon, FilterIcon } from "lucide-react";
 
-import type { CardAction } from "./hooks/useCardStack";
+import type { PreferenceAction } from "./hooks/useCardStack";
 import type { Question } from "@prisma/client";
 
 interface CardActionsProps {
@@ -9,7 +9,7 @@ interface CardActionsProps {
   likes: number[];
   skips: number[];
   isLoading: boolean;
-  onCardAction: (id: number, action: CardAction) => void;
+  onCardAction: (id: number, action: PreferenceAction) => void;
   onGetMore: () => void;
   onReset: () => void;
   onManageSkips: () => void;
