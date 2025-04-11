@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { env } from '~/env';
 import { TRPCError } from '@trpc/server';
-import type { Question } from '~/app/_components/types';
+import type { Question } from '@prisma/client';
 
 const openai = new OpenAI({
   apiKey: env.OPENAI_API_KEY,
