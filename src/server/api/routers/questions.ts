@@ -2,8 +2,8 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc";
 import { generateIcebreakerQuestion } from "~/server/openai";
-import type { Question as PrismaQuestion, Tag } from "@prisma/client";
 import { Prisma } from "@prisma/client";
+import type { Question as PrismaQuestion, Tag } from "@prisma/client";
 
 type Question = PrismaQuestion & {
   tags: Array<{

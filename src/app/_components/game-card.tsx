@@ -1,6 +1,13 @@
 import { cn } from "~/lib/utils"
 import Image from "next/image"
-import type { Question } from "./types"
+import type { Question as PrismaQuestion, Tag } from "@prisma/client";
+
+type Question = PrismaQuestion & {
+  tags: Array<{
+    tag: Tag;
+  }>;
+};
+
 interface GameCardProps {
   question: Question
   image?: string
