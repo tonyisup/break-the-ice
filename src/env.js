@@ -11,12 +11,9 @@ export const env = createEnv({
       process.env.NODE_ENV === "production"
         ? z.string()
         : z.string().optional(),
-    EMAIL_FROM: z.string(),
-    EMAIL_HOST: z.string(),
-    EMAIL_PASSWORD: z.string(),
-    EMAIL_PORT: z.string(),
-    EMAIL_USER: z.string(),
     DATABASE_URL: z.string().url(),
+    GOOGLE_CLIENT_ID: z.string(),
+    GOOGLE_CLIENT_SECRET: z.string(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
@@ -39,12 +36,9 @@ export const env = createEnv({
    */
   runtimeEnv: {
     AUTH_SECRET: process.env.AUTH_SECRET,
-    EMAIL_FROM: process.env.EMAIL_FROM,
-    EMAIL_HOST: process.env.EMAIL_HOST,
-    EMAIL_PASSWORD: process.env.EMAIL_PASSWORD,
-    EMAIL_PORT: process.env.EMAIL_PORT,
-    EMAIL_USER: process.env.EMAIL_USER,
     DATABASE_URL: process.env.DATABASE_URL,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     NODE_ENV: process.env.NODE_ENV,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     ADMIN_USER: process.env.ADMIN_USER,

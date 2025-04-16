@@ -4,9 +4,8 @@ import AdminQuestions from "./admin-questions";
 
 export default function Admin() {
   return (
-    <div className="flex flex-col gap-4">
-      <Tabs>
-        <TabsList>
+    <Tabs>
+      <TabsList>
         <TabsTrigger value="questions">Questions</TabsTrigger>
         <TabsTrigger value="tags">Tags</TabsTrigger>
         <TabsTrigger value="prune">Prune</TabsTrigger>
@@ -19,8 +18,7 @@ export default function Admin() {
       </TabsContent>
       <TabsContent value="prune">
         <span>Prune</span>
-        </TabsContent>
-      </Tabs>
-    </div>
+      </TabsContent>
+    </Tabs>
   );
 }

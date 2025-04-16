@@ -11,14 +11,34 @@ type Question = PrismaQuestion & {
   }>;
 };
 export const questionsRouter = createTRPCRouter({
-  removeQuestion: publicProcedure
+  removeTag: protectedProcedure
+    .input(z.object({
+      questionId: z.number(),
+      tagId: z.number(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return await ctx.db.questionTag.delete({ where: { questionId_tagId: { questionId: input.questionId, tagId: input.tagId } } });
+    }),
+  updateQuestion: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      text: z.string(),
+      category: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return await ctx.db.question.update({
+        where: { id: input.id },
+        data: { text: input.text, category: input.category }
+      });
+    }),
+  removeQuestion: protectedProcedure
     .input(z.object({
       id: z.number(),
     }))
     .mutation(async ({ ctx, input }) => {
       return await ctx.db.question.delete({ where: { id: input.id } });
     }),
-  getAll: publicProcedure.query(async ({ ctx }) => {
+  getAll: protectedProcedure .query(async ({ ctx }) => {
     return await ctx.db.question.findMany({
       include: {
         tags: {
@@ -26,7 +46,15 @@ export const questionsRouter = createTRPCRouter({
             tag: true
           }
         }
-      }
+      },
+      orderBy: [
+        {
+          category: 'asc',
+        },
+        {
+          text: 'asc'
+        }
+      ]
     });
   }),
   // Get a random question
