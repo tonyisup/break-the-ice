@@ -11,6 +11,24 @@ type Question = PrismaQuestion & {
   }>;
 };
 export const questionsRouter = createTRPCRouter({
+  removeQuestion: publicProcedure
+    .input(z.object({
+      id: z.number(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return await ctx.db.question.delete({ where: { id: input.id } });
+    }),
+  getAll: publicProcedure.query(async ({ ctx }) => {
+    return await ctx.db.question.findMany({
+      include: {
+        tags: {
+          include: {
+            tag: true
+          }
+        }
+      }
+    });
+  }),
   // Get a random question
   getRandomStack: publicProcedure
     .input(z.object({

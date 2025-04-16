@@ -1,63 +1,18 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useEffect, useState   } from "react";
-
+import { Button } from "~/components/ui/button";
+import Admin from "../_components/admin/admin";
+import { useSession, signIn } from "next-auth/react";
 
 export default function AdminPage() {
-  const searchParams = useSearchParams();
-  const [isAdmin, setIsAdmin] = useState(false);
-  
-  if (!searchParams) {
-    return <div>Access denied</div>;
-  }
+  const { data: session } = useSession();
 
-  if (!searchParams.has("KU61qVYyQ48KG8qKeuflvveMFbaLT6h0")) {
-    return <div>Access denied</div>;
-  }
-
-  // Example of checking for specific parameters
-  const secret = searchParams.get("KU61qVYyQ48KG8qKeuflvveMFbaLT6h0");
-
-  if (!secret) {
-    return <div>Access denied</div>;
-  }
-
-  const checkAdminAccess = async () => {
-    try {
-      if (!secret) {
-        return <div>Access denied</div>;
-      }
-      const response = await fetch('/api/admin', {
-        headers: {
-          'x-admin-secret': secret || '',
-        },
-      });
-      
-      if (response.ok) {
-        setIsAdmin(true);
-      } else {
-        setIsAdmin(false);
-      }
-    } catch (error) {
-      console.error('Error checking admin access:', error);
-      return <div>Access denied</div>;
-    }
-  };
-
-  // Call the function when the component mounts
-  useEffect(() => {
-    if (secret) {
-      console.log(secret);
-      checkAdminAccess();
-    }
-  }, [secret]);
 
   return (
-    <div>
+    <div className="h-full flex flex-col gap-4 items-center justify-center">
       <h1>Admin Page</h1>
-      {isAdmin && <div>Admin access granted</div>}
-      {!isAdmin && <div>Access denied</div>}
+      {!session?.user.admin && <Button variant="outline" onClick={() => signIn()}>Login</Button>}
+      {session?.user.admin && <Admin />}
     </div>
   );
 }

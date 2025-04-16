@@ -1,6 +1,6 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { type DefaultSession, type NextAuthConfig } from "next-auth";
-import DiscordProvider from "next-auth/providers/discord";
+import EmailProvider from "next-auth/providers/nodemailer";
 
 import { db } from "~/server/db";
 
@@ -14,6 +14,8 @@ declare module "next-auth" {
   interface Session extends DefaultSession {
     user: {
       id: string;
+      email: string;
+      admin: boolean;
       // ...other properties
       // role: UserRole;
     } & DefaultSession["user"];
@@ -32,7 +34,17 @@ declare module "next-auth" {
  */
 export const authConfig = {
   providers: [
-    DiscordProvider,
+    EmailProvider({
+      server: {
+        host: process.env.EMAIL_HOST,
+        port: process.env.EMAIL_PORT,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASSWORD,
+        },
+      },
+      from: process.env.EMAIL_FROM,
+    }),
     /**
      * ...add more providers here.
      *
@@ -50,6 +62,8 @@ export const authConfig = {
       user: {
         ...session.user,
         id: user.id,
+        email: user.email,
+        admin: user.email === process.env.ADMIN_USER,
       },
     }),
   },
