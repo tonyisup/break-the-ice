@@ -1,4 +1,4 @@
-import { Question, QuestionTag, Tag } from "@prisma/client";
+import type { Question, QuestionTag, Tag } from "@prisma/client";
 import { Pencil, Save, Trash, X } from "lucide-react";
 import { useState } from "react";
 import { SearchInput } from "~/components/SearchInput";
@@ -30,15 +30,15 @@ export default function AdminQuestions() {
   const handleRemoveQuestion = (id: number) => {
     removeQuestion.mutate({ id }, {
       onSuccess: () => {
-        refetchAll();
+        void refetchAll();
       }
     });
   }
 
   const handleStartEditingQuestion = (id: number) => {
     setEditingQuestionId(id);
-    setEditingQuestionText(questions.find((question) => question.id === id)?.text || "");
-    setEditingQuestionCategory(questions.find((question) => question.id === id)?.category || "");
+    setEditingQuestionText(questions.find((question) => question.id === id)?.text ?? "");
+    setEditingQuestionCategory(questions.find((question) => question.id === id)?.category ?? "");
   }
 
   const handleStopEditingQuestion = () => {

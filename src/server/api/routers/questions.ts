@@ -38,7 +38,7 @@ export const questionsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       return await ctx.db.question.delete({ where: { id: input.id } });
     }),
-  getAll: protectedProcedure .query(async ({ ctx }) => {
+  getAll: protectedProcedure.query(async ({ ctx }) => {
     return await ctx.db.question.findMany({
       include: {
         tags: {
@@ -57,6 +57,26 @@ export const questionsRouter = createTRPCRouter({
       ]
     });
   }),
+  getRandom: publicProcedure.query(async ({ ctx }) => {
+    const count = await ctx.db.question.count();
+    const skip = Math.floor(Math.random() * count);
+    
+    const question = await ctx.db.question.findFirst({
+      skip,
+      include: {
+        tags: {
+          include: {
+            tag: true
+          }
+        }
+      }
+    });
+    
+    if (!question) {
+      return [];
+    }
+    return [question];
+  }),
   // Get a random question
   getRandomStack: publicProcedure
     .input(z.object({
@@ -68,7 +88,7 @@ export const questionsRouter = createTRPCRouter({
       likeTags: z.array(z.string()).optional(),
     }))
     .query(async ({ ctx, input }) => {
-      
+
       // Fetch skipped and liked questions from the database
       const skippedQuestions = input.skipIds && input.skipIds.length > 0
         ? await ctx.db.$queryRaw<Question[]>`
@@ -106,13 +126,14 @@ export const questionsRouter = createTRPCRouter({
 
           ORDER BY newid()
         `,
-        generateIcebreakerQuestion({ 
-          skips: skippedQuestions, 
-          likes: likedQuestions, 
-          skipTags: input.skipTags ?? [], 
-          likeTags: input.likeTags ?? [], 
-          skipCategories: input.skipCategories ?? [], 
-          likeCategories: input.likeCategories ?? [] }),
+        generateIcebreakerQuestion({
+          skips: skippedQuestions,
+          likes: likedQuestions,
+          skipTags: input.skipTags ?? [],
+          likeTags: input.likeTags ?? [],
+          skipCategories: input.skipCategories ?? [],
+          likeCategories: input.likeCategories ?? []
+        }),
       ]);
 
       // Insert the AI-generated question into the database with its tags

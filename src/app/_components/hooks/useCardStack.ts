@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { type PanInfo } from "framer-motion";
 import { api } from "~/trpc/react";
 import { saveSkippedQuestion, saveLikedQuestion, clearSkippedQuestions, clearLikedQuestions, clearSkippedCategories, clearLikedCategories, clearSkippedTags, clearLikedTags } from "~/lib/localStorage";
@@ -18,6 +18,7 @@ export type PreferenceAction = 'like' | 'skip';
 export type CardDirection = 'left' | 'right' | 'up' | 'down' | null;
 
 interface UseCardStackProps {
+  initialQuestions: Question[];
   storedSkipIDs: number[];
   storedLikeIDs: number[];
   storedSkipCategories: string[];
@@ -44,20 +45,19 @@ interface UseCardStackReturn {
 }
 
 
-export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard }: UseCardStackProps): UseCardStackReturn {
+export function useCardStack({ initialQuestions, storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard }: UseCardStackProps): UseCardStackReturn {
   const [skips, setSkips] = useState<number[]>(storedSkipIDs);
   const [likes, setLikes] = useState<number[]>(storedLikeIDs);
   const [likesCategories] = useState<string[]>(storedLikeCategories);
   const [likesTags] = useState<string[]>(storedLikeTags);
   const [skipCategories] = useState<string[]>(storedSkipCategories);
   const [skipTags] = useState<string[]>(storedSkipTags);
-  const [cards, setCards] = useState<Question[]>([]);
+  const [cards, setCards] = useState<Question[]>(initialQuestions);
   const [direction, setDirection] = useState<CardDirection | null>(null);
   const [skipping, setSkipping] = useState(false);
   const [liking, setLiking] = useState(false);
   const [filtering, setFiltering] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [firstLoad, setFirstLoad] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   const { data: newQuestions, refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
     { 
@@ -69,19 +69,9 @@ export function useCardStack({ storedSkipIDs, storedLikeIDs, storedSkipCategorie
       likeTags: likesTags
     },
     {
-      enabled: (cards.length === 0) && firstLoad,
+      enabled: false,
     },
   );
-
-
-  useEffect(() => {
-    if (newQuestions) {
-      setCards((prev) => [...prev, ...newQuestions]);
-      setFirstLoad(false);
-      setIsLoading(false);
-    }
-  }, [newQuestions]);
-
 
   const getMoreCards = useCallback(async () => {
     setIsLoading(true);

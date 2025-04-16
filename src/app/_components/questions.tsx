@@ -5,10 +5,20 @@ import { CardStack } from "./CardStack";
 import { CardActions } from "./CardActions";
 import { useRouter } from "next/navigation";
 import { getSkippedIds, getLikedIds, getSkippedCategories, getLikedTags, getSkippedTags, getLikedCategories } from "~/lib/localStorage";
+import type { Question, QuestionTag, Tag } from "@prisma/client";
+
 /**
  * QuestionComponent displays a stack of question cards that can be swiped left or right
  */
-export function QuestionComponent() {
+interface QuestionComponentProps {
+  initialQuestions: (Question & {
+    tags: (QuestionTag & {
+      tag: Tag;
+    })[];
+  })[];
+}
+
+export function QuestionComponent({ initialQuestions }: QuestionComponentProps) {
   const router = useRouter();
   //get stored skips and likes
   const storedSkipIDs = getSkippedIds();
@@ -44,7 +54,7 @@ export function QuestionComponent() {
     handleDragEnd,
     getMoreCards,
     reset,
-  } = useCardStack({ storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard });
+  } = useCardStack({ initialQuestions, storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard });
 
   return (
     <div className="flex-1 p-8 h-full flex flex-col justify-center items-center" role="region" aria-label="Question cards">
@@ -57,7 +67,7 @@ export function QuestionComponent() {
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
       />
-      <CardActions  
+      <CardActions
         cards={cards}
         skips={skips}
         likes={likes}

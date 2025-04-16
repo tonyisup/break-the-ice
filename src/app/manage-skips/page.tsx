@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getSkippedIds, removeSkippedQuestion, getSkippedCategories, getSkippedTags, removeSkippedCategory, removeSkippedTag, saveSkippedCategory, saveSkippedTag } from "~/lib/localStorage";
+import { getSkippedIds, removeSkippedQuestion, getSkippedCategories, getSkippedTags, removeSkippedCategory, removeSkippedTag} from "~/lib/localStorage";
 import { QuestionGrid } from "~/app/_components/QuestionGrid";
 import { Button } from "~/components/ui/button";
 import { ArrowLeft, Trash2, Tag, Folder, X, FileQuestionIcon } from "lucide-react";

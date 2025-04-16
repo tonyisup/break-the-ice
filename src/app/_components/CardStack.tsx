@@ -2,7 +2,6 @@ import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { cn } from "~/lib/utils";
 import { QuestionCard } from "./questionCard";
 import type { CardDirection } from "./hooks/useCardStack";
-import { FilterIcon } from "lucide-react";
 
 import type { Question as PrismaQuestion, Tag } from "@prisma/client";
 
