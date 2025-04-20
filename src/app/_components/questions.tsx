@@ -4,9 +4,12 @@ import { useCardStack } from "./hooks/useCardStack";
 import { CardStack } from "./CardStack";
 import { CardActions } from "./CardActions";
 import { useRouter } from "next/navigation";
-import { getSkippedIds, getLikedIds, getSkippedCategories, getLikedTags, getSkippedTags, getLikedCategories } from "~/lib/localStorage";
+import { 
+  getSkippedIds, getLikedIds, getSkippedCategories, getLikedTags, getSkippedTags, getLikedCategories,
+  getSimpleMode, saveSimpleMode
+} from "~/lib/localStorage";
 import type { Question, QuestionTag, Tag } from "@prisma/client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Switch } from "~/components/ui/switch";
 import { Label } from "~/components/ui/label";
 import { Button } from "~/components/ui/button";
@@ -33,6 +36,17 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
   const storedSkipTags = getSkippedTags();
   const storedLikeTags = getLikedTags();
 
+  useEffect(() => {
+    // Load simple mode setting from localStorage
+    const storedSimpleMode = getSimpleMode();
+    setSimpleMode(storedSimpleMode);
+  }, []);
+
+  const handleSimpleModeChange = (checked: boolean) => {
+    setSimpleMode(checked);
+    saveSimpleMode(checked);
+  };
+
   const handleManageSkips = () => {
     router.push("/manage-skips");
   };
@@ -46,7 +60,7 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
     router.push(`/inspect-card?id=${currentCard.id}`);
   };
   const handleFilter = () => {
-    router.push("/filter");
+    router.push("/manage-filters");
   };
   const {
     cards,
@@ -62,12 +76,12 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
     handleDragEnd,
     getMoreCards,
     reset,
-  } = useCardStack({ initialQuestions, storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard });
+  } = useCardStack({ simpleMode, initialQuestions, storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard });
 
   return (
     <div className="flex-1 p-8 h-full flex flex-col justify-center items-center" role="region" aria-label="Question cards">
       <div className="p-2 flex flex-row items-center gap-2">
-        <Switch id="simple-mode"  checked={simpleMode} onCheckedChange={setSimpleMode} />
+        <Switch id="simple-mode" checked={simpleMode} onCheckedChange={handleSimpleModeChange} />
         <Label htmlFor="simple-mode">Simple Mode</Label>
       </div>
 

@@ -6,6 +6,7 @@ const SKIPPED_TAGS_KEY = "break-the-ice-skipped-tags";
 const LIKED_TAGS_KEY = "break-the-ice-liked-tags";
 const SKIPPED_CATEGORIES_KEY = "break-the-ice-skipped-categories";
 const LIKED_CATEGORIES_KEY = "break-the-ice-liked-categories";
+const SIMPLE_MODE_KEY = "break-the-ice-simple-mode";
 
 /**
  * Save a skipped question to local storage
@@ -411,6 +412,34 @@ export function clearLikedCategories(): void {
 export function clearLikedTags(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(LIKED_TAGS_KEY);
+}
+
+/**
+ * Save the simple mode setting to local storage
+ */
+export function saveSimpleMode(simpleMode: boolean): void {
+  if (typeof window === "undefined") return;
+  
+  try {
+    localStorage.setItem(SIMPLE_MODE_KEY, JSON.stringify(simpleMode));
+  } catch (error) {
+    console.error("Failed to save simple mode to local storage:", error);
+  }
+}
+
+/**
+ * Get the simple mode setting from local storage
+ */
+export function getSimpleMode(): boolean {
+  if (typeof window === "undefined") return true;
+  
+  try {
+    const simpleMode = localStorage.getItem(SIMPLE_MODE_KEY);
+    return simpleMode ? JSON.parse(simpleMode) as boolean : true;
+  } catch (error) {
+    console.error("Failed to get simple mode from local storage:", error);
+    return true;
+  }
 }
 
 

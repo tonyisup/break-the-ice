@@ -82,26 +82,26 @@ export function CardStack({
                       <div
                         className={cn(
                           "absolute top-6 left-6 rounded-lg px-4 py-2 font-bold transform -rotate-12 opacity-0",
-                          "bg-green-500 text-white",
+                          simpleMode ? "bg-gray-500 text-white" : "bg-green-500 text-white",
                           "transition-opacity duration-200",
                           liking && "opacity-100"
                         )}
                         aria-hidden="true"
                       >
-                        LIKE
+                        {simpleMode ? "NEXT" : "LIKE"}
                       </div>
                       <div
                         className={cn(
                           "absolute top-6 right-6 rounded-lg px-4 py-2 font-bold transform rotate-12 opacity-0",
-                          "bg-red-500 text-white",
+                          simpleMode ? "bg-gray-500 text-white" : "bg-red-500 text-white",
                           "transition-opacity duration-200",
                           skipping && "opacity-100"
                         )}
                         aria-hidden="true"
                       >
-                        SKIP
+                        {simpleMode ? "NEXT" : "SKIP"}
                       </div>
-                      <div
+                      {!simpleMode && <div
                         className={cn(
                           "absolute top-6 left-1/2 -translate-x-1/2 rounded-lg px-4 py-2 font-bold transform opacity-0",
                           "bg-blue-500 text-white",
@@ -112,6 +112,7 @@ export function CardStack({
                       >
                         FILTER
                       </div>
+                      }
                     </>
                   )}
                 </div>
