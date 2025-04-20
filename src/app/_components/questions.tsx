@@ -6,7 +6,11 @@ import { CardActions } from "./CardActions";
 import { useRouter } from "next/navigation";
 import { getSkippedIds, getLikedIds, getSkippedCategories, getLikedTags, getSkippedTags, getLikedCategories } from "~/lib/localStorage";
 import type { Question, QuestionTag, Tag } from "@prisma/client";
-
+import { useState } from "react";
+import { Switch } from "~/components/ui/switch";
+import { Label } from "~/components/ui/label";
+import { Button } from "~/components/ui/button";
+import { FilterIcon } from "lucide-react";    
 /**
  * QuestionComponent displays a stack of question cards that can be swiped left or right
  */
@@ -19,6 +23,7 @@ interface QuestionComponentProps {
 }
 
 export function QuestionComponent({ initialQuestions }: QuestionComponentProps) {
+  const [simpleMode, setSimpleMode] = useState(true);
   const router = useRouter();
   //get stored skips and likes
   const storedSkipIDs = getSkippedIds();
@@ -40,6 +45,9 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
     if (!currentCard) return;
     router.push(`/inspect-card?id=${currentCard.id}`);
   };
+  const handleFilter = () => {
+    router.push("/filter");
+  };
   const {
     cards,
     skips,
@@ -58,7 +66,20 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
 
   return (
     <div className="flex-1 p-8 h-full flex flex-col justify-center items-center" role="region" aria-label="Question cards">
+      <div className="p-2 flex flex-row items-center gap-2">
+        <Switch id="simple-mode"  checked={simpleMode} onCheckedChange={setSimpleMode} />
+        <Label htmlFor="simple-mode">Simple Mode</Label>
+      </div>
+
+      {!simpleMode && <div className="p-2 flex flex-row items-center gap-2">
+        <Button onClick={handleFilter} aria-label="filter questions">
+          <FilterIcon className="mr-2 text-blue-500" aria-hidden="true" />
+          Filter
+          </Button>
+        </div>
+      }
       <CardStack
+        simpleMode={simpleMode}
         cards={cards}
         direction={direction}
         skipping={skipping}
@@ -68,6 +89,7 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
         onDragEnd={handleDragEnd}
       />
       <CardActions
+        simpleMode={simpleMode}
         cards={cards}
         skips={skips}
         likes={likes}

@@ -1,10 +1,11 @@
 import { Button } from "~/components/ui/button";
-import { TrashIcon, HeartIcon, RefreshCwIcon, LayoutListIcon, ListCheckIcon, FilterIcon } from "lucide-react";
+import { TrashIcon, HeartIcon, RefreshCwIcon, LayoutListIcon, ListCheckIcon, EyeIcon } from "lucide-react";
 
 import type { PreferenceAction } from "./hooks/useCardStack";
 import type { Question } from "@prisma/client";
 
 interface CardActionsProps {
+  simpleMode: boolean;
   cards: Question[];
   likes: number[];
   skips: number[];
@@ -18,6 +19,7 @@ interface CardActionsProps {
 }
 
 export function CardActions({
+  simpleMode,
   cards,
   likes,
   skips,
@@ -41,36 +43,39 @@ export function CardActions({
         >
           {isLoading ? "Loading..." : "Get More Questions"}
         </Button>
-        <p>Getting questions will consider your skips and likes.</p>
-        <div className="flex justify-center justify-around">
+        {!simpleMode && (<>
+          <p>Getting questions will consider your skips and likes.</p>
+          <div className="flex justify-center justify-around">
 
-          <Button
-            onClick={onManageSkips}
-            disabled={skips.length === 0}
-            aria-label={`Manage skips`}
-          >
-            <LayoutListIcon className="text-red-500" aria-hidden="true" />
-            {skips.length}
-          </Button>
-          <Button
-            onClick={onReset}
-            disabled={skips.length === 0 && likes.length === 0}
-            variant="outline"
-            aria-label="reset card stack"
-          >
-            Reset
-            <RefreshCwIcon className="text-red-500" aria-hidden="true" />
-          </Button>
+            <Button
+              onClick={onManageSkips}
+              disabled={skips.length === 0}
+              aria-label={`Manage skips`}
+            >
+              <LayoutListIcon className="text-red-500" aria-hidden="true" />
+              {skips.length}
+            </Button>
+            <Button
+              onClick={onReset}
+              disabled={skips.length === 0 && likes.length === 0}
+              variant="outline"
+              aria-label="reset card stack"
+            >
+              Reset
+              <RefreshCwIcon className="text-red-500" aria-hidden="true" />
+            </Button>
 
-          <Button
-            onClick={onManageLikes}
-            disabled={likes.length === 0}
-            aria-label={`Manage likes`}
-          >
-            {likes.length}
-            <ListCheckIcon className="text-green-500" aria-hidden="true" />
-          </Button>
-        </div>
+            <Button
+              onClick={onManageLikes}
+              disabled={likes.length === 0}
+              aria-label={`Manage likes`}
+            >
+              {likes.length}
+              <ListCheckIcon className="text-green-500" aria-hidden="true" />
+            </Button>
+          </div>
+        </>
+        )}
       </div>
     );
   }
@@ -87,6 +92,16 @@ export function CardActions({
     onCardAction(currentCard.id, 'skip');
   };
 
+  if (simpleMode) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Button onClick={handleSkip} aria-label="skip current question">
+          Next
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2">
 
@@ -102,10 +117,10 @@ export function CardActions({
         <Button
           onClick={onInspectCard}
           variant="outline"
-          aria-label="filter questions"
+          aria-label="inspect current question"
         >
-          <FilterIcon className="mr-2 text-blue-500" aria-hidden="true" />
-          Filter
+          <EyeIcon className="mr-2 text-blue-500" aria-hidden="true" />
+          Inspect
         </Button>
         <Button
           onClick={handleLike}

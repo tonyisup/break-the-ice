@@ -11,6 +11,7 @@ type Question = PrismaQuestion & {
   }>;
 };
 interface CardStackProps {
+  simpleMode: boolean;
   cards: Question[];
   direction: CardDirection;
   skipping: boolean;
@@ -25,6 +26,7 @@ interface CardStackProps {
 }
 
 export function CardStack({ 
+  simpleMode,
   cards, 
   direction, 
   skipping, 
@@ -74,7 +76,7 @@ export function CardStack({
                 aria-label={`Question card ${index + 1} of ${cards.length}`}
               >
                 <div className="h-full">
-                  <QuestionCard question={card} />
+                  <QuestionCard question={card} simpleMode={simpleMode} />
                   {index === 0 && (
                     <>
                       <div
@@ -110,17 +112,6 @@ export function CardStack({
                       >
                         FILTER
                       </div>
-                      {/* <div
-                        className={cn(
-                          "absolute bottom-6 left-6 rounded-lg px-4 py-2 font-bold transform rotate-12 opacity-0",
-                          "bg-gray-500 text-white",
-                          "transition-opacity duration-200",
-                          (filtering && direction === "up") && "opacity-100"
-                        )}
-                        aria-hidden="true"
-                      >
-                        DISCARD
-                      </div> */}
                     </>
                   )}
                 </div>
