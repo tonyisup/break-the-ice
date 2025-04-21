@@ -5,7 +5,7 @@ import type { PreferenceAction } from "./hooks/useCardStack";
 import type { Question } from "@prisma/client";
 
 interface CardActionsProps {
-  simpleMode: boolean;
+  advancedMode: boolean;
   cards: Question[];
   likes: number[];
   skips: number[];
@@ -19,7 +19,7 @@ interface CardActionsProps {
 }
 
 export function CardActions({
-  simpleMode,
+  advancedMode,
   cards,
   likes,
   skips,
@@ -43,7 +43,7 @@ export function CardActions({
         >
           {isLoading ? "Loading..." : "Get More Questions"}
         </Button>
-        {!simpleMode && (<>
+        {advancedMode && (<>
           <p>Getting questions will consider your skips and likes.</p>
           <div className="flex justify-center justify-around">
 
@@ -92,7 +92,7 @@ export function CardActions({
     onCardAction(currentCard.id, 'skip');
   };
 
-  if (simpleMode) {
+  if (!advancedMode) {
     return (
       <div className="flex flex-col gap-2">
         <Button onClick={handleSkip} aria-label="skip current question">

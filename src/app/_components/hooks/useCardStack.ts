@@ -18,7 +18,7 @@ export type PreferenceAction = 'like' | 'skip';
 export type CardDirection = 'left' | 'right' | 'up' | 'down' | null;
 
 interface UseCardStackProps {
-  simpleMode: boolean;
+  advancedMode: boolean;
   initialQuestions: Question[];
   storedSkipIDs: number[];
   storedLikeIDs: number[];
@@ -46,7 +46,7 @@ interface UseCardStackReturn {
 }
 
 
-export function useCardStack({ simpleMode, initialQuestions, storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard }: UseCardStackProps): UseCardStackReturn {
+export function useCardStack({ advancedMode, initialQuestions, storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard }: UseCardStackProps): UseCardStackReturn {
   const [skips, setSkips] = useState<number[]>(storedSkipIDs);
   const [likes, setLikes] = useState<number[]>(storedLikeIDs);
   const [likesCategories] = useState<string[]>(storedLikeCategories);
@@ -60,7 +60,7 @@ export function useCardStack({ simpleMode, initialQuestions, storedSkipIDs, stor
   const [filtering, setFiltering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { data: newQuestions, refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
+  const {  refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
     { 
       skipIds: skips, 
       likeIds: likes,
@@ -74,13 +74,13 @@ export function useCardStack({ simpleMode, initialQuestions, storedSkipIDs, stor
     },
   );
 
-  const {data: singleQuestion, refetch: fetchSingleQuestion} = api.questions.getRandom.useQuery();
+  const { refetch: fetchSingleQuestion} = api.questions.getRandom.useQuery();
   
   const getMoreCards = useCallback(async () => {
     setIsLoading(true);
 
     try {
-      if (simpleMode) { 
+      if (!advancedMode) { 
         const result = await fetchSingleQuestion();
         if (result.data) {
           setCards(result.data);
@@ -97,7 +97,7 @@ export function useCardStack({ simpleMode, initialQuestions, storedSkipIDs, stor
     } finally {
       setIsLoading(false);
     }
-  }, [fetchNewQuestions, fetchSingleQuestion, simpleMode]);
+  }, [fetchNewQuestions, fetchSingleQuestion, advancedMode]);
 
   const removeCard = useCallback(async (id: number) => {
     if (!id) return;  
@@ -105,7 +105,7 @@ export function useCardStack({ simpleMode, initialQuestions, storedSkipIDs, stor
     setLiking(false);
     setSkipping(false);
     setFiltering(false);
-    if ( simpleMode && cards.length < 2) {
+    if (!advancedMode && cards.length < 2) {
       const result = await fetchSingleQuestion();
       if (result.data) {
         setCards(result.data);
@@ -113,7 +113,7 @@ export function useCardStack({ simpleMode, initialQuestions, storedSkipIDs, stor
     } else {
       setCards((prev) => prev.filter((card) => card.id !== id));
     }
-  }, []);
+  }, [advancedMode, fetchSingleQuestion, cards]);
 
   const handleCardAction = useCallback((id: number, action: PreferenceAction) => {
     if (!id) return;
@@ -177,7 +177,7 @@ export function useCardStack({ simpleMode, initialQuestions, storedSkipIDs, stor
     } else if (info.offset.x < -ACTION_THRESHOLD) {
       handleCardAction(id, 'skip');
     } else if (info.offset.y > ACTION_THRESHOLD) {
-      if (!simpleMode) {
+      if (advancedMode) {
         handleInspectCard();
       }
       setDirection(null);
@@ -191,7 +191,7 @@ export function useCardStack({ simpleMode, initialQuestions, storedSkipIDs, stor
       setSkipping(false);
       setFiltering(false);
     }
-  }, [handleCardAction, handleInspectCard, simpleMode]);
+  }, [handleCardAction, handleInspectCard, advancedMode]);
 
   const reset = useCallback(() => {
     setSkips([]);

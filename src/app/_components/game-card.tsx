@@ -9,13 +9,13 @@ type Question = PrismaQuestion & {
 };
 
 interface GameCardProps {
-  simpleMode: boolean;
+  advancedMode: boolean;
   question: Question
   image?: string
   className?: string
 }
 
-export default function GameCard({ question, image, className, simpleMode }: GameCardProps) {
+export default function GameCard({ question, image, className, advancedMode }: GameCardProps) {
   return (
     <div className={cn("h-full rounded-xl overflow-hidden bg-white dark:bg-black shadow-lg border border-gray-200 flex flex-col justify-center items-center", className)}>
       {image && <div className="relative h-80">
@@ -24,7 +24,7 @@ export default function GameCard({ question, image, className, simpleMode }: Gam
       <div className="p-4">
         <h2 className={cn("text-xl font-bold", question.text.length > 150 ? "text-md" : "text-xl")}>{question.text}</h2>
 
-        {!simpleMode && (
+        {advancedMode && (
           <>
             {question.category && <p className="text-gray-600">{question.category}</p>}
             {question.tags && (

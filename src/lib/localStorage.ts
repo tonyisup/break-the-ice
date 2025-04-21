@@ -6,7 +6,7 @@ const SKIPPED_TAGS_KEY = "break-the-ice-skipped-tags";
 const LIKED_TAGS_KEY = "break-the-ice-liked-tags";
 const SKIPPED_CATEGORIES_KEY = "break-the-ice-skipped-categories";
 const LIKED_CATEGORIES_KEY = "break-the-ice-liked-categories";
-const SIMPLE_MODE_KEY = "break-the-ice-simple-mode";
+const ADVANCED_MODE_KEY = "break-the-ice-advanced-mode";
 
 /**
  * Save a skipped question to local storage
@@ -415,29 +415,29 @@ export function clearLikedTags(): void {
 }
 
 /**
- * Save the simple mode setting to local storage
+ * Save the advanced mode setting to local storage
  */
-export function saveSimpleMode(simpleMode: boolean): void {
+export function saveAdvancedMode(advancedMode: boolean): void {
   if (typeof window === "undefined") return;
   
   try {
-    localStorage.setItem(SIMPLE_MODE_KEY, JSON.stringify(simpleMode));
+    localStorage.setItem(ADVANCED_MODE_KEY, JSON.stringify(advancedMode));
   } catch (error) {
-    console.error("Failed to save simple mode to local storage:", error);
+    console.error("Failed to save advanced mode to local storage:", error);
   }
 }
 
 /**
- * Get the simple mode setting from local storage
+ * Get the advanced mode setting from local storage
  */
-export function getSimpleMode(): boolean {
+export function getAdvancedMode(): boolean {
   if (typeof window === "undefined") return true;
   
   try {
-    const simpleMode = localStorage.getItem(SIMPLE_MODE_KEY);
-    return simpleMode ? JSON.parse(simpleMode) as boolean : true;
+    const advancedMode = localStorage.getItem(ADVANCED_MODE_KEY);
+    return advancedMode ? JSON.parse(advancedMode) as boolean : true;
   } catch (error) {
-    console.error("Failed to get simple mode from local storage:", error);
+    console.error("Failed to get advanced mode from local storage:", error);
     return true;
   }
 }

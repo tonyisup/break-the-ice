@@ -12,9 +12,9 @@ type Question = PrismaQuestion & {
 interface QuestionCardProps {
   question: Question;
   className?: string;
-  simpleMode: boolean;
+  advancedMode: boolean;
 }
 
-export function QuestionCard({ question, className, simpleMode }: QuestionCardProps) {
-  return <GameCard simpleMode={simpleMode} question={question} className={cn("bg-[#eaeaea] dark:bg-[#222222]", className)} />
+export function QuestionCard({ question, className, advancedMode }: QuestionCardProps) {
+  return <GameCard advancedMode={advancedMode} question={question} className={cn("bg-[#eaeaea] dark:bg-[#222222]", className)} />
 }

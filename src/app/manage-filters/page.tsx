@@ -8,10 +8,18 @@ import {
 } from "~/lib/localStorage";
 import { QuestionGrid } from "~/app/_components/QuestionGrid";
 import { Button } from "~/components/ui/button";
-import { ArrowLeft, Trash2, Tag, Folder, X, FileQuestionIcon, Heart, ThumbsUp } from "lucide-react";
+import { ArrowLeft, Trash2, Tag, Folder, X, FileQuestionIcon, Heart } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Badge } from "~/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+
+import type { Question as PrismaQuestion, Tag as QuestionTag } from "@prisma/client";
+
+type Question = PrismaQuestion & {
+  tags: Array<{
+    tag: QuestionTag;
+  }>;
+};
 
 export default function ManageFiltersPage() {
   const router = useRouter();
@@ -112,7 +120,7 @@ export default function ManageFiltersPage() {
     questionIDs: number[];
     categories: string[];
     tags: string[];
-    questions: any;
+    questions?: Question[];
     onRemoveQuestion: (id: number) => void;
     onRemoveCategory: (category: string) => void;
     onRemoveTag: (tag: string) => void;

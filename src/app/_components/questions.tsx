@@ -6,7 +6,7 @@ import { CardActions } from "./CardActions";
 import { useRouter } from "next/navigation";
 import { 
   getSkippedIds, getLikedIds, getSkippedCategories, getLikedTags, getSkippedTags, getLikedCategories,
-  getSimpleMode, saveSimpleMode
+  getAdvancedMode, saveAdvancedMode
 } from "~/lib/localStorage";
 import type { Question, QuestionTag, Tag } from "@prisma/client";
 import { useState, useEffect } from "react";
@@ -26,7 +26,7 @@ interface QuestionComponentProps {
 }
 
 export function QuestionComponent({ initialQuestions }: QuestionComponentProps) {
-  const [simpleMode, setSimpleMode] = useState(true);
+  const [advancedMode, setAdvancedMode] = useState(false);
   const router = useRouter();
   //get stored skips and likes
   const storedSkipIDs = getSkippedIds();
@@ -38,13 +38,13 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
 
   useEffect(() => {
     // Load simple mode setting from localStorage
-    const storedSimpleMode = getSimpleMode();
-    setSimpleMode(storedSimpleMode);
+    const storedAdvancedMode = getAdvancedMode();
+    setAdvancedMode(storedAdvancedMode);
   }, []);
 
-  const handleSimpleModeChange = (checked: boolean) => {
-    setSimpleMode(checked);
-    saveSimpleMode(checked);
+  const handleAdvancedModeChange = (checked: boolean) => {
+    setAdvancedMode(checked);
+    saveAdvancedMode(checked);
   };
 
   const handleManageSkips = () => {
@@ -76,16 +76,16 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
     handleDragEnd,
     getMoreCards,
     reset,
-  } = useCardStack({ simpleMode, initialQuestions, storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard });
+  } = useCardStack({ advancedMode, initialQuestions, storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard });
 
   return (
     <div className="flex-1 p-8 h-full flex flex-col justify-center items-center" role="region" aria-label="Question cards">
       <div className="p-2 flex flex-row items-center gap-2">
-        <Switch id="simple-mode" checked={simpleMode} onCheckedChange={handleSimpleModeChange} />
-        <Label htmlFor="simple-mode">Simple Mode</Label>
+        <Switch id="advanced-mode" checked={advancedMode} onCheckedChange={handleAdvancedModeChange} />
+        <Label htmlFor="advanced-mode">Advanced Mode</Label>
       </div>
 
-      {!simpleMode && <div className="p-2 flex flex-row items-center gap-2">
+      {advancedMode && <div className="p-2 flex flex-row items-center gap-2">
         <Button onClick={handleFilter} aria-label="filter questions">
           <FilterIcon className="mr-2 text-blue-500" aria-hidden="true" />
           Filter
@@ -93,7 +93,7 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
         </div>
       }
       <CardStack
-        simpleMode={simpleMode}
+        advancedMode={advancedMode}
         cards={cards}
         direction={direction}
         skipping={skipping}
@@ -103,7 +103,7 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
         onDragEnd={handleDragEnd}
       />
       <CardActions
-        simpleMode={simpleMode}
+        advancedMode={advancedMode}
         cards={cards}
         skips={skips}
         likes={likes}
