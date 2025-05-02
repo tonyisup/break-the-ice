@@ -27,7 +27,7 @@ export function SearchInput({
     onSearch(debouncedSearchTerm);
   }, [debouncedSearchTerm, onSearch]);
 
-  return (<div className="flex items-center gap-2">
+  return (<div className="flex w-full items-center gap-2">
     <Label className="sr-only">Search</Label>
     <Input
       type="text"

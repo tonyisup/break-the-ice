@@ -101,9 +101,9 @@ export default function ManageFiltersPage() {
                 <Folder className="h-5 w-5" />
                 Categories to
               </div>
-              {!isLoadingCategories && <div className="flex items-center gap-2">                
+              {!isLoadingCategories && <div className="flex items-center gap-2">
                 <span className="pl-2 text-xs text-muted-foreground">include</span>
-                <Switch checked={true} />
+                <Switch noCursor checked={true} />
                 <span className="text-xs">exclude</span>
               </div>}
               {isLoadingCategories && (
@@ -114,27 +114,25 @@ export default function ManageFiltersPage() {
           <CardContent>
 
             {!isLoadingCategories &&
-              <div className="mb-4">
+              <div className="mb-4 flex gap-4 items-center justify-between">
                 <SearchInput
                   onSearch={setCategorySearch}
                   placeholder="Search categories..."
                   delay={300}
                 />
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => handleIncludeByDefaultToggle(false)}>
+                    Include all
+                    <Switch checked={false} />
+                  </Button>
+                  <Button variant="outline" onClick={() => handleIncludeByDefaultToggle(true)}>
+                    <Switch checked={true} />
+                    Exclude all
+                  </Button>
+                </div>
               </div>
             }
             <div className="grid gap-4">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="exclude-all-categories">Exclude all categories</Label>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" onClick={() => handleIncludeByDefaultToggle(false)}>
-                    <FolderCheckIcon className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={() => handleIncludeByDefaultToggle(true)}>
-                    <FolderXIcon className="h-4 w-4" />
-                  </Button>
-                </div>
-
-              </div>
               {filteredCategories.map((category) => (
                 <div key={category} className="flex items-center justify-between">
                   <Label htmlFor={`category-${category}`}>{category}</Label>
