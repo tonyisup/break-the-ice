@@ -431,14 +431,14 @@ export function saveAdvancedMode(advancedMode: boolean): void {
  * Get the advanced mode setting from local storage
  */
 export function getAdvancedMode(): boolean {
-  if (typeof window === "undefined") return true;
+  if (typeof window === "undefined") return false;
   
   try {
     const advancedMode = localStorage.getItem(ADVANCED_MODE_KEY);
-    return advancedMode ? JSON.parse(advancedMode) as boolean : true;
+    return advancedMode ? JSON.parse(advancedMode) as boolean : false;
   } catch (error) {
     console.error("Failed to get advanced mode from local storage:", error);
-    return true;
+    return false;
   }
 }
 
