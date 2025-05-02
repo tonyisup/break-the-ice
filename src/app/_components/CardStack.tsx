@@ -4,6 +4,7 @@ import { QuestionCard } from "./questionCard";
 import type { CardDirection } from "./hooks/useCardStack";
 
 import type { Question as PrismaQuestion, Tag } from "@prisma/client";
+import { Button } from "~/components/ui/button";
 
 type Question = PrismaQuestion & {
   tags: Array<{
@@ -23,6 +24,8 @@ interface CardStackProps {
   };
   onDrag: (info: PanInfo, id: number) => void;
   onDragEnd: (info: PanInfo, id: number) => void;
+  onGetMore: () => void;
+  isLoading: boolean;
 }
 
 export function CardStack({ 
@@ -34,11 +37,23 @@ export function CardStack({
   filtering,
   cardSize,
   onDrag, 
-  onDragEnd 
+  onDragEnd,
+  onGetMore,
+  isLoading
 }: CardStackProps) {
   return (
     <div className="flex-1" style={{ width: cardSize?.width ?? 280, height: cardSize?.height ?? 480 }}>
       <div className="relative h-full w-full">
+        {!cards || cards.length == 0 && <div className="flex flex-col items-center justify-center h-[480px]">
+          <p className="text-xl mb-4">No more questions!</p>
+          <Button
+          onClick={onGetMore}
+          disabled={isLoading}
+          aria-label={isLoading ? "Loading more questions..." : "Get more questions"}
+        >
+          {isLoading ? "Loading..." : "Get More Questions"}
+        </Button>
+        </div>}
         {cards && cards.length > 0 && (
           <AnimatePresence>
             {cards.map((card, index) => (

@@ -35,14 +35,6 @@ export function CardActions({
   if (cards.length === 0) {
     return (
       <div className="text-center flex flex-col gap-8">
-        <p className="text-xl mb-4">No more questions!</p>
-        <Button
-          onClick={onGetMore}
-          disabled={isLoading}
-          aria-label={isLoading ? "Loading more questions..." : "Get more questions"}
-        >
-          {isLoading ? "Loading..." : "Get More Questions"}
-        </Button>
         {advancedMode && (<>
           <p>Getting questions will consider your skips and likes.</p>
           <div className="flex justify-center justify-around">

@@ -101,6 +101,8 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
         filtering={filtering}
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
+        onGetMore={getMoreCards}
+        isLoading={isLoading}
       />
       <CardActions
         advancedMode={advancedMode}
