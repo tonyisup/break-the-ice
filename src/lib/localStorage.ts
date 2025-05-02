@@ -9,6 +9,8 @@ const LIKED_CATEGORIES_KEY = "break-the-ice-liked-categories";
 const ADVANCED_MODE_KEY = "break-the-ice-advanced-mode";
 const AUTO_GET_MORE_KEY = "break-the-ice-auto-get-more";
 const DRAW_COUNT_KEY = "break-the-ice-draw-count";
+const EXCLUDED_CATEGORIES_KEY = "break-the-ice-excluded-categories";
+const EXCLUDED_TAGS_KEY = "break-the-ice-excluded-tags";
 
 /**
  * Save a skipped question to local storage
@@ -482,12 +484,134 @@ export function saveDrawCount(drawCount: number): void {
   localStorage.setItem(DRAW_COUNT_KEY, JSON.stringify(drawCount));
 }
 
-
-
 export function getDrawCount(): number {
   if (typeof window === "undefined") return 5;
   const drawCount = localStorage.getItem(DRAW_COUNT_KEY);
   return drawCount ? JSON.parse(drawCount) as number : 5;
+}
+
+/**
+ * Save an excluded category to local storage
+ */
+export function saveExcludedCategory(category: string): void {
+  if (typeof window === "undefined") return;
+  
+  try {
+    const excludedCategories = getExcludedCategories();
+    if (!excludedCategories.includes(category)) {
+      excludedCategories.push(category);
+      localStorage.setItem(EXCLUDED_CATEGORIES_KEY, JSON.stringify(excludedCategories));
+    }
+  } catch (error) {
+    console.error("Failed to save excluded category to local storage:", error);
+  }
+}
+
+/**
+ * Get all excluded categories from local storage
+ */
+export function getExcludedCategories(): string[] {
+  if (typeof window === "undefined") return [];
+  
+  try {
+    const storedData = localStorage.getItem(EXCLUDED_CATEGORIES_KEY);
+    return storedData ? JSON.parse(storedData) as string[] : [];
+  } catch (error) {
+    console.error("Failed to get excluded categories from local storage:", error);
+    return [];
+  }
+}
+
+/**
+ * Check if a category has been excluded
+ */
+export function isCategoryExcluded(category: string): boolean {
+  if (typeof window === "undefined") return false;
+  
+  try {
+    const excludedCategories = getExcludedCategories();
+    return excludedCategories.includes(category);
+  } catch (error) {
+    console.error("Failed to check if category is excluded:", error);
+    return false;
+  }
+}
+
+/**
+ * Remove a category from the excluded list
+ */
+export function removeExcludedCategory(category: string): void {
+  if (typeof window === "undefined") return;
+  
+  try {
+    const excludedCategories = getExcludedCategories();
+    const updatedCategories = excludedCategories.filter(c => c !== category);
+    localStorage.setItem(EXCLUDED_CATEGORIES_KEY, JSON.stringify(updatedCategories));
+  } catch (error) {
+    console.error("Failed to remove excluded category from local storage:", error);
+  }
+}
+
+/**
+ * Save an excluded tag to local storage
+ */
+export function saveExcludedTag(tag: string): void {
+  if (typeof window === "undefined") return;
+  
+  try {
+    const excludedTags = getExcludedTags();
+    if (!excludedTags.includes(tag)) {
+      excludedTags.push(tag);
+      localStorage.setItem(EXCLUDED_TAGS_KEY, JSON.stringify(excludedTags));
+    }
+  } catch (error) {
+    console.error("Failed to save excluded tag to local storage:", error);
+  }
+}
+
+/**
+ * Get all excluded tags from local storage
+ */
+export function getExcludedTags(): string[] {
+  if (typeof window === "undefined") return [];
+  
+  try {
+    const storedData = localStorage.getItem(EXCLUDED_TAGS_KEY);
+    return storedData ? JSON.parse(storedData) as string[] : [];
+  } catch (error) {
+    console.error("Failed to get excluded tags from local storage:", error);
+    return [];
+  }
+}
+
+/**
+ * Check if a tag has been excluded
+ */
+export function isTagExcluded(tag: string): boolean {
+  if (typeof window === "undefined") return false;
+  
+  try {
+    const excludedTags = getExcludedTags();
+    return excludedTags.includes(tag);
+  } catch (error) {
+    console.error("Failed to check if tag is excluded:", error);
+    return false;
+  }
+}
+
+/**
+ * Remove a tag from the excluded list
+ */
+export function removeExcludedTag(tag: string): void {
+  if (typeof window === "undefined") return;
+  
+  try {
+    const excludedTags = getExcludedTags();
+    const updatedTags = excludedTags.filter(t => t !== tag);
+    localStorage.setItem(EXCLUDED_TAGS_KEY, JSON.stringify(updatedTags));
+  } catch (error) {
+    console.error("Failed to remove excluded tag from local storage:", error);
+  }
 }
 
 

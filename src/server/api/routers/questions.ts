@@ -194,6 +194,25 @@ export const questionsRouter = createTRPCRouter({
       // Randomize the order of questions before returning
       return dbQuestions.sort(() => Math.random() - 0.5);
     }),
+  // Get all unique categories
+  getAllCategories: publicProcedure.query(async ({ ctx }) => {
+    const categories = await ctx.db.question.groupBy({
+      by: ['category'],
+      orderBy: {
+        category: 'asc'
+      }
+    });
+    return categories.map(c => c.category);
+  }),
+  // Get all unique tags
+  getAllTags: publicProcedure.query(async ({ ctx }) => {
+    const tags = await ctx.db.tag.findMany({
+      orderBy: {
+        name: 'asc'
+      }
+    });
+    return tags.map(t => t.name);
+  }),
   // Admin procedures (protected by auth)
   create: protectedProcedure
     .input(z.object({
