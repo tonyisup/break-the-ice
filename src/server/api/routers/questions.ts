@@ -77,8 +77,7 @@ export const questionsRouter = createTRPCRouter({
     }
     return [question];
   }),
-  // Get a random question
-  getRandomStack: publicProcedure
+  getAIQuestion: publicProcedure
     .input(z.object({
       skipIds: z.array(z.number()).optional(),
       likeIds: z.array(z.number()).optional(),
@@ -88,7 +87,7 @@ export const questionsRouter = createTRPCRouter({
       likeTags: z.array(z.string()).optional(),
     }))
     .query(async ({ ctx, input }) => {
-
+      
       // Fetch skipped and liked questions from the database
       const skippedQuestions = input.skipIds && input.skipIds.length > 0
         ? await ctx.db.$queryRaw<Question[]>`
@@ -106,10 +105,59 @@ export const questionsRouter = createTRPCRouter({
         `
         : [];
 
+      const aiQuestionData = await generateIcebreakerQuestion({
+        skips: skippedQuestions,
+        likes: likedQuestions,
+        skipTags: input.skipTags ?? [],
+        likeTags: input.likeTags ?? [],
+        skipCategories: input.skipCategories ?? [],
+        likeCategories: input.likeCategories ?? []
+      })
+
+      const aiQuestion = await ctx.db.question.create({
+        data: {
+          text: aiQuestionData.text,
+          category: 'ai-generated',
+          tags: {
+            create: aiQuestionData.tags.map(tagName => ({
+              tag: {
+                connectOrCreate: {
+                  where: { name: tagName },
+                  create: { name: tagName }
+                }
+              }
+            }))
+          }
+        },
+        include: {
+          tags: {
+            include: {
+              tag: true
+            }
+          }
+        }
+      })
+
+      return aiQuestion;
+    }),
+
+  // Get a random question
+  getRandomStack: publicProcedure
+    .input(z.object({
+      drawCount: z.number().optional(),
+      skipIds: z.array(z.number()).optional(),
+      likeIds: z.array(z.number()).optional(),
+      skipCategories: z.array(z.string()).optional(),
+      likeCategories: z.array(z.string()).optional(),
+      skipTags: z.array(z.string()).optional(),
+      likeTags: z.array(z.string()).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const drawCount = input.drawCount ?? 5;
+
       // Run database query and AI generation in parallel
-      const [dbQuestions, aiQuestionData] = await Promise.all([
-        ctx.db.$queryRaw<Question[]>`
-          SELECT top 4
+      const dbQuestions = await ctx.db.$queryRaw<Question[]>`
+          SELECT top (${drawCount})
             [q].[id]
             ,[q].[text]
             ,[q].[category]
@@ -125,42 +173,9 @@ export const questionsRouter = createTRPCRouter({
           AND (0=${input.likeTags?.length ?? 0} or [t].[name] IN (${input.likeTags?.length ?? 0 > 0 ? Prisma.join(input.likeTags ?? [""]) : "0"}))
 
           ORDER BY newid()
-        `,
-        generateIcebreakerQuestion({
-          skips: skippedQuestions,
-          likes: likedQuestions,
-          skipTags: input.skipTags ?? [],
-          likeTags: input.likeTags ?? [],
-          skipCategories: input.skipCategories ?? [],
-          likeCategories: input.likeCategories ?? []
-        }),
-      ]);
-
+        `
       // Insert the AI-generated question into the database with its tags
-      const [aiQuestion, dbQuestionsWIthTags] = await Promise.all([
-        ctx.db.question.create({
-          data: {
-            text: aiQuestionData.text,
-            category: 'ai-generated',
-            tags: {
-              create: aiQuestionData.tags.map(tagName => ({
-                tag: {
-                  connectOrCreate: {
-                    where: { name: tagName },
-                    create: { name: tagName }
-                  }
-                }
-              }))
-            }
-          },
-          include: {
-            tags: {
-              include: {
-                tag: true
-              }
-            }
-          }
-        }),
+      const dbQuestionsWIthTags = await   
         ctx.db.questionTag.findMany({
           where: {
             questionId: {
@@ -171,14 +186,13 @@ export const questionsRouter = createTRPCRouter({
             tag: true
           }
         })
-      ])
+
       dbQuestions.forEach(question => {
         question.tags = dbQuestionsWIthTags.filter(q => q.questionId == question.id)
       })
-      const questions: Question[] = [...dbQuestions, aiQuestion];
 
       // Randomize the order of questions before returning
-      return questions.sort(() => Math.random() - 0.5);
+      return dbQuestions.sort(() => Math.random() - 0.5);
     }),
   // Admin procedures (protected by auth)
   create: protectedProcedure

@@ -5,6 +5,10 @@ import type { CardDirection } from "./hooks/useCardStack";
 
 import type { Question as PrismaQuestion, Tag } from "@prisma/client";
 import { Button } from "~/components/ui/button";
+import { Switch } from "~/components/ui/switch";
+import { Label } from "~/components/ui/label";
+import { ImportIcon } from "lucide-react";
+import { Slider } from "~/components/ui/slider";
 
 type Question = PrismaQuestion & {
   tags: Array<{
@@ -26,6 +30,10 @@ interface CardStackProps {
   onDragEnd: (info: PanInfo, id: number) => void;
   onGetMore: () => void;
   isLoading: boolean;
+  autoGetMore: boolean;
+  setAutoGetMore: (autoGetMore: boolean) => void;
+  drawCount: number;
+  setDrawCount: (drawCount: number) => void;
 }
 
 export function CardStack({ 
@@ -39,20 +47,53 @@ export function CardStack({
   onDrag, 
   onDragEnd,
   onGetMore,
-  isLoading
+  isLoading,
+  autoGetMore,
+  setAutoGetMore,
+  drawCount,
+  setDrawCount
 }: CardStackProps) {
+  const handleDrawCountChange = (value: number[]) => {
+    setDrawCount(value[0] ?? 5);
+  }
   return (
     <div className="flex-1" style={{ width: cardSize?.width ?? 280, height: cardSize?.height ?? 480 }}>
       <div className="relative h-full w-full">
-        {!cards || cards.length == 0 && <div className="flex flex-col items-center justify-center h-[480px]">
+        {isLoading && <div className="flex flex-col gap-4 items-center justify-center h-[480px]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent" />
+          <p className="text-lg">Loading questions...</p>
+        </div>
+        </div>}
+        {!isLoading && (!cards || cards.length == 0) && <div className="flex flex-col gap-4 items-center justify-center h-[480px]">
           <p className="text-xl mb-4">No more questions!</p>
           <Button
-          onClick={onGetMore}
-          disabled={isLoading}
-          aria-label={isLoading ? "Loading more questions..." : "Get more questions"}
-        >
-          {isLoading ? "Loading..." : "Get More Questions"}
-        </Button>
+            onClick={onGetMore}
+            disabled={isLoading}
+            aria-label={`Draw ${drawCount} More`}
+          >
+            <ImportIcon className="mr-2" />
+            Draw {drawCount} More
+          </Button>
+          <div className="flex flex-col items-center gap-2">
+            <Slider
+              id="draw-count"
+              min={1}
+              step={1}
+              max={10}
+              value={[drawCount]}
+              onValueChange={handleDrawCountChange}
+            />
+            <Label htmlFor="draw-count">Draw Count</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={autoGetMore} 
+              onCheckedChange={setAutoGetMore}
+              id="auto-get-more"
+            />
+            <Label htmlFor="auto-get-more">Auto Draw</Label>
+          </div>
         </div>}
         {cards && cards.length > 0 && (
           <AnimatePresence>

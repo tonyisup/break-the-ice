@@ -6,7 +6,11 @@ import { CardActions } from "./CardActions";
 import { useRouter } from "next/navigation";
 import { 
   getSkippedIds, getLikedIds, getSkippedCategories, getLikedTags, getSkippedTags, getLikedCategories,
-  getAdvancedMode, saveAdvancedMode
+  getAdvancedMode, saveAdvancedMode,
+  getAutoGetMore,
+  isAutoGetMoreSet,
+  saveAutoGetMore,
+  getDrawCount
 } from "~/lib/localStorage";
 import type { Question, QuestionTag, Tag } from "@prisma/client";
 import { useState, useEffect } from "react";
@@ -35,6 +39,9 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
   const storedLikeCategories = getLikedCategories();
   const storedSkipTags = getSkippedTags();
   const storedLikeTags = getLikedTags();
+  const isAutoGetMoreRemembered = isAutoGetMoreSet();
+  const autoGetMoreDefault = isAutoGetMoreRemembered ? getAutoGetMore() : false;
+  const drawCountDefault = getDrawCount() ?? advancedMode ? 5 : 1;
 
   useEffect(() => {
     // Load simple mode setting from localStorage
@@ -62,6 +69,11 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
   const handleFilter = () => {
     router.push("/manage-filters");
   };
+  const handleAutoGetMore = (checked: boolean) => {
+    setAutoGetMore(checked);
+    saveAutoGetMore(checked);
+  };
+
   const {
     cards,
     skips,
@@ -71,12 +83,16 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
     liking,
     filtering,
     isLoading,
+    autoGetMore,
+    setAutoGetMore,
     handleCardAction,
     handleDrag,
     handleDragEnd,
     getMoreCards,
     reset,
-  } = useCardStack({ advancedMode, initialQuestions, storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard });
+    drawCount,
+    setDrawCount
+  } = useCardStack({ autoGetMoreDefault, advancedMode, initialQuestions, storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard, drawCountDefault });
 
   return (
     <div className="flex-1 p-8 h-full flex flex-col justify-center items-center" role="region" aria-label="Question cards">
@@ -103,6 +119,10 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
         onDragEnd={handleDragEnd}
         onGetMore={getMoreCards}
         isLoading={isLoading}
+        autoGetMore={autoGetMore}
+        setAutoGetMore={handleAutoGetMore}
+        drawCount={drawCount}
+        setDrawCount={setDrawCount}
       />
       <CardActions
         advancedMode={advancedMode}

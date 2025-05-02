@@ -7,6 +7,8 @@ const LIKED_TAGS_KEY = "break-the-ice-liked-tags";
 const SKIPPED_CATEGORIES_KEY = "break-the-ice-skipped-categories";
 const LIKED_CATEGORIES_KEY = "break-the-ice-liked-categories";
 const ADVANCED_MODE_KEY = "break-the-ice-advanced-mode";
+const AUTO_GET_MORE_KEY = "break-the-ice-auto-get-more";
+const DRAW_COUNT_KEY = "break-the-ice-draw-count";
 
 /**
  * Save a skipped question to local storage
@@ -442,7 +444,50 @@ export function getAdvancedMode(): boolean {
   }
 }
 
+export function isAutoGetMoreSet(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(AUTO_GET_MORE_KEY) !== null;
+}
+
+/**
+ * Save the auto get more setting to local storage
+ */
+export function saveAutoGetMore(autoGetMore: boolean): void {
+  if (typeof window === "undefined") return;
+  
+  try {
+    localStorage.setItem(AUTO_GET_MORE_KEY, JSON.stringify(autoGetMore));
+  } catch (error) {
+    console.error("Failed to save auto get more to local storage:", error);
+  }
+}
+
+/**
+ * Get the auto get more setting from local storage
+ */
+export function getAutoGetMore(): boolean {
+  if (typeof window === "undefined") return false;
+  
+  try {
+    const autoGetMore = localStorage.getItem(AUTO_GET_MORE_KEY);
+    return autoGetMore ? JSON.parse(autoGetMore) as boolean : false;
+  } catch (error) {
+    console.error("Failed to get auto get more from local storage:", error);
+    return false;
+  }
+}
+
+export function saveDrawCount(drawCount: number): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(DRAW_COUNT_KEY, JSON.stringify(drawCount));
+}
 
 
+
+export function getDrawCount(): number {
+  if (typeof window === "undefined") return 5;
+  const drawCount = localStorage.getItem(DRAW_COUNT_KEY);
+  return drawCount ? JSON.parse(drawCount) as number : 5;
+}
 
 

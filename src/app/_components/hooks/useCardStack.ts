@@ -18,6 +18,8 @@ export type PreferenceAction = 'like' | 'skip';
 export type CardDirection = 'left' | 'right' | 'up' | 'down' | null;
 
 interface UseCardStackProps {
+  drawCountDefault: number;
+  autoGetMoreDefault: boolean;
   advancedMode: boolean;
   initialQuestions: Question[];
   storedSkipIDs: number[];
@@ -38,6 +40,10 @@ interface UseCardStackReturn {
   liking: boolean;
   filtering: boolean;
   isLoading: boolean;
+  autoGetMore: boolean;
+  drawCount: number;
+  setDrawCount: (drawCount: number) => void;
+  setAutoGetMore: (autoGetMore: boolean) => void;
   handleCardAction: (id: number, action: PreferenceAction) => void;
   handleDrag: (info: PanInfo, id: number) => void;
   handleDragEnd: (info: PanInfo, id: number) => void;
@@ -46,7 +52,7 @@ interface UseCardStackReturn {
 }
 
 
-export function useCardStack({ advancedMode, initialQuestions, storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard }: UseCardStackProps): UseCardStackReturn {
+export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMode, initialQuestions, storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard }: UseCardStackProps): UseCardStackReturn {
   const [skips, setSkips] = useState<number[]>(storedSkipIDs);
   const [likes, setLikes] = useState<number[]>(storedLikeIDs);
   const [likesCategories] = useState<string[]>(storedLikeCategories);
@@ -59,37 +65,39 @@ export function useCardStack({ advancedMode, initialQuestions, storedSkipIDs, st
   const [liking, setLiking] = useState(false);
   const [filtering, setFiltering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [autoGetMore, setAutoGetMore] = useState(autoGetMoreDefault);
+  const [drawCount, setDrawCount] = useState(drawCountDefault);
 
-  const {  refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
-    { 
-      skipIds: skips, 
+  const { refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
+    {
+      drawCount,
+      skipIds: skips,
       likeIds: likes,
       skipCategories: skipCategories,
       likeCategories: likesCategories,
       skipTags: skipTags,
       likeTags: likesTags
-    },
-    {
-      enabled: false,
-    },
+    }
   );
 
-  const { refetch: fetchSingleQuestion} = api.questions.getRandom.useQuery();
-  
-  const getMoreCards = useCallback(async () => {
-    setIsLoading(true);
+  const { refetch: fetchSingleQuestion } = api.questions.getRandom.useQuery();
 
+  const getMoreCards = async () => {
+    console.log("Fetching more cards");
+    setIsLoading(true);
     try {
-      if (!advancedMode) { 
+      if (!advancedMode) {
+        console.log("Fetching single question");
         const result = await fetchSingleQuestion();
         if (result.data) {
           setCards(result.data);
         }
       } else {
+        console.log("Fetching new questions");
         const result = await fetchNewQuestions();
+        console.log("Result", result);
         if (result.data) {
-          const newQuestions = result.data;
-          setCards((prev) => [...prev, ...newQuestions]);
+          setCards((prev) => [...prev, ...result.data]);
         }
       }
     } catch (error) {
@@ -97,29 +105,36 @@ export function useCardStack({ advancedMode, initialQuestions, storedSkipIDs, st
     } finally {
       setIsLoading(false);
     }
-  }, [fetchNewQuestions, fetchSingleQuestion, advancedMode]);
+  }
 
-  const removeCard = useCallback(async (id: number) => {
-    if (!id) return;  
+
+  const handlerSetAutoGetMore = async (checked: boolean) => {
+    setAutoGetMore(checked);
+    if (checked) {
+      await getMoreCards();
+    }
+  }
+
+  const removeCard = async (id: number) => {
+    if (!id) return;
     setDirection(null);
     setLiking(false);
     setSkipping(false);
     setFiltering(false);
-    if (!advancedMode && cards.length < 2) {
-      const result = await fetchSingleQuestion();
-      if (result.data) {
-        setCards(result.data);
-      }
-    } else {
-      setCards((prev) => prev.filter((card) => card.id !== id));
-    }
-  }, [advancedMode, fetchSingleQuestion, cards]);
 
-  const handleCardAction = useCallback((id: number, action: PreferenceAction) => {
+    setCards((prev) => prev.filter((card) => card.id !== id));
+
+    if (cards.length <= 1) {
+      await getMoreCards();
+    }
+  }
+
+  const handleCardAction = async (id: number, action: PreferenceAction) => {
     if (!id) return;
     setDirection(action === 'like' ? 'right' : 'left');
     const question = cards.find((card) => card.id === id);
-    if (question) {      
+    await removeCard(id);
+    if (question) {
       // Save to local storage if the action is 'skip' (dislike)
       if (action === 'skip') {
         saveSkippedQuestion(question);
@@ -129,8 +144,7 @@ export function useCardStack({ advancedMode, initialQuestions, storedSkipIDs, st
         setLikes((prev) => [question.id, ...prev]);
       }
     }
-    void removeCard(id);
-  }, [cards, removeCard]);
+  }
 
   const handleDrag = useCallback((info: PanInfo, id: number) => {
     if (!id) return;
@@ -213,6 +227,10 @@ export function useCardStack({ advancedMode, initialQuestions, storedSkipIDs, st
     liking,
     filtering,
     isLoading,
+    autoGetMore,
+    drawCount,
+    setDrawCount,
+    setAutoGetMore: handlerSetAutoGetMore,
     handleCardAction,
     handleDrag,
     handleDragEnd,
