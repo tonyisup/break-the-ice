@@ -9,9 +9,8 @@ const LIKED_CATEGORIES_KEY = "break-the-ice-liked-categories";
 const ADVANCED_MODE_KEY = "break-the-ice-advanced-mode";
 const AUTO_GET_MORE_KEY = "break-the-ice-auto-get-more";
 const DRAW_COUNT_KEY = "break-the-ice-draw-count";
-const EXCLUDED_CATEGORIES_KEY = "break-the-ice-excluded-categories";
-const EXCLUDED_TAGS_KEY = "break-the-ice-excluded-tags";
-const INCLUDE_BY_DEFAULT_KEY = "break-the-ice-include-by-default";
+const BLOCKED_CATEGORIES_KEY = "break-the-ice-blocked-categories";
+const BLOCKED_TAGS_KEY = "break-the-ice-blocked-tags";
 
 /**
  * Save a skipped question to local storage
@@ -494,31 +493,31 @@ export function getDrawCount(): number {
 /**
  * Save an excluded category to local storage
  */
-export function saveExcludedCategory(category: string): void {
+export function saveBlockedCategory(category: string): void {
   if (typeof window === "undefined") return;
   
   try {
-    const excludedCategories = getExcludedCategories();
-    if (!excludedCategories.includes(category)) {
-      excludedCategories.push(category);
-      localStorage.setItem(EXCLUDED_CATEGORIES_KEY, JSON.stringify(excludedCategories));
+    const blockedCategories = getBlockedCategories();
+    if (!blockedCategories.includes(category)) {
+      blockedCategories.push(category);
+      localStorage.setItem(BLOCKED_CATEGORIES_KEY, JSON.stringify(blockedCategories));
     }
   } catch (error) {
-    console.error("Failed to save excluded category to local storage:", error);
+    console.error("Failed to save blocked category to local storage:", error);
   }
 }
 
 /**
  * Get all excluded categories from local storage
  */
-export function getExcludedCategories(): string[] {
+export function getBlockedCategories(): string[] {
   if (typeof window === "undefined") return [];
   
   try {
-    const storedData = localStorage.getItem(EXCLUDED_CATEGORIES_KEY);
+    const storedData = localStorage.getItem(BLOCKED_CATEGORIES_KEY);
     return storedData ? JSON.parse(storedData) as string[] : [];
   } catch (error) {
-    console.error("Failed to get excluded categories from local storage:", error);
+    console.error("Failed to get blocked categories from local storage:", error);
     return [];
   }
 }
@@ -526,14 +525,14 @@ export function getExcludedCategories(): string[] {
 /**
  * Check if a category has been excluded
  */
-export function isCategoryExcluded(category: string): boolean {
+export function isCategoryBlocked(category: string): boolean {
   if (typeof window === "undefined") return false;
   
   try {
-    const excludedCategories = getExcludedCategories();
-    return excludedCategories.includes(category);
+    const blockedCategories = getBlockedCategories();
+    return blockedCategories.includes(category);
   } catch (error) {
-    console.error("Failed to check if category is excluded:", error);
+    console.error("Failed to check if category is blocked:", error);
     return false;
   }
 }
@@ -541,46 +540,46 @@ export function isCategoryExcluded(category: string): boolean {
 /**
  * Remove a category from the excluded list
  */
-export function removeExcludedCategory(category: string): void {
+export function removeBlockedCategory(category: string): void {
   if (typeof window === "undefined") return;
   
   try {
-    const excludedCategories = getExcludedCategories();
-    const updatedCategories = excludedCategories.filter(c => c !== category);
-    localStorage.setItem(EXCLUDED_CATEGORIES_KEY, JSON.stringify(updatedCategories));
+    const blockedCategories = getBlockedCategories();
+    const updatedCategories = blockedCategories.filter(c => c !== category);
+    localStorage.setItem(BLOCKED_CATEGORIES_KEY, JSON.stringify(updatedCategories));
   } catch (error) {
-    console.error("Failed to remove excluded category from local storage:", error);
+    console.error("Failed to remove blocked category from local storage:", error);
   }
 }
 
 /**
  * Save an excluded tag to local storage
  */
-export function saveExcludedTag(tag: string): void {
+export function saveBlockedTag(tag: string): void {
   if (typeof window === "undefined") return;
   
   try {
-    const excludedTags = getExcludedTags();
+    const excludedTags = getBlockedTags();
     if (!excludedTags.includes(tag)) {
       excludedTags.push(tag);
-      localStorage.setItem(EXCLUDED_TAGS_KEY, JSON.stringify(excludedTags));
+      localStorage.setItem(BLOCKED_TAGS_KEY, JSON.stringify(excludedTags));
     }
   } catch (error) {
-    console.error("Failed to save excluded tag to local storage:", error);
+    console.error("Failed to save blocked tag to local storage:", error);
   }
 }
 
 /**
  * Get all excluded tags from local storage
  */
-export function getExcludedTags(): string[] {
+export function getBlockedTags(): string[] {
   if (typeof window === "undefined") return [];
   
   try {
-    const storedData = localStorage.getItem(EXCLUDED_TAGS_KEY);
+    const storedData = localStorage.getItem(BLOCKED_TAGS_KEY);
     return storedData ? JSON.parse(storedData) as string[] : [];
   } catch (error) {
-    console.error("Failed to get excluded tags from local storage:", error);
+    console.error("Failed to get blocked tags from local storage:", error);
     return [];
   }
 }
@@ -588,14 +587,14 @@ export function getExcludedTags(): string[] {
 /**
  * Check if a tag has been excluded
  */
-export function isTagExcluded(tag: string): boolean {
+export function isTagBlocked(tag: string): boolean {
   if (typeof window === "undefined") return false;
   
   try {
-    const excludedTags = getExcludedTags();
-    return excludedTags.includes(tag);
+    const blockedTags = getBlockedTags();
+    return blockedTags.includes(tag);
   } catch (error) {
-    console.error("Failed to check if tag is excluded:", error);
+    console.error("Failed to check if tag is blocked:", error);
     return false;
   }
 }
@@ -603,30 +602,14 @@ export function isTagExcluded(tag: string): boolean {
 /**
  * Remove a tag from the excluded list
  */
-export function removeExcludedTag(tag: string): void {
+export function removeBlockedTag(tag: string): void {
   if (typeof window === "undefined") return;
   
   try {
-    const excludedTags = getExcludedTags();
-    const updatedTags = excludedTags.filter(t => t !== tag);
-    localStorage.setItem(EXCLUDED_TAGS_KEY, JSON.stringify(updatedTags));
+    const blockedTags = getBlockedTags();
+    const updatedTags = blockedTags.filter(t => t !== tag);
+    localStorage.setItem(BLOCKED_TAGS_KEY, JSON.stringify(updatedTags));
   } catch (error) {
-    console.error("Failed to remove excluded tag from local storage:", error);
+    console.error("Failed to remove blocked tag from local storage:", error);
   }
 }
-
-
-export function saveIncludeByDefault(includeByDefault: boolean): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(INCLUDE_BY_DEFAULT_KEY, JSON.stringify(includeByDefault));
-}
-
-
-
-export function getIncludeByDefault(): boolean {
-  if (typeof window === "undefined") return true;
-  const includeByDefault = localStorage.getItem(INCLUDE_BY_DEFAULT_KEY);
-  return includeByDefault ? JSON.parse(includeByDefault) as boolean : true;
-}
-
-

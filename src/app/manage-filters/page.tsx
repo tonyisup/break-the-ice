@@ -3,9 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  getExcludedCategories, saveExcludedCategory, removeExcludedCategory,
-  getExcludedTags, saveExcludedTag, removeExcludedTag,
-  getIncludeByDefault
+  getBlockedCategories, saveBlockedCategory as saveBlockedCategory, removeBlockedCategory as removedBlockedCategory,
+  getBlockedTags, saveBlockedTag as saveBlockedTag, removeBlockedTag
 } from "~/lib/localStorage";
 import { Button } from "~/components/ui/button";
 import { ArrowLeft, Tag, Folder, FolderXIcon, FolderCheckIcon } from "lucide-react";
@@ -17,41 +16,39 @@ import { SearchInput } from "~/components/SearchInput";
 
 export default function ManageFiltersPage() {
   const router = useRouter();
-  const [excludedCategories, setExcludedCategories] = useState<string[]>([]);
-  const [excludedTags, setExcludedTags] = useState<string[]>([]);
+  const [blockedCategories, setBlockedCategories] = useState<string[]>([]);
+  const [blockedTags, setBlockedTags] = useState<string[]>([]);
   const [categorySearch, setCategorySearch] = useState("");
   const [tagSearch, setTagSearch] = useState("");
-  const [includeByDefault, setIncludeByDefault] = useState(true);
 
   const { data: allCategories, isLoading: isLoadingCategories } = api.questions.getAllCategories.useQuery();
   const { data: allTags, isLoading: isLoadingTags } = api.questions.getAllTags.useQuery();
 
   useEffect(() => {
     // Load excluded data
-    const categories = getExcludedCategories();
-    const tags = getExcludedTags();
-    setExcludedCategories(categories);
-    setExcludedTags(tags);
-    setIncludeByDefault(getIncludeByDefault());
+    const categories = getBlockedCategories();
+    const tags = getBlockedTags();
+    setBlockedCategories(categories);
+    setBlockedTags(tags);
   }, []);
 
   const handleCategoryToggle = (category: string, checked: boolean) => {
     if (checked) {
-      saveExcludedCategory(category);
-      setExcludedCategories(prev => [...prev, category]);
+      saveBlockedCategory(category);
+      setBlockedCategories(prev => [...prev, category]);
     } else {
-      removeExcludedCategory(category);
-      setExcludedCategories(prev => prev.filter(c => c !== category));
+      removedBlockedCategory(category);
+      setBlockedCategories(prev => prev.filter(c => c !== category));
     }
   };
 
   const handleTagToggle = (tag: string, checked: boolean) => {
     if (checked) {
-      saveExcludedTag(tag);
-      setExcludedTags(prev => [...prev, tag]);
+      saveBlockedTag(tag);
+      setBlockedTags(prev => [...prev, tag]);
     } else {
-      removeExcludedTag(tag);
-      setExcludedTags(prev => prev.filter(t => t !== tag));
+      removeBlockedTag(tag);
+      setBlockedTags(prev => prev.filter(t => t !== tag));
     }
   };
 
@@ -59,30 +56,30 @@ export default function ManageFiltersPage() {
     if (checked) {
       // If we're including by default, remove all categories from excluded list
       allCategories?.forEach(category => {
-        saveExcludedCategory(category);
+        saveBlockedCategory(category);
       });
-      setExcludedCategories(allCategories ?? []);
+      setBlockedCategories(allCategories ?? []);
     } else {
       // If we're excluding by default, add all categories to excluded list
       allCategories?.forEach(category => {
-        removeExcludedCategory(category);
+        removedBlockedCategory(category);
       });
-      setExcludedCategories([]);
+      setBlockedCategories([]);
     }
   };
 
   const handleIncludeAllTags = () => {
     allTags?.forEach(tag => {
-      removeExcludedTag(tag);
+      removeBlockedTag(tag);
     });
-    setExcludedTags([]);
+    setBlockedTags([]);
   };
 
   const handleExcludeAllTags = () => {
     allTags?.forEach(tag => {
-      saveExcludedTag(tag);
+      saveBlockedTag(tag);
     });
-    setExcludedTags(allTags ?? []);
+    setBlockedTags(allTags ?? []);
   };
 
   const filteredCategories = allCategories?.filter(category =>
@@ -116,9 +113,9 @@ export default function ManageFiltersPage() {
                 Categories to
               </div>
               {!isLoadingCategories && <div className="flex items-center gap-2">
-                <span className="pl-2 text-xs text-muted-foreground">include</span>
-                <Switch checked={true} />
-                <span className="text-xs">exclude</span>
+                <span className="pl-2 text-xs text-muted-foreground">block</span>
+                <Switch noCursor checked={true} />
+                <span className="text-xs">include</span>
               </div>}
               {isLoadingCategories && (
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent" />
@@ -135,12 +132,12 @@ export default function ManageFiltersPage() {
                 />
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={() => handleToggleAllCategories(false)}>
-                    Include all
+                    Block all
                     <Switch checked={false} />
                   </Button>
                   <Button variant="outline" onClick={() => handleToggleAllCategories(true)}>
                     <Switch checked={true} />
-                    Exclude all
+                    Include all
                   </Button>
                 </div>
               </div>
@@ -151,8 +148,8 @@ export default function ManageFiltersPage() {
                   <Label htmlFor={`category-${category}`}>{category}</Label>
                   <Switch
                     id={`category-${category}`}
-                    checked={excludedCategories.includes(category)}
-                    onCheckedChange={(checked) => handleCategoryToggle(category, checked)}
+                    checked={!blockedCategories.includes(category)}
+                    onCheckedChange={(checked) => handleCategoryToggle(category, !checked)}
                   />
                 </div>
               ))}
@@ -169,9 +166,9 @@ export default function ManageFiltersPage() {
                 Tags to
               </div>
               {!isLoadingTags && <div className="flex items-center gap-2">
-                <span className="pl-2 text-xs text-muted-foreground">include</span>
-                <Switch checked={true} />
-                <span className="text-xs">exclude</span>
+                <span className="pl-2 text-xs text-muted-foreground">block</span>
+                <Switch noCursor checked={true} />
+                <span className="text-xs">include</span>
               </div>}
               {isLoadingTags && (
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent" />
@@ -188,12 +185,12 @@ export default function ManageFiltersPage() {
               />
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={handleIncludeAllTags}>
-                    Include all
+                    Block all
                     <Switch checked={false} />
                   </Button>
                   <Button variant="outline" onClick={handleExcludeAllTags}>
                     <Switch checked={true} />
-                    Exclude all
+                    Include all
                   </Button>
                 </div>
               </div>
@@ -204,8 +201,8 @@ export default function ManageFiltersPage() {
                   <Label htmlFor={`tag-${tag}`}>{tag}</Label>
                   <Switch
                     id={`tag-${tag}`}
-                    checked={excludedTags.includes(tag)}
-                    onCheckedChange={(checked) => handleTagToggle(tag, checked)}
+                    checked={!blockedTags.includes(tag)}
+                    onCheckedChange={(checked) => handleTagToggle(tag, !checked)}
                   />
                 </div>
               ))}
