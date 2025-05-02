@@ -11,6 +11,7 @@ const AUTO_GET_MORE_KEY = "break-the-ice-auto-get-more";
 const DRAW_COUNT_KEY = "break-the-ice-draw-count";
 const EXCLUDED_CATEGORIES_KEY = "break-the-ice-excluded-categories";
 const EXCLUDED_TAGS_KEY = "break-the-ice-excluded-tags";
+const INCLUDE_BY_DEFAULT_KEY = "break-the-ice-include-by-default";
 
 /**
  * Save a skipped question to local storage
@@ -612,6 +613,20 @@ export function removeExcludedTag(tag: string): void {
   } catch (error) {
     console.error("Failed to remove excluded tag from local storage:", error);
   }
+}
+
+
+export function saveIncludeByDefault(includeByDefault: boolean): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(INCLUDE_BY_DEFAULT_KEY, JSON.stringify(includeByDefault));
+}
+
+
+
+export function getIncludeByDefault(): boolean {
+  if (typeof window === "undefined") return true;
+  const includeByDefault = localStorage.getItem(INCLUDE_BY_DEFAULT_KEY);
+  return includeByDefault ? JSON.parse(includeByDefault) as boolean : true;
 }
 
 
