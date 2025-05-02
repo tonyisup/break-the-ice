@@ -55,15 +55,7 @@ export default function ManageFiltersPage() {
     }
   };
 
-  const filteredCategories = allCategories?.filter(category =>
-    category.toLowerCase().includes(categorySearch.toLowerCase())
-  ) ?? [];
-
-  const filteredTags = allTags?.filter(tag =>
-    tag.toLowerCase().includes(tagSearch.toLowerCase())
-  ) ?? [];
-
-  const handleIncludeByDefaultToggle = (checked: boolean) => {
+  const handleToggleAllCategories = (checked: boolean) => {
     if (checked) {
       // If we're including by default, remove all categories from excluded list
       allCategories?.forEach(category => {
@@ -78,6 +70,28 @@ export default function ManageFiltersPage() {
       setExcludedCategories([]);
     }
   };
+
+  const handleIncludeAllTags = () => {
+    allTags?.forEach(tag => {
+      removeExcludedTag(tag);
+    });
+    setExcludedTags([]);
+  };
+
+  const handleExcludeAllTags = () => {
+    allTags?.forEach(tag => {
+      saveExcludedTag(tag);
+    });
+    setExcludedTags(allTags ?? []);
+  };
+
+  const filteredCategories = allCategories?.filter(category =>
+    category.toLowerCase().includes(categorySearch.toLowerCase())
+  ) ?? [];
+
+  const filteredTags = allTags?.filter(tag =>
+    tag.toLowerCase().includes(tagSearch.toLowerCase())
+  ) ?? [];
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -103,7 +117,7 @@ export default function ManageFiltersPage() {
               </div>
               {!isLoadingCategories && <div className="flex items-center gap-2">
                 <span className="pl-2 text-xs text-muted-foreground">include</span>
-                <Switch noCursor checked={true} />
+                <Switch checked={true} />
                 <span className="text-xs">exclude</span>
               </div>}
               {isLoadingCategories && (
@@ -112,26 +126,25 @@ export default function ManageFiltersPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-
-            {!isLoadingCategories &&
-              <div className="mb-4 flex gap-4 items-center justify-between">
+            {!isLoadingCategories && (
+              <div className="mb-4 gap-4 flex items-center justify-between">
                 <SearchInput
                   onSearch={setCategorySearch}
                   placeholder="Search categories..."
                   delay={300}
                 />
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => handleIncludeByDefaultToggle(false)}>
+                  <Button variant="outline" onClick={() => handleToggleAllCategories(false)}>
                     Include all
                     <Switch checked={false} />
                   </Button>
-                  <Button variant="outline" onClick={() => handleIncludeByDefaultToggle(true)}>
+                  <Button variant="outline" onClick={() => handleToggleAllCategories(true)}>
                     <Switch checked={true} />
                     Exclude all
                   </Button>
                 </div>
               </div>
-            }
+            )}
             <div className="grid gap-4">
               {filteredCategories.map((category) => (
                 <div key={category} className="flex items-center justify-between">
@@ -153,21 +166,38 @@ export default function ManageFiltersPage() {
             <CardTitle className="flex items-center gap-2 justify-between">
               <div className="flex items-center gap-2">
                 <Tag className="h-5 w-5" />
-                Tags
+                Tags to
               </div>
+              {!isLoadingTags && <div className="flex items-center gap-2">
+                <span className="pl-2 text-xs text-muted-foreground">include</span>
+                <Switch checked={true} />
+                <span className="text-xs">exclude</span>
+              </div>}
               {isLoadingTags && (
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent" />
               )}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="mb-4">
+            {!isLoadingTags && (
+              <div className="mb-4 gap-4 flex items-center justify-between">
               <SearchInput
                 onSearch={setTagSearch}
                 placeholder="Search tags..."
                 delay={300}
               />
-            </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={handleIncludeAllTags}>
+                    Include all
+                    <Switch checked={false} />
+                  </Button>
+                  <Button variant="outline" onClick={handleExcludeAllTags}>
+                    <Switch checked={true} />
+                    Exclude all
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="grid gap-4">
               {filteredTags.map((tag) => (
                 <div key={tag} className="flex items-center justify-between">
