@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   getBlockedCategories, saveBlockedCategory as saveBlockedCategory, removeBlockedCategory as removedBlockedCategory,
-  getBlockedTags, saveBlockedTag as saveBlockedTag, removeBlockedTag
+  getBlockedTags, saveBlockedTag as saveBlockedTag, removeBlockedTag,
+  getDrawCount, saveDrawCount,
+  getAutoGetMore, saveAutoGetMore
 } from "~/lib/localStorage";
 import { Button } from "~/components/ui/button";
 import { ArrowLeft, Tag, Folder, FolderXIcon, FolderCheckIcon, SaveIcon, XIcon } from "lucide-react";
@@ -13,6 +15,7 @@ import { Switch } from "~/components/ui/switch";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { SearchInput } from "~/components/SearchInput";
+import { Slider } from "~/components/ui/slider";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -22,6 +25,11 @@ export default function SettingsPage() {
   const [pendingBlockedTags, setPendingBlockedTags] = useState<string[]>([]);
   const [categorySearch, setCategorySearch] = useState("");
   const [tagSearch, setTagSearch] = useState("");
+  const [drawCount, setDrawCount] = useState(5);
+  const [pendingDrawCount, setPendingDrawCount] = useState(5);
+  const [autoGetMore, setAutoGetMore] = useState(false);
+  const [pendingAutoGetMore, setPendingAutoGetMore] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
 
   const { data: allCategories, isLoading: isLoadingCategories } = api.questions.getAllCategories.useQuery();
   const { data: allTags, isLoading: isLoadingTags } = api.questions.getAllTags.useQuery();
@@ -30,11 +38,28 @@ export default function SettingsPage() {
     // Load excluded data
     const categories = getBlockedCategories();
     const tags = getBlockedTags();
+    const savedDrawCount = getDrawCount() ?? 5;
+    const savedAutoGetMore = getAutoGetMore() ?? false;
+
     setBlockedCategories(categories);
     setPendingBlockedCategories(categories);
     setBlockedTags(tags);
     setPendingBlockedTags(tags);
+    setDrawCount(savedDrawCount);
+    setPendingDrawCount(savedDrawCount);
+    setAutoGetMore(savedAutoGetMore);
+    setPendingAutoGetMore(savedAutoGetMore);
+    setHasChanges(false);
   }, []);
+
+  useEffect(() => {
+    const hasCategoryChanges = JSON.stringify(blockedCategories) !== JSON.stringify(pendingBlockedCategories);
+    const hasTagChanges = JSON.stringify(blockedTags) !== JSON.stringify(pendingBlockedTags);
+    const hasDrawCountChanges = drawCount !== pendingDrawCount;
+    const hasAutoGetMoreChanges = autoGetMore !== pendingAutoGetMore;
+    
+    setHasChanges(hasCategoryChanges || hasTagChanges || hasDrawCountChanges || hasAutoGetMoreChanges);
+  }, [blockedCategories, pendingBlockedCategories, blockedTags, pendingBlockedTags, drawCount, pendingDrawCount, autoGetMore, pendingAutoGetMore]);
 
   const handleCategoryToggle = (category: string, checked: boolean) => {
     if (checked) {
@@ -68,6 +93,14 @@ export default function SettingsPage() {
     setPendingBlockedTags(allTags ?? []);
   };
 
+  const handleDrawCountChange = (value: number[]) => {
+    setPendingDrawCount(value[0] ?? 5);
+  };
+
+  const handleAutoGetMoreChange = (checked: boolean) => {
+    setPendingAutoGetMore(checked);
+  };
+
   const handleSave = () => {
     // Save categories
     const categoriesToRemove = blockedCategories.filter(category => !pendingBlockedCategories.includes(category));
@@ -91,21 +124,24 @@ export default function SettingsPage() {
       saveBlockedTag(tag);
     });
 
+    // Save draw settings
+    saveDrawCount(pendingDrawCount);
+    saveAutoGetMore(pendingAutoGetMore);
+
     // Update state
     setBlockedCategories(pendingBlockedCategories);
     setBlockedTags(pendingBlockedTags);
+    setDrawCount(pendingDrawCount);
+    setAutoGetMore(pendingAutoGetMore);
+    setHasChanges(false);
   };
 
   const handleCancel = () => {
     setPendingBlockedCategories(blockedCategories);
     setPendingBlockedTags(blockedTags);
-  };
-
-  const hasChanges = () => {
-    return (
-      JSON.stringify(blockedCategories) !== JSON.stringify(pendingBlockedCategories) ||
-      JSON.stringify(blockedTags) !== JSON.stringify(pendingBlockedTags)
-    );
+    setPendingDrawCount(drawCount);
+    setPendingAutoGetMore(autoGetMore);
+    setHasChanges(false);
   };
 
   const filteredCategories = allCategories?.filter(category =>
@@ -128,11 +164,11 @@ export default function SettingsPage() {
           Back to Questions
         </Button>
         <div className="flex gap-2">
-          <Button disabled={!hasChanges()} variant="outline" onClick={handleCancel}>
+          <Button disabled={!hasChanges} variant="outline" onClick={handleCancel}>
             <XIcon className="text-red-500 h-4 w-4" />
             Cancel
           </Button>
-          <Button disabled={!hasChanges()} onClick={handleSave}>
+          <Button disabled={!hasChanges} onClick={handleSave}>
             <SaveIcon className="text-blue-500 h-4 w-4" />
             Save Changes
           </Button>
@@ -140,6 +176,42 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-6">
+        {/* Draw Count Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 justify-between">
+              <div className="flex items-center gap-2">
+                <Folder className="h-5 w-5" />
+                Draw Settings
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-16 justify-between items-start">
+              <div className="flex-1 flex flex-col items-center gap-2">
+                <Slider
+                  id="draw-count"
+                  min={1}
+                  step={1}
+                  max={10}
+                  value={[pendingDrawCount]}
+                  onValueChange={handleDrawCountChange}
+                />
+                <Label htmlFor="draw-count">Draw {pendingDrawCount}</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={pendingAutoGetMore}
+                  onCheckedChange={handleAutoGetMoreChange}
+                  id="auto-get-more"
+                />
+                <Label htmlFor="auto-get-more">Auto Draw</Label>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+
         {/* Categories Section */}
         <Card>
           <CardHeader>
@@ -168,14 +240,14 @@ export default function SettingsPage() {
                   delay={300}
                 />
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => handleToggleAllCategories(false)}>
+                  <Label htmlFor="block-all-categories">
                     Block all
-                    <Switch checked={false} />
-                  </Button>
-                  <Button variant="outline" onClick={() => handleToggleAllCategories(true)}>
-                    <Switch checked={true} />
+                  </Label>                  
+                  <Switch id="block-all-categories" checked={false} onClick={() => handleToggleAllCategories(false)} />
+                  <Switch id="include-all-categories" checked={true} onClick={() => handleToggleAllCategories(true)} />
+                  <Label htmlFor="include-all-categories">
                     Include all
-                  </Button>
+                  </Label>
                 </div>
               </div>
             )}
@@ -221,15 +293,15 @@ export default function SettingsPage() {
                   placeholder="Search tags..."
                   delay={300}
                 />
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={handleIncludeAllTags}>
+                <div className="flex items-center gap-2">                  
+                  <Label htmlFor="block-all-tags">
                     Block all
-                    <Switch checked={false} />
-                  </Button>
-                  <Button variant="outline" onClick={handleExcludeAllTags}>
-                    <Switch checked={true} />
+                  </Label>                  
+                  <Switch id="block-all-tags" checked={false} onClick={handleIncludeAllTags} />
+                  <Switch id="include-all-tags" checked={true} onClick={handleExcludeAllTags} />
+                  <Label htmlFor="include-all-tags">
                     Include all
-                  </Button>
+                  </Label>
                 </div>
               </div>
             )}
