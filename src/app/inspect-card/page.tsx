@@ -5,28 +5,9 @@ import { api } from "~/trpc/react";
 import { Button } from "~/components/ui/button";
 import { ArrowLeft, Heart, Trash2, Tag, Folder, Undo2, Redo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { 
-  saveLikedQuestion, 
-  saveSkippedQuestion,
-  saveLikedCategory,
-  saveSkippedCategory,
-  saveLikedTag,
-  saveSkippedTag,
-  isCategoryLiked,
-  isCategorySkipped,
-  isTagLiked,
-  isTagSkipped,
-  isQuestionSkipped,
-  isQuestionLiked,
-  removeSkippedQuestion,
-  removeLikedQuestion,
-  removeSkippedCategory,
-  removeLikedCategory,
-  removeSkippedTag,
-  removeLikedTag
-} from "~/lib/localStorage";
 import { Badge } from "~/components/ui/badge";
 import { useState, useEffect } from "react";
+import { useCardStack } from "~/app/_components/hooks/useCardStack";
 
 export default function InspectCard() {
 	const [skipped, setSkipped] = useState(false);
@@ -34,272 +15,246 @@ export default function InspectCard() {
 	const [categoryStatus, setCategoryStatus] = useState<"liked" | "skipped" | "none">("none");
 	const [tagStatus, setTagStatus] = useState<Record<string, "liked" | "skipped" | "none">>({});
 
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const id = searchParams.get("id");
+	const searchParams = useSearchParams();
+	const router = useRouter();
+	const id = searchParams.get("id");
 
-  const { data: question, isLoading, error } = api.questions.getById.useQuery(
-    { id: id ? parseInt(id) : 0 },
-    { enabled: !!id }
-  );
+	const {
+		skips,
+		likes,
+		skipCategories,
+		likeCategories,
+		skipTags,
+		likeTags,
+		saveLikedQuestion,
+		saveSkippedQuestion,
+		saveLikedCategory,
+		saveSkippedCategory,
+		saveLikedTag,
+		saveSkippedTag,
+		removeSkippedQuestion,
+		removeLikedQuestion,
+		removeSkippedCategory,
+		removeLikedCategory,
+		removeSkippedTag,
+		removeLikedTag
+	} = useCardStack({
+		drawCountDefault: 5,
+		autoGetMoreDefault: false,
+		advancedMode: false,
+		initialQuestions: [],
+		handleInspectCard: () => {}
+	});
 
-  useEffect(() => {
-    if (question) {
-			setSkipped(isQuestionSkipped(question.id));
-			setLiked(isQuestionLiked(question.id));
-      setCategoryStatus(question.category ? isCategoryLiked(question.category) ? "liked" : isCategorySkipped(question.category) ? "skipped" : "none" : "none");
-      if (question.tags) {
-        const status: Record<string, "liked" | "skipped" | "none"> = {};
-        question.tags.forEach(tag => {
-          status[tag.tag.name] = isTagLiked(tag.tag.name) ? "liked" : isTagSkipped(tag.tag.name) ? "skipped" : "none";
-        });
-        setTagStatus(status);
-      }
-    }
-  }, [question]);
+	const { data: question, isLoading, error } = api.questions.getById.useQuery(
+		{ id: id ? parseInt(id) : 0 },
+		{ enabled: !!id }
+	);
 
-  const handleLike = () => {
-    if (!question) return;
-    saveLikedQuestion(question);
-		removeSkippedQuestion(question.id);
+	useEffect(() => {
+		if (question) {
+			setSkipped(skips.includes(question.id));
+			setLiked(likes.includes(question.id));
+			setCategoryStatus(question.category ? 
+				likeCategories.includes(question.category) ? "liked" : 
+				skipCategories.includes(question.category) ? "skipped" : 
+				"none" : "none");
+			
+			const newTagStatus: Record<string, "liked" | "skipped" | "none"> = {};
+			question.tags.forEach(({ tag }) => {
+				newTagStatus[tag.name] = 
+					likeTags.includes(tag.name) ? "liked" : 
+					skipTags.includes(tag.name) ? "skipped" : 
+					"none";
+			});
+			setTagStatus(newTagStatus);
+		}
+	}, [question, skips, likes, skipCategories, likeCategories, skipTags, likeTags]);
+
+	const handleLike = () => {
+		if (!question) return;
+		saveLikedQuestion(question);
 		setLiked(true);
-		setSkipped(false);
-  };
+	};
+
 	const handleUnlike = () => {
 		if (!question) return;
 		removeLikedQuestion(question.id);
 		setLiked(false);
 	};
 
-  const handleSkip = () => {
-    if (!question) return;
-    saveSkippedQuestion(question);
-		removeLikedQuestion(question.id);
+	const handleSkip = () => {
+		if (!question) return;
+		saveSkippedQuestion(question);
 		setSkipped(true);
-		setLiked(false);
-  };
+	};
+
 	const handleUnskip = () => {
 		if (!question) return;
 		removeSkippedQuestion(question.id);
 		setSkipped(false);
 	};
 
-  const handleCategoryLike = () => {
-    if (!question) return;
-    saveLikedCategory(question.category);
-		removeSkippedCategory(question.category);
+	const handleCategoryLike = () => {
+		if (!question?.category) return;
+		saveLikedCategory(question.category);
 		setCategoryStatus("liked");
-  };
+	};
+
 	const handleCategoryUnlike = () => {
-		if (!question) return;
+		if (!question?.category) return;
 		removeLikedCategory(question.category);
 		setCategoryStatus("none");
 	};
-  const handleCategorySkip = () => {
-    if (!question) return;
-    saveSkippedCategory(question.category);
-		removeLikedCategory(question.category);
+
+	const handleCategorySkip = () => {
+		if (!question?.category) return;
+		saveSkippedCategory(question.category);
 		setCategoryStatus("skipped");
-  };
+	};
+
 	const handleCategoryUnskip = () => {
-		if (!question) return;
+		if (!question?.category) return;
 		removeSkippedCategory(question.category);
 		setCategoryStatus("none");
 	};
 
+	const handleTagLike = (tagName: string) => {
+		saveLikedTag(tagName);
+		setTagStatus(prev => ({ ...prev, [tagName]: "liked" }));
+	};
 
-  const handleTagLike = (tagName: string) => {
-    if (!question) return;
-    saveLikedTag(tagName);
-		removeSkippedTag(tagName);
-    setTagStatus(prev => ({ ...prev, [tagName]: "liked" }));
-  };
-
-  const handleTagUnlike = (tagName: string) => {
-    if (!question) return;
-    removeLikedTag(tagName);
-    setTagStatus(prev => ({ ...prev, [tagName]: "none" }));
-  };
-
-  const handleTagSkip = (tagName: string) => {
-    if (!question) return;
-    saveSkippedTag(tagName);
+	const handleTagUnlike = (tagName: string) => {
 		removeLikedTag(tagName);
-    setTagStatus(prev => ({ ...prev, [tagName]: "skipped" }));
-  };
+		setTagStatus(prev => ({ ...prev, [tagName]: "none" }));
+	};
 
-  const handleTagUnskip = (tagName: string) => {
-    if (!question) return;
-    removeSkippedTag(tagName);
-    setTagStatus(prev => ({ ...prev, [tagName]: "none" }));
-  };
+	const handleTagSkip = (tagName: string) => {
+		saveSkippedTag(tagName);
+		setTagStatus(prev => ({ ...prev, [tagName]: "skipped" }));
+	};
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen p-4 flex flex-col items-center justify-center">
-        <p>Loading...</p>
-      </div>
-    );
-  }
+	const handleTagUnskip = (tagName: string) => {
+		removeSkippedTag(tagName);
+		setTagStatus(prev => ({ ...prev, [tagName]: "none" }));
+	};
 
-  if (error || !question) {
-    return (
-      <div className="min-h-screen p-4 flex flex-col items-center justify-center">
-        <p>Question not found</p>
-        <Button onClick={() => router.push("/")} className="mt-4">
-          <ArrowLeft className="mr-2" />
-          Back to Home
-        </Button>
-      </div>
-    );
-  }
+	if (isLoading) {
+		return (
+			<div className="min-h-screen p-4 flex flex-col items-center justify-center">
+				<p>Loading...</p>
+			</div>
+		);
+	}
 
-  return (
-    <div className="min-h-screen p-4 flex flex-col">
-      <div className="flex justify-between items-center mb-4">
-        <Button onClick={() => router.back()} variant="ghost">
-          <ArrowLeft className="mr-2" />
-          Back
-        </Button>
-        <div className="flex gap-2">
-					{skipped ? (
-						<Button 
-							onClick={handleUnskip}
-							variant="outline"
-						>
-							<Undo2 className="mr-2 text-red-500" />
-							Unskip
-						</Button>
-					) : (
-						<Button 
-							onClick={handleSkip} 
-							variant="outline"
-						>
-							<Trash2 className="mr-2 text-red-500" />
-							Skip
-						</Button>
-					)}
-					{liked ? (
-						<Button 
-							onClick={handleUnlike} 
-							variant="outline" 
-						>
-							<Redo2 className="mr-2 text-green-500" />
-							Unlike
-						</Button>
-					) : (
-						<Button 
-							onClick={handleLike} 
-						>
-							<Heart className="mr-2 text-green-500" />
-							Like
-						</Button>
-					)}
-        </div>
-      </div>
-      <div className="flex-1 flex flex-col items-center justify-center gap-8">
-        <div className="w-full max-w-md">
-					<h1 className="text-2xl font-bold">{question.text}</h1>
-        </div>
-        
-        <div className="w-full max-w-md space-y-4">
-					<h3 className="font-medium flex items-center gap-2">
-						Category
-						<Folder className="h-5 w-5" />
-					</h3>
-          <div className="flex items-center justify-between p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{question.category}</span>
-            </div>
-            <div className="flex gap-2">
-							{categoryStatus === "skipped" ? (
-								<Button 
-									onClick={handleCategoryUnskip} 
-									variant="outline" 
-									size="sm"
-								>
-									<Undo2 className="h-4 w-4 mr-1 text-red-500" />
-								</Button>
-							) : (
-              <Button 
-                onClick={handleCategorySkip} 
-                variant="outline" 
-                size="sm"
-              >
-                <Trash2 className="h-4 w-4 mr-1 text-red-500" />
-              </Button>
-							)}
-							{categoryStatus === "liked" ? (
-								<Button 
-									onClick={handleCategoryUnlike} 
-									variant="outline" 
-									size="sm"
-								>
-									<Redo2 className="h-4 w-4 mr-1 text-green-500" />
-								</Button>
-							) : (	
-              <Button 
-                onClick={handleCategoryLike} 
-                variant="outline" 
-                size="sm"
-              >
-                <Heart className="h-4 w-4 mr-1 text-green-500" />
-              </Button>
-							)}
-            </div>
-          </div>
+	if (error || !question) {
+		return (
+			<div className="min-h-screen p-4 flex flex-col items-center justify-center">
+				<p>Question not found</p>
+				<Button onClick={() => router.push("/")} className="mt-4">
+					<ArrowLeft className="mr-2" />
+					Back to Home
+				</Button>
+			</div>
+		);
+	}
 
-          <div className="space-y-2">
-            <h3 className="font-medium flex items-center gap-2">
-							Tags
-              <Tag className="h-5 w-5" />
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {question.tags.map(tag => (
-                <div key={tag.tag.id} className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                  <Badge variant="outline">{tag.tag.name}</Badge>
-                  <div className="flex gap-1">
-                    {tagStatus[tag.tag.name] === "skipped" ? (
-                      <Button 
-                        onClick={() => handleTagUnskip(tag.tag.name)} 
-                        variant="ghost" 
-                        size="sm"
-                      >
-                        <Undo2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    ) : (
-                      <Button 
-                        onClick={() => handleTagSkip(tag.tag.name)} 
-                        variant="ghost" 
-                        size="sm"
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    )}
-                    {tagStatus[tag.tag.name] === "liked" ? (
-                      <Button 
-                        onClick={() => handleTagUnlike(tag.tag.name)} 
-                        variant="ghost" 
-                        size="sm"
-                      >
-                        <Redo2 className="h-4 w-4 text-green-500" />
-                      </Button>
-                    ) : (
-                      <Button 
-                        onClick={() => handleTagLike(tag.tag.name)} 
-                        variant="ghost" 
-                        size="sm"
-                      >
-                        <Heart className="h-4 w-4 text-green-500" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+	return (
+		<div className="flex flex-col gap-4 p-4">
+			<div className="flex items-center gap-2">
+				<Button variant="ghost" onClick={() => router.back()}>
+					<ArrowLeft className="h-4 w-4" />
+				</Button>
+				<h1 className="text-2xl font-bold">Inspect Card</h1>
+			</div>
+			{isLoading && <div>Loading...</div>}
+			{error && <div>Error loading question</div>}
+			{question && (
+				<div className="flex flex-col gap-4">
+					<div className="flex flex-col gap-2">
+						<h2 className="text-xl font-semibold">{question.text}</h2>
+						<p>{question.text}</p>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						{question.category && (
+							<div className="flex items-center gap-2">
+								<Folder className="h-4 w-4" />
+								<Badge variant={categoryStatus === "liked" ? "secondary" : categoryStatus === "skipped" ? "destructive" : "default"}>
+									{question.category}
+								</Badge>
+								{categoryStatus === "none" ? (
+									<div className="flex gap-1">
+										<Button size="icon" variant="ghost" onClick={handleCategoryLike}>
+											<Heart className="h-4 w-4" />
+										</Button>
+										<Button size="icon" variant="ghost" onClick={handleCategorySkip}>
+											<Trash2 className="h-4 w-4" />
+										</Button>
+									</div>
+								) : categoryStatus === "liked" ? (
+									<Button size="icon" variant="ghost" onClick={handleCategoryUnlike}>
+										<Undo2 className="h-4 w-4" />
+									</Button>
+								) : (
+									<Button size="icon" variant="ghost" onClick={handleCategoryUnskip}>
+										<Redo2 className="h-4 w-4" />
+									</Button>
+								)}
+							</div>
+						)}
+						{question.tags.map(({ tag }) => (
+							<div key={tag.name} className="flex items-center gap-2">
+								<Tag className="h-4 w-4" />
+								<Badge variant={tagStatus[tag.name] === "liked" ? "secondary" : tagStatus[tag.name] === "skipped" ? "destructive" : "default"}>
+									{tag.name}
+								</Badge>
+								{tagStatus[tag.name] === "none" ? (
+									<div className="flex gap-1">
+										<Button size="icon" variant="ghost" onClick={() => handleTagLike(tag.name)}>
+											<Heart className="h-4 w-4" />
+										</Button>
+										<Button size="icon" variant="ghost" onClick={() => handleTagSkip(tag.name)}>
+											<Trash2 className="h-4 w-4" />
+										</Button>
+									</div>
+								) : tagStatus[tag.name] === "liked" ? (
+									<Button size="icon" variant="ghost" onClick={() => handleTagUnlike(tag.name)}>
+										<Undo2 className="h-4 w-4" />
+									</Button>
+								) : (
+									<Button size="icon" variant="ghost" onClick={() => handleTagUnskip(tag.name)}>
+										<Redo2 className="h-4 w-4" />
+									</Button>
+								)}
+							</div>
+						))}
+					</div>
+					<div className="flex gap-2">
+						{liked ? (
+							<Button variant="ghost" onClick={handleUnlike}>
+								<Undo2 className="h-4 w-4 mr-2" />
+								Unlike
+							</Button>
+						) : (
+							<Button variant="ghost" onClick={handleLike}>
+								<Heart className="h-4 w-4 mr-2" />
+								Like
+							</Button>
+						)}
+						{skipped ? (
+							<Button variant="ghost" onClick={handleUnskip}>
+								<Redo2 className="h-4 w-4 mr-2" />
+								Unskip
+							</Button>
+						) : (
+							<Button variant="ghost" onClick={handleSkip}>
+								<Trash2 className="h-4 w-4 mr-2" />
+								Skip
+							</Button>
+						)}
+					</div>
+				</div>
+			)}
+		</div>
+	);
 }

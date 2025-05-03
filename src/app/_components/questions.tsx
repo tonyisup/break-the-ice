@@ -4,14 +4,6 @@ import { useCardStack } from "./hooks/useCardStack";
 import { CardStack } from "./CardStack";
 import { CardActions } from "./CardActions";
 import { useRouter } from "next/navigation";
-import { 
-  getSkippedIds, getLikedIds, getSkippedCategories, getLikedTags, getSkippedTags, getLikedCategories,
-  getAdvancedMode, saveAdvancedMode,
-  getAutoGetMore,
-  isAutoGetMoreSet,
-  saveAutoGetMore,
-  getDrawCount
-} from "~/lib/localStorage";
 import type { Question, QuestionTag, Tag } from "@prisma/client";
 import { useState, useEffect } from "react";
 import { Switch } from "~/components/ui/switch";
@@ -30,49 +22,8 @@ interface QuestionComponentProps {
 }
 
 export function QuestionComponent({ initialQuestions }: QuestionComponentProps) {
-  const [advancedMode, setAdvancedMode] = useState(false);
   const router = useRouter();
-  //get stored skips and likes
-  const storedSkipIDs = getSkippedIds();
-  const storedLikeIDs = getLikedIds();
-  const storedSkipCategories = getSkippedCategories();
-  const storedLikeCategories = getLikedCategories();
-  const storedSkipTags = getSkippedTags();
-  const storedLikeTags = getLikedTags();
-  const isAutoGetMoreRemembered = isAutoGetMoreSet();
-  const autoGetMoreDefault = isAutoGetMoreRemembered ? getAutoGetMore() : false;
-  const drawCountDefault = getDrawCount() ?? advancedMode ? 5 : 1;
-
-  useEffect(() => {
-    // Load simple mode setting from localStorage
-    const storedAdvancedMode = getAdvancedMode();
-    setAdvancedMode(storedAdvancedMode);
-  }, []);
-
-  const handleAdvancedModeChange = (checked: boolean) => {
-    setAdvancedMode(checked);
-    saveAdvancedMode(checked);
-  };
-
-  const handleManageSkips = () => {
-    router.push("/manage-skips");
-  };
-
-  const handleManageLikes = () => {
-    router.push("/manage-likes");
-  };
-  const handleInspectCard = () => {
-    const currentCard = cards[0];
-    if (!currentCard) return;
-    router.push(`/inspect-card?id=${currentCard.id}`);
-  };
-  const handleFilter = () => {
-    router.push("/manage-filters");
-  };
-  const handleAutoGetMore = (checked: boolean) => {
-    setAutoGetMore(checked);
-    saveAutoGetMore(checked);
-  };
+  const [advancedMode, setAdvancedMode] = useState(false);
 
   const {
     cards,
@@ -91,8 +42,43 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
     getMoreCards,
     reset,
     drawCount,
-    setDrawCount
-  } = useCardStack({ autoGetMoreDefault, advancedMode, initialQuestions, storedSkipIDs, storedSkipCategories, storedLikeIDs, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard, drawCountDefault });
+    setDrawCount,
+    saveAdvancedMode,
+    getAdvancedMode
+  } = useCardStack({
+    drawCountDefault: advancedMode ? 5 : 1,
+    autoGetMoreDefault: false,
+    advancedMode,
+    initialQuestions,
+    handleInspectCard: () => {
+      const currentCard = cards[0];
+      if (!currentCard) return;
+      router.push(`/inspect-card?id=${currentCard.id}`);
+    }
+  });
+
+  useEffect(() => {
+    // Load advanced mode setting from localStorage
+    const storedAdvancedMode = getAdvancedMode();
+    setAdvancedMode(storedAdvancedMode);
+  }, [getAdvancedMode]);
+
+  const handleAdvancedModeChange = (checked: boolean) => {
+    setAdvancedMode(checked);
+    saveAdvancedMode(checked);
+  };
+
+  const handleManageSkips = () => {
+    router.push("/manage-skips");
+  };
+
+  const handleManageLikes = () => {
+    router.push("/manage-likes");
+  };
+
+  const handleFilter = () => {
+    router.push("/manage-filters");
+  };
 
   return (
     <div className="flex-1 p-8 h-full flex flex-col justify-center items-center" role="region" aria-label="Question cards">
@@ -105,9 +91,9 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
         <Button onClick={handleFilter} aria-label="filter questions">
           <FilterIcon className="mr-2 text-blue-500" aria-hidden="true" />
           Filter
-          </Button>
-        </div>
-      }
+        </Button>
+      </div>}
+
       <CardStack
         advancedMode={advancedMode}
         cards={cards}
@@ -120,10 +106,11 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
         onGetMore={getMoreCards}
         isLoading={isLoading}
         autoGetMore={autoGetMore}
-        setAutoGetMore={handleAutoGetMore}
+        setAutoGetMore={setAutoGetMore}
         drawCount={drawCount}
         setDrawCount={setDrawCount}
       />
+
       <CardActions
         advancedMode={advancedMode}
         cards={cards}
@@ -135,7 +122,11 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
         onReset={reset}
         onManageSkips={handleManageSkips}
         onManageLikes={handleManageLikes}
-        onInspectCard={handleInspectCard}
+        onInspectCard={() => {
+          const currentCard = cards[0];
+          if (!currentCard) return;
+          router.push(`/inspect-card?id=${currentCard.id}`);
+        }}
       />
     </div>
   );

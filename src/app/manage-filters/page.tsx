@@ -2,10 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  getBlockedCategories, saveBlockedCategory as saveBlockedCategory, removeBlockedCategory as removedBlockedCategory,
-  getBlockedTags, saveBlockedTag as saveBlockedTag, removeBlockedTag
-} from "~/lib/localStorage";
 import { Button } from "~/components/ui/button";
 import { ArrowLeft, Tag, Folder, FolderXIcon, FolderCheckIcon, SaveIcon, XIcon } from "lucide-react";
 import { api } from "~/trpc/react";
@@ -13,11 +9,10 @@ import { Switch } from "~/components/ui/switch";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { SearchInput } from "~/components/SearchInput";
+import { useCardStack } from "~/app/_components/hooks/useCardStack";
 
 export default function ManageFiltersPage() {
   const router = useRouter();
-  const [blockedCategories, setBlockedCategories] = useState<string[]>([]);
-  const [blockedTags, setBlockedTags] = useState<string[]>([]);
   const [pendingBlockedCategories, setPendingBlockedCategories] = useState<string[]>([]);
   const [pendingBlockedTags, setPendingBlockedTags] = useState<string[]>([]);
   const [categorySearch, setCategorySearch] = useState("");
@@ -26,15 +21,25 @@ export default function ManageFiltersPage() {
   const { data: allCategories, isLoading: isLoadingCategories } = api.questions.getAllCategories.useQuery();
   const { data: allTags, isLoading: isLoadingTags } = api.questions.getAllTags.useQuery();
 
+  const {
+    blockedCategories,
+    blockedTags,
+    saveBlockedCategory,
+    removeBlockedCategory,
+    saveBlockedTag,
+    removeBlockedTag
+  } = useCardStack({
+    drawCountDefault: 5,
+    autoGetMoreDefault: false,
+    advancedMode: false,
+    initialQuestions: [],
+    handleInspectCard: () => {}
+  });
+
   useEffect(() => {
-    // Load excluded data
-    const categories = getBlockedCategories();
-    const tags = getBlockedTags();
-    setBlockedCategories(categories);
-    setPendingBlockedCategories(categories);
-    setBlockedTags(tags);
-    setPendingBlockedTags(tags);
-  }, []);
+    setPendingBlockedCategories(blockedCategories);
+    setPendingBlockedTags(blockedTags);
+  }, [blockedCategories, blockedTags]);
 
   const handleCategoryToggle = (category: string, checked: boolean) => {
     if (checked) {
@@ -71,7 +76,7 @@ export default function ManageFiltersPage() {
   const handleSave = () => {
     // Save categories
     blockedCategories.forEach(category => {
-      removedBlockedCategory(category);
+      removeBlockedCategory(category);
     });
     pendingBlockedCategories.forEach(category => {
       saveBlockedCategory(category);
@@ -84,10 +89,6 @@ export default function ManageFiltersPage() {
     pendingBlockedTags.forEach(tag => {
       saveBlockedTag(tag);
     });
-
-    // Update state
-    setBlockedCategories(pendingBlockedCategories);
-    setBlockedTags(pendingBlockedTags);
   };
 
   const handleCancel = () => {
@@ -131,7 +132,6 @@ export default function ManageFiltersPage() {
             Save Changes
           </Button>
         </div>
-
       </div>
 
       <div className="grid gap-6">

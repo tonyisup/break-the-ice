@@ -2,55 +2,55 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getSkippedIds, removeSkippedQuestion, getSkippedCategories, getSkippedTags, removeSkippedCategory, removeSkippedTag} from "~/lib/localStorage";
 import { QuestionGrid } from "~/app/_components/QuestionGrid";
 import { Button } from "~/components/ui/button";
 import { ArrowLeft, Trash2, Tag, Folder, X, FileQuestionIcon } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Badge } from "~/components/ui/badge";
+import { useCardStack } from "~/app/_components/hooks/useCardStack";
 
 export default function ManageSkipsPage() {
   const router = useRouter();
-  const [skippedQuestionIDs, setSkippedQuestionIDs] = useState<number[]>([]);
-  const [skippedCategories, setSkippedCategories] = useState<string[]>([]);
-  const [skippedTags, setSkippedTags] = useState<string[]>([]);
-  const { data: skippedQuestions } = api.questions.getByIDs.useQuery({
-    ids: skippedQuestionIDs
+
+  const {
+    skips,
+    skipCategories,
+    skipTags,
+    removeSkippedQuestion,
+    removeSkippedCategory,
+    removeSkippedTag,
+    clearSkippedQuestions,
+    clearSkippedCategories,
+    clearSkippedTags
+  } = useCardStack({
+    drawCountDefault: 5,
+    autoGetMoreDefault: false,
+    advancedMode: false,
+    initialQuestions: [],
+    handleInspectCard: () => {}
   });
 
-  useEffect(() => {
-    const questions = getSkippedIds();
-    const categories = getSkippedCategories();
-    const tags = getSkippedTags();
-    setSkippedQuestionIDs(questions);
-    setSkippedCategories(categories);
-    setSkippedTags(tags);
-  }, []);
+  const { data: skippedQuestions } = api.questions.getByIDs.useQuery({
+    ids: skips
+  });
 
   const handleRemoveQuestion = (id: number) => {
     removeSkippedQuestion(id);
-    setSkippedQuestionIDs((prev) => prev.filter((q) => q !== id));
   };
 
   const handleRemoveCategory = (category: string) => {
     removeSkippedCategory(category);
-    setSkippedCategories((prev) => prev.filter((c) => c !== category));
   };
 
   const handleRemoveTag = (tag: string) => {
     removeSkippedTag(tag);
-    setSkippedTags((prev) => prev.filter((t) => t !== tag));
   };
 
   const handleClearAll = () => {
     if (window.confirm("Are you sure you want to remove all skipped questions, categories, and tags?")) {
-      setSkippedQuestionIDs([]);
-      setSkippedCategories([]);
-      setSkippedTags([]);
-      // Clear all skipped data from localStorage
-      localStorage.removeItem("break-the-ice-skipped-ids");
-      localStorage.removeItem("break-the-ice-skipped-categories");
-      localStorage.removeItem("break-the-ice-skipped-tags");
+      clearSkippedQuestions();
+      clearSkippedCategories();
+      clearSkippedTags();
     }
   };
 
@@ -67,9 +67,9 @@ export default function ManageSkipsPage() {
         </Button>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
-            {skippedQuestionIDs.length} skipped questions
+            {skips.length} skipped questions
           </span>
-          {(skippedQuestionIDs.length > 0 || skippedCategories.length > 0 || skippedTags.length > 0) && (
+          {(skips.length > 0 || skipCategories.length > 0 || skipTags.length > 0) && (
             <Button
               variant="destructive"
               size="sm"
@@ -84,14 +84,14 @@ export default function ManageSkipsPage() {
       </div>
 
       {/* Skipped Categories Section */}
-      {skippedCategories.length > 0 && (
+      {skipCategories.length > 0 && (
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <Folder className="h-5 w-5" />
             Skipped Categories
           </h2>
           <div className="flex flex-wrap gap-2">
-            {skippedCategories.map((category) => (
+            {skipCategories.map((category) => (
               <Badge
                 key={category}
                 variant="secondary"
@@ -113,14 +113,14 @@ export default function ManageSkipsPage() {
       )}
 
       {/* Skipped Tags Section */}
-      {skippedTags.length > 0 && (
+      {skipTags.length > 0 && (
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <Tag className="h-5 w-5" />
             Skipped Tags
           </h2>
           <div className="flex flex-wrap gap-2">
-            {skippedTags.map((tag) => (
+            {skipTags.map((tag) => (
               <Badge
                 key={tag}
                 variant="secondary"
@@ -147,7 +147,7 @@ export default function ManageSkipsPage() {
           <FileQuestionIcon className="h-5 w-5" />
           Skipped Questions
         </h2>
-        {skippedQuestionIDs.length === 0 ? (
+        {skips.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-lg text-muted-foreground">
               You haven&apos;t skipped any questions yet.

@@ -2,55 +2,55 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getLikedIds, removeLikedQuestion, getLikedCategories, getLikedTags, removeLikedCategory, removeLikedTag } from "~/lib/localStorage";
 import { QuestionGrid } from "~/app/_components/QuestionGrid";
 import { Button } from "~/components/ui/button";
 import { ArrowLeft, Trash2, Tag, Folder, X, FileQuestionIcon } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Badge } from "~/components/ui/badge";
+import { useCardStack } from "~/app/_components/hooks/useCardStack";
 
 export default function ManageLikesPage() {
   const router = useRouter();
-  const [likedQuestionIDs, setLikedQuestionIDs] = useState<number[]>([]);
-  const [likedCategories, setLikedCategories] = useState<string[]>([]);
-  const [likedTags, setLikedTags] = useState<string[]>([]);
-  const { data: likedQuestions } = api.questions.getByIDs.useQuery({
-    ids: likedQuestionIDs
+
+  const {
+    likes,
+    likeCategories,
+    likeTags,
+    removeLikedQuestion,
+    removeLikedCategory,
+    removeLikedTag,
+    clearLikedQuestions,
+    clearLikedCategories,
+    clearLikedTags
+  } = useCardStack({
+    drawCountDefault: 5,
+    autoGetMoreDefault: false,
+    advancedMode: false,
+    initialQuestions: [],
+    handleInspectCard: () => {}
   });
 
-  useEffect(() => {
-    const questions = getLikedIds();
-    const categories = getLikedCategories();
-    const tags = getLikedTags();
-    setLikedQuestionIDs(questions);
-    setLikedCategories(categories);
-    setLikedTags(tags);
-  }, []);
+  const { data: likedQuestions } = api.questions.getByIDs.useQuery({
+    ids: likes
+  });
 
   const handleRemoveQuestion = (id: number) => {
     removeLikedQuestion(id);
-    setLikedQuestionIDs((prev) => prev.filter((q) => q !== id));
   };
 
   const handleRemoveCategory = (category: string) => {
     removeLikedCategory(category);
-    setLikedCategories((prev) => prev.filter((c) => c !== category));
   };
 
   const handleRemoveTag = (tag: string) => {
     removeLikedTag(tag);
-    setLikedTags((prev) => prev.filter((t) => t !== tag));
   };
 
   const handleClearAll = () => {
     if (window.confirm("Are you sure you want to remove all liked questions, categories, and tags?")) {
-      setLikedQuestionIDs([]);
-      setLikedCategories([]);
-      setLikedTags([]);
-      // Clear all liked data from localStorage
-      localStorage.removeItem("break-the-ice-liked-ids");
-      localStorage.removeItem("break-the-ice-liked-categories");
-      localStorage.removeItem("break-the-ice-liked-tags");
+      clearLikedQuestions();
+      clearLikedCategories();
+      clearLikedTags();
     }
   };
 
@@ -67,9 +67,9 @@ export default function ManageLikesPage() {
         </Button>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
-            {likedQuestionIDs.length} liked questions
+            {likes.length} liked questions
           </span>
-          {(likedQuestionIDs.length > 0 || likedCategories.length > 0 || likedTags.length > 0) && (
+          {(likes.length > 0 || likeCategories.length > 0 || likeTags.length > 0) && (
             <Button
               variant="destructive"
               size="sm"
@@ -84,14 +84,14 @@ export default function ManageLikesPage() {
       </div>
 
       {/* Liked Categories Section */}
-      {likedCategories.length > 0 && (
+      {likeCategories.length > 0 && (
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <Folder className="h-5 w-5" />
             Liked Categories
           </h2>
           <div className="flex flex-wrap gap-2">
-            {likedCategories.map((category) => (
+            {likeCategories.map((category) => (
               <Badge
                 key={category}
                 variant="secondary"
@@ -113,14 +113,14 @@ export default function ManageLikesPage() {
       )}
 
       {/* Liked Tags Section */}
-      {likedTags.length > 0 && (
+      {likeTags.length > 0 && (
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <Tag className="h-5 w-5" />
             Liked Tags
           </h2>
           <div className="flex flex-wrap gap-2">
-            {likedTags.map((tag) => (
+            {likeTags.map((tag) => (
               <Badge
                 key={tag}
                 variant="secondary"
@@ -147,7 +147,7 @@ export default function ManageLikesPage() {
           <FileQuestionIcon className="h-5 w-5" />
           Liked Questions
         </h2>
-        {likedQuestionIDs.length === 0 ? (
+        {likes.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-lg text-muted-foreground">
               You haven&apos;t liked any questions yet.
