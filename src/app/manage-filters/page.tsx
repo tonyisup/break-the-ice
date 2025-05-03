@@ -75,18 +75,24 @@ export default function ManageFiltersPage() {
 
   const handleSave = () => {
     // Save categories
-    blockedCategories.forEach(category => {
+    const categoriesToRemove = blockedCategories.filter(category => !pendingBlockedCategories.includes(category));
+    const categoriesToAdd = pendingBlockedCategories.filter(category => !blockedCategories.includes(category));
+
+    categoriesToRemove.forEach(category => {
       removeBlockedCategory(category);
     });
-    pendingBlockedCategories.forEach(category => {
+    categoriesToAdd.forEach(category => {
       saveBlockedCategory(category);
     });
 
     // Save tags
-    blockedTags.forEach(tag => {
+    const tagsToRemove = blockedTags.filter(tag => !pendingBlockedTags.includes(tag));
+    const tagsToAdd = pendingBlockedTags.filter(tag => !blockedTags.includes(tag));
+
+    tagsToRemove.forEach(tag => {
       removeBlockedTag(tag);
     });
-    pendingBlockedTags.forEach(tag => {
+    tagsToAdd.forEach(tag => {
       saveBlockedTag(tag);
     });
   };
@@ -141,9 +147,10 @@ export default function ManageFiltersPage() {
             <CardTitle className="flex items-center gap-2 justify-between">
               <div className="flex items-center gap-2">
                 <Folder className="h-5 w-5" />
-                Categories to
+                Categories
               </div>
               {!isLoadingCategories && <div className="flex items-center gap-2">
+                to
                 <span className="pl-2 text-xs text-muted-foreground">block</span>
                 <Switch noCursor checked={true} />
                 <span className="text-xs">include</span>
@@ -194,9 +201,10 @@ export default function ManageFiltersPage() {
             <CardTitle className="flex items-center gap-2 justify-between">
               <div className="flex items-center gap-2">
                 <Tag className="h-5 w-5" />
-                Tags to
+                Tags
               </div>
               {!isLoadingTags && <div className="flex items-center gap-2">
+                to
                 <span className="pl-2 text-xs text-muted-foreground">block</span>
                 <Switch noCursor checked={true} />
                 <span className="text-xs">include</span>
