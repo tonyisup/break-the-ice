@@ -6,15 +6,17 @@ import { Input } from "~/components/ui/input";
 import { X } from "lucide-react";
 import { Button } from "./ui/button";
 import { Search } from "lucide-react";
-import { Label } from "@radix-ui/react-dropdown-menu";
+import { Label } from "./ui/label";
 
 interface SearchInputProps {
+  id: string;
   onSearch: (query: string) => void;
   placeholder?: string;
   delay?: number;
 }
 
 export function SearchInput({
+  id,
   onSearch,
   placeholder = "Search...",
   delay = 300,
@@ -28,8 +30,9 @@ export function SearchInput({
   }, [debouncedSearchTerm, onSearch]);
 
   return (<div className="flex w-full items-center gap-2">
-    <Label className="sr-only">Search</Label>
+    <Label htmlFor={id} className="sr-only">Search</Label>
     <Input
+      id={id}
       type="text"
       placeholder={placeholder}
       value={searchTerm}

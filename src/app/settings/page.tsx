@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   getBlockedCategories, saveBlockedCategory as saveBlockedCategory, removeBlockedCategory as removedBlockedCategory,
@@ -9,7 +9,7 @@ import {
   getAutoGetMore, saveAutoGetMore
 } from "~/lib/localStorage";
 import { Button } from "~/components/ui/button";
-import { ArrowLeft, Tag, Folder, FolderXIcon, FolderCheckIcon, SaveIcon, XIcon } from "lucide-react";
+import { ArrowLeft, Tag, Folder, SaveIcon, XIcon } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Switch } from "~/components/ui/switch";
 import { Label } from "~/components/ui/label";
@@ -29,7 +29,6 @@ export default function SettingsPage() {
   const [pendingDrawCount, setPendingDrawCount] = useState(5);
   const [autoGetMore, setAutoGetMore] = useState(false);
   const [pendingAutoGetMore, setPendingAutoGetMore] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
 
   const { data: allCategories, isLoading: isLoadingCategories } = api.questions.getAllCategories.useQuery();
   const { data: allTags, isLoading: isLoadingTags } = api.questions.getAllTags.useQuery();
@@ -49,16 +48,23 @@ export default function SettingsPage() {
     setPendingDrawCount(savedDrawCount);
     setAutoGetMore(savedAutoGetMore);
     setPendingAutoGetMore(savedAutoGetMore);
-    setHasChanges(false);
   }, []);
 
-  useEffect(() => {
-    const hasCategoryChanges = JSON.stringify(blockedCategories) !== JSON.stringify(pendingBlockedCategories);
-    const hasTagChanges = JSON.stringify(blockedTags) !== JSON.stringify(pendingBlockedTags);
+  const hasChanges = useMemo(() => {
+    const hasCategoryChanges =
+      blockedCategories.length !== pendingBlockedCategories.length ||
+      blockedCategories.some(cat => !pendingBlockedCategories.includes(cat)) ||
+      pendingBlockedCategories.some(cat => !blockedCategories.includes(cat));
+
+    const hasTagChanges =
+      blockedTags.length !== pendingBlockedTags.length ||
+      blockedTags.some(tag => !pendingBlockedTags.includes(tag)) ||
+      pendingBlockedTags.some(tag => !blockedTags.includes(tag));
+
     const hasDrawCountChanges = drawCount !== pendingDrawCount;
     const hasAutoGetMoreChanges = autoGetMore !== pendingAutoGetMore;
-    
-    setHasChanges(hasCategoryChanges || hasTagChanges || hasDrawCountChanges || hasAutoGetMoreChanges);
+
+    return hasCategoryChanges || hasTagChanges || hasDrawCountChanges || hasAutoGetMoreChanges;
   }, [blockedCategories, pendingBlockedCategories, blockedTags, pendingBlockedTags, drawCount, pendingDrawCount, autoGetMore, pendingAutoGetMore]);
 
   const handleCategoryToggle = (category: string, checked: boolean) => {
@@ -89,7 +95,7 @@ export default function SettingsPage() {
     setPendingBlockedTags([]);
   };
 
-  const handleExcludeAllTags = () => {
+  const handleBlockAllTags = () => {
     setPendingBlockedTags(allTags ?? []);
   };
 
@@ -133,7 +139,6 @@ export default function SettingsPage() {
     setBlockedTags(pendingBlockedTags);
     setDrawCount(pendingDrawCount);
     setAutoGetMore(pendingAutoGetMore);
-    setHasChanges(false);
   };
 
   const handleCancel = () => {
@@ -141,16 +146,21 @@ export default function SettingsPage() {
     setPendingBlockedTags(blockedTags);
     setPendingDrawCount(drawCount);
     setPendingAutoGetMore(autoGetMore);
-    setHasChanges(false);
   };
 
-  const filteredCategories = allCategories?.filter(category =>
-    category.toLowerCase().includes(categorySearch.toLowerCase())
-  ) ?? [];
+  const filteredCategories = useMemo(() =>
+    allCategories?.filter(category =>
+      category.toLowerCase().includes(categorySearch.toLowerCase())
+    ) ?? [],
+    [allCategories, categorySearch]
+  );
 
-  const filteredTags = allTags?.filter(tag =>
-    tag.toLowerCase().includes(tagSearch.toLowerCase())
-  ) ?? [];
+  const filteredTags = useMemo(() =>
+    allTags?.filter(tag =>
+      tag.toLowerCase().includes(tagSearch.toLowerCase())
+    ) ?? [],
+    [allTags, tagSearch]
+  );
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -235,6 +245,7 @@ export default function SettingsPage() {
             {!isLoadingCategories && (
               <div className="mb-4 gap-4 flex items-center justify-between">
                 <SearchInput
+                  id="category-search"
                   onSearch={setCategorySearch}
                   placeholder="Search categories..."
                   delay={300}
@@ -289,6 +300,7 @@ export default function SettingsPage() {
             {!isLoadingTags && (
               <div className="mb-4 gap-4 flex items-center justify-between">
                 <SearchInput
+                  id="tag-search"
                   onSearch={setTagSearch}
                   placeholder="Search tags..."
                   delay={300}
@@ -297,8 +309,8 @@ export default function SettingsPage() {
                   <Label htmlFor="block-all-tags">
                     Block all
                   </Label>                  
-                  <Switch id="block-all-tags" checked={false} onClick={handleIncludeAllTags} />
-                  <Switch id="include-all-tags" checked={true} onClick={handleExcludeAllTags} />
+                  <Switch id="block-all-tags" checked={false} onClick={handleBlockAllTags} />
+                  <Switch id="include-all-tags" checked={true} onClick={handleIncludeAllTags} />
                   <Label htmlFor="include-all-tags">
                     Include all
                   </Label>
