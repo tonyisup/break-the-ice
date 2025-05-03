@@ -168,11 +168,8 @@ export const questionsRouter = createTRPCRouter({
           LEFT JOIN [ice].[Tag] [t] ON [qt].[tagId] = [t].[id]
           WHERE (1=1)
           AND (0=${input?.skipIds?.length ?? 0} or [q].[id] NOT IN (${input?.skipIds?.length ?? 0 > 0 ? Prisma.join(input.skipIds ?? [0]) : "0"}))
-          AND (0=${input?.likeIds?.length ?? 0} or [q].[id] NOT IN (${input?.likeIds?.length ?? 0 > 0 ? Prisma.join(input.likeIds ?? [0]) : "0"}))
           AND (0=${input.skipCategories?.length ?? 0} or [q].[category] NOT IN (${input.skipCategories?.length ?? 0 > 0 ? Prisma.join(input.skipCategories ?? [""]) : "0"}))
-          AND (0=${input.likeCategories?.length ?? 0} or [q].[category] IN (${input.likeCategories?.length ?? 0 > 0 ? Prisma.join(input.likeCategories ?? [""]) : "0"}))
           AND (0=${input.skipTags?.length ?? 0} or [t].[name] NOT IN (${input.skipTags?.length ?? 0 > 0 ? Prisma.join(input.skipTags ?? [""]) : "0"}))
-          AND (0=${input.likeTags?.length ?? 0} or [t].[name] IN (${input.likeTags?.length ?? 0 > 0 ? Prisma.join(input.likeTags ?? [""]) : "0"}))
           AND (0=${input.blockedCategories?.length ?? 0} or [q].[category] NOT IN (${input.blockedCategories?.length ?? 0 > 0 ? Prisma.join(input.blockedCategories ?? [""]) : "0"}))
           AND (0=${input.blockedTags?.length ?? 0} or [t].[name] NOT IN (${input.blockedTags?.length ?? 0 > 0 ? Prisma.join(input.blockedTags ?? [""]) : "0"}))
 

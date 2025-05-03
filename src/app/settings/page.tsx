@@ -14,7 +14,7 @@ import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { SearchInput } from "~/components/SearchInput";
 
-export default function ManageFiltersPage() {
+export default function SettingsPage() {
   const router = useRouter();
   const [blockedCategories, setBlockedCategories] = useState<string[]>([]);
   const [blockedTags, setBlockedTags] = useState<string[]>([]);
@@ -137,7 +137,6 @@ export default function ManageFiltersPage() {
             Save Changes
           </Button>
         </div>
-
       </div>
 
       <div className="grid gap-6">

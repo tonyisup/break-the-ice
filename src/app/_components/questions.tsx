@@ -17,7 +17,8 @@ import { useState, useEffect } from "react";
 import { Switch } from "~/components/ui/switch";
 import { Label } from "~/components/ui/label";
 import { Button } from "~/components/ui/button";
-import { FilterIcon } from "lucide-react";    
+import { FilterIcon, SettingsIcon } from "lucide-react";    
+import Link from "next/link";
 /**
  * QuestionComponent displays a stack of question cards that can be swiped left or right
  */
@@ -66,9 +67,6 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
     if (!currentCard) return;
     router.push(`/inspect-card?id=${currentCard.id}`);
   };
-  const handleFilter = () => {
-    router.push("/manage-filters");
-  };
   const handleAutoGetMore = (checked: boolean) => {
     setAutoGetMore(checked);
     saveAutoGetMore(checked);
@@ -99,15 +97,14 @@ export function QuestionComponent({ initialQuestions }: QuestionComponentProps) 
       <div className="p-2 flex flex-row items-center gap-2">
         <Switch id="advanced-mode" checked={advancedMode} onCheckedChange={handleAdvancedModeChange} />
         <Label htmlFor="advanced-mode">Advanced Mode</Label>
+
+        {advancedMode && 
+          <Link href="/settings" className="p-2" aria-label="filter questions">
+            <SettingsIcon className="text-blue-500" aria-hidden="true" />
+          </Link>
+        }
       </div>
 
-      {advancedMode && <div className="p-2 flex flex-row items-center gap-2">
-        <Button onClick={handleFilter} aria-label="filter questions">
-          <FilterIcon className="mr-2 text-blue-500" aria-hidden="true" />
-          Filter
-          </Button>
-        </div>
-      }
       <CardStack
         advancedMode={advancedMode}
         cards={cards}
