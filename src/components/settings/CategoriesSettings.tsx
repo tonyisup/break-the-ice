@@ -135,4 +135,6 @@ export const CategoriesSettings = forwardRef<CategoriesSettingsRef, CategoriesSe
       </Card>
     );
   }
-); 
+);
+
+CategoriesSettings.displayName = "CategoriesSettings"; 

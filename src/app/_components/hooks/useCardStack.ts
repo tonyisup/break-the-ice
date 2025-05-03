@@ -116,10 +116,10 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
   }
 
 
-  const handlerSetAutoGetMore = async (checked: boolean) => {
+  const handlerSetAutoGetMore = (checked: boolean) => {
     setAutoGetMore(checked);
     if (checked) {
-      await getMoreCards();
+      void getMoreCards();
     }
   }
 
@@ -137,11 +137,11 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
     }
   }
 
-  const handleCardAction = async (id: number, action: PreferenceAction) => {
+  const handleCardAction = useCallback((id: number, action: PreferenceAction) => {
     if (!id) return;
     setDirection(action === 'like' ? 'right' : 'left');
     const question = cards.find((card) => card.id === id);
-    await removeCard(id);
+    void removeCard(id);
     if (question) {
       // Save to local storage if the action is 'skip' (dislike)
       if (action === 'skip') {
@@ -152,7 +152,7 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
         setLikes((prev) => [question.id, ...prev]);
       }
     }
-  }
+  }, [cards, removeCard]);
 
   const handleDrag = useCallback((info: PanInfo, id: number) => {
     if (!id) return;
@@ -195,12 +195,12 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
   const handleDragEnd = useCallback((info: PanInfo, id: number) => {
     if (!id) return;
     if (info.offset.x > ACTION_THRESHOLD) {
-      handleCardAction(id, 'like');
+      void handleCardAction(id, 'like');
     } else if (info.offset.x < -ACTION_THRESHOLD) {
-      handleCardAction(id, 'skip');
+      void handleCardAction(id, 'skip');
     } else if (info.offset.y > ACTION_THRESHOLD) {
       if (advancedMode) {
-        handleInspectCard();
+        void handleInspectCard();
       }
       setDirection(null);
       setLiking(false);

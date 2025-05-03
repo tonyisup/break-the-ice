@@ -16,8 +16,7 @@ import type { Question, QuestionTag, Tag } from "@prisma/client";
 import { useState, useEffect } from "react";
 import { Switch } from "~/components/ui/switch";
 import { Label } from "~/components/ui/label";
-import { Button } from "~/components/ui/button";
-import { FilterIcon, SettingsIcon } from "lucide-react";    
+import { SettingsIcon } from "lucide-react";    
 import Link from "next/link";
 /**
  * QuestionComponent displays a stack of question cards that can be swiped left or right

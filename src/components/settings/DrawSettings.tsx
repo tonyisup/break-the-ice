@@ -99,4 +99,6 @@ export const DrawSettings = forwardRef<DrawSettingsRef, DrawSettingsProps>(({ on
       </CardContent>
     </Card>
   );
-}); 
+});
+
+DrawSettings.displayName = "DrawSettings"; 

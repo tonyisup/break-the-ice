@@ -135,4 +135,6 @@ export const TagsSettings = forwardRef<TagsSettingsRef, TagsSettingsProps>(
       </Card>
     );
   }
-); 
+);
+
+TagsSettings.displayName = "TagsSettings"; 

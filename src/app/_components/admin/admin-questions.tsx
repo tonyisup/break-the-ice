@@ -66,6 +66,7 @@ export default function AdminQuestions() {
   return (
     <div className="flex flex-col gap-4 w-full justify-center items-center">
       <SearchInput 
+        id="search-questions"
         onSearch={handleSearch} 
         placeholder="Search questions..." 
         delay={300} 
