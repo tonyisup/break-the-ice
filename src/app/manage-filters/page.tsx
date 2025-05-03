@@ -7,7 +7,7 @@ import {
   getBlockedTags, saveBlockedTag as saveBlockedTag, removeBlockedTag
 } from "~/lib/localStorage";
 import { Button } from "~/components/ui/button";
-import { ArrowLeft, Tag, Folder, FolderXIcon, FolderCheckIcon } from "lucide-react";
+import { ArrowLeft, Tag, Folder, FolderXIcon, FolderCheckIcon, SaveIcon, XIcon } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Switch } from "~/components/ui/switch";
 import { Label } from "~/components/ui/label";
@@ -18,6 +18,8 @@ export default function ManageFiltersPage() {
   const router = useRouter();
   const [blockedCategories, setBlockedCategories] = useState<string[]>([]);
   const [blockedTags, setBlockedTags] = useState<string[]>([]);
+  const [pendingBlockedCategories, setPendingBlockedCategories] = useState<string[]>([]);
+  const [pendingBlockedTags, setPendingBlockedTags] = useState<string[]>([]);
   const [categorySearch, setCategorySearch] = useState("");
   const [tagSearch, setTagSearch] = useState("");
 
@@ -29,57 +31,75 @@ export default function ManageFiltersPage() {
     const categories = getBlockedCategories();
     const tags = getBlockedTags();
     setBlockedCategories(categories);
+    setPendingBlockedCategories(categories);
     setBlockedTags(tags);
+    setPendingBlockedTags(tags);
   }, []);
 
   const handleCategoryToggle = (category: string, checked: boolean) => {
     if (checked) {
-      saveBlockedCategory(category);
-      setBlockedCategories(prev => [...prev, category]);
+      setPendingBlockedCategories(prev => [...prev, category]);
     } else {
-      removedBlockedCategory(category);
-      setBlockedCategories(prev => prev.filter(c => c !== category));
+      setPendingBlockedCategories(prev => prev.filter(c => c !== category));
     }
   };
 
   const handleTagToggle = (tag: string, checked: boolean) => {
     if (checked) {
-      saveBlockedTag(tag);
-      setBlockedTags(prev => [...prev, tag]);
+      setPendingBlockedTags(prev => [...prev, tag]);
     } else {
-      removeBlockedTag(tag);
-      setBlockedTags(prev => prev.filter(t => t !== tag));
+      setPendingBlockedTags(prev => prev.filter(t => t !== tag));
     }
   };
 
   const handleToggleAllCategories = (checked: boolean) => {
     if (checked) {
-      // If we're including by default, remove all categories from excluded list
-      allCategories?.forEach(category => {
-        saveBlockedCategory(category);
-      });
-      setBlockedCategories(allCategories ?? []);
+      setPendingBlockedCategories([]);
     } else {
-      // If we're excluding by default, add all categories to excluded list
-      allCategories?.forEach(category => {
-        removedBlockedCategory(category);
-      });
-      setBlockedCategories([]);
+      setPendingBlockedCategories(allCategories ?? []);
     }
   };
 
   const handleIncludeAllTags = () => {
-    allTags?.forEach(tag => {
-      removeBlockedTag(tag);
-    });
-    setBlockedTags([]);
+    setPendingBlockedTags([]);
   };
 
   const handleExcludeAllTags = () => {
-    allTags?.forEach(tag => {
+    setPendingBlockedTags(allTags ?? []);
+  };
+
+  const handleSave = () => {
+    // Save categories
+    blockedCategories.forEach(category => {
+      removedBlockedCategory(category);
+    });
+    pendingBlockedCategories.forEach(category => {
+      saveBlockedCategory(category);
+    });
+
+    // Save tags
+    blockedTags.forEach(tag => {
+      removeBlockedTag(tag);
+    });
+    pendingBlockedTags.forEach(tag => {
       saveBlockedTag(tag);
     });
-    setBlockedTags(allTags ?? []);
+
+    // Update state
+    setBlockedCategories(pendingBlockedCategories);
+    setBlockedTags(pendingBlockedTags);
+  };
+
+  const handleCancel = () => {
+    setPendingBlockedCategories(blockedCategories);
+    setPendingBlockedTags(blockedTags);
+  };
+
+  const hasChanges = () => {
+    return (
+      JSON.stringify(blockedCategories) !== JSON.stringify(pendingBlockedCategories) ||
+      JSON.stringify(blockedTags) !== JSON.stringify(pendingBlockedTags)
+    );
   };
 
   const filteredCategories = allCategories?.filter(category =>
@@ -101,6 +121,17 @@ export default function ManageFiltersPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to Questions
         </Button>
+        <div className="flex gap-2">
+          <Button disabled={!hasChanges()} variant="outline" onClick={handleCancel}>
+            <XIcon className="text-red-500 h-4 w-4" />
+            Cancel
+          </Button>
+          <Button disabled={!hasChanges()} onClick={handleSave}>
+            <SaveIcon className="text-blue-500 h-4 w-4" />
+            Save Changes
+          </Button>
+        </div>
+
       </div>
 
       <div className="grid gap-6">
@@ -148,7 +179,7 @@ export default function ManageFiltersPage() {
                   <Label htmlFor={`category-${category}`}>{category}</Label>
                   <Switch
                     id={`category-${category}`}
-                    checked={!blockedCategories.includes(category)}
+                    checked={!pendingBlockedCategories.includes(category)}
                     onCheckedChange={(checked) => handleCategoryToggle(category, !checked)}
                   />
                 </div>
@@ -178,11 +209,11 @@ export default function ManageFiltersPage() {
           <CardContent>
             {!isLoadingTags && (
               <div className="mb-4 gap-4 flex items-center justify-between">
-              <SearchInput
-                onSearch={setTagSearch}
-                placeholder="Search tags..."
-                delay={300}
-              />
+                <SearchInput
+                  onSearch={setTagSearch}
+                  placeholder="Search tags..."
+                  delay={300}
+                />
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={handleIncludeAllTags}>
                     Block all
@@ -201,7 +232,7 @@ export default function ManageFiltersPage() {
                   <Label htmlFor={`tag-${tag}`}>{tag}</Label>
                   <Switch
                     id={`tag-${tag}`}
-                    checked={!blockedTags.includes(tag)}
+                    checked={!pendingBlockedTags.includes(tag)}
                     onCheckedChange={(checked) => handleTagToggle(tag, !checked)}
                   />
                 </div>
