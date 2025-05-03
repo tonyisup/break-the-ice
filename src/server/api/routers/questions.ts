@@ -151,6 +151,8 @@ export const questionsRouter = createTRPCRouter({
       likeCategories: z.array(z.string()).optional(),
       skipTags: z.array(z.string()).optional(),
       likeTags: z.array(z.string()).optional(),
+      blockedCategories: z.array(z.string()).optional(),
+      blockedTags: z.array(z.string()).optional(),
     }))
     .query(async ({ ctx, input }) => {
       const drawCount = input.drawCount ?? 5;
@@ -171,6 +173,8 @@ export const questionsRouter = createTRPCRouter({
           AND (0=${input.likeCategories?.length ?? 0} or [q].[category] IN (${input.likeCategories?.length ?? 0 > 0 ? Prisma.join(input.likeCategories ?? [""]) : "0"}))
           AND (0=${input.skipTags?.length ?? 0} or [t].[name] NOT IN (${input.skipTags?.length ?? 0 > 0 ? Prisma.join(input.skipTags ?? [""]) : "0"}))
           AND (0=${input.likeTags?.length ?? 0} or [t].[name] IN (${input.likeTags?.length ?? 0 > 0 ? Prisma.join(input.likeTags ?? [""]) : "0"}))
+          AND (0=${input.blockedCategories?.length ?? 0} or [q].[category] NOT IN (${input.blockedCategories?.length ?? 0 > 0 ? Prisma.join(input.blockedCategories ?? [""]) : "0"}))
+          AND (0=${input.blockedTags?.length ?? 0} or [t].[name] NOT IN (${input.blockedTags?.length ?? 0 > 0 ? Prisma.join(input.blockedTags ?? [""]) : "0"}))
 
           ORDER BY newid()
         `

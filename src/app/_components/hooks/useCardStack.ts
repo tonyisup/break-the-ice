@@ -1,7 +1,11 @@
 import { useState, useCallback } from "react";
 import { type PanInfo } from "framer-motion";
 import { api } from "~/trpc/react";
-import { saveSkippedQuestion, saveLikedQuestion, clearSkippedQuestions, clearLikedQuestions, clearSkippedCategories, clearLikedCategories, clearSkippedTags, clearLikedTags } from "~/lib/localStorage";
+import { 
+  saveSkippedQuestion, saveLikedQuestion, clearSkippedQuestions, clearLikedQuestions, 
+  clearSkippedCategories, clearLikedCategories, clearSkippedTags, clearLikedTags,
+  getBlockedCategories, getBlockedTags
+} from "~/lib/localStorage";
 import type { Question as PrismaQuestion, Tag } from "@prisma/client";
 
 type Question = PrismaQuestion & {
@@ -59,6 +63,8 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
   const [likesTags] = useState<string[]>(storedLikeTags);
   const [skipCategories] = useState<string[]>(storedSkipCategories);
   const [skipTags] = useState<string[]>(storedSkipTags);
+  const [blockedCategories] = useState<string[]>(getBlockedCategories());
+  const [blockedTags] = useState<string[]>(getBlockedTags());
   const [cards, setCards] = useState<Question[]>(initialQuestions);
   const [direction, setDirection] = useState<CardDirection | null>(null);
   const [skipping, setSkipping] = useState(false);
@@ -76,7 +82,9 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
       skipCategories: skipCategories,
       likeCategories: likesCategories,
       skipTags: skipTags,
-      likeTags: likesTags
+      likeTags: likesTags,
+      blockedCategories: blockedCategories,
+      blockedTags: blockedTags
     }
   );
 
