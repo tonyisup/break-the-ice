@@ -5,6 +5,7 @@ import { type Metadata } from "next";
 
 import { Providers } from "./_components/providers";
 import { Analytics } from "@vercel/analytics/react"
+import { Toaster } from "~/components/ui/toaster";
 
 export const metadata: Metadata = {
   title: "Break the Ice(berg)",
@@ -20,6 +21,7 @@ export default function RootLayout({
       <body>
         <Providers>{children}</Providers>
         <Analytics />
+        <Toaster />
       </body>
     </html>
   );

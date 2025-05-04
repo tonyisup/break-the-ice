@@ -5,6 +5,7 @@ import { api } from "~/trpc/react";
 import { QuestionsCards } from "./questions-cards";
 import { QuestionsTable } from "./questions-table";
 import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
+import { useToast } from "~/hooks/use-toast";
 
 export default function AdminQuestions() {
   const { data: questions, isLoading, refetch: refetchAll } = api.questions.getAll.useQuery();
@@ -16,6 +17,7 @@ export default function AdminQuestions() {
   const [editingQuestionCategory, setEditingQuestionCategory] = useState<string>("");
   const [search, setSearch] = useState<string>("");
   const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
+  const { toast } = useToast();
 
   if (isLoading) {
     return <div>Loading...</div>;
@@ -29,6 +31,17 @@ export default function AdminQuestions() {
     removeQuestion.mutate({ id }, {
       onSuccess: () => {
         void refetchAll();
+        toast({
+          title: "Success",
+          description: "Question removed successfully",
+        });
+      },
+      onError: (error) => {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
       }
     });
   }
@@ -48,13 +61,41 @@ export default function AdminQuestions() {
   const handleSaveQuestion = (question: Question) => {
     question.text = editingQuestionText;
     question.category = editingQuestionCategory;
-    updateQuestion.mutate({ id: question.id, text: editingQuestionText, category: editingQuestionCategory });
-    handleStopEditingQuestion();
+    updateQuestion.mutate({ id: question.id, text: editingQuestionText, category: editingQuestionCategory }, {
+      onSuccess: () => {
+        handleStopEditingQuestion();
+        toast({
+          title: "Success",
+          description: "Question updated successfully",
+        });
+      },
+      onError: (error) => {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    });
   }
 
   const handleRemoveTag = (questionId: number, tags: QuestionTag[], tag: Tag) => {
     tags = tags.filter((t) => t.tagId !== tag.id);
-    removeTag.mutate({ questionId: questionId, tagId: tag.id });
+    removeTag.mutate({ questionId: questionId, tagId: tag.id }, {
+      onSuccess: () => {
+        toast({
+          title: "Success",
+          description: "Tag removed successfully",
+        });
+      },
+      onError: (error) => {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    });
   }
 
   const handleSearch = (query: string) => {
@@ -74,7 +115,6 @@ export default function AdminQuestions() {
     onRemoveTag: handleRemoveTag,
     onSearch: handleSearch,
   };
-
 
   return (
     <div className="flex flex-col gap-4">
