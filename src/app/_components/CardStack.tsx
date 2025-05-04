@@ -9,6 +9,7 @@ import { Switch } from "~/components/ui/switch";
 import { Label } from "~/components/ui/label";
 import { ImportIcon } from "lucide-react";
 import { Slider } from "~/components/ui/slider";
+import CardShuffleLoader from "./shuffle-loader/card-shuffle-loader";
 
 type Question = PrismaQuestion & {
   tags: Array<{
@@ -61,8 +62,7 @@ export function CardStack({
       <div className="relative h-full w-full">
         {isLoading && <div className="flex flex-col gap-4 items-center justify-center h-[480px]">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent" />
-          <p className="text-lg">Loading questions...</p>
+          <CardShuffleLoader />
         </div>
         </div>}
         {!isLoading && (!cards || cards.length == 0) && <div className="flex flex-col gap-4 items-center justify-center h-[480px]">
