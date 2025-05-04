@@ -21,7 +21,9 @@ interface QuestionsCardsProps {
   search: string;
   editingQuestionId: number;
   editingQuestionText: string;
+  setEditingQuestionText: (text: string) => void;
   editingQuestionCategory: string;
+  setEditingQuestionCategory: (category: string) => void;
   onRemoveQuestion: (id: number) => void;
   onStartEditingQuestion: (id: number) => void;
   onStopEditingQuestion: () => void;
@@ -35,7 +37,9 @@ export function QuestionsCards({
   search,
   editingQuestionId,
   editingQuestionText,
+  setEditingQuestionText,
   editingQuestionCategory,
+  setEditingQuestionCategory,
   onRemoveQuestion,
   onStartEditingQuestion,
   onStopEditingQuestion,
@@ -67,9 +71,7 @@ export function QuestionsCards({
                       <Input 
                         type="text" 
                         value={editingQuestionCategory} 
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          onSearch(e.target.value);
-                        }} 
+                        onChange={(e) => setEditingQuestionCategory(e.target.value)}
                         className="text-lg font-semibold"
                       />
                     ) : (
@@ -78,12 +80,10 @@ export function QuestionsCards({
                   </CardTitle>
                   <CardDescription>
                     {editingQuestionId === question.id ? (
-                      <Textarea 
-                        value={editingQuestionText} 
-                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                          onSearch(e.target.value);
-                        }} 
-                        className="min-h-[100px]"
+                      <Textarea
+                        value={editingQuestionText}
+                        onChange={(e) => setEditingQuestionText(e.target.value)}
+                        className="w-full min-h-[100px]"
                       />
                     ) : (
                       question.text
