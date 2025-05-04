@@ -90,7 +90,7 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
 
   const { refetch: fetchSingleQuestion } = api.questions.getRandom.useQuery();
 
-  const getMoreCards = async () => {
+  const getMoreCards = useCallback(async () => {
     console.log("Fetching more cards");
     setIsLoading(true);
     try {
@@ -113,7 +113,7 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [advancedMode, fetchNewQuestions, fetchSingleQuestion]);
 
 
   const handlerSetAutoGetMore = (checked: boolean) => {
@@ -123,7 +123,7 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
     }
   }
 
-  const removeCard = async (id: number) => {
+  const removeCard = useCallback(async (id: number) => {
     if (!id) return;
     setDirection(null);
     setLiking(false);
@@ -135,7 +135,7 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
     if (cards.length <= 1) {
       await getMoreCards();
     }
-  }
+  }, [cards, getMoreCards]);
 
   const handleCardAction = useCallback((id: number, action: PreferenceAction) => {
     if (!id) return;

@@ -1,13 +1,10 @@
 import type { Question, QuestionTag, Tag } from "@prisma/client";
-import { Pencil, Save, Trash, X } from "lucide-react";
+import { LayoutGrid, Table } from "lucide-react";
 import { useState } from "react";
-import { SearchInput } from "~/components/SearchInput";
-import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "~/components/ui/table";
-import { Textarea } from "~/components/ui/textarea";
 import { api } from "~/trpc/react";
+import { QuestionsCards } from "./questions-cards";
+import { QuestionsTable } from "./questions-table";
+import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
 
 export default function AdminQuestions() {
   const { data: questions, isLoading, refetch: refetchAll } = api.questions.getAll.useQuery();
@@ -18,6 +15,8 @@ export default function AdminQuestions() {
   const [editingQuestionText, setEditingQuestionText] = useState<string>("");
   const [editingQuestionCategory, setEditingQuestionCategory] = useState<string>("");
   const [search, setSearch] = useState<string>("");
+  const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
+
   if (isLoading) {
     return <div>Loading...</div>;
   }
@@ -25,7 +24,6 @@ export default function AdminQuestions() {
   if (!questions) {
     return <div>No questions found</div>;
   }
-
 
   const handleRemoveQuestion = (id: number) => {
     removeQuestion.mutate({ id }, {
@@ -63,74 +61,43 @@ export default function AdminQuestions() {
     setSearch(query);
   }
 
+  const commonProps = {
+    questions,
+    search,
+    editingQuestionId,
+    editingQuestionText,
+    editingQuestionCategory,
+    onRemoveQuestion: handleRemoveQuestion,
+    onStartEditingQuestion: handleStartEditingQuestion,
+    onStopEditingQuestion: handleStopEditingQuestion,
+    onSaveQuestion: handleSaveQuestion,
+    onRemoveTag: handleRemoveTag,
+    onSearch: handleSearch,
+  };
+
+
   return (
-    <div className="flex flex-col gap-4 w-full justify-center items-center">
-      <SearchInput 
-        id="search-questions"
-        onSearch={handleSearch} 
-        placeholder="Search questions..." 
-        delay={300} 
-      />
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Action</TableHead>
-            <TableHead>Question</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Tags</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {questions.filter((question) => question.text.toLowerCase().includes(search.toLowerCase())).map((question) => (
-            <TableRow key={question.id}>
-              <TableCell>
-                <Button variant="destructive" onClick={() => {
-                  handleRemoveQuestion(question.id);
-                }}><Trash className="w-2 h-2" /></Button>
-                {editingQuestionId !== question.id && <Button variant="outline" onClick={() => handleStartEditingQuestion(question.id)}>
-                  <Pencil className="w-2 h-2" />
-                </Button>}
-                {editingQuestionId === question.id && <Button variant="outline" onClick={() => handleSaveQuestion(question)}>
-                  <Save className="w-2 h-2" />
-                </Button>}
-                {editingQuestionId === question.id && <Button variant="outline" onClick={() => handleStopEditingQuestion()}>
-                  <X className="w-2 h-2" />
-                </Button>}
-              </TableCell>
-              <TableCell>{editingQuestionId === question.id ? (
-                <Textarea value={editingQuestionText} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                  setEditingQuestionText(e.target.value);
-                }} />
-              ) : (
-                question.text
-              )}</TableCell>
-              <TableCell>{editingQuestionId === question.id ? (
-                <Input type="text" value={editingQuestionCategory} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  setEditingQuestionCategory(e.target.value);
-                }} />
-              ) : (
-                question.category
-              )}</TableCell>
-              <TableCell>{question.tags.map((t) =>
-                <Badge key={t.tag.id} variant="outline" className="m-1">{t.tag.name}
-                  <Button variant="ghost" size="icon" onClick={() => handleRemoveTag(question.id, question.tags, t.tag)}>
-                    <Trash />
-                  </Button>
-                </Badge>
-              )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-        <TableFooter>
-          <TableRow>
-            <TableCell colSpan={3}>
-              Total
-            </TableCell>
-            <TableCell>{questions.filter((question) => question.text.toLowerCase().includes(search.toLowerCase())).length}</TableCell>
-          </TableRow>
-        </TableFooter>
-      </Table>
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <ToggleGroup
+          type="single"
+          value={viewMode}
+          onValueChange={(value: "table" | "cards") => setViewMode(value)}
+        >
+          <ToggleGroupItem value="table" aria-label="Table view">
+            <Table className="h-4 w-4" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="cards" aria-label="Card view">
+            <LayoutGrid className="h-4 w-4" />
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
+      {viewMode === "table" ? (
+        <QuestionsTable {...commonProps} />
+      ) : (
+        <QuestionsCards {...commonProps} />
+      )}
     </div>
   );
 }
