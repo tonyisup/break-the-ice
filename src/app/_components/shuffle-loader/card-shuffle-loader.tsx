@@ -2,8 +2,9 @@
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import "./card-shuffle.css"
+import Image from "next/image"
 
 export interface CardShuffleLoaderProps {
   /** Width of each card in pixels (default: 60) */
@@ -50,7 +51,6 @@ export default function CardShuffleLoader({
   borderRadius = 8,
   shadowIntensity = 0.1,
 }: CardShuffleLoaderProps) {
-  const [isLoading, setIsLoading] = useState(true)
 
   // Default card faces if not provided
   const defaultCardFaces = [
@@ -62,7 +62,7 @@ export default function CardShuffleLoader({
   ]
 
   // Use provided card faces or defaults
-  const faces = cardFaces || defaultCardFaces
+  const faces = cardFaces ?? defaultCardFaces
 
   // Generate CSS variables for dynamic styling
   const cssVars = {
@@ -83,7 +83,7 @@ export default function CardShuffleLoader({
           <div className="card card-base">
             <div className="card-face">
               {faces[0]?.image ? (
-                <img src={faces[0]?.image || "/placeholder.svg"} alt="Card face" className="card-image" />
+                <Image src={faces[0]?.image ?? "/placeholder.svg"} alt="Card face" className="card-image" />
               ) : (
                 <div
                   className="card-symbol"
@@ -111,7 +111,7 @@ export default function CardShuffleLoader({
               >
                 <div className="card-face">
                   {faces[faceIndex]?.image ? (
-                    <img
+                    <Image
                       src={faces[faceIndex]?.image || "/placeholder.svg"}
                       alt={`Card face ${index + 1}`}
                       className="card-image"
