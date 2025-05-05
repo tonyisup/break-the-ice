@@ -2,6 +2,7 @@
 import { Tabs, TabsContent, TabsTrigger, TabsList } from "~/components/ui/tabs";
 import AdminQuestions from "./admin-questions";
 import { AddQuestion } from "./add-question";
+import AdminTags from "./admin-tags";
 
 export default function Admin() {
   return (
@@ -18,8 +19,8 @@ export default function Admin() {
       <TabsContent value="add">
         <AddQuestion />
       </TabsContent>
-      <TabsContent value="tags">npm run
-        <span>Tags</span>
+      <TabsContent value="tags">
+        <AdminTags />
       </TabsContent>
       <TabsContent value="prune">
         <span>Prune</span>

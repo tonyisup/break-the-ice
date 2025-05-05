@@ -6,6 +6,7 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
+import ScrollToTop from "../ScrollToTop";
 
 interface QuestionWithTags extends Question {
   tags: Array<{
@@ -59,7 +60,7 @@ export function QuestionsCards({
         placeholder="Search questions..." 
         delay={300} 
       />
-      
+      <ScrollToTop />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredQuestions.map((question) => (
           <Card key={question.id} className="flex flex-col">
