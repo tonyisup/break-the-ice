@@ -2,8 +2,7 @@ import { api } from "~/trpc/server";
 import { BackButton } from "~/components/settings/BackButton";
 import { SettingsManager } from "~/components/settings/SettingsManager";
 
-export default async function SettingsPage() {
-  const allCategories = await api.questions.getAllCategories();
+export default async function SettingsPage() {  
   const allTags = await api.questions.getAllTags();
 
   return (
@@ -12,7 +11,7 @@ export default async function SettingsPage() {
         <BackButton />
       </div>
 
-      <SettingsManager allCategories={allCategories} allTags={allTags} />
+      <SettingsManager allTags={allTags} />
     </div>
   );
 } 

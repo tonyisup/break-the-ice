@@ -9,7 +9,6 @@ import { useToast } from "~/hooks/use-toast";
 
 export function AddQuestion() {
   const [text, setText] = useState("");
-  const [category, setCategory] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const utils = api.useUtils();
@@ -17,7 +16,6 @@ export function AddQuestion() {
   const addQuestion = api.questions.create.useMutation({
     onSuccess: () => {
       setText("");
-      setCategory("");
       setIsSubmitting(false);
       toast({
         title: "Success",
@@ -37,19 +35,9 @@ export function AddQuestion() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!text.trim() || !category.trim()) {
-      toast({
-        title: "Error",
-        description: "Please fill in all fields",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsSubmitting(true);
     addQuestion.mutate({
       text: text.trim(),
-      category: category.trim(),
     });
   };
 
@@ -58,21 +46,11 @@ export function AddQuestion() {
       <CardHeader>
         <CardTitle>Add New Question</CardTitle>
         <CardDescription>
-          Create a new question with its category
+          Create a new question
         </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
-            <Input
-              id="category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Enter category"
-              disabled={isSubmitting}
-            />
-          </div>
           <div className="space-y-2">
             <Label htmlFor="text">Question</Label>
             <Textarea

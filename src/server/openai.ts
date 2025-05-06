@@ -22,11 +22,9 @@ interface GenerateIcebreakerQuestionProps {
   likes: Question[];
   skipTags: string[];
   likeTags: string[];
-  skipCategories: string[];
-  likeCategories: string[];
 }
 
-export async function generateIcebreakerQuestion({ skipTags, likeTags, skipCategories, likeCategories }: GenerateIcebreakerQuestionProps): Promise<GeneratedQuestion> {
+export async function generateIcebreakerQuestion({ skipTags, likeTags }: GenerateIcebreakerQuestionProps): Promise<GeneratedQuestion> {
   try {    
     const skipTagsText = skipTags.length > 0 
       ? `\n\n- Here are some example tags that have been discarded, please generate a different type of tag:\n${skipTags.join('\n')}`
@@ -34,22 +32,14 @@ export async function generateIcebreakerQuestion({ skipTags, likeTags, skipCateg
 
     const likeTagsText = likeTags.length > 0 
       ? `\n\n- Here are some example tags that have been liked, please generate more of the same type of tag:\n${likeTags.join('\n')}`
-      : '';
-
-    const skipCategoriesText = skipCategories.length > 0 
-      ? `\n\n- Here are some example categories that have been discarded, please generate a different type of category:\n${skipCategories.join('\n')}`
-      : '';
-
-    const likeCategoriesText = likeCategories.length > 0 
-      ? `\n\n- Here are some example categories that have been liked, please generate more of the same type of category:\n${likeCategories.join('\n')}`
-      : '';
+      : '';    
 
     const prompt = `Generate a fun, engaging icebreaker question that would be suitable for a social gathering or team building activity. The question should be:
 - Light-hearted
 - Open-ended enough to spark interesting conversations
 - Suitable for most adults
 - Creative and unique
-- Feel free to add some sass and personality to the question${skipTagsText}${likeTagsText}${skipCategoriesText}${likeCategoriesText}
+- Feel free to add some sass and personality to the question${skipTagsText}${likeTagsText}
 
 Also, generate 3-5 relevant tags for this question. Tags should be short, descriptive words or phrases that categorize the question.
 

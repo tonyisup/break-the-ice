@@ -25,23 +25,15 @@
 
 # Future Enhancements
 
-## Content Organization
-- Question categories
-  - Implement before NSFW features
-  - Improves content navigation and scalability
-  - Could influence AI question generation
+
 
 ## Like History Management
 - CRUD operations for saved items
 - AI generate directly from history
-- Custom folders / categories
-  - Personal collections
-  - Topic-based organization
-  - Sharing capabilities?
+
 
 ## UI/UX Improvements
 - Icons for main buttons
-- Icons for categories
 - Custom icons for favorites
   - Visual recognition enhancement
   - Consider consistent style guide

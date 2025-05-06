@@ -23,12 +23,11 @@ export const questionsRouter = createTRPCRouter({
     .input(z.object({
       id: z.number(),
       text: z.string(),
-      category: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
       return await ctx.db.question.update({
         where: { id: input.id },
-        data: { text: input.text, category: input.category }
+        data: { text: input.text }
       });
     }),
   removeQuestion: protectedProcedure
@@ -48,9 +47,6 @@ export const questionsRouter = createTRPCRouter({
         }
       },
       orderBy: [
-        {
-          category: 'asc',
-        },
         {
           text: 'asc'
         }
@@ -77,69 +73,6 @@ export const questionsRouter = createTRPCRouter({
     }
     return [question];
   }),
-  getAIQuestion: publicProcedure
-    .input(z.object({
-      skipIds: z.array(z.number()).optional(),
-      likeIds: z.array(z.number()).optional(),
-      skipCategories: z.array(z.string()).optional(),
-      likeCategories: z.array(z.string()).optional(),
-      skipTags: z.array(z.string()).optional(),
-      likeTags: z.array(z.string()).optional(),
-    }))
-    .query(async ({ ctx, input }) => {
-      
-      // Fetch skipped and liked questions from the database
-      const skippedQuestions = input.skipIds && input.skipIds.length > 0
-        ? await ctx.db.$queryRaw<Question[]>`
-          SELECT [id], [text], [category]
-          FROM [ice].[Question]
-          WHERE [id] IN (${Prisma.join(input.skipIds)})
-        `
-        : [];
-
-      const likedQuestions = input.likeIds && input.likeIds.length > 0
-        ? await ctx.db.$queryRaw<Question[]>`
-          SELECT [id], [text], [category]
-          FROM [ice].[Question]
-          WHERE [id] IN (${Prisma.join(input.likeIds)})
-        `
-        : [];
-
-      const aiQuestionData = await generateIcebreakerQuestion({
-        skips: skippedQuestions,
-        likes: likedQuestions,
-        skipTags: input.skipTags ?? [],
-        likeTags: input.likeTags ?? [],
-        skipCategories: input.skipCategories ?? [],
-        likeCategories: input.likeCategories ?? []
-      })
-
-      const aiQuestion = await ctx.db.question.create({
-        data: {
-          text: aiQuestionData.text,
-          category: 'ai-generated',
-          tags: {
-            create: aiQuestionData.tags.map(tagName => ({
-              tag: {
-                connectOrCreate: {
-                  where: { name: tagName },
-                  create: { name: tagName }
-                }
-              }
-            }))
-          }
-        },
-        include: {
-          tags: {
-            include: {
-              tag: true
-            }
-          }
-        }
-      })
-
-      return aiQuestion;
-    }),
 
   // Get a random question
   getRandomStack: publicProcedure
@@ -147,11 +80,8 @@ export const questionsRouter = createTRPCRouter({
       drawCount: z.number().optional(),
       skipIds: z.array(z.number()).optional(),
       likeIds: z.array(z.number()).optional(),
-      skipCategories: z.array(z.string()).optional(),
-      likeCategories: z.array(z.string()).optional(),
       skipTags: z.array(z.string()).optional(),
       likeTags: z.array(z.string()).optional(),
-      blockedCategories: z.array(z.string()).optional(),
       blockedTags: z.array(z.string()).optional(),
     }))
     .query(async ({ ctx, input }) => {
@@ -162,15 +92,12 @@ export const questionsRouter = createTRPCRouter({
           SELECT top (${drawCount})
             [q].[id]
             ,[q].[text]
-            ,[q].[category]
           FROM [ice].[Question] [q]
           LEFT JOIN [ice].[QuestionTag] [qt] ON [q].[id] = [qt].[questionId]
           LEFT JOIN [ice].[Tag] [t] ON [qt].[tagId] = [t].[id]
           WHERE (1=1)
           AND (0=${input?.skipIds?.length ?? 0} or [q].[id] NOT IN (${input?.skipIds?.length ?? 0 > 0 ? Prisma.join(input.skipIds ?? [0]) : "0"}))
-          AND (0=${input.skipCategories?.length ?? 0} or [q].[category] NOT IN (${input.skipCategories?.length ?? 0 > 0 ? Prisma.join(input.skipCategories ?? [""]) : "0"}))
           AND (0=${input.skipTags?.length ?? 0} or [t].[name] NOT IN (${input.skipTags?.length ?? 0 > 0 ? Prisma.join(input.skipTags ?? [""]) : "0"}))
-          AND (0=${input.blockedCategories?.length ?? 0} or [q].[category] NOT IN (${input.blockedCategories?.length ?? 0 > 0 ? Prisma.join(input.blockedCategories ?? [""]) : "0"}))
           AND (0=${input.blockedTags?.length ?? 0} or [t].[name] NOT IN (${input.blockedTags?.length ?? 0 > 0 ? Prisma.join(input.blockedTags ?? [""]) : "0"}))
 
           ORDER BY newid()
@@ -195,16 +122,6 @@ export const questionsRouter = createTRPCRouter({
       // Randomize the order of questions before returning
       return dbQuestions.sort(() => Math.random() - 0.5);
     }),
-  // Get all unique categories
-  getAllCategories: publicProcedure.query(async ({ ctx }) => {
-    const categories = await ctx.db.question.groupBy({
-      by: ['category'],
-      orderBy: {
-        category: 'asc'
-      }
-    });
-    return categories.map(c => c.category);
-  }),
   // Get all unique tags
   getAllTags: publicProcedure.query(async ({ ctx }) => {
     const tags = await ctx.db.tag.findMany({
@@ -218,14 +135,12 @@ export const questionsRouter = createTRPCRouter({
   create: protectedProcedure
     .input(z.object({
       text: z.string().min(5),
-      category: z.string().default("general"),
       tags: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.question.create({
         data: {
           text: input.text,
-          category: input.category,
           tags: input.tags ? {
             create: input.tags.map(tagName => ({
               tag: {

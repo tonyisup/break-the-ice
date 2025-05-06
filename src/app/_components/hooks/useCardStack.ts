@@ -2,9 +2,8 @@ import { useState, useCallback } from "react";
 import { type PanInfo } from "framer-motion";
 import { api } from "~/trpc/react";
 import { 
-  saveSkippedQuestion, saveLikedQuestion, clearSkippedQuestions, clearLikedQuestions, 
-  clearSkippedCategories, clearLikedCategories, clearSkippedTags, clearLikedTags,
-  getBlockedCategories, getBlockedTags
+  clearSkippedTags, clearLikedTags,
+  getBlockedTags
 } from "~/lib/localStorage";
 import type { Question as PrismaQuestion, Tag } from "@prisma/client";
 
@@ -22,14 +21,7 @@ export type PreferenceAction = 'like' | 'skip';
 export type CardDirection = 'left' | 'right' | 'up' | 'down' | null;
 
 interface UseCardStackProps {
-  drawCountDefault: number;
-  autoGetMoreDefault: boolean;
-  advancedMode: boolean;
   initialQuestions: Question[];
-  storedSkipIDs: number[];
-  storedLikeIDs: number[];
-  storedSkipCategories: string[];
-  storedLikeCategories: string[];
   storedSkipTags: string[];
   storedLikeTags: string[];
   handleInspectCard: () => void;
@@ -37,17 +29,11 @@ interface UseCardStackProps {
 
 interface UseCardStackReturn {
   cards: Question[];
-  skips: number[];
-  likes: number[];
   direction: CardDirection;
   skipping: boolean;
   liking: boolean;
   filtering: boolean;
   isLoading: boolean;
-  autoGetMore: boolean;
-  drawCount: number;
-  setDrawCount: (drawCount: number) => void;
-  setAutoGetMore: (autoGetMore: boolean) => void;
   handleCardAction: (id: number, action: PreferenceAction) => void;
   handleDrag: (info: PanInfo, id: number) => void;
   handleDragEnd: (info: PanInfo, id: number) => void;
@@ -56,14 +42,9 @@ interface UseCardStackReturn {
 }
 
 
-export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMode, initialQuestions, storedSkipIDs, storedLikeIDs, storedSkipCategories, storedLikeCategories, storedSkipTags, storedLikeTags, handleInspectCard }: UseCardStackProps): UseCardStackReturn {
-  const [skips, setSkips] = useState<number[]>(storedSkipIDs);
-  const [likes, setLikes] = useState<number[]>(storedLikeIDs);
-  const [likesCategories] = useState<string[]>(storedLikeCategories);
+export function useCardStack({ initialQuestions, storedSkipTags, storedLikeTags, handleInspectCard }: UseCardStackProps): UseCardStackReturn {
   const [likesTags] = useState<string[]>(storedLikeTags);
-  const [skipCategories] = useState<string[]>(storedSkipCategories);
   const [skipTags] = useState<string[]>(storedSkipTags);
-  const [blockedCategories] = useState<string[]>(getBlockedCategories());
   const [blockedTags] = useState<string[]>(getBlockedTags());
   const [cards, setCards] = useState<Question[]>(initialQuestions);
   const [direction, setDirection] = useState<CardDirection | null>(null);
@@ -71,19 +52,11 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
   const [liking, setLiking] = useState(false);
   const [filtering, setFiltering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [autoGetMore, setAutoGetMore] = useState(autoGetMoreDefault);
-  const [drawCount, setDrawCount] = useState(drawCountDefault);
 
   const { refetch: fetchNewQuestions } = api.questions.getRandomStack.useQuery(
     {
-      drawCount,
-      skipIds: skips,
-      likeIds: likes,
-      skipCategories: skipCategories,
-      likeCategories: likesCategories,
       skipTags: skipTags,
       likeTags: likesTags,
-      blockedCategories: blockedCategories,
       blockedTags: blockedTags
     }
   );
@@ -94,34 +67,19 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
     console.log("Fetching more cards");
     setIsLoading(true);
     try {
-      if (!advancedMode) {
-        console.log("Fetching single question");
-        const result = await fetchSingleQuestion();
-        if (result.data) {
-          setCards(result.data);
-        }
-      } else {
-        console.log("Fetching new questions");
-        const result = await fetchNewQuestions();
-        console.log("Result", result);
-        if (result.data) {
-          setCards((prev) => [...prev, ...result.data]);
-        }
+      console.log("Fetching new questions");
+      const result = await fetchNewQuestions();
+      console.log("Result", result);
+      if (result.data) {
+        setCards((prev) => [...prev, ...result.data]);
       }
     } catch (error) {
       console.error("Failed to fetch new questions:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [advancedMode, fetchNewQuestions, fetchSingleQuestion]);
+  }, [fetchNewQuestions, fetchSingleQuestion]);
 
-
-  const handlerSetAutoGetMore = (checked: boolean) => {
-    setAutoGetMore(checked);
-    if (checked) {
-      void getMoreCards();
-    }
-  }
 
   const removeCard = useCallback(async (id: number) => {
     if (!id) return;
@@ -140,18 +98,7 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
   const handleCardAction = useCallback((id: number, action: PreferenceAction) => {
     if (!id) return;
     setDirection(action === 'like' ? 'right' : 'left');
-    const question = cards.find((card) => card.id === id);
     void removeCard(id);
-    if (question) {
-      // Save to local storage if the action is 'skip' (dislike)
-      if (action === 'skip') {
-        saveSkippedQuestion(question);
-        setSkips((prev) => [question.id, ...prev]);
-      } else if (action === 'like') {
-        saveLikedQuestion(question);
-        setLikes((prev) => [question.id, ...prev]);
-      }
-    }
   }, [cards, removeCard]);
 
   const handleDrag = useCallback((info: PanInfo, id: number) => {
@@ -199,9 +146,7 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
     } else if (info.offset.x < -ACTION_THRESHOLD) {
       void handleCardAction(id, 'skip');
     } else if (info.offset.y > ACTION_THRESHOLD) {
-      if (advancedMode) {
-        void handleInspectCard();
-      }
+      void handleInspectCard();
       setDirection(null);
       setLiking(false);
       setSkipping(false);
@@ -213,32 +158,20 @@ export function useCardStack({ drawCountDefault, autoGetMoreDefault, advancedMod
       setSkipping(false);
       setFiltering(false);
     }
-  }, [handleCardAction, handleInspectCard, advancedMode]);
+  }, [handleCardAction, handleInspectCard]);
 
   const reset = useCallback(() => {
-    setSkips([]);
-    setLikes([]);
-    clearSkippedQuestions();
-    clearLikedQuestions();
-    clearSkippedCategories();
-    clearLikedCategories();
     clearSkippedTags();
     clearLikedTags();
   }, []);
 
   return {
     cards,
-    skips,
-    likes,
     direction,
     skipping,
     liking,
     filtering,
     isLoading,
-    autoGetMore,
-    drawCount,
-    setDrawCount,
-    setAutoGetMore: handlerSetAutoGetMore,
     handleCardAction,
     handleDrag,
     handleDragEnd,

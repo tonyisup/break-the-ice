@@ -47,7 +47,6 @@ export function QuestionGrid({ questions, type, onRemove }: QuestionGridProps) {
                 </CardHeader>
                 <CardContent className="flex-grow">
                   <p className="text-lg">{question.text}</p>
-                  <Badge variant="outline">{question.category}</Badge>
                   {question.tags && question.tags.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-4">
                       {question.tags.map((tag) => (

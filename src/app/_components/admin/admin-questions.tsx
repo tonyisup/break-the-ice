@@ -14,7 +14,6 @@ export default function AdminQuestions() {
   const removeTag = api.questions.removeTag.useMutation();
   const [editingQuestionId, setEditingQuestionId] = useState<number>(0);
   const [editingQuestionText, setEditingQuestionText] = useState<string>("");
-  const [editingQuestionCategory, setEditingQuestionCategory] = useState<string>("");
   const [search, setSearch] = useState<string>("");
   const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
   const { toast } = useToast();
@@ -49,19 +48,16 @@ export default function AdminQuestions() {
   const handleStartEditingQuestion = (id: number) => {
     setEditingQuestionId(id);
     setEditingQuestionText(questions.find((question) => question.id === id)?.text ?? "");
-    setEditingQuestionCategory(questions.find((question) => question.id === id)?.category ?? "");
   }
 
   const handleStopEditingQuestion = () => {
     setEditingQuestionId(0);
     setEditingQuestionText("");
-    setEditingQuestionCategory("");
   }
 
   const handleSaveQuestion = (question: Question) => {
     question.text = editingQuestionText;
-    question.category = editingQuestionCategory;
-    updateQuestion.mutate({ id: question.id, text: editingQuestionText, category: editingQuestionCategory }, {
+    updateQuestion.mutate({ id: question.id, text: editingQuestionText }, {
       onSuccess: () => {
         handleStopEditingQuestion();
         toast({
@@ -108,8 +104,6 @@ export default function AdminQuestions() {
     editingQuestionId,
     editingQuestionText,
     setEditingQuestionText,
-    editingQuestionCategory,
-    setEditingQuestionCategory,
     onRemoveQuestion: handleRemoveQuestion,
     onStartEditingQuestion: handleStartEditingQuestion,
     onStopEditingQuestion: handleStopEditingQuestion,

@@ -21,7 +21,6 @@ interface QuestionsTableProps {
   search: string;
   editingQuestionId: number;
   editingQuestionText: string;
-  editingQuestionCategory: string;
   onRemoveQuestion: (id: number) => void;
   onStartEditingQuestion: (id: number) => void;
   onStopEditingQuestion: () => void;
@@ -35,7 +34,6 @@ export function QuestionsTable({
   search,
   editingQuestionId,
   editingQuestionText,
-  editingQuestionCategory,
   onRemoveQuestion,
   onStartEditingQuestion,
   onStopEditingQuestion,
@@ -57,7 +55,6 @@ export function QuestionsTable({
           <TableRow>
             <TableHead>Action</TableHead>
             <TableHead>Question</TableHead>
-            <TableHead>Category</TableHead>
             <TableHead>Tags</TableHead>
           </TableRow>
         </TableHeader>
@@ -84,13 +81,6 @@ export function QuestionsTable({
                 }} />
               ) : (
                 question.text
-              )}</TableCell>
-              <TableCell>{editingQuestionId === question.id ? (
-                <Input type="text" value={editingQuestionCategory} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  onSearch(e.target.value);
-                }} />
-              ) : (
-                question.category
               )}</TableCell>
               <TableCell>{question.tags.map((t) =>
                 <Badge key={t.tag.id} variant="outline" className="m-1">{t.tag.name}

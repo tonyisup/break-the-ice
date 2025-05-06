@@ -23,8 +23,6 @@ interface QuestionsCardsProps {
   editingQuestionId: number;
   editingQuestionText: string;
   setEditingQuestionText: (text: string) => void;
-  editingQuestionCategory: string;
-  setEditingQuestionCategory: (category: string) => void;
   onRemoveQuestion: (id: number) => void;
   onStartEditingQuestion: (id: number) => void;
   onStopEditingQuestion: () => void;
@@ -39,8 +37,6 @@ export function QuestionsCards({
   editingQuestionId,
   editingQuestionText,
   setEditingQuestionText,
-  editingQuestionCategory,
-  setEditingQuestionCategory,
   onRemoveQuestion,
   onStartEditingQuestion,
   onStopEditingQuestion,
@@ -67,18 +63,6 @@ export function QuestionsCards({
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-lg">
-                    {editingQuestionId === question.id ? (
-                      <Input 
-                        type="text" 
-                        value={editingQuestionCategory} 
-                        onChange={(e) => setEditingQuestionCategory(e.target.value)}
-                        className="text-lg font-semibold"
-                      />
-                    ) : (
-                      question.category
-                    )}
-                  </CardTitle>
                   <CardDescription>
                     {editingQuestionId === question.id ? (
                       <Textarea
