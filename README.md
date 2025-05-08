@@ -1,29 +1,28 @@
-# Create T3 App
+# Ice Breaker App Implementation
+  
+This is a project built with [Chef](https://chef.convex.dev) using [Convex](https://convex.dev) as its backend.
+  
+This project is connected to the Convex deployment named [`brazen-sturgeon-967`](https://dashboard.convex.dev/d/brazen-sturgeon-967).
+  
+## Project structure
+  
+The frontend code is in the `app` directory and is built with [Vite](https://vitejs.dev/).
+  
+The backend code is in the `convex` directory.
+  
+`npm run dev` will start the frontend and backend servers.
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+## App authentication
 
-## What's next? How do I make an app with this?
+Chef apps use [Convex Auth](https://auth.convex.dev/) with Anonymous auth for easy sign in. You may wish to change this before deploying your app.
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+## Developing and deploying your app
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+Check out the [Convex docs](https://docs.convex.dev/) for more information on how to develop with Convex.
+* If you're new to Convex, the [Overview](https://docs.convex.dev/understanding/) is a good place to start
+* Check out the [Hosting and Deployment](https://docs.convex.dev/production/) docs for how to deploy your app
+* Read the [Best Practices](https://docs.convex.dev/understanding/best-practices/) guide for tips on how to improve you app further
 
-- [Next.js](https://nextjs.org)
-- [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
-- [Tailwind CSS](https://tailwindcss.com)
-- [tRPC](https://trpc.io)
+## HTTP API
 
-## Learn More
-
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
-
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
-
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
-
-## How do I deploy this?
-
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+User-defined http routes are defined in the `convex/router.ts` file. We split these routes into a separate file from `convex/http.ts` to allow us to prevent the LLM from modifying the authentication routes.
