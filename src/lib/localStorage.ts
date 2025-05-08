@@ -1,5 +1,3 @@
-import type { Question } from "@prisma/client"; 
-
 const SKIPPED_TAGS_KEY = "break-the-ice-skipped-tags";
 const LIKED_TAGS_KEY = "break-the-ice-liked-tags";
 const BLOCKED_TAGS_KEY = "break-the-ice-blocked-tags";

@@ -3,7 +3,6 @@ import { Pencil, Save, Trash, X } from "lucide-react";
 import { SearchInput } from "~/components/SearchInput";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { Textarea } from "~/components/ui/textarea";
 

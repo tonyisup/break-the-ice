@@ -3,8 +3,7 @@ import { Pencil, Save, Trash, X } from "lucide-react";
 import { SearchInput } from "~/components/SearchInput";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
-import { Input } from "~/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader } from "~/components/ui/card";
 import { Textarea } from "~/components/ui/textarea";
 import ScrollToTop from "../ScrollToTop";
 
@@ -46,7 +45,13 @@ export function QuestionsCards({
 }: QuestionsCardsProps) {
   const filteredQuestions = questions.filter((question) => 
     question.text.toLowerCase().includes(search.toLowerCase())
+    || question.tags.some((tag) => tag.tag.name.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const handleRemoveTag = (questionId: number, question: QuestionWithTags, tag: Tag) => {
+    question.tags = question.tags.filter((t) => t.tagId !== tag.id);
+    onRemoveTag(questionId, question.tags, tag);
+  }
 
   return (
     <div className="flex flex-col gap-4 w-full">
@@ -122,7 +127,7 @@ export function QuestionsCards({
                       variant="ghost" 
                       size="icon" 
                       className="h-4 w-4 p-0"
-                      onClick={() => onRemoveTag(question.id, question.tags, t.tag)}
+                      onClick={() => handleRemoveTag(question.id, question, t.tag)}
                     >
                       <Trash className="h-3 w-3" />
                     </Button>

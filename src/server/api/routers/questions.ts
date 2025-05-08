@@ -1,7 +1,6 @@
 // src/server/api/routers/questions.ts
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../trpc";
-import { generateIcebreakerQuestion } from "~/server/openai";
 import { Prisma } from "@prisma/client";
 import type { Question as PrismaQuestion, Tag } from "@prisma/client";
 

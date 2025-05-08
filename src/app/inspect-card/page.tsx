@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { api } from "~/trpc/react";
 import { Button } from "~/components/ui/button";
-import { ArrowLeft, Heart, Tag, Folder, Undo2, Redo2, CircleSlash } from "lucide-react";
+import { ArrowLeft, Heart, Tag, Undo2, Redo2, CircleSlash } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { 
   saveLikedTag,

@@ -7,9 +7,7 @@ interface CardActionsProps {
   cards: Question[];
   isLoading: boolean;
   onCardAction: (id: number, action: PreferenceAction) => void;
-  onGetMore: () => void;
   onReset: () => void;
-  onInspectCard: () => void;
 }
 
 export function CardActions({

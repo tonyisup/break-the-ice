@@ -24,7 +24,6 @@ interface UseCardStackProps {
   initialQuestions: Question[];
   storedSkipTags: string[];
   storedLikeTags: string[];
-  handleInspectCard: () => void;
 }
 
 interface UseCardStackReturn {
@@ -42,7 +41,7 @@ interface UseCardStackReturn {
 }
 
 
-export function useCardStack({ initialQuestions, storedSkipTags, storedLikeTags, handleInspectCard }: UseCardStackProps): UseCardStackReturn {
+export function useCardStack({ initialQuestions, storedSkipTags, storedLikeTags }: UseCardStackProps): UseCardStackReturn {
   const [likesTags] = useState<string[]>(storedLikeTags);
   const [skipTags] = useState<string[]>(storedSkipTags);
   const [blockedTags] = useState<string[]>(getBlockedTags());
@@ -61,8 +60,6 @@ export function useCardStack({ initialQuestions, storedSkipTags, storedLikeTags,
     }
   );
 
-  const { refetch: fetchSingleQuestion } = api.questions.getRandom.useQuery();
-
   const getMoreCards = useCallback(async () => {
     console.log("Fetching more cards");
     setIsLoading(true);
@@ -78,7 +75,7 @@ export function useCardStack({ initialQuestions, storedSkipTags, storedLikeTags,
     } finally {
       setIsLoading(false);
     }
-  }, [fetchNewQuestions, fetchSingleQuestion]);
+  }, [fetchNewQuestions]);
 
 
   const removeCard = useCallback(async (id: number) => {
@@ -99,7 +96,7 @@ export function useCardStack({ initialQuestions, storedSkipTags, storedLikeTags,
     if (!id) return;
     setDirection(action === 'like' ? 'right' : 'left');
     void removeCard(id);
-  }, [cards, removeCard]);
+  }, [removeCard]);
 
   const handleDrag = useCallback((info: PanInfo, id: number) => {
     if (!id) return;
@@ -146,7 +143,6 @@ export function useCardStack({ initialQuestions, storedSkipTags, storedLikeTags,
     } else if (info.offset.x < -ACTION_THRESHOLD) {
       void handleCardAction(id, 'skip');
     } else if (info.offset.y > ACTION_THRESHOLD) {
-      void handleInspectCard();
       setDirection(null);
       setLiking(false);
       setSkipping(false);
@@ -158,7 +154,7 @@ export function useCardStack({ initialQuestions, storedSkipTags, storedLikeTags,
       setSkipping(false);
       setFiltering(false);
     }
-  }, [handleCardAction, handleInspectCard]);
+  }, [handleCardAction]);
 
   const reset = useCallback(() => {
     clearSkippedTags();

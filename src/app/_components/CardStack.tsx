@@ -4,11 +4,6 @@ import { QuestionCard } from "./questionCard";
 import type { CardDirection } from "./hooks/useCardStack";
 
 import type { Question as PrismaQuestion, Tag } from "@prisma/client";
-import { Button } from "~/components/ui/button";
-import { Switch } from "~/components/ui/switch";
-import { Label } from "~/components/ui/label";
-import { ImportIcon } from "lucide-react";
-import { Slider } from "~/components/ui/slider";
 import CardShuffleLoader from "./shuffle-loader/card-shuffle-loader";
 
 type Question = PrismaQuestion & {
@@ -28,7 +23,6 @@ interface CardStackProps {
   };
   onDrag: (info: PanInfo, id: number) => void;
   onDragEnd: (info: PanInfo, id: number) => void;
-  onGetMore: () => void;
   isLoading: boolean;
 }
 
@@ -37,11 +31,9 @@ export function CardStack({
   direction,
   skipping,
   liking,
-  filtering,
   cardSize,
   onDrag,
   onDragEnd,
-  onGetMore,
   isLoading,
 }: CardStackProps) {
   return (
@@ -113,17 +105,6 @@ export function CardStack({
                         aria-hidden="true"
                       >
                         PASS
-                      </div>
-                      <div
-                        className={cn(
-                          "absolute top-6 left-1/2 -translate-x-1/2 rounded-lg px-4 py-2 font-bold transform opacity-0",
-                          "bg-blue-500 text-white",
-                          "transition-opacity duration-200",
-                          (filtering && direction === "down") && "opacity-100"
-                        )}
-                        area-hidden="true"
-                      >
-                        INSPECT
                       </div>
                     </>
                   )}

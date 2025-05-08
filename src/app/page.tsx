@@ -2,9 +2,6 @@ import { HydrateClient } from "~/trpc/server";
 import { QuestionComponent } from "./_components/questions";
 import { ModeToggle } from "./_components/mode-toggle";
 import { api } from "~/trpc/server";
-import { SettingsIcon } from "lucide-react";
-import Link from "next/link";
-import { Button } from "~/components/ui/button";
 
 export default async function Home() {
   const initialQuestions = await api.questions.getRandom();
