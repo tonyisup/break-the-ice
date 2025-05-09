@@ -111,7 +111,7 @@ export default function App() {
       </header> */}
       <main className="p-4 relative">
         {currentQuestions.map((currentQuestion) => (
-          <div key={currentQuestion._id} className="absolute top-2/3 left-1/2 -translate-x-1/2">
+          <div key={currentQuestion._id} className="absolute top-1/2 translate-y-1/2 left-1/2 -translate-x-1/2">
             <QuestionCard
               currentQuestion={currentQuestion}
               liked={likedQuestions.includes(currentQuestion._id)}
