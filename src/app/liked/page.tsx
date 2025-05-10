@@ -50,7 +50,7 @@ export default function LikedQuestionsPage() {
                 key={question._id}
                 className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 aspect-[2.5/3.5] flex flex-col justify-between transition-colors"
               >
-                <div className="text-xl text-center my-auto px-2">
+                <div className="text-center my-auto px-2">
                   {question.text}
                 </div>
                 <div className="text-right text-gray-500 dark:text-gray-400">
