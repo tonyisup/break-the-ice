@@ -29,7 +29,7 @@ export const QuestionCard = ({ currentQuestion, liked, handleDiscard, toggleLike
   };
 
   return <motion.div
-    className="max-w-[300px] aspect-[2.5/3.5] relative bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 transform hover:cursor-pointer active:cursor-grabbing origin-bottom"
+    className="max-w-[500px] aspect-[2.5/3.5] relative bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 transform hover:cursor-pointer active:cursor-grabbing origin-bottom"
     style={{
       x,
       y,
