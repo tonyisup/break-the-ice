@@ -1,6 +1,7 @@
 import { motion, PanInfo, useAnimation, useMotionValue, useTransform } from "framer-motion";
 import { Doc } from "../../../convex/_generated/dataModel";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useThemeListener } from "../../hooks/useTheme";
 
 interface QuestionCardProps {
   currentQuestion: Doc<"questions">;
@@ -11,11 +12,28 @@ interface QuestionCardProps {
 
 export const QuestionCard = ({ currentQuestion, liked, handleDiscard, toggleLike }: QuestionCardProps) => {
   const [isLiked, setIsLiked] = useState(liked);
+  const theme = useThemeListener();
   // Motion controls
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const rotate = useTransform(x, [-150, 150], [-30, 30]);
   const opacity = useTransform(x, [-150, 0, 150], [0, 1, 0]);
+
+  // Initialize empty heart based on theme
+  const [emptyHeart, setEmptyHeart] = useState<"🖤" | "🤍">(() => 
+    theme === "dark" ? "🖤" : "🤍"
+  );
+
+  // Update empty heart when theme changes
+  useEffect(() => {
+    console.log("theme changed to:", theme);
+    setEmptyHeart(theme === "dark" ? "🖤" : "🤍");
+  }, [theme]);
+
+  // Update isLiked when the liked prop changes
+  useEffect(() => {
+    setIsLiked(liked);
+  }, [liked]);
 
   const handleDragEnd = async () => {
     if (Math.abs(x.get()) > 50) { // If the card is swiped a long way, discard it
@@ -53,9 +71,9 @@ export const QuestionCard = ({ currentQuestion, liked, handleDiscard, toggleLike
           e.stopPropagation();
           handleLike();
         }}
-        className="absolute bottom-6 right-6 text-2xl"
+        className="absolute bottom-6 right-6 text-2xl transition-colors"
       >
-        {isLiked ? "❤️" : "🖤"}
+        {isLiked ? "❤️" : emptyHeart}
       </button>
     </div>
   </motion.div>

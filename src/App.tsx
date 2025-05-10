@@ -6,7 +6,7 @@ import { Doc, Id } from "../convex/_generated/dataModel";
 import CardShuffleLoader from "./components/card-shuffle-loader/card-shuffle-loader";
 import { QuestionCard } from "./components/question-card/question-card";
 import { Link } from "react-router-dom";
-
+import { useTheme } from "./hooks/useTheme";
 
 function useLocalStorage<T>(key: string, initialValue: T) {
   const [storedValue, setStoredValue] = useState<T>(() => {
@@ -31,22 +31,16 @@ function useLocalStorage<T>(key: string, initialValue: T) {
 }
 
 export default function App() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const { theme, setTheme } = useTheme();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const [startTime, setStartTime] = useState(Date.now());
   const discardQuestion = useMutation(api.questions.discardQuestion);
   const currentQuestions = useQuery(api.questions.getNextQuestions, { count: 2 });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
-  useEffect(() => {
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, [theme]);
-
-
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
 
   const handleDiscard = async (questionId: string) => {
     if (!currentQuestions) return;
@@ -76,24 +70,24 @@ export default function App() {
 
   if (!currentQuestions) {
     return (
-      <div className="min-h-screen dark:bg-gray-900 dark:text-white flex items-center justify-center">
+      <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white flex items-center justify-center">
         <CardShuffleLoader />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen dark:bg-gray-900 dark:text-white transition-colors overflow-hidden">
+    <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors overflow-hidden">
       <header className="p-4 flex justify-between items-center">
         <Link
           to="/liked"
-          className="p-2 rounded-lg bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
+          className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
         >
           ❤️ Liked Questions
         </Link>
         <button
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className="p-2 rounded-lg bg-gray-200 dark:bg-gray-800"
+          onClick={toggleTheme}
+          className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
         >
           {theme === "dark" ? "🌞" : "🌙"}
         </button>
