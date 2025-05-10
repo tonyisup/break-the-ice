@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Doc, Id } from "../convex/_generated/dataModel";
 import CardShuffleLoader from "./components/card-shuffle-loader/card-shuffle-loader";
 import { QuestionCard } from "./components/question-card/question-card";
+import { Link } from "react-router-dom";
 
 
 function useLocalStorage<T>(key: string, initialValue: T) {
@@ -31,7 +32,7 @@ function useLocalStorage<T>(key: string, initialValue: T) {
 
 export default function App() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [likedQuestions, setLikedQuestions] = useLocalStorage<string[]>("likedQuestions", []);
+  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const [startTime, setStartTime] = useState(Date.now());
   const discardQuestion = useMutation(api.questions.discardQuestion);
   const currentQuestions = useQuery(api.questions.getNextQuestions, { count: 2 });
@@ -52,7 +53,7 @@ export default function App() {
     discardQuestion({ questionId: questionId as Id<"questions">, startTime });
   };
 
-  const toggleLike = async (questionId: string) => {
+  const toggleLike = async (questionId: Id<"questions">) => {
     if (!currentQuestions) return;
     const viewDuration = Math.min(Date.now() - startTime, 10000);
     const isLiked = likedQuestions.includes(questionId);
@@ -65,7 +66,7 @@ export default function App() {
       // Like
       setLikedQuestions([...likedQuestions, questionId]);
       await recordAnalytics({
-        questionId: questionId as Id<"questions">,
+        questionId,
         event: "like",
         viewDuration,
       });
@@ -83,14 +84,20 @@ export default function App() {
 
   return (
     <div className="min-h-screen dark:bg-gray-900 dark:text-white transition-colors overflow-hidden">
-      {/* <header className="p-4 flex justify-between items-center">
+      <header className="p-4 flex justify-between items-center">
+        <Link
+          to="/liked"
+          className="p-2 rounded-lg bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
+        >
+          ❤️ Liked Questions
+        </Link>
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="p-2 rounded-lg bg-gray-200 dark:bg-gray-800"
         >
           {theme === "dark" ? "🌞" : "🌙"}
         </button>
-      </header> */}
+      </header>
       <main className="p-4 relative">
         {currentQuestions.sort((a, b) => (b.lastShownAt ?? 0) - (a.lastShownAt ?? 0)).map((currentQuestion) => (
           <div key={currentQuestion._id} className="absolute top-1/2 translate-y-1/2 left-1/2 -translate-x-1/2">

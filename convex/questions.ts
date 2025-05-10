@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Doc } from "./_generated/dataModel";
 
 export const discardQuestion = mutation({
   args: {
@@ -73,5 +74,18 @@ export const recordAnalytics = mutation({
     await ctx.db.patch(questionId, {
       averageViewDuration: newAverage,
     });
+  },
+});
+
+export const getQuestionsByIds = query({
+  args: {
+    ids: v.array(v.id("questions")),
+  },
+  handler: async (ctx, args) => {
+    const { ids } = args;
+    const questions = await Promise.all(
+      ids.map((id) => ctx.db.get(id))
+    );
+    return questions.filter((q): q is Doc<"questions"> => q !== null);
   },
 });
