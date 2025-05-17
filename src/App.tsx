@@ -35,8 +35,19 @@ export default function App() {
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const [startTime, setStartTime] = useState(Date.now());
   const discardQuestion = useMutation(api.questions.discardQuestion);
-  const currentQuestions = useQuery(api.questions.getNextQuestions, { count: 2 });
+  const nextQuestions = useQuery(api.questions.getNextQuestions, { count: 2 });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
+  const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
+
+  useEffect(() => {
+    if (!nextQuestions) return;
+    if (nextQuestions.length === 0) return;
+
+    if (nextQuestions) {
+      const newQuestions = nextQuestions.filter(question => !currentQuestions.some(q => q._id === question._id));
+      setCurrentQuestions(prev => [...prev, ...newQuestions]);
+    }
+  }, [nextQuestions]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -44,6 +55,7 @@ export default function App() {
 
   const handleDiscard = async (questionId: string) => {
     if (!currentQuestions) return;
+    setCurrentQuestions(prev => prev.filter(question => question._id !== questionId));
     discardQuestion({ questionId: questionId as Id<"questions">, startTime });
   };
 
