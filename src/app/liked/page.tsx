@@ -20,7 +20,7 @@ function useLocalStorage<T>(key: string, initialValue: T) {
 }
 
 export default function LikedQuestionsPage() {
-  const { theme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const [likedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: likedQuestions });
 
@@ -32,6 +32,10 @@ export default function LikedQuestionsPage() {
     );
   }
 
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-8 transition-colors">
       <div className="max-w-4xl mx-auto">
@@ -39,7 +43,14 @@ export default function LikedQuestionsPage() {
           <Link to="/" className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
             &lt;- Home
           </Link>
-          <h1 className="flex-1 text-center text-3xl font-bold">Your Liked Questions</h1>
+          <h1 className="flex-1 text-center text-xl font-bold">Your Liked Questions</h1>
+
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          >
+            {theme === "dark" ? "🌞" : "🌙"}
+          </button>
         </div>
         {questions.length === 0 ? (
           <p className="text-center text-gray-500 dark:text-gray-400">You haven't liked any questions yet.</p>
