@@ -39,7 +39,6 @@ export default function LikedQuestionsPage() {
           <Link to="/" className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
             &lt;- Home
           </Link>
-          <h1 className="flex-1 text-center text-3xl font-bold">Your Liked Questions</h1>
         </div>
         {questions.length === 0 ? (
           <p className="text-center text-gray-500 dark:text-gray-400">You haven't liked any questions yet.</p>
