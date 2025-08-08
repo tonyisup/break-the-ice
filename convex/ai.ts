@@ -12,6 +12,7 @@ const openai = new OpenAI();
 export const generateAIQuestion = action({
   args: {
     selectedTags: v.array(v.string()),
+    currentQuestion: v.optional(v.string())
   },
   returns: v.object({
     text: v.string(),
@@ -19,11 +20,13 @@ export const generateAIQuestion = action({
     promptUsed: v.string(),
   }),
   handler: async (ctx, args) => {
-    const { selectedTags } = args;
+    const { selectedTags, currentQuestion } = args;
 
     // Build the prompt based on selected tags
     let prompt = "Generate a fun, engaging ice-breaker question that would be perfect for starting conversations in a group setting. ";
-    
+    if (currentQuestion) {
+      prompt += `The question should be different from the following: ${currentQuestion}. `;
+    }
     if (selectedTags.length > 0) {
       const tagDescriptions = selectedTags.map(tag => {
         const tagInfo = PREDEFINED_TAGS.find(t => t.name === tag);

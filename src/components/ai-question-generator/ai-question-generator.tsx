@@ -16,10 +16,18 @@ interface AIQuestionGeneratorProps {
   onClose: () => void;
 }
 
+type GeneratedQuestion = {
+  text: string;
+  tags: string[];
+  promptUsed: string;
+};
+
 export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestionGeneratorProps) => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [previewQuestion, setPreviewQuestion] = useState<GeneratedQuestion | null>(null);
   
   const tags = useQuery(api.tags.getTags);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
@@ -80,21 +88,56 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
 
     setIsGenerating(true);
     try {
-      const generatedQuestion = await generateAIQuestion({ selectedTags });
-      const questionId = await saveAIQuestion({
-        text: generatedQuestion.text,
-        tags: generatedQuestion.tags,
-        promptUsed: generatedQuestion.promptUsed,
+      const generatedQuestion = await generateAIQuestion({ 
+        selectedTags, 
+        currentQuestion: previewQuestion ? previewQuestion.text : undefined 
       });
-      
-      toast.success("AI question generated successfully!");
-      onQuestionGenerated(questionId);
-      onClose();
+      setPreviewQuestion(generatedQuestion as GeneratedQuestion);
+      toast.success("Preview generated. Review and accept or try another.");
     } catch (error) {
       console.error("Error generating question:", error);
       toast.error("Failed to generate AI question. Please try again.");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleGenerateAnotherQuestion = async () => {
+    if (selectedTags.length === 0) {
+      toast.error("Please select at least one tag");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const generatedQuestion = await generateAIQuestion({ selectedTags });
+      setPreviewQuestion(generatedQuestion as GeneratedQuestion);
+      toast.success("Preview generated. Review and accept or try another.");
+    } catch (error) {
+      console.error("Error generating question:", error);
+      toast.error("Failed to generate AI question. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleAcceptQuestion = async () => {
+    if (!previewQuestion) return;
+    setIsSaving(true);
+    try {
+      const questionId = await saveAIQuestion({
+        text: previewQuestion.text,
+        tags: previewQuestion.tags,
+        promptUsed: previewQuestion.promptUsed,
+      });
+      toast.success("AI question saved!");
+      onQuestionGenerated(questionId);
+      onClose();
+    } catch (error) {
+      console.error("Error saving AI question:", error);
+      toast.error("Failed to save AI question. Please try again.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -236,6 +279,19 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
           {/* Sticky Bottom Section */}
           <div className="sticky bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-6 z-10">
             <div className="max-w-2xl mx-auto">
+              {previewQuestion && (
+                <div className="mb-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+                  <div className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Preview</div>
+                  <div className="text-gray-900 dark:text-gray-100 text-base mb-3">{previewQuestion.text}</div>
+                  {previewQuestion.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {previewQuestion.tags.map((t) => (
+                        <span key={t} className="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">{t}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {selectedTags.length > 0 && (
                 <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                   <p className="text-sm text-blue-800 dark:text-blue-200">
@@ -245,26 +301,67 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
               )}
               
               <div className="flex gap-3">
-                <button
-                  onClick={handleGenerateQuestion}
-                  disabled={isGenerating || selectedTags.length === 0}
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:cursor-not-allowed"
-                >
-                  {isGenerating ? (
-                    <span className="flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Generating...
-                    </span>
-                  ) : (
-                    "Generate Question"
-                  )}
-                </button>
-                <button
-                  onClick={onClose}
-                  className="px-4 py-3 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
+                {previewQuestion ? (
+                  <>
+                    <button
+                      onClick={handleAcceptQuestion}
+                      disabled={isSaving}
+                      className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:cursor-not-allowed"
+                    >
+                      {isSaving ? (
+                        <span className="flex items-center justify-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Saving...
+                        </span>
+                      ) : (
+                        "Accept"
+                      )}
+                    </button>
+                    <button
+                      onClick={handleGenerateQuestion}
+                      disabled={isGenerating || selectedTags.length === 0}
+                      className="px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 font-medium rounded-lg transition-colors disabled:cursor-not-allowed"
+                    >
+                      {isGenerating ? (
+                        <span className="flex items-center justify-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700 dark:border-gray-200 mr-2"></div>
+                          Generating...
+                        </span>
+                      ) : (
+                        "Generate Another"
+                      )}
+                    </button>
+                    <button
+                      onClick={onClose}
+                      className="px-4 py-3 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleGenerateQuestion}
+                      disabled={isGenerating || selectedTags.length === 0}
+                      className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:cursor-not-allowed"
+                    >
+                      {isGenerating ? (
+                        <span className="flex items-center justify-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Generating...
+                        </span>
+                      ) : (
+                        "Generate Question"
+                      )}
+                    </button>
+                    <button
+                      onClick={onClose}
+                      className="px-4 py-3 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
