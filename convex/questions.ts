@@ -89,3 +89,26 @@ export const getQuestionsByIds = query({
     return questions.filter((q): q is Doc<"questions"> => q !== null);
   },
 });
+
+// Save the generated AI question to the database
+export const saveAIQuestion = mutation({
+  args: {
+    text: v.string(),
+    tags: v.array(v.string()),
+    promptUsed: v.string(),
+  },
+  returns: v.id("questions"),
+  handler: async (ctx, args) => {
+    const { text, tags, promptUsed } = args;
+    
+    return await ctx.db.insert("questions", {
+      text,
+      tags,
+      promptUsed,
+      isAIGenerated: true,
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+  },
+});

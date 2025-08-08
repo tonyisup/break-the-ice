@@ -5,8 +5,10 @@ import { toast } from "sonner";
 import { Doc, Id } from "../convex/_generated/dataModel";
 import CardShuffleLoader from "./components/card-shuffle-loader/card-shuffle-loader";
 import { QuestionCard } from "./components/question-card/question-card";
+import { AIQuestionGenerator } from "./components/ai-question-generator/ai-question-generator";
 import { Link } from "react-router-dom";
 import { useTheme } from "./hooks/useTheme";
+import { AnimatePresence } from "framer-motion";
 
 function useLocalStorage<T>(key: string, initialValue: T) {
   const [storedValue, setStoredValue] = useState<T>(() => {
@@ -34,6 +36,7 @@ export default function App() {
   const { theme, setTheme } = useTheme();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const [startTime, setStartTime] = useState(Date.now());
+  const [showAIGenerator, setShowAIGenerator] = useState(false);
   const discardQuestion = useMutation(api.questions.discardQuestion);
   const nextQuestions = useQuery(api.questions.getNextQuestions, { count: 2 });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
@@ -80,6 +83,12 @@ export default function App() {
     }
   };
 
+  const handleAIQuestionGenerated = (questionId: string) => {
+    // The generated question will be automatically fetched by the existing query
+    // We just need to trigger a refresh of the questions
+    setStartTime(Date.now());
+  };
+
   if (!currentQuestions) {
     return (
       <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white flex items-center justify-center">
@@ -91,12 +100,20 @@ export default function App() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors overflow-hidden">
       <header className="p-4 flex justify-between items-center">
-        <Link
-          to="/liked"
-          className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-        >
-          ❤️ Liked Questions
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            to="/liked"
+            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          >
+            ❤️ Liked Questions
+          </Link>
+          <button
+            onClick={() => setShowAIGenerator(true)}
+            className="p-2 rounded-lg bg-blue-100 dark:bg-blue-800 hover:bg-blue-200 dark:hover:bg-blue-700 transition-colors"
+          >
+            🤖 AI Generator
+          </button>
+        </div>
         <button
           onClick={toggleTheme}
           className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -116,6 +133,15 @@ export default function App() {
           </div>
         ))}
       </main>
+      
+      <AnimatePresence>
+        {showAIGenerator && (
+          <AIQuestionGenerator
+            onQuestionGenerated={handleAIQuestionGenerated}
+            onClose={() => setShowAIGenerator(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
