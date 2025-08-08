@@ -19,6 +19,7 @@ interface AIQuestionGeneratorProps {
 export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestionGeneratorProps) => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   
   const tags = useQuery(api.tags.getTags);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
@@ -32,12 +33,43 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     }
   }, [tags, initializeTags]);
 
+  // Expand all categories by default
+  // useEffect(() => {
+  //   if (tags && tags.length > 0) {
+  //     const categories = Array.from(new Set(tags.map(tag => tag.category)));
+  //     setExpandedCategories(new Set(categories));
+  //   }
+  // }, [tags]);
+
   const handleTagToggle = (tagName: string) => {
     setSelectedTags(prev => 
       prev.includes(tagName) 
         ? prev.filter(tag => tag !== tagName)
         : [...prev, tagName]
     );
+  };
+
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(category)) {
+        newSet.delete(category);
+      } else {
+        newSet.add(category);
+      }
+      return newSet;
+    });
+  };
+
+  const expandAllCategories = () => {
+    if (tags) {
+      const categories = Array.from(new Set(tags.map(tag => tag.category)));
+      setExpandedCategories(new Set(categories));
+    }
+  };
+
+  const collapseAllCategories = () => {
+    setExpandedCategories(new Set());
   };
 
   const handleGenerateQuestion = async () => {
@@ -105,65 +137,137 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
             </p>
           </div>
 
-          {tags && (
-            <div className="space-y-4">
-              {categories.map(category => (
-                <div key={category} className="space-y-2">
-                  <h4 className="font-medium text-gray-900 dark:text-white capitalize">
-                    {category}
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {tags
-                      .filter(tag => tag.category === category)
-                      .map(tag => (
-                        <button
-                          key={tag._id}
-                          onClick={() => handleTagToggle(tag.name)}
-                          className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                            selectedTags.includes(tag.name)
-                              ? "bg-blue-500 text-white"
-                              : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                          }`}
-                        >
-                          {tag.name}
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              ))}
+          {/* Sticky Expand/Collapse All Buttons */}
+          <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 py-3 border-b border-gray-200 dark:border-gray-700 mb-4">
+            <div className="flex gap-2">
+              <button
+                onClick={expandAllCategories}
+                className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Expand All
+              </button>
+              <button
+                onClick={collapseAllCategories}
+                className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Collapse All
+              </button>
             </div>
-          )}
-
-          <div className="mt-6 flex gap-3">
-            <button
-              onClick={handleGenerateQuestion}
-              disabled={isGenerating || selectedTags.length === 0}
-              className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:cursor-not-allowed"
-            >
-              {isGenerating ? (
-                <span className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Generating...
-                </span>
-              ) : (
-                "Generate Question"
-              )}
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-3 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
           </div>
 
-          {selectedTags.length > 0 && (
-            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                Selected: {selectedTags.join(", ")}
-              </p>
+          {tags && (
+            <div className="space-y-2 pb-32">
+              {categories.map(category => {
+                const isExpanded = expandedCategories.has(category);
+                const categoryTags = tags.filter(tag => tag.category === category);
+                const selectedCount = categoryTags.filter(tag => selectedTags.includes(tag.name)).length;
+                
+                return (
+                  <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => toggleCategory(category)}
+                      className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <svg
+                          className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${
+                            isExpanded ? "rotate-90" : ""
+                          }`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 5l7 7-7 7"
+                          />
+                        </svg>
+                        <h4 className="font-medium text-gray-900 dark:text-white capitalize">
+                          {category}
+                        </h4>
+                        {selectedCount > 0 && (
+                          <span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">
+                            {selectedCount} selected
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {categoryTags.length} tags
+                      </span>
+                    </button>
+                    
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: "easeInOut" }}
+                          className="overflow-hidden"
+                        >
+                          <div className="p-4 bg-white dark:bg-gray-800">
+                            <div className="flex flex-wrap gap-2">
+                              {categoryTags.map(tag => (
+                                <button
+                                  key={tag._id}
+                                  onClick={() => handleTagToggle(tag.name)}
+                                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                                    selectedTags.includes(tag.name)
+                                      ? "bg-blue-500 text-white"
+                                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                                  }`}
+                                >
+                                  {tag.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
             </div>
           )}
+
+          {/* Sticky Bottom Section */}
+          <div className="sticky bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-6 z-10">
+            <div className="max-w-2xl mx-auto">
+              {selectedTags.length > 0 && (
+                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    Selected: {selectedTags.join(", ")}
+                  </p>
+                </div>
+              )}
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={handleGenerateQuestion}
+                  disabled={isGenerating || selectedTags.length === 0}
+                  className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:cursor-not-allowed"
+                >
+                  {isGenerating ? (
+                    <span className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Generating...
+                    </span>
+                  ) : (
+                    "Generate Question"
+                  )}
+                </button>
+                <button
+                  onClick={onClose}
+                  className="px-4 py-3 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </motion.div>
     </motion.div>

@@ -35,6 +35,7 @@ export const getNextQuestions = query({
   },
   handler: async (ctx, args) => {
     const { count } = args;
+    
     return await ctx.db
       .query("questions")
       .withIndex("by_last_shown_at")
@@ -106,6 +107,9 @@ export const saveAIQuestion = mutation({
       tags,
       promptUsed,
       isAIGenerated: true,
+      // Seed lastShownAt with a small negative value so it is included
+      // at the front of the by_last_shown_at ascending index and shows up immediately.
+      lastShownAt: 0,
       totalLikes: 0,
       totalShows: 0,
       averageViewDuration: 0,

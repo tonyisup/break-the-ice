@@ -4,27 +4,9 @@ import { v } from "convex/values";
 import { action, mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import OpenAI from "openai";
+import { PREDEFINED_TAGS } from "./tags";
 
 const openai = new OpenAI();
-
-// Predefined tags for different categories
-const PREDEFINED_TAGS = [
-  { name: "fitness", category: "health", description: "Questions about fitness and exercise" },
-  { name: "work", category: "professional", description: "Questions about work and career" },
-  { name: "travel", category: "lifestyle", description: "Questions about travel and adventures" },
-  { name: "food", category: "lifestyle", description: "Questions about food and cooking" },
-  { name: "music", category: "entertainment", description: "Questions about music and entertainment" },
-  { name: "movies", category: "entertainment", description: "Questions about movies and TV shows" },
-  { name: "books", category: "entertainment", description: "Questions about books and reading" },
-  { name: "technology", category: "professional", description: "Questions about technology and gadgets" },
-  { name: "family", category: "personal", description: "Questions about family and relationships" },
-  { name: "hobbies", category: "personal", description: "Questions about hobbies and interests" },
-  { name: "dreams", category: "personal", description: "Questions about dreams and aspirations" },
-  { name: "childhood", category: "personal", description: "Questions about childhood memories" },
-  { name: "learning", category: "personal", description: "Questions about learning and education" },
-  { name: "adventure", category: "lifestyle", description: "Questions about adventure and exploration" },
-  { name: "creativity", category: "personal", description: "Questions about creativity and art" },
-];
 
 // Generate an AI question based on selected tags
 export const generateAIQuestion = action({
