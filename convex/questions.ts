@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, QueryCtx } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 
 export const discardQuestion = mutation({
@@ -39,6 +39,7 @@ export const getNextQuestions = query({
     return await ctx.db
       .query("questions")
       .withIndex("by_last_shown_at")
+      .order("asc")
       .take(count);
   }
 })
@@ -101,7 +102,8 @@ export const saveAIQuestion = mutation({
   returns: v.id("questions"),
   handler: async (ctx, args) => {
     const { text, tags, promptUsed } = args;
-    
+    const oldestQuestion = await getOldestQuestion(ctx);
+    const lastShownAt = oldestQuestion ? oldestQuestion[0]?.lastShownAt ?? 0 : 0;
     return await ctx.db.insert("questions", {
       text,
       tags,
@@ -109,10 +111,14 @@ export const saveAIQuestion = mutation({
       isAIGenerated: true,
       // Seed lastShownAt with a small negative value so it is included
       // at the front of the by_last_shown_at ascending index and shows up immediately.
-      lastShownAt: 0,
+      lastShownAt: lastShownAt - 1,
       totalLikes: 0,
       totalShows: 0,
       averageViewDuration: 0,
     });
   },
 });
+
+async function getOldestQuestion(ctx: QueryCtx) {
+  return await ctx.db.query("questions").withIndex("by_last_shown_at").order("asc").take(1);
+}
