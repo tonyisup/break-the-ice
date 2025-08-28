@@ -47,7 +47,7 @@ export const QuestionCard = ({ currentQuestion, liked, handleDiscard, toggleLike
   };
 
   return <motion.div
-    className="max-w-[500px] aspect-[2.5/3.5] relative bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 transform hover:cursor-pointer active:cursor-grabbing origin-bottom"
+    className="max-w-[500px] min-h-[350px] relative bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 transform hover:cursor-pointer active:cursor-grabbing origin-bottom flex flex-col"
     style={{
       x,
       y,
@@ -62,8 +62,8 @@ export const QuestionCard = ({ currentQuestion, liked, handleDiscard, toggleLike
     onDragEnd={handleDragEnd}
     onDoubleClick={handleLike}
   >
-    <div className="h-full flex flex-col justify-between">
-      <div className="text-xl md:text-2xl text-center my-auto px-2">
+    <div className="flex-grow flex flex-col justify-center">
+      <div className="text-xl md:text-2xl text-center px-2">
         {currentQuestion.text}
       </div>
       <button
