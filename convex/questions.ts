@@ -230,3 +230,68 @@ export const saveAIQuestion = mutation({
 async function getOldestQuestion(ctx: QueryCtx) {
   return await ctx.db.query("questions").withIndex("by_last_shown_at").order("asc").take(1);
 }
+
+const ensureAdmin = async (ctx: QueryCtx | { auth: any; db: any }) => {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("Not authenticated");
+  }
+  const user = await ctx.db
+    .query("users")
+    .withIndex("email", (q: any) => q.eq("email", identity.email!))
+    .unique();
+
+  if (!user || !user.isAdmin) {
+    throw new Error("Not an admin");
+  }
+  return user;
+}
+
+export const getQuestions = query({
+  handler: async (ctx) => {
+    await ensureAdmin(ctx);
+    return await ctx.db.query("questions").collect();
+  },
+});
+
+export const createQuestion = mutation({
+  args: {
+    text: v.string(),
+    tags: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    const { text, tags } = args;
+    return await ctx.db.insert("questions", {
+      text,
+      tags,
+      isAIGenerated: false,
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+  },
+});
+
+export const updateQuestion = mutation({
+  args: {
+    id: v.id("questions"),
+    text: v.string(),
+    tags: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    const { id, text, tags } = args;
+    await ctx.db.patch(id, { text, tags });
+  },
+});
+
+export const deleteQuestion = mutation({
+  args: {
+    id: v.id("questions"),
+  },
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    await ctx.db.delete(args.id);
+  },
+});
