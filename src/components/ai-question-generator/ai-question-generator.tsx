@@ -24,6 +24,7 @@ type GeneratedQuestion = {
 
 export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestionGeneratorProps) => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedStyle, setSelectedStyle] = useState<string>("This or that");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -90,7 +91,8 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     try {
       const generatedQuestion = await generateAIQuestion({ 
         selectedTags, 
-        currentQuestion: previewQuestion ? previewQuestion.text : undefined 
+        currentQuestion: previewQuestion ? previewQuestion.text : undefined,
+        style: selectedStyle,
       });
       setPreviewQuestion(generatedQuestion as GeneratedQuestion);
       toast.success("Preview generated. Review and accept or try another.");
@@ -110,7 +112,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
 
     setIsGenerating(true);
     try {
-      const generatedQuestion = await generateAIQuestion({ selectedTags });
+      const generatedQuestion = await generateAIQuestion({ selectedTags, style: selectedStyle });
       setPreviewQuestion(generatedQuestion as GeneratedQuestion);
       toast.success("Preview generated. Review and accept or try another.");
     } catch (error) {
@@ -169,6 +171,27 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
             >
               ✕
             </button>
+          </div>
+
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
+              Select a question style:
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {["This or that", "Would you rather", "Hypothetical", "Opinion", "Goal", "Childhood"].map(style => (
+                <button
+                  key={style}
+                  onClick={() => setSelectedStyle(style)}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                    selectedStyle === style
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                  }`}
+                >
+                  {style}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="mb-6">
