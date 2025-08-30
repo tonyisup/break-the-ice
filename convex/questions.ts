@@ -32,123 +32,56 @@ export const discardQuestion = mutation({
 export const getNextQuestions = query({
   args: {
     count: v.number(),
+    category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { count } = args;
+    const { count, category } = args;
 
-    // Build a candidate pool from multiple indexes to avoid full scans.
-    const now = Date.now();
-    const candidatePoolSize = Math.max(count * 5, 100);
+    //console.log('getNextQuestions called with:', { count, category });
 
-    const [oldest, mostLiked, longestView] = await Promise.all([
-      ctx.db
-        .query("questions")
-        .withIndex("by_last_shown_at")
-        .order("asc")
-        .take(candidatePoolSize),
-      ctx.db
-        .query("questions")
-        .withIndex("by_total_likes")
-        .order("desc")
-        .take(candidatePoolSize),
-      ctx.db
-        .query("questions")
-        .withIndex("by_average_view_duration")
-        .order("desc")
-        .take(candidatePoolSize),
-    ]);
+    // Get all questions first
+    const allQuestions = await ctx.db.query("questions").collect();
+    // console.log('Total questions in DB:', allQuestions.length);
 
-    const idToQuestion = new Map<string, Doc<"questions">>();
-    for (const q of [...oldest, ...mostLiked, ...longestView]) {
-      idToQuestion.set(q._id, q);
-    }
-    const candidates: Array<Doc<"questions">> = Array.from(idToQuestion.values());
-
-    if (candidates.length === 0) {
-      return await ctx.db
-        .query("questions")
-        .withIndex("by_last_shown_at")
-        .order("asc")
-        .take(count);
-    }
-
-    // Feature extraction
-    const computeAgeMs = (q: Doc<"questions">): number => {
-      const lastShown = q.lastShownAt ?? 0; // unseen => very old
-      return now - lastShown;
-    };
-
-    let minAge = Infinity,
-      maxAge = -Infinity,
-      minLikes = Infinity,
-      maxLikes = -Infinity,
-      minDur = Infinity,
-      maxDur = -Infinity;
-
-    for (const q of candidates) {
-      const age = computeAgeMs(q);
-      const likes = q.totalLikes ?? 0;
-      const dur = q.averageViewDuration ?? 0;
-      if (age < minAge) minAge = age;
-      if (age > maxAge) maxAge = age;
-      if (likes < minLikes) minLikes = likes;
-      if (likes > maxLikes) maxLikes = likes;
-      if (dur < minDur) minDur = dur;
-      if (dur > maxDur) maxDur = dur;
-    }
-
-    const normalize = (value: number, min: number, max: number): number => {
-      if (!isFinite(min) || !isFinite(max) || max === min) return 1;
-      return (value - min) / (max - min);
-    };
-
-    // Weights: prioritize older recency, then likes, then view duration.
-    const alpha = 0.5; // age
-    const beta = 0.3; // likes
-    const gamma = 0.2; // view duration
-
-    const weights: Array<number> = candidates.map((q) => {
-      const ageNorm = normalize(computeAgeMs(q), minAge, maxAge);
-      const likesNorm = normalize(q.totalLikes ?? 0, minLikes, maxLikes);
-      const durNorm = normalize(q.averageViewDuration ?? 0, minDur, maxDur);
-      const w = alpha * ageNorm + beta * likesNorm + gamma * durNorm;
-      return Math.max(w, 1e-6); // guard against zero
-    });
-
-    // Weighted sampling without replacement
-    const selected: Array<Doc<"questions">> = [];
-    const mutableCandidates = candidates.slice();
-    const mutableWeights = weights.slice();
-    while (selected.length < count && mutableCandidates.length > 0) {
-      const total = mutableWeights.reduce((sum, w) => sum + w, 0);
-      let r = Math.random() * total;
-      let idx = 0;
-      while (idx < mutableWeights.length && r >= mutableWeights[idx]) {
-        r -= mutableWeights[idx];
-        idx += 1;
-      }
-      if (idx >= mutableCandidates.length) idx = mutableCandidates.length - 1;
-      selected.push(mutableCandidates[idx]);
-      mutableCandidates.splice(idx, 1);
-      mutableWeights.splice(idx, 1);
-    }
-
-    // If we still need more, fall back to oldest by lastShownAt
-    if (selected.length < count) {
-      const fallback = await ctx.db
-        .query("questions")
-        .withIndex("by_last_shown_at")
-        .order("asc")
-        .take(count - selected.length);
-      const selectedIds = new Set(selected.map((q) => q._id));
-      for (const q of fallback) {
-        if (!selectedIds.has(q._id) && selected.length < count) {
-          selected.push(q);
+    // Filter by category if specified
+    let filteredQuestions = allQuestions;
+    if (category) {
+      filteredQuestions = allQuestions.filter(q => q.category === category);
+      // console.log(`Questions for category "${category}":`, filteredQuestions.length);
+      
+      // If no questions found for this category, try to get AI-generated questions
+      if (filteredQuestions.length === 0) {
+        // console.log('No questions found for category, trying AI-generated questions...');
+        const aiQuestions = allQuestions.filter(q => q.isAIGenerated === true);
+        // console.log('AI-generated questions available:', aiQuestions.length);
+        
+        if (aiQuestions.length > 0) {
+          // Sort AI questions by lastShownAt (oldest first)
+          aiQuestions.sort((a, b) => {
+            const aTime = a.lastShownAt ?? 0;
+            const bTime = b.lastShownAt ?? 0;
+            return aTime - bTime;
+          });
+          
+          const result = aiQuestions.slice(0, count);
+          // console.log('Returning AI-generated questions:', result.length);
+          return result;
         }
       }
     }
 
-    return selected;
+    // Sort by lastShownAt (oldest first) if available, otherwise random
+    filteredQuestions.sort((a, b) => {
+      const aTime = a.lastShownAt ?? 0;
+      const bTime = b.lastShownAt ?? 0;
+      return aTime - bTime;
+    });
+
+    // Return the requested number of questions
+    const result = filteredQuestions.slice(0, count);
+    // console.log('Returning questions:', result.length);
+    
+    return result;
   }
 })
 
@@ -206,16 +139,18 @@ export const saveAIQuestion = mutation({
     text: v.string(),
     tags: v.array(v.string()),
     promptUsed: v.string(),
+    category: v.optional(v.string()),
   },
   returns: v.id("questions"),
   handler: async (ctx, args) => {
-    const { text, tags, promptUsed } = args;
+    const { text, tags, promptUsed, category } = args;
     const oldestQuestion = await getOldestQuestion(ctx);
     const lastShownAt = oldestQuestion ? oldestQuestion[0]?.lastShownAt ?? 0 : 0;
     return await ctx.db.insert("questions", {
       text,
       tags,
       promptUsed,
+      category,
       isAIGenerated: true,
       // Seed lastShownAt with a small negative value so it is included
       // at the front of the by_last_shown_at ascending index and shows up immediately.
@@ -230,3 +165,200 @@ export const saveAIQuestion = mutation({
 async function getOldestQuestion(ctx: QueryCtx) {
   return await ctx.db.query("questions").withIndex("by_last_shown_at").order("asc").take(1);
 }
+
+const ensureAdmin = async (ctx: QueryCtx | { auth: any; db: any }) => {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("Not authenticated");
+  }
+  const user = await ctx.db
+    .query("users")
+    .withIndex("email", (q: any) => q.eq("email", identity.email!))
+    .unique();
+
+  if (!user || !user.isAdmin) {
+    throw new Error("Not an admin");
+  }
+  return user;
+}
+
+export const getQuestions = query({
+  handler: async (ctx) => {
+    await ensureAdmin(ctx);
+    return await ctx.db.query("questions").collect();
+  },
+});
+
+export const createQuestion = mutation({
+  args: {
+    text: v.string(),
+    tags: v.optional(v.array(v.string())),
+    category: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    const { text, tags, category } = args;
+    return await ctx.db.insert("questions", {
+      text,
+      tags,
+      category,
+      isAIGenerated: false,
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+  },
+});
+
+export const updateQuestion = mutation({
+  args: {
+    id: v.id("questions"),
+    text: v.string(),
+    tags: v.optional(v.array(v.string())),
+    category: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    const { id, text, tags, category } = args;
+    await ctx.db.patch(id, { text, tags, category });
+  },
+});
+
+export const deleteQuestion = mutation({
+  args: {
+    id: v.id("questions"),
+  },
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    await ctx.db.delete(args.id);
+  },
+});
+
+// Simple function to list all questions (for category population script)
+export const list = query({
+  handler: async (ctx) => {
+    const questions = await ctx.db.query("questions").collect();
+    // console.log('List query result:', questions.length, 'questions');
+    // questions.forEach((q, i) => {
+    //   console.log(`Question ${i + 1}:`, {
+    //     id: q._id,
+    //     text: q.text?.substring(0, 50) + '...',
+    //     category: q.category,
+    //     lastShownAt: q.lastShownAt,
+    //     hasLastShownAt: q.lastShownAt !== undefined
+    //   });
+    // });
+    return questions;
+  },
+});
+
+// Function to fix existing questions by adding lastShownAt field
+export const fixExistingQuestions = mutation({
+  handler: async (ctx) => {
+    const allQuestions = await ctx.db.query("questions").collect();
+    const now = Date.now();
+    let fixedCount = 0;
+    
+    for (const question of allQuestions) {
+      if (question.lastShownAt === undefined) {
+        await ctx.db.patch(question._id, {
+          lastShownAt: now - Math.random() * 10000000 // Random time in the past
+        });
+        fixedCount++;
+      }
+    }
+    
+    return { totalQuestions: allQuestions.length, fixedCount };
+  },
+});
+
+// Temporary function to add test questions
+export const addTestQuestions = mutation({
+  handler: async (ctx) => {
+    const now = Date.now();
+    const testQuestions = [
+      {
+        text: "What's your favorite childhood memory?",
+        category: "deep",
+        tags: ["memory", "childhood"],
+        totalLikes: 0,
+        totalShows: 0,
+        averageViewDuration: 0,
+        lastShownAt: now - 1000000, // 1 hour ago
+        isAIGenerated: false,
+      },
+      {
+        text: "If you could have any superpower, what would it be?",
+        category: "fun",
+        tags: ["superpower", "fantasy"],
+        totalLikes: 0,
+        totalShows: 0,
+        averageViewDuration: 0,
+        lastShownAt: now - 2000000, // 2 hours ago
+        isAIGenerated: false,
+      },
+      {
+        text: "What's your biggest professional achievement?",
+        category: "professional",
+        tags: ["career", "achievement"],
+        totalLikes: 0,
+        totalShows: 0,
+        averageViewDuration: 0,
+        lastShownAt: now - 3000000, // 3 hours ago
+        isAIGenerated: false,
+      },
+      {
+        text: "Would you rather travel to the past or the future?",
+        category: "wouldYouRather",
+        tags: ["time travel", "choice"],
+        totalLikes: 0,
+        totalShows: 0,
+        averageViewDuration: 0,
+        lastShownAt: now - 4000000, // 4 hours ago
+        isAIGenerated: false,
+      },
+      {
+        text: "Coffee or tea?",
+        category: "thisOrThat",
+        tags: ["preference", "drink"],
+        totalLikes: 0,
+        totalShows: 0,
+        averageViewDuration: 0,
+        lastShownAt: now - 5000000, // 5 hours ago
+        isAIGenerated: false,
+      }
+    ];
+
+    const results = [];
+    for (const question of testQuestions) {
+      const id = await ctx.db.insert("questions", question);
+      results.push({ id, text: question.text, category: question.category });
+    }
+    return results;
+  },
+});
+
+
+
+// Function to update multiple question categories at once
+export const updateCategories = mutation({
+  args: {
+    updates: v.array(v.object({
+      id: v.id("questions"),
+      category: v.string(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const results = [];
+    for (const update of args.updates) {
+      try {
+        await ctx.db.patch(update.id, { category: update.category });
+        results.push({ id: update.id, success: true });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        results.push({ id: update.id, success: false, error: errorMessage });
+      }
+    }
+    return results;
+  },
+});

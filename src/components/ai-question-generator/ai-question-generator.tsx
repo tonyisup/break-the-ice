@@ -22,6 +22,55 @@ type GeneratedQuestion = {
   promptUsed: string;
 };
 
+// Helper function to determine category from tags
+const determineCategoryFromTags = (tags: string[]): string => {
+  const tagToCategory: Record<string, string> = {
+    // Fun & Silly
+    'humor': 'fun',
+    'jokes': 'fun',
+    'silly': 'fun',
+    'funny': 'fun',
+    'entertainment': 'fun',
+    
+    // Deep & Thoughtful
+    'philosophy': 'deep',
+    'meaning': 'deep',
+    'purpose': 'deep',
+    'values': 'deep',
+    'beliefs': 'deep',
+    'introspection': 'deep',
+    
+    // Professional
+    'work': 'professional',
+    'career': 'professional',
+    'business': 'professional',
+    'leadership': 'professional',
+    'teamwork': 'professional',
+    'networking': 'professional',
+    
+    // Would You Rather
+    'choice': 'wouldYouRather',
+    'preference': 'wouldYouRather',
+    'decision': 'wouldYouRather',
+    
+    // This or That
+    'comparison': 'thisOrThat',
+    'versus': 'thisOrThat',
+    'option': 'thisOrThat',
+  };
+  
+  // Check if any tag matches a category
+  for (const tag of tags) {
+    const category = tagToCategory[tag.toLowerCase()];
+    if (category) {
+      return category;
+    }
+  }
+  
+  // Default to random if no specific category is found
+  return 'random';
+};
+
 export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestionGeneratorProps) => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedStyle, setSelectedStyle] = useState<string>("This or that");
@@ -127,10 +176,14 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     if (!previewQuestion) return;
     setIsSaving(true);
     try {
+      // Determine category based on selected tags
+      const category = determineCategoryFromTags(previewQuestion.tags);
+      
       const questionId = await saveAIQuestion({
         text: previewQuestion.text,
         tags: previewQuestion.tags,
         promptUsed: previewQuestion.promptUsed,
+        category,
       });
       toast.success("AI question saved!");
       onQuestionGenerated(questionId);

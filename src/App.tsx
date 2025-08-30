@@ -3,9 +3,10 @@ import { api } from "../convex/_generated/api";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Doc, Id } from "../convex/_generated/dataModel";
-import CardShuffleLoader from "./components/card-shuffle-loader/card-shuffle-loader";
-import { QuestionCard } from "./components/question-card/question-card";
+import { ModernQuestionCard } from "./components/modern-question-card";
+import { CategorySelector, categories } from "./components/category-selector";
 import { AIQuestionGenerator } from "./components/ai-question-generator/ai-question-generator";
+// import { DebugPanel } from "./components/debug-panel/debug-panel";
 import { Link } from "react-router-dom";
 import { useTheme } from "./hooks/useTheme";
 import { AnimatePresence } from "framer-motion";
@@ -37,20 +38,45 @@ export default function App() {
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const [startTime, setStartTime] = useState(Date.now());
   const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("deep");
   const discardQuestion = useMutation(api.questions.discardQuestion);
-  const nextQuestions = useQuery(api.questions.getNextQuestions, { count: 2 });
+  const nextQuestions = useQuery(api.questions.getNextQuestions, { 
+    count: 1, 
+    category: selectedCategory === "random" ? undefined : selectedCategory 
+  });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
+  const allQuestions = useQuery(api.questions.list);
+  const addTestQuestions = useMutation(api.questions.addTestQuestions);
+  const fixExistingQuestions = useMutation(api.questions.fixExistingQuestions);
+  // Debug logging
+  console.log('Query state:', {
+    selectedCategory,
+    nextQuestions: nextQuestions?.length,
+    nextQuestionsData: nextQuestions,
+    allQuestions: allQuestions?.length
+  });
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
   useEffect(() => {
     if (!nextQuestions) return;
     if (nextQuestions.length === 0) return;
 
-    if (nextQuestions) {
+    // When category changes, replace all questions instead of appending
+    if (selectedCategory !== currentQuestions[0]?.category) {
+      setCurrentQuestions(nextQuestions);
+    } else {
+      // Only append new questions that we don't already have
       const newQuestions = nextQuestions.filter(question => !currentQuestions.some(q => q._id === question._id));
-      setCurrentQuestions(prev => [...prev, ...newQuestions]);
+      if (newQuestions.length > 0) {
+        setCurrentQuestions(prev => [...prev, ...newQuestions]);
+      }
     }
-  }, [nextQuestions]);
+  }, [nextQuestions, selectedCategory, currentQuestions]);
+
+  // Reset start time when category changes
+  useEffect(() => {
+    setStartTime(Date.now());
+  }, [selectedCategory]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -89,49 +115,153 @@ export default function App() {
     setStartTime(Date.now());
   };
 
-  if (!currentQuestions) {
+  const generateNewQuestion = () => {
+    setStartTime(Date.now());
+    if (currentQuestions.length > 0) {
+      handleDiscard(currentQuestions[0]._id);
+    }
+  };
+
+  const currentQuestion = currentQuestions[0] || null;
+  const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
+  const category = categories.find(c => c.id === selectedCategory);
+  const gradient = category?.gradient || ['#667EEA', '#764BA2'];
+
+
+
+  if (!nextQuestions) {
     return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white flex items-center justify-center">
-        <CardShuffleLoader />
+      <div 
+        className="min-h-screen flex items-center justify-center"
+        style={{
+          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, #fff)`
+        }}
+      >
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white text-lg">Loading questions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (nextQuestions.length === 0) {
+    return (
+      <div 
+        className="min-h-screen flex items-center justify-center"
+        style={{
+          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, #fff)`
+        }}
+      >
+        <div className="text-center">
+          <div className="text-white text-lg mb-4">No questions found</div>
+          <p className="text-white/60 text-sm">Try selecting a different category or use the AI generator</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentQuestions || currentQuestions.length === 0) {
+    return (
+      <div 
+        className="min-h-screen flex items-center justify-center"
+        style={{
+          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, #fff)`
+        }}
+      >
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white text-lg">Preparing questions...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors overflow-hidden">
+    <div 
+      className="min-h-screen transition-colors overflow-hidden"
+      style={{
+        background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, #fff)`
+      }}
+    >
+      {/* Header */}
       <header className="p-4 flex justify-between items-center">
         <div className="flex gap-2">
           <Link
             to="/liked"
-            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors text-white"
           >
             ❤️ Liked Questions
           </Link>
           <button
             onClick={() => setShowAIGenerator(true)}
-            className="p-2 rounded-lg bg-blue-100 dark:bg-blue-800 hover:bg-blue-200 dark:hover:bg-blue-700 transition-colors"
+            className="p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors text-white"
           >
             🤖 AI Generator
           </button>
         </div>
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          className="p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors text-white"
         >
           {theme === "dark" ? "🌞" : "🌙"}
         </button>
       </header>
-      <main className="p-4 relative">
-        {currentQuestions.sort((a, b) => (b.lastShownAt ?? 0) - (a.lastShownAt ?? 0)).map((currentQuestion) => (
-          <div key={currentQuestion._id} className="absolute top-1/2 translate-y-1/2 left-1/2 -translate-x-1/2">
-            <QuestionCard
-              currentQuestion={currentQuestion}
-              liked={likedQuestions.includes(currentQuestion._id)}
-              handleDiscard={() => handleDiscard(currentQuestion._id)}
-              toggleLike={() => toggleLike(currentQuestion._id)}
-            />
-          </div>
-        ))}
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col">
+              {/* Header Section */}
+      <div className="text-center py-8">
+        <h1 className="text-4xl font-extrabold text-white mb-2">Ice Breaker</h1>
+        <p className="text-white/90 text-lg">Start conversations that matter</p>
+      </div>
+
+      {/* Debug Info - Remove this after fixing
+      {allQuestions && (
+        <div className="px-5 py-2 bg-black/20 text-white text-xs">
+          <div>Total questions: {allQuestions.length}</div>
+          <div>Questions by category: {JSON.stringify(allQuestions.reduce((acc, q) => {
+            acc[q.category || 'no-category'] = (acc[q.category || 'no-category'] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>))}</div>
+          <button 
+            onClick={() => addTestQuestions()}
+            className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-xs mr-2"
+          >
+            Add Test Questions
+          </button>
+          <button 
+            onClick={() => fixExistingQuestions()}
+            className="mt-2 px-3 py-1 bg-green-500 text-white rounded text-xs"
+          >
+            Fix Existing Questions
+          </button>
+        </div>
+      )} */}
+
+        {/* Category Selector */}
+        <CategorySelector
+          selectedCategory={selectedCategory}
+          onSelectCategory={setSelectedCategory}
+        />
+
+        {/* Question Card */}
+        <div className="flex-1 flex items-center justify-center px-5 pb-8">
+          <ModernQuestionCard
+            question={currentQuestion}
+            isFavorite={isFavorite}
+            onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
+            onNewQuestion={generateNewQuestion}
+            onShare={() => {
+              if (currentQuestion && navigator.share) {
+                navigator.share({
+                  title: 'Ice Breaker Question',
+                  text: currentQuestion.text,
+                });
+              }
+            }}
+          />
+        </div>
       </main>
       
       <AnimatePresence>
