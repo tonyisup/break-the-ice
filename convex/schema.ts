@@ -67,13 +67,17 @@ export default defineSchema({
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
     promptUsed: v.optional(v.string()),
+    category: v.optional(v.string()),
   })
     .index("by_average_view_duration", [
       "averageViewDuration",
     ])
     .index("by_last_shown_at", ["lastShownAt"])
     .index("by_total_likes", ["totalLikes"])
-    .index("by_tags", ["tags"]),
+    .index("by_tags", ["tags"])
+    .index("by_category", ["category"])
+    .index("by_category_and_last_shown", ["category", "lastShownAt"])
+    .index("by_category_and_total_likes", ["category", "totalLikes"]),
   tags: defineTable({
     name: v.string(),
     category: v.string(),

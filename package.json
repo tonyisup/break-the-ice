@@ -13,8 +13,9 @@
   "dependencies": {
     "@convex-dev/auth": "^0.0.80",
     "clsx": "^2.1.1",
-    "convex": "1.21.1-alpha.1",
+    "convex": "^1.21.1-alpha.1",
     "framer-motion": "^12.10.4",
+    "lucide-react": "^0.542.0",
     "openai": "^4.104.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
