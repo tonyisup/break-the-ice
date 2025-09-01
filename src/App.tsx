@@ -41,7 +41,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState("deep");
   const discardQuestion = useMutation(api.questions.discardQuestion);
   const nextQuestions = useQuery(api.questions.getNextQuestions, { 
-    count: 1, 
+    count: 10,
     category: selectedCategory === "random" ? undefined : selectedCategory 
   });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
@@ -58,20 +58,25 @@ export default function App() {
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
   useEffect(() => {
-    if (!nextQuestions) return;
-    if (nextQuestions.length === 0) return;
+    if (!nextQuestions || nextQuestions.length === 0) return;
 
-    // When category changes, replace all questions instead of appending
-    if (selectedCategory !== currentQuestions[0]?.category) {
-      setCurrentQuestions(nextQuestions);
-    } else {
-      // Only append new questions that we don't already have
-      const newQuestions = nextQuestions.filter(question => !currentQuestions.some(q => q._id === question._id));
-      if (newQuestions.length > 0) {
-        setCurrentQuestions(prev => [...prev, ...newQuestions]);
+    setCurrentQuestions(prevQuestions => {
+      // When category changes, replace all questions
+      if (selectedCategory !== prevQuestions[0]?.category) {
+        return nextQuestions;
       }
-    }
-  }, [nextQuestions, selectedCategory, currentQuestions]);
+
+      // Only append new questions that we don't already have
+      const existingIds = new Set(prevQuestions.map(q => q._id));
+      const newQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
+
+      if (newQuestions.length > 0) {
+        return [...prevQuestions, ...newQuestions];
+      }
+
+      return prevQuestions;
+    });
+  }, [nextQuestions, selectedCategory]);
 
   // Reset start time when category changes
   useEffect(() => {
