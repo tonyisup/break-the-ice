@@ -33,15 +33,16 @@ export const getNextQuestions = query({
   args: {
     count: v.number(),
     category: v.optional(v.string()),
+    seen: v.optional(v.array(v.id("questions"))),
   },
   handler: async (ctx, args) => {
-    const { count, category } = args;
+    const { count, category, seen } = args;
+    const seenIds = new Set(seen ?? []);
 
-    //console.log('getNextQuestions called with:', { count, category });
-
-    // Get all questions first
-    const allQuestions = await ctx.db.query("questions").collect();
-    // console.log('Total questions in DB:', allQuestions.length);
+    // Get all questions first, and filter out seen ones.
+    const allQuestions = (await ctx.db.query("questions").collect()).filter(
+      (q) => !seenIds.has(q._id)
+    );
 
     // Filter by category if specified
     let filteredQuestions = allQuestions;
@@ -141,12 +142,11 @@ export const saveAIQuestion = mutation({
     promptUsed: v.string(),
     category: v.optional(v.string()),
   },
-  returns: v.id("questions"),
   handler: async (ctx, args) => {
     const { text, tags, promptUsed, category } = args;
     const oldestQuestion = await getOldestQuestion(ctx);
     const lastShownAt = oldestQuestion ? oldestQuestion[0]?.lastShownAt ?? 0 : 0;
-    return await ctx.db.insert("questions", {
+    const id = await ctx.db.insert("questions", {
       text,
       tags,
       promptUsed,
@@ -159,6 +159,7 @@ export const saveAIQuestion = mutation({
       totalShows: 0,
       averageViewDuration: 0,
     });
+    return await ctx.db.get(id);
   },
 });
 
