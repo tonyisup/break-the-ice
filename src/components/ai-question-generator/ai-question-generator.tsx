@@ -12,7 +12,7 @@ interface Tag {
 }
 
 interface AIQuestionGeneratorProps {
-  onQuestionGenerated: (questionId: string) => void;
+  onQuestionGenerated: (question: Doc<"questions">) => void;
   onClose: () => void;
 }
 
@@ -179,14 +179,16 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
       // Determine category based on selected tags
       const category = determineCategoryFromTags(previewQuestion.tags);
       
-      const questionId = await saveAIQuestion({
+      const newQuestion = await saveAIQuestion({
         text: previewQuestion.text,
         tags: previewQuestion.tags,
         promptUsed: previewQuestion.promptUsed,
         category,
       });
       toast.success("AI question saved!");
-      onQuestionGenerated(questionId);
+      if (newQuestion) {
+        onQuestionGenerated(newQuestion);
+      }
       onClose();
     } catch (error) {
       console.error("Error saving AI question:", error);

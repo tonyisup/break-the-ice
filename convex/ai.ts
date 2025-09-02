@@ -14,19 +14,24 @@ export const generateAIQuestion = action({
     selectedTags: v.array(v.string()),
     currentQuestion: v.optional(v.string()),
     style: v.optional(v.string()),
+    category: v.optional(v.string()),
   },
   returns: v.object({
     text: v.string(),
     tags: v.array(v.string()),
     promptUsed: v.string(),
+    category: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
-    const { selectedTags, currentQuestion, style } = args;
+    const { selectedTags, currentQuestion, style, category } = args;
 
     // Build the prompt based on selected tags
     let prompt = "Generate a fun, engaging ice-breaker question that would be perfect for starting conversations in a group setting. ";
     if (style) {
       prompt += `The question should be in the style of a "${style}" question. `;
+    }
+    if (category) {
+      prompt += `The question should fit into the category: ${category}. `;
     }
     if (currentQuestion) {
       prompt += `The question should be different from the following: ${currentQuestion}. `;
@@ -69,6 +74,7 @@ export const generateAIQuestion = action({
         text: generatedQuestion,
         tags: selectedTags,
         promptUsed: prompt,
+        category,
       };
     } catch (error) {
       console.error("Error generating AI question:", error);

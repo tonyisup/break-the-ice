@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -39,12 +39,17 @@ export default function App() {
   const [startTime, setStartTime] = useState(Date.now());
   const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("deep");
+  const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
   const discardQuestion = useMutation(api.questions.discardQuestion);
   const nextQuestions = useQuery(api.questions.getNextQuestions, { 
     count: 10,
-    category: selectedCategory === "random" ? undefined : selectedCategory 
+    category: selectedCategory === "random" ? undefined : selectedCategory,
+    seen: seenQuestionIds,
   });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
+  const generateAIQuestion = useAction(api.ai.generateAIQuestion);
+  const saveAIQuestion = useMutation(api.questions.saveAIQuestion);
   const allQuestions = useQuery(api.questions.list);
   const addTestQuestions = useMutation(api.questions.addTestQuestions);
   const fixExistingQuestions = useMutation(api.questions.fixExistingQuestions);
@@ -78,17 +83,50 @@ export default function App() {
     });
   }, [nextQuestions, selectedCategory]);
 
+  useEffect(() => {
+    if (
+      nextQuestions &&
+      nextQuestions.length === 0 &&
+      !isGenerating &&
+      selectedCategory !== "random"
+    ) {
+      setIsGenerating(true);
+      toast.info("No more questions in this category. Generating a new one...");
+      generateAIQuestion({
+        category: selectedCategory,
+        currentQuestion: currentQuestions.at(-1)?.text,
+        selectedTags: [],
+      }).then((newQuestion) => {
+        saveAIQuestion(newQuestion).then((newQuestionDoc) => {
+          if (newQuestionDoc) {
+            setCurrentQuestions((prev) => [newQuestionDoc, ...prev]);
+          }
+          setIsGenerating(false);
+        });
+      });
+    }
+  }, [
+    nextQuestions,
+    isGenerating,
+    generateAIQuestion,
+    saveAIQuestion,
+    selectedCategory,
+    currentQuestions,
+  ]);
+
   // Reset start time when category changes
   useEffect(() => {
     setStartTime(Date.now());
+    setSeenQuestionIds([]);
   }, [selectedCategory]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
-  const handleDiscard = async (questionId: string) => {
+  const handleDiscard = async (questionId: Id<"questions">) => {
     if (!currentQuestions) return;
+    setSeenQuestionIds((prev) => [...prev, questionId]);
     setCurrentQuestions(prev => prev.filter(question => question._id !== questionId));
     discardQuestion({ questionId: questionId as Id<"questions">, startTime });
   };
@@ -114,16 +152,15 @@ export default function App() {
     }
   };
 
-  const handleAIQuestionGenerated = (questionId: string) => {
-    // The generated question will be automatically fetched by the existing query
-    // We just need to trigger a refresh of the questions
-    setStartTime(Date.now());
+  const handleAIQuestionGenerated = (question: Doc<"questions">) => {
+    setCurrentQuestions((prev) => [question, ...prev]);
+    setShowAIGenerator(false);
   };
 
   const generateNewQuestion = () => {
     setStartTime(Date.now());
     if (currentQuestions.length > 0) {
-      handleDiscard(currentQuestions[0]._id);
+      handleDiscard(currentQuestions[0]._id as Id<"questions">);
     }
   };
 
