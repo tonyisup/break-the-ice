@@ -4,7 +4,7 @@ import { api } from '../../../convex/_generated/api';
 import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { useTheme } from '../../hooks/useTheme';
-
+import { categories } from '../../components/category-selector/category-selector';
 
 const AdminPage: React.FC = () => {
   return (
@@ -40,8 +40,9 @@ function AdminComponent() {
   const updateQuestion = useMutation(api.questions.updateQuestion);
   const deleteQuestion = useMutation(api.questions.deleteQuestion);
   const { theme, setTheme } = useTheme();
-
+  const selectorCategories = categories.filter(category => !category.hidden);
   const [newQuestionText, setNewQuestionText] = useState('');
+  const [newQuestionCategory, setNewQuestionCategory] = useState('');
   const [editingQuestion, setEditingQuestion] = useState<Doc<"questions"> | null>(null);
 
   const toggleTheme = () => {
@@ -50,14 +51,22 @@ function AdminComponent() {
 
   const handleCreateQuestion = async () => {
     if (newQuestionText.trim()) {
-      await createQuestion({ text: newQuestionText });
+      await createQuestion({ 
+        text: newQuestionText,
+        category: newQuestionCategory || undefined
+      });
       setNewQuestionText('');
+      setNewQuestionCategory('');
     }
   };
 
   const handleUpdateQuestion = async () => {
     if (editingQuestion && editingQuestion.text.trim()) {
-      await updateQuestion({ id: editingQuestion._id, text: editingQuestion.text });
+      await updateQuestion({ 
+        id: editingQuestion._id, 
+        text: editingQuestion.text,
+        category: editingQuestion.category || undefined
+      });
       setEditingQuestion(null);
     }
   };
@@ -92,20 +101,34 @@ function AdminComponent() {
 
         <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Create New Question</h2>
-          <div className="flex gap-3">
+          <div className="space-y-4">
             <input
               type="text"
               value={newQuestionText}
               onChange={(e) => setNewQuestionText(e.target.value)}
-              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg flex-grow focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Enter new question text"
             />
-            <button
-              onClick={handleCreateQuestion}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              Create
-            </button>
+            <div className="flex gap-3">
+              <select
+                value={newQuestionCategory}
+                onChange={(e) => setNewQuestionCategory(e.target.value)}
+                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Select a category (optional)</option>
+                {selectorCategories?.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleCreateQuestion}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              >
+                Create
+              </button>
+            </div>
           </div>
         </div>
 
@@ -118,6 +141,7 @@ function AdminComponent() {
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
                   <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Question</th>
+                  <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Category</th>
                   <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Actions</th>
                 </tr>
               </thead>
@@ -126,14 +150,34 @@ function AdminComponent() {
                   <tr key={q._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                     <td className="p-4">
                       {editingQuestion?._id === q._id ? (
-                        <input
-                          type="text"
+                        <textarea
                           value={editingQuestion.text}
                           onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
                           className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          rows={2}
                         />
                       ) : (
                         <span className="text-gray-900 dark:text-white">{q.text}</span>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      {editingQuestion?._id === q._id ? (
+                        <select
+                          value={editingQuestion.category || ''}
+                          onChange={(e) => setEditingQuestion({ ...editingQuestion, category: e.target.value || undefined })}
+                          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">No category</option>
+                          {selectorCategories?.map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-gray-600 dark:text-gray-400">
+                          {q.category || <em>No category</em>}
+                        </span>
                       )}
                     </td>
                     <td className="p-4">

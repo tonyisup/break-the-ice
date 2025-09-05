@@ -194,6 +194,17 @@ export const getTags = query({
   },
 });
 
+// Get all unique categories
+export const getCategories = query({
+  args: {},
+  returns: v.array(v.string()),
+  handler: async (ctx) => {
+    const tags = await ctx.db.query("tags").collect();
+    const categories = new Set(tags.map(tag => tag.category));
+    return Array.from(categories).sort();
+  },
+});
+
 // Initialize tags in the database
 export const initializeTags = mutation({
   args: {},

@@ -7,6 +7,7 @@ export interface Category {
   icon: string;
   gradient: [string, string];
   description: string;
+  hidden: boolean; // if true, the category will not be shown in the selector
 }
 
 export const categories: Category[] = [
@@ -15,42 +16,48 @@ export const categories: Category[] = [
     name: 'Fun & Silly',
     icon: 'Sparkles',
     gradient: ['#FF6B6B', '#FFE66D'],
-    description: 'Light-hearted questions to break the ice'
+    description: 'Light-hearted questions to break the ice',
+    hidden: false
   },
   {
     id: 'deep',
     name: 'Deep & Thoughtful',
     icon: 'Brain',
     gradient: ['#667EEA', '#764BA2'],
-    description: 'Questions that spark meaningful conversations'
+    description: 'Questions that spark meaningful conversations',
+    hidden: false
   },
   {
     id: 'professional',
     name: 'Professional',
     icon: 'Briefcase',
     gradient: ['#0093E9', '#80D0C7'],
-    description: 'Great for work events and networking'
+    description: 'Great for work events and networking',
+    hidden: false
   },
   {
     id: 'wouldYouRather',
     name: 'Would You Rather',
     icon: 'HelpCircle',
     gradient: ['#FA709A', '#FEE140'],
-    description: 'Classic choice-based questions'
+    description: 'Classic choice-based questions',
+    hidden: false
   },
   {
     id: 'thisOrThat',
     name: 'This or That',
     icon: 'Zap',
     gradient: ['#30CFD0', '#330867'],
-    description: 'Quick preference questions'
+    description: 'Quick preference questions',
+    hidden: false
   },
   {
     id: 'random',
     name: 'Random Mix',
     icon: 'Shuffle',
     gradient: ['#F093FB', '#F5576C'],
-    description: 'A mix of everything'
+    description: 'A mix of everything',
+    hidden: true
   }
 ];
 
