@@ -172,15 +172,10 @@ const ensureAdmin = async (ctx: QueryCtx | { auth: any; db: any }) => {
   if (!identity) {
     throw new Error("Not authenticated");
   }
-  const user = await ctx.db
-    .query("users")
-    .withIndex("email", (q: any) => q.eq("email", identity.email!))
-    .unique();
-
-  if (!user || !user.isAdmin) {
+  if (!identity.metadata.isAdmin || identity.metadata.isAdmin !== "true") {
     throw new Error("Not an admin");
   }
-  return user;
+  return identity;
 }
 
 export const getQuestions = query({
