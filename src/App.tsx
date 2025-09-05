@@ -168,6 +168,7 @@ export default function App() {
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const category = categories.find(c => c.id === selectedCategory);
   const gradient = category?.gradient || ['#667EEA', '#764BA2'];
+  const gradientTarget = theme === "dark" ? "#000" : "#fff";
 
 
 
@@ -176,7 +177,7 @@ export default function App() {
       <div 
         className="min-h-screen flex items-center justify-center"
         style={{
-          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, #fff)`
+          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
         }}
       >
         <div className="text-center">
@@ -192,7 +193,7 @@ export default function App() {
       <div 
         className="min-h-screen flex items-center justify-center"
         style={{
-          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, #fff)`
+          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
         }}
       >
         <div className="text-center">
@@ -208,7 +209,7 @@ export default function App() {
       <div 
         className="min-h-screen flex items-center justify-center"
         style={{
-          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, #fff)`
+          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
         }}
       >
         <div className="text-center">
@@ -223,7 +224,7 @@ export default function App() {
     <div 
       className="min-h-screen transition-colors overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, #fff)`
+        background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
       }}
     >
       {/* Header */}
@@ -252,11 +253,6 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col">
-              {/* Header Section */}
-      <div className="text-center py-8">
-        <h1 className="text-4xl font-extrabold text-white mb-2">Ice Breaker</h1>
-        <p className="text-white/90 text-lg">Start conversations that matter</p>
-      </div>
 
       {/* Debug Info - Remove this after fixing
       {allQuestions && (
