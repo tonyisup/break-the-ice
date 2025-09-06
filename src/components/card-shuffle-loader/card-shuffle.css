@@ -13,6 +13,7 @@
   left: 50%;
   bottom: 0;
   transform: translateX(-50%);
+  will-change: transform;
 }
 
 .card-face {
@@ -43,21 +44,36 @@
 
 .card-1 {
   animation: shuffle1 2s infinite;
+  animation-fill-mode: both;
 }
 
 .card-2 {
   animation: shuffle2 2s infinite;
   animation-delay: 0.4s;
+  animation-fill-mode: both;
 }
 
 .card-3 {
   animation: shuffle3 2s infinite;
   animation-delay: 0.8s;
+  animation-fill-mode: both;
 }
 
 .card-4 {
   animation: shuffle4 2s infinite;
   animation-delay: 1.2s;
+  animation-fill-mode: both;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .card-1,
+  .card-2,
+  .card-3,
+  .card-4 {
+    animation: none;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .loading-text {
