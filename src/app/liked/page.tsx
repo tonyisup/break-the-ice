@@ -1,23 +1,11 @@
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import CardShuffleLoader from "../../components/card-shuffle-loader/card-shuffle-loader";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
-
-function useLocalStorage<T>(key: string, initialValue: T) {
-  const [storedValue, setStoredValue] = useState<T>(() => {
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      return initialValue;
-    }
-  });
-
-  return [storedValue] as const;
-}
+import { useLocalStorage } from "../../hooks/useLocalStorage";
 
 export default function LikedQuestionsPage() {
   const { theme, setTheme } = useTheme();
