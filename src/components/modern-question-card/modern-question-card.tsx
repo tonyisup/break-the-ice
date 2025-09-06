@@ -23,8 +23,20 @@ export function ModernQuestionCard({
 
   if (!question) return null;
 
+  const defaultCategory = {
+    id: 'random',
+    name: 'Random',
+    icon: 'Shuffle',
+    gradient: ['#F093FB', '#F5576C'],
+    description: 'A mix of everything',
+    hidden: true
+  };
+
   // Use the question's category or fall back to a default
-  const category = categories.find(c => c.id === question.category) || categories.find(c => c.id === 'deep') || categories[0];
+  const category = categories.find(c => c.id === question.category) ||
+                   categories.find(c => c.id === 'deep') ||
+                   categories[0] ||
+                   defaultCategory;
   const gradient = category.gradient;
 
   const handleShare = async () => {
