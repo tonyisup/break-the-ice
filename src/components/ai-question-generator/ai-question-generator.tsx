@@ -3,13 +3,8 @@ import { useMutation, useQuery, useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-
-interface Tag {
-  _id: string;
-  name: string;
-  category: string;
-  description?: string;
-}
+import { Doc } from "../../../convex/_generated/dataModel";
+import { categories } from "../category-selector/category-selector";
 
 interface AIQuestionGeneratorProps {
   onQuestionGenerated: (question: Doc<"questions">) => void;
@@ -22,61 +17,12 @@ type GeneratedQuestion = {
   promptUsed: string;
 };
 
-// Helper function to determine category from tags
-const determineCategoryFromTags = (tags: string[]): string => {
-  const tagToCategory: Record<string, string> = {
-    // Fun & Silly
-    'humor': 'fun',
-    'jokes': 'fun',
-    'silly': 'fun',
-    'funny': 'fun',
-    'entertainment': 'fun',
-    
-    // Deep & Thoughtful
-    'philosophy': 'deep',
-    'meaning': 'deep',
-    'purpose': 'deep',
-    'values': 'deep',
-    'beliefs': 'deep',
-    'introspection': 'deep',
-    
-    // Professional
-    'work': 'professional',
-    'career': 'professional',
-    'business': 'professional',
-    'leadership': 'professional',
-    'teamwork': 'professional',
-    'networking': 'professional',
-    
-    // Would You Rather
-    'choice': 'wouldYouRather',
-    'preference': 'wouldYouRather',
-    'decision': 'wouldYouRather',
-    
-    // This or That
-    'comparison': 'thisOrThat',
-    'versus': 'thisOrThat',
-    'option': 'thisOrThat',
-  };
-  
-  // Check if any tag matches a category
-  for (const tag of tags) {
-    const category = tagToCategory[tag.toLowerCase()];
-    if (category) {
-      return category;
-    }
-  }
-  
-  // Default to random if no specific category is found
-  return 'random';
-};
-
 export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestionGeneratorProps) => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedStyle, setSelectedStyle] = useState<string>("This or that");
+  const [selectedCategory, setSelectedCategory] = useState<string>(categories[0].id);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedTagCategories, setExpandedTagCategories] = useState<Set<string>>(new Set());
   const [previewQuestion, setPreviewQuestion] = useState<GeneratedQuestion | null>(null);
   
   const tags = useQuery(api.tags.getTags);
@@ -107,8 +53,8 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     );
   };
 
-  const toggleCategory = (category: string) => {
-    setExpandedCategories(prev => {
+  const toggleTagCategory = (category: string) => {
+    setExpandedTagCategories(prev => {
       const newSet = new Set(prev);
       if (newSet.has(category)) {
         newSet.delete(category);
@@ -119,15 +65,15 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     });
   };
 
-  const expandAllCategories = () => {
+  const expandAllTagCategories = () => {
     if (tags) {
       const categories = Array.from(new Set(tags.map(tag => tag.category)));
-      setExpandedCategories(new Set(categories));
+      setExpandedTagCategories(new Set(categories));
     }
   };
 
-  const collapseAllCategories = () => {
-    setExpandedCategories(new Set());
+  const collapseAllTagCategories = () => {
+    setExpandedTagCategories(new Set());
   };
 
   const handleGenerateQuestion = async () => {
@@ -138,17 +84,10 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
 
     setIsGenerating(true);
     try {
-      // Convert UI style to backend category
-      const styleToCategory: Record<string, string> = {
-        "This or that": "thisOrThat",
-        "Would you rather": "wouldYouRather",
-      };
-      const category = styleToCategory[selectedStyle];
-
       const generatedQuestion = await generateAIQuestion({
         selectedTags,
         currentQuestion: previewQuestion ? previewQuestion.text : undefined,
-        category,
+        category: selectedCategory,
       });
       setPreviewQuestion(generatedQuestion as GeneratedQuestion);
       toast.success("Preview generated. Review and accept or try another.");
@@ -165,13 +104,12 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     setIsSaving(true);
     try {
       // Determine category based on selected tags
-      const category = determineCategoryFromTags(previewQuestion.tags);
       
       const newQuestion = await saveAIQuestion({
         text: previewQuestion.text,
         tags: previewQuestion.tags,
         promptUsed: previewQuestion.promptUsed,
-        category,
+        category: selectedCategory,
       });
       toast.success("AI question saved!");
       if (newQuestion) {
@@ -186,7 +124,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     }
   };
 
-  const categories = tags ? Array.from(new Set(tags.map(tag => tag.category))) : [];
+  const tagCategories = tags ? Array.from(new Set(tags.map(tag => tag.category))) : [];
 
   return (
     <motion.div
@@ -221,17 +159,17 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
               Select a question style:
             </h3>
             <div className="flex flex-wrap gap-2">
-              {["This or that", "Would you rather", "Hypothetical", "Opinion", "Goal", "Childhood"].map(style => (
+              {categories.map(category => (
                 <button
-                  key={style}
-                  onClick={() => setSelectedStyle(style)}
+                  key={category.id}
+                  onClick={() => setSelectedCategory(category.id)}
                   className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                    selectedStyle === style
+                    selectedCategory === category.id
                       ? "bg-blue-500 text-white"
                       : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
                   }`}
                 >
-                  {style}
+                  {category.name}
                 </button>
               ))}
             </div>
@@ -250,13 +188,13 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
           <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 py-3 border-b border-gray-200 dark:border-gray-700 mb-4">
             <div className="flex gap-2">
               <button
-                onClick={expandAllCategories}
+                onClick={expandAllTagCategories}
                 className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 Expand All
               </button>
               <button
-                onClick={collapseAllCategories}
+                onClick={collapseAllTagCategories}
                 className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 Collapse All
@@ -266,15 +204,15 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
 
           {tags && (
             <div className="space-y-2 pb-32">
-              {categories.map(category => {
-                const isExpanded = expandedCategories.has(category);
+              {tagCategories.map(category => {
+                const isExpanded = expandedTagCategories.has(category);
                 const categoryTags = tags.filter(tag => tag.category === category);
                 const selectedCount = categoryTags.filter(tag => selectedTags.includes(tag.name)).length;
                 
                 return (
                   <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                     <button
-                      onClick={() => toggleCategory(category)}
+                      onClick={() => toggleTagCategory(category)}
                       className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                     >
                       <div className="flex items-center gap-3">

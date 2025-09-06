@@ -3,7 +3,6 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import OpenAI from "openai";
-import { PREDEFINED_TAGS } from "./tags";
 
 const openai = new OpenAI();
 
@@ -11,10 +10,10 @@ const categoryPromptMap: Record<string, string> = {
   fun: "The question should be light-hearted and funny. Ideal for parties and social gatherings.",
   deep: "The question should be personal and thought-provoking. Ideal for introspection and self-discovery.",
   professional: "The question should be about work and career. Safe for work. Ideal for work events and networking.",
-  wouldYouRather: "The question should be in the style of would-you-rather questions or if-you-could _____ would-you-rather ____ or ____.",
-  thisOrThat: "The question should in the style of this-or-that questions. Ideal for quick and easy questions.",
+  wouldYouRather: "The question should be in the style of would-you-rather questions. It must be in the format of 'would you rather ____ or ____'. It may also be in the format of 'If you could _____, would you rather ____ or ____'.",
+  thisOrThat: "The question should be short and concise and in the style of this-or-that questions. It must be in the format of '____ or ____'.",
   crossfit: "The question should be in the style of question-of-the-day questions for CrossFit. Ideal for CrossFit enthusiasts.",
-  random: "The question can be about any category in (fun, deep, professional, wouldYouRather, thisOrThat).",
+  random: "The question can be in any style in (fun, deep, professional, wouldYouRather, thisOrThat, crossfit).",
 }
 
 // Generate an AI question based on selected tags
@@ -33,7 +32,6 @@ export const generateAIQuestion = action({
   handler: async (ctx, args) => {
     const { selectedTags, currentQuestion, category } = args;
 
-    // Build the prompt based on selected tags
     let prompt = "Generate an ice-breaker question that would be perfect for starting conversations in a group setting. ";
 
     if (category) {
@@ -42,13 +40,8 @@ export const generateAIQuestion = action({
     if (currentQuestion) {
       prompt += `The question should be different from the following: ${currentQuestion}. `;
     }
-    if (selectedTags.length > 0) {
-      const tagDescriptions = selectedTags.map(tag => {
-        const tagInfo = PREDEFINED_TAGS.find(t => t.name === tag);
-        return tagInfo ? `${tag} (${tagInfo.description})` : tag;
-      });
-      
-      prompt += `The question should relate to these topics: ${tagDescriptions.join(", ")}. `;
+    if (selectedTags.length > 0) {      
+      prompt += `The question should include these topics: ${selectedTags.join(", ")}. `;
     }
     
     prompt += "Keep the question concise (under 100 words).";
@@ -59,7 +52,7 @@ export const generateAIQuestion = action({
         messages: [
           {
             role: "system",
-            content: "You are a helpful assistant that creates engaging ice-breaker questions for group conversations. Always respond with just the question text, nothing else."
+            content: "You are a helpful assistant that creates engaging ice-breaker questions for conversations. Always respond with just the question text, nothing else."
           },
           {
             role: "user",
