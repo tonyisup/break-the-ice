@@ -138,30 +138,18 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
 
     setIsGenerating(true);
     try {
-      const generatedQuestion = await generateAIQuestion({ 
-        selectedTags, 
+      // Convert UI style to backend category
+      const styleToCategory: Record<string, string> = {
+        "This or that": "thisOrThat",
+        "Would you rather": "wouldYouRather",
+      };
+      const category = styleToCategory[selectedStyle];
+
+      const generatedQuestion = await generateAIQuestion({
+        selectedTags,
         currentQuestion: previewQuestion ? previewQuestion.text : undefined,
-        style: selectedStyle,
+        category,
       });
-      setPreviewQuestion(generatedQuestion as GeneratedQuestion);
-      toast.success("Preview generated. Review and accept or try another.");
-    } catch (error) {
-      console.error("Error generating question:", error);
-      toast.error("Failed to generate AI question. Please try again.");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleGenerateAnotherQuestion = async () => {
-    if (selectedTags.length === 0) {
-      toast.error("Please select at least one tag");
-      return;
-    }
-
-    setIsGenerating(true);
-    try {
-      const generatedQuestion = await generateAIQuestion({ selectedTags, style: selectedStyle });
       setPreviewQuestion(generatedQuestion as GeneratedQuestion);
       toast.success("Preview generated. Review and accept or try another.");
     } catch (error) {
