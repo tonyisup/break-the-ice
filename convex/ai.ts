@@ -1,19 +1,27 @@
 "use node";
 
 import { v } from "convex/values";
-import { action, mutation } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { action } from "./_generated/server";
 import OpenAI from "openai";
 import { PREDEFINED_TAGS } from "./tags";
 
 const openai = new OpenAI();
+
+const categoryPromptMap: Record<string, string> = {
+  fun: "The question should be light-hearted and funny. Ideal for parties and social gatherings.",
+  deep: "The question should be personal and thought-provoking. Ideal for introspection and self-discovery.",
+  professional: "The question should be about work and career. Safe for work. Ideal for work events and networking.",
+  wouldYouRather: "The question should be in the style of would-you-rather questions or if-you-could _____ would-you-rather ____ or ____.",
+  thisOrThat: "The question should in the style of this-or-that questions. Ideal for quick and easy questions.",
+  crossfit: "The question should be in the style of question-of-the-day questions for CrossFit. Ideal for CrossFit enthusiasts.",
+  random: "The question can be about any category in (fun, deep, professional, wouldYouRather, thisOrThat).",
+}
 
 // Generate an AI question based on selected tags
 export const generateAIQuestion = action({
   args: {
     selectedTags: v.array(v.string()),
     currentQuestion: v.optional(v.string()),
-    style: v.optional(v.string()),
     category: v.optional(v.string()),
   },
   returns: v.object({
@@ -23,15 +31,13 @@ export const generateAIQuestion = action({
     category: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
-    const { selectedTags, currentQuestion, style, category } = args;
+    const { selectedTags, currentQuestion, category } = args;
 
     // Build the prompt based on selected tags
-    let prompt = "Generate a fun, engaging ice-breaker question that would be perfect for starting conversations in a group setting. ";
-    if (style) {
-      prompt += `The question should be in the style of a "${style}" question. `;
-    }
+    let prompt = "Generate an ice-breaker question that would be perfect for starting conversations in a group setting. ";
+
     if (category) {
-      prompt += `The question should fit into the category: ${category}. `;
+      prompt += categoryPromptMap[category];
     }
     if (currentQuestion) {
       prompt += `The question should be different from the following: ${currentQuestion}. `;
@@ -45,7 +51,7 @@ export const generateAIQuestion = action({
       prompt += `The question should relate to these topics: ${tagDescriptions.join(", ")}. `;
     }
     
-    prompt += "The question should be: 1) Light-hearted and fun, 2) Easy to answer for most people, 3) Open-ended enough to spark interesting conversations, 4) Appropriate for a diverse group. Keep the question concise (under 100 words).";
+    prompt += "Keep the question concise (under 100 words).";
 
     try {
       const completion = await openai.chat.completions.create({

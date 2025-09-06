@@ -1,5 +1,4 @@
-import React from 'react';
-import { Sparkles, Brain, Briefcase, HelpCircle, Zap, Shuffle } from 'lucide-react';
+import { Sparkles, Brain, Briefcase, HelpCircle, Zap, Shuffle, Dumbbell } from 'lucide-react';
 
 export interface Category {
   id: string;
@@ -10,7 +9,15 @@ export interface Category {
   hidden: boolean; // if true, the category will not be shown in the selector
 }
 
-export const categories: Category[] = [
+export const categories: Category[] = [  
+  {
+    id: 'random',
+    name: 'Random Mix',
+    icon: 'Shuffle',
+    gradient: ['#F093FB', '#F5576C'],
+    description: 'A mix of everything',
+    hidden: true
+  },
   {
     id: 'fun',
     name: 'Fun & Silly',
@@ -52,12 +59,12 @@ export const categories: Category[] = [
     hidden: false
   },
   {
-    id: 'random',
-    name: 'Random Mix',
-    icon: 'Shuffle',
-    gradient: ['#F093FB', '#F5576C'],
-    description: 'A mix of everything',
-    hidden: true
+    id: 'crossfit',
+    name: 'CrossFit',
+    icon: 'Dumbbell',
+    gradient: ['#F36B6B', '#F3E66D'],
+    description: 'QOD questions for CrossFit',
+    hidden: false
   }
 ];
 
@@ -67,7 +74,8 @@ const iconMap = {
   Briefcase,
   HelpCircle,
   Zap,
-  Shuffle
+  Shuffle, 
+  Dumbbell
 };
 
 interface CategorySelectorProps {

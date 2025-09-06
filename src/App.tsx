@@ -38,11 +38,11 @@ export default function App() {
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const [startTime, setStartTime] = useState(Date.now());
   const [showAIGenerator, setShowAIGenerator] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("deep");
+  const [selectedCategory, setSelectedCategory] = useState("random");
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const discardQuestion = useMutation(api.questions.discardQuestion);
-  const nextQuestions = useQuery(api.questions.getNextQuestions, { 
+  const nextQuestions = useQuery(api.questions.getNextQuestions, {
     count: 10,
     category: selectedCategory === "random" ? undefined : selectedCategory,
     seen: seenQuestionIds,
@@ -50,20 +50,11 @@ export default function App() {
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
   const saveAIQuestion = useMutation(api.questions.saveAIQuestion);
-  const allQuestions = useQuery(api.questions.list);
-  const addTestQuestions = useMutation(api.questions.addTestQuestions);
-  const fixExistingQuestions = useMutation(api.questions.fixExistingQuestions);
-  // Debug logging
-  console.log('Query state:', {
-    selectedCategory,
-    nextQuestions: nextQuestions?.length,
-    nextQuestionsData: nextQuestions,
-    allQuestions: allQuestions?.length
-  });
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
   useEffect(() => {
     if (!nextQuestions || nextQuestions.length === 0) return;
+    setIsGenerating(false);
 
     setCurrentQuestions(prevQuestions => {
       // When category changes, replace all questions
@@ -125,10 +116,16 @@ export default function App() {
   };
 
   const handleDiscard = async (questionId: Id<"questions">) => {
-    if (!currentQuestions) return;
+    if (!currentQuestions) return; // This shouldn't happen! We should always generate more
     setSeenQuestionIds((prev) => [...prev, questionId]);
     setCurrentQuestions(prev => prev.filter(question => question._id !== questionId));
-    discardQuestion({ questionId: questionId as Id<"questions">, startTime });
+    const getMore = currentQuestions.length == 0;
+    setIsGenerating(getMore);
+    discardQuestion({
+      questionId: questionId as Id<"questions">,
+      startTime,
+      category: getMore ? selectedCategory : undefined
+    });
   };
 
   const toggleLike = async (questionId: Id<"questions">) => {
@@ -170,58 +167,8 @@ export default function App() {
   const gradient = category?.gradient || ['#667EEA', '#764BA2'];
   const gradientTarget = theme === "dark" ? "#000" : "#fff";
 
-
-
-  if (!nextQuestions) {
-    return (
-      <div 
-        className="min-h-screen flex items-center justify-center"
-        style={{
-          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
-        }}
-      >
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-white text-lg">Loading questions...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (nextQuestions.length === 0) {
-    return (
-      <div 
-        className="min-h-screen flex items-center justify-center"
-        style={{
-          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
-        }}
-      >
-        <div className="text-center">
-          <div className="text-white text-lg mb-4">No questions found</div>
-          <p className="text-white/60 text-sm">Try selecting a different category or use the AI generator</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!currentQuestions || currentQuestions.length === 0) {
-    return (
-      <div 
-        className="min-h-screen flex items-center justify-center"
-        style={{
-          background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
-        }}
-      >
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-white text-lg">Preparing questions...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div 
+    <div
       className="min-h-screen transition-colors overflow-hidden"
       style={{
         background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
@@ -254,37 +201,24 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col">
 
-      {/* Debug Info - Remove this after fixing
-      {allQuestions && (
-        <div className="px-5 py-2 bg-black/20 text-white text-xs">
-          <div>Total questions: {allQuestions.length}</div>
-          <div>Questions by category: {JSON.stringify(allQuestions.reduce((acc, q) => {
-            acc[q.category || 'no-category'] = (acc[q.category || 'no-category'] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>))}</div>
-          <button 
-            onClick={() => addTestQuestions()}
-            className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-xs mr-2"
-          >
-            Add Test Questions
-          </button>
-          <button 
-            onClick={() => fixExistingQuestions()}
-            className="mt-2 px-3 py-1 bg-green-500 text-white rounded text-xs"
-          >
-            Fix Existing Questions
-          </button>
-        </div>
-      )} */}
-
         {/* Category Selector */}
         <CategorySelector
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
         />
 
+        {isGenerating && (
+          <div className="flex-1 flex items-center justify-center px-5 h-full">
+            <div className="text-center">
+              <div className="text-white text-lg">Generating question...</div>
+            </div>
+          </div>
+        )}
+
+
         {/* Question Card */}
         <div className="flex-1 flex items-center justify-center px-5 pb-8">
+
           <ModernQuestionCard
             question={currentQuestion}
             isFavorite={isFavorite}
@@ -301,7 +235,7 @@ export default function App() {
           />
         </div>
       </main>
-      
+
       <AnimatePresence>
         {showAIGenerator && (
           <AIQuestionGenerator

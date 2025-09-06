@@ -1,14 +1,17 @@
 import { v } from "convex/values";
 import { mutation, query, QueryCtx } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
+import { api } from "./_generated/api";
+
 
 export const discardQuestion = mutation({
   args: {
     questionId: v.id("questions"),
     startTime: v.number(),
+    category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { questionId, startTime } = args;
+    const { questionId, startTime, category } = args;
 
     const question = await ctx.db.get(questionId);
     if (question) {
@@ -26,6 +29,13 @@ export const discardQuestion = mutation({
       });
 
       await Promise.all([analytics, updateQuestion]);
+    }
+
+    if (category) {
+      ctx.scheduler.runAfter(0, api.ai.generateAIQuestion, {
+        category,
+        selectedTags: [],
+      });
     }
   },
 });
@@ -50,25 +60,6 @@ export const getNextQuestions = query({
       filteredQuestions = allQuestions.filter(q => q.category === category);
       // console.log(`Questions for category "${category}":`, filteredQuestions.length);
       
-      // If no questions found for this category, try to get AI-generated questions
-      if (filteredQuestions.length === 0) {
-        // console.log('No questions found for category, trying AI-generated questions...');
-        const aiQuestions = allQuestions.filter(q => q.isAIGenerated === true);
-        // console.log('AI-generated questions available:', aiQuestions.length);
-        
-        if (aiQuestions.length > 0) {
-          // Sort AI questions by lastShownAt (oldest first)
-          aiQuestions.sort((a, b) => {
-            const aTime = a.lastShownAt ?? 0;
-            const bTime = b.lastShownAt ?? 0;
-            return aTime - bTime;
-          });
-          
-          const result = aiQuestions.slice(0, count);
-          // console.log('Returning AI-generated questions:', result.length);
-          return result;
-        }
-      }
     }
 
     // Sort by lastShownAt (oldest first) if available, otherwise random
