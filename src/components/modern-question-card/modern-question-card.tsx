@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, RefreshCw, Share2 } from 'lucide-react';
+import { ArrowBigRight, Heart, RefreshCcwDotIcon, Share2 } from 'lucide-react';
 import { Doc } from '../../../convex/_generated/dataModel';
 import { categories } from '../category-selector/category-selector';
 
@@ -8,7 +8,7 @@ interface ModernQuestionCardProps {
   question: Doc<"questions"> | null;
   isFavorite: boolean;
   onToggleFavorite: () => void;
-  onNewQuestion: () => void;
+  onNewQuestion?: () => void;
   onShare?: () => void;
 }
 
@@ -29,7 +29,7 @@ export function ModernQuestionCard({
 
   const handleShare = async () => {
     if (!question || !navigator.share) return;
-    
+
     try {
       await navigator.share({
         title: 'Ice Breaker Question',
@@ -44,17 +44,17 @@ export function ModernQuestionCard({
     <AnimatePresence>
       <motion.div
         ref={cardRef}
-        initial={{ scale: 0, rotate: 0 }}
-        animate={{ scale: 1, rotate: 360 }}
+        initial={{ scale: .8, rotate: 0 }}
+        animate={{ scale: 1, rotate: 0 }}
         transition={{
           type: "spring",
           stiffness: 50,
           damping: 7,
           duration: 0.3
         }}
-        className="w-full max-w-md aspect-square mx-auto"
+        className="w-full max-w-md mx-auto"
       >
-        <div 
+        <div
           className="w-full h-full rounded-[30px] p-[3px]"
           style={{
             background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]})`
@@ -69,7 +69,7 @@ export function ModernQuestionCard({
             </div>
 
             {/* Question Text */}
-            <div className="flex-1 flex items-center justify-center text-center">
+            <div className="py-8 flex-1 flex items-center justify-center text-center">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white leading-relaxed">
                 {question.text}
               </h2>
@@ -82,20 +82,22 @@ export function ModernQuestionCard({
                 className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
                 title="Toggle favorite"
               >
-                <Heart 
-                  size={24} 
-                  className={isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600 dark:text-gray-400'} 
+                <Heart
+                  size={24}
+                  className={isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600 dark:text-gray-400'}
                 />
               </button>
 
-              <button
-                onClick={onNewQuestion}
-                className="bg-black/20 dark:bg-white/20 px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
-                title="New question"
-              >
-                <RefreshCw size={24} className="text-white" />
-                <span className="text-white font-semibold text-base">New Question</span>
-              </button>
+              {onNewQuestion && (
+                <button
+                  onClick={onNewQuestion}
+                  className="bg-black/20 dark:bg-white/20 px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
+                  title="New question"
+                >
+                  <ArrowBigRight size={24} className="text-white" />
+                  <span className="sm:block hidden text-white font-semibold text-base">New Question</span>
+                </button>
+              )}
 
               {typeof navigator.share === 'function' && (
                 <button
