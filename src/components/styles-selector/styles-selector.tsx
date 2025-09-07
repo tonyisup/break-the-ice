@@ -1,4 +1,5 @@
 import { useQuery } from 'convex/react';
+import { useRef } from 'react';
 import {
   HelpCircle,
   GitBranch,
@@ -45,15 +46,40 @@ interface StyleSelectorProps {
 
 export function StyleSelector({ selectedStyle, onSelectStyle }: StyleSelectorProps) {
   const styles = useQuery(api.styles.getStyles);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
+  
+  const scrollToCenter = (styleId: string) => {
+    const container = containerRef.current;
+    const button = buttonRefs.current[styleId];
+    
+    if (container && button) {
+      const containerRect = container.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
+      
+      // Calculate the scroll position to center the button
+      const scrollLeft = button.offsetLeft - (containerRect.width / 2) + (buttonRect.width / 2);
+      
+      container.scrollTo({
+        left: scrollLeft,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   const handleRandomStyle = () => {
     if (!styles) return;
     const randomStyle = styles[Math.floor(Math.random() * styles.length)];
     onSelectStyle(randomStyle.id);
+    
+    // Scroll to center the randomly selected style after a brief delay
+    setTimeout(() => {
+      scrollToCenter(randomStyle.id);
+    }, 100);
   };
 
   return (
-    <div className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide">
+    <div ref={containerRef} className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide">
 
       <button
         onClick={handleRandomStyle}
@@ -68,6 +94,9 @@ export function StyleSelector({ selectedStyle, onSelectStyle }: StyleSelectorPro
         return (
           <button
             key={style.id}
+            ref={(el) => {
+              buttonRefs.current[style.id] = el;
+            }}
             onClick={() => onSelectStyle(style.id)}
             className={`flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 ${isSelected
                 ? 'text-white shadow-lg'

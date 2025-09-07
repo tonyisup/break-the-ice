@@ -110,11 +110,6 @@ export default function App() {
       void handleDiscard(currentQuestions[0]._id as Id<"questions">);
     }
   };
-  const handleShuffleStyleAndTone = () => {
-
-    setSelectedStyle(selectedStyle === "open-ended" ? "closed-ended" : "open-ended");
-    setSelectedTone(selectedTone === "fun-silly" ? "serious-formal" : "fun-silly");
-  };
 
   const currentQuestion = currentQuestions[0] || null;
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
@@ -145,8 +140,8 @@ export default function App() {
         </div>
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors text-white"
-        >
+          className={cn(isColorDark(gradient[1]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white", isFavorite && "bg-white/20 dark:bg-white/20")}
+          >
           {theme === "dark" ? "🌞" : "🌙"}
         </button>
       </header>
@@ -188,7 +183,7 @@ export default function App() {
           <div className="flex justify-center gap-4">
             <button
               onClick={generateNewQuestion}
-              className="bg-black/20 dark:bg-white/20 px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
+              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
               title="New question"
             >
               <ArrowBigRight size={24} className="text-white" />

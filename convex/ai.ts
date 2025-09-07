@@ -93,9 +93,11 @@ export const generateAIQuestion = action({
       if (!generatedQuestion) {
         throw new Error("Failed to generate question");
       }
+      // Remove any quotes from the generated question
+      const cleanedQuestion = generatedQuestion.replace(/^["']|["']$/g, '');
 
       const newQuestion: Doc<"questions"> | null = await ctx.runMutation(api.questions.saveAIQuestion, {
-        text: generatedQuestion,
+        text: cleanedQuestion,
         style:styleId,
         tone:toneId,
         tags: selectedTags,
