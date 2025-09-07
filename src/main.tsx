@@ -10,6 +10,7 @@ import LikedQuestionsPage from "./app/liked/page";
 import AdminPage from "./app/admin/page";
 import QuestionsPage from "./app/admin/questions/page";
 import TagsPage from "./app/admin/tags/page";
+import ModelsPage from "./app/admin/models/page";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -24,6 +25,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/questions" element={<QuestionsPage />} />
           <Route path="/admin/tags" element={<TagsPage />} />
+          <Route path="/admin/models" element={<ModelsPage />} />
         </Routes>
       </BrowserRouter>
     </ConvexProviderWithClerk>

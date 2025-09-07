@@ -190,6 +190,11 @@ function ModelManager() {
                     {editingModel?._id === m._id ? (
                       <div className="space-y-3">
                         <input
+                          value={editingModel.id}
+                          onChange={(e) => setEditingModel({ ...editingModel, id: e.target.value })}
+                          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <input
                           value={editingModel.name}
                           onChange={(e) => setEditingModel({ ...editingModel, name: e.target.value })}
                           className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
