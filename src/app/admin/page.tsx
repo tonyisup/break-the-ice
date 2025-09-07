@@ -37,51 +37,11 @@ function AdminComponentWrapper() {
   return <AdminComponent />;
 }
 function AdminComponent() {
-  const questions = useQuery(api.questions.getQuestions);
-  const categories = useQuery(api.categories.getCategories);
-  const createQuestion = useMutation(api.questions.createQuestion);
-  const updateQuestion = useMutation(api.questions.updateQuestion);
-  const deleteQuestion = useMutation(api.questions.deleteQuestion);
   const { theme, setTheme } = useTheme();
-  const selectorCategories = categories?.filter(category => !category.hidden);
-  const [newQuestionText, setNewQuestionText] = useState('');
-  const [newQuestionCategory, setNewQuestionCategory] = useState('');
-  const [editingQuestion, setEditingQuestion] = useState<Doc<"questions"> | null>(null);
-  const [searchText, setSearchText] = useState('');
   const [showAIGenerator, setShowAIGenerator] = useState(false);
 
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');
-  };
-
-  const handleCreateQuestion = () => {
-    if (newQuestionText.trim()) {
-      void createQuestion({
-        text: newQuestionText,
-        category: newQuestionCategory || undefined
-      });
-      setNewQuestionText('');
-      setNewQuestionCategory('');
-    }
-  };
-
-  const handleUpdateQuestion = () => {
-    if (editingQuestion && editingQuestion.text.trim()) {
-      void updateQuestion({
-        id: editingQuestion._id,
-        text: editingQuestion.text,
-        category: editingQuestion.category || undefined
-      });
-      setEditingQuestion(null);
-    }
-  };
-
-  const handleDeleteQuestion = (id: Id<"questions">) => {
-    void deleteQuestion({ id });
-  };
-
-  const clearSearchText = () => {
-    setSearchText('');
   };
 
   return (
@@ -119,167 +79,15 @@ function AdminComponent() {
             </div>
           </div>
         </div>
-
-        <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Create New Question</h2>
-          <div className="space-y-4">
-            <input
-              type="text"
-              value={newQuestionText}
-              onChange={(e) => setNewQuestionText(e.target.value)}
-              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter new question text"
-            />
-            <div className="flex flex-col sm:flex-row gap-3">
-              <select
-                value={newQuestionCategory}
-                onChange={(e) => setNewQuestionCategory(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:w-1/2"
-              >
-                <option value="">Select a category (optional)</option>
-                {selectorCategories?.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={handleCreateQuestion}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex gap-3">
-          <input
-            type="text"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Search questions..."
-          />
-          <button
-            onClick={clearSearchText}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-          >
-            Clear
-          </button>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Link to="/admin/questions" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Questions</h2>
-          </div>
-          {/* Mobile View */}
-          <div className="md:hidden">
-            <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {questions?.filter(q => q.text.toLowerCase().includes(searchText.toLowerCase()))?.map((q) => (
-                <div key={q._id} className="p-4 space-y-3">
-                  {editingQuestion?._id === q._id ? (
-                    <div className="space-y-3">
-                      <textarea
-                        value={editingQuestion.text}
-                        onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        rows={3}
-                      />
-                      <select
-                        value={editingQuestion.category || ''}
-                        onChange={(e) => setEditingQuestion({ ...editingQuestion, category: e.target.value || undefined })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">No category</option>
-                        {selectorCategories?.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="flex gap-2">
-                        <button onClick={handleUpdateQuestion} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Save</button>
-                        <button onClick={() => setEditingQuestion(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-gray-900 dark:text-white">{q.text}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{q.category || 'No category'}</p>
-                      <div className="flex gap-2 pt-2">
-                        <button onClick={() => setEditingQuestion(q)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Edit</button>
-                        <button onClick={() => handleDeleteQuestion(q._id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Delete</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Desktop View */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/2">Question</th>
-                  <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Category</th>
-                  <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {questions?.map((q) => (
-                  <tr key={q._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                    <td className="p-4 align-top">
-                      {editingQuestion?._id === q._id ? (
-                        <textarea
-                          value={editingQuestion.text}
-                          onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
-                          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          rows={2}
-                        />
-                      ) : (
-                        <span className="text-gray-900 dark:text-white">{q.text}</span>
-                      )}
-                    </td>
-                    <td className="p-4 align-top">
-                      {editingQuestion?._id === q._id ? (
-                        <select
-                          value={editingQuestion.category || ''}
-                          onChange={(e) => setEditingQuestion({ ...editingQuestion, category: e.target.value || undefined })}
-                          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="">No category</option>
-                          {selectorCategories?.map((category) => (
-                            <option key={category.id} value={category.id}>
-                              {category.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-gray-600 dark:text-gray-400">
-                          {q.category || <em>No category</em>}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4 align-top">
-                      <div className="flex gap-2">
-                        {editingQuestion?._id === q._id ? (
-                          <div className="flex gap-2">
-                            <button onClick={handleUpdateQuestion} className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Save</button>
-                            <button onClick={() => setEditingQuestion(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Cancel</button>
-                          </div>
-                        ) : (
-                          <button onClick={() => setEditingQuestion(q)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Edit</button>
-                        )}
-                        <button onClick={() => handleDeleteQuestion(q._id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <p className="text-gray-600 dark:text-gray-400">Create, edit, and delete questions.</p>
+          </Link>
+          <Link to="/admin/tags" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Tags</h2>
+            <p className="text-gray-600 dark:text-gray-400">Create, edit, and delete tags.</p>
+          </Link>
         </div>
       </div>
       
