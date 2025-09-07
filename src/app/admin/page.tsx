@@ -88,6 +88,10 @@ function AdminComponent() {
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Tags</h2>
             <p className="text-gray-600 dark:text-gray-400">Create, edit, and delete tags.</p>
           </Link>
+          <Link to="/admin/models" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Models</h2>
+            <p className="text-gray-600 dark:text-gray-400">Create, edit, and delete models.</p>
+          </Link>
         </div>
       </div>
       
