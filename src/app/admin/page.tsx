@@ -152,7 +152,7 @@ function AdminComponent() {
             </div>
           </div>
         </div>
-
+        <TagManager />
         <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex gap-3">
           <input
             type="text"
@@ -294,5 +294,161 @@ function AdminComponent() {
     </div>
   );
 };
+
+function TagManager() {
+  const tags = useQuery(api.tags.getTags);
+  const categories = useQuery(api.categories.getCategories);
+  const createTag = useMutation(api.tags.createTag);
+  const updateTag = useMutation(api.tags.updateTag);
+  const deleteTag = useMutation(api.tags.deleteTag);
+
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagCategory, setNewTagCategory] = useState('');
+  const [newTagDescription, setNewTagDescription] = useState('');
+  const [editingTag, setEditingTag] = useState<Doc<"tags"> | null>(null);
+
+  const handleCreateTag = () => {
+    if (newTagName.trim() && newTagCategory.trim()) {
+      void createTag({
+        name: newTagName,
+        category: newTagCategory,
+        description: newTagDescription,
+      });
+      setNewTagName('');
+      setNewTagCategory('');
+      setNewTagDescription('');
+    }
+  };
+
+  const handleUpdateTag = () => {
+    if (editingTag && editingTag.name.trim() && editingTag.category.trim()) {
+      void updateTag({
+        id: editingTag._id,
+        name: editingTag.name,
+        category: editingTag.category,
+        description: editingTag.description,
+      });
+      setEditingTag(null);
+    }
+  };
+
+  const handleDeleteTag = (id: Id<"tags">) => {
+    void deleteTag({ id });
+  };
+
+  return (
+    <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+      <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Manage Tags</h2>
+      <div className="space-y-4 mb-6">
+        <input
+          type="text"
+          value={newTagName}
+          onChange={(e) => setNewTagName(e.target.value)}
+          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="Enter new tag name"
+        />
+        <select
+          value={newTagCategory}
+          onChange={(e) => setNewTagCategory(e.target.value)}
+          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:w-1/2"
+        >
+          <option value="">Select a category</option>
+          {categories?.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          value={newTagDescription}
+          onChange={(e) => setNewTagDescription(e.target.value)}
+          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="Enter tag description (optional)"
+        />
+        <button
+          onClick={handleCreateTag}
+          className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+        >
+          Create Tag
+        </button>
+      </div>
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50 dark:bg-gray-700">
+            <tr>
+              <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Name</th>
+              <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Category</th>
+              <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/2">Description</th>
+              <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            {tags?.map((tag) => (
+              <tr key={tag._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                <td className="p-4 align-top">
+                  {editingTag?._id === tag._id ? (
+                    <input
+                      type="text"
+                      value={editingTag.name}
+                      onChange={(e) => setEditingTag({ ...editingTag, name: e.target.value })}
+                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  ) : (
+                    <span className="text-gray-900 dark:text-white">{tag.name}</span>
+                  )}
+                </td>
+                <td className="p-4 align-top">
+                  {editingTag?._id === tag._id ? (
+                    <select
+                      value={editingTag.category}
+                      onChange={(e) => setEditingTag({ ...editingTag, category: e.target.value })}
+                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {categories?.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {categories?.find(c => c.id === tag.category)?.name ?? 'Category not found'}
+                    </span>
+                  )}
+                </td>
+                <td className="p-4 align-top">
+                  {editingTag?._id === tag._id ? (
+                    <input
+                      type="text"
+                      value={editingTag.description ?? ''}
+                      onChange={(e) => setEditingTag({ ...editingTag, description: e.target.value })}
+                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  ) : (
+                    <span className="text-gray-600 dark:text-gray-400">{tag.description}</span>
+                  )}
+                </td>
+                <td className="p-4 align-top">
+                  <div className="flex gap-2">
+                    {editingTag?._id === tag._id ? (
+                      <div className="flex gap-2">
+                        <button onClick={handleUpdateTag} className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Save</button>
+                        <button onClick={() => setEditingTag(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Cancel</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setEditingTag(tag)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Edit</button>
+                    )}
+                    <button onClick={() => handleDeleteTag(tag._id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export default AdminPage;
