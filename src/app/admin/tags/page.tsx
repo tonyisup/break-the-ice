@@ -47,6 +47,7 @@ function TagManager() {
     const [newTagCategory, setNewTagCategory] = useState('');
     const [newTagDescription, setNewTagDescription] = useState('');
     const [editingTag, setEditingTag] = useState<Doc<"tags"> | null>(null);
+    const [searchText, setSearchText] = useState('');
 
     const handleCreateTag = () => {
       if (newTagName.trim() && newTagCategory.trim()) {
@@ -112,6 +113,21 @@ function TagManager() {
           </div>
       <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Manage Tags</h2>
+        <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex gap-3">
+            <input
+                type="text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Search tags..."
+            />
+            <button
+                onClick={() => setSearchText('')}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            >
+                Clear
+            </button>
+        </div>
         <div className="space-y-4 mb-6">
           <input
             type="text"
@@ -157,7 +173,12 @@ function TagManager() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {tags?.map((tag) => (
+              {tags?.filter(tag => {
+                const searchLower = searchText.toLowerCase();
+                return tag.name.toLowerCase().includes(searchLower) ||
+                       tag.category.toLowerCase().includes(searchLower) ||
+                       (tag.description && tag.description.toLowerCase().includes(searchLower))
+              }).map((tag) => (
                 <tr key={tag._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                   <td className="p-4 align-top">
                     {editingTag?._id === tag._id ? (
