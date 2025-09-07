@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react';
-import { useRef, useEffect } from 'react';
+import { useRef, forwardRef, useImperativeHandle } from 'react';
 import { 
   Smile, 
   Brain, 
@@ -48,7 +48,11 @@ interface ToneSelectorProps {
   onSelectTone: (tone: string) => void;
 }
 
-export function ToneSelector({ selectedTone, onSelectTone }: ToneSelectorProps) {
+export interface ToneSelectorRef {
+  randomizeTone: () => void;
+}
+
+export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ selectedTone, onSelectTone }, ref) => {
   const tones = useQuery(api.tones.getTones);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
@@ -81,6 +85,11 @@ export function ToneSelector({ selectedTone, onSelectTone }: ToneSelectorProps) 
       scrollToCenter(randomTone.id);
     }, 100);
   };
+
+  // Expose the randomizeTone function to parent components
+  useImperativeHandle(ref, () => ({
+    randomizeTone: handleRandomTone,
+  }));
 
   return (
     <div ref={containerRef} className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide">
@@ -124,4 +133,4 @@ export function ToneSelector({ selectedTone, onSelectTone }: ToneSelectorProps) 
       })}
     </div>
   );
-}
+});

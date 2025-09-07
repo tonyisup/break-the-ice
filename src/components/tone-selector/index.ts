@@ -1,1 +1,1 @@
-export { ToneSelector } from './tone-selector';
+export { ToneSelector, type ToneSelectorRef } from './tone-selector';

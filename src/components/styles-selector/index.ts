@@ -1,1 +1,1 @@
-export { StyleSelector } from './styles-selector';
+export { StyleSelector, type StyleSelectorRef } from './styles-selector';

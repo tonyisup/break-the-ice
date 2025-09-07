@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { Doc, Id } from "../convex/_generated/dataModel";
 import { ModernQuestionCard } from "./components/modern-question-card";
@@ -10,8 +10,8 @@ import { Link } from "react-router-dom";
 import { useTheme } from "./hooks/useTheme";
 import { AnimatePresence } from "framer-motion";
 import { useLocalStorage } from "./hooks/useLocalStorage";
-import { StyleSelector } from "./components/styles-selector";
-import { ToneSelector } from "./components/tone-selector";
+import { StyleSelector, StyleSelectorRef } from "./components/styles-selector";
+import { ToneSelector, ToneSelectorRef } from "./components/tone-selector";
 import { ArrowBigRight, Shuffle } from "lucide-react";
 import { cn } from "./lib/utils";
 
@@ -25,6 +25,8 @@ export default function App() {
   const discardQuestion = useMutation(api.questions.discardQuestion);
   const [selectedStyle, setSelectedStyle] = useState("open-ended");
   const [selectedTone, setSelectedTone] = useState("fun-silly");
+  const toneSelectorRef = useRef<ToneSelectorRef>(null);
+  const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const nextQuestions = useQuery(api.questions.getNextQuestions, {
     count: 10,
     style: selectedStyle,
@@ -111,6 +113,11 @@ export default function App() {
     }
   };
 
+  const handleShuffleStyleAndTone = () => {
+    // Call the randomizer function from the ToneSelector component
+    toneSelectorRef.current?.randomizeTone();
+    styleSelectorRef.current?.randomizeStyle();
+  }
   const currentQuestion = currentQuestions[0] || null;
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
@@ -172,9 +179,11 @@ export default function App() {
 
         <StyleSelector
           selectedStyle={selectedStyle}
+          ref={styleSelectorRef}
           onSelectStyle={setSelectedStyle}
         />
         <ToneSelector
+          ref={toneSelectorRef}
           selectedTone={selectedTone}
           onSelectTone={setSelectedTone}
         />
@@ -182,11 +191,19 @@ export default function App() {
         {!isGenerating && (
           <div className="flex justify-center gap-4">
             <button
+              onClick={handleShuffleStyleAndTone}
+              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
+              title="Generate question"
+            >
+              <Shuffle size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
+              <span className="sm:block hidden text-white font-semibold text-base">Randomize</span>
+            </button>
+            <button
               onClick={generateNewQuestion}
               className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
               title="New question"
             >
-              <ArrowBigRight size={24} className="text-white" />
+              <ArrowBigRight size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
               <span className="sm:block hidden text-white font-semibold text-base">New Question</span>
             </button>
           </div>

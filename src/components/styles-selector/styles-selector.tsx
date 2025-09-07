@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react';
-import { useRef } from 'react';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 import {
   HelpCircle,
   GitBranch,
@@ -44,7 +44,10 @@ interface StyleSelectorProps {
   onSelectStyle: (style: string) => void;
 }
 
-export function StyleSelector({ selectedStyle, onSelectStyle }: StyleSelectorProps) {
+export interface StyleSelectorRef {
+  randomizeStyle: () => void;
+}
+export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({ selectedStyle, onSelectStyle }, ref) => {
   const styles = useQuery(api.styles.getStyles);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
@@ -77,6 +80,11 @@ export function StyleSelector({ selectedStyle, onSelectStyle }: StyleSelectorPro
       scrollToCenter(randomStyle.id);
     }, 100);
   };
+
+  // Expose the randomizeStyle function to parent components
+  useImperativeHandle(ref, () => ({
+    randomizeStyle: handleRandomStyle,
+  }));
 
   return (
     <div ref={containerRef} className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide">
@@ -119,4 +127,4 @@ export function StyleSelector({ selectedStyle, onSelectStyle }: StyleSelectorPro
       })}
     </div>
   );
-}
+});
