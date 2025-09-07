@@ -8,10 +8,11 @@ export const discardQuestion = mutation({
   args: {
     questionId: v.id("questions"),
     startTime: v.number(),
-    category: v.optional(v.string()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { questionId, startTime, category } = args;
+    const { questionId, startTime, style, tone } = args;
 
     const question = await ctx.db.get(questionId);
     if (question) {
@@ -31,9 +32,11 @@ export const discardQuestion = mutation({
       await Promise.all([analytics, updateQuestion]);
     }
 
-    if (category) {
+    //we only discard AND supply style and tone when running out of questions on the main page
+    if (style && tone) { 
       void ctx.scheduler.runAfter(0, api.ai.generateAIQuestion, {
-        category,
+        style,
+        tone,
         selectedTags: [],
       });
     }
@@ -42,11 +45,12 @@ export const discardQuestion = mutation({
 export const getNextQuestions = query({
   args: {
     count: v.number(),
-    category: v.optional(v.string()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
     seen: v.optional(v.array(v.id("questions"))),
   },
   handler: async (ctx, args) => {
-    const { count, category, seen } = args;
+    const { count, style, tone, seen } = args;
     const seenIds = new Set(seen ?? []);
 
     // Get all questions first, and filter out seen ones.
@@ -56,11 +60,7 @@ export const getNextQuestions = query({
 
     // Filter by category if specified
     let filteredQuestions = allQuestions;
-    if (category) {
-      filteredQuestions = allQuestions.filter(q => q.category === category);
-      // console.log(`Questions for category "${category}":`, filteredQuestions.length);
-      
-    }
+    filteredQuestions = allQuestions.filter(q => (style === undefined || q.style === style) && (tone === undefined || q.tone === tone));
 
     // Sort by lastShownAt (oldest first) if available, otherwise random
     filteredQuestions.sort((a, b) => {
@@ -130,16 +130,18 @@ export const saveAIQuestion = mutation({
   args: {
     text: v.string(),
     tags: v.array(v.string()),  
-    category: v.optional(v.string()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { text, tags, category } = args;
+    const { text, tags, style, tone } = args;
     const oldestQuestion = await getOldestQuestion(ctx);
     const lastShownAt = oldestQuestion ? oldestQuestion[0]?.lastShownAt ?? 0 : 0;
     const id = await ctx.db.insert("questions", {
       text,
       tags,
-      category,
+      style,
+      tone,
       isAIGenerated: true,
       // Seed lastShownAt with a small negative value so it is included
       // at the front of the by_last_shown_at ascending index and shows up immediately.
@@ -167,15 +169,17 @@ export const createQuestion = mutation({
   args: {
     text: v.string(),
     tags: v.optional(v.array(v.string())),
-    category: v.optional(v.string()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const { text, tags, category } = args;
+    const { text, tags, style, tone } = args;
     return await ctx.db.insert("questions", {
       text,
       tags,
-      category,
+      style,
+      tone,
       isAIGenerated: false,
       totalLikes: 0,
       totalShows: 0,
@@ -189,12 +193,13 @@ export const updateQuestion = mutation({
     id: v.id("questions"),
     text: v.string(),
     tags: v.optional(v.array(v.string())),
-    category: v.optional(v.string()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const { id, text, tags, category } = args;
-    await ctx.db.patch(id, { text, tags, category });
+    const { id, text, tags, style, tone } = args;
+    await ctx.db.patch(id, { text, tags, style, tone });
   },
 });
 
@@ -208,23 +213,6 @@ export const deleteQuestion = mutation({
   },
 });
 
-// Simple function to list all questions (for category population script)
-export const list = query({
-  handler: async (ctx) => {
-    const questions = await ctx.db.query("questions").collect();
-    // console.log('List query result:', questions.length, 'questions');
-    // questions.forEach((q, i) => {
-    //   console.log(`Question ${i + 1}:`, {
-    //     id: q._id,
-    //     text: q.text?.substring(0, 50) + '...',
-    //     category: q.category,
-    //     lastShownAt: q.lastShownAt,
-    //     hasLastShownAt: q.lastShownAt !== undefined
-    //   });
-    // });
-    return questions;
-  },
-});
 
 // Function to fix existing questions by adding lastShownAt field
 export const fixExistingQuestions = mutation({
@@ -319,14 +307,15 @@ export const updateCategories = mutation({
   args: {
     updates: v.array(v.object({
       id: v.id("questions"),
-      category: v.string(),
+      style: v.optional(v.string()),
+      tone: v.optional(v.string()),
     })),
   },
   handler: async (ctx, args) => {
     const results = [];
     for (const update of args.updates) {
       try {
-        await ctx.db.patch(update.id, { category: update.category });
+        await ctx.db.patch(update.id, { style: update.style, tone: update.tone });
         results.push({ id: update.id, success: true });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

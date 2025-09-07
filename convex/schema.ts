@@ -79,6 +79,8 @@ export default defineSchema({
     id: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
+    color: v.string(),
+    icon: v.string(),
     promptGuidanceForAI: v.string(),
   }).index("name", ["name"])
     .index("id", ["id"]),
@@ -102,6 +104,8 @@ export default defineSchema({
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
     category: v.optional(v.string()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
   })
     .index("by_average_view_duration", [
       "averageViewDuration",
@@ -109,9 +113,12 @@ export default defineSchema({
     .index("by_last_shown_at", ["lastShownAt"])
     .index("by_total_likes", ["totalLikes"])
     .index("by_tags", ["tags"])
-    .index("by_category", ["category"])
-    .index("by_category_and_last_shown", ["category", "lastShownAt"])
-    .index("by_category_and_total_likes", ["category", "totalLikes"]),
+    .index("by_style", ["style"])
+    .index("by_tone", ["tone"])
+    .index("by_style_and_last_shown", ["style", "lastShownAt"])
+    .index("by_style_and_total_likes", ["style", "totalLikes"])
+    .index("by_tone_and_last_shown", ["tone", "lastShownAt"])
+    .index("by_tone_and_total_likes", ["tone", "totalLikes"]),
   tags: defineTable({
     name: v.string(),
     category: v.string(),

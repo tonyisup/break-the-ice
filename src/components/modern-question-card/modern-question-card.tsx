@@ -1,44 +1,26 @@
 import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowBigRight, Heart, Share2 } from 'lucide-react';
+import { Heart, Share2 } from 'lucide-react';
 import { Doc } from '../../../convex/_generated/dataModel';
-import { api } from '../../../convex/_generated/api';
-import { useQuery } from 'convex/react';
 
 interface ModernQuestionCardProps {
   question: Doc<"questions"> | null;
   isFavorite: boolean;
+  gradient?: string[];
   onToggleFavorite: () => void;
-  onNewQuestion?: () => void;
   onShare?: () => void;
 }
 
 export function ModernQuestionCard({
   question,
   isFavorite,
+  gradient = ['#667EEA', '#764BA2'],
   onToggleFavorite,
-  onNewQuestion,
-  onShare
+  onShare,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const categories = useQuery(api.categories.getCategories);
   if (!question) return null;
 
-  const defaultCategory = {
-    id: 'random',
-    name: 'Random',
-    icon: 'Shuffle',
-    gradient: ['#F093FB', '#F5576C'],
-    description: 'A mix of everything',
-    hidden: true
-  };
-
-  // Use the question's category or fall back to a default
-  const category = categories?.find(c => c.id === question.category) ||
-                   categories?.find(c => c.id === 'deep') ||
-                   categories?.[0] ||
-                   defaultCategory;
-  const gradient = category.gradient;
 
   const handleShare = () => {
     if (!question || !navigator.share) return;
@@ -70,15 +52,23 @@ export function ModernQuestionCard({
         <div
           className="w-full h-full rounded-[30px] p-[3px]"
           style={{
-            background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]})`
+            background: `linear-gradient(135deg, ${gradient[1]}, ${gradient[0]})`
           }}
         >
           <div className="w-full h-full bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-between">
             {/* Category Badge */}
-            <div className="bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start">
-              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                {category.name}
-              </span>
+            <div className="flex flex-row gap-2 justify-between">
+              <div className="bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between">
+                <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  {question.style}
+                </span>
+              </div>
+
+              <div className="bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between">
+                <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  {question.tone}
+                </span>
+              </div>
             </div>
 
             {/* Question Text */}
@@ -100,17 +90,6 @@ export function ModernQuestionCard({
                   className={isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600 dark:text-gray-400'}
                 />
               </button>
-
-              {onNewQuestion && (
-                <button
-                  onClick={onNewQuestion}
-                  className="bg-black/20 dark:bg-white/20 px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
-                  title="New question"
-                >
-                  <ArrowBigRight size={24} className="text-white" />
-                  <span className="sm:block hidden text-white font-semibold text-base">New Question</span>
-                </button>
-              )}
 
               {typeof navigator.share === 'function' && (
                 <button

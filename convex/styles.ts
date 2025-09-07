@@ -155,6 +155,29 @@ export const PREDEFINED_STYLES = [
 	}
 ];
 
+export const getStyle = query({
+  args: { id: v.string() },
+  returns: v.object({
+    _id: v.id("styles"),
+    _creationTime: v.number(),
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    structure: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    example: v.optional(v.string()),
+    promptGuidanceForAI: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const style = await ctx.db.query("styles").filter((q) => q.eq(q.field("id"), args.id)).first();
+    if (!style) {
+      throw new Error("Style not found");
+    }
+    return style;
+  },
+});
+
 // Get all available styles
 export const getStyles = query({
   args: {},
