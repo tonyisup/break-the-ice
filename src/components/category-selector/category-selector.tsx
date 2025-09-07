@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react';
-import { Sparkles, Brain, Briefcase, HelpCircle, Zap, Shuffle, Dumbbell } from 'lucide-react';
+import { Sparkles, Brain, Briefcase, HelpCircle, Zap, Shuffle, Dumbbell, Scale } from 'lucide-react';
 import { api } from '../../../convex/_generated/api';
 
 const iconMap = {
@@ -9,7 +9,8 @@ const iconMap = {
   HelpCircle,
   Zap,
   Shuffle, 
-  Dumbbell
+  Dumbbell,
+  Scale
 };
 
 interface CategorySelectorProps {

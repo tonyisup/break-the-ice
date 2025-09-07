@@ -64,6 +64,24 @@ export default defineSchema({
     description: v.optional(v.string()),
     nsfw: v.boolean(),
   }).index("name", ["name"]),
+  styles: defineTable({
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    structure: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    promptGuidanceForAI: v.optional(v.string()),
+    example: v.optional(v.string()),
+  }).index("name", ["name"])
+    .index("id", ["id"]),
+  tones: defineTable({
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    promptGuidanceForAI: v.string(),
+  }).index("name", ["name"])
+    .index("id", ["id"]),
   categories: defineTable({
     id: v.string(),
     name: v.string(),

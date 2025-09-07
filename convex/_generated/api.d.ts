@@ -20,6 +20,7 @@ import type * as http from "../http.js";
 import type * as models from "../models.js";
 import type * as questions from "../questions.js";
 import type * as router from "../router.js";
+import type * as styles from "../styles.js";
 import type * as tags from "../tags.js";
 
 /**
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   models: typeof models;
   questions: typeof questions;
   router: typeof router;
+  styles: typeof styles;
   tags: typeof tags;
 }>;
 export declare const api: FilterApi<
