@@ -32,7 +32,7 @@ export const discardQuestion = mutation({
     }
 
     if (category) {
-      ctx.scheduler.runAfter(0, api.ai.generateAIQuestion, {
+      void ctx.scheduler.runAfter(0, api.ai.generateAIQuestion, {
         category,
         selectedTags: [],
       });

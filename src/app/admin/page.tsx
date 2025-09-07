@@ -24,10 +24,10 @@ const AdminPage: React.FC = () => {
 
 function AdminComponentWrapper() {
   const isLoggedIn = useQuery(api.auth.loggedInUser);
+  const user = useUser();
   if (!isLoggedIn) {
     return <div>You are not logged in</div>;
   }
-  const user = useUser();
   if (!user.user?.publicMetadata.isAdmin) {
     return <div>You are not an admin</div>;
   }
@@ -43,14 +43,15 @@ function AdminComponent() {
   const [newQuestionText, setNewQuestionText] = useState('');
   const [newQuestionCategory, setNewQuestionCategory] = useState('');
   const [editingQuestion, setEditingQuestion] = useState<Doc<"questions"> | null>(null);
+  const [searchText, setSearchText] = useState('');
 
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');
   };
 
-  const handleCreateQuestion = async () => {
+  const handleCreateQuestion = () => {
     if (newQuestionText.trim()) {
-      await createQuestion({
+      void createQuestion({
         text: newQuestionText,
         category: newQuestionCategory || undefined
       });
@@ -59,9 +60,9 @@ function AdminComponent() {
     }
   };
 
-  const handleUpdateQuestion = async () => {
+  const handleUpdateQuestion = () => {
     if (editingQuestion && editingQuestion.text.trim()) {
-      await updateQuestion({
+      void updateQuestion({
         id: editingQuestion._id,
         text: editingQuestion.text,
         category: editingQuestion.category || undefined
@@ -70,8 +71,12 @@ function AdminComponent() {
     }
   };
 
-  const handleDeleteQuestion = async (id: Id<"questions">) => {
-    await deleteQuestion({ id });
+  const handleDeleteQuestion = (id: Id<"questions">) => {
+    void deleteQuestion({ id });
+  };
+
+  const clearSearchText = () => {
+    setSearchText('');
   };
 
   return (
@@ -134,6 +139,22 @@ function AdminComponent() {
           </div>
         </div>
 
+        <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex gap-3">
+          <input
+            type="text"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Search questions..."
+          />
+          <button
+            onClick={clearSearchText}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Questions</h2>
@@ -141,7 +162,7 @@ function AdminComponent() {
           {/* Mobile View */}
           <div className="md:hidden">
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {questions?.map((q) => (
+              {questions?.filter(q => q.text.toLowerCase().includes(searchText.toLowerCase()))?.map((q) => (
                 <div key={q._id} className="p-4 space-y-3">
                   {editingQuestion?._id === q._id ? (
                     <div className="space-y-3">
