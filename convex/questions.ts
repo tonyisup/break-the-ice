@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, QueryCtx } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { api } from "./_generated/api";
+import { ensureAdmin } from "./auth";
 
 export const discardQuestion = mutation({
   args: {
@@ -153,17 +154,6 @@ export const saveAIQuestion = mutation({
 
 async function getOldestQuestion(ctx: QueryCtx) {
   return await ctx.db.query("questions").withIndex("by_last_shown_at").order("asc").take(1);
-}
-
-const ensureAdmin = async (ctx: QueryCtx | { auth: any; db: any }) => {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
-    throw new Error("Not authenticated");
-  }
-  if (!identity.metadata.isAdmin || identity.metadata.isAdmin !== "true") {
-    throw new Error("Not an admin");
-  }
-  return identity;
 }
 
 export const getQuestions = query({

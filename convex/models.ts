@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { ensureAdmin } from "./auth";
 
 const MODELS = [
 	{
@@ -22,7 +23,7 @@ const MODELS = [
 	},
 ];
 
-export const getModels = query({
+export const listModels = query({
 	returns: v.array(v.object({
 		_id: v.id("models"),
 		_creationTime: v.number(),
@@ -48,4 +49,54 @@ export const initializeModels = mutation({
 		}
 		return null;
 	}
+});
+
+export const getModels = query({
+	handler: async (ctx) => {
+		await ensureAdmin(ctx);
+		return await ctx.db.query("models").collect();
+	},
+});
+
+export const createModel = mutation({
+	args: {
+		id: v.string(),
+		name: v.string(),
+		description: v.optional(v.string()),
+		nsfw: v.boolean(),
+	},
+	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
+		const { id, name, description, nsfw } = args;
+		return await ctx.db.insert("models", {
+			id,
+			name,
+			description,
+			nsfw,
+		});
+	},
+});
+
+export const updateModel = mutation({
+	args: {
+		id: v.id("models"),
+		name: v.string(),
+		description: v.optional(v.string()),
+		nsfw: v.boolean(),
+	},
+	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
+		const { id, name, description, nsfw } = args;
+		await ctx.db.patch(id, { name, description, nsfw });
+	},
+});
+
+export const deleteModel = mutation({
+	args: {
+		id: v.id("models"),
+	},
+	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
+		await ctx.db.delete(args.id);
+	},
 });
