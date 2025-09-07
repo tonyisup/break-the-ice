@@ -1,20 +1,21 @@
 import { useQuery } from 'convex/react';
-import { 
-  HelpCircle, 
-  GitBranch, 
-  Clock, 
-  Anchor, 
-  Zap, 
-  Shuffle, 
-  List, 
-  Heart, 
-  Box, 
-  MessageCircle, 
-  Type, 
-  Award, 
-  TrendingUp, 
-  Smile, 
-  GitPullRequest 
+import {
+  HelpCircle,
+  GitBranch,
+  Clock,
+  Anchor,
+  Zap,
+  Shuffle,
+  List,
+  Heart,
+  Box,
+  MessageCircle,
+  Type,
+  Award,
+  TrendingUp,
+  Smile,
+  GitPullRequest,
+  BowArrow
 } from 'lucide-react';
 import { api } from '../../../convex/_generated/api';
 
@@ -33,7 +34,8 @@ const iconMap = {
   Award,
   TrendingUp,
   Smile,
-  GitPullRequest
+  GitPullRequest,
+  BowArrow
 };
 
 interface StyleSelectorProps {
@@ -43,9 +45,22 @@ interface StyleSelectorProps {
 
 export function StyleSelector({ selectedStyle, onSelectStyle }: StyleSelectorProps) {
   const styles = useQuery(api.styles.getStyles);
-  
+
+  const handleRandomStyle = () => {
+    if (!styles) return;
+    const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+    onSelectStyle(randomStyle.id);
+  };
+
   return (
     <div className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide">
+
+      <button
+        onClick={handleRandomStyle}
+        className="flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+      >
+        <Shuffle size={20} />
+      </button>
       {styles && styles.map((style) => {
         const Icon = iconMap[style.icon as keyof typeof iconMap];
         const isSelected = selectedStyle === style.id;
@@ -54,16 +69,15 @@ export function StyleSelector({ selectedStyle, onSelectStyle }: StyleSelectorPro
           <button
             key={style.id}
             onClick={() => onSelectStyle(style.id)}
-            className={`flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 ${
-              isSelected 
-                ? 'text-white shadow-lg' 
+            className={`flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 ${isSelected
+                ? 'text-white shadow-lg'
                 : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-            }`}
+              }`}
             style={
-              isSelected 
+              isSelected
                 ? {
-                    backgroundColor: style.color
-                  }
+                  backgroundColor: style.color
+                }
                 : {}
             }
           >

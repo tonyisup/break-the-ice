@@ -16,6 +16,8 @@ import {
   Zap,
   Archive,
   EyeOff,
+  Shuffle,
+  BowArrow,
 } from 'lucide-react';
 import { api } from '../../../convex/_generated/api';
 
@@ -36,6 +38,7 @@ const iconMap = {
   Zap,          // quick-energizer
   Archive,      // nostalgic
   EyeOff,       // mysterious-intriguing
+  BowArrow
 };
 
 
@@ -47,8 +50,21 @@ interface ToneSelectorProps {
 export function ToneSelector({ selectedTone, onSelectTone }: ToneSelectorProps) {
   const tones = useQuery(api.tones.getTones);
   
+  const handleRandomTone = () => {
+    if (!tones) return;
+    const randomTone = tones[Math.floor(Math.random() * tones.length)];
+    onSelectTone(randomTone.id);
+  };
+
   return (
     <div className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide">
+      
+      <button
+        onClick={handleRandomTone}
+        className="flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+      >
+        <Shuffle size={20} />
+      </button>
       {tones && tones.map((tone) => {
         const Icon = iconMap[tone.icon as keyof typeof iconMap];
         const isSelected = selectedTone === tone.id;

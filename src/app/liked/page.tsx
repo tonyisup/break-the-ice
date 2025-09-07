@@ -1,7 +1,6 @@
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
-import CardShuffleLoader from "../../components/card-shuffle-loader/card-shuffle-loader";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
 import { useLocalStorage } from "../../hooks/useLocalStorage";

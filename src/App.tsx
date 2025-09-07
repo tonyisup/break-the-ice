@@ -1,10 +1,9 @@
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Doc, Id } from "../convex/_generated/dataModel";
 import { ModernQuestionCard } from "./components/modern-question-card";
-import { CategorySelector } from "./components/category-selector";
 import { AIQuestionGenerator } from "./components/ai-question-generator/ai-question-generator";
 // import { DebugPanel } from "./components/debug-panel/debug-panel";
 import { Link } from "react-router-dom";
@@ -13,7 +12,7 @@ import { AnimatePresence } from "framer-motion";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import { StyleSelector } from "./components/styles-selector";
 import { ToneSelector } from "./components/tone-selector";
-import { ArrowBigRight } from "lucide-react";
+import { ArrowBigRight, Shuffle } from "lucide-react";
 import { cn } from "./lib/utils";
 
 export default function App() {
@@ -33,8 +32,6 @@ export default function App() {
     seen: seenQuestionIds,
   });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
-  const generateAIQuestion = useAction(api.ai.generateAIQuestion);
-  const saveAIQuestion = useMutation(api.questions.saveAIQuestion);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
   const style = useQuery(api.styles.getStyle, { id: selectedStyle });
   const tone = useQuery(api.tones.getTone, { id: selectedTone });
@@ -56,39 +53,7 @@ export default function App() {
     });
   }, [nextQuestions, selectedStyle, selectedTone]);
 
-  useEffect(() => {
-    if (
-      nextQuestions &&
-      nextQuestions.length === 0 &&
-      !isGenerating
-    ) {
-      setIsGenerating(true);
-      toast.info("No more questions in this category. Generating a new one...");
-      generateAIQuestion({
-        style: selectedStyle,
-        tone: selectedTone,
-        currentQuestion: currentQuestions.at(-1)?.text,
-        selectedTags: [],
-      }).then((newQuestion) => {
-        if (newQuestion) {
-          setCurrentQuestions((prev) => [newQuestion, ...prev]);
-        }
-      }).catch((error) => {
-        console.error("Error generating AI question:", error);
-        toast.error("Failed to generate AI question. Please try again.");
-        setIsGenerating(false);
-      });
-    }
-  }, [
-    nextQuestions,
-    isGenerating,
-    generateAIQuestion,
-    saveAIQuestion,
-    selectedStyle,
-    selectedTone,
-    currentQuestions,
-  ]);
-
+  
   // Reset start time when category changes
   useEffect(() => {
     setStartTime(Date.now());
@@ -145,6 +110,11 @@ export default function App() {
       void handleDiscard(currentQuestions[0]._id as Id<"questions">);
     }
   };
+  const handleShuffleStyleAndTone = () => {
+
+    setSelectedStyle(selectedStyle === "open-ended" ? "closed-ended" : "open-ended");
+    setSelectedTone(selectedTone === "fun-silly" ? "serious-formal" : "fun-silly");
+  };
 
   const currentQuestion = currentQuestions[0] || null;
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
@@ -172,12 +142,6 @@ export default function App() {
           >
             ❤️ Liked Questions
           </Link>
-          {/* <button
-            onClick={() => setShowAIGenerator(true)}
-            className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white", isFavorite && "bg-white/20 dark:bg-white/20")}
-          >
-            🤖 AI Generator
-          </button> */}
         </div>
         <button
           onClick={toggleTheme}
@@ -195,6 +159,7 @@ export default function App() {
         <div className="flex-1 flex items-center justify-center px-5 pb-8">
 
           <ModernQuestionCard
+            isGenerating={isGenerating}
             question={currentQuestion}
             isFavorite={isFavorite}
             gradient={gradient}
@@ -219,16 +184,8 @@ export default function App() {
           onSelectTone={setSelectedTone}
         />
 
-        {isGenerating && (
-          <div className="flex-1 flex items-center justify-center px-5 h-full">
-            <div className="text-center">
-              <div className="text-white text-lg">Generating question...</div>
-            </div>
-          </div>
-        )}
-
         {!isGenerating && (
-          <div className="flex justify-center">
+          <div className="flex justify-center gap-4">
             <button
               onClick={generateNewQuestion}
               className="bg-black/20 dark:bg-white/20 px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
