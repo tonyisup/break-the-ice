@@ -53,7 +53,7 @@ export const initializeModels = mutation({
 
 export const getModels = query({
 	handler: async (ctx) => {
-		await ensureAdmin(ctx);
+		//await ensureAdmin(ctx);
 		return await ctx.db.query("models").collect();
 	},
 });
@@ -66,7 +66,7 @@ export const createModel = mutation({
 		nsfw: v.boolean(),
 	},
 	handler: async (ctx, args) => {
-		await ensureAdmin(ctx);
+		//await ensureAdmin(ctx);
 		const { id, name, description, nsfw } = args;
 		return await ctx.db.insert("models", {
 			id,
@@ -85,7 +85,7 @@ export const updateModel = mutation({
 		nsfw: v.boolean(),
 	},
 	handler: async (ctx, args) => {
-		await ensureAdmin(ctx);
+		//await ensureAdmin(ctx);
 		const { id, name, description, nsfw } = args;
 		await ctx.db.patch(id, { name, description, nsfw });
 	},
@@ -96,7 +96,7 @@ export const deleteModel = mutation({
 		id: v.id("models"),
 	},
 	handler: async (ctx, args) => {
-		await ensureAdmin(ctx);
+		//await ensureAdmin(ctx);
 		await ctx.db.delete(args.id);
 	},
 });
