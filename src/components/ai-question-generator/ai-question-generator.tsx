@@ -4,7 +4,6 @@ import { api } from "../../../convex/_generated/api";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Doc } from "../../../convex/_generated/dataModel";
-import { categories } from "../category-selector/category-selector";
 
 interface AIQuestionGeneratorProps {
   onQuestionGenerated: (question: Doc<"questions">) => void;
@@ -14,12 +13,14 @@ interface AIQuestionGeneratorProps {
 type GeneratedQuestion = {
   text: string;
   tags: string[];
-  promptUsed: string;
 };
 
 export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestionGeneratorProps) => {
+  const categories = useQuery(api.categories.getCategories);
+  const models = useQuery(api.models.getModels);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>(categories[0].id);
+  const [selectedCategory, setSelectedCategory] = useState<string>(categories?.[0]?.id || "random");
+  const [selectedModel, setSelectedModel] = useState<string>("mistralai/mistral-nemo");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [expandedTagCategories, setExpandedTagCategories] = useState<Set<string>>(new Set());
@@ -29,21 +30,25 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
   const saveAIQuestion = useMutation(api.questions.saveAIQuestion);
   const initializeTags = useMutation(api.tags.initializeTags);
-
+  const initializeModels = useMutation(api.models.initializeModels);
+  const initializeCategories = useMutation(api.categories.initializeCategories);
   // Initialize tags if they don't exist
   useEffect(() => {
     if (tags && tags.length === 0) {
-      initializeTags();
+      void initializeTags();
     }
   }, [tags, initializeTags]);
+  useEffect(() => {
+    if (models && models.length === 0) {
+      void initializeModels();
+    }
+  }, [models, initializeModels]);
 
-  // Expand all categories by default
-  // useEffect(() => {
-  //   if (tags && tags.length > 0) {
-  //     const categories = Array.from(new Set(tags.map(tag => tag.category)));
-  //     setExpandedCategories(new Set(categories));
-  //   }
-  // }, [tags]);
+  useEffect(() => {
+    if (categories && categories.length === 0) {
+      void initializeCategories();
+    }
+  }, [categories, initializeCategories]);
 
   const handleTagToggle = (tagName: string) => {
     setSelectedTags(prev => 
@@ -88,6 +93,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
         selectedTags,
         currentQuestion: previewQuestion ? previewQuestion.text : undefined,
         category: selectedCategory,
+        model: selectedModel,
       });
       setPreviewQuestion(generatedQuestion as GeneratedQuestion);
       toast.success("Preview generated. Review and accept or try another.");
@@ -108,7 +114,6 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
       const newQuestion = await saveAIQuestion({
         text: previewQuestion.text,
         tags: previewQuestion.tags,
-        promptUsed: previewQuestion.promptUsed,
         category: selectedCategory,
       });
       toast.success("AI question saved!");
@@ -159,7 +164,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
               Select a question style:
             </h3>
             <div className="flex flex-wrap gap-2">
-              {categories.map(category => (
+              {categories?.map(category => (
                 <button
                   key={category.id}
                   onClick={() => setSelectedCategory(category.id)}
@@ -303,12 +308,34 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                   </p>
                 </div>
               )}
+
+
+<div className="mb-6">
+            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
+              Select a model:
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {models?.map(model => (
+                <button
+                  key={model.id}
+                  onClick={() => setSelectedModel(model.id)}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                    selectedModel === model.id
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                  }`}
+                >
+                  {model.name}
+                </button>
+              ))}
+            </div>
+          </div>
               
               <div className="flex gap-3">
                 {previewQuestion ? (
                   <>
                     <button
-                      onClick={handleAcceptQuestion}
+                      onClick={() => void handleAcceptQuestion()}
                       disabled={isSaving}
                       className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:cursor-not-allowed"
                     >
@@ -322,7 +349,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                       )}
                     </button>
                     <button
-                      onClick={handleGenerateQuestion}
+                      onClick={() => void handleGenerateQuestion()}
                       disabled={isGenerating || selectedTags.length === 0}
                       className="px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 font-medium rounded-lg transition-colors disabled:cursor-not-allowed"
                     >
@@ -345,7 +372,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                 ) : (
                   <>
                     <button
-                      onClick={handleGenerateQuestion}
+                      onClick={() => void handleGenerateQuestion()}
                       disabled={isGenerating || selectedTags.length === 0}
                       className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:cursor-not-allowed"
                     >

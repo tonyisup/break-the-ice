@@ -4,7 +4,10 @@ import { api } from '../../../convex/_generated/api';
 import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { useTheme } from '../../hooks/useTheme';
-import { categories } from '../../components/category-selector/category-selector';
+import { Link } from 'react-router-dom';
+import { HouseIcon } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { AIQuestionGenerator } from '../../components/ai-question-generator/ai-question-generator';
 
 const AdminPage: React.FC = () => {
   return (
@@ -35,15 +38,17 @@ function AdminComponentWrapper() {
 }
 function AdminComponent() {
   const questions = useQuery(api.questions.getQuestions);
+  const categories = useQuery(api.categories.getCategories);
   const createQuestion = useMutation(api.questions.createQuestion);
   const updateQuestion = useMutation(api.questions.updateQuestion);
   const deleteQuestion = useMutation(api.questions.deleteQuestion);
   const { theme, setTheme } = useTheme();
-  const selectorCategories = categories.filter(category => !category.hidden);
+  const selectorCategories = categories?.filter(category => !category.hidden);
   const [newQuestionText, setNewQuestionText] = useState('');
   const [newQuestionCategory, setNewQuestionCategory] = useState('');
   const [editingQuestion, setEditingQuestion] = useState<Doc<"questions"> | null>(null);
   const [searchText, setSearchText] = useState('');
+  const [showAIGenerator, setShowAIGenerator] = useState(false);
 
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');
@@ -83,7 +88,16 @@ function AdminComponent() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Admin Portal</h1>
+          <Link to="/" className="text-gray-500 flex items-center gap-2 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors text-sm sm:text-base">
+            <HouseIcon />
+            Home
+          </Link>
+          <button
+            onClick={() => setShowAIGenerator(true)}
+            className="p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors text-white"
+          >
+            🤖 AI Generator
+          </button>
           <div className="flex items-center gap-4">
             <button
               onClick={toggleTheme}
@@ -99,7 +113,7 @@ function AdminComponent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
               )}
-            </button>            
+            </button>
             <div className="p-2">
               <UserButton />
             </div>
@@ -268,6 +282,15 @@ function AdminComponent() {
           </div>
         </div>
       </div>
+      
+      <AnimatePresence>
+        {showAIGenerator && (
+          <AIQuestionGenerator
+            onQuestionGenerated={() => setShowAIGenerator(false)}
+            onClose={() => setShowAIGenerator(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -3,18 +3,18 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import OpenAI from "openai";
+import { api } from "./_generated/api";
 
-const openai = new OpenAI();
+const openai = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: process.env.OPEN_ROUTER_API_KEY,
+  defaultHeaders: {
+    'HTTP-Referer': 'https://breaktheiceberg.com', 
+    'X-Title': 'Break the ice(berg)', 
+  },
+});
 
-const categoryPromptMap: Record<string, string> = {
-  fun: "The question should be light-hearted and funny. Ideal for parties and social gatherings.",
-  deep: "The question should be personal and thought-provoking. Ideal for introspection and self-discovery.",
-  professional: "The question should be about work and career. Safe for work. Ideal for work events and networking.",
-  wouldYouRather: "The question should be in the style of would-you-rather questions. It must be in the format of 'would you rather ____ or ____'. It may also be in the format of 'If you could _____, would you rather ____ or ____'.",
-  thisOrThat: "The question should be short and concise and in the style of this-or-that questions. It must be in the format of '____ or ____'.",
-  crossfit: "The question should be in the style of question-of-the-day questions for CrossFit. Ideal for CrossFit enthusiasts.",
-  random: "The question can be in any style in (fun, deep, professional, wouldYouRather, thisOrThat, crossfit).",
-}
+
 
 // Generate an AI question based on selected tags
 export const generateAIQuestion = action({
@@ -22,20 +22,20 @@ export const generateAIQuestion = action({
     selectedTags: v.array(v.string()),
     currentQuestion: v.optional(v.string()),
     category: v.optional(v.string()),
+    model: v.optional(v.string()),
   },
   returns: v.object({
     text: v.string(),
     tags: v.array(v.string()),
-    promptUsed: v.string(),
     category: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
-    const { selectedTags, currentQuestion, category } = args;
+    const { selectedTags, currentQuestion, category, model } = args;
 
     let prompt = "Generate an ice-breaker question that would be perfect for starting conversations in a group setting. ";
-
+    const categories = await ctx.runQuery(api.categories.getCategories);
     if (category) {
-      prompt += categoryPromptMap[category];
+      prompt += categories.find(q => q.id === category)?.prompt ?? "";
     }
     if (currentQuestion) {
       prompt += `The question should be different from the following: ${currentQuestion}. `;
@@ -48,7 +48,7 @@ export const generateAIQuestion = action({
 
     try {
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: model ?? "mistralai/mistral-nemo",
         messages: [
           {
             role: "system",
@@ -72,7 +72,6 @@ export const generateAIQuestion = action({
       return {
         text: generatedQuestion,
         tags: selectedTags,
-        promptUsed: prompt,
         category,
       };
     } catch (error) {

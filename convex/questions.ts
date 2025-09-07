@@ -3,7 +3,6 @@ import { mutation, query, QueryCtx } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { api } from "./_generated/api";
 
-
 export const discardQuestion = mutation({
   args: {
     questionId: v.id("questions"),
@@ -129,18 +128,16 @@ export const getQuestionsByIds = query({
 export const saveAIQuestion = mutation({
   args: {
     text: v.string(),
-    tags: v.array(v.string()),
-    promptUsed: v.string(),
+    tags: v.array(v.string()),  
     category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { text, tags, promptUsed, category } = args;
+    const { text, tags, category } = args;
     const oldestQuestion = await getOldestQuestion(ctx);
     const lastShownAt = oldestQuestion ? oldestQuestion[0]?.lastShownAt ?? 0 : 0;
     const id = await ctx.db.insert("questions", {
       text,
       tags,
-      promptUsed,
       category,
       isAIGenerated: true,
       // Seed lastShownAt with a small negative value so it is included

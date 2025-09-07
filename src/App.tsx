@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Doc, Id } from "../convex/_generated/dataModel";
 import { ModernQuestionCard } from "./components/modern-question-card";
-import { CategorySelector, categories } from "./components/category-selector";
+import { CategorySelector } from "./components/category-selector";
 import { AIQuestionGenerator } from "./components/ai-question-generator/ai-question-generator";
 // import { DebugPanel } from "./components/debug-panel/debug-panel";
 import { Link } from "react-router-dom";
@@ -30,6 +30,7 @@ export default function App() {
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
   const saveAIQuestion = useMutation(api.questions.saveAIQuestion);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
+  const categories = useQuery(api.categories.getCategories);
 
   useEffect(() => {
     if (!nextQuestions || nextQuestions.length === 0) return;
@@ -72,7 +73,15 @@ export default function App() {
             setCurrentQuestions((prev) => [newQuestionDoc, ...prev]);
           }
           setIsGenerating(false);
+        }).catch((error) => {
+          console.error("Error saving AI question:", error);
+          toast.error("Failed to save AI question. Please try again.");
+          setIsGenerating(false);
         });
+      }).catch((error) => {
+        console.error("Error generating AI question:", error);
+        toast.error("Failed to generate AI question. Please try again.");
+        setIsGenerating(false);
       });
     }
   }, [
@@ -100,8 +109,8 @@ export default function App() {
     setCurrentQuestions(prev => prev.filter(question => question._id !== questionId));
     const getMore = currentQuestions.length == 0;
     setIsGenerating(getMore);
-    discardQuestion({
-      questionId: questionId as Id<"questions">,
+    void discardQuestion({
+      questionId,
       startTime,
       category: getMore ? selectedCategory : undefined
     });
@@ -136,13 +145,13 @@ export default function App() {
   const generateNewQuestion = () => {
     setStartTime(Date.now());
     if (currentQuestions.length > 0) {
-      handleDiscard(currentQuestions[0]._id as Id<"questions">);
+      void handleDiscard(currentQuestions[0]._id as Id<"questions">);
     }
   };
 
   const currentQuestion = currentQuestions[0] || null;
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
-  const category = categories.find(c => c.id === selectedCategory);
+  const category = categories?.find(c => c.id === selectedCategory);
   const gradient = category?.gradient || ['#667EEA', '#764BA2'];
   const gradientTarget = theme === "dark" ? "#000" : "#fff";
 
@@ -201,11 +210,11 @@ export default function App() {
           <ModernQuestionCard
             question={currentQuestion}
             isFavorite={isFavorite}
-            onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
+            onToggleFavorite={() => currentQuestion && void toggleLike(currentQuestion._id)}
             onNewQuestion={generateNewQuestion}
             onShare={() => {
               if (currentQuestion && navigator.share) {
-                navigator.share({
+                void navigator.share({
                   title: 'Ice Breaker Question',
                   text: currentQuestion.text,
                 });

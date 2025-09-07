@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowBigRight, Heart, RefreshCcwDotIcon, Share2 } from 'lucide-react';
+import { ArrowBigRight, Heart, Share2 } from 'lucide-react';
 import { Doc } from '../../../convex/_generated/dataModel';
-import { categories } from '../category-selector/category-selector';
+import { api } from '../../../convex/_generated/api';
+import { useQuery } from 'convex/react';
 
 interface ModernQuestionCardProps {
   question: Doc<"questions"> | null;
@@ -20,7 +21,7 @@ export function ModernQuestionCard({
   onShare
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
-
+  const categories = useQuery(api.categories.getCategories);
   if (!question) return null;
 
   const defaultCategory = {
@@ -33,17 +34,17 @@ export function ModernQuestionCard({
   };
 
   // Use the question's category or fall back to a default
-  const category = categories.find(c => c.id === question.category) ||
-                   categories.find(c => c.id === 'deep') ||
-                   categories[0] ||
+  const category = categories?.find(c => c.id === question.category) ||
+                   categories?.find(c => c.id === 'deep') ||
+                   categories?.[0] ||
                    defaultCategory;
   const gradient = category.gradient;
 
-  const handleShare = async () => {
+  const handleShare = () => {
     if (!question || !navigator.share) return;
 
     try {
-      await navigator.share({
+      void navigator.share({
         title: 'Ice Breaker Question',
         text: question.text,
       });
