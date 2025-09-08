@@ -40,13 +40,15 @@ const QuestionsPage: React.FC = () => {
 function QuestionManager() {
     const questions = useQuery(api.questions.getQuestions);
     const categories = useQuery(api.categories.getCategories);
+    const styles = useQuery(api.styles.getStyles);
+    const tones = useQuery(api.tones.getTones);
     const createQuestion = useMutation(api.questions.createQuestion);
     const updateQuestion = useMutation(api.questions.updateQuestion);
     const deleteQuestion = useMutation(api.questions.deleteQuestion);
     const { theme, setTheme } = useTheme();
-    const selectorCategories = categories?.filter(category => !category.hidden);
     const [newQuestionText, setNewQuestionText] = useState('');
-    const [newQuestionCategory, setNewQuestionCategory] = useState('');
+    const [newQuestionStyle, setNewQuestionStyle] = useState('open-ended');
+    const [newQuestionTone, setNewQuestionTone] = useState('fun-silly');
     const [editingQuestion, setEditingQuestion] = useState<Doc<"questions"> | null>(null);
     const [searchText, setSearchText] = useState('');
     const [showAIGenerator, setShowAIGenerator] = useState(false);
@@ -59,10 +61,12 @@ function QuestionManager() {
       if (newQuestionText.trim()) {
         void createQuestion({
           text: newQuestionText,
-          category: newQuestionCategory || undefined
+          style: newQuestionStyle,
+          tone: newQuestionTone,
         });
         setNewQuestionText('');
-        setNewQuestionCategory('');
+        setNewQuestionStyle('open-ended');
+        setNewQuestionTone('fun-silly');
       }
     };
 
@@ -71,7 +75,8 @@ function QuestionManager() {
         void updateQuestion({
           id: editingQuestion._id,
           text: editingQuestion.text,
-          category: editingQuestion.category || undefined
+          style: editingQuestion.style || undefined,
+          tone: editingQuestion.tone || undefined,
         });
         setEditingQuestion(null);
       }
@@ -131,19 +136,39 @@ function QuestionManager() {
                 className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter new question text"
               />
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Style
+                </label>
                 <select
-                  value={newQuestionCategory}
-                  onChange={(e) => setNewQuestionCategory(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:w-1/2"
+                  value={newQuestionStyle}
+                  onChange={(e) => setNewQuestionStyle(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="">Select a category (optional)</option>
-                  {selectorCategories?.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
+                  {styles?.map((style) => (
+                    <option key={style.id} value={style.id}>
+                      {style.name}
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Tone
+                </label>
+                <select
+                  value={newQuestionTone}
+                  onChange={(e) => setNewQuestionTone(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {tones?.map((tone) => (
+                    <option key={tone.id} value={tone.id}>
+                      {tone.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleCreateQuestion}
                   className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
@@ -175,7 +200,7 @@ function QuestionManager() {
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Questions</h2>
             </div>
             {/* Mobile View */}
-            <div className="md:hidden">
+            <div className="lg:hidden">
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {questions?.filter(q => q.text.toLowerCase().includes(searchText.toLowerCase()))?.map((q) => (
                   <div key={q._id} className="p-4 space-y-3">
@@ -188,14 +213,26 @@ function QuestionManager() {
                           rows={3}
                         />
                         <select
-                          value={editingQuestion.category || ''}
-                          onChange={(e) => setEditingQuestion({ ...editingQuestion, category: e.target.value || undefined })}
+                          value={editingQuestion.style ?? ''}
+                          onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
                           className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                          <option value="">No category</option>
-                          {selectorCategories?.map((category) => (
-                            <option key={category.id} value={category.id}>
-                              {category.name}
+                          <option value="">Select a style</option>
+                          {styles?.map((style) => (
+                            <option key={style.id} value={style.id}>
+                              {style.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={editingQuestion.tone ?? ''}
+                          onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
+                          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Select a tone</option>
+                          {tones?.map((tone) => (
+                            <option key={tone.id} value={tone.id}>
+                              {tone.name}
                             </option>
                           ))}
                         </select>
@@ -207,7 +244,12 @@ function QuestionManager() {
                     ) : (
                       <div className="space-y-2">
                         <p className="text-gray-900 dark:text-white">{q.text}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{q.category || 'No category'}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Style: {q.style || 'No style'}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Tone: {q.tone || 'No tone'}
+                        </p>
                         <div className="flex gap-2 pt-2">
                           <button onClick={() => setEditingQuestion(q)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Edit</button>
                           <button onClick={() => handleDeleteQuestion(q._id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Delete</button>
@@ -219,13 +261,14 @@ function QuestionManager() {
               </div>
             </div>
             {/* Desktop View */}
-            <div className="hidden md:block overflow-x-auto">
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/2">Question</th>
-                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Category</th>
-                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Actions</th>
+                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/3">Question</th>
+                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/6">Style</th>
+                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/6">Tone</th>
+                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/6">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -246,20 +289,40 @@ function QuestionManager() {
                       <td className="p-4 align-top">
                         {editingQuestion?._id === q._id ? (
                           <select
-                            value={editingQuestion.category || ''}
-                            onChange={(e) => setEditingQuestion({ ...editingQuestion, category: e.target.value || undefined })}
+                            value={editingQuestion.style ?? ''}
+                            onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
                             className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           >
-                            <option value="">No category</option>
-                            {selectorCategories?.map((category) => (
-                              <option key={category.id} value={category.id}>
-                                {category.name}
+                            <option value="">Select a style</option>
+                            {styles?.map((style) => (
+                              <option key={style.id} value={style.id}>
+                                {style.name}
                               </option>
                             ))}
                           </select>
                         ) : (
                           <span className="text-gray-600 dark:text-gray-400">
-                            {q.category || <em>No category</em>}
+                            {q.style || <em>No style</em>}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-4 align-top">
+                        {editingQuestion?._id === q._id ? (
+                          <select
+                            value={editingQuestion.tone ?? ''}
+                            onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
+                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="">Select a tone</option>
+                            {tones?.map((tone) => (
+                              <option key={tone.id} value={tone.id}>
+                                {tone.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-gray-600 dark:text-gray-400">
+                            {q.tone || <em>No tone</em>}
                           </span>
                         )}
                       </td>

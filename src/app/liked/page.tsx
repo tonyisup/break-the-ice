@@ -65,6 +65,7 @@ function LikedQuestionsPageContent() {
             <ModernQuestionCard
               key={question._id}
               question={question}
+              isGenerating={false}
               isFavorite={true}
               onToggleFavorite={() => handleRemoveFavorite(question._id)}
             />

@@ -132,7 +132,7 @@ export default function App() {
     <div
       className="min-h-screen transition-colors overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradientTarget}, ${gradientTarget})`
+        background: `linear-gradient(135deg, ${gradientTarget}, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
       }}
     >
       {/* Header */}
