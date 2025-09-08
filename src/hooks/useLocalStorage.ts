@@ -10,15 +10,27 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
       if (!item) {
         return initialValue;
       }
-      const value = JSON.parse(item);
+      let value = JSON.parse(item);
+
+      // Backwards compatibility for liked questions.
+      // If the user has an old version of the "liked" list, it will be an array of objects.
+      // The new version is an array of strings (the question IDs).
+      // This code checks for the old format and migrates it to the new format.
+      if (key === "likedQuestions" && Array.isArray(value) && value.length > 0 && typeof value[0] === "object" && value[0] !== null && "_id" in value[0]) {
+        console.log("Old 'likedQuestions' format detected. Migrating...");
+        value = value.map((item: any) => item._id);
+        window.localStorage.setItem(key, JSON.stringify(value));
+        console.log("Migration complete. New value:", value);
+      }
       // If initialValue is an array, ensure the stored value is also an array.
       // This prevents crashes if the data in localStorage is corrupted.
       if (Array.isArray(initialValue) && !Array.isArray(value)) {
+        console.log("Data in localStorage is corrupted. Returning initial value.");
         return initialValue;
       }
       return value;
     } catch (error) {
-      console.error(error);
+      console.error("Error reading from localStorage", error);
       return initialValue;
     }
   });
