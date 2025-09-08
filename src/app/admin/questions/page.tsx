@@ -8,8 +8,6 @@ import { Link } from 'react-router-dom';
 import { HouseIcon } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { AIQuestionGenerator } from '../../../components/ai-question-generator/ai-question-generator';
-import { StyleSelector } from '../../../components/styles-selector';
-import { ToneSelector } from '../../../components/tone-selector';
 
 const QuestionsPage: React.FC = () => {
     return (
@@ -42,13 +40,13 @@ const QuestionsPage: React.FC = () => {
 function QuestionManager() {
     const questions = useQuery(api.questions.getQuestions);
     const categories = useQuery(api.categories.getCategories);
+    const styles = useQuery(api.styles.getStyles);
+    const tones = useQuery(api.tones.getTones);
     const createQuestion = useMutation(api.questions.createQuestion);
     const updateQuestion = useMutation(api.questions.updateQuestion);
     const deleteQuestion = useMutation(api.questions.deleteQuestion);
     const { theme, setTheme } = useTheme();
-    const selectorCategories = categories?.filter(category => !category.hidden);
     const [newQuestionText, setNewQuestionText] = useState('');
-    const [newQuestionCategory, setNewQuestionCategory] = useState('');
     const [newQuestionStyle, setNewQuestionStyle] = useState('open-ended');
     const [newQuestionTone, setNewQuestionTone] = useState('fun-silly');
     const [editingQuestion, setEditingQuestion] = useState<Doc<"questions"> | null>(null);
@@ -67,7 +65,6 @@ function QuestionManager() {
           tone: newQuestionTone,
         });
         setNewQuestionText('');
-        setNewQuestionCategory('');
         setNewQuestionStyle('open-ended');
         setNewQuestionTone('fun-silly');
       }
@@ -143,19 +140,33 @@ function QuestionManager() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Style
                 </label>
-                <StyleSelector
-                  selectedStyle={newQuestionStyle}
-                  onSelectStyle={setNewQuestionStyle}
-                />
+                <select
+                  value={newQuestionStyle}
+                  onChange={(e) => setNewQuestionStyle(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {styles?.map((style) => (
+                    <option key={style.id} value={style.id}>
+                      {style.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Tone
                 </label>
-                <ToneSelector
-                  selectedTone={newQuestionTone}
-                  onSelectTone={setNewQuestionTone}
-                />
+                <select
+                  value={newQuestionTone}
+                  onChange={(e) => setNewQuestionTone(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {tones?.map((tone) => (
+                    <option key={tone.id} value={tone.id}>
+                      {tone.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
@@ -189,7 +200,7 @@ function QuestionManager() {
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Questions</h2>
             </div>
             {/* Mobile View */}
-            <div className="md:hidden">
+            <div className="lg:hidden">
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {questions?.filter(q => q.text.toLowerCase().includes(searchText.toLowerCase()))?.map((q) => (
                   <div key={q._id} className="p-4 space-y-3">
@@ -202,25 +213,27 @@ function QuestionManager() {
                           rows={3}
                         />
                         <select
-                          value={editingQuestion.category || ''}
-                          onChange={(e) => setEditingQuestion({ ...editingQuestion, category: e.target.value || undefined })}
+                          value={editingQuestion.style ?? ''}
+                          onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
                           className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                          <option value="">No category</option>
-                          {selectorCategories?.map((category) => (
-                            <option key={category.id} value={category.id}>
-                              {category.name}
+                          {styles?.map((style) => (
+                            <option key={style.id} value={style.id}>
+                              {style.name}
                             </option>
                           ))}
                         </select>
-                        <StyleSelector
-                          selectedStyle={editingQuestion.style ?? ''}
-                          onSelectStyle={(style) => setEditingQuestion({ ...editingQuestion, style: style })}
-                        />
-                        <ToneSelector
-                          selectedTone={editingQuestion.tone ?? ''}
-                          onSelectTone={(tone) => setEditingQuestion({ ...editingQuestion, tone: tone })}
-                        />
+                        <select
+                          value={editingQuestion.tone ?? ''}
+                          onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
+                          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          {tones?.map((tone) => (
+                            <option key={tone.id} value={tone.id}>
+                              {tone.name}
+                            </option>
+                          ))}
+                        </select>
                         <div className="flex gap-2">
                           <button onClick={handleUpdateQuestion} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Save</button>
                           <button onClick={() => setEditingQuestion(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Cancel</button>
@@ -246,7 +259,7 @@ function QuestionManager() {
               </div>
             </div>
             {/* Desktop View */}
-            <div className="hidden md:block overflow-x-auto">
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
@@ -273,10 +286,17 @@ function QuestionManager() {
                       </td>
                       <td className="p-4 align-top">
                         {editingQuestion?._id === q._id ? (
-                          <StyleSelector
-                            selectedStyle={editingQuestion.style ?? ''}
-                            onSelectStyle={(style) => setEditingQuestion({ ...editingQuestion, style: style })}
-                          />
+                          <select
+                            value={editingQuestion.style ?? ''}
+                            onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
+                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            {styles?.map((style) => (
+                              <option key={style.id} value={style.id}>
+                                {style.name}
+                              </option>
+                            ))}
+                          </select>
                         ) : (
                           <span className="text-gray-600 dark:text-gray-400">
                             {q.style || <em>No style</em>}
@@ -285,10 +305,17 @@ function QuestionManager() {
                       </td>
                       <td className="p-4 align-top">
                         {editingQuestion?._id === q._id ? (
-                          <ToneSelector
-                            selectedTone={editingQuestion.tone ?? ''}
-                            onSelectTone={(tone) => setEditingQuestion({ ...editingQuestion, tone: tone })}
-                          />
+                          <select
+                            value={editingQuestion.tone ?? ''}
+                            onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
+                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            {tones?.map((tone) => (
+                              <option key={tone.id} value={tone.id}>
+                                {tone.name}
+                              </option>
+                            ))}
+                          </select>
                         ) : (
                           <span className="text-gray-600 dark:text-gray-400">
                             {q.tone || <em>No tone</em>}
