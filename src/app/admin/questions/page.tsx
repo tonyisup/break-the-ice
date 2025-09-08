@@ -63,7 +63,6 @@ function QuestionManager() {
       if (newQuestionText.trim()) {
         void createQuestion({
           text: newQuestionText,
-          category: newQuestionCategory || undefined,
           style: newQuestionStyle,
           tone: newQuestionTone,
         });
@@ -79,7 +78,6 @@ function QuestionManager() {
         void updateQuestion({
           id: editingQuestion._id,
           text: editingQuestion.text,
-          category: editingQuestion.category || undefined,
           style: editingQuestion.style || undefined,
           tone: editingQuestion.tone || undefined,
         });
@@ -160,18 +158,6 @@ function QuestionManager() {
                 />
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
-                <select
-                  value={newQuestionCategory}
-                  onChange={(e) => setNewQuestionCategory(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:w-1/2"
-                >
-                  <option value="">Select a category (optional)</option>
-                  {selectorCategories?.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
                 <button
                   onClick={handleCreateQuestion}
                   className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
@@ -244,9 +230,6 @@ function QuestionManager() {
                       <div className="space-y-2">
                         <p className="text-gray-900 dark:text-white">{q.text}</p>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Category: {q.category || 'No category'}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
                           Style: {q.style || 'No style'}
                         </p>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -268,7 +251,6 @@ function QuestionManager() {
                 <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
                     <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/3">Question</th>
-                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/6">Category</th>
                     <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/6">Style</th>
                     <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/6">Tone</th>
                     <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/6">Actions</th>
@@ -287,26 +269,6 @@ function QuestionManager() {
                           />
                         ) : (
                           <span className="text-gray-900 dark:text-white">{q.text}</span>
-                        )}
-                      </td>
-                      <td className="p-4 align-top">
-                        {editingQuestion?._id === q._id ? (
-                          <select
-                            value={editingQuestion.category || ''}
-                            onChange={(e) => setEditingQuestion({ ...editingQuestion, category: e.target.value || undefined })}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="">No category</option>
-                            {selectorCategories?.map((category) => (
-                              <option key={category.id} value={category.id}>
-                                {category.name}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span className="text-gray-600 dark:text-gray-400">
-                            {q.category || <em>No category</em>}
-                          </span>
                         )}
                       </td>
                       <td className="p-4 align-top">

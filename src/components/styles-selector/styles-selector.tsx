@@ -87,8 +87,10 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
   }));
 
   return (
-    <div ref={containerRef} className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide">
-
+    <div 
+      ref={containerRef} 
+      className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide"
+    >
       <button
         onClick={handleRandomStyle}
         className="flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
