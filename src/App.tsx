@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -22,27 +22,49 @@ export default function App() {
   const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const discardQuestion = useMutation(api.questions.discardQuestion);
-  const [selectedStyle, setSelectedStyle] = useState("open-ended");
-  const [selectedTone, setSelectedTone] = useState("fun-silly");
+  const [selectedStyle, setSelectedStyle] = useState("");
+  const [selectedTone, setSelectedTone] = useState("");
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
-  const nextQuestions = useQuery(api.questions.getNextQuestions, {
-    count: 10,
+  const generateAIQuestion = useAction(api.ai.generateAIQuestion);
+  const discardQuestion = useMutation(api.questions.discardQuestion);
+  const nextQuestions = useQuery(api.questions.getNextQuestions, 
+    (selectedStyle === "" || selectedTone === "") ? "skip" : {
+    count: 1,
     style: selectedStyle,
     tone: selectedTone,
     seen: seenQuestionIds,
   });
+  const style = useQuery(api.styles.getStyle, (selectedStyle === "") ? "skip" : { id: selectedStyle });
+  const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
-  const style = useQuery(api.styles.getStyle, { id: selectedStyle });
-  const tone = useQuery(api.tones.getTone, { id: selectedTone });
 
   useEffect(() => {
-    if (!nextQuestions || nextQuestions.length === 0) return;
-    setIsGenerating(false);
+    if ((selectedStyle !== "" && selectedTone !== "") && (!nextQuestions || nextQuestions.length === 0)) {
+      setIsGenerating(true);
+      generateAIQuestion({
+        selectedTags: [],
+        style: selectedStyle,
+        tone: selectedTone,
+      }).then(question => {
+        setCurrentQuestions((prev) => [question as Doc<"questions">, ...prev]);
+        setIsGenerating(false);
+      });
+    }
+  }, [selectedStyle, selectedTone, nextQuestions]);
+
+  useEffect(() => {
+    if (!nextQuestions || nextQuestions.length === 0) {
+      return;
+    }
 
     setCurrentQuestions(prevQuestions => {
+      // If we have no previous questions (e.g., after style/tone change), just set the new ones
+      if (prevQuestions.length === 0) {
+        return nextQuestions;
+      }
+
       // Only append new questions that we don't already have
       const existingIds = new Set(prevQuestions.map(q => q._id));
       const newQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
@@ -60,6 +82,7 @@ export default function App() {
   useEffect(() => {
     setStartTime(Date.now());
     setSeenQuestionIds([]);
+    setCurrentQuestions([]); // Clear current questions when style/tone changes
   }, [selectedStyle, selectedTone]);
 
   const toggleTheme = () => {

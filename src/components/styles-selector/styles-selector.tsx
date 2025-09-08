@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react';
-import { forwardRef, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import {
   HelpCircle,
   GitBranch,
@@ -43,13 +43,14 @@ const iconMap = {
 
 interface StyleSelectorProps {
   selectedStyle: string;
+  randomOrder?: boolean;
   onSelectStyle: (style: string) => void;
 }
 
 export interface StyleSelectorRef {
   randomizeStyle: () => void;
 }
-export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({ selectedStyle, onSelectStyle }, ref) => {
+export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({ selectedStyle, onSelectStyle, randomOrder = true }, ref) => {
   const styles = useQuery(api.styles.getStyles);
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>('hiddenStyles', []);
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
@@ -59,14 +60,20 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
   };
 
   // Convert styles to the format expected by GenericSelector
-  const selectorItems: SelectorItem[] | undefined = styles
+  const selectorItems: SelectorItem[] | undefined = useMemo(() => styles
     ?.filter(style => !hiddenStyles.includes(style.id))
+    .sort((a, b) => {
+      if (randomOrder) {
+        return Math.random() - 0.5;
+      }
+      return a.name.localeCompare(b.name);
+    })
     .map(style => ({
       id: style.id,
       name: style.name,
       icon: style.icon,
       color: style.color
-    }));
+    })), [styles, hiddenStyles, randomOrder]);
 
   // Expose the randomizeStyle function to parent components
   useImperativeHandle(ref, () => ({
@@ -74,6 +81,12 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
       genericSelectorRef.current?.randomizeItem();
     },
   }));
+
+  useEffect(() => {
+    if (onSelectStyle && selectorItems) {
+      onSelectStyle(selectorItems[0].id);
+    }
+  }, [selectorItems, onSelectStyle]);
 
   return (
     <GenericSelector

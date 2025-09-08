@@ -118,7 +118,7 @@ export const getTones = query({
     color: v.string(),
     icon: v.string(),
   })),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     return await ctx.db.query("tones").order("asc").collect();
   },
 });

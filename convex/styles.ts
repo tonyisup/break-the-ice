@@ -193,7 +193,7 @@ export const getStyles = query({
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
   })),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     return await ctx.db.query("styles").order("asc").collect();
   },
 });
