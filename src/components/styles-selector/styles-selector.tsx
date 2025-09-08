@@ -15,7 +15,8 @@ import {
   TrendingUp,
   Smile,
   GitPullRequest,
-  BowArrow
+  BowArrow,
+  Scale
 } from 'lucide-react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
@@ -35,7 +36,8 @@ const iconMap = {
   TrendingUp,
   Smile,
   GitPullRequest,
-  BowArrow
+  BowArrow,
+  Scale  
 };
 
 interface StyleSelectorProps {

@@ -18,6 +18,7 @@ import {
   Archive,
   EyeOff,
   BowArrow,
+  Activity,
 } from 'lucide-react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
@@ -39,7 +40,8 @@ const iconMap = {
   Zap,          // quick-energizer
   Archive,      // nostalgic
   EyeOff,       // mysterious-intriguing
-  BowArrow
+  BowArrow,
+  Activity
 };
 
 
