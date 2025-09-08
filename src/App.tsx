@@ -41,7 +41,7 @@ export default function App() {
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
   useEffect(() => {
-    if ((selectedStyle !== "" && selectedTone !== "") && (!nextQuestions || nextQuestions.length === 0)) {
+    if ((selectedStyle !== "" && selectedTone !== "") && (!nextQuestions || nextQuestions.length === 0) && !isGenerating) {
       setIsGenerating(true);
       generateAIQuestion({
         selectedTags: [],
@@ -52,7 +52,7 @@ export default function App() {
         setIsGenerating(false);
       });
     }
-  }, [selectedStyle, selectedTone, nextQuestions]);
+  }, [selectedStyle, selectedTone, nextQuestions, isGenerating, generateAIQuestion]);
 
   useEffect(() => {
     if (!nextQuestions || nextQuestions.length === 0) {
