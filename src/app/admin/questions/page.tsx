@@ -90,6 +90,18 @@ function QuestionManager() {
       setSearchText('');
     };
 
+    const filteredQuestions = questions?.filter((q) => {
+        const lowerCaseSearchText = searchText.toLowerCase();
+        const styleName = styles?.find((s) => s.id === q.style)?.name ?? "";
+        const toneName = tones?.find((t) => t.id === q.tone)?.name ?? "";
+
+        return (
+          q.text.toLowerCase().includes(lowerCaseSearchText) ||
+          styleName.toLowerCase().includes(lowerCaseSearchText) ||
+          toneName.toLowerCase().includes(lowerCaseSearchText)
+        );
+      });
+
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
         <div className="max-w-6xl mx-auto">
@@ -185,7 +197,7 @@ function QuestionManager() {
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Search questions..."
+              placeholder="Search questions by text, style, or tone..."
             />
             <button
               onClick={clearSearchText}
@@ -202,7 +214,7 @@ function QuestionManager() {
             {/* Mobile View */}
             <div className="lg:hidden">
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {questions?.filter(q => q.text.toLowerCase().includes(searchText.toLowerCase()))?.map((q) => (
+                {filteredQuestions?.map((q) => (
                   <div key={q._id} className="p-4 space-y-3">
                     {editingQuestion?._id === q._id ? (
                       <div className="space-y-3">
@@ -272,7 +284,7 @@ function QuestionManager() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {questions?.map((q) => (
+                  {filteredQuestions?.map((q) => (
                     <tr key={q._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                       <td className="p-4 align-top">
                         {editingQuestion?._id === q._id ? (
