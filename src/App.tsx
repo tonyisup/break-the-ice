@@ -145,12 +145,20 @@ export default function App() {
             ❤️ Liked Questions
           </Link>
         </div>
-        <button
-          onClick={toggleTheme}
-          className={cn(isColorDark(gradient[1]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white", isFavorite && "bg-white/20 dark:bg-white/20")}
+        <div className="flex items-center gap-2">
+          <Link
+            to="/settings"
+            className={cn(isColorDark(gradient[1]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
           >
-          {theme === "dark" ? "🌞" : "🌙"}
-        </button>
+            ⚙️ Settings
+          </Link>
+          <button
+            onClick={toggleTheme}
+            className={cn(isColorDark(gradient[1]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white", isFavorite && "bg-white/20 dark:bg-white/20")}
+            >
+            {theme === "dark" ? "🌞" : "🌙"}
+          </button>
+        </div>
       </header>
 
       {/* Main Content */}

@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Shuffle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Shuffle, X } from 'lucide-react';
 
 export interface SelectorItem {
   id: string;
@@ -14,6 +14,7 @@ interface GenericSelectorProps {
   onSelectItem: (itemId: string) => void;
   iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>>;
   randomizeLabel?: string;
+  onHideItem?: (itemId: string) => void;
 }
 
 export interface GenericSelectorRef {
@@ -21,9 +22,9 @@ export interface GenericSelectorRef {
 }
 
 export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorProps>(
-  ({ items, selectedItem, onSelectItem, iconMap, randomizeLabel = "Randomize" }, ref) => {
+  ({ items, selectedItem, onSelectItem, iconMap, randomizeLabel = "Randomize", onHideItem }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
+    const buttonRefs = useRef<{ [key: string]: HTMLElement | null }>({});
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(false);
     
@@ -236,30 +237,46 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
             const isSelected = selectedItem === item.id;
 
             return (
-              <button
+              <div
                 key={item.id}
+                className="relative group"
                 ref={(el) => {
                   buttonRefs.current[item.id] = el;
                 }}
-                onClick={() => onSelectItem(item.id)}
-                className={`flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 ${
-                  isSelected
-                    ? 'text-white shadow-lg'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-                style={
-                  isSelected
-                    ? {
-                        backgroundColor: item.color
-                      }
-                    : {}
-                }
               >
-                {Icon && <Icon size={20} />}
-                <span className="text-sm font-semibold whitespace-nowrap">
-                  {item.name}
-                </span>
-              </button>
+                <button
+                  onClick={() => onSelectItem(item.id)}
+                  className={`flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 ${
+                    isSelected
+                      ? 'text-white shadow-lg'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                  style={
+                    isSelected
+                      ? {
+                          backgroundColor: item.color
+                        }
+                      : {}
+                  }
+                >
+                  {Icon && <Icon size={20} />}
+                  <span className="text-sm font-semibold whitespace-nowrap">
+                    {item.name}
+                  </span>
+                </button>
+                {onHideItem && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onHideItem(item.id);
+                    }}
+                    className="absolute -top-1 -right-1 z-20 p-0.5 bg-gray-300 dark:bg-gray-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label={`Hide ${item.name}`}
+                  >
+                    <X size={12} className="text-gray-600 dark:text-gray-300" />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
