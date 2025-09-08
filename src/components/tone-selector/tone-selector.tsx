@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
 
 const iconMap = {
   Smile,        // fun-silly
@@ -56,15 +57,22 @@ export interface ToneSelectorRef {
 
 export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ selectedTone, onSelectTone }, ref) => {
   const tones = useQuery(api.tones.getTones);
+  const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>('hiddenTones', []);
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   
+  const handleHideTone = (toneId: string) => {
+    setHiddenTones(prev => [...new Set([...prev, toneId])]);
+  };
+
   // Convert tones to the format expected by GenericSelector
-  const selectorItems: SelectorItem[] | undefined = tones?.map(tone => ({
-    id: tone.id,
-    name: tone.name,
-    icon: tone.icon,
-    color: tone.color
-  }));
+  const selectorItems: SelectorItem[] | undefined = tones
+    ?.filter(tone => !hiddenTones.includes(tone.id))
+    .map(tone => ({
+      id: tone.id,
+      name: tone.name,
+      icon: tone.icon,
+      color: tone.color
+    }));
 
   // Expose the randomizeTone function to parent components
   useImperativeHandle(ref, () => ({
@@ -79,6 +87,7 @@ export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ se
       items={selectorItems}
       selectedItem={selectedTone}
       onSelectItem={onSelectTone}
+      onHideItem={handleHideTone}
       iconMap={iconMap}
       randomizeLabel="Randomize Tone"
     />
