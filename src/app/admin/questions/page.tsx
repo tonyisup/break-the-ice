@@ -217,6 +217,7 @@ function QuestionManager() {
                           onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
                           className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
+                          <option value="">Select a style</option>
                           {styles?.map((style) => (
                             <option key={style.id} value={style.id}>
                               {style.name}
@@ -228,6 +229,7 @@ function QuestionManager() {
                           onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
                           className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
+                          <option value="">Select a tone</option>
                           {tones?.map((tone) => (
                             <option key={tone.id} value={tone.id}>
                               {tone.name}
@@ -291,6 +293,7 @@ function QuestionManager() {
                             onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
                             className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           >
+                            <option value="">Select a style</option>
                             {styles?.map((style) => (
                               <option key={style.id} value={style.id}>
                                 {style.name}
@@ -310,6 +313,7 @@ function QuestionManager() {
                             onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
                             className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           >
+                            <option value="">Select a tone</option>
                             {tones?.map((tone) => (
                               <option key={tone.id} value={tone.id}>
                                 {tone.name}
