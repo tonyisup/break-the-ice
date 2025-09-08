@@ -37,9 +37,14 @@ function LikedQuestionsPageContent() {
     >
 
       <div className="flex items-center justify-between mb-6 sm:mb-8">
-        <Link to="/" className="text-gray-500 flex items-center gap-2 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors text-sm sm:text-base">
-          <HouseIcon />
-          Home
+        <Link to="/">
+          <button
+            className="flex items-center gap-2 p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors text-white"
+            aria-label="Home"
+          >
+            <HouseIcon /> 
+            Home
+          </button>
         </Link>
         <button
           onClick={toggleTheme}
