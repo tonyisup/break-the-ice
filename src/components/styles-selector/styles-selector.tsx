@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react';
-import { forwardRef, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
 import {
   HelpCircle,
   GitBranch,
@@ -16,7 +16,9 @@ import {
   TrendingUp,
   Smile,
   GitPullRequest,
-  BowArrow
+  BowArrow,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { api } from '../../../convex/_generated/api';
 
@@ -51,6 +53,44 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
   const styles = useQuery(api.styles.getStyles);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  
+  const checkScrollButtons = () => {
+    const container = containerRef.current;
+    if (container) {
+      setCanScrollLeft(container.scrollLeft > 0);
+      setCanScrollRight(container.scrollLeft < container.scrollWidth - container.clientWidth);
+    }
+  };
+
+  const scrollLeft = () => {
+    const container = containerRef.current;
+    if (container) {
+      container.scrollBy({ left: -200, behavior: 'smooth' });
+    }
+  };
+
+  const scrollRight = () => {
+    const container = containerRef.current;
+    if (container) {
+      container.scrollBy({ left: 200, behavior: 'smooth' });
+    }
+  };
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      checkScrollButtons();
+      container.addEventListener('scroll', checkScrollButtons);
+      window.addEventListener('resize', checkScrollButtons);
+      
+      return () => {
+        container.removeEventListener('scroll', checkScrollButtons);
+        window.removeEventListener('resize', checkScrollButtons);
+      };
+    }
+  }, [styles]);
   
   const scrollToCenter = (styleId: string) => {
     const container = containerRef.current;
@@ -87,10 +127,31 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
   }));
 
   return (
-    <div 
-      ref={containerRef} 
-      className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide"
-    >
+    <div className="relative">
+      {/* Left scroll button */}
+      {canScrollLeft && (
+        <button
+          onClick={scrollLeft}
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white dark:bg-gray-900 shadow-lg rounded-full p-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        >
+          <ChevronLeft size={20} className="text-gray-600 dark:text-gray-400" />
+        </button>
+      )}
+      
+      {/* Right scroll button */}
+      {canScrollRight && (
+        <button
+          onClick={scrollRight}
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white dark:bg-gray-900 shadow-lg rounded-full p-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        >
+          <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
+        </button>
+      )}
+      
+      <div 
+        ref={containerRef} 
+        className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide scroll-smooth"
+      >
       <button
         onClick={handleRandomStyle}
         className="flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
@@ -127,6 +188,7 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
           </button>
         );
       })}
+      </div>
     </div>
   );
 });

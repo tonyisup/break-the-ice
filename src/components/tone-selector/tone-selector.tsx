@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react';
-import { useRef, forwardRef, useImperativeHandle } from 'react';
+import { useRef, forwardRef, useImperativeHandle, useState, useEffect } from 'react';
 import { 
   Smile, 
   Brain, 
@@ -19,6 +19,8 @@ import {
   EyeOff,
   Shuffle,
   BowArrow,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { api } from '../../../convex/_generated/api';
 
@@ -56,6 +58,44 @@ export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ se
   const tones = useQuery(api.tones.getTones);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  
+  const checkScrollButtons = () => {
+    const container = containerRef.current;
+    if (container) {
+      setCanScrollLeft(container.scrollLeft > 0);
+      setCanScrollRight(container.scrollLeft < container.scrollWidth - container.clientWidth);
+    }
+  };
+
+  const scrollLeft = () => {
+    const container = containerRef.current;
+    if (container) {
+      container.scrollBy({ left: -200, behavior: 'smooth' });
+    }
+  };
+
+  const scrollRight = () => {
+    const container = containerRef.current;
+    if (container) {
+      container.scrollBy({ left: 200, behavior: 'smooth' });
+    }
+  };
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      checkScrollButtons();
+      container.addEventListener('scroll', checkScrollButtons);
+      window.addEventListener('resize', checkScrollButtons);
+      
+      return () => {
+        container.removeEventListener('scroll', checkScrollButtons);
+        window.removeEventListener('resize', checkScrollButtons);
+      };
+    }
+  }, [tones]);
   
   const scrollToCenter = (toneId: string) => {
     const container = containerRef.current;
@@ -92,7 +132,28 @@ export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ se
   }));
 
   return (
-    <div ref={containerRef} className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide">
+    <div className="relative">
+      {/* Left scroll button */}
+      {canScrollLeft && (
+        <button
+          onClick={scrollLeft}
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white dark:bg-gray-900 shadow-lg rounded-full p-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        >
+          <ChevronLeft size={20} className="text-gray-600 dark:text-gray-400" />
+        </button>
+      )}
+      
+      {/* Right scroll button */}
+      {canScrollRight && (
+        <button
+          onClick={scrollRight}
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white dark:bg-gray-900 shadow-lg rounded-full p-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        >
+          <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
+        </button>
+      )}
+      
+      <div ref={containerRef} className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide scroll-smooth">
       
       <button
         onClick={handleRandomTone}
@@ -131,6 +192,7 @@ export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ se
           </button>
         );
       })}
+      </div>
     </div>
   );
 });
