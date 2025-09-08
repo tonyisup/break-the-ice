@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Shuffle } from 'lucide-react';
 
 export interface SelectorItem {
@@ -27,6 +27,11 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(false);
     
+    // Drag scrolling state
+    const [isDragging, setIsDragging] = useState(false);
+    const [startX, setStartX] = useState(0);
+    const [dragScrollLeft, setDragScrollLeft] = useState(0);
+    
     const checkScrollButtons = () => {
       const container = containerRef.current;
       if (container) {
@@ -35,33 +40,121 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
       }
     };
 
-    const scrollLeft = () => {
-      const container = containerRef.current;
-      if (container) {
-        container.scrollBy({ left: -200, behavior: 'smooth' });
-      }
-    };
+  const scrollToLeft = () => {
+    const container = containerRef.current;
+    if (container) {
+      container.scrollBy({ left: -200, behavior: 'smooth' });
+    }
+  };
 
-    const scrollRight = () => {
-      const container = containerRef.current;
-      if (container) {
-        container.scrollBy({ left: 200, behavior: 'smooth' });
-      }
-    };
+  const scrollToRight = () => {
+    const container = containerRef.current;
+    if (container) {
+      container.scrollBy({ left: 200, behavior: 'smooth' });
+    }
+  };
 
-    useEffect(() => {
-      const container = containerRef.current;
-      if (container) {
-        checkScrollButtons();
-        container.addEventListener('scroll', checkScrollButtons);
-        window.addEventListener('resize', checkScrollButtons);
-        
-        return () => {
-          container.removeEventListener('scroll', checkScrollButtons);
-          window.removeEventListener('resize', checkScrollButtons);
-        };
-      }
-    }, [items]);
+  // Drag scrolling handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    // Don't start dragging if clicking on a button
+    if ((e.target as HTMLElement).closest('button')) {
+      return;
+    }
+    
+    setIsDragging(true);
+    setStartX(e.pageX - container.offsetLeft);
+    setDragScrollLeft(container.scrollLeft);
+    container.style.cursor = 'grabbing';
+    container.style.userSelect = 'none';
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    setIsDragging(false);
+    container.style.cursor = 'grab';
+    container.style.userSelect = 'auto';
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    setIsDragging(false);
+    container.style.cursor = 'grab';
+    container.style.userSelect = 'auto';
+  }, []);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll speed multiplier
+    container.scrollLeft = dragScrollLeft - walk;
+  }, [isDragging, startX, dragScrollLeft]);
+
+  // Touch support for mobile devices
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    // Don't start dragging if touching a button
+    if ((e.target as HTMLElement).closest('button')) {
+      return;
+    }
+    
+    setIsDragging(true);
+    setStartX(e.touches[0].pageX - container.offsetLeft);
+    setDragScrollLeft(container.scrollLeft);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const x = e.touches[0].pageX - container.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll speed multiplier
+    container.scrollLeft = dragScrollLeft - walk;
+  }, [isDragging, startX, dragScrollLeft]);
+
+  const handleTouchEnd = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      checkScrollButtons();
+      container.addEventListener('scroll', checkScrollButtons);
+      window.addEventListener('resize', checkScrollButtons);
+      
+      // Add global mouse up event to handle dragging outside the container
+      const handleGlobalMouseUp = () => {
+        if (isDragging) {
+          handleMouseUp();
+        }
+      };
+      
+      document.addEventListener('mouseup', handleGlobalMouseUp);
+      
+      return () => {
+        container.removeEventListener('scroll', checkScrollButtons);
+        window.removeEventListener('resize', checkScrollButtons);
+        document.removeEventListener('mouseup', handleGlobalMouseUp);
+      };
+    }
+  }, [items, isDragging, handleMouseUp]);
     
     const scrollToCenter = (itemId: string) => {
       const container = containerRef.current;
@@ -102,7 +195,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
         {/* Left scroll button */}
         {canScrollLeft && (
           <button
-            onClick={scrollLeft}
+            onClick={scrollToLeft}
             className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white dark:bg-gray-900 shadow-lg rounded-full p-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             <ChevronLeft size={20} className="text-gray-600 dark:text-gray-400" />
@@ -112,7 +205,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
         {/* Right scroll button */}
         {canScrollRight && (
           <button
-            onClick={scrollRight}
+            onClick={scrollToRight}
             className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white dark:bg-gray-900 shadow-lg rounded-full p-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
@@ -121,7 +214,15 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
         
         <div 
           ref={containerRef} 
-          className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide scroll-smooth"
+          className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide scroll-smooth cursor-grab select-none"
+          onMouseDown={handleMouseDown}
+          onMouseLeave={handleMouseLeave}
+          onMouseUp={handleMouseUp}
+          onMouseMove={handleMouseMove}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
         >
           <button
             onClick={handleRandomItem}
