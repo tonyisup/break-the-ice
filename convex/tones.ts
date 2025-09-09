@@ -1,6 +1,26 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
+export const getTone = query({
+  args: { id: v.string() },
+  returns: v.object({
+    _id: v.id("tones"),
+    _creationTime: v.number(),
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    promptGuidanceForAI: v.string(),
+    color: v.string(),
+    icon: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const tone = await ctx.db.query("tones").filter((q) => q.eq(q.field("id"), args.id)).first();
+    if (!tone) {
+      throw new Error("Tone not found");
+    }
+    return tone;
+  },
+});
 // Get all available tones
 export const getTones = query({
   args: {},
@@ -20,6 +40,7 @@ export const getTones = query({
 
 export const createTone = mutation({
   args: {
+    id: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     promptGuidanceForAI: v.string(),
@@ -35,6 +56,7 @@ export const createTone = mutation({
       throw new Error("Tone with this name already exists");
     }
     const toneId = await ctx.db.insert("tones", {
+      id: args.id,
       name: args.name,
       description: args.description,
       promptGuidanceForAI: args.promptGuidanceForAI,
