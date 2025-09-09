@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Share2 } from 'lucide-react';
+import { Heart, Share2, ThumbsDown } from 'lucide-react';
 import { Doc } from '../../../convex/_generated/dataModel';
 
 interface ModernQuestionCardProps {
@@ -10,6 +10,7 @@ interface ModernQuestionCardProps {
   gradient?: string[];
   onToggleFavorite: () => void;
   onShare?: () => void;
+  onHide: () => void;
 }
 
 export function ModernQuestionCard({
@@ -19,6 +20,7 @@ export function ModernQuestionCard({
   gradient = ['#667EEA', '#764BA2'],
   onToggleFavorite,
   onShare,
+  onHide,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -134,6 +136,13 @@ export function ModernQuestionCard({
                       <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
                     </button>
                   )}
+                  <button
+                    onClick={onHide}
+                    className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
+                    title="Hide question"
+                  >
+                    <ThumbsDown size={24} className="text-gray-600 dark:text-gray-400" />
+                  </button>
                 </div>
               </div>
             )}

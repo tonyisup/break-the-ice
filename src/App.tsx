@@ -18,6 +18,7 @@ import { cn } from "./lib/utils";
 export default function App() {
   const { theme, setTheme } = useTheme();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<Id<"questions">[]>("hiddenQuestions", []);
   const [startTime, setStartTime] = useState(Date.now());
   const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
@@ -29,13 +30,13 @@ export default function App() {
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
   const discardQuestion = useMutation(api.questions.discardQuestion);
-  const nextQuestions = useQuery(api.questions.getNextQuestions, 
+  const nextQuestions = useQuery(api.questions.getNextQuestions,
     (selectedStyle === "" || selectedTone === "") ? "skip" : {
-    count: 1,
-    style: selectedStyle,
-    tone: selectedTone,
-    seen: seenQuestionIds,
-  });
+      count: 1,
+      style: selectedStyle,
+      tone: selectedTone,
+      seen: [...seenQuestionIds, ...hiddenQuestions],
+    });
   const style = useQuery(api.styles.getStyle, (selectedStyle === "") ? "skip" : { id: selectedStyle });
   const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
@@ -205,6 +206,12 @@ export default function App() {
             isFavorite={isFavorite}
             gradient={gradient}
             onToggleFavorite={() => currentQuestion && void toggleLike(currentQuestion._id)}
+            onHide={() => {
+              if (!currentQuestion) return;
+              setHiddenQuestions((prev) => [...prev, currentQuestion._id]);
+              generateNewQuestion();
+              toast.success("Question hidden");
+            }}
             onShare={() => {
               if (currentQuestion && navigator.share) {
                 void navigator.share({

@@ -6,14 +6,16 @@ import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
 import { Link } from "react-router-dom";
 import { HouseIcon } from "lucide-react";
+import { Id } from "../../../convex/_generated/dataModel";
 
 const SettingsPage = () => {
   const { theme, setTheme } = useTheme();
   const allStyles = useQuery(api.styles.getStyles);
   const allTones = useQuery(api.tones.getTones);
-
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>("hiddenStyles", []);
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
+  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<Id<"questions">[]>("hiddenQuestions", []);
+  const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { questionIds: hiddenQuestions });
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -25,6 +27,10 @@ const SettingsPage = () => {
 
   const unhideTone = (toneId: string) => {
     setHiddenTones(prev => prev.filter(id => id !== toneId));
+  };
+
+  const unhideQuestion = (questionId: Id<"questions">) => {
+    setHiddenQuestions(prev => prev.filter(id => id !== questionId));
   };
 
   const hiddenStyleObjects = allStyles?.filter(style => hiddenStyles.includes(style.id));
@@ -121,6 +127,37 @@ const SettingsPage = () => {
               </ul>
             ) : (
               <p className="dark:text-white/70 text-black/70">You have no hidden tones.</p>
+            )}
+          </section>
+
+          <section>
+            <div className="flex items-center justify-between border-b pb-2 mb-4">
+              <h2 className="text-2xl font-semibold dark:text-white text-black border-white/30">Hidden Questions</h2>
+              {hiddenQuestionObjects && hiddenQuestionObjects.length > 0 && (
+                <button
+                  onClick={() => setHiddenQuestions([])}
+                  className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {hiddenQuestionObjects && hiddenQuestionObjects.length > 0 ? (
+              <ul className="space-y-2">
+                {hiddenQuestionObjects.map(question => (
+                  <li key={question._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                    <span className="dark:text-white text-black">{question.text}</span>
+                    <button
+                      onClick={() => unhideQuestion(question._id)}
+                      className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                    >
+                      Unhide
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="dark:text-white/70 text-black/70">You have no hidden questions.</p>
             )}
           </section>
         </div>
