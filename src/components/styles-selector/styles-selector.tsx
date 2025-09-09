@@ -62,18 +62,12 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
   // Convert styles to the format expected by GenericSelector
   const selectorItems: SelectorItem[] | undefined = useMemo(() => styles
     ?.filter(style => !hiddenStyles.includes(style.id))
-    .sort((a, b) => {
-      if (randomOrder) {
-        return Math.random() - 0.5;
-      }
-      return a.name.localeCompare(b.name);
-    })
     .map(style => ({
       id: style.id,
       name: style.name,
       icon: style.icon,
       color: style.color
-    })), [styles, hiddenStyles, randomOrder]);
+    })), [styles, hiddenStyles]);
 
   // Expose the randomizeStyle function to parent components
   useImperativeHandle(ref, () => ({
@@ -83,10 +77,13 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
   }));
 
   useEffect(() => {
+    if (!randomOrder) {
+      return;
+    }
     if (onSelectStyle && selectorItems) {
       onSelectStyle(selectorItems[0].id);
     }
-  }, [selectorItems, onSelectStyle]);
+  }, [randomOrder, selectorItems, onSelectStyle]);
 
   return (
     <GenericSelector

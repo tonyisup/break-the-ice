@@ -23,15 +23,15 @@ export default function App() {
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRandomizing, setIsRandomizing] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState("");
-  const [selectedTone, setSelectedTone] = useState("");
+  const [selectedStyle, setSelectedStyle] = useState("would-you-rather");
+  const [selectedTone, setSelectedTone] = useState("fun-silly");
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
   const discardQuestion = useMutation(api.questions.discardQuestion);
   const nextQuestions = useQuery(api.questions.getNextQuestions, 
     (selectedStyle === "" || selectedTone === "") ? "skip" : {
-    count: 1,
+    count: 10,
     style: selectedStyle,
     tone: selectedTone,
     seen: seenQuestionIds,
@@ -41,19 +41,22 @@ export default function App() {
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
-  useEffect(() => {
-    if ((selectedStyle !== "" && selectedTone !== "") && (!nextQuestions || nextQuestions.length === 0) && !isGenerating && !isRandomizing) {
-      setIsGenerating(true);
-      generateAIQuestion({
-        selectedTags: [],
-        style: selectedStyle,
-        tone: selectedTone,
-      }).then(question => {
-        setCurrentQuestions((prev) => [question as Doc<"questions">, ...prev]);
-        setIsGenerating(false);
-      });
-    }
-  }, [selectedStyle, selectedTone, nextQuestions, isGenerating, generateAIQuestion, isRandomizing]);
+  // useEffect(() => {
+  //   if ((selectedStyle !== "" && selectedTone !== "") && (!nextQuestions || nextQuestions.length === 0) && !isGenerating && !isRandomizing) {
+  //     setIsGenerating(true);
+  //     generateAIQuestion({
+  //       selectedTags: [],
+  //       style: selectedStyle,
+  //       tone: selectedTone,
+  //     }).then(question => {
+  //       setCurrentQuestions((prev) => [question as Doc<"questions">, ...prev]);
+  //       setIsGenerating(false);
+  //     }).catch(error => {
+  //       console.error(error);
+  //       setIsGenerating(false);
+  //     });
+  //   }
+  // }, [selectedStyle, selectedTone, nextQuestions, isGenerating, generateAIQuestion, isRandomizing]);
 
   useEffect(() => {
     if (!nextQuestions || nextQuestions.length === 0) {
@@ -217,17 +220,19 @@ export default function App() {
         </div>
 
         <StyleSelector
+          randomOrder={false}
           selectedStyle={selectedStyle}
           ref={styleSelectorRef}
           onSelectStyle={setSelectedStyle}
         />
         <ToneSelector
+          randomOrder={false}
           ref={toneSelectorRef}
           selectedTone={selectedTone}
           onSelectTone={setSelectedTone}
         />
 
-        {!isGenerating && (
+        {!isGenerating || currentQuestion ? (
           <div className="flex justify-center gap-4">
             <button
               onClick={handleShuffleStyleAndTone}
@@ -240,13 +245,13 @@ export default function App() {
             <button
               onClick={generateNewQuestion}
               className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
-              title="New question"
+              title="Next Question"
             >
               <ArrowBigRight size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
-              <span className="sm:block hidden text-white font-semibold text-base">New Question</span>
+              <span className="sm:block hidden text-white font-semibold text-base">Next Question</span>
             </button>
           </div>
-        )}
+        ) : null}
       </main>
 
       <AnimatePresence>
