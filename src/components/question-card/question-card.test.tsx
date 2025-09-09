@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import React from 'react';
 import { QuestionCard } from './question-card';
+import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../hooks/useTheme', () => ({ useThemeListener: () => 'light' }));
 
