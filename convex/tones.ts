@@ -27,6 +27,7 @@ export const getTones = query({
   returns: v.array(v.object({
     _id: v.id("tones"),
     _creationTime: v.number(),
+    id: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     promptGuidanceForAI: v.string(),

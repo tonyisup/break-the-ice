@@ -30,6 +30,7 @@ export const getStyles = query({
   returns: v.array(v.object({
     _id: v.id("styles"),
     _creationTime: v.number(),
+    id: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     structure: v.string(),
