@@ -16,43 +16,30 @@ type GeneratedQuestion = {
 };
 
 export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestionGeneratorProps) => {
-  const categories = useQuery(api.categories.getCategories);
+
   const models = useQuery(api.models.getModels);
+  const styles = useQuery(api.styles.getStyles);
+  const tones = useQuery(api.tones.getTones);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>(categories?.[0]?.id || "random");
+  const [selectedStyle, setSelectedStyle] = useState<string>(styles?.[0]?.id || "random");
+  const [selectedTone, setSelectedTone] = useState<string>(tones?.[0]?.id || "random");
   const [selectedModel, setSelectedModel] = useState<string>("mistralai/mistral-nemo");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [expandedTagCategories, setExpandedTagCategories] = useState<Set<string>>(new Set());
   const [previewQuestion, setPreviewQuestion] = useState<GeneratedQuestion | null>(null);
-  
+
   const tags = useQuery(api.tags.getTags);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
   const saveAIQuestion = useMutation(api.questions.saveAIQuestion);
   const initializeTags = useMutation(api.tags.initializeTags);
   const initializeModels = useMutation(api.models.initializeModels);
   const initializeCategories = useMutation(api.categories.initializeCategories);
-  // Initialize tags if they don't exist
-  useEffect(() => {
-    if (tags && tags.length === 0) {
-      void initializeTags();
-    }
-  }, [tags, initializeTags]);
-  useEffect(() => {
-    if (models && models.length === 0) {
-      void initializeModels();
-    }
-  }, [models, initializeModels]);
 
-  useEffect(() => {
-    if (categories && categories.length === 0) {
-      void initializeCategories();
-    }
-  }, [categories, initializeCategories]);
 
   const handleTagToggle = (tagName: string) => {
-    setSelectedTags(prev => 
-      prev.includes(tagName) 
+    setSelectedTags(prev =>
+      prev.includes(tagName)
         ? prev.filter(tag => tag !== tagName)
         : [...prev, tagName]
     );
@@ -92,7 +79,8 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
       const generatedQuestion = await generateAIQuestion({
         selectedTags,
         currentQuestion: previewQuestion ? previewQuestion.text : undefined,
-        category: selectedCategory,
+        style: selectedStyle,
+        tone: selectedTone,
         model: selectedModel,
       });
       setPreviewQuestion(generatedQuestion as GeneratedQuestion);
@@ -110,11 +98,12 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     setIsSaving(true);
     try {
       // Determine category based on selected tags
-      
+
       const newQuestion = await saveAIQuestion({
         text: previewQuestion.text,
         tags: previewQuestion.tags,
-        category: selectedCategory,
+        style: selectedStyle,
+        tone: selectedTone,
       });
       toast.success("AI question saved!");
       if (newQuestion) {
@@ -164,17 +153,36 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
               Select a question style:
             </h3>
             <div className="flex flex-wrap gap-2">
-              {categories?.map(category => (
+              {styles?.map(style => (
                 <button
-                  key={category.id}
-                  onClick={() => setSelectedCategory(category.id)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                    selectedCategory === category.id
+                  key={style.id}
+                  onClick={() => setSelectedStyle(style.id)}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${selectedStyle === style.id
                       ? "bg-blue-500 text-white"
                       : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                  }`}
+                    }`}
                 >
-                  {category.name}
+                  {style.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
+              Select a question tone:
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {tones?.map(tone => (
+                <button
+                  key={tone.id}
+                  onClick={() => setSelectedTone(tone.id)}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${selectedTone === tone.id
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                    }`}
+                >
+                  {tone.name}
                 </button>
               ))}
             </div>
@@ -213,7 +221,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                 const isExpanded = expandedTagCategories.has(category);
                 const categoryTags = tags.filter(tag => tag.category === category);
                 const selectedCount = categoryTags.filter(tag => selectedTags.includes(tag.name)).length;
-                
+
                 return (
                   <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                     <button
@@ -222,9 +230,8 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                     >
                       <div className="flex items-center gap-3">
                         <svg
-                          className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${
-                            isExpanded ? "rotate-90" : ""
-                          }`}
+                          className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
+                            }`}
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -249,7 +256,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                         {categoryTags.length} tags
                       </span>
                     </button>
-                    
+
                     <AnimatePresence>
                       {isExpanded && (
                         <motion.div
@@ -265,11 +272,10 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                                 <button
                                   key={tag._id}
                                   onClick={() => handleTagToggle(tag.name)}
-                                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                                    selectedTags.includes(tag.name)
+                                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${selectedTags.includes(tag.name)
                                       ? "bg-blue-500 text-white"
                                       : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                                  }`}
+                                    }`}
                                 >
                                   {tag.name}
                                 </button>
@@ -310,27 +316,26 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
               )}
 
 
-<div className="mb-6">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
-              Select a model:
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {models?.map(model => (
-                <button
-                  key={model.id}
-                  onClick={() => setSelectedModel(model.id)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                    selectedModel === model.id
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                  }`}
-                >
-                  {model.name}
-                </button>
-              ))}
-            </div>
-          </div>
-              
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
+                  Select a model:
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {models?.map(model => (
+                    <button
+                      key={model.id}
+                      onClick={() => setSelectedModel(model.id)}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${selectedModel === model.id
+                          ? "bg-blue-500 text-white"
+                          : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                        }`}
+                    >
+                      {model.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-3">
                 {previewQuestion ? (
                   <>
