@@ -42,6 +42,7 @@ function StyleManager() {
   const deleteStyle = useMutation(api.styles.deleteStyle);
   const { theme, setTheme } = useTheme();
 
+  const [newStyleId, setNewStyleId] = useState('');
   const [newStyleName, setNewStyleName] = useState('');
   const [newStyleDescription, setNewStyleDescription] = useState('');
   const [newStyleStructure, setNewStyleStructure] = useState('');
@@ -55,6 +56,7 @@ function StyleManager() {
   const handleCreateStyle = () => {
     if (newStyleName.trim()) {
       void createStyle({
+        id: newStyleId,
         name: newStyleName,
         description: newStyleDescription,
         structure: newStyleStructure,
@@ -76,7 +78,8 @@ function StyleManager() {
   const handleUpdateStyle = () => {
     if (editingStyle && editingStyle.name.trim()) {
       void updateStyle({
-        id: editingStyle._id,
+        _id: editingStyle._id,
+        id: editingStyle.id,
         name: editingStyle.name,
         description: editingStyle.description,
         structure: editingStyle.structure,
@@ -128,6 +131,13 @@ function StyleManager() {
         </div>
         <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="space-y-4 mb-6">
+            <input
+              type="text"
+              value={newStyleId}
+              onChange={(e) => setNewStyleId(e.target.value)}
+              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter new style id"
+            />
             <input
               type="text"
               value={newStyleName}

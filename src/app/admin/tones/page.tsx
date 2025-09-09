@@ -42,6 +42,7 @@ function ToneManager() {
   const deleteTone = useMutation(api.tones.deleteTone);
   const { theme, setTheme } = useTheme();
 
+  const [newToneId, setNewToneId] = useState('');
   const [newToneName, setNewToneName] = useState('');
   const [newToneDescription, setNewToneDescription] = useState('');
   const [newTonePromptGuidance, setNewTonePromptGuidance] = useState('');
@@ -53,12 +54,14 @@ function ToneManager() {
   const handleCreateTone = () => {
     if (newToneName.trim()) {
       void createTone({
+        id: newToneId,
         name: newToneName,
         description: newToneDescription,
         promptGuidanceForAI: newTonePromptGuidance,
         color: newToneColor,
         icon: newToneIcon,
       });
+      setNewToneId('');
       setNewToneName('');
       setNewToneDescription('');
       setNewTonePromptGuidance('');
@@ -70,7 +73,8 @@ function ToneManager() {
   const handleUpdateTone = () => {
     if (editingTone && editingTone.name.trim()) {
       void updateTone({
-        id: editingTone._id,
+        _id: editingTone._id,
+        id: editingTone.id,
         name: editingTone.name,
         description: editingTone.description,
         promptGuidanceForAI: editingTone.promptGuidanceForAI,
@@ -120,6 +124,13 @@ function ToneManager() {
         </div>
         <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="space-y-4 mb-6">
+            <input
+              type="text"
+              value={newToneId}
+              onChange={(e) => setNewToneId(e.target.value)}
+              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter new tone id"
+            />
             <input
               type="text"
               value={newToneName}

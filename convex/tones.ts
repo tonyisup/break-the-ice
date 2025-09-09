@@ -70,7 +70,8 @@ export const createTone = mutation({
 
 export const updateTone = mutation({
   args: {
-    id: v.id("tones"),
+    _id: v.id("tones"),
+    id: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     promptGuidanceForAI: v.string(),
@@ -79,9 +80,9 @@ export const updateTone = mutation({
   },
   handler: async (ctx, args) => {
     const { id, ...rest } = args;
-    const existingTone = await ctx.db.get(args.id);
+    const existingTone = await ctx.db.get(args._id);
     if (existingTone) {
-      await ctx.db.patch(args.id, {
+      await ctx.db.patch(args._id, {
         name: args.name,
         description: args.description,
         promptGuidanceForAI: args.promptGuidanceForAI,

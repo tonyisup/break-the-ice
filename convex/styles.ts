@@ -79,7 +79,8 @@ export const createStyle = mutation({
 
 export const updateStyle = mutation({
   args: {
-    id: v.id("styles"),
+    _id: v.id("styles"),
+    id: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     structure: v.string(),
@@ -90,9 +91,9 @@ export const updateStyle = mutation({
   },
   handler: async (ctx, args) => {
     const { id, ...rest } = args;
-    const existingStyle = await ctx.db.get(args.id);
+    const existingStyle = await ctx.db.get(args._id);
     if (existingStyle) {
-      await ctx.db.patch(args.id, {
+      await ctx.db.patch(args._id, {
         name: args.name,
         description: args.description,
         structure: args.structure,
