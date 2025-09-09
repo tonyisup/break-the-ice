@@ -22,6 +22,7 @@ export default function App() {
   const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRandomizing, setIsRandomizing] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState("");
   const [selectedTone, setSelectedTone] = useState("");
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
@@ -41,7 +42,7 @@ export default function App() {
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
   useEffect(() => {
-    if ((selectedStyle !== "" && selectedTone !== "") && (!nextQuestions || nextQuestions.length === 0) && !isGenerating) {
+    if ((selectedStyle !== "" && selectedTone !== "") && (!nextQuestions || nextQuestions.length === 0) && !isGenerating && !isRandomizing) {
       setIsGenerating(true);
       generateAIQuestion({
         selectedTags: [],
@@ -52,7 +53,7 @@ export default function App() {
         setIsGenerating(false);
       });
     }
-  }, [selectedStyle, selectedTone, nextQuestions, isGenerating, generateAIQuestion]);
+  }, [selectedStyle, selectedTone, nextQuestions, isGenerating, generateAIQuestion, isRandomizing]);
 
   useEffect(() => {
     if (!nextQuestions || nextQuestions.length === 0) {
@@ -84,6 +85,12 @@ export default function App() {
     setSeenQuestionIds([]);
     setCurrentQuestions([]); // Clear current questions when style/tone changes
   }, [selectedStyle, selectedTone]);
+
+  useEffect(() => {
+    if (isRandomizing) {
+      setIsRandomizing(false);
+    }
+  }, [selectedStyle, selectedTone, isRandomizing]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -137,6 +144,7 @@ export default function App() {
   };
 
   const handleShuffleStyleAndTone = () => {
+    setIsRandomizing(true);
     // Call the randomizer function from the ToneSelector component
     toneSelectorRef.current?.randomizeTone();
     styleSelectorRef.current?.randomizeStyle();
