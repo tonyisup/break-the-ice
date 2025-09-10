@@ -141,6 +141,7 @@ export default function App() {
   }
   const handleConfirmRandomizeStyleAndTone = () => {
     setCurrentQuestions([]);
+    setSeenQuestionIds([]);
     toneSelectorRef.current?.confirmRandomizedTone();
     styleSelectorRef.current?.confirmRandomizedStyle();
   }
@@ -200,6 +201,7 @@ export default function App() {
         <div className="flex-1 flex items-center justify-center px-5 pb-8">
 
           <ModernQuestionCard
+            key={currentQuestion?._id}
             isGenerating={isGenerating}
             question={currentQuestion}
             isFavorite={isFavorite}
