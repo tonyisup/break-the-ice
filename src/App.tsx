@@ -60,7 +60,7 @@ export default function App() {
       setIsGenerating(false);
     }
   }, [selectedStyle, selectedTone, generateAIQuestion]);
-  
+
   useEffect(() => {
     if (nextQuestions) {
       if (nextQuestions.length > 0) {
