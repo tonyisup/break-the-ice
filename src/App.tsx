@@ -41,12 +41,13 @@ export default function App() {
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
-  const callGenerateAIQuestion = useCallback(async () => {    
+  const callGenerateAIQuestion = useCallback(async (count: number) => {
     setIsGenerating(true);
     await generateAIQuestion({
       style: selectedStyle,
       tone: selectedTone,
       selectedTags: [],
+      count: count,
     });
     setIsGenerating(false);
   }, [selectedStyle, selectedTone, generateAIQuestion]);
@@ -74,7 +75,8 @@ export default function App() {
 
   useEffect(() => {
     if (currentQuestions.length > 0 && currentQuestions.length <= 5 && !isGenerating) {
-      void callGenerateAIQuestion();
+      const questionsToGenerate = 10 - currentQuestions.length;
+      void callGenerateAIQuestion(questionsToGenerate);
     }
   }, [currentQuestions, isGenerating, callGenerateAIQuestion]);
 
