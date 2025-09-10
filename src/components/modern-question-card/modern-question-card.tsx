@@ -49,7 +49,7 @@ export function ModernQuestionCard({
         <div className="w-full h-full bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-center items-center">
           {isGenerating && !question ? (
             // Loading Spinner
-            <div className="flex flex-col items-center justify-center space-y-4 h-[200px]">
+            <div className="flex flex-col items-center justify-between space-y-4 min-h-[300px]">
               <div
                 className="w-12 h-12 border-4 border-gray-200 dark:border-gray-700 rounded-full animate-spin"
                 style={{
@@ -65,7 +65,7 @@ export function ModernQuestionCard({
             </div>
           ) : (
             // Full Card Content
-            question && <div className="w-full h-full flex flex-col justify-between">
+            question && <div className="w-full h-full flex flex-col justify-between min-h-[300px]">
               {/* Category Badge */}
               <div className="flex flex-row gap-2 justify-between">
                 <div className="border-t-2 border-l-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
