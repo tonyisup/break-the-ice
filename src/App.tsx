@@ -135,6 +135,7 @@ export default function App() {
   const getNextQuestion = () => {
     setStartTime(Date.now());
     if (currentQuestion) {
+      addQuestionToHistory(currentQuestion);
       void handleDiscard(currentQuestion._id as Id<"questions">);
     }
   };
