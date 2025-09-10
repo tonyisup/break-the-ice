@@ -50,13 +50,16 @@ interface ToneSelectorProps {
   selectedTone: string;
   randomOrder?: boolean;
   onSelectTone: (tone: string) => void;
+  onRandomizeTone: (tone: string | null) => void;
 }
 
 export interface ToneSelectorRef {
   randomizeTone: () => void;
+  cancelRandomizingTone: () => void;
+  confirmRandomizedTone: () => void;
 }
 
-export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ selectedTone, onSelectTone, randomOrder = true }, ref) => {
+export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ selectedTone, onSelectTone, onRandomizeTone, randomOrder = true }, ref) => {
   const tones = useQuery(api.tones.getTones);
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>('hiddenTones', []);
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
@@ -80,6 +83,12 @@ export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ se
     randomizeTone: () => {
       genericSelectorRef.current?.randomizeItem();
     },
+    cancelRandomizingTone: () => {
+      genericSelectorRef.current?.cancelRandomizingItem();
+    },
+    confirmRandomizedTone: () => {
+      genericSelectorRef.current?.confirmRandomizedItem();
+    },
   }));
 
   // useEffect(() => {
@@ -97,6 +106,7 @@ export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ se
       onHideItem={handleHideTone}
       iconMap={iconMap}
       randomizeLabel="Randomize Tone"
+      onRandomizeItem={onRandomizeTone}
     />
   );
 });

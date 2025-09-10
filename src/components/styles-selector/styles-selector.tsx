@@ -45,12 +45,15 @@ interface StyleSelectorProps {
   selectedStyle: string;
   randomOrder?: boolean;
   onSelectStyle: (style: string) => void;
+  onRandomizeStyle: (style: string | null) => void;
 }
 
 export interface StyleSelectorRef {
   randomizeStyle: () => void;
+  cancelRandomizingStyle: () => void;
+  confirmRandomizedStyle: () => void;
 }
-export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({ selectedStyle, onSelectStyle, randomOrder = true }, ref) => {
+export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({ selectedStyle, onSelectStyle, onRandomizeStyle, randomOrder = true }, ref) => {
   const styles = useQuery(api.styles.getStyles);
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>('hiddenStyles', []);
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
@@ -74,6 +77,12 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
     randomizeStyle: () => {
       genericSelectorRef.current?.randomizeItem();
     },
+    cancelRandomizingStyle: () => {
+      genericSelectorRef.current?.cancelRandomizingItem();
+    },
+    confirmRandomizedStyle: () => {
+      genericSelectorRef.current?.confirmRandomizedItem();
+    },
   }));
 
   useEffect(() => {
@@ -94,6 +103,7 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
       onHideItem={handleHideStyle}
       iconMap={iconMap}
       randomizeLabel="Randomize Style"
+      onRandomizeItem={onRandomizeStyle}
     />
   );
 });

@@ -1,6 +1,6 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { Doc, Id } from "../convex/_generated/dataModel";
 import { ModernQuestionCard } from "./components/modern-question-card";
@@ -12,56 +12,52 @@ import { AnimatePresence } from "framer-motion";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import { StyleSelector, StyleSelectorRef } from "./components/styles-selector";
 import { ToneSelector, ToneSelectorRef } from "./components/tone-selector";
-import { ArrowBigRight, Shuffle } from "lucide-react";
+import { ArrowBigRight, ArrowBigRightDash, RouteOff, Shuffle } from "lucide-react";
 import { cn } from "./lib/utils";
 
 export default function App() {
   const { theme, setTheme } = useTheme();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const [startTime, setStartTime] = useState(Date.now());
-  const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isRandomizing, setIsRandomizing] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState("would-you-rather");
+  const [selectedStyle, setSelectedStyle] = useState("open-ended");
   const [selectedTone, setSelectedTone] = useState("fun-silly");
+  const [randomizedTone, setRandomizedTone] = useState<string | null>(null);
+  const [randomizedStyle, setRandomizedStyle] = useState<string | null>(null);
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
   const discardQuestion = useMutation(api.questions.discardQuestion);
-  const nextQuestions = useQuery(api.questions.getNextQuestions, 
+  const nextQuestions = useQuery(api.questions.getNextQuestions,
     (selectedStyle === "" || selectedTone === "") ? "skip" : {
-    count: 10,
-    style: selectedStyle,
-    tone: selectedTone,
-    seen: seenQuestionIds,
-  });
+      count: 10,
+      style: selectedStyle,
+      tone: selectedTone,
+      seen: seenQuestionIds,
+    });
   const style = useQuery(api.styles.getStyle, (selectedStyle === "") ? "skip" : { id: selectedStyle });
   const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
-  // useEffect(() => {
-  //   if ((selectedStyle !== "" && selectedTone !== "") && (!nextQuestions || nextQuestions.length === 0) && !isGenerating && !isRandomizing) {
-  //     setIsGenerating(true);
-  //     generateAIQuestion({
-  //       selectedTags: [],
-  //       style: selectedStyle,
-  //       tone: selectedTone,
-  //     }).then(question => {
-  //       setCurrentQuestions((prev) => [question as Doc<"questions">, ...prev]);
-  //       setIsGenerating(false);
-  //     }).catch(error => {
-  //       console.error(error);
-  //       setIsGenerating(false);
-  //     });
-  //   }
-  // }, [selectedStyle, selectedTone, nextQuestions, isGenerating, generateAIQuestion, isRandomizing]);
-
+  const callGenerateAIQuestion = useCallback(async () => {    
+    setIsGenerating(true);
+    await generateAIQuestion({
+      style: selectedStyle,
+      tone: selectedTone,
+      selectedTags: [],
+    });
+    setIsGenerating(false);
+  }, [selectedStyle, selectedTone, generateAIQuestion]);
+  
   useEffect(() => {
     if (!nextQuestions || nextQuestions.length === 0) {
+      if (!isGenerating) {
+        void callGenerateAIQuestion();
+      }
       return;
-    }
+    }  
 
     setCurrentQuestions(prevQuestions => {
       // If we have no previous questions (e.g., after style/tone change), just set the new ones
@@ -79,31 +75,17 @@ export default function App() {
 
       return prevQuestions;
     });
-  }, [nextQuestions, selectedStyle, selectedTone]);
+  }, [nextQuestions, selectedStyle, selectedTone, isGenerating, callGenerateAIQuestion]);
 
-  
-  // Reset start time when category changes
-  useEffect(() => {
-    setStartTime(Date.now());
-    setSeenQuestionIds([]);
-    setCurrentQuestions([]); // Clear current questions when style/tone changes
-  }, [selectedStyle, selectedTone]);
-
-  useEffect(() => {
-    if (isRandomizing) {
-      setIsRandomizing(false);
-    }
-  }, [selectedStyle, selectedTone, isRandomizing]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
   const handleDiscard = async (questionId: Id<"questions">) => {
-    if (!currentQuestions) return; // This shouldn't happen! We should always generate more
     setSeenQuestionIds((prev) => [...prev, questionId]);
     setCurrentQuestions(prev => prev.filter(question => question._id !== questionId));
-    const getMore = currentQuestions.length == 1;
+    const getMore = currentQuestions.length <= 1;
     setIsGenerating(getMore);
     void discardQuestion({
       questionId,
@@ -134,23 +116,33 @@ export default function App() {
     }
   };
 
-  const handleAIQuestionGenerated = (question: Doc<"questions">) => {
-    setCurrentQuestions((prev) => [question, ...prev]);
-    setShowAIGenerator(false);
-  };
-
-  const generateNewQuestion = () => {
+  const getNextQuestion = () => {
     setStartTime(Date.now());
-    if (currentQuestions.length > 0) {
-      void handleDiscard(currentQuestions[0]._id as Id<"questions">);
+    if (currentQuestion) {
+      void handleDiscard(currentQuestion._id as Id<"questions">);
+    } else {
+      void callGenerateAIQuestion();
     }
   };
 
   const handleShuffleStyleAndTone = () => {
-    setIsRandomizing(true);
     // Call the randomizer function from the ToneSelector component
     toneSelectorRef.current?.randomizeTone();
     styleSelectorRef.current?.randomizeStyle();
+  }
+  const handleCancelRandomizeStyleAndTone = () => {
+    toneSelectorRef.current?.cancelRandomizingTone();
+    styleSelectorRef.current?.cancelRandomizingStyle();
+  }
+  const handleConfirmRandomizeStyleAndTone = () => {
+    setCurrentQuestions([]);
+    toneSelectorRef.current?.confirmRandomizedTone();
+    styleSelectorRef.current?.confirmRandomizedStyle();
+  }
+  const handleCancelRandomAndNextQuestion = () => {
+    toneSelectorRef.current?.cancelRandomizingTone();
+    styleSelectorRef.current?.cancelRandomizingStyle();
+    getNextQuestion();
   }
   const currentQuestion = currentQuestions[0] || null;
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
@@ -176,7 +168,7 @@ export default function App() {
             to="/liked"
             className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white", isFavorite && "bg-white/20 dark:bg-white/20")}
           >
-            ❤️ Liked Questions
+            ❤️ Liked
           </Link>
         </div>
         <div className="flex items-center gap-2">
@@ -189,7 +181,7 @@ export default function App() {
           <button
             onClick={toggleTheme}
             className={cn(isColorDark(gradient[1]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white", isFavorite && "bg-white/20 dark:bg-white/20")}
-            >
+          >
             {theme === "dark" ? "🌞" : "🌙"}
           </button>
         </div>
@@ -224,44 +216,79 @@ export default function App() {
           selectedStyle={selectedStyle}
           ref={styleSelectorRef}
           onSelectStyle={setSelectedStyle}
+          onRandomizeStyle={setRandomizedStyle}
         />
         <ToneSelector
           randomOrder={false}
           ref={toneSelectorRef}
           selectedTone={selectedTone}
           onSelectTone={setSelectedTone}
+          onRandomizeTone={setRandomizedTone}
         />
 
-        {!isGenerating || currentQuestion ? (
-          <div className="flex justify-center gap-4">
-            <button
-              onClick={handleShuffleStyleAndTone}
-              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
-              title="Generate question"
-            >
-              <Shuffle size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
-              <span className="sm:block hidden text-white font-semibold text-base">Randomize</span>
-            </button>
-            <button
-              onClick={generateNewQuestion}
-              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
-              title="Next Question"
-            >
-              <ArrowBigRight size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
-              <span className="sm:block hidden text-white font-semibold text-base">Next Question</span>
-            </button>
+        {randomizedStyle || randomizedTone ? (
+          <div className="flex justify-center">
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={handleShuffleStyleAndTone}
+                className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
+                title="Shuffle Style and Tone"
+                disabled={(!isGenerating || currentQuestion) ? false : true}
+              >
+                <Shuffle size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
+                <span className="sm:block hidden text-white font-semibold text-base">Shuffle</span>
+              </button>
+              <button
+                onClick={handleConfirmRandomizeStyleAndTone}
+                className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
+                title="New Question / Confirm Shuffle"
+              >
+                <ArrowBigRightDash size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
+                <span className="sm:block hidden text-white font-semibold text-base">New</span>
+              </button>
+              <button
+                onClick={handleCancelRandomizeStyleAndTone}
+                className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
+                title="Cancel Shuffle"
+              >
+                <RouteOff size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
+                <span className="sm:block hidden text-white font-semibold text-base">Cancel</span>
+              </button>
+              <button
+                onClick={handleCancelRandomAndNextQuestion}
+                className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
+                title="Next Question"
+                disabled={(!isGenerating || currentQuestion) ? false : true}
+              >
+                <ArrowBigRight size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
+                <span className="sm:block hidden text-white font-semibold text-base">Next</span>
+              </button>
+            </div>
           </div>
-        ) : null}
-      </main>
-
-      <AnimatePresence>
-        {showAIGenerator && (
-          <AIQuestionGenerator
-            onQuestionGenerated={handleAIQuestionGenerated}
-            onClose={() => setShowAIGenerator(false)}
-          />
+        ) : (
+          <div className="flex justify-center">
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={handleShuffleStyleAndTone}
+                className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
+                title="Shuffle Style and Tone"
+              >
+                <Shuffle size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
+                <span className="sm:block hidden text-white font-semibold text-base">Shuffle</span>
+              </button>
+              <button
+                onClick={getNextQuestion}
+                className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
+                title="Next Question"
+                disabled={isGenerating}
+              >
+                <ArrowBigRight size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
+                <span className="sm:block hidden text-white font-semibold text-base">Next</span>
+              </button>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
+      </main>
     </div>
   );
 }

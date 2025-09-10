@@ -62,7 +62,8 @@ export function ModernQuestionCard({
                 <motion.div
                   className="w-12 h-12 border-4 border-gray-200 dark:border-gray-700 rounded-full"
                   style={{
-                    borderTopColor: gradient[0]
+                    borderTopColor: gradient[0],
+                    borderBottomColor: gradient[1]
                   }}
                   animate={{ rotate: 360 }}
                   transition={{
@@ -92,13 +93,23 @@ export function ModernQuestionCard({
               question && <div className="w-full h-full flex flex-col justify-between">
                 {/* Category Badge */}
                 <div className="flex flex-row gap-2 justify-between">
-                  <div className="bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between">
+                  <div className="border-t-2 border-l-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
+                    style={{
+                      borderTopColor: gradient[0],
+                      borderLeftColor: gradient[0]
+                    }}
+                  >
                     <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                       {question.style}
                     </span>
                   </div>
 
-                  <div className="bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between">
+                  <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
+                    style={{
+                      borderBottomColor: gradient[1],
+                      borderRightColor: gradient[1]
+                    }}
+                  >
                     <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                       {question.tone}
                     </span>

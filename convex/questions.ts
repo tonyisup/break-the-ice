@@ -33,7 +33,7 @@ export const discardQuestion = mutation({
     }
 
     //we only discard AND supply style and tone when running out of questions on the main page
-    if (style && tone) { 
+    if (style && tone) {
       void ctx.scheduler.runAfter(0, api.ai.generateAIQuestion, {
         style,
         tone,
@@ -42,11 +42,29 @@ export const discardQuestion = mutation({
     }
   },
 });
+
+function mulberry32(a: number) {
+  return function () {
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+const shuffleArray = (array: any[]) => {
+  const random = mulberry32(Date.now());
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    const temp = array[i];
+    array[i] = array[j];
+    array[j] = temp;
+  }
+}
 export const getNextQuestions = query({
   args: {
     count: v.number(),
-    style: v.optional(v.string()),
-    tone: v.optional(v.string()),
+    style: v.string(),
+    tone: v.string(),
     seen: v.optional(v.array(v.id("questions"))),
   },
   handler: async (ctx, args) => {
@@ -54,26 +72,19 @@ export const getNextQuestions = query({
     const seenIds = new Set(seen ?? []);
 
     // Get all questions first, and filter out seen ones.
-    const allQuestions = (await ctx.db.query("questions").collect()).filter(
-      (q) => !seenIds.has(q._id)
-    );
+    const filteredQuestions = await ctx.db
+      .query("questions")
+      .withIndex("by_style_and_tone", (q) => q.eq("style", style).eq("tone", tone))
+      .collect();
 
-    // Filter by category if specified
-    let filteredQuestions = allQuestions;
-    filteredQuestions = allQuestions.filter(q => (style === undefined || q.style === style) && (tone === undefined || q.tone === tone));
+    const unseenQuestions = filteredQuestions.filter(q => !seenIds.has(q._id));
+    if (unseenQuestions.length > 0) {
+      shuffleArray(unseenQuestions);
+      return unseenQuestions.slice(0, count);
+    }
 
-    // Sort by lastShownAt (oldest first) if available, otherwise random
-    filteredQuestions.sort((a, b) => {
-      const aTime = a.lastShownAt ?? 0;
-      const bTime = b.lastShownAt ?? 0;
-      return aTime - bTime;
-    });
-
-    // Return the requested number of questions
-    const result = filteredQuestions.slice(0, count);
-    // console.log('Returning questions:', result.length);
-    
-    return result;
+    shuffleArray(filteredQuestions);
+    return filteredQuestions.slice(0, count);
   }
 })
 
@@ -129,7 +140,7 @@ export const getQuestionsByIds = query({
 export const saveAIQuestion = mutation({
   args: {
     text: v.string(),
-    tags: v.array(v.string()),  
+    tags: v.array(v.string()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
   },
@@ -220,7 +231,7 @@ export const fixExistingQuestions = mutation({
     const allQuestions = await ctx.db.query("questions").collect();
     const now = Date.now();
     let fixedCount = 0;
-    
+
     for (const question of allQuestions) {
       if (question.lastShownAt === undefined) {
         await ctx.db.patch(question._id, {
@@ -229,78 +240,10 @@ export const fixExistingQuestions = mutation({
         fixedCount++;
       }
     }
-    
+
     return { totalQuestions: allQuestions.length, fixedCount };
   },
 });
-
-// Temporary function to add test questions
-export const addTestQuestions = mutation({
-  handler: async (ctx) => {
-    const now = Date.now();
-    const testQuestions = [
-      {
-        text: "What's your favorite childhood memory?",
-        category: "deep",
-        tags: ["memory", "childhood"],
-        totalLikes: 0,
-        totalShows: 0,
-        averageViewDuration: 0,
-        lastShownAt: now - 1000000, // 1 hour ago
-        isAIGenerated: false,
-      },
-      {
-        text: "If you could have any superpower, what would it be?",
-        category: "fun",
-        tags: ["superpower", "fantasy"],
-        totalLikes: 0,
-        totalShows: 0,
-        averageViewDuration: 0,
-        lastShownAt: now - 2000000, // 2 hours ago
-        isAIGenerated: false,
-      },
-      {
-        text: "What's your biggest professional achievement?",
-        category: "professional",
-        tags: ["career", "achievement"],
-        totalLikes: 0,
-        totalShows: 0,
-        averageViewDuration: 0,
-        lastShownAt: now - 3000000, // 3 hours ago
-        isAIGenerated: false,
-      },
-      {
-        text: "Would you rather travel to the past or the future?",
-        category: "wouldYouRather",
-        tags: ["time travel", "choice"],
-        totalLikes: 0,
-        totalShows: 0,
-        averageViewDuration: 0,
-        lastShownAt: now - 4000000, // 4 hours ago
-        isAIGenerated: false,
-      },
-      {
-        text: "Coffee or tea?",
-        category: "thisOrThat",
-        tags: ["preference", "drink"],
-        totalLikes: 0,
-        totalShows: 0,
-        averageViewDuration: 0,
-        lastShownAt: now - 5000000, // 5 hours ago
-        isAIGenerated: false,
-      }
-    ];
-
-    const results = [];
-    for (const question of testQuestions) {
-      const id = await ctx.db.insert("questions", question);
-      results.push({ id, text: question.text, category: question.category });
-    }
-    return results;
-  },
-});
-
-
 
 // Function to update multiple question categories at once
 export const updateCategories = mutation({

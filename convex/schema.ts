@@ -118,7 +118,8 @@ export default defineSchema({
     .index("by_style_and_last_shown", ["style", "lastShownAt"])
     .index("by_style_and_total_likes", ["style", "totalLikes"])
     .index("by_tone_and_last_shown", ["tone", "lastShownAt"])
-    .index("by_tone_and_total_likes", ["tone", "totalLikes"]),
+    .index("by_tone_and_total_likes", ["tone", "totalLikes"])
+    .index("by_style_and_tone", ["style", "tone"]),
   tags: defineTable({
     name: v.string(),
     category: v.string(),
