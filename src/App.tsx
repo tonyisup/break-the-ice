@@ -53,25 +53,30 @@ export default function App() {
   }, [selectedStyle, selectedTone, generateAIQuestion]);
   
   useEffect(() => {
-    if (nextQuestions && nextQuestions.length > 0) {
-      setCurrentQuestions(prevQuestions => {
-        // If we have no previous questions (e.g., after style/tone change), just set the new ones
-        if (prevQuestions.length === 0) {
-          return nextQuestions;
-        }
+    if (nextQuestions) {
+      if (nextQuestions.length > 0) {
+        setCurrentQuestions(prevQuestions => {
+          // If we have no previous questions (e.g., after style/tone change), just set the new ones
+          if (prevQuestions.length === 0) {
+            return nextQuestions;
+          }
 
-        // Only append new questions that we don't already have
-        const existingIds = new Set(prevQuestions.map(q => q._id));
-        const newQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
+          // Only append new questions that we don't already have
+          const existingIds = new Set(prevQuestions.map(q => q._id));
+          const newQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
 
-        if (newQuestions.length > 0) {
-          return [...prevQuestions, ...newQuestions];
-        }
+          if (newQuestions.length > 0) {
+            return [...prevQuestions, ...newQuestions];
+          }
 
-        return prevQuestions;
-      });
+          return prevQuestions;
+        });
+      } else if (currentQuestions.length === 0 && !isGenerating) {
+        // If we have no questions, and get an empty list back, generate some.
+        void callGenerateAIQuestion(10);
+      }
     }
-  }, [nextQuestions]);
+  }, [nextQuestions, isGenerating, currentQuestions.length, callGenerateAIQuestion]);
 
   useEffect(() => {
     if (currentQuestions.length > 0 && currentQuestions.length <= 5 && !isGenerating) {
