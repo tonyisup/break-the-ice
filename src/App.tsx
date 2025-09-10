@@ -72,6 +72,11 @@ export default function App() {
     }
   }, [nextQuestions]);
 
+  useEffect(() => {
+    if (currentQuestions.length > 0 && currentQuestions.length <= 5 && !isGenerating) {
+      void callGenerateAIQuestion();
+    }
+  }, [currentQuestions, isGenerating, callGenerateAIQuestion]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -81,9 +86,6 @@ export default function App() {
     setSeenQuestionIds((prev) => [...prev, questionId]);
     setCurrentQuestions(prev => {
       const newQuestions = prev.filter(q => q._id !== questionId);
-      if (newQuestions.length === 0) {
-        void callGenerateAIQuestion();
-      }
       return newQuestions;
     });
 
