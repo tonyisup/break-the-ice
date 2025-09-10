@@ -43,13 +43,16 @@ export default function App() {
 
   const callGenerateAIQuestion = useCallback(async (count: number) => {
     setIsGenerating(true);
-    await generateAIQuestion({
-      style: selectedStyle,
-      tone: selectedTone,
-      selectedTags: [],
-      count: count,
-    });
-    setIsGenerating(false);
+    try {
+      await generateAIQuestion({
+        style: selectedStyle,
+        tone: selectedTone,
+        selectedTags: [],
+        count: count,
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   }, [selectedStyle, selectedTone, generateAIQuestion]);
   
   useEffect(() => {
