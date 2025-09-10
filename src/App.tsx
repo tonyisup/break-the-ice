@@ -41,42 +41,56 @@ export default function App() {
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
-  const callGenerateAIQuestion = useCallback(async () => {    
+  const callGenerateAIQuestion = useCallback(async (count: number) => {
     setIsGenerating(true);
-    await generateAIQuestion({
-      style: selectedStyle,
-      tone: selectedTone,
-      selectedTags: [],
-    });
-    setIsGenerating(false);
+    try {
+      const newQuestions = await generateAIQuestion({
+        style: selectedStyle,
+        tone: selectedTone,
+        selectedTags: [],
+        count: count,
+      });
+      const validNewQuestions = newQuestions.filter((q): q is Doc<"questions"> => q !== null);
+      if (validNewQuestions.length > 0) {
+        setCurrentQuestions(prev => [...prev, ...validNewQuestions]);
+      }
+    } finally {
+      setIsGenerating(false);
+    }
   }, [selectedStyle, selectedTone, generateAIQuestion]);
   
   useEffect(() => {
-    if (!nextQuestions || nextQuestions.length === 0) {
-      if (!isGenerating) {
-        void callGenerateAIQuestion();
+    if (nextQuestions) {
+      if (nextQuestions.length > 0) {
+        setCurrentQuestions(prevQuestions => {
+          // If we have no previous questions (e.g., after style/tone change), just set the new ones
+          if (prevQuestions.length === 0) {
+            return nextQuestions;
+          }
+
+          // Only append new questions that we don't already have
+          const existingIds = new Set(prevQuestions.map(q => q._id));
+          const newQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
+
+          if (newQuestions.length > 0) {
+            return [...prevQuestions, ...newQuestions];
+          }
+
+          return prevQuestions;
+        });
+      } else if (currentQuestions.length === 0 && !isGenerating) {
+        // If we have no questions, and get an empty list back, generate some.
+        void callGenerateAIQuestion(10);
       }
-      return;
-    }  
+    }
+  }, [nextQuestions, isGenerating, currentQuestions.length, callGenerateAIQuestion]);
 
-    setCurrentQuestions(prevQuestions => {
-      // If we have no previous questions (e.g., after style/tone change), just set the new ones
-      if (prevQuestions.length === 0) {
-        return nextQuestions;
-      }
-
-      // Only append new questions that we don't already have
-      const existingIds = new Set(prevQuestions.map(q => q._id));
-      const newQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
-
-      if (newQuestions.length > 0) {
-        return [...prevQuestions, ...newQuestions];
-      }
-
-      return prevQuestions;
-    });
-  }, [nextQuestions, selectedStyle, selectedTone, isGenerating, callGenerateAIQuestion]);
-
+  useEffect(() => {
+    if (currentQuestions.length > 0 && currentQuestions.length <= 5 && !isGenerating) {
+      const questionsToGenerate = 10 - currentQuestions.length;
+      void callGenerateAIQuestion(questionsToGenerate);
+    }
+  }, [currentQuestions, isGenerating, callGenerateAIQuestion]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -84,14 +98,14 @@ export default function App() {
 
   const handleDiscard = async (questionId: Id<"questions">) => {
     setSeenQuestionIds((prev) => [...prev, questionId]);
-    setCurrentQuestions(prev => prev.filter(question => question._id !== questionId));
-    const getMore = currentQuestions.length <= 1;
-    setIsGenerating(getMore);
+    setCurrentQuestions(prev => {
+      const newQuestions = prev.filter(q => q._id !== questionId);
+      return newQuestions;
+    });
+
     void discardQuestion({
       questionId,
       startTime,
-      style: getMore ? selectedStyle : undefined,
-      tone: getMore ? selectedTone : undefined,
     });
   };
 
@@ -120,8 +134,6 @@ export default function App() {
     setStartTime(Date.now());
     if (currentQuestion) {
       void handleDiscard(currentQuestion._id as Id<"questions">);
-    } else {
-      void callGenerateAIQuestion();
     }
   };
 
@@ -136,6 +148,7 @@ export default function App() {
   }
   const handleConfirmRandomizeStyleAndTone = () => {
     setCurrentQuestions([]);
+    setSeenQuestionIds([]);
     toneSelectorRef.current?.confirmRandomizedTone();
     styleSelectorRef.current?.confirmRandomizedStyle();
   }
@@ -280,7 +293,7 @@ export default function App() {
                 onClick={getNextQuestion}
                 className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
                 title="Next Question"
-                disabled={isGenerating}
+                disabled={isGenerating && currentQuestions.length === 0}
               >
                 <ArrowBigRight size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
                 <span className="sm:block hidden text-white font-semibold text-base">Next</span>
