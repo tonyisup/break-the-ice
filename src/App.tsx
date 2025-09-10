@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { useTheme } from "./hooks/useTheme";
 import { AnimatePresence } from "framer-motion";
 import { useLocalStorage } from "./hooks/useLocalStorage";
+import { useQuestionHistory } from "./hooks/useQuestionHistory";
 import { StyleSelector, StyleSelectorRef } from "./components/styles-selector";
 import { ToneSelector, ToneSelectorRef } from "./components/tone-selector";
 import { ArrowBigRight, ArrowBigRightDash, RouteOff, Shuffle } from "lucide-react";
@@ -18,6 +19,7 @@ import { cn } from "./lib/utils";
 export default function App() {
   const { theme, setTheme } = useTheme();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const { addQuestionToHistory } = useQuestionHistory();
   const [startTime, setStartTime] = useState(Date.now());
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -133,6 +135,7 @@ export default function App() {
   const getNextQuestion = () => {
     setStartTime(Date.now());
     if (currentQuestion) {
+      addQuestionToHistory(currentQuestion);
       void handleDiscard(currentQuestion._id as Id<"questions">);
     }
   };
@@ -182,6 +185,12 @@ export default function App() {
             className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white", isFavorite && "bg-white/20 dark:bg-white/20")}
           >
             ❤️ Liked
+          </Link>
+          <Link
+            to="/history"
+            className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
+          >
+            📜 History
           </Link>
         </div>
         <div className="flex items-center gap-2">
