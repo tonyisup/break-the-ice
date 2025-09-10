@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, Share2 } from 'lucide-react';
 import { Doc } from '../../../convex/_generated/dataModel';
 
@@ -36,9 +36,11 @@ export function ModernQuestionCard({
   };
 
   return (
-    <motion.div
-      ref={cardRef}
-      initial={{ scale: .8, rotate: 0 }}
+    <AnimatePresence>
+      <motion.div
+        key={question?._id}
+        ref={cardRef}
+        initial={{ scale: .8, rotate: 0 }}
         animate={{ scale: 1, rotate: 0 }}
         transition={{
           type: "spring",
@@ -150,5 +152,6 @@ export function ModernQuestionCard({
           </div>
         </div>
       </motion.div>
+    </AnimatePresence>
   );
 }

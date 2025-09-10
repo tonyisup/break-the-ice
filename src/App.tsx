@@ -44,12 +44,16 @@ export default function App() {
   const callGenerateAIQuestion = useCallback(async (count: number) => {
     setIsGenerating(true);
     try {
-      await generateAIQuestion({
+      const newQuestions = await generateAIQuestion({
         style: selectedStyle,
         tone: selectedTone,
         selectedTags: [],
         count: count,
       });
+      const validNewQuestions = newQuestions.filter((q): q is Doc<"questions"> => q !== null);
+      if (validNewQuestions.length > 0) {
+        setCurrentQuestions(prev => [...prev, ...validNewQuestions]);
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -204,7 +208,6 @@ export default function App() {
         <div className="flex-1 flex items-center justify-center px-5 pb-8">
 
           <ModernQuestionCard
-            key={currentQuestion?._id}
             isGenerating={isGenerating}
             question={currentQuestion}
             isFavorite={isFavorite}
@@ -290,7 +293,7 @@ export default function App() {
                 onClick={getNextQuestion}
                 className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
                 title="Next Question"
-                disabled={isGenerating}
+                disabled={isGenerating && currentQuestions.length === 0}
               >
                 <ArrowBigRight size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
                 <span className="sm:block hidden text-white font-semibold text-base">Next</span>
