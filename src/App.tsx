@@ -52,30 +52,25 @@ export default function App() {
   }, [selectedStyle, selectedTone, generateAIQuestion]);
   
   useEffect(() => {
-    if (!nextQuestions || nextQuestions.length === 0) {
-      if (!isGenerating) {
-        void callGenerateAIQuestion();
-      }
-      return;
-    }  
+    if (nextQuestions && nextQuestions.length > 0) {
+      setCurrentQuestions(prevQuestions => {
+        // If we have no previous questions (e.g., after style/tone change), just set the new ones
+        if (prevQuestions.length === 0) {
+          return nextQuestions;
+        }
 
-    setCurrentQuestions(prevQuestions => {
-      // If we have no previous questions (e.g., after style/tone change), just set the new ones
-      if (prevQuestions.length === 0) {
-        return nextQuestions;
-      }
+        // Only append new questions that we don't already have
+        const existingIds = new Set(prevQuestions.map(q => q._id));
+        const newQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
 
-      // Only append new questions that we don't already have
-      const existingIds = new Set(prevQuestions.map(q => q._id));
-      const newQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
+        if (newQuestions.length > 0) {
+          return [...prevQuestions, ...newQuestions];
+        }
 
-      if (newQuestions.length > 0) {
-        return [...prevQuestions, ...newQuestions];
-      }
-
-      return prevQuestions;
-    });
-  }, [nextQuestions, selectedStyle, selectedTone, isGenerating, callGenerateAIQuestion]);
+        return prevQuestions;
+      });
+    }
+  }, [nextQuestions]);
 
 
   const toggleTheme = () => {
@@ -84,14 +79,17 @@ export default function App() {
 
   const handleDiscard = async (questionId: Id<"questions">) => {
     setSeenQuestionIds((prev) => [...prev, questionId]);
-    setCurrentQuestions(prev => prev.filter(question => question._id !== questionId));
-    const getMore = currentQuestions.length <= 1;
-    setIsGenerating(getMore);
+    setCurrentQuestions(prev => {
+      const newQuestions = prev.filter(q => q._id !== questionId);
+      if (newQuestions.length === 0) {
+        void callGenerateAIQuestion();
+      }
+      return newQuestions;
+    });
+
     void discardQuestion({
       questionId,
       startTime,
-      style: getMore ? selectedStyle : undefined,
-      tone: getMore ? selectedTone : undefined,
     });
   };
 
@@ -120,8 +118,6 @@ export default function App() {
     setStartTime(Date.now());
     if (currentQuestion) {
       void handleDiscard(currentQuestion._id as Id<"questions">);
-    } else {
-      void callGenerateAIQuestion();
     }
   };
 

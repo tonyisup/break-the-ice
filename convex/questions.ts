@@ -8,11 +8,9 @@ export const discardQuestion = mutation({
   args: {
     questionId: v.id("questions"),
     startTime: v.number(),
-    style: v.optional(v.string()),
-    tone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { questionId, startTime, style, tone } = args;
+    const { questionId, startTime } = args;
 
     const question = await ctx.db.get(questionId);
     if (question) {
@@ -30,15 +28,6 @@ export const discardQuestion = mutation({
       });
 
       await Promise.all([analytics, updateQuestion]);
-    }
-
-    //we only discard AND supply style and tone when running out of questions on the main page
-    if (style && tone) {
-      void ctx.scheduler.runAfter(0, api.ai.generateAIQuestion, {
-        style,
-        tone,
-        selectedTags: [],
-      });
     }
   },
 });
