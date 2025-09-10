@@ -161,6 +161,12 @@ export default function App() {
     getNextQuestion();
   }
   const currentQuestion = currentQuestions[0] || null;
+
+  useEffect(() => {
+    if (currentQuestion) {
+      addQuestionToHistory(currentQuestion);
+    }
+  }, [currentQuestion, addQuestionToHistory]);
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
   const gradientTarget = theme === "dark" ? "#000" : "#fff";
