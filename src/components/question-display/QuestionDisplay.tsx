@@ -22,6 +22,10 @@ export const QuestionDisplay = ({
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (info.offset.y < -100) {
       onSwipe();
+    } else if (info.offset.y > 100) {
+      if (currentQuestion) {
+        toggleLike(currentQuestion._id);
+      }
     }
   };
   return (
