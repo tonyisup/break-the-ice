@@ -8,7 +8,11 @@ import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { HouseIcon } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+
 import { motion, AnimatePresence } from "framer-motion";
+
 
 function LikedQuestionsPageContent() {
   const { theme, setTheme } = useTheme();
@@ -48,6 +52,15 @@ function LikedQuestionsPageContent() {
   const handleRemoveFavorite = (questionId: Id<"questions">) => {
     setLikedQuestions(likedQuestions.filter(id => id !== questionId));
   };
+
+  const gradient = ['#667EEA', '#764BA2'];
+  const isColorDark = (color: string) => {
+    if (!color) return false;
+    const [r, g, b] = color.match(/\w\w/g)!.map((hex) => parseInt(hex, 16));
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness < 128;
+  };
+
   return (
     <div
       className="min-h-screen transition-colors overflow-hidden p-4"
@@ -62,7 +75,7 @@ function LikedQuestionsPageContent() {
             className="flex items-center gap-2 p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors text-white"
             aria-label="Home"
           >
-            <HouseIcon /> 
+            <HouseIcon />
             Home
           </button>
         </Link>
@@ -79,7 +92,7 @@ function LikedQuestionsPageContent() {
           <p className="text-gray-500 dark:text-gray-400 text-lg">You haven't liked any questions yet.</p>
           <Link
             to="/"
-            className="inline-block mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "inline-block mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
           >
             Start Exploring
           </Link>

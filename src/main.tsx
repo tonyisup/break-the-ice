@@ -15,6 +15,7 @@ import SettingsPage from "./app/settings/page";
 import StylesPage from "./app/admin/styles/page";
 import TonesPage from "./app/admin/tones/page";
 import HistoryPage from "./app/history/page";
+import QuestionPage from "./app/question/page";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -25,6 +26,7 @@ createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<App />} />
+          <Route path="/question/:id" element={<QuestionPage />} />
           <Route path="/liked" element={<LikedQuestionsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/history" element={<HistoryPage />} />

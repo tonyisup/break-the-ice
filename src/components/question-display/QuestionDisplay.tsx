@@ -8,8 +8,10 @@ interface QuestionDisplayProps {
   isFavorite: boolean;
   gradient: string[];
   toggleLike: (questionId: any) => void;
+
 colors
   onSwipe: () => void;
+
   toggleHide: (questionId: any) => void;
 }
 
@@ -19,8 +21,11 @@ export const QuestionDisplay = ({
   isFavorite,
   gradient,
   toggleLike,
+
   onSwipe,
+
   toggleHide,
+
 }: QuestionDisplayProps) => {
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (info.offset.y < -100) {
@@ -48,12 +53,17 @@ export const QuestionDisplay = ({
         isFavorite={isFavorite}
         gradient={gradient}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
+
+
         onToggleHidden={() => currentQuestion && toggleHide(currentQuestion._id)}
         onShare={() => {
+
           if (currentQuestion && navigator.share) {
+            const shareUrl = `${window.location.origin}/question/${currentQuestion._id}`;
             void navigator.share({
               title: 'Ice Breaker Question',
               text: currentQuestion.text,
+              url: shareUrl,
             });
           }
         }}
