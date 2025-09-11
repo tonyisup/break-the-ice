@@ -6,6 +6,7 @@ import { ConvexReactClient } from "convex/react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./index.css";
 import App from "./App";
+import LandingPage from "./pages/LandingPage";
 import LikedQuestionsPage from "./app/liked/page";
 import AdminPage from "./app/admin/page";
 import QuestionsPage from "./app/admin/questions/page";
@@ -25,7 +26,8 @@ createRoot(document.getElementById("root")!).render(
     <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<App />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/app" element={<App />} />
           <Route path="/question/:id" element={<QuestionPage />} />
           <Route path="/liked" element={<LikedQuestionsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
