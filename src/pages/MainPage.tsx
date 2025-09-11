@@ -202,7 +202,7 @@ export default function MainPage() {
               gradient={gradient}
               toggleLike={toggleLike}
               onSwipe={getNextQuestion}
-              toggleHide={toggleHide
+              toggleHide={toggleHide)
             />
           )}
           {isGenerating && !currentQuestion && (
