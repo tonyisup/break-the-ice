@@ -86,7 +86,7 @@ export const ActionButtons = ({
               title="Next Question"
               disabled={isGenerating && !currentQuestion}
             >
-              <ArrowBigRight size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
+              <ArrowBigUp size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
               <span className="sm:block hidden text-white font-semibold text-base">Next</span>
             </button>
           </div>
