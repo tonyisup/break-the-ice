@@ -16,8 +16,8 @@ export default function QuestionPage() {
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
   const question = useQuery(api.questions.getQuestionById, id ? { id } : "skip");
-  const style = useQuery(api.styles.getStyle, question ? { id: question.style! } : "skip");
-  const tone = useQuery(api.tones.getTone, question ? { id: question.tone! } : "skip");
+  const style = useQuery(api.styles.getStyle, (question && question.style) ? { id: question.style } : "skip");
+  const tone = useQuery(api.tones.getTone, (question && question.tone) ? { id: question.tone } : "skip");
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
