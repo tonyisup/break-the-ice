@@ -3,7 +3,6 @@ import { api } from "../../convex/_generated/api";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { Doc, Id } from "../../convex/_generated/dataModel";
-import { AIQuestionGenerator } from "../components/ai-question-generator/ai-question-generator";
 import { useTheme } from "../hooks/useTheme";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useQuestionHistory } from "../hooks/useQuestionHistory";
@@ -12,7 +11,7 @@ import { ToneSelector, ToneSelectorRef } from "../components/tone-selector";
 import { Header } from "../components/header";
 import { ActionButtons } from "../components/action-buttons";
 import { QuestionDisplay } from "../components/question-display";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { isColorDark } from "@/lib/utils";
 
 export default function MainPage() {

@@ -20,5 +20,9 @@ export function useQuestionHistory() {
     });
   }, [setHistory]);
 
-  return { history, addQuestionToHistory, removeQuestionFromHistory };
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+  }, [setHistory]);
+
+  return { history, addQuestionToHistory, removeQuestionFromHistory, clearHistory };
 }
