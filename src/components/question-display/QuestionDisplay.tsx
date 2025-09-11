@@ -50,6 +50,6 @@ export const QuestionDisplay = ({
           }
         }}
       />
-    </div>
+    </motion.div>
   );
 };
