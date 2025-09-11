@@ -3,16 +3,39 @@ import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
+import { useMemo } from "react";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { HouseIcon } from "lucide-react";
+
 import { cn } from "@/lib/utils";
+
+import { motion, AnimatePresence } from "framer-motion";
+
 
 function LikedQuestionsPageContent() {
   const { theme, setTheme } = useTheme();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: likedQuestions });
+  const styles = useQuery(api.styles.getStyles, {});
+  const tones = useQuery(api.tones.getTones, {});
+
+  const styleColors = useMemo(() => {
+    if (!styles) return {};
+    return styles.reduce((acc, style) => {
+      acc[style.id] = style.color;
+      return acc;
+    }, {} as { [key: string]: string });
+  }, [styles]);
+
+  const toneColors = useMemo(() => {
+    if (!tones) return {};
+    return tones.reduce((acc, tone) => {
+      acc[tone.id] = tone.color;
+      return acc;
+    }, {} as { [key: string]: string });
+  }, [tones]);
 
   if (!questions) {
     return (
@@ -76,15 +99,37 @@ function LikedQuestionsPageContent() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-          {questions.map((question: Doc<"questions">) => (
-            <ModernQuestionCard
-              key={question._id}
-              question={question}
-              isGenerating={false}
-              isFavorite={true}
-              onToggleFavorite={() => handleRemoveFavorite(question._id)}
-            />
-          ))}
+          <AnimatePresence>
+          {questions.map((question: Doc<"questions">) => {
+            const styleColor = (question.style && styleColors[question.style]) || '#667EEA';
+            const toneColor = (question.tone && toneColors[question.tone]) || '#764BA2';
+            const gradient = [styleColor, toneColor];
+            return (
+              <motion.div
+                key={question._id}
+                layout
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                onDragEnd={(event, info) => {
+                  if (Math.abs(info.offset.x) > 100) {
+                    handleRemoveFavorite(question._id);
+                  }
+                }}
+              >
+                <ModernQuestionCard
+                  question={question}
+                  isGenerating={false}
+                  isFavorite={true}
+                  onToggleFavorite={() => handleRemoveFavorite(question._id)}
+                  gradient={gradient}
+                />
+              </motion.div>
+            );
+          })}
+          </AnimatePresence>
         </div>
       )}
     </div>
