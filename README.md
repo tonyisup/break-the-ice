@@ -1,50 +1,86 @@
-# Ice Breaker App Implementation
-  
-This is a project built with [Chef](https://chef.convex.dev) using [Convex](https://convex.dev) as its backend.
-  
-This project is connected to the Convex deployment named [`brazen-sturgeon-967`](https://dashboard.convex.dev/d/brazen-sturgeon-967).
-  
-## Features
+# Ice Breaker: AI-Powered Conversation Starters
 
-### Core Features
-- **Question Display**: Instantly see unique ice-breaker questions upon landing
-- **Swipe Interface**: Swipe away questions to view new ones
-- **Favorites**: Mark questions as "liked" and view them later
-- **AI Generation**: Generate custom questions using AI with tag-based filtering
+**Ice Breaker** is a fun and interactive application designed to spark engaging conversations in any social setting. Whether you're in a team meeting, a workshop, or a friendly get-together, this app provides an endless stream of unique ice-breaker questions to get everyone talking.
 
-### AI Question Generation
-- **Tag Selection**: Choose from predefined categories like fitness, work, travel, food, music, movies, books, technology, family, hobbies, dreams, childhood, learning, adventure, and creativity
-- **Smart Prompts**: AI generates contextually relevant questions based on selected tags
-- **Seamless Integration**: Generated questions are automatically added to your question queue
+Powered by a modern tech stack, Ice Breaker features a sleek, intuitive interface and AI-driven question generation to ensure you never run out of interesting topics.
 
-## Project structure
-  
-The frontend code is in the `src` directory and is built with [Vite](https://vitejs.dev/).
-  
-The backend code is in the `convex` directory.
-  
-`npm run dev` will start the frontend and backend servers.
+## ✨ Features
 
-## Environment Setup
+*   **Instant Question Display**: Get a unique ice-breaker question the moment you open the app.
+*   **Swipe Interface**: Effortlessly swipe through questions to find the perfect one.
+*   **Favorites**: Like a question? Save it to your "Liked" list for easy access later.
+*   **AI-Powered Generation**: Generate custom questions tailored to your interests using AI. Select from various categories, styles, and tones to guide the generation process.
+*   **Sleek, Modern UI**: Enjoy a beautiful, responsive interface with both **Dark and Light modes**, smooth animations, and full gesture support.
+*   **Admin Dashboard**: A built-in dashboard allows administrators to manage questions, categories, styles, and tones, giving you full control over the app's content.
 
-### OpenAI API Key
-To use the AI question generation feature, you need to set up an OpenAI API key:
+## 🤖 AI-Powered Question Generation
 
-1. Get your API key from [OpenAI Platform](https://platform.openai.com/api-keys)
-2. Create a `.env.local` file in the project root
-3. Add your API key: `OPENAI_API_KEY=your_actual_api_key_here`
+The AI question generation feature uses OpenAI's GPT-4 to create unique and contextually relevant questions. You can guide the AI by selecting from a variety of predefined categories, styles, and tones to generate questions that fit any occasion.
 
-### App authentication
+For a more detailed explanation of how this feature is implemented, check out the [AI Feature Guide](./AI_FEATURE_GUIDE.md).
 
-Chef apps use [Convex Auth](https://auth.convex.dev/) with Anonymous auth for easy sign in. You may wish to change this before deploying your app.
+## 🚀 Getting Started
 
-## Developing and deploying your app
+Follow these steps to get the Ice Breaker application running on your local machine.
 
-Check out the [Convex docs](https://docs.convex.dev/) for more information on how to develop with Convex.
-* If you're new to Convex, the [Overview](https://docs.convex.dev/understanding/) is a good place to start
-* Check out the [Hosting and Deployment](https://docs.convex.dev/production/) docs for how to deploy your app
-* Read the [Best Practices](https://docs.convex.dev/understanding/best-practices/) guide for tips on how to improve you app further
+### Prerequisites
 
-## HTTP API
+*   [Node.js](https://nodejs.org/) (v18 or later)
+*   [npm](https://www.npmjs.com/)
 
-User-defined http routes are defined in the `convex/router.ts` file. We split these routes into a separate file from `convex/http.ts` to allow us to prevent the LLM from modifying the authentication routes.
+### 1. Installation
+
+Clone the repository and install the dependencies:
+
+```bash
+git clone https://github.com/your-repo/ice-breaker.git
+cd ice-breaker
+npm install
+```
+
+### 2. Environment Variables
+
+This project requires both frontend and backend environment variables to be configured.
+
+#### Frontend Variables (`.env.local`)
+
+Create a file named `.env.local` in the root of the project and add the following variables:
+
+```
+VITE_CONVEX_URL="your-convex-url"
+VITE_CLERK_PUBLISHABLE_KEY="your-clerk-publishable-key"
+```
+
+*   `VITE_CONVEX_URL`: You can find this in your [Convex Dashboard](https://dashboard.convex.dev) under **Settings**.
+*   `VITE_CLERK_PUBLISHABLE_KEY`: You can find this in your [Clerk Dashboard](https://dashboard.clerk.com) under **API Keys**.
+
+#### Backend Variables (Convex Dashboard)
+
+The following variables need to be set in your [Convex Dashboard](https://dashboard.convex.dev) under **Settings** → **Environment Variables**:
+
+*   `CLERK_JWT_ISSUER_DOMAIN`: You can find this in your [Clerk Dashboard](https://dashboard.clerk.com) under **API Keys**. It should be the "JWT Issuer URL".
+*   `OPENAI_API_KEY`: Your API key from the [OpenAI Platform](https://platform.openai.com/api-keys).
+
+### 3. Running the Application
+
+Once your environment variables are set, you can start the application with the following command:
+
+```bash
+npm run dev
+```
+
+This command will:
+1.  Run a one-time setup script (`setup.mjs`) to help configure Convex auth.
+2.  Start the Vite development server for the frontend.
+3.  Start the Convex development server for the backend.
+
+The application will open in your default browser.
+
+## 🛠️ Tech Stack
+
+*   **Frontend**: [React](https://react.dev/), [Vite](https://vitejs.dev/), [TypeScript](https://www.typescriptlang.org/)
+*   **Backend & Database**: [Convex](https://convex.dev/)
+*   **Authentication**: [Clerk](https://clerk.com/)
+*   **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+*   **Animation**: [Framer Motion](https://www.framer.com/motion/)
+*   **Testing**: [Vitest](https://vitest.dev/)
