@@ -127,12 +127,17 @@ export const getQuestionsByIds = query({
 
 export const getQuestionById = query({
   args: {
-    id: v.id("questions"),
+    id: v.string(),
   },
   handler: async (ctx, args) => {
-    const { id } = args;
-    const question = await ctx.db.get(id);
-    return question;
+    if (!args.id) return null;
+    try {
+      const questionId = ctx.db.normalizeId("questions", args.id);
+      if (!questionId) return null;
+      return await ctx.db.get(questionId);
+    } catch {
+      return null;
+    }
   },
 });
 

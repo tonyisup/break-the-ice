@@ -14,7 +14,7 @@ export default function QuestionPage() {
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
-  const question = useQuery(api.questions.getQuestionById, id ? { id: id as Id<"questions"> } : "skip");
+  const question = useQuery(api.questions.getQuestionById, id ? { id } : "skip");
   const style = useQuery(api.styles.getStyle, question ? { id: question.style! } : "skip");
   const tone = useQuery(api.tones.getTone, question ? { id: question.tone! } : "skip");
 
