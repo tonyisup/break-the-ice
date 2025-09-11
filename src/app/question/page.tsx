@@ -50,7 +50,11 @@ export default function QuestionPage() {
     return brightness < 128;
   };
 
-  if (question === undefined) {
+  const isLoadingQuestion = question === undefined;
+  const isLoadingStyle = question?.style && style === undefined;
+  const isLoadingTone = question?.tone && tone === undefined;
+
+  if (isLoadingQuestion || isLoadingStyle || isLoadingTone) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div
