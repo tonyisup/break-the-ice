@@ -49,7 +49,21 @@ export default function QuestionPage() {
     return brightness < 128;
   };
 
-  if (!question) {
+  if (question === undefined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div
+          className="w-12 h-12 border-4 border-gray-200 dark:border-gray-700 rounded-full animate-spin"
+          style={{
+            borderTopColor: gradient[0],
+            borderBottomColor: gradient[1]
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (question === null) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div>Question not found</div>
