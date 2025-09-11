@@ -19,7 +19,7 @@ function LikedQuestionsPageContent() {
   const styleColors = useMemo(() => {
     if (!styles) return {};
     return styles.reduce((acc, style) => {
-      acc[style.name] = style.color;
+      acc[style.id] = style.color;
       return acc;
     }, {} as { [key: string]: string });
   }, [styles]);
@@ -27,7 +27,7 @@ function LikedQuestionsPageContent() {
   const toneColors = useMemo(() => {
     if (!tones) return {};
     return tones.reduce((acc, tone) => {
-      acc[tone.name] = tone.color;
+      acc[tone.id] = tone.color;
       return acc;
     }, {} as { [key: string]: string });
   }, [tones]);
@@ -86,8 +86,8 @@ function LikedQuestionsPageContent() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           {questions.map((question: Doc<"questions">) => {
-            const styleColor = styleColors[question.style] || '#667EEA';
-            const toneColor = toneColors[question.tone] || '#764BA2';
+            const styleColor = (question.style && styleColors[question.style]) || '#667EEA';
+            const toneColor = (question.tone && toneColors[question.tone]) || '#764BA2';
             const gradient = [styleColor, toneColor];
             return (
               <ModernQuestionCard
