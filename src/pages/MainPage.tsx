@@ -85,6 +85,13 @@ export default function MainPage() {
     }
   }, [currentQuestions, isGenerating, callGenerateAIQuestion]);
 
+  const currentQuestion = currentQuestions[0] || null;
+  useEffect(() => {
+    if (currentQuestion) {
+      addQuestionToHistory(currentQuestion);
+    }
+  }, [currentQuestion, addQuestionToHistory]);
+
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
@@ -124,7 +131,6 @@ export default function MainPage() {
   const getNextQuestion = () => {
     setStartTime(Date.now());
     if (currentQuestion) {
-      addQuestionToHistory(currentQuestion);
       void handleDiscard(currentQuestion._id as Id<"questions">);
     }
   };
@@ -148,7 +154,6 @@ export default function MainPage() {
     styleSelectorRef.current?.cancelRandomizingStyle();
     getNextQuestion();
   }
-  const currentQuestion = currentQuestions[0] || null;
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
   const gradientTarget = theme === "dark" ? "#000" : "#fff";

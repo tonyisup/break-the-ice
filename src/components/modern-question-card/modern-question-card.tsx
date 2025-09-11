@@ -46,7 +46,7 @@ export function ModernQuestionCard({
           background: `linear-gradient(135deg, ${gradient[1]}, ${gradient[0]})`
         }}
       >
-        <div className="w-full h-full bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-center items-center">
+        <div className="w-full h-full min-h-[300px] bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-center items-center">
           {isGenerating && !question ? (
             // Loading Spinner
             <div className="flex flex-col items-center justify-between space-y-4 min-h-[300px]">
