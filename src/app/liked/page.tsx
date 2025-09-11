@@ -8,6 +8,7 @@ import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { HouseIcon } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 function LikedQuestionsPageContent() {
   const { theme, setTheme } = useTheme();
@@ -85,21 +86,37 @@ function LikedQuestionsPageContent() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          <AnimatePresence>
           {questions.map((question: Doc<"questions">) => {
             const styleColor = (question.style && styleColors[question.style]) || '#667EEA';
             const toneColor = (question.tone && toneColors[question.tone]) || '#764BA2';
             const gradient = [styleColor, toneColor];
             return (
-              <ModernQuestionCard
+              <motion.div
                 key={question._id}
-                question={question}
-                isGenerating={false}
-                isFavorite={true}
-                onToggleFavorite={() => handleRemoveFavorite(question._id)}
-                gradient={gradient}
-              />
+                layout
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                onDragEnd={(event, info) => {
+                  if (Math.abs(info.offset.x) > 100) {
+                    handleRemoveFavorite(question._id);
+                  }
+                }}
+              >
+                <ModernQuestionCard
+                  question={question}
+                  isGenerating={false}
+                  isFavorite={true}
+                  onToggleFavorite={() => handleRemoveFavorite(question._id)}
+                  gradient={gradient}
+                />
+              </motion.div>
             );
           })}
+          </AnimatePresence>
         </div>
       )}
     </div>
