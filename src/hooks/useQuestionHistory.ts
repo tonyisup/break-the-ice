@@ -1,5 +1,5 @@
 import { useLocalStorage } from "./useLocalStorage";
-import { Doc } from "../../convex/_generated/dataModel";
+import { Doc, Id } from "../../convex/_generated/dataModel";
 import { useCallback } from "react";
 
 const MAX_HISTORY_LENGTH = 100;
@@ -14,5 +14,11 @@ export function useQuestionHistory() {
     });
   }, [setHistory]);
 
-  return { history, addQuestionToHistory };
+  const removeQuestionFromHistory = useCallback((questionId: Id<"questions">) => {
+    setHistory((prevHistory) => {
+      return prevHistory.filter(q => q._id !== questionId);
+    });
+  }, [setHistory]);
+
+  return { history, addQuestionToHistory, removeQuestionFromHistory };
 }
