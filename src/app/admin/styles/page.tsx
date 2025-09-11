@@ -50,6 +50,7 @@ function StyleManager() {
   const [newStyleIcon, setNewStyleIcon] = useState('');
   const [newStyleExample, setNewStyleExample] = useState('');
   const [newStylePromptGuidance, setNewStylePromptGuidance] = useState('');
+  const [newStyleOrder, setNewStyleOrder] = useState('');
   const [editingStyle, setEditingStyle] = useState<Doc<"styles"> | null>(null);
   const [searchText, setSearchText] = useState('');
 
@@ -64,6 +65,7 @@ function StyleManager() {
         icon: newStyleIcon,
         example: newStyleExample,
         promptGuidanceForAI: newStylePromptGuidance,
+        order: newStyleOrder ? parseFloat(newStyleOrder) : undefined,
       });
       setNewStyleName('');
       setNewStyleDescription('');
@@ -72,6 +74,7 @@ function StyleManager() {
       setNewStyleIcon('');
       setNewStyleExample('');
       setNewStylePromptGuidance('');
+      setNewStyleOrder('');
     }
   };
 
@@ -87,6 +90,7 @@ function StyleManager() {
         icon: editingStyle.icon,
         example: editingStyle.example,
         promptGuidanceForAI: editingStyle.promptGuidanceForAI,
+        order: editingStyle.order,
       });
       setEditingStyle(null);
     }
@@ -172,6 +176,16 @@ function StyleManager() {
                 placeholder="Enter style icon"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Order</label>
+              <input
+                type="number"
+                value={newStyleOrder}
+                onChange={(e) => setNewStyleOrder(e.target.value)}
+                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter order"
+              />
+            </div>
           </div>
           <div className="space-y-4 mb-6">
             <div>
@@ -251,6 +265,7 @@ function StyleManager() {
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Icon</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Example</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Prompt Guidance</th>
+                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Order</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Actions</th>
               </tr>
             </thead>
@@ -343,6 +358,18 @@ function StyleManager() {
                       />
                     ) : (
                       <span className="text-gray-600 dark:text-gray-400">{style.promptGuidanceForAI}</span>
+                    )}
+                  </td>
+                  <td className="p-4 align-top">
+                    {editingStyle?._id === style._id ? (
+                      <input
+                        type="number"
+                        value={editingStyle.order ?? ''}
+                        onChange={(e) => setEditingStyle({ ...editingStyle, order: e.target.value ? parseFloat(e.target.value) : undefined })}
+                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <span className="text-gray-600 dark:text-gray-400">{style.order}</span>
                     )}
                   </td>
                   <td className="p-4 align-top">
@@ -475,6 +502,21 @@ function StyleManager() {
                     />
                   ) : (
                     <span className="text-gray-600 dark:text-gray-400 text-sm">{style.promptGuidanceForAI}</span>
+                  )}
+                </div>
+
+                {/* Order */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Order</label>
+                  {editingStyle?._id === style._id ? (
+                    <input
+                      type="number"
+                      value={editingStyle.order ?? ''}
+                      onChange={(e) => setEditingStyle({ ...editingStyle, order: e.target.value ? parseFloat(e.target.value) : undefined })}
+                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  ) : (
+                    <span className="text-gray-600 dark:text-gray-400 text-sm">{style.order}</span>
                   )}
                 </div>
 

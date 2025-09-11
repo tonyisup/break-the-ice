@@ -73,8 +73,10 @@ export default defineSchema({
     icon: v.string(),
     promptGuidanceForAI: v.optional(v.string()),
     example: v.optional(v.string()),
+    order: v.optional(v.float64()),
   }).index("name", ["name"])
-    .index("id", ["id"]),
+    .index("id", ["id"])
+    .index("by_order", ["order"]),
   tones: defineTable({
     id: v.string(),
     name: v.string(),
@@ -82,8 +84,10 @@ export default defineSchema({
     color: v.string(),
     icon: v.string(),
     promptGuidanceForAI: v.string(),
+    order: v.optional(v.float64()),
   }).index("name", ["name"])
-    .index("id", ["id"]),
+    .index("id", ["id"])
+    .index("by_order", ["order"]),
   categories: defineTable({
     id: v.string(),
     name: v.string(),

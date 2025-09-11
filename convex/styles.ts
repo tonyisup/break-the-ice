@@ -14,6 +14,7 @@ export const getStyle = query({
     icon: v.string(),
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
+    order: v.optional(v.float64()),
   }),
   handler: async (ctx, args) => {
     const style = await ctx.db.query("styles").filter((q) => q.eq(q.field("id"), args.id)).first();
@@ -38,9 +39,10 @@ export const getStyles = query({
     icon: v.string(),
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
+    order: v.optional(v.float64()),
   })),
   handler: async (ctx) => {
-    return await ctx.db.query("styles").order("asc").collect();
+    return await ctx.db.query("styles").withIndex("by_order").order("asc").collect();
   },
 });
 
@@ -54,6 +56,7 @@ export const createStyle = mutation({
     icon: v.string(),
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
+    order: v.optional(v.float64()),
   },
   handler: async (ctx, args) => {
     const existingStyle = await ctx.db
@@ -72,6 +75,7 @@ export const createStyle = mutation({
       icon: args.icon,
       example: args.example,
       promptGuidanceForAI: args.promptGuidanceForAI,
+      order: args.order,
     });
     return styleId;
   },
@@ -88,6 +92,7 @@ export const updateStyle = mutation({
     icon: v.string(),
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
+    order: v.optional(v.float64()),
   },
   handler: async (ctx, args) => {
     const { id, ...rest } = args;
@@ -101,6 +106,7 @@ export const updateStyle = mutation({
         icon: args.icon,
         example: args.example,
         promptGuidanceForAI: args.promptGuidanceForAI,
+        order: args.order,
       });
     }
   },
