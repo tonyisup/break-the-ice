@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Heart, Share2 } from 'lucide-react';
+import { Heart, Share2, ThumbsDown } from 'lucide-react';
 import { Doc } from '../../../convex/_generated/dataModel';
 
 interface ModernQuestionCardProps {
@@ -8,6 +8,7 @@ interface ModernQuestionCardProps {
   isFavorite: boolean;
   gradient?: string[];
   onToggleFavorite: () => void;
+  onToggleHidden: () => void;
   onShare?: () => void;
 }
 
