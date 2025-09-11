@@ -138,6 +138,7 @@ export default function MainPage() {
     if (!currentQuestions) return;
     setHiddenQuestions([...hiddenQuestions, questionId]);
     toast.success("Question hidden");
+    getNextQuestion();
   }
 
   const getNextQuestion = () => {

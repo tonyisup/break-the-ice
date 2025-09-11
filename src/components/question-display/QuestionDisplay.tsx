@@ -7,6 +7,7 @@ interface QuestionDisplayProps {
   isFavorite: boolean;
   gradient: string[];
   toggleLike: (questionId: any) => void;
+  toggleHide: (questionId: any) => void;
 }
 
 export const QuestionDisplay = ({
@@ -15,6 +16,7 @@ export const QuestionDisplay = ({
   isFavorite,
   gradient,
   toggleLike,
+  toggleHide,
 }: QuestionDisplayProps) => {
   return (
     <div className="flex-1 flex items-center justify-center px-5 pb-8">
@@ -24,6 +26,7 @@ export const QuestionDisplay = ({
         isFavorite={isFavorite}
         gradient={gradient}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
+        onToggleHidden={() => currentQuestion && toggleHide(currentQuestion._id)}
         onShare={() => {
           if (currentQuestion && navigator.share) {
             void navigator.share({

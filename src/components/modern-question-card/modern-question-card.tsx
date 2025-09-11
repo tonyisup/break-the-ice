@@ -18,6 +18,7 @@ export function ModernQuestionCard({
   isFavorite,
   gradient = ['#667EEA', '#764BA2'],
   onToggleFavorite,
+  onToggleHidden,
   onShare,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -109,6 +110,17 @@ export function ModernQuestionCard({
                   <Heart
                     size={24}
                     className={isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600 dark:text-gray-400'}
+                  />
+                </button>
+
+                <button
+                  onClick={onToggleHidden}
+                  className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
+                  title="Hide question"
+                >
+                  <ThumbsDown
+                    size={24}
+                    className='text-gray-600 dark:text-gray-400'
                   />
                 </button>
 
