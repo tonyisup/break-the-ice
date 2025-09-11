@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
@@ -13,6 +13,7 @@ import { cn } from "../../lib/utils";
 
 export default function QuestionPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { addQuestionToHistory } = useQuestionHistory();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
@@ -105,16 +106,8 @@ export default function QuestionPage() {
           isFavorite={isFavorite}
           gradient={gradient}
           toggleLike={toggleLike}
-          onShare={() => {
-            if (question && navigator.share) {
-              const shareUrl = `${window.location.origin}/question/${question._id}`;
-              void navigator.share({
-                title: 'Ice Breaker Question',
-                text: question.text,
-                url: shareUrl,
-              });
-            }
-          }}
+          onSwipe={() => navigate("/")}
+          toggleHide={() => navigate("/")}
         />
         <div className="flex justify-center p-4">
           <Link
