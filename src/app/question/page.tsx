@@ -7,6 +7,7 @@ import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { Header } from "../../components/header";
 import { QuestionDisplay } from "../../components/question-display";
 import { toast } from "sonner";
+import { cn } from "../../lib/utils";
 
 export default function QuestionPage() {
   const { id } = useParams<{ id: string }>();
@@ -105,7 +106,7 @@ export default function QuestionPage() {
         <div className="flex justify-center p-4">
           <Link
             to="/"
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
           >
             Get more questions
           </Link>
