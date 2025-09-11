@@ -69,7 +69,7 @@ const SettingsPage = () => {
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <div className="space-y-8">
-          <CollapsibleSection title="Hidden Styles">
+          <CollapsibleSection title="Hidden Styles" count={hiddenStyleObjects?.length}>
             {hiddenStyleObjects && hiddenStyleObjects.length > 0 ? (
               <>
                 <button
@@ -97,7 +97,7 @@ const SettingsPage = () => {
             )}
           </CollapsibleSection>
 
-          <CollapsibleSection title="Hidden Tones">
+          <CollapsibleSection title="Hidden Tones" count={hiddenToneObjects?.length}>
             {hiddenToneObjects && hiddenToneObjects.length > 0 ? (
               <>
                 <button
@@ -125,7 +125,7 @@ const SettingsPage = () => {
             )}
           </CollapsibleSection>
 
-          <CollapsibleSection title="Hidden Questions">
+          <CollapsibleSection title="Hidden Questions" count={hiddenQuestionObjects?.length}>
             {hiddenQuestionObjects && hiddenQuestionObjects.length > 0 ? (
               <>
                 <button
