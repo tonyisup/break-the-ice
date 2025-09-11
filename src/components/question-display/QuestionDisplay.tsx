@@ -39,6 +39,18 @@ export const QuestionDisplay = ({
     } else if (info.offset.x > 100) {
       setDragDirection("right");
       onSwipe();
+    } else if (info.offset.y < -100) {
+      handleShare();
+    }
+  };
+  const handleShare = () => {
+    if (currentQuestion && navigator.share) {
+      const shareUrl = `${window.location.origin}/question/${currentQuestion._id}`;
+      void navigator.share({
+        title: 'Ice Breaker Question',
+        text: currentQuestion.text,
+        url: shareUrl,
+      });
     }
   };
   return (
@@ -64,16 +76,6 @@ export const QuestionDisplay = ({
         gradient={gradient}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
         onToggleHidden={() => currentQuestion && toggleHide(currentQuestion._id)}
-        onShare={() => {
-          if (currentQuestion && navigator.share) {
-            const shareUrl = `${window.location.origin}/question/${currentQuestion._id}`;
-            void navigator.share({
-              title: 'Ice Breaker Question',
-              text: currentQuestion.text,
-              url: shareUrl,
-            });
-          }
-        }}
       />
     </motion.div>
   );
