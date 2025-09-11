@@ -23,7 +23,7 @@ export const ThemeToggle = ({ themeOverride, className }: ThemeToggleProps) => {
 			)}
       aria-label="Toggle theme"
     >
-      {theme === "dark" ? "🌞" : "🌙"}
+      {theme === "dark" ? "🔆" : "🌙"}
     </button>
   );
 };
