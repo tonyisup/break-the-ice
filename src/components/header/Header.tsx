@@ -20,7 +20,7 @@ export const Header = ({ gradient = ['#667EEA', '#764BA2'], homeLinkSlot }: Head
             to="/liked"
             className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
           >
-            ❤️ Liked
+            ❤️<span className="hidden sm:inline"> Liked</span>
           </Link>
         }
         {homeLinkSlot === "history" ? (
@@ -30,7 +30,7 @@ export const Header = ({ gradient = ['#667EEA', '#764BA2'], homeLinkSlot }: Head
             to="/history"
             className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
           >
-            📜 History
+            📜<span className="hidden sm:inline"> History</span>
           </Link>
         )}
       </div>
@@ -42,7 +42,7 @@ export const Header = ({ gradient = ['#667EEA', '#764BA2'], homeLinkSlot }: Head
             to="/settings"
             className={cn(isColorDark(gradient[1]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
           >
-            ⚙️ Settings
+            ⚙️<span className="hidden sm:inline"> Settings</span>
           </Link>
         )}
         <ThemeToggle themeOverride={isColorDark(gradient[1]) ? "dark" : "light"} />
@@ -57,7 +57,8 @@ export const HomeLink = ({ theme = "dark", icon = "🏠", text="Home" }: { theme
       to="/"
       className={cn(theme === "dark" ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
     >
-        {icon} {text}
+      {icon}
+      <span className="hidden sm:inline"> {text}</span>
     </Link>
   );
 };
