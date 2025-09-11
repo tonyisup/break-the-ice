@@ -12,6 +12,7 @@ export const getTone = query({
     promptGuidanceForAI: v.string(),
     color: v.string(),
     icon: v.string(),
+    order: v.optional(v.float64()),
   }),
   handler: async (ctx, args) => {
     const tone = await ctx.db.query("tones").filter((q) => q.eq(q.field("id"), args.id)).first();
@@ -33,9 +34,10 @@ export const getTones = query({
     promptGuidanceForAI: v.string(),
     color: v.string(),
     icon: v.string(),
+    order: v.optional(v.float64()),
   })),
   handler: async (ctx) => {
-    return await ctx.db.query("tones").order("asc").collect();
+    return await ctx.db.query("tones").withIndex("by_order").order("asc").collect();
   },
 });
 
@@ -47,6 +49,7 @@ export const createTone = mutation({
     promptGuidanceForAI: v.string(),
     color: v.string(),
     icon: v.string(),
+    order: v.optional(v.float64()),
   },
   handler: async (ctx, args) => {
     const existingTone = await ctx.db
@@ -63,6 +66,7 @@ export const createTone = mutation({
       promptGuidanceForAI: args.promptGuidanceForAI,
       color: args.color,
       icon: args.icon,
+      order: args.order,
     });
     return toneId;
   },
@@ -77,6 +81,7 @@ export const updateTone = mutation({
     promptGuidanceForAI: v.string(),
     color: v.string(),
     icon: v.string(),
+    order: v.optional(v.float64()),
   },
   handler: async (ctx, args) => {
     const { id, ...rest } = args;
@@ -88,6 +93,7 @@ export const updateTone = mutation({
         promptGuidanceForAI: args.promptGuidanceForAI,
         color: args.color,
         icon: args.icon,
+        order: args.order,
       });
     }
   },

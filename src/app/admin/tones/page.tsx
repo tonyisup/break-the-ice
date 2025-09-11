@@ -48,6 +48,7 @@ function ToneManager() {
   const [newTonePromptGuidance, setNewTonePromptGuidance] = useState('');
   const [newToneColor, setNewToneColor] = useState('');
   const [newToneIcon, setNewToneIcon] = useState('');
+  const [newToneOrder, setNewToneOrder] = useState('');
   const [editingTone, setEditingTone] = useState<Doc<"tones"> | null>(null);
   const [searchText, setSearchText] = useState('');
 
@@ -60,6 +61,7 @@ function ToneManager() {
         promptGuidanceForAI: newTonePromptGuidance,
         color: newToneColor,
         icon: newToneIcon,
+        order: newToneOrder ? parseFloat(newToneOrder) : undefined,
       });
       setNewToneId('');
       setNewToneName('');
@@ -67,6 +69,7 @@ function ToneManager() {
       setNewTonePromptGuidance('');
       setNewToneColor('');
       setNewToneIcon('');
+      setNewToneOrder('');
     }
   };
 
@@ -80,6 +83,7 @@ function ToneManager() {
         promptGuidanceForAI: editingTone.promptGuidanceForAI,
         color: editingTone.color,
         icon: editingTone.icon,
+        order: editingTone.order,
       });
       setEditingTone(null);
     }
@@ -165,6 +169,16 @@ function ToneManager() {
                 placeholder="Enter tone icon"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Order</label>
+              <input
+                type="number"
+                value={newToneOrder}
+                onChange={(e) => setNewToneOrder(e.target.value)}
+                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter order"
+              />
+            </div>
           </div>
           <div className="space-y-4 mb-6">
             <div>
@@ -222,6 +236,7 @@ function ToneManager() {
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Prompt Guidance</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Color</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Icon</th>
+                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Order</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Actions</th>
               </tr>
             </thead>
@@ -290,6 +305,18 @@ function ToneManager() {
                       />
                     ) : (
                       <span className="text-gray-600 dark:text-gray-400">{tone.icon}</span>
+                    )}
+                  </td>
+                  <td className="p-4 align-top">
+                    {editingTone?._id === tone._id ? (
+                      <input
+                        type="number"
+                        value={editingTone.order ?? ''}
+                        onChange={(e) => setEditingTone({ ...editingTone, order: e.target.value ? parseFloat(e.target.value) : undefined })}
+                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <span className="text-gray-600 dark:text-gray-400">{tone.order}</span>
                     )}
                   </td>
                   <td className="p-4 align-top">
@@ -392,6 +419,21 @@ function ToneManager() {
                     />
                   ) : (
                     <span className="text-gray-600 dark:text-gray-400 text-sm">{tone.promptGuidanceForAI}</span>
+                  )}
+                </div>
+
+                {/* Order */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Order</label>
+                  {editingTone?._id === tone._id ? (
+                    <input
+                      type="number"
+                      value={editingTone.order ?? ''}
+                      onChange={(e) => setEditingTone({ ...editingTone, order: e.target.value ? parseFloat(e.target.value) : undefined })}
+                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  ) : (
+                    <span className="text-gray-600 dark:text-gray-400 text-sm">{tone.order}</span>
                   )}
                 </div>
 
