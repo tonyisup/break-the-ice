@@ -1,16 +1,35 @@
 import { useQuestionHistory } from "../../hooks/useQuestionHistory";
 import { Link } from "react-router-dom";
+import { useMemo } from "react";
 import { ModernQuestionCard } from "../../components/modern-question-card";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { Id } from "../../../convex/_generated/dataModel";
 import { toast } from "sonner";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 
 export default function HistoryPage() {
   const { history } = useQuestionHistory();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
+  const styles = useQuery(api.styles.getStyles, {});
+  const tones = useQuery(api.tones.getTones, {});
+
+  const styleColors = useMemo(() => {
+    if (!styles) return {};
+    return styles.reduce((acc, style) => {
+      acc[style.name] = style.color;
+      return acc;
+    }, {} as { [key: string]: string });
+  }, [styles]);
+
+  const toneColors = useMemo(() => {
+    if (!tones) return {};
+    return tones.reduce((acc, tone) => {
+      acc[tone.name] = tone.color;
+      return acc;
+    }, {} as { [key: string]: string });
+  }, [tones]);
 
   const toggleLike = async (questionId: Id<"questions">) => {
     const isLiked = likedQuestions.includes(questionId);
@@ -43,15 +62,21 @@ export default function HistoryPage() {
           <p className="text-center text-gray-500">No questions viewed yet.</p>
         ) : (
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {history.map((question) => (
-              <ModernQuestionCard
-                key={question._id}
-                question={question}
-                isGenerating={false}
-                isFavorite={likedQuestions.includes(question._id)}
-                onToggleFavorite={() => toggleLike(question._id)}
-              />
-            ))}
+            {history.map((question) => {
+              const styleColor = styleColors[question.style] || '#667EEA';
+              const toneColor = toneColors[question.tone] || '#764BA2';
+              const gradient = [styleColor, toneColor];
+              return (
+                <ModernQuestionCard
+                  key={question._id}
+                  question={question}
+                  isGenerating={false}
+                  isFavorite={likedQuestions.includes(question._id)}
+                  onToggleFavorite={() => toggleLike(question._id)}
+                  gradient={gradient}
+                />
+              );
+            })}
           </div>
         )}
       </main>
