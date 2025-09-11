@@ -33,7 +33,15 @@ export const ActionButtons = ({
     <>
       {randomizedStyle || randomizedTone ? (
         <div className="flex justify-center">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="flex  gap-4">
+            <button
+              onClick={handleCancelRandomizeStyleAndTone}
+              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
+              title="Cancel Shuffle"
+            >
+              <ShuffleCancelIcon size={24} className={isColorDark(gradient[1]) ? "text-black" : "text-white"} />
+              <span className="sm:block hidden text-white font-semibold text-base">Cancel</span>
+            </button>
             <button
               onClick={handleShuffleStyleAndTone}
               className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
@@ -50,23 +58,6 @@ export const ActionButtons = ({
             >
               <ArrowBigUpDash size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
               <span className="sm:block hidden text-white font-semibold text-base">New</span>
-            </button>
-            <button
-              onClick={handleCancelRandomizeStyleAndTone}
-              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
-              title="Cancel Shuffle"
-            >
-              <ShuffleCancelIcon size={24} className={isColorDark(gradient[1]) ? "text-black" : "text-white"} />
-              <span className="sm:block hidden text-white font-semibold text-base">Cancel</span>
-            </button>
-            <button
-              onClick={handleCancelRandomAndNextQuestion}
-              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
-              title="Next Question"
-              disabled={(!isGenerating || currentQuestion) ? false : true}
-            >
-              <ArrowBigUp size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
-              <span className="sm:block hidden text-white font-semibold text-base">Next</span>
             </button>
           </div>
         </div>
