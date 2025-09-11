@@ -27,6 +27,7 @@ export default function MainPage() {
   const [selectedTone, setSelectedTone] = useState("fun-silly");
   const [randomizedTone, setRandomizedTone] = useState<string | null>(null);
   const [randomizedStyle, setRandomizedStyle] = useState<string | null>(null);
+  const [autoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
@@ -153,6 +154,11 @@ export default function MainPage() {
   const handleShuffleStyleAndTone = () => {
     toneSelectorRef.current?.randomizeTone();
     styleSelectorRef.current?.randomizeStyle();
+    if (autoAdvanceShuffle) {
+      setTimeout(() => {
+        handleConfirmRandomizeStyleAndTone();
+      }, 0);
+    }
   }
   const handleCancelRandomizeStyleAndTone = () => {
     toneSelectorRef.current?.cancelRandomizingTone();

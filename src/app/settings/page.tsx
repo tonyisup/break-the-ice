@@ -18,6 +18,7 @@ const SettingsPage = () => {
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>("hiddenStyles", []);
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
   const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<string[]>("hiddenQuestions", []);
+  const [autoAdvanceShuffle, setAutoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
 
   const unhideStyle = (styleId: string) => {
     setHiddenStyles(prev => prev.filter(id => id !== styleId));
@@ -52,6 +53,24 @@ const SettingsPage = () => {
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <div className="space-y-8">
+          <CollapsibleSection title="Shuffle" count={undefined}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="dark:text-white text-black font-semibold">Auto-advance Shuffle</p>
+                <p className="text-sm dark:text-white/70 text-black/70">Automatically confirm style and tone after shuffling.</p>
+              </div>
+              <button
+                onClick={() => setAutoAdvanceShuffle(!autoAdvanceShuffle)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoAdvanceShuffle ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
+                aria-pressed={autoAdvanceShuffle}
+                aria-label="Toggle auto-advance shuffle"
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoAdvanceShuffle ? 'translate-x-6' : 'translate-x-1'}`}
+                />
+              </button>
+            </div>
+          </CollapsibleSection>
           <CollapsibleSection title="Hidden Styles" count={hiddenStyleObjects?.length}>
             {hiddenStyleObjects && hiddenStyleObjects.length > 0 ? (
               <>
