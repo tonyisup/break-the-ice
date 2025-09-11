@@ -23,7 +23,7 @@ export default function MainPage() {
   const [startTime, setStartTime] = useState(Date.now());
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState("open-ended");
+  const [selectedStyle, setSelectedStyle] = useState("would-you-rather");
   const [selectedTone, setSelectedTone] = useState("fun-silly");
   const [randomizedTone, setRandomizedTone] = useState<string | null>(null);
   const [randomizedStyle, setRandomizedStyle] = useState<string | null>(null);
