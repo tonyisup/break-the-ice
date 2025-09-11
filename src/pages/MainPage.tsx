@@ -12,6 +12,7 @@ import { ToneSelector, ToneSelectorRef } from "../components/tone-selector";
 import { Header } from "../components/header";
 import { ActionButtons } from "../components/action-buttons";
 import { QuestionDisplay } from "../components/question-display";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function MainPage() {
   const { theme, setTheme } = useTheme();
@@ -178,13 +179,29 @@ export default function MainPage() {
       />
 
       <main className="flex-1 flex flex-col">
-        <QuestionDisplay
-          isGenerating={isGenerating}
-          currentQuestion={currentQuestion}
-          isFavorite={isFavorite}
-          gradient={gradient}
-          toggleLike={toggleLike}
-        />
+        <AnimatePresence mode="wait">
+          {currentQuestion && (
+            <QuestionDisplay
+              key={currentQuestion._id}
+              isGenerating={isGenerating}
+              currentQuestion={currentQuestion}
+              isFavorite={isFavorite}
+              gradient={gradient}
+              toggleLike={toggleLike}
+              onSwipe={getNextQuestion}
+            />
+          )}
+          {isGenerating && !currentQuestion && (
+            <QuestionDisplay
+              isGenerating={isGenerating}
+              currentQuestion={null}
+              isFavorite={false}
+              gradient={gradient}
+              toggleLike={() => {}}
+              onSwipe={() => {}}
+            />
+          )}
+        </AnimatePresence>
 
         <StyleSelector
           randomOrder={false}
