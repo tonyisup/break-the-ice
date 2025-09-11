@@ -6,6 +6,7 @@ import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
 import { Link } from "react-router-dom";
 import { HouseIcon } from "lucide-react";
+import { CollapsibleSection } from "../../components/collapsible-section/CollapsibleSection";
 
 const SettingsPage = () => {
   const { theme, setTheme } = useTheme();
@@ -14,6 +15,7 @@ const SettingsPage = () => {
 
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>("hiddenStyles", []);
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
+  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<string[]>("hiddenQuestions", []);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -27,8 +29,13 @@ const SettingsPage = () => {
     setHiddenTones(prev => prev.filter(id => id !== toneId));
   };
 
+  const unhideQuestion = (questionId: string) => {
+    setHiddenQuestions(prev => prev.filter(id => id !== questionId));
+  };
+
   const hiddenStyleObjects = allStyles?.filter(style => hiddenStyles.includes(style.id));
   const hiddenToneObjects = allTones?.filter(tone => hiddenTones.includes(tone.id));
+  const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions });
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradientDark = ["#3B2554", "#262D54"];
@@ -62,67 +69,89 @@ const SettingsPage = () => {
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <div className="space-y-8">
-          <section>
-            <div className="flex items-center justify-between border-b pb-2 mb-4">
-              <h2 className="text-2xl font-semibold dark:text-white text-black border-white/30">Hidden Styles</h2>
-              {hiddenStyleObjects && hiddenStyleObjects.length > 0 && (
+          <CollapsibleSection title="Hidden Styles" count={hiddenStyleObjects?.length}>
+            {hiddenStyleObjects && hiddenStyleObjects.length > 0 ? (
+              <>
                 <button
                   onClick={() => setHiddenStyles([])}
-                  className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                  className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
                 >
-                  Clear
+                  Clear All
                 </button>
-              )}
-            </div>
-            {hiddenStyleObjects && hiddenStyleObjects.length > 0 ? (
-              <ul className="space-y-2">
-                {hiddenStyleObjects.map(style => (
-                  <li key={style.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                    <span className="dark:text-white text-black">{style.name}</span>
-                    <button
-                      onClick={() => unhideStyle(style.id)}
-                      className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
-                    >
-                      Unhide
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                <ul className="space-y-2">
+                  {hiddenStyleObjects.map(style => (
+                    <li key={style.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                      <span className="dark:text-white text-black">{style.name}</span>
+                      <button
+                        onClick={() => unhideStyle(style.id)}
+                        className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                      >
+                        Unhide
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
             ) : (
               <p className="dark:text-white/70 text-black/70">You have no hidden styles.</p>
             )}
-          </section>
+          </CollapsibleSection>
 
-          <section>
-            <div className="flex items-center justify-between border-b pb-2 mb-4">
-              <h2 className="text-2xl font-semibold dark:text-white text-black border-white/30">Hidden Tones</h2>
-              {hiddenToneObjects && hiddenToneObjects.length > 0 && (
+          <CollapsibleSection title="Hidden Tones" count={hiddenToneObjects?.length}>
+            {hiddenToneObjects && hiddenToneObjects.length > 0 ? (
+              <>
                 <button
                   onClick={() => setHiddenTones([])}
-                  className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                  className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
                 >
-                  Clear
+                  Clear All
                 </button>
-              )}
-            </div>
-            {hiddenToneObjects && hiddenToneObjects.length > 0 ? (
-              <ul className="space-y-2">
-                {hiddenToneObjects.map(tone => (
-                  <li key={tone.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                    <span className="dark:text-white text-black">{tone.name}</span>
-                    <button
-                      onClick={() => unhideTone(tone.id)}
-                      className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
-                    >
-                      Unhide
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                <ul className="space-y-2">
+                  {hiddenToneObjects.map(tone => (
+                    <li key={tone.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                      <span className="dark:text-white text-black">{tone.name}</span>
+                      <button
+                        onClick={() => unhideTone(tone.id)}
+                        className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                      >
+                        Unhide
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
             ) : (
               <p className="dark:text-white/70 text-black/70">You have no hidden tones.</p>
             )}
-          </section>
+          </CollapsibleSection>
+
+          <CollapsibleSection title="Hidden Questions" count={hiddenQuestionObjects?.length}>
+            {hiddenQuestionObjects && hiddenQuestionObjects.length > 0 ? (
+              <>
+                <button
+                  onClick={() => setHiddenQuestions([])}
+                  className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
+                >
+                  Clear All
+                </button>
+                <ul className="space-y-2">
+                  {hiddenQuestionObjects.map(question => (
+                    question && <li key={question._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                      <span className="dark:text-white text-black">{question.text}</span>
+                      <button
+                        onClick={() => unhideQuestion(question._id)}
+                        className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                      >
+                        Unhide
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="dark:text-white/70 text-black/70">You have no hidden questions.</p>
+            )}
+          </CollapsibleSection>
         </div>
       </div>
     </div>

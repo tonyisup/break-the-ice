@@ -8,7 +8,9 @@ interface QuestionDisplayProps {
   isFavorite: boolean;
   gradient: string[];
   toggleLike: (questionId: any) => void;
+colors
   onSwipe: () => void;
+  toggleHide: (questionId: any) => void;
 }
 
 export const QuestionDisplay = ({
@@ -18,6 +20,7 @@ export const QuestionDisplay = ({
   gradient,
   toggleLike,
   onSwipe,
+  toggleHide,
 }: QuestionDisplayProps) => {
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (info.offset.y < -100) {
@@ -45,6 +48,7 @@ export const QuestionDisplay = ({
         isFavorite={isFavorite}
         gradient={gradient}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
+        onToggleHidden={() => currentQuestion && toggleHide(currentQuestion._id)}
         onShare={() => {
           if (currentQuestion && navigator.share) {
             void navigator.share({

@@ -24,6 +24,7 @@ export const discardQuestion = mutation({
 
       const updateQuestion = ctx.db.patch(questionId, {
         totalShows: question.totalShows + 1,
+        totalThumbsDown: (question.totalThumbsDown ?? 0) + 1,
         lastShownAt: Date.now(),
       });
 
@@ -147,6 +148,7 @@ export const saveAIQuestion = mutation({
       // at the front of the by_last_shown_at ascending index and shows up immediately.
       lastShownAt: lastShownAt - 1,
       totalLikes: 0,
+      totalThumbsDown: 0,
       totalShows: 0,
       averageViewDuration: 0,
     });
@@ -182,6 +184,7 @@ export const createQuestion = mutation({
       tone,
       isAIGenerated: false,
       totalLikes: 0,
+      totalThumbsDown: 0,
       totalShows: 0,
       averageViewDuration: 0,
     });

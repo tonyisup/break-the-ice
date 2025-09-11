@@ -17,6 +17,7 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function MainPage() {
   const { theme, setTheme } = useTheme();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<Id<"questions">[]>("hiddenQuestions", []);
   const { addQuestionToHistory } = useQuestionHistory();
   const [startTime, setStartTime] = useState(Date.now());
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
@@ -63,13 +64,14 @@ export default function MainPage() {
     if (nextQuestions) {
       if (nextQuestions.length > 0) {
         setCurrentQuestions(prevQuestions => {
+          const newQuestions = nextQuestions.filter(q => !hiddenQuestions.includes(q._id));
           if (prevQuestions.length === 0) {
-            return nextQuestions;
+            return newQuestions;
           }
           const existingIds = new Set(prevQuestions.map(q => q._id));
-          const newQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
-          if (newQuestions.length > 0) {
-            return [...prevQuestions, ...newQuestions];
+          const filteredNewQuestions = newQuestions.filter(q => !existingIds.has(q._id));
+          if (filteredNewQuestions.length > 0) {
+            return [...prevQuestions, ...filteredNewQuestions];
           }
           return prevQuestions;
         });
@@ -77,7 +79,7 @@ export default function MainPage() {
         void callGenerateAIQuestion(10);
       }
     }
-  }, [nextQuestions, isGenerating, currentQuestions.length, callGenerateAIQuestion]);
+  }, [nextQuestions, isGenerating, currentQuestions.length, callGenerateAIQuestion, hiddenQuestions]);
 
   useEffect(() => {
     if (currentQuestions.length > 0 && currentQuestions.length <= 5 && !isGenerating) {
@@ -85,6 +87,10 @@ export default function MainPage() {
       void callGenerateAIQuestion(questionsToGenerate);
     }
   }, [currentQuestions, isGenerating, callGenerateAIQuestion]);
+
+  useEffect(() => {
+    setCurrentQuestions(prev => prev.filter(q => !hiddenQuestions.includes(q._id)));
+  }, [hiddenQuestions]);
 
   const currentQuestion = currentQuestions[0] || null;
   useEffect(() => {
@@ -128,6 +134,13 @@ export default function MainPage() {
       toast.success("Added to favorites!");
     }
   };
+
+  const toggleHide = async (questionId: Id<"questions">) => {
+    if (!currentQuestions) return;
+    setHiddenQuestions([...hiddenQuestions, questionId]);
+    toast.success("Question hidden");
+    getNextQuestion();
+  }
 
   const getNextQuestion = () => {
     setStartTime(Date.now());
@@ -189,6 +202,7 @@ export default function MainPage() {
               gradient={gradient}
               toggleLike={toggleLike}
               onSwipe={getNextQuestion}
+              toggleHide={toggleHide
             />
           )}
           {isGenerating && !currentQuestion && (
