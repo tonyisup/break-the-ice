@@ -13,6 +13,7 @@ import { Header } from "../components/header";
 import { ActionButtons } from "../components/action-buttons";
 import { QuestionDisplay } from "../components/question-display";
 import { motion, AnimatePresence } from "framer-motion";
+import { isColorDark } from "@/lib/utils";
 
 export default function MainPage() {
   const { theme, setTheme } = useTheme();
@@ -163,19 +164,10 @@ export default function MainPage() {
     toneSelectorRef.current?.confirmRandomizedTone();
     styleSelectorRef.current?.confirmRandomizedStyle();
   }
-  const handleCancelRandomAndNextQuestion = () => {
-    toneSelectorRef.current?.cancelRandomizingTone();
-    styleSelectorRef.current?.cancelRandomizingStyle();
-    getNextQuestion();
-  }
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
   const gradientTarget = theme === "dark" ? "#000" : "#fff";
-  const isColorDark = (color: string) => {
-    const [r, g, b] = color.match(/\w\w/g)!.map(hex => parseInt(hex, 16));
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    return brightness < 128;
-  };
+
 
   return (
     <div
@@ -185,9 +177,6 @@ export default function MainPage() {
       }}
     >
       <Header
-        theme={theme}
-        toggleTheme={toggleTheme}
-        isColorDark={isColorDark}
         gradient={gradient}
       />
 
@@ -200,9 +189,9 @@ export default function MainPage() {
               currentQuestion={currentQuestion}
               isFavorite={isFavorite}
               gradient={gradient}
-              toggleLike={toggleLike}
+              toggleLike={() => void toggleLike(currentQuestion._id)}
               onSwipe={getNextQuestion}
-              toggleHide={toggleHide}
+              toggleHide={() => void toggleHide(currentQuestion._id)}
             />
           )}
           {isGenerating && !currentQuestion && (
@@ -212,6 +201,7 @@ export default function MainPage() {
               isFavorite={false}
               gradient={gradient}
               toggleLike={() => {}}
+              toggleHide={() => {}}
               onSwipe={() => {}}
             />
           )}
@@ -242,7 +232,6 @@ export default function MainPage() {
           handleShuffleStyleAndTone={handleShuffleStyleAndTone}
           handleConfirmRandomizeStyleAndTone={handleConfirmRandomizeStyleAndTone}
           handleCancelRandomizeStyleAndTone={handleCancelRandomizeStyleAndTone}
-          handleCancelRandomAndNextQuestion={handleCancelRandomAndNextQuestion}
           getNextQuestion={getNextQuestion}
         />
       </main>

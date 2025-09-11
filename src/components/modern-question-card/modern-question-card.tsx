@@ -18,8 +18,7 @@ export function ModernQuestionCard({
   isFavorite,
   gradient = ['#667EEA', '#764BA2'],
   onToggleFavorite,
-  onToggleHidden,
-  onShare,
+  onToggleHidden, 
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -129,7 +128,7 @@ export function ModernQuestionCard({
 
                 {typeof navigator.share === 'function' && (
                   <button
-                    onClick={onShare ?? handleShare}
+                    onClick={handleShare}
                     className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
                     title="Share question"
                   >

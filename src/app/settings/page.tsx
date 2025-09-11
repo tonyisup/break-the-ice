@@ -7,6 +7,8 @@ import { useTheme } from "../../hooks/useTheme";
 import { Link } from "react-router-dom";
 import { HouseIcon } from "lucide-react";
 import { CollapsibleSection } from "../../components/collapsible-section/CollapsibleSection";
+import { Header } from "@/components/header";
+import { Id } from "../../../convex/_generated/dataModel";
 
 const SettingsPage = () => {
   const { theme, setTheme } = useTheme();
@@ -16,10 +18,6 @@ const SettingsPage = () => {
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>("hiddenStyles", []);
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
   const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<string[]>("hiddenQuestions", []);
-
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
 
   const unhideStyle = (styleId: string) => {
     setHiddenStyles(prev => prev.filter(id => id !== styleId));
@@ -35,35 +33,20 @@ const SettingsPage = () => {
 
   const hiddenStyleObjects = allStyles?.filter(style => hiddenStyles.includes(style.id));
   const hiddenToneObjects = allTones?.filter(tone => hiddenTones.includes(tone.id));
-  const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions });
+  const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions as Id<"questions">[] });
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradientDark = ["#3B2554", "#262D54"];
   return (
     <div
-      className="min-h-screen transition-colors overflow-hidden p-4"
+      className="min-h-screen transition-colors overflow-hidden"
       style={{
         background: `linear-gradient(135deg, ${theme === "dark" ? gradientDark[0] : gradientLight[0]}, ${theme === "dark" ? gradientDark[1] : gradientLight[1]}, ${theme === "dark" ? "#000" : "#fff"})`
       }}
     >
-      <div className="flex items-center justify-between mb-6 sm:mb-8">
-        <Link to="/">
-          <button
-            className="flex items-center gap-2 p-2 rounded-lg dark:bg-white/20 bg-black/20 backdrop-blur-sm hover:bg-white/30 transition-colors dark:text-white text-black"
-            aria-label="Home"
-          >
-            <HouseIcon />
-            Home
-          </button>
-        </Link>
-        <button
-          onClick={toggleTheme}
-          className="p-2 rounded-lg light:bg-white/20 bg-black/20 backdrop-blur-sm hover:bg-white/30 transition-colors dark:text-white text-black"
-          aria-label="Toggle theme"
-        >
-          {theme === "dark" ? "🌞" : "🌙"}
-        </button>
-      </div>
+      <Header 
+        gradient={theme === "dark" ? gradientDark : gradientLight} 
+        homeLinkSlot="settings" />
 
       <div className="container mx-auto p-4 md:p-8">
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
