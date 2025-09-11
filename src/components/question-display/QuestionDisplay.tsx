@@ -7,7 +7,7 @@ interface QuestionDisplayProps {
   isFavorite: boolean;
   gradient: string[];
   toggleLike: (questionId: any) => void;
-  onShare?: () => void;
+  
   toggleHide: (questionId: any) => void;
 }
 
@@ -18,7 +18,7 @@ export const QuestionDisplay = ({
   gradient,
   toggleLike,
 
-  onShare,
+  
 
   toggleHide,
 
@@ -32,7 +32,6 @@ export const QuestionDisplay = ({
         gradient={gradient}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
 
-        onShare={onShare ?? (() => {
 
         onToggleHidden={() => currentQuestion && toggleHide(currentQuestion._id)}
         onShare={() => {
