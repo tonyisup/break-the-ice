@@ -100,6 +100,7 @@ export default defineSchema({
     lastShownAt: v.optional(v.float64()),
     text: v.string(),
     totalLikes: v.float64(),
+    totalThumbsDown: v.optional(v.float64()),
     totalShows: v.float64(),
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
