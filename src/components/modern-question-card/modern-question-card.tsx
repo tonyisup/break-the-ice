@@ -24,10 +24,13 @@ export function ModernQuestionCard({
   const handleShare = () => {
     if (!question || !navigator.share) return;
 
+    const shareUrl = `${window.location.origin}/question/${question._id}`;
+
     try {
       void navigator.share({
         title: 'Ice Breaker Question',
         text: question.text,
+        url: shareUrl,
       });
     } catch (error) {
       console.error('Error sharing:', error);
@@ -113,7 +116,7 @@ export function ModernQuestionCard({
 
                 {typeof navigator.share === 'function' && (
                   <button
-                    onClick={handleShare}
+                    onClick={onShare ?? handleShare}
                     className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
                     title="Share question"
                   >

@@ -125,6 +125,17 @@ export const getQuestionsByIds = query({
   },
 });
 
+export const getQuestionById = query({
+  args: {
+    id: v.id("questions"),
+  },
+  handler: async (ctx, args) => {
+    const { id } = args;
+    const question = await ctx.db.get(id);
+    return question;
+  },
+});
+
 // Save the generated AI question to the database
 export const saveAIQuestion = mutation({
   args: {

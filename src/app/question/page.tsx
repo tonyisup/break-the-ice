@@ -1,0 +1,102 @@
+import { Link, useParams } from "react-router-dom";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { Id, Doc } from "../../../convex/_generated/dataModel";
+import { useTheme } from "../../hooks/useTheme";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { Header } from "../../components/header";
+import { QuestionDisplay } from "../../components/question-display";
+import { toast } from "sonner";
+
+export default function QuestionPage() {
+  const { id } = useParams<{ id: string }>();
+  const { theme, setTheme } = useTheme();
+  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const recordAnalytics = useMutation(api.questions.recordAnalytics);
+
+  const question = useQuery(api.questions.getQuestionById, id ? { id: id as Id<"questions"> } : "skip");
+  const style = useQuery(api.styles.getStyle, question ? { id: question.style! } : "skip");
+  const tone = useQuery(api.tones.getTone, question ? { id: question.tone! } : "skip");
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  const toggleLike = async (questionId: Id<"questions">) => {
+    const isLiked = likedQuestions.includes(questionId);
+    if (isLiked) {
+      setLikedQuestions(likedQuestions.filter((id) => id !== questionId));
+      toast.success("Removed from favorites");
+    } else {
+      setLikedQuestions([...likedQuestions, questionId]);
+      await recordAnalytics({
+        questionId,
+        event: "like",
+        viewDuration: 0, // No view duration for shared questions
+      });
+      toast.success("Added to favorites!");
+    }
+  };
+
+  const isFavorite = question ? likedQuestions.includes(question._id) : false;
+  const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
+  const gradientTarget = theme === "dark" ? "#000" : "#fff";
+
+  const isColorDark = (color: string) => {
+    if (!color) return false;
+    const [r, g, b] = color.match(/\w\w/g)!.map((hex) => parseInt(hex, 16));
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness < 128;
+  };
+
+  if (!question) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div>Question not found</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="min-h-screen transition-colors overflow-hidden"
+      style={{
+        background: `linear-gradient(135deg, ${gradientTarget}, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`,
+      }}
+    >
+      <Header
+        theme={theme}
+        toggleTheme={toggleTheme}
+        isColorDark={isColorDark}
+        gradient={gradient}
+      />
+      <main className="flex-1 flex flex-col">
+        <QuestionDisplay
+          isGenerating={false}
+          currentQuestion={question}
+          isFavorite={isFavorite}
+          gradient={gradient}
+          toggleLike={toggleLike}
+          onShare={() => {
+            if (question && navigator.share) {
+              const shareUrl = `${window.location.origin}/question/${question._id}`;
+              void navigator.share({
+                title: 'Ice Breaker Question',
+                text: question.text,
+                url: shareUrl,
+              });
+            }
+          }}
+        />
+        <div className="flex justify-center p-4">
+          <Link
+            to="/"
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Get more questions
+          </Link>
+        </div>
+      </main>
+    </div>
+  );
+}

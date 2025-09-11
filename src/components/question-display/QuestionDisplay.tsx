@@ -7,6 +7,7 @@ interface QuestionDisplayProps {
   isFavorite: boolean;
   gradient: string[];
   toggleLike: (questionId: any) => void;
+  onShare?: () => void;
 }
 
 export const QuestionDisplay = ({
@@ -15,6 +16,7 @@ export const QuestionDisplay = ({
   isFavorite,
   gradient,
   toggleLike,
+  onShare,
 }: QuestionDisplayProps) => {
   return (
     <div className="flex-1 flex items-center justify-center px-5 pb-8">
@@ -24,14 +26,16 @@ export const QuestionDisplay = ({
         isFavorite={isFavorite}
         gradient={gradient}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
-        onShare={() => {
+        onShare={onShare ?? (() => {
           if (currentQuestion && navigator.share) {
+            const shareUrl = `${window.location.origin}/question/${currentQuestion._id}`;
             void navigator.share({
               title: 'Ice Breaker Question',
               text: currentQuestion.text,
+              url: shareUrl,
             });
           }
-        }}
+        })}
       />
     </div>
   );

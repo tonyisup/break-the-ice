@@ -2,6 +2,7 @@ import { motion, PanInfo, useAnimation, useMotionValue, useTransform } from "fra
 import { Doc } from "../../../convex/_generated/dataModel";
 import { useState, useEffect } from "react";
 import { useThemeListener } from "../../hooks/useTheme";
+import { Share2 } from "lucide-react";
 
 interface QuestionCardProps {
   currentQuestion: Doc<"questions">;
@@ -46,6 +47,22 @@ export const QuestionCard = ({ currentQuestion, liked, handleDiscard, toggleLike
     await toggleLike();
   };
 
+  const handleShare = () => {
+    if (!currentQuestion || !navigator.share) return;
+
+    const shareUrl = `${window.location.origin}/question/${currentQuestion._id}`;
+
+    try {
+      void navigator.share({
+        title: 'Ice Breaker Question',
+        text: currentQuestion.text,
+        url: shareUrl,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
   return <motion.div
     className="max-w-[500px] aspect-[2.5/3.5] relative bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 transform hover:cursor-pointer active:cursor-grabbing origin-bottom"
     style={{
@@ -66,15 +83,29 @@ export const QuestionCard = ({ currentQuestion, liked, handleDiscard, toggleLike
       <div className="text-xl md:text-2xl text-center my-auto px-2">
         {currentQuestion.text}
       </div>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          handleLike();
-        }}
-        className="absolute bottom-6 right-6 text-2xl transition-colors"
-      >
-        {isLiked ? "❤️" : emptyHeart}
-      </button>
+      <div className="absolute bottom-6 right-6 flex gap-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleLike();
+          }}
+          className="text-2xl transition-colors"
+        >
+          {isLiked ? "❤️" : emptyHeart}
+        </button>
+        {typeof navigator.share === 'function' && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleShare();
+            }}
+            className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            title="Share question"
+          >
+            <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
+          </button>
+        )}
+      </div>
     </div>
   </motion.div>
 };
