@@ -4,7 +4,9 @@ import { api } from "../../../convex/_generated/api";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { useTheme } from "../../hooks/useTheme";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { useQuestionHistory } from "../../hooks/useQuestionHistory";
 import { Header } from "../../components/header";
+import { useEffect } from "react";
 import { QuestionDisplay } from "../../components/question-display";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
@@ -12,12 +14,19 @@ import { cn } from "../../lib/utils";
 export default function QuestionPage() {
   const { id } = useParams<{ id: string }>();
   const { theme, setTheme } = useTheme();
+  const { addQuestionToHistory } = useQuestionHistory();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
   const question = useQuery(api.questions.getQuestionById, id ? { id } : "skip");
   const style = useQuery(api.styles.getStyle, (question && question.style) ? { id: question.style } : "skip");
   const tone = useQuery(api.tones.getTone, (question && question.tone) ? { id: question.tone } : "skip");
+
+  useEffect(() => {
+    if (question) {
+      addQuestionToHistory(question);
+    }
+  }, [question, addQuestionToHistory]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
