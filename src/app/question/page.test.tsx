@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import QuestionPage from './page';
 import { useQuery } from 'convex/react';
-import { useParams } from 'react-router-dom';
+import { useParams, MemoryRouter } from 'react-router-dom';
 import { Id } from '../../../convex/_generated/dataModel';
 
 // Mock dependencies
@@ -12,6 +12,7 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useParams: vi.fn(),
+    useNavigate: () => vi.fn(),
     Link: (props: any) => <a {...props} href={props.to}>{props.children}</a>,
   };
 });
@@ -43,14 +44,14 @@ describe('QuestionPage', () => {
 
   it('renders a loading spinner while fetching the question', () => {
     mockUseQuery.mockReturnValue(undefined);
-    render(<QuestionPage />);
+    render(<MemoryRouter><QuestionPage /></MemoryRouter>);
     expect(screen.queryByText('Question not found')).not.toBeInTheDocument();
     // In a real app, we'd check for the spinner role, but this is sufficient for now.
   });
 
   it('renders "Question not found" when the question is null', () => {
     mockUseQuery.mockReturnValue(null);
-    render(<QuestionPage />);
+    render(<MemoryRouter><QuestionPage /></MemoryRouter>);
     expect(screen.getByText('Question not found')).toBeInTheDocument();
   });
 
@@ -66,7 +67,7 @@ describe('QuestionPage', () => {
       .mockReturnValueOnce({ color: '#ff0000' }) // for getStyle
       .mockReturnValueOnce({ color: '#00ff00' }); // for getTone
 
-    render(<QuestionPage />);
+    render(<MemoryRouter><QuestionPage /></MemoryRouter>);
     expect(screen.getByText('This is a test question')).toBeInTheDocument();
     expect(screen.getByText('Get more questions')).toBeInTheDocument();
   });
@@ -83,7 +84,7 @@ describe('QuestionPage', () => {
       .mockReturnValueOnce(null) // for getStyle
       .mockReturnValueOnce(null); // for getTone
 
-    render(<QuestionPage />);
+    render(<MemoryRouter><QuestionPage /></MemoryRouter>);
     expect(screen.getByText('Question with no style/tone')).toBeInTheDocument();
     expect(screen.getByText('Get more questions')).toBeInTheDocument();
   });

@@ -30,19 +30,29 @@ export const generateAIQuestion = action({
     const generationCount = count ?? 1;
     const newQuestions: (Doc<"questions"> | null)[] = [];
 
+    const existingQuestions = await ctx.runQuery(api.questions.getNextQuestions, {
+      count: 5,
+      style: styleId,
+      tone: toneId,
+    });
+
     // Build the prompt data structure once
     const promptData: {
-      style: string;
+      style:string;
       structure: string;
       styleGuidance?: string;
       tone: string;
       toneGuidance?: string;
       currentQuestion?: string;
       tags?: string;
+      existingQuestions?: string[];
+      count: number;
     } = {
       style: "",
       structure: "",
       tone: "",
+      existingQuestions: existingQuestions.map((q) => q.text),
+      count: generationCount,
     };
 
     if (styleId) {
@@ -67,45 +77,59 @@ export const generateAIQuestion = action({
       promptData.tags = selectedTags.join(", ");
     }
 
-    for (let i = 0; i < generationCount; i++) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: model ?? "@preset/break-the-ice-berg-default",
+        messages: [
+          {
+            role: "system",
+            content: `You are an ice-breaker generator that creates engaging ice-breaker questions for conversations. Avoid generating questions that are too similar to the existing questions provided. Always respond with a JSON array of strings, where each string is a unique question. For example: ["question 1", "question 2"]`
+          },
+          {
+            role: "user",
+            content: JSON.stringify(promptData)
+          }
+        ],
+        max_tokens: 150 * generationCount,
+        temperature: 0.8,
+      });
+
+      const generatedContent = completion.choices[0]?.message?.content?.trim();
+
+      if (!generatedContent) {
+        throw new Error("Failed to generate question");
+      }
+
       try {
-        const completion = await openai.chat.completions.create({
-          model: model ?? "@preset/break-the-ice-berg-default",
-          messages: [
-            {
-              role: "system",
-              content: `You are an ice-breaker generator that creates engaging ice-breaker questions for conversations. Always respond with just the question text, nothing else.`
-            },
-            {
-              role: "user",
-              content: JSON.stringify(promptData)
+        const generatedQuestions = JSON.parse(generatedContent);
+        if (Array.isArray(generatedQuestions)) {
+          for (const questionText of generatedQuestions) {
+            if (typeof questionText === 'string') {
+              const cleanedQuestion = questionText.replace(/^["']|["']$/g, '');
+              const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
+                text: cleanedQuestion,
+                style: styleId,
+                tone: toneId,
+                tags: selectedTags,
+              });
+              newQuestions.push(newQuestion);
             }
-          ],
-          max_tokens: 150,
-          temperature: 0.8,
-        });
-
-        const generatedQuestion = completion.choices[0]?.message?.content?.trim();
-
-        if (!generatedQuestion) {
-          throw new Error("Failed to generate question");
+          }
         }
-        // Remove any quotes from the generated question
-        const cleanedQuestion = generatedQuestion.replace(/^["']|["']$/g, '');
-
+      } catch (e) {
+        console.error("Failed to parse AI response as JSON:", e);
+        // Fallback for when the AI doesn't return a valid JSON array
+        const cleanedQuestion = generatedContent.replace(/^["']|["']$/g, '');
         const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
-          text: cleanedQuestion,
-          style:styleId,
-          tone:toneId,
-          tags: selectedTags,
+            text: cleanedQuestion,
+            style: styleId,
+            tone: toneId,
+            tags: selectedTags,
         });
         newQuestions.push(newQuestion);
-      } catch (error) {
-        console.error("Error generating AI question:", error);
-        // We still want to return any questions that were successfully generated
-        // before the error occurred.
-        break;
       }
+    } catch (error) {
+      console.error("Error generating AI question:", error);
     }
     return newQuestions;
   },
