@@ -3,7 +3,7 @@ import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { ModernQuestionCard } from "@/components/modern-question-card";
@@ -23,6 +23,16 @@ function LikedQuestionsPageContent() {
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: likedQuestions });
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
+
+  useEffect(() => {
+    if (questions) {
+      const serverIds = questions.map(q => q._id);
+      const localIds = likedQuestions;
+      if (serverIds.length !== localIds.length) {
+        setLikedQuestions(serverIds);
+      }
+    }
+  }, [questions, likedQuestions, setLikedQuestions]);
 
   const styleColors = useMemo(() => {
     if (!styles) return {};
