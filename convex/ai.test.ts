@@ -25,7 +25,7 @@ vi.mock('openai', () => {
 test("generate AI question with existing questions", async () => {
   // Reset mock implementation for this specific test
   mockCreate.mockResolvedValue({
-    choices: [{ message: { content: "This is a new AI question" } }],
+    choices: [{ message: { content: '["This is a new AI question 1", "This is a new AI question 2"]' } }],
   });
 
   const t = convexTest(schema);
@@ -73,14 +73,19 @@ test("generate AI question with existing questions", async () => {
     selectedTags: [],
     style: "test-style",
     tone: "test-tone",
+    count: 2,
   });
 
   // 4. Assert the result
   expect(result).toBeDefined();
-  expect(result.length).toBe(1);
+  expect(result.length).toBe(2);
   if (result[0]) {
-    expect(result[0].text).toBe("This is a new AI question");
+    expect(result[0].text).toBe("This is a new AI question 1");
   }
+  if (result[1]) {
+    expect(result[1].text).toBe("This is a new AI question 2");
+  }
+
 
   // 5. Assert that the mock was called correctly
   const calls = mockCreate.mock.calls;
@@ -88,11 +93,12 @@ test("generate AI question with existing questions", async () => {
   const messages = calls[0][0].messages;
   expect(messages.length).toBe(2);
   expect(messages[0].role).toBe("system");
-  expect(messages[0].content).toContain("Avoid generating questions that are too similar");
+  expect(messages[0].content).toContain("JSON array of strings");
 
   const userMessageContent = JSON.parse(messages[1].content);
   expect(userMessageContent.existingQuestions).toBeDefined();
   expect(userMessageContent.existingQuestions.length).toBe(5);
+  expect(userMessageContent.count).toBe(2);
   expect(userMessageContent.existingQuestions[0]).toContain("Existing question");
 
 });
