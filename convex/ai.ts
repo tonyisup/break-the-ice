@@ -30,6 +30,12 @@ export const generateAIQuestion = action({
     const generationCount = count ?? 1;
     const newQuestions: (Doc<"questions"> | null)[] = [];
 
+    const existingQuestions = await ctx.runQuery(api.questions.getNextQuestions, {
+      count: 5,
+      style: styleId,
+      tone: toneId,
+    });
+
     // Build the prompt data structure once
     const promptData: {
       style: string;
@@ -39,10 +45,12 @@ export const generateAIQuestion = action({
       toneGuidance?: string;
       currentQuestion?: string;
       tags?: string;
+      existingQuestions?: string[];
     } = {
       style: "",
       structure: "",
       tone: "",
+      existingQuestions: existingQuestions.map((q) => q.text),
     };
 
     if (styleId) {
@@ -74,7 +82,7 @@ export const generateAIQuestion = action({
           messages: [
             {
               role: "system",
-              content: `You are an ice-breaker generator that creates engaging ice-breaker questions for conversations. Always respond with just the question text, nothing else.`
+              content: `You are an ice-breaker generator that creates engaging ice-breaker questions for conversations. Avoid generating questions that are too similar to the existing questions provided. Always respond with just the question text, nothing else.`
             },
             {
               role: "user",
