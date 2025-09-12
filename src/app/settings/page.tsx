@@ -19,6 +19,7 @@ const SettingsPage = () => {
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
   const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<string[]>("hiddenQuestions", []);
   const [autoAdvanceShuffle, setAutoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
+  const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
 
   const unhideStyle = (styleId: string) => {
     setHiddenStyles(prev => prev.filter(id => id !== styleId));
@@ -53,6 +54,24 @@ const SettingsPage = () => {
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <div className="space-y-8">
+          <CollapsibleSection title="General" count={undefined}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="dark:text-white text-black font-semibold">Bypass Landing Page</p>
+                <p className="text-sm dark:text-white/70 text-black/70">Go directly to the app when visiting the site.</p>
+              </div>
+              <button
+                onClick={() => setBypassLandingPage(!bypassLandingPage)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${bypassLandingPage ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
+                aria-pressed={bypassLandingPage}
+                aria-label="Toggle bypass landing page"
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bypassLandingPage ? 'translate-x-6' : 'translate-x-1'}`}
+                />
+              </button>
+            </div>
+          </CollapsibleSection>
           <CollapsibleSection title="Shuffle" count={undefined}>
             <div className="flex items-center justify-between">
               <div>
