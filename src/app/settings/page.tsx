@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
 import { Link } from "react-router-dom";
@@ -17,9 +17,14 @@ const SettingsPage = () => {
 
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>("hiddenStyles", []);
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
-  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<string[]>("hiddenQuestions", []);
-  const [autoAdvanceShuffle, setAutoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
   const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
+
+  const settings = useQuery(api.users.getSettings);
+  const updateAutoAdvanceShuffle = useMutation(api.users.updateAutoAdvanceShuffle);
+  const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
+
+  const autoAdvanceShuffle = settings?.autoAdvanceShuffle ?? false;
+  const hiddenQuestions = settings?.hiddenQuestions ?? [];
 
   const unhideStyle = (styleId: string) => {
     setHiddenStyles(prev => prev.filter(id => id !== styleId));
@@ -29,9 +34,14 @@ const SettingsPage = () => {
     setHiddenTones(prev => prev.filter(id => id !== toneId));
   };
 
-  const unhideQuestion = (questionId: string) => {
-    setHiddenQuestions(prev => prev.filter(id => id !== questionId));
+  const unhideQuestion = (questionId: Id<"questions">) => {
+    const newHiddenQuestions = hiddenQuestions.filter(id => id !== questionId);
+    updateHiddenQuestions({ hiddenQuestions: newHiddenQuestions });
   };
+
+  const clearHiddenQuestions = () => {
+    updateHiddenQuestions({ hiddenQuestions: [] });
+  }
 
   const hiddenStyleObjects = allStyles?.filter(style => hiddenStyles.includes(style.id));
   const hiddenToneObjects = allTones?.filter(tone => hiddenTones.includes(tone.id));
@@ -79,7 +89,8 @@ const SettingsPage = () => {
                 <p className="text-sm dark:text-white/70 text-black/70">Automatically confirm style and tone after shuffling.</p>
               </div>
               <button
-                onClick={() => setAutoAdvanceShuffle(!autoAdvanceShuffle)}
+                onClick={() => updateAutoAdvanceShuffle({ autoAdvanceShuffle: !autoAdvanceShuffle })}
+                disabled={settings === undefined}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoAdvanceShuffle ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
                 aria-pressed={autoAdvanceShuffle}
                 aria-label="Toggle auto-advance shuffle"
@@ -150,7 +161,7 @@ const SettingsPage = () => {
             {hiddenQuestionObjects && hiddenQuestionObjects.length > 0 ? (
               <>
                 <button
-                  onClick={() => setHiddenQuestions([])}
+                  onClick={clearHiddenQuestions}
                   className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
                 >
                   Clear All
