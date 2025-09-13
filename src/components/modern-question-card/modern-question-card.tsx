@@ -10,6 +10,7 @@ interface ModernQuestionCardProps {
   onToggleFavorite: () => void;
   onToggleHidden: () => void;
   onShare?: () => void;
+  disabled?: boolean;
 }
 
 export function ModernQuestionCard({
@@ -18,7 +19,8 @@ export function ModernQuestionCard({
   isFavorite,
   gradient = ['#667EEA', '#764BA2'],
   onToggleFavorite,
-  onToggleHidden, 
+  onToggleHidden,
+  disabled = false,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -106,7 +108,8 @@ export function ModernQuestionCard({
               <div className="flex justify-center items-center gap-3">
                 <button
                   onClick={onToggleFavorite}
-                  className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
+                  disabled={disabled}
+                  className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
                   title="Toggle favorite"
                 >
                   <Heart
@@ -117,7 +120,8 @@ export function ModernQuestionCard({
 
                 <button
                   onClick={onToggleHidden}
-                  className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
+                  disabled={disabled}
+                  className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
                   title="Hide question"
                 >
                   <ThumbsDown
@@ -129,7 +133,8 @@ export function ModernQuestionCard({
                 {typeof navigator.share === 'function' && (
                   <button
                     onClick={handleShare}
-                    className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
+                    disabled={disabled}
+                    className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
                     title="Share question"
                   >
                     <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
