@@ -54,7 +54,7 @@ export const Header = ({ gradient = ['#667EEA', '#764BA2'], homeLinkSlot }: Head
 export const HomeLink = ({ theme = "dark", icon = "🏠", text="Home" }: { theme: string, icon?: string, text?: string }) => {
   return (
     <Link
-      to="/"
+      to="/app"
       className={cn(theme === "dark" ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
     >
       {icon}
