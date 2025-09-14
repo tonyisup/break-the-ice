@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react';
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import {
   HelpCircle,
   GitBranch,
@@ -53,7 +53,7 @@ export interface StyleSelectorRef {
   cancelRandomizingStyle: () => void;
   confirmRandomizedStyle: () => void;
 }
-export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({ selectedStyle, onSelectStyle, onRandomizeStyle, randomOrder = true }, ref) => {
+export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, randomOrder = true, ref }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
   const styles = useQuery(api.styles.getStyles);
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>('hiddenStyles', []);
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
@@ -106,4 +106,4 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
       onRandomizeItem={onRandomizeStyle}
     />
   );
-});
+};
