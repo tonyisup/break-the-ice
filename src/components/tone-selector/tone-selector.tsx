@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react';
-import { useRef, forwardRef, useImperativeHandle, useEffect, useMemo } from 'react';
+import { useRef, useImperativeHandle, useEffect, useMemo } from 'react';
 import { 
   Smile, 
   Brain, 
@@ -59,7 +59,7 @@ export interface ToneSelectorRef {
   confirmRandomizedTone: () => void;
 }
 
-export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ selectedTone, onSelectTone, onRandomizeTone, randomOrder = true }, ref) => {
+export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, randomOrder = true, ref }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
   const tones = useQuery(api.tones.getTones);
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>('hiddenTones', []);
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
@@ -109,4 +109,4 @@ export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ se
       onRandomizeItem={onRandomizeTone}
     />
   );
-});
+};
