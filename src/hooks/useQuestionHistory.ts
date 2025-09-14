@@ -6,7 +6,13 @@ import { api } from "../../convex/_generated/api";
 
 const MAX_HISTORY_LENGTH = 100;
 
+export type HistoryEntry = {
+  question: Doc<"questions">;
+  viewedAt: number;
+};
+
 export function useQuestionHistory() {
+
   const [history, setHistory] = useLocalStorage<Doc<"questions">[]>("questionHistory", []);
   const historyIds = useMemo(() => history.map(q => q._id), [history]);
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: historyIds });
@@ -22,16 +28,17 @@ export function useQuestionHistory() {
     }
   }, [questions, history, setHistory]);
 
+
   const addQuestionToHistory = useCallback((question: Doc<"questions">) => {
     setHistory((prevHistory) => {
-      const newHistory = [question, ...prevHistory.filter(q => q._id !== question._id)];
+      const newHistory = [{ question, viewedAt: Date.now() }, ...prevHistory.filter(entry => entry.question._id !== question._id)];
       return newHistory.slice(0, MAX_HISTORY_LENGTH);
     });
   }, [setHistory]);
 
   const removeQuestionFromHistory = useCallback((questionId: Id<"questions">) => {
     setHistory((prevHistory) => {
-      return prevHistory.filter(q => q._id !== questionId);
+      return prevHistory.filter(entry => entry.question._id !== questionId);
     });
   }, [setHistory]);
 
