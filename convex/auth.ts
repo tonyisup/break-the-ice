@@ -1,33 +1,18 @@
 import { convexAuth, getAuthUserId } from "@convex-dev/auth/server";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { Anonymous } from "@convex-dev/auth/providers/Anonymous";
-import { query, QueryCtx } from "./_generated/server";
-import { v } from "convex/values";
+import { query, QueryCtx, mutation } from "./_generated/server";
+import { getOrCreateUser } from "./users";
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [Password, Anonymous],
   callbacks: {
-    async session({ session, user }) {
-      const userFromDb = await getUser(session.ctx, { userId: user.userId });
-      session.user = {
-        ...user,
-        ...userFromDb,
-      };
-      return session;
-    },
     async onSignIn({ ctx, user }) {
-      await getOrCreateUser(ctx, { userId: user.userId });
+      await ctx.runMutation(getOrCreateUser, { user });
     },
     async onSignUp({ ctx, user }) {
-      await getOrCreateUser(ctx, { userId: user.userId });
+      await ctx.runMutation(getOrCreateUser, { user });
     },
-  },
-});
-
-export const getUser = query({
-  args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
-    return await ctx.db.get(userId);
   },
 });
 

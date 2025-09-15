@@ -164,20 +164,22 @@ export const makeAdmin = mutation({
 });
 
 export const getOrCreateUser = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    user: v.any(),
+  },
+  handler: async (ctx, { user }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Not authenticated");
     }
 
-    const user = await ctx.db
+    const userFromDb = await ctx.db
       .query("users")
       .withIndex("email", (q) => q.eq("email", identity.email!))
       .unique();
 
-    if (user) {
-      return user._id;
+    if (userFromDb) {
+      return userFromDb._id;
     }
 
     const newUser = await ctx.db.insert("users", {
