@@ -165,7 +165,7 @@ export const makeAdmin = mutation({
 
 export const getOrCreateUser = mutation({
   args: {
-    existingUserId: v.optional(v.union(v.id("users"), v.null())),
+    existingUserId: v.union(v.id("users"), v.null()),
     type: v.union(
       v.literal("email"),
       v.literal("phone"),
