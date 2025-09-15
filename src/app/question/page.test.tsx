@@ -63,6 +63,7 @@ describe('QuestionPage', () => {
       tone: 'test_tone',
     };
     mockUseQuery
+      .mockReturnValueOnce([]) // for getQuestionsByIds in useQuestionHistory
       .mockReturnValueOnce(mockQuestion) // for getQuestionById
       .mockReturnValueOnce({ color: '#ff0000' }) // for getStyle
       .mockReturnValueOnce({ color: '#00ff00' }); // for getTone
@@ -80,6 +81,7 @@ describe('QuestionPage', () => {
       tone: null,
     };
     mockUseQuery
+      .mockReturnValueOnce([]) // for getQuestionsByIds in useQuestionHistory
       .mockReturnValueOnce(mockQuestion) // for getQuestionById
       .mockReturnValueOnce(null) // for getStyle
       .mockReturnValueOnce(null); // for getTone
