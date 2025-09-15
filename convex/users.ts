@@ -164,16 +164,18 @@ export const makeAdmin = mutation({
 });
 
 export const getOrCreateUser = mutation({
-  args: {},
+  args: {
+    type: v.string(),
+    profile: v.any(),
+    existingUserId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
+    if (args.existingUserId) {
+      return args.existingUserId;
     }
-
     const userFromDb = await ctx.db
       .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .withIndex("email", (q) => q.eq("email", args.profile.email))
       .unique();
 
     if (userFromDb) {
@@ -181,9 +183,9 @@ export const getOrCreateUser = mutation({
     }
 
     const newUser = await ctx.db.insert("users", {
-      email: identity.email!,
-      name: identity.name,
-      image: identity.pictureUrl,
+      email: args.profile.email,
+      name: args.profile.name,
+      image: args.profile.pictureUrl,
       likedQuestions: [],
       hiddenQuestions: [],
       autoAdvanceShuffle: false,
