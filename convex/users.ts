@@ -165,9 +165,17 @@ export const makeAdmin = mutation({
 
 export const getOrCreateUser = mutation({
   args: {
-    type: v.string(),
+    existingUserId: v.optional(v.union(v.id("users"), v.null())),
+    type: v.union(
+      v.literal("email"),
+      v.literal("phone"),
+      v.literal("credentials"),
+      v.literal("oauth"),
+      v.literal("verification")
+    ),
+    provider: v.any(),
     profile: v.any(),
-    existingUserId: v.optional(v.id("users")),
+    shouldLink: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     if (args.existingUserId) {
