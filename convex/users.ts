@@ -164,10 +164,8 @@ export const makeAdmin = mutation({
 });
 
 export const getOrCreateUser = mutation({
-  args: {
-    user: v.any(),
-  },
-  handler: async (ctx, { user }) => {
+  args: {},
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Not authenticated");

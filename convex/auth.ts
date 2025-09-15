@@ -7,12 +7,7 @@ import { getOrCreateUser } from "./users";
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [Password, Anonymous],
   callbacks: {
-    async onSignIn({ ctx, user }) {
-      await ctx.runMutation(getOrCreateUser, { user });
-    },
-    async onSignUp({ ctx, user }) {
-      await ctx.runMutation(getOrCreateUser, { user });
-    },
+    createOrUpdateUser: getOrCreateUser,
   },
 });
 
