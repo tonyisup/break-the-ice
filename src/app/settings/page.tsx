@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -46,6 +47,37 @@ const SettingsPage = () => {
   const hiddenStyleObjects = allStyles?.filter(style => hiddenStyles.includes(style.id));
   const hiddenToneObjects = allTones?.filter(tone => hiddenTones.includes(tone.id));
   const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions as Id<"questions">[] });
+
+  useEffect(() => {
+    if (hiddenQuestionObjects) {
+      const serverIds = hiddenQuestionObjects.map(q => q!._id);
+      if (serverIds.length !== hiddenQuestions.length) {
+        setHiddenQuestions(serverIds);
+      }
+    }
+  }, [hiddenQuestionObjects, hiddenQuestions, setHiddenQuestions]);
+
+  useEffect(() => {
+    if (allStyles) {
+      const serverIds = allStyles.map(s => s.id);
+      const localIds = hiddenStyles;
+      const filteredIds = localIds.filter(id => serverIds.includes(id));
+      if (filteredIds.length !== localIds.length) {
+        setHiddenStyles(filteredIds);
+      }
+    }
+  }, [allStyles, hiddenStyles, setHiddenStyles]);
+
+  useEffect(() => {
+    if (allTones) {
+      const serverIds = allTones.map(t => t.id);
+      const localIds = hiddenTones;
+      const filteredIds = localIds.filter(id => serverIds.includes(id));
+      if (filteredIds.length !== localIds.length) {
+        setHiddenTones(filteredIds);
+      }
+    }
+  }, [allTones, hiddenTones, setHiddenTones]);
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradientDark = ["#3B2554", "#262D54"];
