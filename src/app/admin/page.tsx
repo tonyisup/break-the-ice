@@ -5,7 +5,7 @@ import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { useTheme } from '../../hooks/useTheme';
 import { Link } from 'react-router-dom';
-import { HouseIcon } from 'lucide-react';
+import { HouseIcon } from '@/components/ui/icons';
 import { AnimatePresence } from 'framer-motion';
 import { AIQuestionGenerator } from '../../components/ai-question-generator/ai-question-generator';
 

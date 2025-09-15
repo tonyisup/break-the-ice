@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Heart, Share2, ThumbsDown } from 'lucide-react';
+import { Heart, Share2, ThumbsDown } from '@/components/ui/icons';
 import { Doc } from '../../../convex/_generated/dataModel';
 
 interface ModernQuestionCardProps {
