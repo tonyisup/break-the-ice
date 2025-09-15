@@ -1,31 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-
-export const getSettings = query({
-  args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return null;
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email!))
-      .unique();
-
-    if (!user) {
-      return null;
-    }
-
-    return {
-      likedQuestions: user.likedQuestions,
-      hiddenQuestions: user.hiddenQuestions,
-      autoAdvanceShuffle: user.autoAdvanceShuffle,
-      migratedFromLocalStorage: user.migratedFromLocalStorage,
-    };
-  },
-});
+import { GenericMutationCtx } from "convex/server";
 
 export const migrateLocalStorageSettings = mutation({
   args: {
@@ -132,77 +107,37 @@ export const updateAutoAdvanceShuffle = mutation({
   },
 });
 
-export const makeAdmin = mutation({
+export async function getOrCreateUser(
+  ctx: GenericMutationCtx<any>,
   args: {
-    email: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
-    }
-    const tempUser = await ctx.db
-        .query("users")
-        .withIndex("email", (q) => q.eq("email", identity.email!))
-        .unique();
+    existingUserId: any;
+    profile: any;
+  }
+) {
+  if (args.existingUserId) {
+    return args.existingUserId;
+  }
+  const userFromDb = await ctx.db
+    .query("users")
+    .withIndex("email", (q) => q.eq("email", args.profile.email))
+    .unique();
 
-    if (!tempUser || !tempUser.isAdmin) {
-        throw new Error("Not authorized to make admins");
-    }
+  if (userFromDb) {
+    return userFromDb._id;
+  }
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", args.email))
-      .unique();
+  const newUser = await ctx.db.insert("users", {
+    email: args.profile.email,
+    name: args.profile.name,
+    image: args.profile.pictureUrl,
+    likedQuestions: [],
+    hiddenQuestions: [],
+    autoAdvanceShuffle: false,
+    migratedFromLocalStorage: false,
+  });
 
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    await ctx.db.patch(user._id, { isAdmin: true });
-  },
-});
-
-export const getOrCreateUser = mutation({
-  args: {
-    existingUserId: v.union(v.id("users"), v.null()),
-    type: v.union(
-      v.literal("email"),
-      v.literal("phone"),
-      v.literal("credentials"),
-      v.literal("oauth"),
-      v.literal("verification")
-    ),
-    provider: v.any(),
-    profile: v.any(),
-    shouldLink: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    if (args.existingUserId) {
-      return args.existingUserId;
-    }
-    const userFromDb = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", args.profile.email))
-      .unique();
-
-    if (userFromDb) {
-      return userFromDb._id;
-    }
-
-    const newUser = await ctx.db.insert("users", {
-      email: args.profile.email,
-      name: args.profile.name,
-      image: args.profile.pictureUrl,
-      likedQuestions: [],
-      hiddenQuestions: [],
-      autoAdvanceShuffle: false,
-      migratedFromLocalStorage: false,
-    });
-
-    return newUser;
-  },
-});
+  return newUser;
+}
 
 export const me = query({
   args: {},
