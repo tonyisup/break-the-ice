@@ -1,5 +1,5 @@
 import React, { useState, ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown } from '@/components/ui/icons';
 
 interface CollapsibleSectionProps {
   title: string;

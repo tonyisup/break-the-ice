@@ -2,7 +2,7 @@ import { motion, PanInfo, useAnimation, useMotionValue, useTransform } from "fra
 import { Doc } from "../../../convex/_generated/dataModel";
 import { useState, useEffect } from "react";
 import { useThemeListener } from "../../hooks/useTheme";
-import { Share2 } from "lucide-react";
+import { Share2 } from '@/components/ui/icons';
 
 interface QuestionCardProps {
   currentQuestion: Doc<"questions">;

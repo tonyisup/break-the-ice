@@ -6,7 +6,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
 import { Link } from "react-router-dom";
-import { HouseIcon } from "lucide-react";
+import { HouseIcon } from '@/components/ui/icons';
 import { CollapsibleSection } from "../../components/collapsible-section/CollapsibleSection";
 import { Header } from "@/components/header";
 import { Id } from "../../../convex/_generated/dataModel";

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { MoveRight } from "lucide-react";
+import { MoveRight } from "@/components/ui/icons";
 
 const LandingPage = () => {
   return (

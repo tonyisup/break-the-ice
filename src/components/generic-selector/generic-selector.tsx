@@ -1,11 +1,12 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, EyeOff, Shuffle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, EyeOff, Shuffle } from '@/components/ui/icons';
 import { cn } from '@/lib/utils';
+import * as icons from '@/components/ui/icons';
 
 export interface SelectorItem {
   id: string;
   name: string;
-  icon: string;
+  icon: keyof typeof icons;
   color: string;
 }
 
@@ -13,7 +14,6 @@ interface GenericSelectorProps {
   items: SelectorItem[] | undefined;
   selectedItem: string;
   onSelectItem: (itemId: string) => void;
-  iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>>;
   randomizeLabel?: string;
   onHideItem?: (itemId: string) => void;
   onRandomizeItem?: (itemId: string | null) => void;
@@ -26,7 +26,7 @@ export interface GenericSelectorRef {
 }
 
 export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorProps>(
-  ({ items, selectedItem, onSelectItem, iconMap, randomizeLabel = "Randomize", onHideItem, onRandomizeItem }, ref) => {
+  ({ items, selectedItem, onSelectItem, randomizeLabel = "Randomize", onHideItem, onRandomizeItem }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const buttonRefs = useRef<{ [key: string]: HTMLElement | null }>({});
     const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -352,7 +352,6 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
             style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
           >
             {items && items.map((item) => {
-              const Icon = iconMap[item.icon];
               const isSelected = selectedItem === item.id;
               const isLongPressed = longPressedItems.has(item.id);
               const showHideButton = isLongPressed || false; // Will be overridden by CSS hover on desktop
@@ -393,7 +392,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
 
                     }
                   >
-                    {Icon && <Icon size={20} />}
+                    {React.createElement(icons[item.icon], { size: 20 })}
                     <span className="text-sm font-semibold whitespace-nowrap">
                       {item.name}
                     </span>

@@ -7,7 +7,6 @@ import { useMemo, useState, useEffect } from "react";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { ModernQuestionCard } from "@/components/modern-question-card";
-// import { HouseIcon } from "lucide-react";
 
 import { cn, isColorDark } from "@/lib/utils";
 

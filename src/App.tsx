@@ -1,9 +1,9 @@
-import { useConvexAuth } from "convex/react";
+import { useStoreUserEffect } from "./hooks/useStoreUserEffect";
 import MainPage from "./pages/MainPage";
 import { SignIn } from "./SignIn";
 
 export default function App() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
+  const { isAuthenticated, isLoading } = useStoreUserEffect();
 
   if (isLoading) {
     return (
