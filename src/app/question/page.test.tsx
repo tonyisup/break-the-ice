@@ -27,6 +27,12 @@ vi.mock('../../hooks/useTheme', () => ({
 vi.mock('../../hooks/useLocalStorage', () => ({
   useLocalStorage: () => [[], vi.fn()],
 }));
+vi.mock('../../hooks/useQuestionHistory', () => ({
+  useQuestionHistory: () => ({
+    history: [],
+    addQuestionToHistory: vi.fn(),
+  }),
+}));
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
@@ -63,7 +69,6 @@ describe('QuestionPage', () => {
       tone: 'test_tone',
     };
     mockUseQuery
-      .mockReturnValueOnce([]) // for getQuestionsByIds in useQuestionHistory
       .mockReturnValueOnce(mockQuestion) // for getQuestionById
       .mockReturnValueOnce({ color: '#ff0000' }) // for getStyle
       .mockReturnValueOnce({ color: '#00ff00' }); // for getTone
@@ -81,7 +86,6 @@ describe('QuestionPage', () => {
       tone: null,
     };
     mockUseQuery
-      .mockReturnValueOnce([]) // for getQuestionsByIds in useQuestionHistory
       .mockReturnValueOnce(mockQuestion) // for getQuestionById
       .mockReturnValueOnce(null) // for getStyle
       .mockReturnValueOnce(null); // for getTone
