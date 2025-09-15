@@ -18,7 +18,7 @@ export function useQuestionHistory() {
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: historyIds });
 
   useEffect(() => {
-    if (questions) {
+    if (questions && Array.isArray(questions)) {
       const serverIds = questions.map(q => q._id);
       const localIds = history.map(q => q._id);
       if (serverIds.length !== localIds.length) {

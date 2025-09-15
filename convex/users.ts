@@ -162,3 +162,51 @@ export const makeAdmin = mutation({
     await ctx.db.patch(user._id, { isAdmin: true });
   },
 });
+
+export const getOrCreateUser = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .unique();
+
+    if (user) {
+      return user._id;
+    }
+
+    const newUser = await ctx.db.insert("users", {
+      email: identity.email!,
+      name: identity.name,
+      image: identity.pictureUrl,
+      likedQuestions: [],
+      hiddenQuestions: [],
+      autoAdvanceShuffle: false,
+      migratedFromLocalStorage: false,
+    });
+
+    return newUser;
+  },
+});
+
+export const me = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .unique();
+
+    return user;
+  },
+});

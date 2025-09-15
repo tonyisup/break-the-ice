@@ -55,37 +55,47 @@ describe('QuestionPage', () => {
     expect(screen.getByText('Question not found')).toBeInTheDocument();
   });
 
-  it('renders the question card when the question is loaded', () => {
+  it('renders the question card when the question is loaded', async () => {
     const mockQuestion = {
       _id: 'test_id' as Id<'questions'>,
       text: 'This is a test question',
       style: 'test_style',
       tone: 'test_tone',
     };
-    mockUseQuery
-      .mockReturnValueOnce(mockQuestion) // for getQuestionById
-      .mockReturnValueOnce({ color: '#ff0000' }) // for getStyle
-      .mockReturnValueOnce({ color: '#00ff00' }); // for getTone
+    mockUseQuery.mockImplementation((query, args) => {
+      if (args.id === 'test_id') {
+        return mockQuestion;
+      }
+      if (args.id === 'test_style') {
+        return { color: '#ff0000' };
+      }
+      if (args.id === 'test_tone') {
+        return { color: '#00ff00' };
+      }
+      return null;
+    });
 
     render(<MemoryRouter><QuestionPage /></MemoryRouter>);
-    expect(screen.getByText('This is a test question')).toBeInTheDocument();
+    await screen.findByText('This is a test question');
     expect(screen.getByText('Get more questions')).toBeInTheDocument();
   });
 
-  it('renders correctly when the question has no style or tone', () => {
+  it('renders correctly when the question has no style or tone', async () => {
     const mockQuestion = {
       _id: 'test_id' as Id<'questions'>,
       text: 'Question with no style/tone',
       style: null,
       tone: null,
     };
-    mockUseQuery
-      .mockReturnValueOnce(mockQuestion) // for getQuestionById
-      .mockReturnValueOnce(null) // for getStyle
-      .mockReturnValueOnce(null); // for getTone
+    mockUseQuery.mockImplementation((query, args) => {
+      if (args.id === 'test_id') {
+        return mockQuestion;
+      }
+      return null;
+    });
 
     render(<MemoryRouter><QuestionPage /></MemoryRouter>);
-    expect(screen.getByText('Question with no style/tone')).toBeInTheDocument();
+    await screen.findByText('Question with no style/tone');
     expect(screen.getByText('Get more questions')).toBeInTheDocument();
   });
 });
