@@ -1,6 +1,7 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Doc, Id } from "../../convex/_generated/dataModel";
 import { useTheme } from "../hooks/useTheme";
@@ -62,8 +63,10 @@ export default function MainPage() {
   const [startTime, setStartTime] = useState(Date.now());
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState("would-you-rather");
-  const [selectedTone, setSelectedTone] = useState("fun-silly");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? "would-you-rather");
+  const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? "fun-silly");
   const [randomizedTone, setRandomizedTone] = useState<string | null>(null);
   const [randomizedStyle, setRandomizedStyle] = useState<string | null>(null);
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
@@ -81,6 +84,13 @@ export default function MainPage() {
   const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
+
+  useEffect(() => {
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("style", selectedStyle);
+    newSearchParams.set("tone", selectedTone);
+    setSearchParams(newSearchParams);
+  }, [selectedStyle, selectedTone, setSearchParams]);
 
   const callGenerateAIQuestion = useCallback(async (count: number) => {
     setIsGenerating(true);
