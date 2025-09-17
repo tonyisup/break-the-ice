@@ -126,6 +126,31 @@ export const getQuestionsByIds = query({
   },
 });
 
+export const getLikedQuestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .unique();
+
+    if (!user || !user.likedQuestions) {
+      return [];
+    }
+
+    const questions = await Promise.all(
+      user.likedQuestions.map((id) => ctx.db.get(id))
+    );
+
+    return questions.filter((q): q is Doc<"questions"> => q !== null);
+  },
+});
+
 export const getQuestionById = query({
   args: {
     id: v.string(),
