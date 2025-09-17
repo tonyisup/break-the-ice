@@ -142,8 +142,6 @@ Respond with ONLY the JSON array, no other text.`
       throw new Error("Failed to generate question after all attempts");
     }
 
-    console.log("Raw AI response:", generatedContent);
-
     // Try to clean and parse the response
     let cleanedContent = generatedContent;
     

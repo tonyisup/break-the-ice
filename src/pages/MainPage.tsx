@@ -127,9 +127,11 @@ export default function MainPage() {
     }
     if (currentQuestions.length > 0 && currentQuestions.length <= 5) {
       if (nextQuestions && nextQuestions.length === 0) {
+        // Only display the loading indicator if there are no more question in the database
         setIsGenerating(true);
       }
-      const questionsToGenerate = 10 - currentQuestions.length;
+      // between 2 and 6 questions
+      const questionsToGenerate = 7 - currentQuestions.length;
       void callGenerateAIQuestion(questionsToGenerate);
     }
   }, [currentQuestions, isGenerating, callGenerateAIQuestion, nextQuestions]);
