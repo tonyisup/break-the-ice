@@ -25,6 +25,7 @@ export const generateAIQuestion = action({
     model: v.optional(v.string()),
     count: v.optional(v.number()),
   },
+  returns: v.array(v.union(v.any(), v.null())),
   handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
     const { selectedTags, currentQuestion, style: styleId, tone: toneId, model, count } = args;
     const generationCount = count ?? 1;
@@ -77,35 +78,92 @@ export const generateAIQuestion = action({
       promptData.tags = selectedTags.join(", ");
     }
 
-    try {
-      const completion = await openai.chat.completions.create({
-        model: model ?? "@preset/break-the-ice-berg-default",
-        messages: [
-          {
-            role: "system",
-            content: `You are an ice-breaker generator that creates engaging ice-breaker questions for conversations. Avoid generating questions that are too similar to the existing questions provided. Always respond with a JSON array of strings, where each string is a unique question. For example: ["question 1", "question 2"]`
-          },
-          {
-            role: "user",
-            content: JSON.stringify(promptData)
-          }
-        ],
-        max_tokens: 150 * generationCount,
-        temperature: 0.8,
-      });
+    // Retry logic for AI generation
+    let attempts = 0;
+    const maxAttempts = 3;
+    let generatedContent = "";
 
-      const generatedContent = completion.choices[0]?.message?.content?.trim();
-
-      if (!generatedContent) {
-        throw new Error("Failed to generate question");
-      }
-
+    while (attempts < maxAttempts && !generatedContent) {
       try {
-        const generatedQuestions = JSON.parse(generatedContent);
-        if (Array.isArray(generatedQuestions)) {
-          for (const questionText of generatedQuestions) {
-            if (typeof questionText === 'string') {
-              const cleanedQuestion = questionText.replace(/^["']|["']$/g, '');
+        attempts++;
+        const completion = await openai.chat.completions.create({
+          model: model ?? "@preset/break-the-ice-berg-default",
+          messages: [
+            {
+              role: "system",
+              content: `You are an ice-breaker generator that creates engaging ice-breaker questions for conversations. 
+
+CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of strings. Do not include any text before or after the JSON. Do not use markdown formatting. Do not include explanations or comments.
+
+Example format: ["What's your favorite childhood memory?", "If you could have dinner with anyone, who would it be?"]
+
+Requirements:
+- Return exactly ${generationCount} question(s)
+- Each question should be a string in the JSON array
+- Avoid questions too similar to existing ones
+- Make questions engaging and conversation-starting`
+            },
+            {
+              role: "user",
+              content: `Generate ${generationCount} ice-breaker question(s) with these parameters:
+${JSON.stringify(promptData, null, 2)}
+
+Respond with ONLY the JSON array, no other text.`
+            }
+          ],
+          max_tokens: 200 * generationCount,
+          temperature: 0.7,
+        });
+
+        generatedContent = completion.choices[0]?.message?.content?.trim() || "";
+        
+        if (!generatedContent) {
+          console.log(`Attempt ${attempts}: No content generated`);
+          if (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+            continue;
+          }
+          throw new Error("Failed to generate question after multiple attempts");
+        }
+
+        // If we get here, we have content, so break out of the retry loop
+        break;
+        
+      } catch (error) {
+        console.error(`Attempt ${attempts} failed:`, error);
+        if (attempts >= maxAttempts) {
+          throw error;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+      }
+    }
+
+    if (!generatedContent) {
+      throw new Error("Failed to generate question after all attempts");
+    }
+
+    console.log("Raw AI response:", generatedContent);
+
+    // Try to clean and parse the response
+    let cleanedContent = generatedContent;
+    
+    // Remove any markdown code blocks
+    cleanedContent = cleanedContent.replace(/```json\s*|\s*```/g, '');
+    cleanedContent = cleanedContent.replace(/```\s*|\s*```/g, '');
+    
+    // Remove any leading/trailing text that's not JSON
+    const jsonMatch = cleanedContent.match(/\[.*\]/s);
+    if (jsonMatch) {
+      cleanedContent = jsonMatch[0];
+    }
+
+    try {
+      const generatedQuestions = JSON.parse(cleanedContent);
+      if (Array.isArray(generatedQuestions)) {
+        for (const questionText of generatedQuestions) {
+          if (typeof questionText === 'string' && questionText.trim()) {
+            const cleanedQuestion = questionText.trim().replace(/^["']|["']$/g, '');
+            if (cleanedQuestion.length > 0) {
               const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
                 text: cleanedQuestion,
                 style: styleId,
@@ -116,22 +174,43 @@ export const generateAIQuestion = action({
             }
           }
         }
-      } catch (e) {
-        console.error("Failed to parse AI response as JSON:", e);
-        // Fallback for when the AI doesn't return a valid JSON array
-        const cleanedQuestion = generatedContent.replace(/^["']|["']$/g, '');
-        const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
+      } else {
+        throw new Error("Response is not an array");
+      }
+    } catch (e) {
+      console.error("Failed to parse AI response as JSON:", e);
+      console.error("Cleaned content:", cleanedContent);
+      
+      // Try to extract individual questions from the response
+      const questionMatches = generatedContent.match(/"([^"]+)"/g);
+      if (questionMatches && questionMatches.length > 0) {
+        for (const match of questionMatches) {
+          const questionText = match.replace(/"/g, '').trim();
+          if (questionText.length > 0) {
+            const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
+              text: questionText,
+              style: styleId,
+              tone: toneId,
+              tags: selectedTags,
+            });
+            newQuestions.push(newQuestion);
+          }
+        }
+      } else {
+        // Last resort: treat the entire response as a single question
+        const cleanedQuestion = generatedContent.replace(/^["']|["']$/g, '').trim();
+        if (cleanedQuestion.length > 0) {
+          const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
             text: cleanedQuestion,
             style: styleId,
             tone: toneId,
             tags: selectedTags,
-        });
-        newQuestions.push(newQuestion);
+          });
+          newQuestions.push(newQuestion);
+        }
       }
-    } catch (error) {
-      console.error("Error generating AI question:", error);
     }
+
     return newQuestions;
   },
 });
-

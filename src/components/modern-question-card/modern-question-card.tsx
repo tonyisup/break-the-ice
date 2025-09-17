@@ -55,7 +55,7 @@ export function ModernQuestionCard({
         <div className="w-full h-full min-h-[300px] bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-center items-center">
           {isGenerating && !question ? (
             // Loading Spinner
-            <div className="flex flex-col items-center justify-between space-y-4 min-h-[300px]">
+            <div className="flex flex-col items-center justify-center space-y-4 min-h-[300px]">
               <div
                 className="w-12 h-12 border-4 border-gray-200 dark:border-gray-700 rounded-full animate-spin"
                 style={{

@@ -83,7 +83,6 @@ export default function MainPage() {
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
   const callGenerateAIQuestion = useCallback(async (count: number) => {
-    setIsGenerating(true);
     try {
       const newQuestions = await generateAIQuestion({
         style: selectedStyle,
@@ -115,18 +114,25 @@ export default function MainPage() {
           }
           return prevQuestions;
         });
-      } else if (currentQuestions.length === 0 && !isGenerating) {
-        void callGenerateAIQuestion(10);
+      } else if ((currentQuestions.length === 0) && !isGenerating) {
+        setIsGenerating(true);
+        void callGenerateAIQuestion(2);
       }
     }
   }, [nextQuestions, isGenerating, currentQuestions.length, callGenerateAIQuestion, hiddenQuestions]);
 
   useEffect(() => {
-    if (currentQuestions.length > 0 && currentQuestions.length <= 5 && !isGenerating) {
+    if (nextQuestions && nextQuestions.length > 1) {
+      return;
+    }
+    if (currentQuestions.length > 0 && currentQuestions.length <= 5) {
+      if (nextQuestions && nextQuestions.length === 0) {
+        setIsGenerating(true);
+      }
       const questionsToGenerate = 10 - currentQuestions.length;
       void callGenerateAIQuestion(questionsToGenerate);
     }
-  }, [currentQuestions, isGenerating, callGenerateAIQuestion]);
+  }, [currentQuestions, isGenerating, callGenerateAIQuestion, nextQuestions]);
 
   useEffect(() => {
     setCurrentQuestions(prev => prev.filter(q => !hiddenQuestions.includes(q._id)));
@@ -138,10 +144,6 @@ export default function MainPage() {
       addQuestionToHistory(currentQuestion);
     }
   }, [currentQuestion, addQuestionToHistory]);
-
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
 
   const handleDiscard = async (questionId: Id<"questions">) => {
     setSeenQuestionIds((prev) => [...prev, questionId]);
