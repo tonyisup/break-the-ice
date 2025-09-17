@@ -39,8 +39,8 @@ vi.mock('sonner', () => ({
   },
 }));
 
-const mockUseParams = useParams as vi.Mock;
-const mockUseQuery = useQuery as vi.Mock;
+const mockUseParams = useParams as any; //vi.Mock;
+const mockUseQuery = useQuery as any; //vi.Mock;
 
 describe('QuestionPage', () => {
   beforeEach(() => {

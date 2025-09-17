@@ -84,7 +84,7 @@ function LikedQuestionsPageContent() {
           </Link>
         </div>
       ) : (
-        <div className="container mx-auto flex flex-col gap-4">
+        <div className="container mx-auto flex flex-col gap-4 p-4">
           <div className="container mx-auto flex flex-col gap-4">
             <div className="flex justify-between gap-2 w-full">
               <input
