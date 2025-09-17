@@ -18,9 +18,9 @@ export default function MainPage() {
   const { theme, setTheme } = useTheme();
 
   // For migration
-  const [localStorageLikedQuestions, , removeLocalStorageLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
-  const [localStorageHiddenQuestions, , removeLocalStorageHiddenQuestions] = useLocalStorage<Id<"questions">[]>("hiddenQuestions", []);
-  const [localStorageAutoAdvanceShuffle, , removeLocalStorageAutoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
+  const [localStorageLikedQuestions, setLocalStorageLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const [localStorageHiddenQuestions, setLocalStorageHiddenQuestions] = useLocalStorage<Id<"questions">[]>("hiddenQuestions", []);
+  const [localStorageAutoAdvanceShuffle, setLocalStorageAutoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
 
   // DB settings
   const settings = useQuery(api.users.getSettings);
@@ -42,12 +42,12 @@ export default function MainPage() {
         autoAdvanceShuffle: localStorageAutoAdvanceShuffle,
       }).then(() => {
         // Clean up local storage after migration
-        removeLocalStorageLikedQuestions();
-        removeLocalStorageHiddenQuestions();
-        removeLocalStorageAutoAdvanceShuffle();
+        setLocalStorageLikedQuestions([]);
+        setLocalStorageHiddenQuestions([]);
+        setLocalStorageAutoAdvanceShuffle(false);
       });
     }
-  }, [settings, migrateLocalStorageSettings, localStorageLikedQuestions, localStorageHiddenQuestions, localStorageAutoAdvanceShuffle, removeLocalStorageLikedQuestions, removeLocalStorageHiddenQuestions, removeLocalStorageAutoAdvanceShuffle]);
+  }, [settings, migrateLocalStorageSettings, localStorageLikedQuestions, localStorageHiddenQuestions, localStorageAutoAdvanceShuffle, setLocalStorageLikedQuestions, setLocalStorageHiddenQuestions, setLocalStorageAutoAdvanceShuffle]);
 
   // Sync local state with DB settings
   useEffect(() => {

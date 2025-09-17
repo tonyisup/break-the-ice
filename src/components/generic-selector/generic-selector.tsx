@@ -2,6 +2,7 @@ import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallba
 import { ChevronLeft, ChevronRight, EyeOff, Shuffle } from '@/components/ui/icons';
 import { cn } from '@/lib/utils';
 import * as icons from '@/components/ui/icons';
+import React from 'react';
 
 export interface SelectorItem {
   id: string;
