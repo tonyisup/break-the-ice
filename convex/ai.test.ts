@@ -90,15 +90,23 @@ test("generate AI question with existing questions", async () => {
   // 5. Assert that the mock was called correctly
   const calls = mockCreate.mock.calls;
   expect(calls.length).toBe(1);
+  
   const messages = calls[0][0].messages;
   expect(messages.length).toBe(2);
   expect(messages[0].role).toBe("system");
-  expect(messages[0].content).toContain("JSON array of strings");
+  expect(messages[0].content).toContain("Return exactly 2 question(s)");
 
-  const userMessageContent = JSON.parse(messages[1].content);
-  expect(userMessageContent.existingQuestions).toBeDefined();
-  expect(userMessageContent.existingQuestions.length).toBe(5);
-  expect(userMessageContent.count).toBe(2);
-  expect(userMessageContent.existingQuestions[0]).toContain("Existing question");
-
+  expect(messages[1].role).toBe("user");
+  expect(messages[1].content).toContain("Generate 2 ice-breaker question(s) with these parameters:");
+  expect(messages[1].content).toContain('"style": "Test Style"');
+  expect(messages[1].content).toContain('"structure": "Test Structure"');
+  expect(messages[1].content).toContain('"tone": "Test Tone"');
+  expect(messages[1].content).toContain('"toneGuidance": "Test Guidance"');
+  expect(messages[1].content).toContain('"styleGuidance": "Test Guidance"');
+  expect(messages[1].content).toContain('"Existing question 0"');
+  expect(messages[1].content).toContain('"Existing question 1"');
+  expect(messages[1].content).toContain('"Existing question 2"');
+  expect(messages[1].content).toContain('"Existing question 3"');
+  expect(messages[1].content).toContain('"Existing question 4"');
+  expect(messages[1].content).toContain('"count": 2');
 });
