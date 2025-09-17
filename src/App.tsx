@@ -1,14 +1,22 @@
 import { useStoreUserEffect } from "./hooks/useStoreUserEffect";
 import MainPage from "./pages/MainPage";
 import { SignIn } from "./SignIn";
+import { useTheme } from "./hooks/useTheme";
 
 export default function App() {
   const { isAuthenticated, isLoading } = useStoreUserEffect();
 
+  const { theme } = useTheme();
+  const gradient = ['#667EEA', '#764BA2'];
+  const gradientTarget = theme === "dark" ? "#000" : "#fff";
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
-        <div className="loader ease-linear rounded-full border-8 border-t-8 border-gray-200 h-32 w-32"></div>
+      <div
+        className="min-h-screen transition-colors overflow-hidden"
+        style={{
+          background: `linear-gradient(135deg, ${gradientTarget}, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
+        }}
+      >
       </div>
     );
   }

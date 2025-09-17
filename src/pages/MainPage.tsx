@@ -64,7 +64,6 @@ export default function MainPage() {
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-
   const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? "would-you-rather");
   const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? "fun-silly");
   const [randomizedTone, setRandomizedTone] = useState<string | null>(null);
@@ -80,10 +79,28 @@ export default function MainPage() {
       tone: selectedTone,
       seen: seenQuestionIds,
     });
+  const styles = useQuery(api.styles.getStyles);
+  const tones = useQuery(api.tones.getTones);
   const style = useQuery(api.styles.getStyle, (selectedStyle === "") ? "skip" : { id: selectedStyle });
   const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
+
+  useEffect(() => {
+    // Only scroll if we have data loaded and the URL params are different from defaults
+    if (styles && searchParams.get("style") !== "would-you-rather") {
+      // Small delay to ensure DOM elements are rendered
+      setTimeout(() => {
+        styleSelectorRef.current?.scrollToSelectedItem();
+      }, 100);
+    }
+    if (tones && searchParams.get("tone") !== "fun-silly") {
+      // Small delay to ensure DOM elements are rendered
+      setTimeout(() => {
+        toneSelectorRef.current?.scrollToSelectedItem();
+      }, 100);
+    }
+  }, [searchParams, styleSelectorRef, toneSelectorRef, styles, tones]);
 
   useEffect(() => {
     const newSearchParams = new URLSearchParams(searchParams);

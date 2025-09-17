@@ -24,6 +24,7 @@ export interface GenericSelectorRef {
   randomizeItem: () => void;
   cancelRandomizingItem: () => void;
   confirmRandomizedItem: () => void;
+  scrollToSelectedItem: () => void;
 }
 
 export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorProps>(
@@ -302,6 +303,9 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
 
     // Expose the randomizeItem function to parent components
     useImperativeHandle(ref, () => ({
+      scrollToSelectedItem: () => {
+        scrollToCenter(selectedItem);
+      },
       randomizeItem: handleRandomItem,
       cancelRandomizingItem: () => {
         setRandomItem(null);

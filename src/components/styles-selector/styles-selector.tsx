@@ -14,7 +14,8 @@ interface StyleSelectorProps {
 export interface StyleSelectorRef {
   randomizeStyle: () => void;
   cancelRandomizingStyle: () => void;
-  confirmRandomizedStyle: () => void;
+  confirmRandomizedStyle: () => void; 
+  scrollToSelectedItem: () => void;
 }
 export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, randomOrder = true, ref }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
   const styles = useQuery(api.styles.getStyles);
@@ -31,7 +32,7 @@ export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, 
     .map(style => ({
       id: style.id,
       name: style.name,
-      icon: style.icon,
+      icon: style.icon as SelectorItem['icon'],
       color: style.color
     })), [styles, hiddenStyles]);
 
@@ -45,6 +46,9 @@ export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, 
     },
     confirmRandomizedStyle: () => {
       genericSelectorRef.current?.confirmRandomizedItem();
+    },
+    scrollToSelectedItem: () => {
+      genericSelectorRef.current?.scrollToSelectedItem();
     },
   }));
 

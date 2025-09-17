@@ -15,6 +15,7 @@ export interface ToneSelectorRef {
   randomizeTone: () => void;
   cancelRandomizingTone: () => void;
   confirmRandomizedTone: () => void;
+  scrollToSelectedItem: () => void;
 }
 
 export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, randomOrder = true, ref }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
@@ -32,7 +33,7 @@ export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, rand
     .map(tone => ({
       id: tone.id,
       name: tone.name,
-      icon: tone.icon,
+      icon: tone.icon as SelectorItem['icon'],
       color: tone.color
     })), [tones, hiddenTones]);
 
@@ -46,6 +47,9 @@ export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, rand
     },
     confirmRandomizedTone: () => {
       genericSelectorRef.current?.confirmRandomizedItem();
+    },
+    scrollToSelectedItem: () => {
+      genericSelectorRef.current?.scrollToSelectedItem();
     },
   }));
 
