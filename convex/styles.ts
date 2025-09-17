@@ -115,6 +115,18 @@ export const updateStyle = mutation({
 export const deleteStyle = mutation({
   args: { id: v.id("styles") },
   handler: async (ctx, args) => {
+    const styleToDelete = await ctx.db.get(args.id);
+    if (!styleToDelete) {
+      throw new Error("Style not found");
+    }
+
+    const questionsToDelete = await ctx.db
+      .query("questions")
+      .withIndex("by_style", (q) => q.eq("style", styleToDelete.id))
+      .collect();
+
+    await Promise.all(questionsToDelete.map((q) => ctx.db.delete(q._id)));
+
     await ctx.db.delete(args.id);
   },
 });

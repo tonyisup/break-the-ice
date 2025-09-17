@@ -16,8 +16,48 @@ import { isColorDark } from "@/lib/utils";
 
 export default function MainPage() {
   const { theme, setTheme } = useTheme();
-  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
-  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<Id<"questions">[]>("hiddenQuestions", []);
+
+  // For migration
+  const [localStorageLikedQuestions, setLocalStorageLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const [localStorageHiddenQuestions, setLocalStorageHiddenQuestions] = useLocalStorage<Id<"questions">[]>("hiddenQuestions", []);
+  const [localStorageAutoAdvanceShuffle, setLocalStorageAutoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
+
+  // DB settings
+  const settings = useQuery(api.users.getSettings);
+  const migrateLocalStorageSettings = useMutation(api.users.migrateLocalStorageSettings);
+  const updateLikedQuestions = useMutation(api.users.updateLikedQuestions);
+  const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
+
+  // Local state for settings
+  const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
+  const [hiddenQuestions, setHiddenQuestions] = useState<Id<"questions">[]>([]);
+  const [autoAdvanceShuffle, setAutoAdvanceShuffle] = useState<boolean>(false);
+
+  // Migration effect
+  useEffect(() => {
+    if (settings && !settings.migratedFromLocalStorage) {
+      migrateLocalStorageSettings({
+        likedQuestions: localStorageLikedQuestions,
+        hiddenQuestions: localStorageHiddenQuestions,
+        autoAdvanceShuffle: localStorageAutoAdvanceShuffle,
+      }).then(() => {
+        // Clean up local storage after migration
+        setLocalStorageLikedQuestions([]);
+        setLocalStorageHiddenQuestions([]);
+        setLocalStorageAutoAdvanceShuffle(false);
+      });
+    }
+  }, [settings, migrateLocalStorageSettings, localStorageLikedQuestions, localStorageHiddenQuestions, localStorageAutoAdvanceShuffle, setLocalStorageLikedQuestions, setLocalStorageHiddenQuestions, setLocalStorageAutoAdvanceShuffle]);
+
+  // Sync local state with DB settings
+  useEffect(() => {
+    if (settings) {
+      setLikedQuestions(settings.likedQuestions ?? []);
+      setHiddenQuestions(settings.hiddenQuestions ?? []);
+      setAutoAdvanceShuffle(settings.autoAdvanceShuffle ?? false);
+    }
+  }, [settings]);
+
   const { addQuestionToHistory } = useQuestionHistory();
   const [startTime, setStartTime] = useState(Date.now());
   const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
@@ -26,7 +66,6 @@ export default function MainPage() {
   const [selectedTone, setSelectedTone] = useState("fun-silly");
   const [randomizedTone, setRandomizedTone] = useState<string | null>(null);
   const [randomizedStyle, setRandomizedStyle] = useState<string | null>(null);
-  const [autoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
@@ -124,11 +163,15 @@ export default function MainPage() {
     const viewDuration = Math.min(Date.now() - startTime, 10000);
     const isLiked = likedQuestions.includes(questionId);
 
+    const newLikedQuestions = isLiked
+      ? likedQuestions.filter(id => id !== questionId)
+      : [...likedQuestions, questionId];
+
+    setLikedQuestions(newLikedQuestions);
+
     if (isLiked) {
-      setLikedQuestions(likedQuestions.filter(id => id !== questionId));
       toast.success("Removed from favorites");
     } else {
-      setLikedQuestions([...likedQuestions, questionId]);
       await recordAnalytics({
         questionId,
         event: "like",
@@ -136,13 +179,17 @@ export default function MainPage() {
       });
       toast.success("Added to favorites!");
     }
+
+    await updateLikedQuestions({ likedQuestions: newLikedQuestions });
   };
 
   const toggleHide = async (questionId: Id<"questions">) => {
     if (!currentQuestions) return;
-    setHiddenQuestions([...hiddenQuestions, questionId]);
+    const newHiddenQuestions = [...hiddenQuestions, questionId];
+    setHiddenQuestions(newHiddenQuestions);
     toast.success("Question hidden");
     getNextQuestion();
+    await updateHiddenQuestions({ hiddenQuestions: newHiddenQuestions });
   }
 
   const getNextQuestion = () => {
@@ -174,6 +221,7 @@ export default function MainPage() {
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
   const gradientTarget = theme === "dark" ? "#000" : "#fff";
+  const settingsAreLoading = settings === undefined;
 
 
   return (
@@ -199,6 +247,7 @@ export default function MainPage() {
               toggleLike={() => void toggleLike(currentQuestion._id)}
               onSwipe={getNextQuestion}
               toggleHide={() => void toggleHide(currentQuestion._id)}
+              disabled={settingsAreLoading}
             />
           )}
           {isGenerating && !currentQuestion && (
@@ -207,9 +256,10 @@ export default function MainPage() {
               currentQuestion={null}
               isFavorite={false}
               gradient={gradient}
-              toggleLike={() => { }}
-              toggleHide={() => { }}
-              onSwipe={() => { }}
+              toggleLike={() => {}}
+              toggleHide={() => {}}
+              onSwipe={() => {}}
+              disabled={settingsAreLoading}
             />
           )}
         </AnimatePresence>
@@ -240,6 +290,7 @@ export default function MainPage() {
           handleConfirmRandomizeStyleAndTone={handleConfirmRandomizeStyleAndTone}
           handleCancelRandomizeStyleAndTone={handleCancelRandomizeStyleAndTone}
           getNextQuestion={getNextQuestion}
+          disabled={settingsAreLoading}
         />
       </main>
     </div>

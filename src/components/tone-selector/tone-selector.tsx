@@ -1,50 +1,8 @@
 import { useQuery } from 'convex/react';
-import { useRef, forwardRef, useImperativeHandle, useEffect, useMemo } from 'react';
-import { 
-  Smile, 
-  Brain, 
-  Briefcase, 
-  Gamepad2, 
-  Heart, 
-  Flame, 
-  Clock, 
-  Trophy, 
-  Leaf, 
-  Eye,
-  Mountain,
-  HeartHandshake,
-  Cpu,
-  Zap,
-  Archive,
-  EyeOff,
-  BowArrow,
-  Activity,
-} from 'lucide-react';
+import { useRef, useImperativeHandle, useEffect, useMemo } from 'react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-
-const iconMap = {
-  Smile,        // fun-silly
-  Brain,        // deep-thoughtful
-  Briefcase,    // professional
-  Gamepad2,     // nerdy-geeky
-  Heart,        // wholesome-heartwarming
-  Flame,        // edgy-provocative
-  Clock,        // nostalgic-retro
-  Trophy,       // competitive-trivia
-  Leaf,         // mindful-calm
-  Eye,          // mysterious-intriguing
-  HeartHandshake,   // wholesome-uplifting
-  Mountain,     // outdoorsy-adventurous
-  Cpu,          // nerdy-geeky
-  Zap,          // quick-energizer
-  Archive,      // nostalgic
-  EyeOff,       // mysterious-intriguing
-  BowArrow,
-  Activity
-};
-
 
 interface ToneSelectorProps {
   selectedTone: string;
@@ -59,7 +17,7 @@ export interface ToneSelectorRef {
   confirmRandomizedTone: () => void;
 }
 
-export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ selectedTone, onSelectTone, onRandomizeTone, randomOrder = true }, ref) => {
+export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, randomOrder = true, ref }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
   const tones = useQuery(api.tones.getTones);
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>('hiddenTones', []);
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
@@ -104,9 +62,8 @@ export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ se
       selectedItem={selectedTone}
       onSelectItem={onSelectTone}
       onHideItem={handleHideTone}
-      iconMap={iconMap}
       randomizeLabel="Randomize Tone"
       onRandomizeItem={onRandomizeTone}
     />
   );
-});
+};

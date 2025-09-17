@@ -23,6 +23,7 @@ import type * as router from "../router.js";
 import type * as styles from "../styles.js";
 import type * as tags from "../tags.js";
 import type * as tones from "../tones.js";
+import type * as users from "../users.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   styles: typeof styles;
   tags: typeof tags;
   tones: typeof tones;
+  users: typeof users;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

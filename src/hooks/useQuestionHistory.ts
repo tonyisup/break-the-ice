@@ -1,22 +1,44 @@
 import { useLocalStorage } from "./useLocalStorage";
 import { Doc, Id } from "../../convex/_generated/dataModel";
-import { useCallback } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 const MAX_HISTORY_LENGTH = 100;
 
+export type HistoryEntry = {
+  question: Doc<"questions">;
+  viewedAt: number;
+};
+
 export function useQuestionHistory() {
-  const [history, setHistory] = useLocalStorage<Doc<"questions">[]>("questionHistory", []);
+
+  const [history, setHistory] = useLocalStorage<HistoryEntry[]>("questionHistory", []);
+  const historyIds = useMemo(() => history.map(entry => entry.question._id), [history]);
+  const questions = useQuery(api.questions.getQuestionsByIds, { ids: historyIds });
+
+  useEffect(() => {
+    if (questions) {
+      const serverIds = questions.map(q => q._id);
+      const localIds = history.map(entry => entry.question._id);
+      if (serverIds.length !== localIds.length) {
+        const newHistory = history.filter(entry => serverIds.includes(entry.question._id));
+        setHistory(newHistory);
+      }
+    }
+  }, [questions, history, setHistory]);
+
 
   const addQuestionToHistory = useCallback((question: Doc<"questions">) => {
     setHistory((prevHistory) => {
-      const newHistory = [question, ...prevHistory.filter(q => q._id !== question._id)];
+      const newHistory = [{ question, viewedAt: Date.now() }, ...prevHistory.filter(entry => entry.question._id !== question._id)];
       return newHistory.slice(0, MAX_HISTORY_LENGTH);
     });
   }, [setHistory]);
 
   const removeQuestionFromHistory = useCallback((questionId: Id<"questions">) => {
     setHistory((prevHistory) => {
-      return prevHistory.filter(q => q._id !== questionId);
+      return prevHistory.filter(entry => entry.question._id !== questionId);
     });
   }, [setHistory]);
 

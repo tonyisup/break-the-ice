@@ -102,6 +102,18 @@ export const updateTone = mutation({
 export const deleteTone = mutation({
   args: { id: v.id("tones") },
   handler: async (ctx, args) => {
+    const toneToDelete = await ctx.db.get(args.id);
+    if (!toneToDelete) {
+      throw new Error("Tone not found");
+    }
+
+    const questionsToDelete = await ctx.db
+      .query("questions")
+      .withIndex("by_tone", (q) => q.eq("tone", toneToDelete.id))
+      .collect();
+
+    await Promise.all(questionsToDelete.map((q) => ctx.db.delete(q._id)));
+
     await ctx.db.delete(args.id);
   },
 });

@@ -27,6 +27,12 @@ vi.mock('../../hooks/useTheme', () => ({
 vi.mock('../../hooks/useLocalStorage', () => ({
   useLocalStorage: () => [[], vi.fn()],
 }));
+vi.mock('../../hooks/useQuestionHistory', () => ({
+  useQuestionHistory: () => ({
+    history: [],
+    addQuestionToHistory: vi.fn(),
+  }),
+}));
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),

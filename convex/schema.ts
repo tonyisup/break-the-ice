@@ -140,6 +140,10 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.float64()),
     isAdmin: v.optional(v.boolean()),
+    likedQuestions: v.optional(v.array(v.id("questions"))),
+    hiddenQuestions: v.optional(v.array(v.id("questions"))),
+    autoAdvanceShuffle: v.optional(v.boolean()),
+    migratedFromLocalStorage: v.optional(v.boolean()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
