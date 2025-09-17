@@ -1,4 +1,4 @@
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
@@ -17,21 +17,11 @@ import { toast } from "sonner";
 
 function LikedQuestionsPageContent() {
   const { theme } = useTheme();
-  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const [searchText, setSearchText] = useState("");
-  const questions = useQuery(api.questions.getQuestionsByIds, { ids: likedQuestions });
+  const questions = useQuery(api.questions.getLikedQuestions, {});
+  const updateLikedQuestions = useMutation(api.users.updateLikedQuestions);
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
-
-  useEffect(() => {
-    if (questions) {
-      const serverIds = questions.map(q => q._id);
-      const localIds = likedQuestions;
-      if (serverIds.length !== localIds.length) {
-        setLikedQuestions(serverIds);
-      }
-    }
-  }, [questions, likedQuestions, setLikedQuestions]);
 
   const styleColors = useMemo(() => {
     if (!styles) return {};
@@ -51,12 +41,15 @@ function LikedQuestionsPageContent() {
 
 
   const handleRemoveFavorite = (questionId: Id<"questions">) => {
-    setLikedQuestions(likedQuestions.filter(id => id !== questionId));
+    if (!questions) return;
+    const currentLikedIds = questions.map(q => q._id);
+    const newLikedIds = currentLikedIds.filter(id => id !== questionId);
+    updateLikedQuestions({ likedQuestions: newLikedIds });
   };
 
   const handleClearLikes = () => {
     setSearchText("");
-    setLikedQuestions([]);
+    updateLikedQuestions({ likedQuestions: [] });
     toast.success("Likes cleared");
   };
 
