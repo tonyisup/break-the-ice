@@ -1,6 +1,29 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+export const ensureAnonymousUser = mutation({
+  args: {
+    anonymousId: v.string(),
+  },
+  handler: async (ctx, { anonymousId }) => {
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("by_anonymousId", (q) => q.eq("anonymousId", anonymousId))
+      .unique();
+
+    if (existingUser) {
+      return existingUser._id;
+    }
+
+    return await ctx.db.insert("users", {
+      anonymousId,
+      isAnonymous: true,
+      name: "Anonymous",
+      image: "",
+    });
+  },
+});
+
 export const store = mutation({
   args: {},
   handler: async (ctx) => {

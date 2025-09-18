@@ -144,7 +144,9 @@ export default defineSchema({
     hiddenQuestions: v.optional(v.array(v.id("questions"))),
     autoAdvanceShuffle: v.optional(v.boolean()),
     migratedFromLocalStorage: v.optional(v.boolean()),
+    anonymousId: v.optional(v.string()),
   })
     .index("email", ["email"])
-    .index("phone", ["phone"]),
+    .index("phone", ["phone"])
+    .index("by_anonymousId", ["anonymousId"]),
 });
