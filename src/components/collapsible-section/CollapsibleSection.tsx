@@ -1,26 +1,26 @@
-import React, { useState, ReactNode } from 'react';
+import React, { ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 interface CollapsibleSectionProps {
   title: string;
   children: ReactNode;
-  defaultOpen?: boolean;
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
   count?: number;
 }
 
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   title,
   children,
-  defaultOpen = false,
+  isOpen,
+  onOpenChange,
   count,
 }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
   return (
     <section>
       <div
         className="flex items-center justify-between cursor-pointer border-b pb-2 mb-4"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => onOpenChange(!isOpen)}
       >
         <div className="flex items-center gap-2">
           <h2 className="text-2xl font-semibold dark:text-white text-black border-white/30">{title}</h2>

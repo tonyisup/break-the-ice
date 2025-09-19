@@ -13,6 +13,7 @@ interface ActionButtonsProps {
   handleConfirmRandomizeStyleAndTone: () => void;
   handleCancelRandomizeStyleAndTone: () => void;
   getNextQuestion: () => void;
+  isStyleTonesOpen: boolean;
 }
 
 export const ActionButtons = ({
@@ -26,6 +27,7 @@ export const ActionButtons = ({
   handleConfirmRandomizeStyleAndTone,
   handleCancelRandomizeStyleAndTone,
   getNextQuestion,
+  isStyleTonesOpen,
 }: ActionButtonsProps) => {
   return (
     <>
@@ -60,26 +62,37 @@ export const ActionButtons = ({
           </div>
         </div>
       ) : (
-        <div className="flex justify-center">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="flex justify-center p-4">
+          {isStyleTonesOpen ? (
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={handleShuffleStyleAndTone}
+                className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
+                title="Shuffle Style and Tone"
+              >
+                <Shuffle size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
+                <span className="sm:block hidden text-white font-semibold text-base">Shuffle</span>
+              </button>
+              <button
+                onClick={getNextQuestion}
+                className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
+                title="Next Question"
+                disabled={isGenerating && !currentQuestion}
+              >
+                <ArrowBigRight size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
+                <span className="sm:block hidden text-white font-semibold text-base">Next</span>
+              </button>
+            </div>
+          ) : (
             <button
               onClick={handleShuffleStyleAndTone}
               className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
-              title="Shuffle Style and Tone"
+              title="Next Question"
             >
               <Shuffle size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
-              <span className="sm:block hidden text-white font-semibold text-base">Shuffle</span>
+              <span className="text-white font-semibold text-base">Next Question</span>
             </button>
-            <button
-              onClick={getNextQuestion}
-              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors")}
-              title="Next Question"
-              disabled={isGenerating && !currentQuestion}
-            >
-              <ArrowBigRight size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
-              <span className="sm:block hidden text-white font-semibold text-base">Next</span>
-            </button>
-          </div>
+          )}
         </div>
       )}
     </>

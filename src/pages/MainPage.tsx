@@ -12,6 +12,7 @@ import { Header } from "../components/header";
 import { ActionButtons } from "../components/action-buttons";
 import { QuestionDisplay } from "../components/question-display";
 import { AnimatePresence } from "framer-motion";
+import { CollapsibleSection } from "../components/collapsible-section/CollapsibleSection";
 import { isColorDark } from "@/lib/utils";
 
 export default function MainPage() {
@@ -26,7 +27,8 @@ export default function MainPage() {
   const [selectedTone, setSelectedTone] = useState("fun-silly");
   const [randomizedTone, setRandomizedTone] = useState<string | null>(null);
   const [randomizedStyle, setRandomizedStyle] = useState<string | null>(null);
-  const [autoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
+  const [autoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", true);
+  const [isStyleTonesOpen, setIsStyleTonesOpen] = useState(false);
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
@@ -214,20 +216,28 @@ export default function MainPage() {
           )}
         </AnimatePresence>
 
-        <StyleSelector
-          randomOrder={false}
-          selectedStyle={selectedStyle}
-          ref={styleSelectorRef}
-          onSelectStyle={setSelectedStyle}
-          onRandomizeStyle={setRandomizedStyle}
-        />
-        <ToneSelector
-          randomOrder={false}
-          ref={toneSelectorRef}
-          selectedTone={selectedTone}
-          onSelectTone={setSelectedTone}
-          onRandomizeTone={setRandomizedTone}
-        />
+        <div className="px-4">
+          <CollapsibleSection
+            title="Customize Style & Tone"
+            isOpen={isStyleTonesOpen}
+            onOpenChange={setIsStyleTonesOpen}
+          >
+            <StyleSelector
+              randomOrder={false}
+              selectedStyle={selectedStyle}
+              ref={styleSelectorRef}
+              onSelectStyle={setSelectedStyle}
+              onRandomizeStyle={setRandomizedStyle}
+            />
+            <ToneSelector
+              randomOrder={false}
+              ref={toneSelectorRef}
+              selectedTone={selectedTone}
+              onSelectTone={setSelectedTone}
+              onRandomizeTone={setRandomizedTone}
+            />
+          </CollapsibleSection>
+        </div>
 
         <ActionButtons
           isColorDark={isColorDark}
@@ -240,6 +250,7 @@ export default function MainPage() {
           handleConfirmRandomizeStyleAndTone={handleConfirmRandomizeStyleAndTone}
           handleCancelRandomizeStyleAndTone={handleCancelRandomizeStyleAndTone}
           getNextQuestion={getNextQuestion}
+          isStyleTonesOpen={isStyleTonesOpen}
         />
       </main>
     </div>
