@@ -57,6 +57,7 @@ export interface ToneSelectorRef {
   randomizeTone: () => void;
   cancelRandomizingTone: () => void;
   confirmRandomizedTone: () => void;
+  scrollToCenter: (toneId: string) => void;
 }
 
 export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ selectedTone, onSelectTone, onRandomizeTone, randomOrder = true }, ref) => {
@@ -88,6 +89,9 @@ export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ se
     },
     confirmRandomizedTone: () => {
       genericSelectorRef.current?.confirmRandomizedItem();
+    },
+    scrollToCenter: (toneId: string) => {
+      genericSelectorRef.current?.scrollToCenter(toneId);
     },
   }));
 

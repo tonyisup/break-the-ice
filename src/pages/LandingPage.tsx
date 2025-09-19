@@ -1,4 +1,4 @@
-)import { Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { MoveRight } from "lucide-react";
 
 const LandingPage = () => {
