@@ -4,15 +4,13 @@ import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
-import { Link } from "react-router-dom";
-import { HouseIcon } from "lucide-react";
 import { CollapsibleSection } from "../../components/collapsible-section/CollapsibleSection";
 import { Header } from "@/components/header";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useState } from "react";
 
 const SettingsPage = () => {
-  const { theme, setTheme } = useTheme();
+  const { theme } = useTheme();
   const allStyles = useQuery(api.styles.getStyles);
   const allTones = useQuery(api.tones.getTones);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
@@ -24,7 +22,7 @@ const SettingsPage = () => {
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
   const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<string[]>("hiddenQuestions", []);
   const [autoAdvanceShuffle, setAutoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
-  const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
+  // const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
 
   const unhideStyle = (styleId: string) => {
     setHiddenStyles(prev => prev.filter(id => id !== styleId));
@@ -59,7 +57,7 @@ const SettingsPage = () => {
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <div className="space-y-8">
-          <CollapsibleSection
+          {/* <CollapsibleSection
             title="General"
             isOpen={!!openSections['general']}
             onOpenChange={() => toggleSection('general')}
@@ -81,7 +79,7 @@ const SettingsPage = () => {
                 />
               </button>
             </div>
-          </CollapsibleSection>
+          </CollapsibleSection> */}
           <CollapsibleSection
             title="Shuffle"
             isOpen={!!openSections['shuffle']}
