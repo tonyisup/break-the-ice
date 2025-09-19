@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, QueryCtx, internalQuery, internalMutation } from "./_generated/server";
-import { Doc } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { ensureAdmin } from "./auth";
 
 export const discardQuestion = mutation({
@@ -166,6 +166,31 @@ export const getQuestionById = query({
   },
 });
 
+export const getQuestion = query({
+  args: {
+    id: v.id("questions"),
+  },
+  returns: v.union(v.object({
+    _id: v.id("questions"),
+    _creationTime: v.float64(),
+    text: v.string(),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    totalLikes: v.float64(),
+    totalShows: v.float64(),
+    averageViewDuration: v.float64(),
+    lastShownAt: v.optional(v.float64()),
+    totalThumbsDown: v.optional(v.float64()),
+    isAIGenerated: v.optional(v.boolean()),
+    tags: v.optional(v.array(v.string())),
+    category: v.optional(v.string()),
+  }), v.null()),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    return await ctx.db.get(args.id);
+  },
+});
+
 // Save the generated AI question to the database
 export const saveAIQuestion = mutation({
   args: {
@@ -242,7 +267,23 @@ export const updateQuestion = mutation({
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
     const { id, text, tags, style, tone } = args;
-    await ctx.db.patch(id, { text, tags, style, tone });
+    
+    // Build update object with only provided fields
+    const updateData: any = { text };
+    
+    if (tags !== undefined) {
+      updateData.tags = tags;
+    }
+    
+    if (style !== undefined) {
+      updateData.style = style;
+    }
+    
+    if (tone !== undefined) {
+      updateData.tone = tone;
+    }
+    
+    await ctx.db.patch(id, updateData);
   },
 });
 
@@ -329,7 +370,11 @@ export const getAllQuestionsForDuplicateDetection = internalQuery({
   })),
   handler: async (ctx) => {
     const questions = await ctx.db.query("questions").collect();
-    return questions.map(q => ({
+    //filter out any questions that are already in a duplicate detection
+    const duplicateDetections = await ctx.db.query("duplicateDetections").collect();
+    const duplicateQuestionIds = duplicateDetections.flatMap(d => d.questionIds);
+    const filteredQuestions = questions.filter(q => !duplicateQuestionIds.includes(q._id));
+    return filteredQuestions.map(q => ({
       _id: q._id,
       text: q.text,
     }));
@@ -363,6 +408,7 @@ export const getPendingDuplicateDetections = query({
     _creationTime: v.number(),
     questionIds: v.array(v.id("questions")),
     reason: v.string(),
+    rejectReason: v.optional(v.string()),
     confidence: v.number(),
     status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
     detectedAt: v.number(),
@@ -421,16 +467,19 @@ export const updateDuplicateDetectionStatus = mutation({
   args: {
     detectionId: v.id("duplicateDetections"),
     status: v.union(v.literal("approved"), v.literal("rejected")),
-    reviewerId: v.id("users"),
+    reviewerEmail: v.optional(v.string()),
+    rejectReason: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
     
+    const reviewerId = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", args.reviewerEmail)).unique();
     await ctx.db.patch(args.detectionId, {
       status: args.status,
       reviewedAt: Date.now(),
-      reviewedBy: args.reviewerId,
+      reviewedBy: reviewerId?._id ?? "system" as Id<"users">,
+      rejectReason: args.rejectReason,
     });
     
     return null;
@@ -442,7 +491,7 @@ export const deleteDuplicateQuestions = mutation({
   args: {
     detectionId: v.id("duplicateDetections"),
     questionIdsToDelete: v.array(v.id("questions")),
-    keepQuestionId: v.id("questions"),
+    keepQuestionId: v.optional(v.id("questions")),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -450,28 +499,18 @@ export const deleteDuplicateQuestions = mutation({
     
     // Delete the specified questions
     for (const questionId of args.questionIdsToDelete) {
-      if (questionId !== args.keepQuestionId) {
-        await ctx.db.delete(questionId);
+      if (args.keepQuestionId && questionId === args.keepQuestionId) {
+        continue;
       }
+      await ctx.db.delete(questionId);
     }
     
     // Update the detection status
     await ctx.db.patch(args.detectionId, {
-      status: "approved",
+      status: args.keepQuestionId ? "approved" : "deleted",
       reviewedAt: Date.now(),
     });
     
-    return null;
-  },
-});
-
-// Legacy function - now calls the AI action
-export const detectDuplicateQuestions = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async (_ctx) => {
-    // This is now handled by the scheduled action
-    // Keeping this for backward compatibility but it does nothing
     return null;
   },
 });

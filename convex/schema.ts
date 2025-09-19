@@ -151,10 +151,11 @@ export default defineSchema({
     questionIds: v.array(v.id("questions")),
     reason: v.string(),
     confidence: v.number(),
-    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
     detectedAt: v.number(),
     reviewedAt: v.optional(v.number()),
     reviewedBy: v.optional(v.id("users")),
+    rejectReason: v.optional(v.string()),
   })
     .index("by_status", ["status"])
     .index("by_detected_at", ["detectedAt"])
