@@ -14,6 +14,7 @@ import { ActionButtons } from "../components/action-buttons";
 import { QuestionDisplay } from "../components/question-display";
 import { AnimatePresence } from "framer-motion";
 import { isColorDark } from "@/lib/utils";
+import { Id } from "../../convex/_generated/dataModel";
 
 export default function MainPage() {
   const { theme, setTheme } = useTheme();
@@ -28,10 +29,14 @@ export default function MainPage() {
   const migrateLocalStorageSettings = useMutation(api.users.migrateLocalStorageSettings);
   const updateLikedQuestions = useMutation(api.users.updateLikedQuestions);
   const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
+  const updateHiddenStyles = useMutation(api.users.updateHiddenStyles);
+  const updateHiddenTones = useMutation(api.users.updateHiddenTones);
 
   // Local state for settings
   const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
   const [hiddenQuestions, setHiddenQuestions] = useState<Id<"questions">[]>([]);
+  const [hiddenStyles, setHiddenStyles] = useState<Id<"styles">[]>([]);
+  const [hiddenTones, setHiddenTones] = useState<Id<"tones">[]>([]);
   const [autoAdvanceShuffle, setAutoAdvanceShuffle] = useState<boolean>(false);
 
   // Migration effect
@@ -57,6 +62,8 @@ export default function MainPage() {
     if (settings) {
       setLikedQuestions(settings.likedQuestions ?? []);
       setHiddenQuestions(settings.hiddenQuestions ?? []);
+      setHiddenStyles(settings.hiddenStyles ?? []);
+      setHiddenTones(settings.hiddenTones ?? []);
       setAutoAdvanceShuffle(settings.autoAdvanceShuffle ?? false);
     }
   }, [settings]);
@@ -80,11 +87,15 @@ export default function MainPage() {
       style: selectedStyle,
       tone: selectedTone,
       seen: seenQuestionIds,
+      hiddenStyles,
+      hiddenTones,
     });
-  const styles = useQuery(api.styles.getStyles);
-  const tones = useQuery(api.tones.getTones);
-  const style = useQuery(api.styles.getStyle, (selectedStyle === "") ? "skip" : { id: selectedStyle });
-  const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
+  const allStyles = useQuery(api.styles.getStyles);
+  const styles = allStyles?.filter(s => !hiddenStyles.includes(s._id));
+  const allTones = useQuery(api.tones.getTones);
+  const tones = allTones?.filter(t => !hiddenTones.includes(t._id));
+  const style = useQuery(api.styles.getStyle, (selectedStyle === "") ? "skip" : { _id: selectedStyle });
+  const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { _id: selectedTone });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
@@ -223,6 +234,20 @@ export default function MainPage() {
     await updateHiddenQuestions({ hiddenQuestions: newHiddenQuestions });
   }
 
+  const onHideItem = async (item: 'style' | 'tone', id: Id<'styles'> | Id<'tones'>) => {
+    if (item === 'style') {
+      const newHiddenStyles = [...hiddenStyles, id as Id<"styles">];
+      setHiddenStyles(newHiddenStyles);
+      await updateHiddenStyles({ hiddenStyles: newHiddenStyles });
+      toast.success("Style hidden");
+    } else {
+      const newHiddenTones = [...hiddenTones, id as Id<"tones">];
+      setHiddenTones(newHiddenTones);
+      await updateHiddenTones({ hiddenTones: newHiddenTones });
+      toast.success("Tone hidden");
+    }
+  }
+
   const getNextQuestion = () => {
     setStartTime(Date.now());
     if (currentQuestion) {
@@ -278,6 +303,7 @@ export default function MainPage() {
               toggleLike={() => void toggleLike(currentQuestion._id)}
               onSwipe={getNextQuestion}
               toggleHide={() => void toggleHide(currentQuestion._id)}
+              onHideItem={onHideItem}
               disabled={settingsAreLoading}
             />
           )}

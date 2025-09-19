@@ -1,7 +1,9 @@
-import React, { useRef } from 'react';
-import { Heart, Share2, ThumbsDown } from '@/components/ui/icons';
+import React, { useRef, useState } from 'react';
+import { Heart, Share2, ThumbsDown, EyeOff } from '@/components/ui/icons';
 import { Doc } from '../../../convex/_generated/dataModel';
+import { ContextMenu } from '../ui';
 
+import { Id } from '../../../convex/_generated/dataModel';
 interface ModernQuestionCardProps {
   question: Doc<"questions"> | null;
   isGenerating: boolean;
@@ -9,6 +11,7 @@ interface ModernQuestionCardProps {
   gradient?: string[];
   onToggleFavorite: () => void;
   onToggleHidden: () => void;
+  onHide?: (item: 'style' | 'tone', id: Id<'styles'> | Id<'tones'>) => void;
   onShare?: () => void;
   disabled?: boolean;
 }
@@ -20,9 +23,16 @@ export function ModernQuestionCard({
   gradient = ['#667EEA', '#764BA2'],
   onToggleFavorite,
   onToggleHidden,
+  onHide,
   disabled = false,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const [hiddenItems, setHiddenItems] = useState<{ style?: boolean; tone?: boolean }>({});
+
+  const handleHide = (item: 'style' | 'tone', id: Id<'styles'> | Id<'tones'>) => {
+    setHiddenItems(prev => ({ ...prev, [item]: true }));
+    onHide?.(item, id);
+  };
 
   const handleShare = () => {
     if (!question || !navigator.share) return;
@@ -74,27 +84,51 @@ export function ModernQuestionCard({
             question && <div className="w-full h-full flex flex-col justify-between min-h-[300px]">
               {/* Category Badge */}
               <div className="flex flex-row gap-2 justify-between">
-                <div className="border-t-2 border-l-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
-                  style={{
-                    borderTopColor: gradient[0],
-                    borderLeftColor: gradient[0]
-                  }}
-                >
-                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                    {question.style}
-                  </span>
-                </div>
+                {!hiddenItems.style && (
+                  <ContextMenu
+                    menuItems={[
+                      {
+                        label: 'Hide Style',
+                        action: () => handleHide('style', question.style as Id<'styles'>),
+                        icon: <EyeOff size={16} />,
+                      },
+                    ]}
+                  >
+                    <div className="border-t-2 border-l-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
+                      style={{
+                        borderTopColor: gradient[0],
+                        borderLeftColor: gradient[0]
+                      }}
+                    >
+                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                        {question.style}
+                      </span>
+                    </div>
+                  </ContextMenu>
+                )}
 
-                <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
-                  style={{
-                    borderBottomColor: gradient[1],
-                    borderRightColor: gradient[1]
-                  }}
-                >
-                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                    {question.tone}
-                  </span>
-                </div>
+                {!hiddenItems.tone && (
+                  <ContextMenu
+                    menuItems={[
+                      {
+                        label: 'Hide Tone',
+                        action: () => handleHide('tone', question.tone as Id<'tones'>),
+                        icon: <EyeOff size={16} />,
+                      },
+                    ]}
+                  >
+                    <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
+                      style={{
+                        borderBottomColor: gradient[1],
+                        borderRightColor: gradient[1]
+                      }}
+                    >
+                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                        {question.tone}
+                      </span>
+                    </div>
+                  </ContextMenu>
+                )}
               </div>
 
               {/* Question Text */}

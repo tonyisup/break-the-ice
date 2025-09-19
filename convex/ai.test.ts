@@ -31,9 +31,9 @@ test("generate AI question with existing questions", async () => {
   const t = convexTest(schema);
 
   // 2. Setup: Populate the database with some initial data
-  await t.run(async (ctx) => {
+  const { styleId, toneId } = await t.run(async (ctx) => {
     // Insert a style
-    await ctx.db.insert("styles", {
+    const styleId = await ctx.db.insert("styles", {
       name: "Test Style",
       structure: "Test Structure",
       promptGuidanceForAI: "Test Guidance",
@@ -43,7 +43,7 @@ test("generate AI question with existing questions", async () => {
     });
 
     // Insert a tone
-    await ctx.db.insert("tones", {
+    const toneId = await ctx.db.insert("tones", {
         name: "Test Tone",
         promptGuidanceForAI: "Test Guidance",
         id: "test-tone",
@@ -55,8 +55,8 @@ test("generate AI question with existing questions", async () => {
     for (let i = 0; i < 5; i++) {
       await ctx.db.insert("questions", {
         text: `Existing question ${i}`,
-        style: "test-style",
-        tone: "test-tone",
+        style: styleId,
+        tone: toneId,
         isAIGenerated: false,
         totalLikes: 0,
         totalThumbsDown: 0,
@@ -65,14 +65,15 @@ test("generate AI question with existing questions", async () => {
         lastShownAt: Date.now()
       });
     }
+    return { styleId, toneId };
   });
 
 
   // 3. Run the action
   const result = await t.action(api.ai.generateAIQuestion, {
     selectedTags: [],
-    style: "test-style",
-    tone: "test-tone",
+    style: styleId,
+    tone: toneId,
     count: 2,
   });
 

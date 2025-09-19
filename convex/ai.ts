@@ -57,7 +57,7 @@ export const generateAIQuestion = action({
     };
 
     if (styleId) {
-      const style = await ctx.runQuery(api.styles.getStyle, { id: styleId });
+      const style = await ctx.runQuery(api.styles.getStyle, { _id: styleId });
       if (style) {
         promptData.style = style.name;
         promptData.structure = style.structure;
@@ -65,7 +65,7 @@ export const generateAIQuestion = action({
       }
     }
     if (toneId) {
-      const tone = await ctx.runQuery(api.tones.getTone, { id: toneId });
+      const tone = await ctx.runQuery(api.tones.getTone, { _id: toneId });
       if (tone) {
         promptData.tone = tone.name;
         promptData.toneGuidance = tone.promptGuidanceForAI;

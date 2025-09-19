@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
 export const getTone = query({
-  args: { id: v.string() },
+  args: { _id: v.id("tones") },
   returns: v.object({
     _id: v.id("tones"),
     _creationTime: v.number(),
@@ -15,7 +15,7 @@ export const getTone = query({
     order: v.optional(v.float64()),
   }),
   handler: async (ctx, args) => {
-    const tone = await ctx.db.query("tones").filter((q) => q.eq(q.field("id"), args.id)).first();
+    const tone = await ctx.db.get(args._id);
     if (!tone) {
       throw new Error("Tone not found");
     }

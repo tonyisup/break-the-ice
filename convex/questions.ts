@@ -57,6 +57,8 @@ export const getNextQuestions = query({
     style: v.string(),
     tone: v.string(),
     seen: v.optional(v.array(v.id("questions"))),
+    hiddenStyles: v.optional(v.array(v.id("styles"))),
+    hiddenTones: v.optional(v.array(v.id("tones"))),
   },
   returns: v.array(v.object({
     _id: v.id("questions"),
@@ -74,8 +76,10 @@ export const getNextQuestions = query({
     tone: v.optional(v.string()),
   })),
   handler: async (ctx, args) => {
-    const { count, style, tone, seen } = args;
+    const { count, style, tone, seen, hiddenStyles, hiddenTones } = args;
     const seenIds = new Set(seen ?? []);
+    const hiddenStyleIds = new Set(hiddenStyles ?? []);
+    const hiddenToneIds = new Set(hiddenTones ?? []);
 
     // Get all questions first, and filter out seen ones.
     const filteredQuestions = await ctx.db
@@ -83,7 +87,12 @@ export const getNextQuestions = query({
       .withIndex("by_style_and_tone", (q) => q.eq("style", style).eq("tone", tone))
       .collect();
 
-    const unseenQuestions = filteredQuestions.filter(q => !seenIds.has(q._id));
+    const unseenQuestions = filteredQuestions.filter(q =>
+      !seenIds.has(q._id) &&
+      !hiddenStyleIds.has(q.style) &&
+      !hiddenToneIds.has(q.tone)
+    );
+
     if (unseenQuestions.length > 0) {
       shuffleArray(unseenQuestions);
       return unseenQuestions.slice(0, count);
