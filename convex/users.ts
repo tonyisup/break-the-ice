@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 export const store = mutation({
   args: {},
+  returns: v.id("users"),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -34,6 +35,15 @@ export const store = mutation({
 
 export const getSettings = query({
   args: {},
+  returns: v.union(
+    v.null(),
+    v.object({
+      likedQuestions: v.optional(v.array(v.id("questions"))),
+      hiddenQuestions: v.optional(v.array(v.id("questions"))),
+      autoAdvanceShuffle: v.optional(v.boolean()),
+      migratedFromLocalStorage: v.optional(v.boolean()),
+    })
+  ),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -64,6 +74,7 @@ export const migrateLocalStorageSettings = mutation({
     hiddenQuestions: v.array(v.id("questions")),
     autoAdvanceShuffle: v.boolean(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -85,6 +96,7 @@ export const migrateLocalStorageSettings = mutation({
       autoAdvanceShuffle: args.autoAdvanceShuffle,
       migratedFromLocalStorage: true,
     });
+    return null;
   },
 });
 
@@ -92,6 +104,7 @@ export const updateLikedQuestions = mutation({
   args: {
     likedQuestions: v.array(v.id("questions")),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -110,6 +123,7 @@ export const updateLikedQuestions = mutation({
     await ctx.db.patch(user._id, {
       likedQuestions: args.likedQuestions,
     });
+    return null;
   },
 });
 
@@ -117,6 +131,7 @@ export const updateHiddenQuestions = mutation({
   args: {
     hiddenQuestions: v.array(v.id("questions")),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -135,6 +150,7 @@ export const updateHiddenQuestions = mutation({
     await ctx.db.patch(user._id, {
       hiddenQuestions: args.hiddenQuestions,
     });
+    return null;
   },
 });
 
@@ -142,6 +158,7 @@ export const updateAutoAdvanceShuffle = mutation({
   args: {
     autoAdvanceShuffle: v.boolean(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -160,6 +177,7 @@ export const updateAutoAdvanceShuffle = mutation({
     await ctx.db.patch(user._id, {
       autoAdvanceShuffle: args.autoAdvanceShuffle,
     });
+    return null;
   },
 });
 
@@ -167,6 +185,7 @@ export const makeAdmin = mutation({
   args: {
     email: v.string(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -191,5 +210,6 @@ export const makeAdmin = mutation({
     }
 
     await ctx.db.patch(user._id, { isAdmin: true });
+    return null;
   },
 });

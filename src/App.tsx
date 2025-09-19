@@ -2,6 +2,7 @@ import { useStoreUserEffect } from "./hooks/useStoreUserEffect";
 import MainPage from "./pages/MainPage";
 import { SignIn } from "./SignIn";
 import { useTheme } from "./hooks/useTheme";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 export default function App() {
   const { isAuthenticated, isLoading } = useStoreUserEffect();
@@ -25,5 +26,9 @@ export default function App() {
     return <SignIn />;
   }
 
-  return <MainPage />;
+  return (
+    <ErrorBoundary>
+      <MainPage />
+    </ErrorBoundary>
+  );
 }

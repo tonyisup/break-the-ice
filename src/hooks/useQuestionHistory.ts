@@ -14,15 +14,15 @@ export type HistoryEntry = {
 export function useQuestionHistory() {
 
   const [history, setHistory] = useLocalStorage<HistoryEntry[]>("questionHistory", []);
-  const historyIds = useMemo(() => history.map(entry => entry.question._id), [history]);
+  const historyIds = useMemo(() => history.filter(entry => entry.question).map(entry => entry.question._id), [history]);
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: historyIds });
 
   useEffect(() => {
     if (questions) {
       const serverIds = questions.map(q => q._id);
-      const localIds = history.map(entry => entry.question._id);
+      const localIds = history.filter(entry => entry.question).map(entry => entry.question._id);
       if (serverIds.length !== localIds.length) {
-        const newHistory = history.filter(entry => serverIds.includes(entry.question._id));
+        const newHistory = history.filter(entry => entry.question && serverIds.includes(entry.question._id));
         setHistory(newHistory);
       }
     }
@@ -31,14 +31,14 @@ export function useQuestionHistory() {
 
   const addQuestionToHistory = useCallback((question: Doc<"questions">) => {
     setHistory((prevHistory) => {
-      const newHistory = [{ question, viewedAt: Date.now() }, ...prevHistory.filter(entry => entry.question._id !== question._id)];
+      const newHistory = [{ question, viewedAt: Date.now() }, ...prevHistory.filter(entry => entry.question && entry.question._id !== question._id)];
       return newHistory.slice(0, MAX_HISTORY_LENGTH);
     });
   }, [setHistory]);
 
   const removeQuestionFromHistory = useCallback((questionId: Id<"questions">) => {
     setHistory((prevHistory) => {
-      return prevHistory.filter(entry => entry.question._id !== questionId);
+      return prevHistory.filter(entry => entry.question && entry.question._id !== questionId);
     });
   }, [setHistory]);
 

@@ -291,7 +291,7 @@ export const detectDuplicateQuestionsAI = internalAction({
 });
 
 // Helper function to detect duplicates in a batch of questions
-async function detectDuplicatesInBatch(questions: Array<{_id: string, text: string}>) {
+async function detectDuplicatesInBatch(questions: Array<{_id: string, text: string, style: string}>) {
   if (questions.length < 2) return [];
 
   const prompt = `
@@ -313,9 +313,10 @@ Guidelines:
 - Each question can only be in one group
 - Include the reason for grouping
 - Confidence should be between 0.0 and 1.0
+- Consider the style of the questions. If questions are in the same style, they will have similar wording and structure and therefore should NOT be considered duplicate based on style.
 
 Questions to analyze:
-${JSON.stringify(questions.map(q => ({ id: q._id, text: q.text })), null, 2)}
+${JSON.stringify(questions.map(q => ({ id: q._id, text: q.text, style: q.style })), null, 2)}
 `;
 
   try {

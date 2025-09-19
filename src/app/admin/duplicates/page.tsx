@@ -191,7 +191,7 @@ function DuplicateDetectionComponent() {
         </div>
 
         {duplicateDetections.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="flex flex-col gap-4 items-center justify-center text-center py-12">
             <div className="text-gray-500 dark:text-gray-400 text-lg">
               No pending duplicate detections found.
             </div>

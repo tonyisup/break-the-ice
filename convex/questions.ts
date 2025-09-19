@@ -8,6 +8,7 @@ export const discardQuestion = mutation({
     questionId: v.id("questions"),
     startTime: v.number(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const { questionId, startTime } = args;
 
@@ -29,6 +30,7 @@ export const discardQuestion = mutation({
 
       await Promise.all([analytics, updateQuestion]);
     }
+    return null;
   },
 });
 
@@ -56,6 +58,21 @@ export const getNextQuestions = query({
     tone: v.string(),
     seen: v.optional(v.array(v.id("questions"))),
   },
+  returns: v.array(v.object({
+    _id: v.id("questions"),
+    _creationTime: v.number(),
+    averageViewDuration: v.number(),
+    lastShownAt: v.optional(v.number()),
+    text: v.string(),
+    totalLikes: v.number(),
+    totalThumbsDown: v.optional(v.number()),
+    totalShows: v.number(),
+    isAIGenerated: v.optional(v.boolean()),
+    tags: v.optional(v.array(v.string())),
+    category: v.optional(v.string()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+  })),
   handler: async (ctx, args) => {
     const { count, style, tone, seen } = args;
     const seenIds = new Set(seen ?? []);
@@ -83,6 +100,7 @@ export const recordAnalytics = mutation({
     event: v.union(v.literal("like"), v.literal("discard")),
     viewDuration: v.number(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const { questionId, event, viewDuration } = args;
     const question = await ctx.db.get(questionId);
@@ -109,6 +127,7 @@ export const recordAnalytics = mutation({
     await ctx.db.patch(questionId, {
       averageViewDuration: newAverage,
     });
+    return null;
   },
 });
 
@@ -367,6 +386,7 @@ export const getAllQuestionsForDuplicateDetection = internalQuery({
   returns: v.array(v.object({
     _id: v.id("questions"),
     text: v.string(),
+    style: v.string(),
   })),
   handler: async (ctx) => {
     const questions = await ctx.db.query("questions").collect();
@@ -377,6 +397,7 @@ export const getAllQuestionsForDuplicateDetection = internalQuery({
     return filteredQuestions.map(q => ({
       _id: q._id,
       text: q.text,
+      style: q.style ?? "",
     }));
   },
 });

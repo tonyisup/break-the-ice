@@ -8,20 +8,36 @@ interface Props {
 interface State {
   hasError: boolean;
   error?: Error;
+  copied: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
-    hasError: false
+    hasError: false,
+    copied: false
   };
 
   public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { hasError: true, error, copied: false };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
+
+  private copyErrorToClipboard = async () => {
+    if (!this.state.error) return;
+    
+    const errorText = `${this.state.error.name}: ${this.state.error.message}\n\n${this.state.error.stack}`;
+    
+    try {
+      await navigator.clipboard.writeText(errorText);
+      this.setState({ copied: true });
+      setTimeout(() => this.setState({ copied: false }), 2000);
+    } catch (err) {
+      console.error('Failed to copy error to clipboard:', err);
+    }
+  };
 
   public render() {
     if (this.state.hasError) {
@@ -40,8 +56,22 @@ export class ErrorBoundary extends Component<Props, State> {
             </button>
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="mt-4 text-left">
-                <summary className="cursor-pointer text-sm text-gray-500">Error Details</summary>
-                <pre className="mt-2 text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded overflow-auto">
+                <summary className="cursor-pointer text-sm text-gray-500 flex items-center justify-between">
+                  <span>Error Details</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void this.copyErrorToClipboard();
+                      }}
+                      className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      {this.state.copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </summary>
+                <pre className="mt-2 text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded overflow-auto max-h-64 whitespace-pre-wrap break-words">
                   {this.state.error.stack}
                 </pre>
               </details>
