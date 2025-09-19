@@ -3,13 +3,13 @@ import { Navigate } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
 
 const Root = () => {
-  const [bypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
+  // const [bypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
 
-  if (bypassLandingPage) {
+  // if (bypassLandingPage) {
     return <Navigate to="/app" replace />;
-  }
+  // }
 
-  return <LandingPage />;
+  // return <LandingPage />;
 };
 
 export default Root;
