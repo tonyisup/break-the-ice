@@ -52,6 +52,7 @@ export interface StyleSelectorRef {
   randomizeStyle: () => void;
   cancelRandomizingStyle: () => void;
   confirmRandomizedStyle: () => void;
+  scrollToCenter: (styleId: string) => void;
 }
 export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({ selectedStyle, onSelectStyle, onRandomizeStyle, randomOrder = true }, ref) => {
   const styles = useQuery(api.styles.getStyles);
@@ -82,6 +83,9 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
     },
     confirmRandomizedStyle: () => {
       genericSelectorRef.current?.confirmRandomizedItem();
+    },
+    scrollToCenter: (styleId: string) => {
+      genericSelectorRef.current?.scrollToCenter(styleId);
     },
   }));
 
