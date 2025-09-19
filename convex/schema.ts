@@ -109,8 +109,8 @@ export default defineSchema({
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
     category: v.optional(v.string()),
-    style: v.optional(v.string()),
-    tone: v.optional(v.string()),
+    style: v.optional(v.id("styles")),
+    tone: v.optional(v.id("tones")),
   })
     .index("by_average_view_duration", [
       "averageViewDuration",
@@ -142,6 +142,8 @@ export default defineSchema({
     isAdmin: v.optional(v.boolean()),
     likedQuestions: v.optional(v.array(v.id("questions"))),
     hiddenQuestions: v.optional(v.array(v.id("questions"))),
+    hiddenStyles: v.optional(v.array(v.id("styles"))),
+    hiddenTones: v.optional(v.array(v.id("tones"))),
     autoAdvanceShuffle: v.optional(v.boolean()),
     migratedFromLocalStorage: v.optional(v.boolean()),
   })

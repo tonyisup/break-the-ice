@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
 export const getStyle = query({
-  args: { id: v.string() },
+  args: { _id: v.id("styles") },
   returns: v.object({
     _id: v.id("styles"),
     _creationTime: v.number(),
@@ -17,7 +17,7 @@ export const getStyle = query({
     order: v.optional(v.float64()),
   }),
   handler: async (ctx, args) => {
-    const style = await ctx.db.query("styles").filter((q) => q.eq(q.field("id"), args.id)).first();
+    const style = await ctx.db.get(args._id);
     if (!style) {
       throw new Error("Style not found");
     }

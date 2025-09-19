@@ -108,6 +108,7 @@ export default function QuestionPage() {
           toggleLike={toggleLike}
           onSwipe={() => navigate("/")}
           toggleHide={() => navigate("/")}
+          onHideItem={() => {}}
         />
         <div className="flex justify-center p-4">
           <Link

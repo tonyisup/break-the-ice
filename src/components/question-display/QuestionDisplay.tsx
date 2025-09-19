@@ -2,6 +2,7 @@ import { ModernQuestionCard } from "../modern-question-card";
 import { Doc } from "../../../convex/_generated/dataModel";
 import { motion, PanInfo } from "framer-motion";
 import { useState } from "react";
+import { Id } from "../../../convex/_generated/dataModel";
 
 interface QuestionDisplayProps {
   isGenerating: boolean;
@@ -11,6 +12,7 @@ interface QuestionDisplayProps {
   toggleLike: (questionId: any) => void;
   onSwipe: () => void;
   toggleHide: (questionId: any) => void;
+  onHideItem?: (item: 'style' | 'tone', id: Id<'styles'> | Id<'tones'>) => void;
   disabled?: boolean;
 }
 
@@ -22,6 +24,7 @@ export const QuestionDisplay = ({
   toggleLike,
   onSwipe,
   toggleHide,
+  onHideItem,
   disabled = false,
 }: QuestionDisplayProps) => {
   const [dragDirection, setDragDirection] = useState<"left" | "right">("right");
@@ -74,6 +77,7 @@ export const QuestionDisplay = ({
         gradient={gradient}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
         onToggleHidden={() => currentQuestion && toggleHide(currentQuestion._id)}
+        onHide={(item, id) => onHideItem?.(item, id)}
         disabled={disabled}
       />
     </motion.div>
