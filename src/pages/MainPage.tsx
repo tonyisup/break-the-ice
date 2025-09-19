@@ -166,6 +166,17 @@ export default function MainPage() {
     setSeenQuestionIds((prev) => [...prev, questionId]);
     setCurrentQuestions(prev => {
       const newQuestions = prev.filter(q => q._id !== questionId);
+      
+      // If we're about to remove the last question and no generation is in progress, start generating
+      if (newQuestions.length === 0 && !isGenerating) {
+        setIsGenerating(true);
+        // Generate questions immediately to prevent empty state
+        const count = isShuffling ? 1 : 2;
+        setTimeout(() => {
+          void callGenerateAIQuestion(count, isShuffling);
+        }, 0);
+      }
+      
       return newQuestions;
     });
 
@@ -311,7 +322,7 @@ export default function MainPage() {
 
       <main className="flex-1 flex flex-col">
         <AnimatePresence mode="wait">
-          {currentQuestion && (
+          {currentQuestion ? (
             <QuestionDisplay
               key={currentQuestion._id}
               isGenerating={isGenerating}
@@ -322,10 +333,10 @@ export default function MainPage() {
               onSwipe={getNextQuestion}
               toggleHide={() => void toggleHide(currentQuestion._id)}
             />
-          )}
-          {isGenerating && !currentQuestion && (
+          ) : (
             <QuestionDisplay
-              isGenerating={isGenerating}
+              key="loading"
+              isGenerating={true}
               currentQuestion={null}
               isFavorite={false}
               gradient={gradient}
