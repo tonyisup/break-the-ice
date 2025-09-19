@@ -120,7 +120,7 @@ Respond with ONLY the JSON array, no other text.`
         generatedContent = completion.choices[0]?.message?.content?.trim() || "";
         
         if (!generatedContent) {
-          console.log(`Attempt ${attempts}: No content generated`);
+          // console.log(`Attempt ${attempts}: No content generated`);
           if (attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
             continue;
@@ -144,8 +144,8 @@ Respond with ONLY the JSON array, no other text.`
       throw new Error("Failed to generate question after all attempts");
     }
 
-    console.log("Raw AI response:", generatedContent);
-    console.log("Requested count:", generationCount);
+    // console.log("Raw AI response:", generatedContent);
+    // console.log("Requested count:", generationCount);
 
     // Try to clean and parse the response
     let cleanedContent = generatedContent;
@@ -177,7 +177,7 @@ Respond with ONLY the JSON array, no other text.`
       if (Array.isArray(generatedQuestions)) {
         // Limit to the requested count even if AI returns more
         const limitedQuestions = generatedQuestions.slice(0, generationCount);
-        console.log(`AI returned ${generatedQuestions.length} questions, limiting to ${limitedQuestions.length}`);
+        // console.log(`AI returned ${generatedQuestions.length} questions, limiting to ${limitedQuestions.length}`);
         
         for (const questionText of limitedQuestions) {
           if (typeof questionText === 'string' && questionText.trim()) {
@@ -212,7 +212,7 @@ Respond with ONLY the JSON array, no other text.`
       if (questionMatches && questionMatches.length > 0) {
         // Limit to the requested count even if regex finds more
         const limitedMatches = questionMatches.slice(0, generationCount);
-        console.log(`Regex found ${questionMatches.length} questions, limiting to ${limitedMatches.length}`);
+        // console.log(`Regex found ${questionMatches.length} questions, limiting to ${limitedMatches.length}`);
         
         for (const match of limitedMatches) {
           const questionText = match.replace(/"/g, '').trim();
@@ -256,7 +256,7 @@ Respond with ONLY the JSON array, no other text.`
       
       // Try to generate a single fallback question
       try {
-        console.log("Attempting fallback single question generation...");
+        // console.log("Attempting fallback single question generation...");
         const fallbackCompletion = await openai.chat.completions.create({
           model: model ?? "@preset/break-the-ice-berg-default",
           messages: [
@@ -284,7 +284,7 @@ Respond with ONLY the JSON array, no other text.`
                 tone: toneId,
                 tags: selectedTags,
               });
-              console.log("Fallback question generated successfully");
+              // console.log("Fallback question generated successfully");
               return [fallbackQuestion];
             } catch (error) {
               console.error("Failed to save fallback question:", error);

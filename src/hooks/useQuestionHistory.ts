@@ -1,28 +1,49 @@
 import { useLocalStorage } from "./useLocalStorage";
 import { Doc, Id } from "../../convex/_generated/dataModel";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 const MAX_HISTORY_LENGTH = 100;
 
+// Helper function to validate question data
+const isValidQuestion = (question: any): question is Doc<"questions"> => {
+  return (
+    question &&
+    typeof question === 'object' &&
+    typeof question._id === 'string' &&
+    typeof question.text === 'string' &&
+    question.text.length > 0
+  );
+};
+
 export function useQuestionHistory() {
-  const [history, setHistory] = useLocalStorage<Doc<"questions">[]>("questionHistory", []);
+  const [rawHistory, setRawHistory] = useLocalStorage<Doc<"questions">[]>("questionHistory", []);
+  
+  // Filter out invalid questions
+  const history = useMemo(() => {
+    const validQuestions = rawHistory.filter(isValidQuestion);
+    if (validQuestions.length !== rawHistory.length) {
+      console.log("Cleaning up invalid questions from history");
+      setRawHistory(validQuestions);
+    }
+    return validQuestions;
+  }, [rawHistory, setRawHistory]);
 
   const addQuestionToHistory = useCallback((question: Doc<"questions">) => {
-    setHistory((prevHistory) => {
+    setRawHistory((prevHistory) => {
       const newHistory = [question, ...prevHistory.filter(q => q._id !== question._id)];
       return newHistory.slice(0, MAX_HISTORY_LENGTH);
     });
-  }, [setHistory]);
+  }, [setRawHistory]);
 
   const removeQuestionFromHistory = useCallback((questionId: Id<"questions">) => {
-    setHistory((prevHistory) => {
+    setRawHistory((prevHistory) => {
       return prevHistory.filter(q => q._id !== questionId);
     });
-  }, [setHistory]);
+  }, [setRawHistory]);
 
   const clearHistory = useCallback(() => {
-    setHistory([]);
-  }, [setHistory]);
+    setRawHistory([]);
+  }, [setRawHistory]);
 
   return { history, addQuestionToHistory, removeQuestionFromHistory, clearHistory };
 }

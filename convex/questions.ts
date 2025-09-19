@@ -119,8 +119,23 @@ export const getQuestionsByIds = query({
   },
   handler: async (ctx, args) => {
     const { ids } = args;
+    
+    // Filter out any invalid IDs before querying
+    const validIds = ids.filter(id => {
+      try {
+        // Basic validation - ensure the ID looks valid
+        return typeof id === 'string' && id.length > 0;
+      } catch {
+        return false;
+      }
+    });
+    
+    if (validIds.length === 0) {
+      return [];
+    }
+    
     const questions = await Promise.all(
-      ids.map((id) => ctx.db.get(id))
+      validIds.map((id) => ctx.db.get(id))
     );
     return questions.filter((q): q is Doc<"questions"> => q !== null);
   },

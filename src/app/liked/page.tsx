@@ -3,7 +3,7 @@ import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { ModernQuestionCard } from "@/components/modern-question-card";
@@ -20,9 +20,40 @@ function LikedQuestionsPageContent() {
   const { theme } = useTheme();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const [searchText, setSearchText] = useState("");
-  const questions = useQuery(api.questions.getQuestionsByIds, { ids: likedQuestions });
+  
+  // Filter out invalid question IDs to prevent errors
+  const validLikedQuestions = useMemo(() => {
+    return likedQuestions.filter(id => {
+      // Basic validation - check if it's a string and looks like a valid ID
+      return typeof id === 'string' && id.length > 0;
+    });
+  }, [likedQuestions]);
+  
+  const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions });
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
+
+  // Clean up invalid question IDs automatically
+  useEffect(() => {
+    if (validLikedQuestions.length !== likedQuestions.length) {
+      console.log("Cleaning up invalid question IDs from localStorage");
+      setLikedQuestions(validLikedQuestions);
+    }
+  }, [validLikedQuestions.length, likedQuestions.length, setLikedQuestions, validLikedQuestions]);
+
+  // Remove questions that no longer exist in the database
+  useEffect(() => {
+    if (questions && validLikedQuestions.length > 0) {
+      const existingQuestionIds = new Set(questions.map(q => q._id));
+      const validIds = validLikedQuestions.filter(id => existingQuestionIds.has(id));
+      
+      if (validIds.length !== validLikedQuestions.length) {
+        console.log("Removing deleted questions from likes");
+        setLikedQuestions(validIds);
+        toast.success("Cleaned up deleted questions from your favorites");
+      }
+    }
+  }, [questions, validLikedQuestions, setLikedQuestions]);
 
   const styleColors = useMemo(() => {
     if (!styles) return {};
@@ -75,7 +106,7 @@ function LikedQuestionsPageContent() {
           </Link>
         </div>
       ) : (
-        <div className="container mx-auto flex flex-col gap-4">
+        <div className="container mx-auto flex flex-col gap-4 p-4">
           <div className="container mx-auto flex flex-col gap-4">
             <div className="flex justify-between gap-2 w-full">
               <input
@@ -85,12 +116,14 @@ function LikedQuestionsPageContent() {
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
               />
-              <button
-                onClick={handleClearLikes}
-                className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
-              >
-                Clear likes
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleClearLikes}
+                  className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
+                >
+                  Clear likes
+                </button>
+              </div>
             </div>
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
@@ -138,8 +171,14 @@ function LikedQuestionsPageContent() {
 }
 
 export default function LikedQuestionsPage() {
+  const handleResetLikes = () => {
+    // Clear localStorage and reload the page
+    localStorage.removeItem("likedQuestions");
+    window.location.reload();
+  };
+
   return (
-    <ErrorBoundary>
+    <ErrorBoundary onReset={handleResetLikes}>
       <LikedQuestionsPageContent />
     </ErrorBoundary>
   );
