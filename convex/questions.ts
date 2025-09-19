@@ -1,7 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query, QueryCtx } from "./_generated/server";
+import { mutation, query, QueryCtx, internalQuery, internalMutation } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
-import { api } from "./_generated/api";
 import { ensureAdmin } from "./auth";
 
 export const discardQuestion = mutation({
@@ -136,7 +135,7 @@ export const getLikedQuestions = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .withIndex("email", (q) => q.eq("email", identity.email))
       .unique();
 
     if (!user || !user.likedQuestions) {
@@ -299,5 +298,180 @@ export const updateCategories = mutation({
       }
     }
     return results;
+  },
+});
+
+// to be executed on a daily schedule
+export const cleanDuplicateQuestions = mutation({
+  handler: async (ctx) => {
+    const allQuestions = await ctx.db.query("questions").collect();
+
+    let totalDeleted = 0;
+    //Find duplicate questions by exact text match
+    const duplicateQuestions = allQuestions.filter((question, index, self) =>
+      index !== self.findIndex((t) => t.text === question.text)
+    );
+    for (const question of duplicateQuestions) {
+      await ctx.db.delete(question._id);
+      totalDeleted++;
+    }
+
+    return totalDeleted;
+  },
+});
+
+// Get all questions for duplicate detection (minimal data for efficiency)
+export const getAllQuestionsForDuplicateDetection = internalQuery({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id("questions"),
+    text: v.string(),
+  })),
+  handler: async (ctx) => {
+    const questions = await ctx.db.query("questions").collect();
+    return questions.map(q => ({
+      _id: q._id,
+      text: q.text,
+    }));
+  },
+});
+
+// Save duplicate detection results
+export const saveDuplicateDetection = internalMutation({
+  args: {
+    questionIds: v.array(v.id("questions")),
+    reason: v.string(),
+    confidence: v.number(),
+  },
+  returns: v.id("duplicateDetections"),
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("duplicateDetections", {
+      questionIds: args.questionIds,
+      reason: args.reason,
+      confidence: args.confidence,
+      status: "pending",
+      detectedAt: Date.now(),
+    });
+  },
+});
+
+// Get all pending duplicate detections for admin review
+export const getPendingDuplicateDetections = query({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id("duplicateDetections"),
+    _creationTime: v.number(),
+    questionIds: v.array(v.id("questions")),
+    reason: v.string(),
+    confidence: v.number(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
+    detectedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedBy: v.optional(v.id("users")),
+    questions: v.array(v.object({
+      _id: v.id("questions"),
+      _creationTime: v.number(),
+      text: v.string(),
+      style: v.optional(v.string()),
+      tone: v.optional(v.string()),
+      totalLikes: v.number(),
+      totalShows: v.number(),
+    })),
+  })),
+  handler: async (ctx): Promise<any> => {
+    await ensureAdmin(ctx);
+    
+    const detections = await ctx.db
+      .query("duplicateDetections")
+      .withIndex("by_status_and_confidence", (q) => q.eq("status", "pending"))
+      .order("desc")
+      .collect();
+
+    const detectionsWithQuestions = await Promise.all(
+      detections.map(async (detection) => {
+        const questions = await Promise.all(
+          detection.questionIds.map(async (id) => {
+            const question = await ctx.db.get(id);
+            if (!question) return null;
+            return {
+              _id: question._id,
+              _creationTime: question._creationTime,
+              text: question.text,
+              style: question.style,
+              tone: question.tone,
+              totalLikes: question.totalLikes,
+              totalShows: question.totalShows,
+            };
+          })
+        );
+        
+        return {
+          ...detection,
+          questions: questions.filter((q): q is NonNullable<typeof q> => q !== null),
+        };
+      })
+    );
+
+    return detectionsWithQuestions;
+  },
+});
+
+// Update duplicate detection status (approve/reject)
+export const updateDuplicateDetectionStatus = mutation({
+  args: {
+    detectionId: v.id("duplicateDetections"),
+    status: v.union(v.literal("approved"), v.literal("rejected")),
+    reviewerId: v.id("users"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    
+    await ctx.db.patch(args.detectionId, {
+      status: args.status,
+      reviewedAt: Date.now(),
+      reviewedBy: args.reviewerId,
+    });
+    
+    return null;
+  },
+});
+
+// Delete duplicate questions after approval
+export const deleteDuplicateQuestions = mutation({
+  args: {
+    detectionId: v.id("duplicateDetections"),
+    questionIdsToDelete: v.array(v.id("questions")),
+    keepQuestionId: v.id("questions"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    
+    // Delete the specified questions
+    for (const questionId of args.questionIdsToDelete) {
+      if (questionId !== args.keepQuestionId) {
+        await ctx.db.delete(questionId);
+      }
+    }
+    
+    // Update the detection status
+    await ctx.db.patch(args.detectionId, {
+      status: "approved",
+      reviewedAt: Date.now(),
+    });
+    
+    return null;
+  },
+});
+
+// Legacy function - now calls the AI action
+export const detectDuplicateQuestions = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (_ctx) => {
+    // This is now handled by the scheduled action
+    // Keeping this for backward compatibility but it does nothing
+    return null;
   },
 });

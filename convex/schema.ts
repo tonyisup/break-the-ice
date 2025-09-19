@@ -147,4 +147,16 @@ export default defineSchema({
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
+  duplicateDetections: defineTable({
+    questionIds: v.array(v.id("questions")),
+    reason: v.string(),
+    confidence: v.number(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
+    detectedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedBy: v.optional(v.id("users")),
+  })
+    .index("by_status", ["status"])
+    .index("by_detected_at", ["detectedAt"])
+    .index("by_status_and_confidence", ["status", "confidence"]),
 });

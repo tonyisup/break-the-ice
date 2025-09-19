@@ -46,6 +46,8 @@ export default function MainPage() {
         setLocalStorageLikedQuestions([]);
         setLocalStorageHiddenQuestions([]);
         setLocalStorageAutoAdvanceShuffle(false);
+      }).catch((error) => {
+        console.error("Error migrating local storage settings:", error);
       });
     }
   }, [settings, migrateLocalStorageSettings, localStorageLikedQuestions, localStorageHiddenQuestions, localStorageAutoAdvanceShuffle, setLocalStorageLikedQuestions, setLocalStorageHiddenQuestions, setLocalStorageAutoAdvanceShuffle]);

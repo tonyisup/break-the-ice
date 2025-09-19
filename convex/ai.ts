@@ -1,9 +1,9 @@
 "use node";
 
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import OpenAI from "openai";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { Doc } from "./_generated/dataModel";
 
 const openai = new OpenAI({
@@ -212,3 +212,151 @@ Respond with ONLY the JSON array, no other text.`
     return newQuestions;
   },
 });
+
+export const detectDuplicateQuestions = action({
+  args: {},
+  returns: v.object({
+    processedCount: v.number(),
+    duplicatesFound: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx): Promise<{
+    processedCount: number;
+    duplicatesFound: number;
+    errors: string[];
+  }> => {
+    //call ai action detectDuplicateQuestionsAI
+    return await ctx.runAction(internal.ai.detectDuplicateQuestionsAI, {});
+  },
+});
+
+// Internal action for cron job
+export const detectDuplicateQuestionsAI = internalAction({
+  args: {
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processedCount: v.number(),
+    duplicatesFound: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? 50;
+    const errors: string[] = [];
+    let processedCount = 0;
+    let duplicatesFound = 0;
+
+    try {
+      // Get all questions in batches
+      const allQuestions = await ctx.runQuery(internal.questions.getAllQuestionsForDuplicateDetection);
+      
+      // Process questions in batches to avoid token limits
+      for (let i = 0; i < allQuestions.length; i += batchSize) {
+        const batch = allQuestions.slice(i, i + batchSize);
+        
+        try {
+          const duplicateGroups = await detectDuplicatesInBatch(batch);
+          
+          // Store each duplicate group as a detection record
+          for (const group of duplicateGroups) {
+            if (group.questionIds.length > 1) {
+              await ctx.runMutation(internal.questions.saveDuplicateDetection, {
+                questionIds: group.questionIds,
+                reason: group.reason,
+                confidence: group.confidence,
+              });
+              duplicatesFound += group.questionIds.length;
+            }
+          }
+          
+          processedCount += batch.length;
+        } catch (error) {
+          const errorMessage = `Error processing batch ${i}-${i + batchSize}: ${error instanceof Error ? error.message : String(error)}`;
+          errors.push(errorMessage);
+          console.error(errorMessage);
+        }
+      }
+    } catch (error) {
+      const errorMessage = `Error in detectDuplicateQuestionsAI: ${error instanceof Error ? error.message : String(error)}`;
+      errors.push(errorMessage);
+      console.error(errorMessage);
+    }
+
+    return {
+      processedCount,
+      duplicatesFound,
+      errors,
+    };
+  },
+});
+
+// Helper function to detect duplicates in a batch of questions
+async function detectDuplicatesInBatch(questions: Array<{_id: string, text: string}>) {
+  if (questions.length < 2) return [];
+
+  const prompt = `
+You are an expert at detecting duplicate or very similar ice-breaker questions. Analyze the following questions and identify groups of questions that are essentially asking the same thing, even if worded differently.
+
+Return your analysis as a JSON array where each element represents a group of duplicate questions:
+[
+  {
+    "questionIds": ["id1", "id2", "id3"],
+    "reason": "These questions all ask about favorite childhood memories with slightly different wording",
+    "confidence": 0.95
+  }
+]
+
+Guidelines:
+- Group questions that have the same core meaning or intent
+- Consider variations in wording, tense, or phrasing
+- Only group questions with high confidence (0.8+)
+- Each question can only be in one group
+- Include the reason for grouping
+- Confidence should be between 0.0 and 1.0
+
+Questions to analyze:
+${JSON.stringify(questions.map(q => ({ id: q._id, text: q.text })), null, 2)}
+`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "@preset/break-the-ice-berg-duplicate-detection",
+      messages: [
+        {
+          role: "system",
+          content: "You are a duplicate question detector. Always respond with valid JSON only."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 2000,
+      temperature: 0.1, // Low temperature for consistent results
+    });
+
+    const response = completion.choices[0]?.message?.content?.trim();
+    if (!response) {
+      throw new Error("No response from AI");
+    }
+
+    // Clean and parse the response
+    let cleanedResponse = response;
+    cleanedResponse = cleanedResponse.replace(/```json\s*|\s*```/g, '');
+    const jsonMatch = cleanedResponse.match(/\[.*\]/s);
+    if (jsonMatch) {
+      cleanedResponse = jsonMatch[0];
+    }
+
+    const duplicateGroups = JSON.parse(cleanedResponse);
+    
+    if (!Array.isArray(duplicateGroups)) {
+      throw new Error("Response is not an array");
+    }
+
+    return duplicateGroups;
+  } catch (error) {
+    console.error("Error in detectDuplicatesInBatch:", error);
+    return [];
+  }
+}
