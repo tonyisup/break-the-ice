@@ -51,7 +51,7 @@ export function useQuestionHistory() {
   }, [questions, rawHistory, setRawHistory]);
 
   const addQuestionToHistory = useCallback((question: Doc<"questions">) => {
-    setRawHistory((prevHistory) => {{
+    setRawHistory((prevHistory) => {
       const newHistory = [{ question, viewedAt: Date.now() }, ...prevHistory.filter(entry => entry.question && entry.question._id !== question._id)];
       return newHistory.slice(0, MAX_HISTORY_LENGTH);
     });
