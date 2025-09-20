@@ -1,8 +1,10 @@
 import { useQuery } from 'convex/react';
-import { useRef, useImperativeHandle, useEffect, useMemo } from 'react';
+import { useRef, useImperativeHandle, useEffect, useMemo, useState } from 'react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
 import { useStorageContext } from '../../hooks/useStorageContext';
+import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer';
+import * as icons from '@/components/ui/icons';
 
 interface ToneSelectorProps {
   selectedTone: string;
@@ -23,9 +25,25 @@ export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, rand
   const tones = useQuery(api.tones.getTones);
   const { hiddenTones, setHiddenTones } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
   
   const handleHideTone = (toneId: string) => {
     setHiddenTones(prev => [...new Set([...prev, toneId])]);
+  };
+
+  const handleOpenDrawer = (itemId: string) => {
+    const tone = tones?.find(t => t.id === itemId);
+    if (tone) {
+      setSelectedItemForDrawer({
+        id: tone.id,
+        name: tone.name,
+        description: tone.description,
+        icon: tone.icon as keyof typeof icons,
+        color: tone.color,
+      });
+      setIsDrawerOpen(true);
+    }
   };
 
   // Convert tones to the format expected by GenericSelector
@@ -64,14 +82,22 @@ export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, rand
   // }, [selectorItems, onSelectTone]);
 
   return (
-    <GenericSelector
-      ref={genericSelectorRef}
-      items={selectorItems}
-      selectedItem={selectedTone}
-      onSelectItem={onSelectTone}
-      onHideItem={handleHideTone}
-      randomizeLabel="Randomize Tone"
-      onRandomizeItem={onRandomizeTone}
-    />
+    <>
+      <GenericSelector
+        ref={genericSelectorRef}
+        items={selectorItems}
+        selectedItem={selectedTone}
+        onSelectItem={handleOpenDrawer}
+        randomizeLabel="Randomize Tone"
+        onRandomizeItem={onRandomizeTone}
+      />
+      <ItemDetailDrawer
+        item={selectedItemForDrawer}
+        isOpen={isDrawerOpen}
+        onOpenChange={setIsDrawerOpen}
+        onSelectItem={onSelectTone}
+        onHideItem={handleHideTone}
+      />
+    </>
   );
 };

@@ -1,9 +1,10 @@
 import { useQuery } from 'convex/react';
-import { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
 import { useStorageContext } from '../../hooks/useStorageContext';
 import * as icons from '@/components/ui/icons';
+import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer';
 
 interface StyleSelectorProps {
   selectedStyle: string;
@@ -23,9 +24,25 @@ export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, 
   const styles = useQuery(api.styles.getStyles);
   const { hiddenStyles, setHiddenStyles } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
   
   const handleHideStyle = (styleId: string) => {
     setHiddenStyles(prev => [...new Set([...prev, styleId])]);
+  };
+
+  const handleOpenDrawer = (itemId: string) => {
+    const style = styles?.find(s => s.id === itemId);
+    if (style) {
+      setSelectedItemForDrawer({
+        id: style.id,
+        name: style.name,
+        description: style.description,
+        icon: style.icon as keyof typeof icons,
+        color: style.color,
+      });
+      setIsDrawerOpen(true);
+    }
   };
 
   // Convert styles to the format expected by GenericSelector
@@ -67,14 +84,22 @@ export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, 
   }, [randomOrder, selectorItems, onSelectStyle]);
 
   return (
-    <GenericSelector
-      ref={genericSelectorRef}
-      items={selectorItems}
-      selectedItem={selectedStyle}
-      onSelectItem={onSelectStyle}
-      onHideItem={handleHideStyle}
-      randomizeLabel="Randomize Style"
-      onRandomizeItem={onRandomizeStyle}
-    />
+    <>
+      <GenericSelector
+        ref={genericSelectorRef}
+        items={selectorItems}
+        selectedItem={selectedStyle}
+        onSelectItem={handleOpenDrawer}
+        randomizeLabel="Randomize Style"
+        onRandomizeItem={onRandomizeStyle}
+      />
+      <ItemDetailDrawer
+        item={selectedItemForDrawer}
+        isOpen={isDrawerOpen}
+        onOpenChange={setIsDrawerOpen}
+        onSelectItem={onSelectStyle}
+        onHideItem={handleHideStyle}
+      />
+    </>
   );
 };
