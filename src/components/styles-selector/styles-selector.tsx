@@ -2,7 +2,7 @@ import { useQuery } from 'convex/react';
 import { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
-import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { useStorageContext } from '../../hooks/useStorageContext';
 import * as icons from '@/components/ui/icons';
 
 interface StyleSelectorProps {
@@ -21,7 +21,7 @@ export interface StyleSelectorRef {
 }
 export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, randomOrder = true, ref }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
   const styles = useQuery(api.styles.getStyles);
-  const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>('hiddenStyles', []);
+  const { hiddenStyles, setHiddenStyles } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   
   const handleHideStyle = (styleId: string) => {

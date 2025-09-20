@@ -1,4 +1,4 @@
-import { useLocalStorage } from "./useLocalStorage";
+import { useStorageContext } from "./useStorageContext";
 import { Doc, Id } from "../../convex/_generated/dataModel";
 import { useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "convex/react";
@@ -25,7 +25,7 @@ const isValidQuestion = (questionEntry: any): questionEntry is HistoryEntry => {
 };
 
 export function useQuestionHistory() {
-  const [rawHistory, setRawHistory] = useLocalStorage<HistoryEntry[]>("questionHistory", []);
+  const { questionHistory: rawHistory, setQuestionHistory: setRawHistory } = useStorageContext();
   const historyIds = useMemo(() => rawHistory.filter(entry => entry.question).map(entry => entry.question._id), [rawHistory]);
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: historyIds });
   // Filter out invalid questions

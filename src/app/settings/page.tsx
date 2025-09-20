@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { useStorageContext } from "../../hooks/useStorageContext";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
@@ -19,9 +19,14 @@ const SettingsPage = () => {
   const toggleSection = (section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
-  const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>("hiddenStyles", []);
-  const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
-  const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
+  const {
+    hiddenStyles,
+    setHiddenStyles,
+    hiddenTones,
+    setHiddenTones,
+    bypassLandingPage,
+    setBypassLandingPage,
+  } = useStorageContext();
   
   const settings = useQuery(api.users.getSettings);
   const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);

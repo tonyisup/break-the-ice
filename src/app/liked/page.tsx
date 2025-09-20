@@ -4,7 +4,7 @@ import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
 import { useMemo, useState, useEffect } from "react";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { useStorageContext } from "../../hooks/useStorageContext";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { QuestionList } from "@/components/question-list/QuestionList";
 
@@ -17,7 +17,7 @@ import { toast } from "sonner";
 function LikedQuestionsPageContent() {
   const { theme } = useTheme();
   const [searchText, setSearchText] = useState("");
-  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const { likedQuestions, setLikedQuestions } = useStorageContext();
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   
   // Filter out invalid question IDs to prevent errors
@@ -179,9 +179,9 @@ function LikedQuestionsPageContent() {
 }
 
 export default function LikedQuestionsPage() {
+  const { setLikedQuestions } = useStorageContext();
   const handleResetLikes = () => {
-    // Clear localStorage and reload the page
-    localStorage.removeItem("likedQuestions");
+    setLikedQuestions([]);
     window.location.reload();
   };
 

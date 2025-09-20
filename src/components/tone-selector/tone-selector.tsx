@@ -2,7 +2,7 @@ import { useQuery } from 'convex/react';
 import { useRef, useImperativeHandle, useEffect, useMemo } from 'react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
-import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { useStorageContext } from '../../hooks/useStorageContext';
 
 interface ToneSelectorProps {
   selectedTone: string;
@@ -21,7 +21,7 @@ export interface ToneSelectorRef {
 
 export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, randomOrder = true, ref }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
   const tones = useQuery(api.tones.getTones);
-  const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>('hiddenTones', []);
+  const { hiddenTones, setHiddenTones } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   
   const handleHideTone = (toneId: string) => {

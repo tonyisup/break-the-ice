@@ -1,6 +1,11 @@
-import { useState, useCallback } from "react";
+import { createContext, useContext, ReactNode, useState, useCallback } from "react";
+import { Id } from "../../convex/_generated/dataModel";
+import { HistoryEntry } from "./useQuestionHistory";
 
-export function useLocalStorage<T>(key: string, initialValue: T) {
+type Theme = "light" | "dark";
+
+// The useLocalStorage hook from the old file
+function useLocalStorage<T>(key: string, initialValue: T) {
   const [storedValue, setStoredValue] = useState<T>(() => {
     if (typeof window === "undefined") {
       return initialValue;
@@ -12,10 +17,6 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
       }
       let value = JSON.parse(item);
 
-      // Backwards compatibility for liked questions.
-      // If the user has an old version of the "liked" list, it will be an array of objects.
-      // The new version is an array of strings (the question IDs).
-      // This code checks for the old format and migrates it to the new format.
       if (key === "likedQuestions" && Array.isArray(value) && value.length > 0 && typeof value[0] === "object" && value[0] !== null && "_id" in value[0]) {
         console.log("Old 'likedQuestions' format detected. Migrating...");
         value = value.map((item: any) => item._id);
@@ -23,16 +24,12 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
         console.log("Migration complete. New value:", value);
       }
       
-      // If initialValue is an array, ensure the stored value is also an array.
-      // This prevents crashes if the data in localStorage is corrupted.
       if (Array.isArray(initialValue) && !Array.isArray(value)) {
         console.log("Data in localStorage is corrupted (not an array). Returning initial value.");
         return initialValue;
       }
       
-      // Additional validation for likedQuestions array
       if (key === "likedQuestions" && Array.isArray(value)) {
-        // Filter out invalid entries (non-strings, empty strings, null, undefined)
         const validValues = value.filter(item => 
           typeof item === 'string' && item.length > 0 && item !== null && item !== undefined
         );
@@ -44,9 +41,7 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
         }
       }
       
-      // Additional validation for questionHistory array
       if (key === "questionHistory" && Array.isArray(value)) {
-        // Filter out invalid question objects
         const validQuestions = value.filter(item => {
           const question = item.question;
           return question &&
@@ -78,8 +73,6 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
             window.localStorage.setItem(key, JSON.stringify(valueToStore));
           } catch (storageError) {
             console.error("Error writing to localStorage:", storageError);
-            // If localStorage is full or unavailable, still update the state
-            // but don't persist to localStorage
           }
         }
         return valueToStore;
@@ -91,3 +84,80 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
 
   return [storedValue, setValue] as const;
 }
+
+
+interface StorageContextType {
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+  likedQuestions: Id<"questions">[];
+  setLikedQuestions: (ids: Id<"questions">[]) => void;
+  questionHistory: HistoryEntry[];
+  setQuestionHistory: (entries: HistoryEntry[]) => void;
+  hiddenQuestions: Id<"questions">[];
+  setHiddenQuestions: (ids: Id<"questions">[]) => void;
+  hiddenStyles: string[];
+  setHiddenStyles: (ids: string[]) => void;
+  hiddenTones: string[];
+  setHiddenTones: (ids: string[]) => void;
+  bypassLandingPage: boolean;
+  setBypassLandingPage: (bypass: boolean) => void;
+}
+
+const StorageContext = createContext<StorageContextType | undefined>(
+  undefined
+);
+
+export const StorageProvider = ({ children }: { children: ReactNode }) => {
+  const [theme, setTheme] = useLocalStorage<Theme>("theme", "light");
+  const [likedQuestions, setLikedQuestions] = useLocalStorage<
+    Id<"questions">[]
+  >("likedQuestions", []);
+  const [questionHistory, setQuestionHistory] = useLocalStorage<HistoryEntry[]>(
+    "questionHistory",
+    []
+  );
+  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<
+    Id<"questions">[]
+  >("hiddenQuestions", []);
+  const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>(
+    "hiddenStyles",
+    []
+  );
+  const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>(
+    "hiddenTones",
+    []
+  );
+  const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>(
+    "bypassLandingPage",
+    false
+  );
+
+  const value = {
+    theme,
+    setTheme,
+    likedQuestions,
+    setLikedQuestions,
+    questionHistory,
+    setQuestionHistory,
+    hiddenQuestions,
+    setHiddenQuestions,
+    hiddenStyles,
+    setHiddenStyles,
+    hiddenTones,
+    setHiddenTones,
+    bypassLandingPage,
+    setBypassLandingPage,
+  };
+
+  return (
+    <StorageContext.Provider value={value}>{children}</StorageContext.Provider>
+  );
+};
+
+export const useStorageContext = () => {
+  const context = useContext(StorageContext);
+  if (context === undefined) {
+    throw new Error("useStorageContext must be used within a StorageProvider");
+  }
+  return context;
+};
