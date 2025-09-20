@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "@/hooks/useTheme";
 import { Header } from "@/components/header";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { useStorageContext } from "@/hooks/useStorageContext";
 import { Link } from "react-router-dom";
 import { cn, isColorDark } from "@/lib/utils";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
@@ -14,7 +14,7 @@ import { QuestionList } from "@/components/question-list/QuestionList";
 
 function HistoryPageContent() {
   const { history, removeQuestionFromHistory, clearHistory } = useQuestionHistory();
-  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const { likedQuestions, setLikedQuestions } = useStorageContext();
   const [searchText, setSearchText] = useState("");
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const styles = useQuery(api.styles.getStyles, {});
@@ -124,9 +124,9 @@ function HistoryPageContent() {
   );
 }
 export default function HistoryPage() {
+  const { setQuestionHistory } = useStorageContext();
   const handleResetHistory = () => {
-    // Clear localStorage and reload the page
-    localStorage.removeItem("questionHistory");
+    setQuestionHistory([]);
     window.location.reload();
   };
 

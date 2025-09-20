@@ -5,7 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Doc, Id } from "../../convex/_generated/dataModel";
 import { useTheme } from "../hooks/useTheme";
-import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useStorageContext } from "../hooks/useStorageContext";
 import { useQuestionHistory } from "../hooks/useQuestionHistory";
 import { StyleSelector, StyleSelectorRef } from "../components/styles-selector";
 import { ToneSelector, ToneSelectorRef } from "../components/tone-selector";
@@ -19,9 +19,12 @@ import { isColorDark } from "@/lib/utils";
 export default function MainPage() {
   const { theme } = useTheme();
 
-  // For migration
-  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
-  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<Id<"questions">[]>("hiddenQuestions", []);
+  const {
+    likedQuestions,
+    setLikedQuestions,
+    hiddenQuestions,
+    setHiddenQuestions,
+  } = useStorageContext();
 
 
 
