@@ -1,45 +1,8 @@
 import { useQuery } from 'convex/react';
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import {
-  HelpCircle,
-  GitBranch,
-  Clock,
-  Anchor,
-  Zap,
-  List,
-  Heart,
-  Box,
-  MessageCircle,
-  Type,
-  Award,
-  TrendingUp,
-  Smile,
-  GitPullRequest,
-  BowArrow,
-  Scale
-} from 'lucide-react';
+import { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-
-const iconMap = {
-  HelpCircle,
-  GitBranch,
-  Clock,
-  Anchor,
-  Zap,
-  List,
-  Heart,
-  Box,
-  MessageCircle,
-  Type,
-  Award,
-  TrendingUp,
-  Smile,
-  GitPullRequest,
-  BowArrow,
-  Scale  
-};
 
 interface StyleSelectorProps {
   selectedStyle: string;
@@ -53,8 +16,9 @@ export interface StyleSelectorRef {
   cancelRandomizingStyle: () => void;
   confirmRandomizedStyle: () => void;
   scrollToCenter: (styleId: string) => void;
+  scrollToSelectedItem: () => void;
 }
-export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({ selectedStyle, onSelectStyle, onRandomizeStyle, randomOrder = true }, ref) => {
+export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, randomOrder = true, ref }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
   const styles = useQuery(api.styles.getStyles);
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>('hiddenStyles', []);
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
@@ -69,7 +33,7 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
     .map(style => ({
       id: style.id,
       name: style.name,
-      icon: style.icon,
+      icon: style.icon as SelectorItem['icon'],
       color: style.color
     })), [styles, hiddenStyles]);
 
@@ -86,6 +50,9 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
     },
     scrollToCenter: (styleId: string) => {
       genericSelectorRef.current?.scrollToCenter(styleId);
+    },
+    scrollToSelectedItem: () => {
+      genericSelectorRef.current?.scrollToSelectedItem();
     },
   }));
 
@@ -105,9 +72,8 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
       selectedItem={selectedStyle}
       onSelectItem={onSelectStyle}
       onHideItem={handleHideStyle}
-      iconMap={iconMap}
       randomizeLabel="Randomize Style"
       onRandomizeItem={onRandomizeStyle}
     />
   );
-});
+};

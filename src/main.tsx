@@ -17,6 +17,8 @@ import StylesPage from "./app/admin/styles/page";
 import TonesPage from "./app/admin/tones/page";
 import HistoryPage from "./app/history/page";
 import QuestionPage from "./app/question/page";
+import DuplicatesPage from "./app/admin/duplicates/page";
+import IndividualQuestionPage from "./app/admin/questions/[id]/page";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -38,6 +40,8 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/admin/models" element={<ModelsPage />} />
           <Route path="/admin/styles" element={<StylesPage />} />
           <Route path="/admin/tones" element={<TonesPage />} />
+          <Route path="/admin/duplicates" element={<DuplicatesPage />} />
+          <Route path="/admin/questions/:id" element={<IndividualQuestionPage />} />
         </Routes>
       </BrowserRouter>
     </ConvexProviderWithClerk>

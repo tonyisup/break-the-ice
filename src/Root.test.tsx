@@ -19,21 +19,22 @@ vi.mock('react-router-dom', async (importOriginal) => {
 });
 
 describe('Root component', () => {
-  it('should render LandingPage when bypassLandingPage is false', () => {
-    // Arrange
-    vi.mocked(useLocalStorage).mockReturnValue([false, vi.fn()]);
+  // Currently disabled until product showcase video is added
+  // it('should render LandingPage when bypassLandingPage is false', () => {
+  //   // Arrange
+  //   vi.mocked(useLocalStorage).mockReturnValue([false, vi.fn()]);
 
-    // Act
-    render(
-      <MemoryRouter>
-        <Root />
-      </MemoryRouter>
-    );
+  //   // Act
+  //   render(
+  //     <MemoryRouter>
+  //       <Root />
+  //     </MemoryRouter>
+  //   );
 
-    // Assert
-    expect(screen.getByText('Landing Page')).toBeInTheDocument();
-    expect(vi.mocked(Navigate)).not.toHaveBeenCalled();
-  });
+  //   // Assert
+  //   expect(screen.getByText('Landing Page')).toBeInTheDocument();
+  //   expect(vi.mocked(Navigate)).not.toHaveBeenCalled();
+  // });
 
   it('should navigate to /app when bypassLandingPage is true', () => {
     // Arrange

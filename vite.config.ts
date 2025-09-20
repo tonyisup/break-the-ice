@@ -40,4 +40,15 @@ window.addEventListener('message', async (message) => {
     },
         dedupe: ["react", "react-dom", "react-router", "react-router-dom"],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return id.toString().split('node_modules/')[1].split('/')[0].toString();
+          }
+        }
+      }
+    }
+  }
 }));

@@ -1,17 +1,7 @@
+import React from 'react';
 import { useQuery } from 'convex/react';
-import { Sparkles, Brain, Briefcase, HelpCircle, Zap, Shuffle, Dumbbell, Scale } from 'lucide-react';
 import { api } from '../../../convex/_generated/api';
-
-const iconMap = {
-  Sparkles,
-  Brain,
-  Briefcase,
-  HelpCircle,
-  Zap,
-  Shuffle, 
-  Dumbbell,
-  Scale
-};
+import * as icons from '@/components/ui/icons';
 
 interface CategorySelectorProps {
   selectedCategory: string;
@@ -23,7 +13,6 @@ export function CategorySelector({ selectedCategory, onSelectCategory }: Categor
   return (
     <div className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide">
       {categories && categories.map((category) => {
-        const Icon = iconMap[category.icon as keyof typeof iconMap];
         const isSelected = selectedCategory === category.id;
 
         return (
@@ -43,7 +32,7 @@ export function CategorySelector({ selectedCategory, onSelectCategory }: Categor
                 : {}
             }
           >
-            <Icon size={20} />
+            {React.createElement(icons[category.icon as keyof typeof icons], { size: 20 })}
             <span className="text-sm font-semibold whitespace-nowrap">
               {category.name}
             </span>

@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
+import { Link } from "react-router-dom";
+import { HouseIcon } from '@/components/ui/icons';
 import { CollapsibleSection } from "../../components/collapsible-section/CollapsibleSection";
 import { Header } from "@/components/header";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -20,9 +23,14 @@ const SettingsPage = () => {
   };
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>("hiddenStyles", []);
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
-  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<string[]>("hiddenQuestions", []);
-  const [autoAdvanceShuffle, setAutoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
-  // const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
+  const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
+  
+  const settings = useQuery(api.users.getSettings);
+  const updateAutoAdvanceShuffle = useMutation(api.users.updateAutoAdvanceShuffle);
+  const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
+
+  const autoAdvanceShuffle = settings?.autoAdvanceShuffle ?? false;
+  const hiddenQuestions = settings?.hiddenQuestions ?? [];
 
   const unhideStyle = (styleId: string) => {
     setHiddenStyles(prev => prev.filter(id => id !== styleId));
@@ -32,13 +40,49 @@ const SettingsPage = () => {
     setHiddenTones(prev => prev.filter(id => id !== toneId));
   };
 
-  const unhideQuestion = (questionId: string) => {
-    setHiddenQuestions(prev => prev.filter(id => id !== questionId));
+  const unhideQuestion = (questionId: Id<"questions">) => {
+    const newHiddenQuestions = hiddenQuestions.filter(id => id !== questionId);
+    updateHiddenQuestions({ hiddenQuestions: newHiddenQuestions });
   };
+
+  const clearHiddenQuestions = () => {
+    updateHiddenQuestions({ hiddenQuestions: [] });
+  }
 
   const hiddenStyleObjects = allStyles?.filter(style => hiddenStyles.includes(style.id));
   const hiddenToneObjects = allTones?.filter(tone => hiddenTones.includes(tone.id));
   const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions as Id<"questions">[] });
+
+  useEffect(() => {
+    if (hiddenQuestionObjects) {
+      const serverIds = hiddenQuestionObjects.map(q => q!._id);
+      if (serverIds.length !== hiddenQuestions.length) {
+        setHiddenQuestions(serverIds);
+      }
+    }
+  }, [hiddenQuestionObjects, hiddenQuestions, setHiddenQuestions]);
+
+  useEffect(() => {
+    if (allStyles) {
+      const serverIds = allStyles.map(s => s.id);
+      const localIds = hiddenStyles;
+      const filteredIds = localIds.filter(id => serverIds.includes(id));
+      if (filteredIds.length !== localIds.length) {
+        setHiddenStyles(filteredIds);
+      }
+    }
+  }, [allStyles, hiddenStyles, setHiddenStyles]);
+
+  useEffect(() => {
+    if (allTones) {
+      const serverIds = allTones.map(t => t.id);
+      const localIds = hiddenTones;
+      const filteredIds = localIds.filter(id => serverIds.includes(id));
+      if (filteredIds.length !== localIds.length) {
+        setHiddenTones(filteredIds);
+      }
+    }
+  }, [allTones, hiddenTones, setHiddenTones]);
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradientDark = ["#3B2554", "#262D54"];
@@ -57,7 +101,7 @@ const SettingsPage = () => {
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <div className="space-y-8">
-          {/* <CollapsibleSection
+          <CollapsibleSection
             title="General"
             isOpen={!!openSections['general']}
             onOpenChange={() => toggleSection('general')}
@@ -79,7 +123,7 @@ const SettingsPage = () => {
                 />
               </button>
             </div>
-          </CollapsibleSection> */}
+          </CollapsibleSection>
           <CollapsibleSection
             title="Shuffle"
             isOpen={!!openSections['shuffle']}
@@ -92,7 +136,8 @@ const SettingsPage = () => {
                 <p className="text-sm dark:text-white/70 text-black/70">Automatically confirm style and tone after shuffling.</p>
               </div>
               <button
-                onClick={() => setAutoAdvanceShuffle(!autoAdvanceShuffle)}
+                onClick={() => updateAutoAdvanceShuffle({ autoAdvanceShuffle: !autoAdvanceShuffle })}
+                disabled={settings === undefined}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoAdvanceShuffle ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
                 aria-pressed={autoAdvanceShuffle}
                 aria-label="Toggle auto-advance shuffle"
@@ -178,7 +223,7 @@ const SettingsPage = () => {
             {hiddenQuestionObjects && hiddenQuestionObjects.length > 0 ? (
               <>
                 <button
-                  onClick={() => setHiddenQuestions([])}
+                  onClick={clearHiddenQuestions}
                   className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
                 >
                   Clear All

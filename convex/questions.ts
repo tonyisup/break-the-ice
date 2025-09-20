@@ -1,7 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query, QueryCtx } from "./_generated/server";
-import { Doc } from "./_generated/dataModel";
-import { api } from "./_generated/api";
+import { mutation, query, QueryCtx, internalQuery, internalMutation } from "./_generated/server";
+import { Doc, Id } from "./_generated/dataModel";
 import { ensureAdmin } from "./auth";
 
 export const discardQuestion = mutation({
@@ -9,6 +8,7 @@ export const discardQuestion = mutation({
     questionId: v.id("questions"),
     startTime: v.number(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const { questionId, startTime } = args;
 
@@ -30,6 +30,7 @@ export const discardQuestion = mutation({
 
       await Promise.all([analytics, updateQuestion]);
     }
+    return null;
   },
 });
 
@@ -57,6 +58,21 @@ export const getNextQuestions = query({
     tone: v.string(),
     seen: v.optional(v.array(v.id("questions"))),
   },
+  returns: v.array(v.object({
+    _id: v.id("questions"),
+    _creationTime: v.number(),
+    averageViewDuration: v.number(),
+    lastShownAt: v.optional(v.number()),
+    text: v.string(),
+    totalLikes: v.number(),
+    totalThumbsDown: v.optional(v.number()),
+    totalShows: v.number(),
+    isAIGenerated: v.optional(v.boolean()),
+    tags: v.optional(v.array(v.string())),
+    category: v.optional(v.string()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+  })),
   handler: async (ctx, args) => {
     const { count, style, tone, seen } = args;
     const seenIds = new Set(seen ?? []);
@@ -84,6 +100,7 @@ export const recordAnalytics = mutation({
     event: v.union(v.literal("like"), v.literal("discard")),
     viewDuration: v.number(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const { questionId, event, viewDuration } = args;
     const question = await ctx.db.get(questionId);
@@ -110,6 +127,7 @@ export const recordAnalytics = mutation({
     await ctx.db.patch(questionId, {
       averageViewDuration: newAverage,
     });
+    return null;
   },
 });
 
@@ -141,6 +159,31 @@ export const getQuestionsByIds = query({
   },
 });
 
+export const getLikedQuestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+
+    if (!user || !user.likedQuestions) {
+      return [];
+    }
+
+    const questions = await Promise.all(
+      user.likedQuestions.map((id) => ctx.db.get(id))
+    );
+
+    return questions.filter((q): q is Doc<"questions"> => q !== null);
+  },
+});
+
 export const getQuestionById = query({
   args: {
     id: v.string(),
@@ -154,6 +197,31 @@ export const getQuestionById = query({
     } catch {
       return null;
     }
+  },
+});
+
+export const getQuestion = query({
+  args: {
+    id: v.id("questions"),
+  },
+  returns: v.union(v.object({
+    _id: v.id("questions"),
+    _creationTime: v.float64(),
+    text: v.string(),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    totalLikes: v.float64(),
+    totalShows: v.float64(),
+    averageViewDuration: v.float64(),
+    lastShownAt: v.optional(v.float64()),
+    totalThumbsDown: v.optional(v.float64()),
+    isAIGenerated: v.optional(v.boolean()),
+    tags: v.optional(v.array(v.string())),
+    category: v.optional(v.string()),
+  }), v.null()),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    return await ctx.db.get(args.id);
   },
 });
 
@@ -237,7 +305,23 @@ export const updateQuestion = mutation({
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
     const { id, text, tags, style, tone } = args;
-    await ctx.db.patch(id, { text, tags, style, tone });
+    
+    // Build update object with only provided fields
+    const updateData: any = { text };
+    
+    if (tags !== undefined) {
+      updateData.tags = tags;
+    }
+    
+    if (style !== undefined) {
+      updateData.style = style;
+    }
+    
+    if (tone !== undefined) {
+      updateData.tone = tone;
+    }
+    
+    await ctx.db.patch(id, updateData);
   },
 });
 
@@ -293,5 +377,180 @@ export const updateCategories = mutation({
       }
     }
     return results;
+  },
+});
+
+// to be executed on a daily schedule
+export const cleanDuplicateQuestions = mutation({
+  handler: async (ctx) => {
+    const allQuestions = await ctx.db.query("questions").collect();
+
+    let totalDeleted = 0;
+    //Find duplicate questions by exact text match
+    const duplicateQuestions = allQuestions.filter((question, index, self) =>
+      index !== self.findIndex((t) => t.text === question.text)
+    );
+    for (const question of duplicateQuestions) {
+      await ctx.db.delete(question._id);
+      totalDeleted++;
+    }
+
+    return totalDeleted;
+  },
+});
+
+// Get all questions for duplicate detection (minimal data for efficiency)
+export const getAllQuestionsForDuplicateDetection = internalQuery({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id("questions"),
+    text: v.string(),
+    style: v.string(),
+  })),
+  handler: async (ctx) => {
+    const questions = await ctx.db.query("questions").collect();
+    //filter out any questions that are already in a duplicate detection
+    const duplicateDetections = await ctx.db.query("duplicateDetections").collect();
+    const duplicateQuestionIds = duplicateDetections.flatMap(d => d.questionIds);
+    const filteredQuestions = questions.filter(q => !duplicateQuestionIds.includes(q._id));
+    return filteredQuestions.map(q => ({
+      _id: q._id,
+      text: q.text,
+      style: q.style ?? "",
+    }));
+  },
+});
+
+// Save duplicate detection results
+export const saveDuplicateDetection = internalMutation({
+  args: {
+    questionIds: v.array(v.id("questions")),
+    reason: v.string(),
+    confidence: v.number(),
+  },
+  returns: v.id("duplicateDetections"),
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("duplicateDetections", {
+      questionIds: args.questionIds,
+      reason: args.reason,
+      confidence: args.confidence,
+      status: "pending",
+      detectedAt: Date.now(),
+    });
+  },
+});
+
+// Get all pending duplicate detections for admin review
+export const getPendingDuplicateDetections = query({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id("duplicateDetections"),
+    _creationTime: v.number(),
+    questionIds: v.array(v.id("questions")),
+    reason: v.string(),
+    rejectReason: v.optional(v.string()),
+    confidence: v.number(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
+    detectedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedBy: v.optional(v.id("users")),
+    questions: v.array(v.object({
+      _id: v.id("questions"),
+      _creationTime: v.number(),
+      text: v.string(),
+      style: v.optional(v.string()),
+      tone: v.optional(v.string()),
+      totalLikes: v.number(),
+      totalShows: v.number(),
+    })),
+  })),
+  handler: async (ctx): Promise<any> => {
+    await ensureAdmin(ctx);
+    
+    const detections = await ctx.db
+      .query("duplicateDetections")
+      .withIndex("by_status_and_confidence", (q) => q.eq("status", "pending"))
+      .order("desc")
+      .collect();
+
+    const detectionsWithQuestions = await Promise.all(
+      detections.map(async (detection) => {
+        const questions = await Promise.all(
+          detection.questionIds.map(async (id) => {
+            const question = await ctx.db.get(id);
+            if (!question) return null;
+            return {
+              _id: question._id,
+              _creationTime: question._creationTime,
+              text: question.text,
+              style: question.style,
+              tone: question.tone,
+              totalLikes: question.totalLikes,
+              totalShows: question.totalShows,
+            };
+          })
+        );
+        
+        return {
+          ...detection,
+          questions: questions.filter((q): q is NonNullable<typeof q> => q !== null),
+        };
+      })
+    );
+
+    return detectionsWithQuestions;
+  },
+});
+
+// Update duplicate detection status (approve/reject)
+export const updateDuplicateDetectionStatus = mutation({
+  args: {
+    detectionId: v.id("duplicateDetections"),
+    status: v.union(v.literal("approved"), v.literal("rejected")),
+    reviewerEmail: v.optional(v.string()),
+    rejectReason: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    
+    const reviewerId = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", args.reviewerEmail)).unique();
+    await ctx.db.patch(args.detectionId, {
+      status: args.status,
+      reviewedAt: Date.now(),
+      reviewedBy: reviewerId?._id ?? "system" as Id<"users">,
+      rejectReason: args.rejectReason,
+    });
+    
+    return null;
+  },
+});
+
+// Delete duplicate questions after approval
+export const deleteDuplicateQuestions = mutation({
+  args: {
+    detectionId: v.id("duplicateDetections"),
+    questionIdsToDelete: v.array(v.id("questions")),
+    keepQuestionId: v.optional(v.id("questions")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    
+    // Delete the specified questions
+    for (const questionId of args.questionIdsToDelete) {
+      if (args.keepQuestionId && questionId === args.keepQuestionId) {
+        continue;
+      }
+      await ctx.db.delete(questionId);
+    }
+    
+    // Update the detection status
+    await ctx.db.patch(args.detectionId, {
+      status: args.keepQuestionId ? "approved" : "deleted",
+      reviewedAt: Date.now(),
+    });
+    
+    return null;
   },
 });

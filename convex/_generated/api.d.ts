@@ -16,6 +16,7 @@ import type {
 import type * as ai from "../ai.js";
 import type * as auth from "../auth.js";
 import type * as categories from "../categories.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as models from "../models.js";
 import type * as questions from "../questions.js";
@@ -23,6 +24,7 @@ import type * as router from "../router.js";
 import type * as styles from "../styles.js";
 import type * as tags from "../tags.js";
 import type * as tones from "../tones.js";
+import type * as users from "../users.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -36,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   auth: typeof auth;
   categories: typeof categories;
+  crons: typeof crons;
   http: typeof http;
   models: typeof models;
   questions: typeof questions;
@@ -43,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   styles: typeof styles;
   tags: typeof tags;
   tones: typeof tones;
+  users: typeof users;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,
