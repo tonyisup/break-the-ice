@@ -17,50 +17,13 @@ import { CollapsibleSection } from "../components/collapsible-section/Collapsibl
 import { isColorDark } from "@/lib/utils";
 
 export default function MainPage() {
-  const { theme, setTheme } = useTheme();
+  const { theme } = useTheme();
 
   // For migration
-  const [localStorageLikedQuestions, setLocalStorageLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
-  const [localStorageHiddenQuestions, setLocalStorageHiddenQuestions] = useLocalStorage<Id<"questions">[]>("hiddenQuestions", []);
-  const [localStorageAutoAdvanceShuffle, setLocalStorageAutoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
+  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<Id<"questions">[]>("hiddenQuestions", []);
 
-  // DB settings
-  const settings = useQuery(api.users.getSettings);
-  const migrateLocalStorageSettings = useMutation(api.users.migrateLocalStorageSettings);
-  const updateLikedQuestions = useMutation(api.users.updateLikedQuestions);
-  const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
 
-  // Local state for settings
-  const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
-  const [hiddenQuestions, setHiddenQuestions] = useState<Id<"questions">[]>([]);
-  const [autoAdvanceShuffle, setAutoAdvanceShuffle] = useState<boolean>(false);
-
-  // Migration effect
-  useEffect(() => {
-    if (settings && !settings.migratedFromLocalStorage) {
-      migrateLocalStorageSettings({
-        likedQuestions: localStorageLikedQuestions,
-        hiddenQuestions: localStorageHiddenQuestions,
-        autoAdvanceShuffle: localStorageAutoAdvanceShuffle,
-      }).then(() => {
-        // Clean up local storage after migration
-        setLocalStorageLikedQuestions([]);
-        setLocalStorageHiddenQuestions([]);
-        setLocalStorageAutoAdvanceShuffle(false);
-      }).catch((error) => {
-        console.error("Error migrating local storage settings:", error);
-      });
-    }
-  }, [settings, migrateLocalStorageSettings, localStorageLikedQuestions, localStorageHiddenQuestions, localStorageAutoAdvanceShuffle, setLocalStorageLikedQuestions, setLocalStorageHiddenQuestions, setLocalStorageAutoAdvanceShuffle]);
-
-  // Sync local state with DB settings
-  useEffect(() => {
-    if (settings) {
-      setLikedQuestions(settings.likedQuestions ?? []);
-      setHiddenQuestions(settings.hiddenQuestions ?? []);
-      setAutoAdvanceShuffle(settings.autoAdvanceShuffle ?? false);
-    }
-  }, [settings]);
 
   const { addQuestionToHistory } = useQuestionHistory();
   const [startTime, setStartTime] = useState(Date.now());
@@ -115,7 +78,7 @@ export default function MainPage() {
     newSearchParams.set("style", selectedStyle);
     newSearchParams.set("tone", selectedTone);
     setSearchParams(newSearchParams);
-  }, [selectedStyle, selectedTone, setSearchParams]);
+  }, [searchParams, selectedStyle, selectedTone, setSearchParams]);
     
   const callGenerateAIQuestion = useCallback(async (count: number, isShuffleGeneration = false) => {
     try {
@@ -163,32 +126,32 @@ export default function MainPage() {
         setIsGenerating(true);
         // Generate only 1 question when shuffling, 2 otherwise
         const count = isShuffling ? 1 : 2;
-        console.log("First useEffect triggering generation:", { count, isShuffling, isShufflingRef: isShufflingRef.current });
+        // console.log("First useEffect triggering generation:", { count, isShuffling, isShufflingRef: isShufflingRef.current });
         void callGenerateAIQuestion(count, isShuffling);
       }
     }
   }, [nextQuestions, isGenerating, currentQuestions.length, callGenerateAIQuestion, hiddenQuestions, isShuffling]);
 
   useEffect(() => {
-    console.log("Second useEffect running:", { 
-      nextQuestionsLength: nextQuestions?.length, 
-      currentQuestionsLength: currentQuestions.length, 
-      isShufflingRef: isShufflingRef.current, 
-      isGenerating 
-    });
+    // console.log("Second useEffect running:", { 
+    //   nextQuestionsLength: nextQuestions?.length, 
+    //   currentQuestionsLength: currentQuestions.length, 
+    //   isShufflingRef: isShufflingRef.current, 
+    //   isGenerating 
+    // });
     
     if (nextQuestions && nextQuestions.length > 1) {
-      console.log("Second useEffect: returning early - nextQuestions.length > 1");
+      // console.log("Second useEffect: returning early - nextQuestions.length > 1");
       return;
     }
     // Don't trigger buffer generation when shuffling - let the first useEffect handle it
     if (isShufflingRef.current) {
-      console.log("Second useEffect: returning early - isShufflingRef.current is true");
+      // console.log("Second useEffect: returning early - isShufflingRef.current is true");
       return;
     }
     // Don't trigger if we're currently generating (to avoid race conditions)
     if (isGenerating) {
-      console.log("Second useEffect: returning early - isGenerating is true");
+      // console.log("Second useEffect: returning early - isGenerating is true");
       return;
     }
     if (currentQuestions.length > 0 && currentQuestions.length <= 5) {
@@ -255,7 +218,7 @@ export default function MainPage() {
     });
   };
 
-  const toggleLike = async (questionId: Id<"questions">) => {
+  const toggleLike = (questionId: Id<"questions">) => {
     if (!currentQuestions) return;
     const viewDuration = Math.min(Date.now() - startTime, 10000);
     const isLiked = likedQuestions.includes(questionId);
@@ -269,24 +232,21 @@ export default function MainPage() {
     if (isLiked) {
       toast.success("Removed from favorites");
     } else {
-      await recordAnalytics({
+      void recordAnalytics({
         questionId,
         event: "like",
         viewDuration,
       });
       toast.success("Added to favorites!");
     }
-
-    await updateLikedQuestions({ likedQuestions: newLikedQuestions });
   };
 
-  const toggleHide = async (questionId: Id<"questions">) => {
+  const toggleHide = (questionId: Id<"questions">) => {
     if (!currentQuestions) return;
     const newHiddenQuestions = [...hiddenQuestions, questionId];
     setHiddenQuestions(newHiddenQuestions);
     toast.success("Question hidden");
     getNextQuestion();
-    await updateHiddenQuestions({ hiddenQuestions: newHiddenQuestions });
   }
 
   const getNextQuestion = () => {
@@ -299,7 +259,7 @@ export default function MainPage() {
   };
 
   const handleShuffleStyleAndTone = () => {
-    if (autoAdvanceShuffle) {
+    if (!isStyleTonesOpen) {
       // If auto-advance is enabled, immediately shuffle and advance
       if (toneSelectorRef.current && styleSelectorRef.current) {
         // Components are mounted - first randomize, then confirm
@@ -384,7 +344,6 @@ export default function MainPage() {
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
   const gradientTarget = theme === "dark" ? "#000" : "#fff";
-  const settingsAreLoading = settings === undefined;
 
 
   return (
@@ -407,10 +366,9 @@ export default function MainPage() {
               currentQuestion={currentQuestion}
               isFavorite={isFavorite}
               gradient={gradient}
-              toggleLike={() => void toggleLike(currentQuestion._id)}
+              toggleLike={() => toggleLike(currentQuestion._id)}
               onSwipe={getNextQuestion}
-              toggleHide={() => void toggleHide(currentQuestion._id)}
-              disabled={settingsAreLoading}
+              toggleHide={() => toggleHide(currentQuestion._id)}
             />
           ) : (
             <QuestionDisplay
@@ -422,7 +380,6 @@ export default function MainPage() {
               toggleLike={() => {}}
               toggleHide={() => {}}
               onSwipe={() => {}}
-              disabled={settingsAreLoading}
             />
           )}
         </AnimatePresence>
@@ -462,7 +419,6 @@ export default function MainPage() {
           handleCancelRandomizeStyleAndTone={handleCancelRandomizeStyleAndTone}
           getNextQuestion={getNextQuestion}
           isStyleTonesOpen={isStyleTonesOpen}
-          disabled={settingsAreLoading}
         />
       </main>
     </div>

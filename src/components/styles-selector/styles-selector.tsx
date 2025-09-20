@@ -3,6 +3,7 @@ import { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
+import * as icons from '@/components/ui/icons';
 
 interface StyleSelectorProps {
   selectedStyle: string;
@@ -33,7 +34,7 @@ export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, 
     .map(style => ({
       id: style.id,
       name: style.name,
-      icon: style.icon as SelectorItem['icon'],
+      icon: style.icon as keyof typeof icons,
       color: style.color
     })), [styles, hiddenStyles]);
 

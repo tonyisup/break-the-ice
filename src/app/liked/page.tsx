@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
@@ -18,6 +18,8 @@ import { toast } from "sonner";
 function LikedQuestionsPageContent() {
   const { theme } = useTheme();
   const [searchText, setSearchText] = useState("");
+  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
   
   // Filter out invalid question IDs to prevent errors
   const validLikedQuestions = useMemo(() => {
@@ -28,31 +30,58 @@ function LikedQuestionsPageContent() {
   }, [likedQuestions]);
   
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions });
-  const updateLikedQuestions = useMutation(api.users.updateLikedQuestions);
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
 
   // Clean up invalid question IDs automatically
   useEffect(() => {
-    if (validLikedQuestions.length !== likedQuestions.length) {
-      console.log("Cleaning up invalid question IDs from localStorage");
-      setLikedQuestions(validLikedQuestions);
+    if (isCleaningUp) return;
+    
+    try {
+      if (validLikedQuestions.length !== likedQuestions.length) {
+        console.log("Cleaning up invalid question IDs from localStorage");
+        setIsCleaningUp(true);
+        setLikedQuestions(validLikedQuestions);
+        // Reset cleanup flag after a short delay
+        setTimeout(() => setIsCleaningUp(false), 100);
+      }
+    } catch (error) {
+      console.error("Error cleaning up invalid question IDs:", error);
+      setIsCleaningUp(false);
     }
-  }, [validLikedQuestions.length, likedQuestions.length, setLikedQuestions, validLikedQuestions]);
+  }, [validLikedQuestions.length, likedQuestions.length, setLikedQuestions, validLikedQuestions, isCleaningUp]);
 
   // Remove questions that no longer exist in the database
   useEffect(() => {
-    if (questions && validLikedQuestions.length > 0) {
-      const existingQuestionIds = new Set(questions.map(q => q._id));
-      const validIds = validLikedQuestions.filter(id => existingQuestionIds.has(id));
-      
-      if (validIds.length !== validLikedQuestions.length) {
-        console.log("Removing deleted questions from likes");
-        setLikedQuestions(validIds);
-        toast.success("Cleaned up deleted questions from your favorites");
+    if (isCleaningUp) return;
+    
+    try {
+      if (questions && validLikedQuestions.length > 0) {
+        const existingQuestionIds = new Set(questions.map(q => q._id));
+        const validIds = validLikedQuestions.filter(id => existingQuestionIds.has(id));
+        
+        if (validIds.length !== validLikedQuestions.length) {
+          console.log("Removing deleted questions from likes");
+          setIsCleaningUp(true);
+          setLikedQuestions(validIds);
+          toast.success("Cleaned up deleted questions from your favorites");
+          // Reset cleanup flag after a short delay
+          setTimeout(() => setIsCleaningUp(false), 100);
+        }
       }
+    } catch (error) {
+      console.error("Error cleaning up deleted questions:", error);
+      setIsCleaningUp(false);
     }
-  }, [questions, validLikedQuestions, setLikedQuestions]);
+  }, [questions, validLikedQuestions, setLikedQuestions, isCleaningUp]);
+
+  // Cleanup effect to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      // Cleanup any pending timeouts
+      setIsCleaningUp(false);
+    };
+  }, []);
 
   const styleColors = useMemo(() => {
     if (!styles) return {};
@@ -75,13 +104,13 @@ function LikedQuestionsPageContent() {
     if (!questions) return;
     const currentLikedIds = questions.map(q => q._id);
     const newLikedIds = currentLikedIds.filter(id => id !== questionId);
-    updateLikedQuestions({ likedQuestions: newLikedIds });
+    setLikedQuestions(newLikedIds);
   };
 
   const handleClearLikes = () => {
     setSearchText("");
-    updateLikedQuestions({ likedQuestions: [] });
     toast.success("Likes cleared");
+    setLikedQuestions([]);
   };
 
   const gradientLight = ["#667EEA", "#A064DE"];
@@ -128,7 +157,7 @@ function LikedQuestionsPageContent() {
               </div>
             </div>
           </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             <AnimatePresence>
               {questions && questions.map((question: Doc<"questions">) => {
                 const styleColor = (question.style && styleColors[question.style]) || '#667EEA';
@@ -149,7 +178,7 @@ function LikedQuestionsPageContent() {
                       }
                     }}
                     onDoubleClick={() => {
-                      void handleRemoveFavorite(question._id);
+                      handleRemoveFavorite(question._id);
                     }}
                   >
                     <ModernQuestionCard

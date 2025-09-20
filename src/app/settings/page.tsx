@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
-import { Link } from "react-router-dom";
-import { HouseIcon } from '@/components/ui/icons';
 import { CollapsibleSection } from "../../components/collapsible-section/CollapsibleSection";
 import { Header } from "@/components/header";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -26,11 +24,9 @@ const SettingsPage = () => {
   const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
   
   const settings = useQuery(api.users.getSettings);
-  const updateAutoAdvanceShuffle = useMutation(api.users.updateAutoAdvanceShuffle);
   const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
 
-  const autoAdvanceShuffle = settings?.autoAdvanceShuffle ?? false;
-  const hiddenQuestions = settings?.hiddenQuestions ?? [];
+  const hiddenQuestions = useMemo(() => settings?.hiddenQuestions ?? [], [settings]);
 
   const unhideStyle = (styleId: string) => {
     setHiddenStyles(prev => prev.filter(id => id !== styleId));
@@ -42,11 +38,11 @@ const SettingsPage = () => {
 
   const unhideQuestion = (questionId: Id<"questions">) => {
     const newHiddenQuestions = hiddenQuestions.filter(id => id !== questionId);
-    updateHiddenQuestions({ hiddenQuestions: newHiddenQuestions });
+    void updateHiddenQuestions({ hiddenQuestions: newHiddenQuestions });
   };
 
   const clearHiddenQuestions = () => {
-    updateHiddenQuestions({ hiddenQuestions: [] });
+    void updateHiddenQuestions({ hiddenQuestions: [] });
   }
 
   const hiddenStyleObjects = allStyles?.filter(style => hiddenStyles.includes(style.id));
@@ -55,12 +51,12 @@ const SettingsPage = () => {
 
   useEffect(() => {
     if (hiddenQuestionObjects) {
-      const serverIds = hiddenQuestionObjects.map(q => q!._id);
+      const serverIds = hiddenQuestionObjects.map(q => q._id);
       if (serverIds.length !== hiddenQuestions.length) {
-        setHiddenQuestions(serverIds);
+        void updateHiddenQuestions({ hiddenQuestions: serverIds });
       }
     }
-  }, [hiddenQuestionObjects, hiddenQuestions, setHiddenQuestions]);
+  }, [hiddenQuestionObjects, hiddenQuestions, updateHiddenQuestions]);
 
   useEffect(() => {
     if (allStyles) {
@@ -120,30 +116,6 @@ const SettingsPage = () => {
               >
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bypassLandingPage ? 'translate-x-6' : 'translate-x-1'}`}
-                />
-              </button>
-            </div>
-          </CollapsibleSection>
-          <CollapsibleSection
-            title="Shuffle"
-            isOpen={!!openSections['shuffle']}
-            onOpenChange={() => toggleSection('shuffle')}
-            count={undefined}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="dark:text-white text-black font-semibold">Auto-advance Shuffle</p>
-                <p className="text-sm dark:text-white/70 text-black/70">Automatically confirm style and tone after shuffling.</p>
-              </div>
-              <button
-                onClick={() => updateAutoAdvanceShuffle({ autoAdvanceShuffle: !autoAdvanceShuffle })}
-                disabled={settings === undefined}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoAdvanceShuffle ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
-                aria-pressed={autoAdvanceShuffle}
-                aria-label="Toggle auto-advance shuffle"
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoAdvanceShuffle ? 'translate-x-6' : 'translate-x-1'}`}
                 />
               </button>
             </div>

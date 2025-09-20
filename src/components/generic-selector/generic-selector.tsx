@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, EyeOff, Shuffle } from '@/components/ui/icons';
+import { ChevronLeft, ChevronRight, EyeOff } from '@/components/ui/icons';
 import { cn } from '@/lib/utils';
 import * as icons from '@/components/ui/icons';
 import React from 'react';

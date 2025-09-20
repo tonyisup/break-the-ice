@@ -24,19 +24,22 @@ export function ModernQuestionCard({
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (!question || !navigator.share) return;
 
     const shareUrl = `${window.location.origin}/question/${question._id}`;
 
     try {
-      void navigator.share({
+      await navigator.share({
         title: 'Ice Breaker Question',
         text: question.text,
         url: shareUrl,
       });
     } catch (error) {
-      console.error('Error sharing:', error);
+      // User cancelled the share dialog or an error occurred
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error('Error sharing:', error);
+      }
     }
   };
 
@@ -55,96 +58,108 @@ export function ModernQuestionCard({
         <div className="w-full h-full min-h-[300px] bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-center items-center">
           {isGenerating && !question ? (
             // Loading Spinner
-            <div className="flex flex-col items-center justify-center space-y-4 min-h-[300px]">
-              <div
-                className="w-12 h-12 border-4 border-gray-200 dark:border-gray-700 rounded-full animate-spin"
-                style={{
-                  borderTopColor: gradient[0],
-                  borderBottomColor: gradient[1]
-                }}
-              />
-              <p
-                className="text-gray-600 dark:text-gray-400 font-medium"
-              >
-                Generating question...
-              </p>
-            </div>
+            <LoadingSpinner gradient={gradient} />
           ) : (
             // Full Card Content
-            question && <div className="w-full h-full flex flex-col justify-between min-h-[300px]">
-              {/* Category Badge */}
-              <div className="flex flex-row gap-2 justify-between">
-                <div className="border-t-2 border-l-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
-                  style={{
-                    borderTopColor: gradient[0],
-                    borderLeftColor: gradient[0]
-                  }}
-                >
-                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                    {question.style}
-                  </span>
-                </div>
-
-                <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
-                  style={{
-                    borderBottomColor: gradient[1],
-                    borderRightColor: gradient[1]
-                  }}
-                >
-                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                    {question.tone}
-                  </span>
-                </div>
-              </div>
-
-              {/* Question Text */}
-              <div className="py-8 flex-1 flex items-center justify-center text-center">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white leading-relaxed">
-                  {question.text}
-                </h2>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex justify-center items-center gap-3">
-                <button
-                  onClick={onToggleFavorite}
-                  disabled={disabled}
-                  className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
-                  title="Toggle favorite"
-                >
-                  <Heart
-                    size={24}
-                    className={isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600 dark:text-gray-400'}
-                  />
-                </button>
-
-                <button
-                  onClick={onToggleHidden}
-                  disabled={disabled}
-                  className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
-                  title="Hide question"
-                >
-                  <ThumbsDown
-                    size={24}
-                    className='text-gray-600 dark:text-gray-400'
-                  />
-                </button>
-
-                {typeof navigator.share === 'function' && (
-                  <button
-                    onClick={handleShare}
-                    disabled={disabled}
-                    className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
-                    title="Share question"
-                  >
-                    <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
-                  </button>
-                )}
-              </div>
-            </div>
+            question && <QuestionContent question={question} gradient={gradient} isFavorite={isFavorite} onToggleFavorite={onToggleFavorite} onToggleHidden={onToggleHidden} disabled={disabled} handleShare={() => void handleShare()} />
           )}
         </div>
       </div>
     </div>
   );
 }
+
+const LoadingSpinner = ({ gradient }: { gradient: string[] }) => {
+  return (
+    <div className="flex flex-col items-center justify-center space-y-4 min-h-[300px]">
+      <div
+        className="w-12 h-12 border-4 border-gray-200 dark:border-gray-700 rounded-full animate-spin"
+        style={{
+          borderTopColor: gradient[0],
+          borderBottomColor: gradient[1]
+        }}
+      />
+      <p
+        className="text-gray-600 dark:text-gray-400 font-medium"
+      >
+        Generating question...
+      </p>
+    </div>
+  );
+};
+
+const QuestionContent = ({ question, gradient, isFavorite, onToggleFavorite, onToggleHidden, disabled, handleShare }: { question: Doc<"questions">, gradient: string[], isFavorite: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void }) => {
+  return (
+    <div className="w-full h-full flex flex-col justify-between min-h-[300px]">
+      {/* Category Badge */}
+      <div className="flex flex-row gap-2 justify-between">
+        <div className="border-t-2 border-l-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
+          style={{
+            borderTopColor: gradient[0],
+            borderLeftColor: gradient[0]
+          }}
+        >
+          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+            {question.style}
+          </span>
+        </div>
+
+        <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
+          style={{
+            borderBottomColor: gradient[1],
+            borderRightColor: gradient[1]
+          }}
+        >
+          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+            {question.tone}
+          </span>
+        </div>
+      </div>
+
+      {/* Question Text */}
+      <div className="py-8 flex-1 flex items-center justify-center text-center">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white leading-relaxed">
+          {question.text}
+        </h2>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex justify-center items-center gap-3">
+        <button
+          onClick={onToggleFavorite}
+          disabled={disabled}
+          className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+          title="Toggle favorite"
+        >
+          <Heart
+            size={24}
+            className={isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600 dark:text-gray-400'}
+          />
+        </button>
+
+        <button
+          onClick={onToggleHidden}
+          disabled={disabled}
+          className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+          title="Hide question"
+        >
+          <ThumbsDown
+            size={24}
+            className='text-gray-600 dark:text-gray-400'
+          />
+        </button>
+
+        {typeof navigator.share === 'function' && (
+          <button
+            onClick={handleShare}
+            disabled={disabled}
+            className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+            title="Share question"
+          >
+            <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};

@@ -13,7 +13,7 @@ export const store = mutation({
     // Check if we've already stored this identity before.
     const user = await ctx.db
       .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .withIndex("email", (q) => q.eq("email", identity.email))
       .unique();
 
     if (user !== null) {
@@ -27,7 +27,7 @@ export const store = mutation({
     // If it's a new identity, create a new user.
     return await ctx.db.insert("users", {
       name: identity.name!,
-      email: identity.email!,
+      email: identity.email,
       image: identity.pictureUrl,
     });
   },
@@ -40,7 +40,6 @@ export const getSettings = query({
     v.object({
       likedQuestions: v.optional(v.array(v.id("questions"))),
       hiddenQuestions: v.optional(v.array(v.id("questions"))),
-      autoAdvanceShuffle: v.optional(v.boolean()),
       migratedFromLocalStorage: v.optional(v.boolean()),
     })
   ),
@@ -52,7 +51,7 @@ export const getSettings = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .withIndex("email", (q) => q.eq("email", identity.email))
       .unique();
 
     if (!user) {
@@ -62,7 +61,6 @@ export const getSettings = query({
     return {
       likedQuestions: user.likedQuestions,
       hiddenQuestions: user.hiddenQuestions,
-      autoAdvanceShuffle: user.autoAdvanceShuffle,
       migratedFromLocalStorage: user.migratedFromLocalStorage,
     };
   },
@@ -82,8 +80,8 @@ export const migrateLocalStorageSettings = mutation({
     }
 
     const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .query("users") 
+      .withIndex("email", (q) => q.eq("email", identity.email))
       .unique();
 
     if (!user) {
@@ -93,7 +91,6 @@ export const migrateLocalStorageSettings = mutation({
     await ctx.db.patch(user._id, {
       likedQuestions: args.likedQuestions,
       hiddenQuestions: args.hiddenQuestions,
-      autoAdvanceShuffle: args.autoAdvanceShuffle,
       migratedFromLocalStorage: true,
     });
     return null;
@@ -113,7 +110,7 @@ export const updateLikedQuestions = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .withIndex("email", (q) => q.eq("email", identity.email))
       .unique();
 
     if (!user) {
@@ -140,7 +137,7 @@ export const updateHiddenQuestions = mutation({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .withIndex("email", (q) => q.eq("email", identity.email))
       .unique();
 
     if (!user) {
@@ -152,34 +149,7 @@ export const updateHiddenQuestions = mutation({
     });
     return null;
   },
-});
-
-export const updateAutoAdvanceShuffle = mutation({
-  args: {
-    autoAdvanceShuffle: v.boolean(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email!))
-      .unique();
-
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    await ctx.db.patch(user._id, {
-      autoAdvanceShuffle: args.autoAdvanceShuffle,
-    });
-    return null;
-  },
-});
+}); 
 
 export const makeAdmin = mutation({
   args: {
@@ -193,7 +163,7 @@ export const makeAdmin = mutation({
     }
     const tempUser = await ctx.db
         .query("users")
-        .withIndex("email", (q) => q.eq("email", identity.email!))
+        .withIndex("email", (q) => q.eq("email", identity.email))
         .unique();
 
     if (!tempUser || !tempUser.isAdmin) {

@@ -47,16 +47,17 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
       // Additional validation for questionHistory array
       if (key === "questionHistory" && Array.isArray(value)) {
         // Filter out invalid question objects
-        const validQuestions = value.filter(item => 
-          item &&
-          typeof item === 'object' &&
-          typeof item._id === 'string' &&
-          typeof item.text === 'string' &&
-          item.text.length > 0
-        );
+        const validQuestions = value.filter(item => {
+          const question = item.question;
+          return question &&
+          typeof question === 'object' &&
+          typeof question._id === 'string' &&
+          typeof question.text === 'string' &&
+          question.text.length > 0
+        });
         
         if (validQuestions.length !== value.length) {
-          console.log("Found invalid questions in history. Cleaning up...");
+          console.log("Found invalid questions in history. Cleaning up...", validQuestions, value);
           window.localStorage.setItem(key, JSON.stringify(validQuestions));
           value = validQuestions;
         }
@@ -73,12 +74,18 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
       setStoredValue(prevStoredValue => {
         const valueToStore = value instanceof Function ? value(prevStoredValue) : value;
         if (typeof window !== "undefined") {
-          window.localStorage.setItem(key, JSON.stringify(valueToStore));
+          try {
+            window.localStorage.setItem(key, JSON.stringify(valueToStore));
+          } catch (storageError) {
+            console.error("Error writing to localStorage:", storageError);
+            // If localStorage is full or unavailable, still update the state
+            // but don't persist to localStorage
+          }
         }
         return valueToStore;
       });
     } catch (error) {
-      console.error(error);
+      console.error("Error in setValue:", error);
     }
   }, [key]);
 

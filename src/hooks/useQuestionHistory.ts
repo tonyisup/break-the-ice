@@ -26,9 +26,8 @@ const isValidQuestion = (questionEntry: any): questionEntry is HistoryEntry => {
 
 export function useQuestionHistory() {
   const [rawHistory, setRawHistory] = useLocalStorage<HistoryEntry[]>("questionHistory", []);
-  const questions = useQuery(api.questions.getQuestionsByIds, { ids: historyIds });
-
   const historyIds = useMemo(() => rawHistory.filter(entry => entry.question).map(entry => entry.question._id), [rawHistory]);
+  const questions = useQuery(api.questions.getQuestionsByIds, { ids: historyIds });
   // Filter out invalid questions
   const history = useMemo(() => {
     const validQuestions = rawHistory.filter(isValidQuestion);

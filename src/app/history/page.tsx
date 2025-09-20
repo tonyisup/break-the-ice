@@ -122,12 +122,12 @@ function HistoryPageContent() {
                 </button>
               </div>
             </div>
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
             <AnimatePresence>
               {Object.entries(groupedHistory).map(([date, entries]) => (
                 <div key={date}>
                   <h2 className="text-lg font-bold my-4 text-gray-700 dark:text-gray-300">{date}</h2>
-                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                     {entries.map((entry) => {
                       const { question } = entry;
                       const styleColor = (question.style && styleColors[question.style]) || '#667EEA';

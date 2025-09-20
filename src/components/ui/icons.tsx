@@ -39,4 +39,5 @@ export {
   ChevronDown,
   X,
   MoveRight,
+  SquareArrowRight,
 } from 'lucide-react';
