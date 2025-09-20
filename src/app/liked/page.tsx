@@ -18,10 +18,41 @@ import { toast } from "sonner";
 function LikedQuestionsPageContent() {
   const { theme } = useTheme();
   const [searchText, setSearchText] = useState("");
-  const questions = useQuery(api.questions.getLikedQuestions, {});
+  
+  // Filter out invalid question IDs to prevent errors
+  const validLikedQuestions = useMemo(() => {
+    return likedQuestions.filter(id => {
+      // Basic validation - check if it's a string and looks like a valid ID
+      return typeof id === 'string' && id.length > 0;
+    });
+  }, [likedQuestions]);
+  
+  const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions });
   const updateLikedQuestions = useMutation(api.users.updateLikedQuestions);
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
+
+  // Clean up invalid question IDs automatically
+  useEffect(() => {
+    if (validLikedQuestions.length !== likedQuestions.length) {
+      console.log("Cleaning up invalid question IDs from localStorage");
+      setLikedQuestions(validLikedQuestions);
+    }
+  }, [validLikedQuestions.length, likedQuestions.length, setLikedQuestions, validLikedQuestions]);
+
+  // Remove questions that no longer exist in the database
+  useEffect(() => {
+    if (questions && validLikedQuestions.length > 0) {
+      const existingQuestionIds = new Set(questions.map(q => q._id));
+      const validIds = validLikedQuestions.filter(id => existingQuestionIds.has(id));
+      
+      if (validIds.length !== validLikedQuestions.length) {
+        console.log("Removing deleted questions from likes");
+        setLikedQuestions(validIds);
+        toast.success("Cleaned up deleted questions from your favorites");
+      }
+    }
+  }, [questions, validLikedQuestions, setLikedQuestions]);
 
   const styleColors = useMemo(() => {
     if (!styles) return {};
@@ -87,12 +118,14 @@ function LikedQuestionsPageContent() {
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
               />
-              <button
-                onClick={handleClearLikes}
-                className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
-              >
-                Clear likes
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleClearLikes}
+                  className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
+                >
+                  Clear likes
+                </button>
+              </div>
             </div>
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
@@ -140,8 +173,14 @@ function LikedQuestionsPageContent() {
 }
 
 export default function LikedQuestionsPage() {
+  const handleResetLikes = () => {
+    // Clear localStorage and reload the page
+    localStorage.removeItem("likedQuestions");
+    window.location.reload();
+  };
+
   return (
-    <ErrorBoundary>
+    <ErrorBoundary onReset={handleResetLikes}>
       <LikedQuestionsPageContent />
     </ErrorBoundary>
   );

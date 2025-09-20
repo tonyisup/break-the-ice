@@ -24,6 +24,7 @@ export interface GenericSelectorRef {
   randomizeItem: () => void;
   cancelRandomizingItem: () => void;
   confirmRandomizedItem: () => void;
+  scrollToCenter: (itemId: string) => void;
   scrollToSelectedItem: () => void;
 }
 
@@ -318,6 +319,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
         setRandomItem(null);
         onRandomizeItem?.(null);
       },
+      scrollToCenter: scrollToCenter,
     }));
 
     return (

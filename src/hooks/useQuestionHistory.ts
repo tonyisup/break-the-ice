@@ -11,40 +11,61 @@ export type HistoryEntry = {
   viewedAt: number;
 };
 
-export function useQuestionHistory() {
+// Helper function to validate question data
+const isValidQuestion = (questionEntry: any): questionEntry is HistoryEntry => {
+  const question = questionEntry.question;
+  
+  return (
+    question &&
+    typeof question === 'object' &&
+    typeof question._id === 'string' &&
+    typeof question.text === 'string' &&
+    question.text.length > 0
+  );
+};
 
-  const [history, setHistory] = useLocalStorage<HistoryEntry[]>("questionHistory", []);
-  const historyIds = useMemo(() => history.filter(entry => entry.question).map(entry => entry.question._id), [history]);
+export function useQuestionHistory() {
+  const [rawHistory, setRawHistory] = useLocalStorage<HistoryEntry[]>("questionHistory", []);
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: historyIds });
 
+  const historyIds = useMemo(() => rawHistory.filter(entry => entry.question).map(entry => entry.question._id), [rawHistory]);
+  // Filter out invalid questions
+  const history = useMemo(() => {
+    const validQuestions = rawHistory.filter(isValidQuestion);
+    if (validQuestions.length !== rawHistory.length) {
+      console.log("Cleaning up invalid questions from history");
+      setRawHistory(validQuestions);
+    }
+    return validQuestions;
+  }, [rawHistory, setRawHistory]);
+  
   useEffect(() => {
     if (questions) {
       const serverIds = questions.map(q => q._id);
       const localIds = history.filter(entry => entry.question).map(entry => entry.question._id);
       if (serverIds.length !== localIds.length) {
-        const newHistory = history.filter(entry => entry.question && serverIds.includes(entry.question._id));
-        setHistory(newHistory);
+        const newRawHistory = rawHistory.filter(entry => entry.question && serverIds.includes(entry.question._id));
+        setRawHistory(newRawHistory);
       }
     }
-  }, [questions, history, setHistory]);
-
+  }, [questions, rawHistory, setRawHistory]);
 
   const addQuestionToHistory = useCallback((question: Doc<"questions">) => {
-    setHistory((prevHistory) => {
+    setRawHistory((prevHistory) => {
       const newHistory = [{ question, viewedAt: Date.now() }, ...prevHistory.filter(entry => entry.question && entry.question._id !== question._id)];
       return newHistory.slice(0, MAX_HISTORY_LENGTH);
     });
-  }, [setHistory]);
-
+  }, [setRawHistory]);
+    
   const removeQuestionFromHistory = useCallback((questionId: Id<"questions">) => {
-    setHistory((prevHistory) => {
+    setRawHistory((prevHistory) => {
       return prevHistory.filter(entry => entry.question && entry.question._id !== questionId);
     });
-  }, [setHistory]);
-
+  }, [setRawHistory]);
+    
   const clearHistory = useCallback(() => {
-    setHistory([]);
-  }, [setHistory]);
+    setRawHistory([]);
+  }, [setRawHistory]);
 
   return { history, addQuestionToHistory, removeQuestionFromHistory, clearHistory };
 }

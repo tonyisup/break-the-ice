@@ -13,6 +13,7 @@ import { Header } from "../components/header";
 import { ActionButtons } from "../components/action-buttons";
 import { QuestionDisplay } from "../components/question-display";
 import { AnimatePresence } from "framer-motion";
+import { CollapsibleSection } from "../components/collapsible-section/CollapsibleSection";
 import { isColorDark } from "@/lib/utils";
 
 export default function MainPage() {
@@ -70,6 +71,9 @@ export default function MainPage() {
   const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? "fun-silly");
   const [randomizedTone, setRandomizedTone] = useState<string | null>(null);
   const [randomizedStyle, setRandomizedStyle] = useState<string | null>(null);
+  const [isStyleTonesOpen, setIsStyleTonesOpen] = useState(false);
+  const [isShuffling, setIsShuffling] = useState(false);
+  const isShufflingRef = useRef(false);
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
@@ -85,6 +89,8 @@ export default function MainPage() {
   const tones = useQuery(api.tones.getTones);
   const style = useQuery(api.styles.getStyle, (selectedStyle === "") ? "skip" : { id: selectedStyle });
   const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
+  const allStyles = useQuery(api.styles.getStyles);
+  const allTones = useQuery(api.tones.getTones);
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
@@ -110,8 +116,8 @@ export default function MainPage() {
     newSearchParams.set("tone", selectedTone);
     setSearchParams(newSearchParams);
   }, [selectedStyle, selectedTone, setSearchParams]);
-
-  const callGenerateAIQuestion = useCallback(async (count: number) => {
+    
+  const callGenerateAIQuestion = useCallback(async (count: number, isShuffleGeneration = false) => {
     try {
       const newQuestions = await generateAIQuestion({
         style: selectedStyle,
@@ -121,7 +127,17 @@ export default function MainPage() {
       });
       const validNewQuestions = newQuestions.filter((q): q is Doc<"questions"> => q !== null);
       if (validNewQuestions.length > 0) {
-        setCurrentQuestions(prev => [...prev, ...validNewQuestions]);
+        setCurrentQuestions(prev => {
+          const updated = [...prev, ...validNewQuestions];
+          // Reset shuffling state after questions are added to state
+          if (isShuffleGeneration) {
+            setTimeout(() => {
+              setIsShuffling(false);
+              // Don't reset the ref here - let it stay true until user advances
+            }, 0);
+          }
+          return updated;
+        });
       }
     } finally {
       setIsGenerating(false);
@@ -145,13 +161,34 @@ export default function MainPage() {
         });
       } else if ((currentQuestions.length === 0) && !isGenerating) {
         setIsGenerating(true);
-        void callGenerateAIQuestion(2);
+        // Generate only 1 question when shuffling, 2 otherwise
+        const count = isShuffling ? 1 : 2;
+        console.log("First useEffect triggering generation:", { count, isShuffling, isShufflingRef: isShufflingRef.current });
+        void callGenerateAIQuestion(count, isShuffling);
       }
     }
-  }, [nextQuestions, isGenerating, currentQuestions.length, callGenerateAIQuestion, hiddenQuestions]);
+  }, [nextQuestions, isGenerating, currentQuestions.length, callGenerateAIQuestion, hiddenQuestions, isShuffling]);
 
   useEffect(() => {
+    console.log("Second useEffect running:", { 
+      nextQuestionsLength: nextQuestions?.length, 
+      currentQuestionsLength: currentQuestions.length, 
+      isShufflingRef: isShufflingRef.current, 
+      isGenerating 
+    });
+    
     if (nextQuestions && nextQuestions.length > 1) {
+      console.log("Second useEffect: returning early - nextQuestions.length > 1");
+      return;
+    }
+    // Don't trigger buffer generation when shuffling - let the first useEffect handle it
+    if (isShufflingRef.current) {
+      console.log("Second useEffect: returning early - isShufflingRef.current is true");
+      return;
+    }
+    // Don't trigger if we're currently generating (to avoid race conditions)
+    if (isGenerating) {
+      console.log("Second useEffect: returning early - isGenerating is true");
       return;
     }
     if (currentQuestions.length > 0 && currentQuestions.length <= 5) {
@@ -161,13 +198,31 @@ export default function MainPage() {
       }
       // between 2 and 6 questions
       const questionsToGenerate = 7 - currentQuestions.length;
-      void callGenerateAIQuestion(questionsToGenerate);
+      //console.log("Second useEffect triggering generation:", { questionsToGenerate, isShufflingRef: isShufflingRef.current, isGenerating });
+      void callGenerateAIQuestion(questionsToGenerate, false);
+    } else {
+      //console.log("Second useEffect: not triggering - currentQuestions.length not in range 1-5:", currentQuestions.length);
     }
   }, [currentQuestions, isGenerating, callGenerateAIQuestion, nextQuestions]);
 
   useEffect(() => {
     setCurrentQuestions(prev => prev.filter(q => !hiddenQuestions.includes(q._id)));
   }, [hiddenQuestions]);
+
+  // Scroll to center selected style and tone when section is opened
+  useEffect(() => {
+    if (isStyleTonesOpen) {
+      // Small delay to ensure the components are mounted and rendered
+      setTimeout(() => {
+        if (styleSelectorRef.current) {
+          styleSelectorRef.current.scrollToCenter?.(selectedStyle);
+        }
+        if (toneSelectorRef.current) {
+          toneSelectorRef.current.scrollToCenter?.(selectedTone);
+        }
+      }, 100);
+    }
+  }, [isStyleTonesOpen, selectedStyle, selectedTone]);
 
   const currentQuestion = currentQuestions[0] || null;
   useEffect(() => {
@@ -180,6 +235,17 @@ export default function MainPage() {
     setSeenQuestionIds((prev) => [...prev, questionId]);
     setCurrentQuestions(prev => {
       const newQuestions = prev.filter(q => q._id !== questionId);
+      
+      // If we're about to remove the last question and no generation is in progress, start generating
+      if (newQuestions.length === 0 && !isGenerating) {
+        setIsGenerating(true);
+        // Generate questions immediately to prevent empty state
+        const count = isShuffling ? 1 : 2;
+        setTimeout(() => {
+          void callGenerateAIQuestion(count, isShuffling);
+        }, 0);
+      }
+      
       return newQuestions;
     });
 
@@ -225,29 +291,95 @@ export default function MainPage() {
 
   const getNextQuestion = () => {
     setStartTime(Date.now());
+    // Reset shuffle ref when user manually advances
+    isShufflingRef.current = false;
     if (currentQuestion) {
       void handleDiscard(currentQuestion._id as Id<"questions">);
     }
   };
 
   const handleShuffleStyleAndTone = () => {
-    toneSelectorRef.current?.randomizeTone();
-    styleSelectorRef.current?.randomizeStyle();
     if (autoAdvanceShuffle) {
-      setTimeout(() => {
+      // If auto-advance is enabled, immediately shuffle and advance
+      if (toneSelectorRef.current && styleSelectorRef.current) {
+        // Components are mounted - first randomize, then confirm
+        toneSelectorRef.current.randomizeTone();
+        styleSelectorRef.current.randomizeStyle();
+        // Small delay to ensure randomization completes before confirmation
+        setTimeout(() => {
+          handleConfirmRandomizeStyleAndTone();
+        }, 50);
+      } else {
+        // Components are not mounted - do direct randomization and confirmation
         handleConfirmRandomizeStyleAndTone();
-      }, 0);
+      }
+    } else {
+      // If auto-advance is disabled, show the intermediate state
+      // If components are mounted, use their methods
+      if (toneSelectorRef.current && styleSelectorRef.current) {
+        toneSelectorRef.current.randomizeTone();
+        styleSelectorRef.current.randomizeStyle();
+      } else {
+        // If components are not mounted (collapsed), implement randomization directly
+        if (allStyles && allTones) {
+          const availableStyles = allStyles.filter(s => s.id !== selectedStyle);
+          const availableTones = allTones.filter(t => t.id !== selectedTone);
+          
+          if (availableStyles.length > 0) {
+            const randomStyle = availableStyles[Math.floor(Math.random() * availableStyles.length)];
+            setRandomizedStyle(randomStyle.id);
+          }
+          
+          if (availableTones.length > 0) {
+            const randomTone = availableTones[Math.floor(Math.random() * availableTones.length)];
+            setRandomizedTone(randomTone.id);
+          }
+        }
+      }
     }
   }
   const handleCancelRandomizeStyleAndTone = () => {
-    toneSelectorRef.current?.cancelRandomizingTone();
-    styleSelectorRef.current?.cancelRandomizingStyle();
+    // Reset shuffle ref when user cancels
+    isShufflingRef.current = false;
+    setIsShuffling(false);
+    
+    // If components are mounted, use their methods
+    if (toneSelectorRef.current && styleSelectorRef.current) {
+      toneSelectorRef.current.cancelRandomizingTone();
+      styleSelectorRef.current.cancelRandomizingStyle();
+    } else {
+      // If components are not mounted, clear the randomized values directly
+      setRandomizedStyle(null);
+      setRandomizedTone(null);
+    }
   }
   const handleConfirmRandomizeStyleAndTone = () => {
     setCurrentQuestions([]);
     setSeenQuestionIds([]);
-    toneSelectorRef.current?.confirmRandomizedTone();
-    styleSelectorRef.current?.confirmRandomizedStyle();
+    setIsShuffling(true);
+    isShufflingRef.current = true;
+    
+    // If components are mounted, use their methods
+    if (toneSelectorRef.current && styleSelectorRef.current) {
+      toneSelectorRef.current.confirmRandomizedTone();
+      styleSelectorRef.current.confirmRandomizedStyle();
+    } else {
+      // If components are not mounted, do randomization and apply immediately
+      if (allStyles && allTones) {
+        const availableStyles = allStyles.filter(s => s.id !== selectedStyle);
+        const availableTones = allTones.filter(t => t.id !== selectedTone);
+        
+        if (availableStyles.length > 0) {
+          const randomStyle = availableStyles[Math.floor(Math.random() * availableStyles.length)];
+          setSelectedStyle(randomStyle.id);
+        }
+        
+        if (availableTones.length > 0) {
+          const randomTone = availableTones[Math.floor(Math.random() * availableTones.length)];
+          setSelectedTone(randomTone.id);
+        }
+      }
+    }
   }
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
@@ -268,7 +400,7 @@ export default function MainPage() {
 
       <main className="flex-1 flex flex-col">
         <AnimatePresence mode="wait">
-          {currentQuestion && (
+          {currentQuestion ? (
             <QuestionDisplay
               key={currentQuestion._id}
               isGenerating={isGenerating}
@@ -280,10 +412,10 @@ export default function MainPage() {
               toggleHide={() => void toggleHide(currentQuestion._id)}
               disabled={settingsAreLoading}
             />
-          )}
-          {isGenerating && !currentQuestion && (
+          ) : (
             <QuestionDisplay
-              isGenerating={isGenerating}
+              key="loading"
+              isGenerating={true}
               currentQuestion={null}
               isFavorite={false}
               gradient={gradient}
@@ -295,20 +427,28 @@ export default function MainPage() {
           )}
         </AnimatePresence>
 
-        <StyleSelector
-          randomOrder={false}
-          selectedStyle={selectedStyle}
-          ref={styleSelectorRef}
-          onSelectStyle={setSelectedStyle}
-          onRandomizeStyle={setRandomizedStyle}
-        />
-        <ToneSelector
-          randomOrder={false}
-          ref={toneSelectorRef}
-          selectedTone={selectedTone}
-          onSelectTone={setSelectedTone}
-          onRandomizeTone={setRandomizedTone}
-        />
+        <div className="px-4">
+          <CollapsibleSection
+            title="Customize Style & Tone"
+            isOpen={isStyleTonesOpen}
+            onOpenChange={setIsStyleTonesOpen}
+          >
+            <StyleSelector
+              randomOrder={false}
+              selectedStyle={selectedStyle}
+              ref={styleSelectorRef}
+              onSelectStyle={setSelectedStyle}
+              onRandomizeStyle={setRandomizedStyle}
+            />
+            <ToneSelector
+              randomOrder={false}
+              ref={toneSelectorRef}
+              selectedTone={selectedTone}
+              onSelectTone={setSelectedTone}
+              onRandomizeTone={setRandomizedTone}
+            />
+          </CollapsibleSection>
+        </div>
 
         <ActionButtons
           isColorDark={isColorDark}
@@ -321,6 +461,7 @@ export default function MainPage() {
           handleConfirmRandomizeStyleAndTone={handleConfirmRandomizeStyleAndTone}
           handleCancelRandomizeStyleAndTone={handleCancelRandomizeStyleAndTone}
           getNextQuestion={getNextQuestion}
+          isStyleTonesOpen={isStyleTonesOpen}
           disabled={settingsAreLoading}
         />
       </main>

@@ -1,6 +1,6 @@
-// import { useLocalStorage } from "./hooks/useLocalStorage";
+import { useLocalStorage } from "./hooks/useLocalStorage";
 import { Navigate } from "react-router-dom";
-// import LandingPage from "./pages/LandingPage";
+import LandingPage from "./pages/LandingPage";
 
 const Root = () => {
   // const [bypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);

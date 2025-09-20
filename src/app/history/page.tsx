@@ -11,8 +11,9 @@ import { Header } from "@/components/header";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Link } from "react-router-dom";
 import { cn, isColorDark } from "@/lib/utils";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
 
-export default function HistoryPage() {
+function HistoryPageContent() {
   const { history, removeQuestionFromHistory, clearHistory } = useQuestionHistory();
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
   const [searchText, setSearchText] = useState("");
@@ -112,13 +113,16 @@ export default function HistoryPage() {
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
               />
-              <button
-               onClick={handleClearHistory}
-               className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
-              >
-                Clear history
-              </button>
+              <div className="flex gap-2">
+                <button
+                 onClick={handleClearHistory}
+                 className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
+                >
+                  Clear history
+                </button>
+              </div>
             </div>
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             <AnimatePresence>
               {Object.entries(groupedHistory).map(([date, entries]) => (
                 <div key={date}>
@@ -162,9 +166,24 @@ export default function HistoryPage() {
                 </div>
               ))}
             </AnimatePresence>
+            </div>
           </div>
         )}
       </main>
     </div>
   );
 }
+export default function HistoryPage() {
+  const handleResetHistory = () => {
+    // Clear localStorage and reload the page
+    localStorage.removeItem("questionHistory");
+    window.location.reload();
+  };
+
+  return (
+    <ErrorBoundary onReset={handleResetHistory}>
+      <HistoryPageContent />
+    </ErrorBoundary>
+  );
+}
+

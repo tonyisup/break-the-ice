@@ -14,7 +14,8 @@ interface StyleSelectorProps {
 export interface StyleSelectorRef {
   randomizeStyle: () => void;
   cancelRandomizingStyle: () => void;
-  confirmRandomizedStyle: () => void; 
+  confirmRandomizedStyle: () => void;
+  scrollToCenter: (styleId: string) => void;
   scrollToSelectedItem: () => void;
 }
 export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, randomOrder = true, ref }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
@@ -46,6 +47,9 @@ export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, 
     },
     confirmRandomizedStyle: () => {
       genericSelectorRef.current?.confirmRandomizedItem();
+    },
+    scrollToCenter: (styleId: string) => {
+      genericSelectorRef.current?.scrollToCenter(styleId);
     },
     scrollToSelectedItem: () => {
       genericSelectorRef.current?.scrollToSelectedItem();

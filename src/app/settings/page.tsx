@@ -10,16 +10,21 @@ import { HouseIcon } from '@/components/ui/icons';
 import { CollapsibleSection } from "../../components/collapsible-section/CollapsibleSection";
 import { Header } from "@/components/header";
 import { Id } from "../../../convex/_generated/dataModel";
+import { useState } from "react";
 
 const SettingsPage = () => {
-  const { theme, setTheme } = useTheme();
+  const { theme } = useTheme();
   const allStyles = useQuery(api.styles.getStyles);
   const allTones = useQuery(api.tones.getTones);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
+  const toggleSection = (section: string) => {
+    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>("hiddenStyles", []);
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
   const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
-
+  
   const settings = useQuery(api.users.getSettings);
   const updateAutoAdvanceShuffle = useMutation(api.users.updateAutoAdvanceShuffle);
   const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
@@ -96,7 +101,12 @@ const SettingsPage = () => {
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <div className="space-y-8">
-          <CollapsibleSection title="General" count={undefined}>
+          <CollapsibleSection
+            title="General"
+            isOpen={!!openSections['general']}
+            onOpenChange={() => toggleSection('general')}
+            count={undefined}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="dark:text-white text-black font-semibold">Bypass Landing Page</p>
@@ -114,7 +124,12 @@ const SettingsPage = () => {
               </button>
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="Shuffle" count={undefined}>
+          <CollapsibleSection
+            title="Shuffle"
+            isOpen={!!openSections['shuffle']}
+            onOpenChange={() => toggleSection('shuffle')}
+            count={undefined}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="dark:text-white text-black font-semibold">Auto-advance Shuffle</p>
@@ -133,7 +148,12 @@ const SettingsPage = () => {
               </button>
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="Hidden Styles" count={hiddenStyleObjects?.length}>
+          <CollapsibleSection
+            title="Hidden Styles"
+            isOpen={!!openSections['hidden-styles']}
+            onOpenChange={() => toggleSection('hidden-styles')}
+            count={hiddenStyleObjects?.length}
+          >
             {hiddenStyleObjects && hiddenStyleObjects.length > 0 ? (
               <>
                 <button
@@ -161,7 +181,12 @@ const SettingsPage = () => {
             )}
           </CollapsibleSection>
 
-          <CollapsibleSection title="Hidden Tones" count={hiddenToneObjects?.length}>
+          <CollapsibleSection
+            title="Hidden Tones"
+            isOpen={!!openSections['hidden-tones']}
+            onOpenChange={() => toggleSection('hidden-tones')}
+            count={hiddenToneObjects?.length}
+          >
             {hiddenToneObjects && hiddenToneObjects.length > 0 ? (
               <>
                 <button
@@ -189,7 +214,12 @@ const SettingsPage = () => {
             )}
           </CollapsibleSection>
 
-          <CollapsibleSection title="Hidden Questions" count={hiddenQuestionObjects?.length}>
+          <CollapsibleSection
+            title="Hidden Questions"
+            isOpen={!!openSections['hidden-questions']}
+            onOpenChange={() => toggleSection('hidden-questions')}
+            count={hiddenQuestionObjects?.length}
+          >
             {hiddenQuestionObjects && hiddenQuestionObjects.length > 0 ? (
               <>
                 <button

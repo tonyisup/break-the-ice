@@ -22,11 +22,44 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
         window.localStorage.setItem(key, JSON.stringify(value));
         console.log("Migration complete. New value:", value);
       }
+      
       // If initialValue is an array, ensure the stored value is also an array.
       // This prevents crashes if the data in localStorage is corrupted.
       if (Array.isArray(initialValue) && !Array.isArray(value)) {
-        console.log("Data in localStorage is corrupted. Returning initial value.");
+        console.log("Data in localStorage is corrupted (not an array). Returning initial value.");
         return initialValue;
+      }
+      
+      // Additional validation for likedQuestions array
+      if (key === "likedQuestions" && Array.isArray(value)) {
+        // Filter out invalid entries (non-strings, empty strings, null, undefined)
+        const validValues = value.filter(item => 
+          typeof item === 'string' && item.length > 0 && item !== null && item !== undefined
+        );
+        
+        if (validValues.length !== value.length) {
+          console.log("Found invalid entries in likedQuestions. Cleaning up...");
+          window.localStorage.setItem(key, JSON.stringify(validValues));
+          value = validValues;
+        }
+      }
+      
+      // Additional validation for questionHistory array
+      if (key === "questionHistory" && Array.isArray(value)) {
+        // Filter out invalid question objects
+        const validQuestions = value.filter(item => 
+          item &&
+          typeof item === 'object' &&
+          typeof item._id === 'string' &&
+          typeof item.text === 'string' &&
+          item.text.length > 0
+        );
+        
+        if (validQuestions.length !== value.length) {
+          console.log("Found invalid questions in history. Cleaning up...");
+          window.localStorage.setItem(key, JSON.stringify(validQuestions));
+          value = validQuestions;
+        }
       }
       return value;
     } catch (error) {

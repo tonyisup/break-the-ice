@@ -15,6 +15,7 @@ export interface ToneSelectorRef {
   randomizeTone: () => void;
   cancelRandomizingTone: () => void;
   confirmRandomizedTone: () => void;
+  scrollToCenter: (toneId: string) => void;
   scrollToSelectedItem: () => void;
 }
 
@@ -47,6 +48,9 @@ export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, rand
     },
     confirmRandomizedTone: () => {
       genericSelectorRef.current?.confirmRandomizedItem();
+    },
+    scrollToCenter: (toneId: string) => {
+      genericSelectorRef.current?.scrollToCenter(toneId);
     },
     scrollToSelectedItem: () => {
       genericSelectorRef.current?.scrollToSelectedItem();

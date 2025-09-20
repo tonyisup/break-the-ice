@@ -137,8 +137,23 @@ export const getQuestionsByIds = query({
   },
   handler: async (ctx, args) => {
     const { ids } = args;
+    
+    // Filter out any invalid IDs before querying
+    const validIds = ids.filter(id => {
+      try {
+        // Basic validation - ensure the ID looks valid
+        return typeof id === 'string' && id.length > 0;
+      } catch {
+        return false;
+      }
+    });
+    
+    if (validIds.length === 0) {
+      return [];
+    }
+    
     const questions = await Promise.all(
-      ids.map((id) => ctx.db.get(id))
+      validIds.map((id) => ctx.db.get(id))
     );
     return questions.filter((q): q is Doc<"questions"> => q !== null);
   },
@@ -220,17 +235,21 @@ export const saveAIQuestion = mutation({
   },
   handler: async (ctx, args) => {
     const { text, tags, style, tone } = args;
-    const oldestQuestion = await getOldestQuestion(ctx);
-    const lastShownAt = oldestQuestion ? oldestQuestion[0]?.lastShownAt ?? 0 : 0;
+    
+    // Use a more robust approach to avoid concurrency issues
+    // Generate a unique timestamp with some randomness to avoid conflicts
+    const now = Date.now();
+    const randomOffset = Math.floor(Math.random() * 1000); // 0-999ms random offset
+    const lastShownAt = now - randomOffset;
+    
     const id = await ctx.db.insert("questions", {
       text,
       tags,
       style,
       tone,
       isAIGenerated: true,
-      // Seed lastShownAt with a small negative value so it is included
-      // at the front of the by_last_shown_at ascending index and shows up immediately.
-      lastShownAt: lastShownAt - 1,
+      // Use a negative timestamp to ensure new questions appear first
+      lastShownAt: -lastShownAt,
       totalLikes: 0,
       totalThumbsDown: 0,
       totalShows: 0,
