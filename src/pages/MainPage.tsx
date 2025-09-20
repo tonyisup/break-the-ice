@@ -39,6 +39,7 @@ export default function MainPage() {
   const isShufflingRef = useRef(false);
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
+  const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
   const discardQuestion = useMutation(api.questions.discardQuestion);
   const nextQuestions = useQuery(api.questions.getNextQuestions,
@@ -58,18 +59,24 @@ export default function MainPage() {
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
   useEffect(() => {
-    // Only scroll if we have data loaded and the URL params are different from defaults
-    if (styles && searchParams.get("style") !== "would-you-rather") {
-      // Small delay to ensure DOM elements are rendered
-      setTimeout(() => {
-        styleSelectorRef.current?.scrollToSelectedItem();
-      }, 100);
-    }
-    if (tones && searchParams.get("tone") !== "fun-silly") {
-      // Small delay to ensure DOM elements are rendered
-      setTimeout(() => {
-        toneSelectorRef.current?.scrollToSelectedItem();
-      }, 100);
+    try {
+      // Only scroll if we have data loaded and the URL params are different from defaults
+      if (styles && searchParams.get("style") !== "would-you-rather") {
+        // Small delay to ensure DOM elements are rendered
+        const timeout = setTimeout(() => {
+          styleSelectorRef.current?.scrollToSelectedItem();
+        }, 100);
+        timeoutRefs.current.push(timeout);
+      }
+      if (tones && searchParams.get("tone") !== "fun-silly") {
+        // Small delay to ensure DOM elements are rendered
+        const timeout = setTimeout(() => {
+          toneSelectorRef.current?.scrollToSelectedItem();
+        }, 100);
+        timeoutRefs.current.push(timeout);
+      }
+    } catch (error) {
+      console.error("Error in scroll effect:", error);
     }
   }, [searchParams, styleSelectorRef, toneSelectorRef, styles, tones]);
 
@@ -94,77 +101,91 @@ export default function MainPage() {
           const updated = [...prev, ...validNewQuestions];
           // Reset shuffling state after questions are added to state
           if (isShuffleGeneration) {
-            setTimeout(() => {
+            const timeout = setTimeout(() => {
               setIsShuffling(false);
               // Don't reset the ref here - let it stay true until user advances
             }, 0);
+            timeoutRefs.current.push(timeout);
           }
           return updated;
         });
       }
+    } catch (error) {
+      console.error("Error generating AI questions:", error);
+      toast.error("Failed to generate questions. Please try again.");
     } finally {
       setIsGenerating(false);
     }
   }, [selectedStyle, selectedTone, generateAIQuestion]);
 
   useEffect(() => {
-    if (nextQuestions) {
-      if (nextQuestions.length > 0) {
-        setCurrentQuestions(prevQuestions => {
-          const newQuestions = nextQuestions.filter(q => !hiddenQuestions.includes(q._id));
-          if (prevQuestions.length === 0) {
-            return newQuestions;
-          }
-          const existingIds = new Set(prevQuestions.map(q => q._id));
-          const filteredNewQuestions = newQuestions.filter(q => !existingIds.has(q._id));
-          if (filteredNewQuestions.length > 0) {
-            return [...prevQuestions, ...filteredNewQuestions];
-          }
-          return prevQuestions;
-        });
-      } else if ((currentQuestions.length === 0) && !isGenerating) {
-        setIsGenerating(true);
-        // Generate only 1 question when shuffling, 2 otherwise
-        const count = isShuffling ? 1 : 2;
-        // console.log("First useEffect triggering generation:", { count, isShuffling, isShufflingRef: isShufflingRef.current });
-        void callGenerateAIQuestion(count, isShuffling);
+    try {
+      if (nextQuestions) {
+        if (nextQuestions.length > 0) {
+          setCurrentQuestions(prevQuestions => {
+            const newQuestions = nextQuestions.filter(q => !hiddenQuestions.includes(q._id));
+            if (prevQuestions.length === 0) {
+              return newQuestions;
+            }
+            const existingIds = new Set(prevQuestions.map(q => q._id));
+            const filteredNewQuestions = newQuestions.filter(q => !existingIds.has(q._id));
+            if (filteredNewQuestions.length > 0) {
+              return [...prevQuestions, ...filteredNewQuestions];
+            }
+            return prevQuestions;
+          });
+        } else if ((currentQuestions.length === 0) && !isGenerating) {
+          setIsGenerating(true);
+          // Generate only 1 question when shuffling, 2 otherwise
+          const count = isShuffling ? 1 : 2;
+          // console.log("First useEffect triggering generation:", { count, isShuffling, isShufflingRef: isShufflingRef.current });
+          void callGenerateAIQuestion(count, isShuffling);
+        }
       }
+    } catch (error) {
+      console.error("Error in first useEffect:", error);
+      setIsGenerating(false);
     }
   }, [nextQuestions, isGenerating, currentQuestions.length, callGenerateAIQuestion, hiddenQuestions, isShuffling]);
 
   useEffect(() => {
-    // console.log("Second useEffect running:", { 
-    //   nextQuestionsLength: nextQuestions?.length, 
-    //   currentQuestionsLength: currentQuestions.length, 
-    //   isShufflingRef: isShufflingRef.current, 
-    //   isGenerating 
-    // });
-    
-    if (nextQuestions && nextQuestions.length > 1) {
-      // console.log("Second useEffect: returning early - nextQuestions.length > 1");
-      return;
-    }
-    // Don't trigger buffer generation when shuffling - let the first useEffect handle it
-    if (isShufflingRef.current) {
-      // console.log("Second useEffect: returning early - isShufflingRef.current is true");
-      return;
-    }
-    // Don't trigger if we're currently generating (to avoid race conditions)
-    if (isGenerating) {
-      // console.log("Second useEffect: returning early - isGenerating is true");
-      return;
-    }
-    if (currentQuestions.length > 0 && currentQuestions.length <= 5) {
-      if (nextQuestions && nextQuestions.length === 0) {
-        // Only display the loading indicator if there are no more question in the database
-        setIsGenerating(true);
+    try {
+      // console.log("Second useEffect running:", { 
+      //   nextQuestionsLength: nextQuestions?.length, 
+      //   currentQuestionsLength: currentQuestions.length, 
+      //   isShufflingRef: isShufflingRef.current, 
+      //   isGenerating 
+      // });
+      
+      if (nextQuestions && nextQuestions.length > 1) {
+        // console.log("Second useEffect: returning early - nextQuestions.length > 1");
+        return;
       }
-      // between 2 and 6 questions
-      const questionsToGenerate = 7 - currentQuestions.length;
-      //console.log("Second useEffect triggering generation:", { questionsToGenerate, isShufflingRef: isShufflingRef.current, isGenerating });
-      void callGenerateAIQuestion(questionsToGenerate, false);
-    } else {
-      //console.log("Second useEffect: not triggering - currentQuestions.length not in range 1-5:", currentQuestions.length);
+      // Don't trigger buffer generation when shuffling - let the first useEffect handle it
+      if (isShufflingRef.current) {
+        // console.log("Second useEffect: returning early - isShufflingRef.current is true");
+        return;
+      }
+      // Don't trigger if we're currently generating (to avoid race conditions)
+      if (isGenerating) {
+        // console.log("Second useEffect: returning early - isGenerating is true");
+        return;
+      }
+      if (currentQuestions.length > 0 && currentQuestions.length <= 5) {
+        if (nextQuestions && nextQuestions.length === 0) {
+          // Only display the loading indicator if there are no more question in the database
+          setIsGenerating(true);
+        }
+        // between 2 and 6 questions
+        const questionsToGenerate = 7 - currentQuestions.length;
+        //console.log("Second useEffect triggering generation:", { questionsToGenerate, isShufflingRef: isShufflingRef.current, isGenerating });
+        void callGenerateAIQuestion(questionsToGenerate, false);
+      } else {
+        //console.log("Second useEffect: not triggering - currentQuestions.length not in range 1-5:", currentQuestions.length);
+      }
+    } catch (error) {
+      console.error("Error in second useEffect:", error);
+      setIsGenerating(false);
     }
   }, [currentQuestions, isGenerating, callGenerateAIQuestion, nextQuestions]);
 
@@ -172,18 +193,36 @@ export default function MainPage() {
     setCurrentQuestions(prev => prev.filter(q => !hiddenQuestions.includes(q._id)));
   }, [hiddenQuestions]);
 
+  // Cleanup effect to prevent memory leaks and race conditions
+  useEffect(() => {
+    return () => {
+      // Clear all pending timeouts
+      timeoutRefs.current.forEach(timeout => clearTimeout(timeout));
+      timeoutRefs.current = [];
+      // Reset states
+      setIsGenerating(false);
+      setIsShuffling(false);
+      isShufflingRef.current = false;
+    };
+  }, []);
+
   // Scroll to center selected style and tone when section is opened
   useEffect(() => {
-    if (isStyleTonesOpen) {
-      // Small delay to ensure the components are mounted and rendered
-      setTimeout(() => {
-        if (styleSelectorRef.current) {
-          styleSelectorRef.current.scrollToCenter?.(selectedStyle);
-        }
-        if (toneSelectorRef.current) {
-          toneSelectorRef.current.scrollToCenter?.(selectedTone);
-        }
-      }, 100);
+    try {
+      if (isStyleTonesOpen) {
+        // Small delay to ensure the components are mounted and rendered
+        const timeout = setTimeout(() => {
+          if (styleSelectorRef.current) {
+            styleSelectorRef.current.scrollToCenter?.(selectedStyle);
+          }
+          if (toneSelectorRef.current) {
+            toneSelectorRef.current.scrollToCenter?.(selectedTone);
+          }
+        }, 100);
+        timeoutRefs.current.push(timeout);
+      }
+    } catch (error) {
+      console.error("Error in scroll to center effect:", error);
     }
   }, [isStyleTonesOpen, selectedStyle, selectedTone]);
 
@@ -195,66 +234,87 @@ export default function MainPage() {
   }, [currentQuestion, addQuestionToHistory]);
 
   const handleDiscard = async (questionId: Id<"questions">) => {
-    setSeenQuestionIds((prev) => [...prev, questionId]);
-    setCurrentQuestions(prev => {
-      const newQuestions = prev.filter(q => q._id !== questionId);
-      
-      // If we're about to remove the last question and no generation is in progress, start generating
-      if (newQuestions.length === 0 && !isGenerating) {
-        setIsGenerating(true);
-        // Generate questions immediately to prevent empty state
-        const count = isShuffling ? 1 : 2;
-        setTimeout(() => {
-          void callGenerateAIQuestion(count, isShuffling);
-        }, 0);
-      }
-      
-      return newQuestions;
-    });
+    try {
+      setSeenQuestionIds((prev) => [...prev, questionId]);
+      setCurrentQuestions(prev => {
+        const newQuestions = prev.filter(q => q._id !== questionId);
+        
+        // If we're about to remove the last question and no generation is in progress, start generating
+        if (newQuestions.length === 0 && !isGenerating) {
+          setIsGenerating(true);
+          // Generate questions immediately to prevent empty state
+          const count = isShuffling ? 1 : 2;
+          const timeout = setTimeout(() => {
+            void callGenerateAIQuestion(count, isShuffling);
+          }, 0);
+          timeoutRefs.current.push(timeout);
+        }
+        
+        return newQuestions;
+      });
 
-    void discardQuestion({
-      questionId,
-      startTime,
-    });
+      await discardQuestion({
+        questionId,
+        startTime,
+      });
+    } catch (error) {
+      console.error("Error discarding question:", error);
+      toast.error("Failed to discard question. Please try again.");
+    }
   };
 
-  const toggleLike = (questionId: Id<"questions">) => {
-    if (!currentQuestions) return;
-    const viewDuration = Math.min(Date.now() - startTime, 10000);
-    const isLiked = likedQuestions.includes(questionId);
+  const toggleLike = async (questionId: Id<"questions">) => {
+    try {
+      if (!currentQuestions) return;
+      const viewDuration = Math.min(Date.now() - startTime, 10000);
+      const isLiked = likedQuestions.includes(questionId);
 
-    const newLikedQuestions = isLiked
-      ? likedQuestions.filter(id => id !== questionId)
-      : [...likedQuestions, questionId];
+      const newLikedQuestions = isLiked
+        ? likedQuestions.filter(id => id !== questionId)
+        : [...likedQuestions, questionId];
 
-    setLikedQuestions(newLikedQuestions);
+      setLikedQuestions(newLikedQuestions);
 
-    if (isLiked) {
-      toast.success("Removed from favorites");
-    } else {
-      void recordAnalytics({
-        questionId,
-        event: "like",
-        viewDuration,
-      });
-      toast.success("Added to favorites!");
+      if (isLiked) {
+        toast.success("Removed from favorites");
+      } else {
+        await recordAnalytics({
+          questionId,
+          event: "like",
+          viewDuration,
+        });
+        toast.success("Added to favorites!");
+      }
+    } catch (error) {
+      console.error("Error toggling like:", error);
+      toast.error("Failed to update favorites. Please try again.");
     }
   };
 
   const toggleHide = (questionId: Id<"questions">) => {
-    if (!currentQuestions) return;
-    const newHiddenQuestions = [...hiddenQuestions, questionId];
-    setHiddenQuestions(newHiddenQuestions);
-    toast.success("Question hidden");
-    getNextQuestion();
+    try {
+      if (!currentQuestions) return;
+      const newHiddenQuestions = [...hiddenQuestions, questionId];
+      setHiddenQuestions(newHiddenQuestions);
+      toast.success("Question hidden");
+      getNextQuestion();
+    } catch (error) {
+      console.error("Error hiding question:", error);
+      toast.error("Failed to hide question. Please try again.");
+    }
   }
 
   const getNextQuestion = () => {
-    setStartTime(Date.now());
-    // Reset shuffle ref when user manually advances
-    isShufflingRef.current = false;
-    if (currentQuestion) {
-      void handleDiscard(currentQuestion._id as Id<"questions">);
+    try {
+      setStartTime(Date.now());
+      // Reset shuffle ref when user manually advances
+      isShufflingRef.current = false;
+      if (currentQuestion) {
+        void handleDiscard(currentQuestion._id as Id<"questions">);
+      }
+    } catch (error) {
+      console.error("Error getting next question:", error);
+      toast.error("Failed to advance to next question. Please try again.");
     }
   };
 
@@ -366,7 +426,7 @@ export default function MainPage() {
               currentQuestion={currentQuestion}
               isFavorite={isFavorite}
               gradient={gradient}
-              toggleLike={() => toggleLike(currentQuestion._id)}
+              toggleLike={() => void toggleLike(currentQuestion._id)}
               onSwipe={getNextQuestion}
               toggleHide={() => toggleHide(currentQuestion._id)}
             />
