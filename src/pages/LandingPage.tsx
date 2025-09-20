@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { MoveRight } from "@/components/ui/icons";
+import { MoveRight } from "@/components/ui/icons/icon";
 
 const LandingPage = () => {
   return (

@@ -15,6 +15,7 @@ import { QuestionDisplay } from "../components/question-display";
 import { AnimatePresence } from "framer-motion";
 import { CollapsibleSection } from "../components/collapsible-section/CollapsibleSection";
 import { isColorDark } from "@/lib/utils";
+import { Icon } from "@/components/ui/icons/icon";
 
 export default function MainPage() {
   const { theme } = useTheme();
@@ -450,6 +451,7 @@ export default function MainPage() {
         <div className="px-4">
           <CollapsibleSection
             title="Customize Style & Tone"
+            icons={[style?.icon as Icon, tone?.icon as Icon]}
             isOpen={isStyleTonesOpen}
             onOpenChange={setIsStyleTonesOpen}
           >

@@ -154,6 +154,7 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useStorageContext = () => {
   const context = useContext(StorageContext);
   if (context === undefined) {

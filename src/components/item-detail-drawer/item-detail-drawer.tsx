@@ -7,15 +7,16 @@ import {
   DrawerFooter,
   DrawerClose,
 } from '@/components/ui/drawer';
-import { Button } from '@/components/ui/button';
-import React from 'react';
-import * as icons from '@/components/ui/icons';
+import { Button } from '@/components/ui/button'; 
+import { isColorDark } from '@/lib/utils';
+import { Icon, IconComponent } from '@/components/ui/icons/icon';
 
 export interface ItemDetails {
   id: string;
-  name: string;
+  name: string; 
+  type: "Style" | "Tone";
   description: string;
-  icon: keyof typeof icons;
+  icon: Icon;
   color: string;
 }
 
@@ -34,6 +35,7 @@ export function ItemDetailDrawer({
   onSelectItem,
   onHideItem,
 }: ItemDetailDrawerProps) {
+
   if (!item) {
     return null;
   }
@@ -52,14 +54,21 @@ export function ItemDetailDrawer({
     <Drawer open={isOpen} onOpenChange={onOpenChange}>
       <DrawerContent>
         <DrawerHeader>
-          <DrawerTitle className="flex items-center gap-2">
-            {React.createElement(icons[item.icon], { size: 24, color: item.color })}
-            {item.name}
+          <DrawerTitle className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <IconComponent icon={item.icon} size={24} color={item.color} />
+              {item.name}
+            </span>
+            <span className="text-sm text-muted-foreground">{item.type}</span>
           </DrawerTitle>
-          <DrawerDescription>{item.description}</DrawerDescription>
+          <DrawerDescription className="pt-4 text-sm text-muted-foreground">{item.description}</DrawerDescription>
         </DrawerHeader>
         <DrawerFooter>
-          <Button onClick={handleSelect} style={{ backgroundColor: item.color }}>Select</Button>
+          <Button 
+            onClick={handleSelect} 
+            className={isColorDark(item.color) ? "text-white" : "text-black"}
+            style={{ backgroundColor: item.color }}
+          >Select</Button>
           <Button variant="outline" onClick={handleHide}>Hide</Button>
           <DrawerClose asChild>
             <Button variant="ghost">Cancel</Button>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
-import * as icons from '@/components/ui/icons';
+import * as icons from '@/components/ui/icons/icons';
 
 interface CategorySelectorProps {
   selectedCategory: string;

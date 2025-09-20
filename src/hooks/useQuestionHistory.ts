@@ -47,20 +47,18 @@ export function useQuestionHistory() {
         setRawHistory(newRawHistory);
       }
     }
-  }, [questions, rawHistory, setRawHistory]);
+  }, [questions, history, rawHistory, setRawHistory]);
 
   const addQuestionToHistory = useCallback((question: Doc<"questions">) => {
-    setRawHistory((prevHistory) => {
-      const newHistory = [{ question, viewedAt: Date.now() }, ...prevHistory.filter(entry => entry.question && entry.question._id !== question._id)];
-      return newHistory.slice(0, MAX_HISTORY_LENGTH);
-    });
-  }, [setRawHistory]);
+    const newHistory = [{ question, viewedAt: Date.now() }, ...rawHistory.filter(entry => entry.question && entry.question._id !== question._id)];
+    return newHistory.slice(0, MAX_HISTORY_LENGTH);
+    setRawHistory(newHistory);
+  }, [rawHistory, setRawHistory]);
     
   const removeQuestionFromHistory = useCallback((questionId: Id<"questions">) => {
-    setRawHistory((prevHistory) => {
-      return prevHistory.filter(entry => entry.question && entry.question._id !== questionId);
-    });
-  }, [setRawHistory]);
+    const newHistory = rawHistory.filter(entry => entry.question && entry.question._id !== questionId);
+    setRawHistory(newHistory);
+  }, [rawHistory, setRawHistory]);
     
   const clearHistory = useCallback(() => {
     setRawHistory([]);

@@ -1,4 +1,4 @@
-import { ArrowBigRight, ArrowBigRightDash, Shuffle, X, SquareArrowRight } from '@/components/ui/icons';
+import { ArrowBigRight, ArrowBigRightDash, Shuffle, X, SquareArrowRight } from '@/components/ui/icons/icons';
 import { cn } from "../../lib/utils";
 
 interface ActionButtonsProps {
@@ -33,8 +33,8 @@ export const ActionButtons = ({
   return (
     <>
       {randomizedStyle || randomizedTone ? (
-        <div className="flex justify-center">
-          <div className="flex  gap-4">
+        <div className="flex justify-center p-4">
+          <div className="flex gap-4">
             <button
               onClick={handleCancelRandomizeStyleAndTone}
               disabled={disabled}
@@ -42,7 +42,7 @@ export const ActionButtons = ({
               title="Cancel Shuffle"
             >
               <X size={24} className={isColorDark(gradient[1]) ? "text-black" : "text-white"} />
-              <span className="sm:block hidden text-white font-semibold text-base">Cancel</span>
+              {/* <span className="sm:block hidden text-white font-semibold text-base">Cancel</span> */}
             </button>
             <button
               onClick={handleShuffleStyleAndTone}
@@ -51,7 +51,7 @@ export const ActionButtons = ({
               title="Shuffle Style and Tone"
             >
               <Shuffle size={24} className={isColorDark(gradient[0]) ? "text-black" : "text-white"} />
-              <span className="sm:block hidden text-white font-semibold text-base">Shuffle</span>
+              {/* <span className="sm:block hidden text-white font-semibold text-base">Shuffle</span> */}
             </button>
             <button
               onClick={handleConfirmRandomizeStyleAndTone}

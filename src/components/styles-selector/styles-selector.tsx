@@ -3,7 +3,7 @@ import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
 import { useStorageContext } from '../../hooks/useStorageContext';
-import * as icons from '@/components/ui/icons';
+import { Icon } from '@/components/ui/icons/icon';
 import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer';
 
 interface StyleSelectorProps {
@@ -26,9 +26,12 @@ export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, 
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
+  const [isRandomizing, setIsRandomizing] = useState(false);
   
   const handleHideStyle = (styleId: string) => {
-    setHiddenStyles(prev => [...new Set([...prev, styleId])]);
+    if (!styleId) return;
+
+    setHiddenStyles(hiddenStyles.filter(id => id !== styleId));
   };
 
   const handleOpenDrawer = (itemId: string) => {
@@ -37,12 +40,22 @@ export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, 
       setSelectedItemForDrawer({
         id: style.id,
         name: style.name,
-        description: style.description,
-        icon: style.icon as keyof typeof icons,
+        type: "Style",
+        description: style.description || "",
+        icon: style.icon as Icon,
         color: style.color,
       });
       setIsDrawerOpen(true);
     }
+  };
+
+  const handleSelectStyle = (styleId: string) => {
+    if(isRandomizing) {
+      onSelectStyle(styleId);
+      setIsRandomizing(false);
+      return;
+    }
+    handleOpenDrawer(styleId);
   };
 
   // Convert styles to the format expected by GenericSelector
@@ -51,19 +64,22 @@ export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, 
     .map(style => ({
       id: style.id,
       name: style.name,
-      icon: style.icon as keyof typeof icons,
+      icon: style.icon as Icon,
       color: style.color
     })), [styles, hiddenStyles]);
 
   // Expose the randomizeStyle function to parent components
   useImperativeHandle(ref, () => ({
     randomizeStyle: () => {
+      setIsRandomizing(true);
       genericSelectorRef.current?.randomizeItem();
     },
     cancelRandomizingStyle: () => {
+      setIsRandomizing(false);
       genericSelectorRef.current?.cancelRandomizingItem();
     },
     confirmRandomizedStyle: () => {
+      setIsRandomizing(true);
       genericSelectorRef.current?.confirmRandomizedItem();
     },
     scrollToCenter: (styleId: string) => {
@@ -89,7 +105,7 @@ export const StyleSelector = ({ selectedStyle, onSelectStyle, onRandomizeStyle, 
         ref={genericSelectorRef}
         items={selectorItems}
         selectedItem={selectedStyle}
-        onSelectItem={handleOpenDrawer}
+        onSelectItem={handleSelectStyle}
         randomizeLabel="Randomize Style"
         onRandomizeItem={onRandomizeStyle}
       />

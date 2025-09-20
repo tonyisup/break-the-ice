@@ -1,10 +1,10 @@
 import { useQuery } from 'convex/react';
-import { useRef, useImperativeHandle, useEffect, useMemo, useState } from 'react';
+import { useRef, useImperativeHandle, useMemo, useState } from 'react';
 import { api } from '../../../convex/_generated/api';
 import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
 import { useStorageContext } from '../../hooks/useStorageContext';
 import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer';
-import * as icons from '@/components/ui/icons';
+import { Icon } from '@/components/ui/icons/icon';
 
 interface ToneSelectorProps {
   selectedTone: string;
@@ -27,9 +27,12 @@ export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, rand
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
+  const [isRandomizing, setIsRandomizing] = useState(false);
   
   const handleHideTone = (toneId: string) => {
-    setHiddenTones(prev => [...new Set([...prev, toneId])]);
+    if (!toneId) return;
+
+    setHiddenTones(hiddenTones.filter(id => id !== toneId));
   };
 
   const handleOpenDrawer = (itemId: string) => {
@@ -38,12 +41,21 @@ export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, rand
       setSelectedItemForDrawer({
         id: tone.id,
         name: tone.name,
-        description: tone.description,
-        icon: tone.icon as keyof typeof icons,
+        type: "Tone",
+        description: tone.description || "",
+        icon: tone.icon as Icon,
         color: tone.color,
       });
       setIsDrawerOpen(true);
     }
+  };
+  const handleSelectTone = (toneId: string) => {
+    if(isRandomizing) {
+      onSelectTone(toneId);
+      setIsRandomizing(false);
+      return;
+    }
+    handleOpenDrawer(toneId);
   };
 
   // Convert tones to the format expected by GenericSelector
@@ -52,19 +64,22 @@ export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, rand
     .map(tone => ({
       id: tone.id,
       name: tone.name,
-      icon: tone.icon as SelectorItem['icon'],
+      icon: tone.icon as Icon,
       color: tone.color
     })), [tones, hiddenTones]);
 
   // Expose the randomizeTone function to parent components
   useImperativeHandle(ref, () => ({
     randomizeTone: () => {
+      setIsRandomizing(true);
       genericSelectorRef.current?.randomizeItem();
     },
     cancelRandomizingTone: () => {
+      setIsRandomizing(false);
       genericSelectorRef.current?.cancelRandomizingItem();
     },
     confirmRandomizedTone: () => {
+      setIsRandomizing(true);
       genericSelectorRef.current?.confirmRandomizedItem();
     },
     scrollToCenter: (toneId: string) => {
@@ -87,7 +102,7 @@ export const ToneSelector = ({ selectedTone, onSelectTone, onRandomizeTone, rand
         ref={genericSelectorRef}
         items={selectorItems}
         selectedItem={selectedTone}
-        onSelectItem={handleOpenDrawer}
+        onSelectItem={handleSelectTone}
         randomizeLabel="Randomize Tone"
         onRandomizeItem={onRandomizeTone}
       />

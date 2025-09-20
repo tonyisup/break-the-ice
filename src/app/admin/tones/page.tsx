@@ -5,7 +5,7 @@ import { Doc, Id } from '../../../../convex/_generated/dataModel';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { useTheme } from '../../../hooks/useTheme';
 import { Link } from 'react-router-dom';
-import { HouseIcon } from '@/components/ui/icons';
+import { HouseIcon } from '@/components/ui/icons/icons';
 
 const TonesPage: React.FC = () => {
   return (

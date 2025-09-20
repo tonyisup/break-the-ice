@@ -1,13 +1,13 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight } from '@/components/ui/icons';
+import { ChevronLeft, ChevronRight } from '@/components/ui/icons/icons';
+import { Icon, IconComponent } from '@/components/ui/icons/icon';
 import { cn } from '@/lib/utils';
-import * as icons from '@/components/ui/icons';
 import React from 'react';
 
 export interface SelectorItem {
   id: string;
   name: string;
-  icon: keyof typeof icons;
+  icon: Icon;
   color: string;
 }
 
@@ -239,7 +239,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
             <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
           </button>
         )}
-        <div className={cn("flex items-center gap-2")}>
+        <div className={cn("flex items-center")}>
           <div
             ref={containerRef}
             className={cn(
@@ -283,7 +283,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
 
                     }
                   >
-                    {React.createElement(icons[item.icon], { size: 20 })}
+                    <IconComponent icon={item.icon} size={20} />
                     <span className="text-sm font-semibold whitespace-nowrap">
                       {item.name}
                     </span>
