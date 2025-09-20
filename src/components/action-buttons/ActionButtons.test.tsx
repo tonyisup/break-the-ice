@@ -22,7 +22,7 @@ describe("ActionButtons", () => {
   });
 
   it("renders without crashing", () => {
-    render(<ActionButtons {...mockProps} />);
+    render(<ActionButtons {...mockProps} isStyleTonesOpen={true} />);
     expect(screen.getByTitle("Shuffle Style and Tone")).toBeInTheDocument();
     expect(screen.getByTitle("Next Question")).toBeInTheDocument();
   });
@@ -35,7 +35,7 @@ describe("ActionButtons", () => {
   });
 
   it('calls the correct functions when buttons are clicked', () => {
-    render(<ActionButtons {...mockProps} />);
+    render(<ActionButtons {...mockProps} isStyleTonesOpen={true} />);
     fireEvent.click(screen.getByTitle("Shuffle Style and Tone"));
     expect(mockProps.handleShuffleStyleAndTone).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByTitle("Next Question"));
@@ -43,7 +43,7 @@ describe("ActionButtons", () => {
   });
 
   it('disables buttons when disabled prop is true', () => {
-    render(<ActionButtons {...mockProps} disabled={true} />);
+    render(<ActionButtons {...mockProps} isStyleTonesOpen={true} disabled={true} />);
     expect(screen.getByTitle("Shuffle Style and Tone")).toBeDisabled();
     expect(screen.getByTitle("Next Question")).toBeDisabled();
   });
