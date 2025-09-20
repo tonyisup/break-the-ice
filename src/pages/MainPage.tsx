@@ -71,7 +71,6 @@ export default function MainPage() {
   const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? "fun-silly");
   const [randomizedTone, setRandomizedTone] = useState<string | null>(null);
   const [randomizedStyle, setRandomizedStyle] = useState<string | null>(null);
-  const [autoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", true);
   const [isStyleTonesOpen, setIsStyleTonesOpen] = useState(false);
   const [isShuffling, setIsShuffling] = useState(false);
   const isShufflingRef = useRef(false);
