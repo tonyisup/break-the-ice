@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, Authenticated, Unauthenticated, AuthLoading, useAction } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { Id } from '../../../../convex/_generated/dataModel';
@@ -43,16 +43,34 @@ function DuplicateDetectionComponent() {
   const [editingQuestion, setEditingQuestion] = useState<Id<"questions"> | null>(null);
   const [editedText, setEditedText] = useState<string>("");
   const [rejectReason, setRejectReason] = useState<string>("");
+  const [isDetectingDuplicates, setIsDetectingDuplicates] = useState<boolean>(false);
 
   const duplicateDetections = useQuery(api.questions.getPendingDuplicateDetections);
   const updateStatus = useMutation(api.questions.updateDuplicateDetectionStatus);
   const deleteDuplicates = useMutation(api.questions.deleteDuplicateQuestions);
   const updateQuestion = useMutation(api.questions.updateQuestion);
-  const detectDuplicates = useAction(api.ai.detectDuplicateQuestions);
+  const detectDuplicatesStreaming = useAction(api.ai.detectDuplicateQuestionsStreaming);
+  // Temporarily disable progress tracking until duplicates.ts is properly registered
+  // const duplicateDetectionProgress = useQuery(api.duplicates.getLatestDuplicateDetectionProgress);
+  const duplicateDetectionProgress = null;
 
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');
   };
+
+  // Monitor progress updates
+  useEffect(() => {
+    if (duplicateDetectionProgress && duplicateDetectionProgress.status !== 'running') {
+      setIsDetectingDuplicates(false);
+      if (duplicateDetectionProgress.status === 'completed') {
+        console.log('Duplicate detection completed:', duplicateDetectionProgress);
+        // Refresh the duplicate detections list
+        window.location.reload();
+      } else if (duplicateDetectionProgress.status === 'failed') {
+        console.error('Duplicate detection failed:', duplicateDetectionProgress.errors);
+      }
+    }
+  }, [duplicateDetectionProgress]);
 
   const handleDeleteAll = async (detection: any) => {
     try {
@@ -113,8 +131,14 @@ function DuplicateDetectionComponent() {
   };
 
   const handleDetectDuplicates = async () => {
-    const result = await detectDuplicates();
-    console.log(result);
+    try {
+      setIsDetectingDuplicates(true);
+      const progressId = await detectDuplicatesStreaming();
+      console.log('Started duplicate detection with progress ID:', progressId);
+    } catch (error) {
+      console.error('Error starting duplicate detection:', error);
+      setIsDetectingDuplicates(false);
+    }
   };
 
   const handleStartEdit = (questionId: Id<"questions">, currentText: string) => {
@@ -190,6 +214,46 @@ function DuplicateDetectionComponent() {
           </p>
         </div>
 
+        {/* Progress Display */}
+        {isDetectingDuplicates && duplicateDetectionProgress && (
+          <div className="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100">
+                Detecting Duplicates...
+              </h3>
+              <span className="text-sm text-blue-700 dark:text-blue-300">
+                {duplicateDetectionProgress.currentBatch} / {duplicateDetectionProgress.totalBatches} batches
+              </span>
+            </div>
+            <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2 mb-2">
+              <div 
+                className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all duration-300"
+                style={{ 
+                  width: `${(duplicateDetectionProgress.processedQuestions / duplicateDetectionProgress.totalQuestions) * 100}%` 
+                }}
+              ></div>
+            </div>
+            <div className="flex justify-between text-sm text-blue-700 dark:text-blue-300">
+              <span>
+                {duplicateDetectionProgress.processedQuestions} / {duplicateDetectionProgress.totalQuestions} questions processed
+              </span>
+              <span>
+                {duplicateDetectionProgress.duplicatesFound} duplicates found
+              </span>
+            </div>
+            {duplicateDetectionProgress.errors.length > 0 && (
+              <div className="mt-2 text-sm text-red-600 dark:text-red-400">
+                <strong>Errors:</strong>
+                <ul className="list-disc list-inside ml-2">
+                  {duplicateDetectionProgress.errors.map((error: string, index: number) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
         {duplicateDetections.length === 0 ? (
           <div className="flex flex-col gap-4 items-center justify-center text-center py-12">
             <div className="text-gray-500 dark:text-gray-400 text-lg">
@@ -200,9 +264,10 @@ function DuplicateDetectionComponent() {
             </p>
             <button
               onClick={() => void handleDetectDuplicates()}
-              className="px-4 py-2 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/30 transition-colors flex items-center gap-2"
+              disabled={isDetectingDuplicates}
+              className="px-4 py-2 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/30 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Detect Duplicates Now
+              {isDetectingDuplicates ? 'Detecting Duplicates...' : 'Detect Duplicates Now'}
             </button>
           </div>
         ) : (

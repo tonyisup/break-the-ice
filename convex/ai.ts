@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import OpenAI from "openai";
 import { api, internal } from "./_generated/api";
-import { Doc } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
@@ -314,6 +314,16 @@ export const detectDuplicateQuestions = action({
   },
 });
 
+// New streaming version of duplicate detection
+export const detectDuplicateQuestionsStreaming = action({
+  args: {},
+  returns: v.id("duplicateDetectionProgress"),
+  handler: async (ctx): Promise<Id<"duplicateDetectionProgress">> => {
+    // Start the streaming detection process
+    return await ctx.runAction(internal.ai.detectDuplicateQuestionsStreamingAI, {});
+  },
+});
+
 // Internal action for cron job
 export const detectDuplicateQuestionsAI = internalAction({
   args: {
@@ -371,6 +381,112 @@ export const detectDuplicateQuestionsAI = internalAction({
       duplicatesFound,
       errors,
     };
+  },
+});
+
+// Internal streaming action for duplicate detection with progress tracking
+export const detectDuplicateQuestionsStreamingAI = internalAction({
+  args: {
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.id("duplicateDetectionProgress"),
+  handler: async (ctx, args): Promise<Id<"duplicateDetectionProgress">> => {
+    const batchSize = args.batchSize ?? 50;
+    
+    // Get all questions first to calculate total
+    const allQuestions = await ctx.runQuery(internal.questions.getAllQuestionsForDuplicateDetection);
+    const totalQuestions = allQuestions.length;
+    const totalBatches = Math.ceil(totalQuestions / batchSize);
+    
+    // Create initial progress record
+    // Note: This will work once duplicates.ts is deployed and types are regenerated
+    const progressId = await ctx.runMutation(api.duplicates.createDuplicateDetectionProgress as any, {
+      totalQuestions,
+      totalBatches,
+    });
+    
+    // Process questions in batches with progress updates
+    let processedCount = 0;
+    let duplicatesFound = 0;
+    const errors: string[] = [];
+    
+    try {
+      for (let i = 0; i < allQuestions.length; i += batchSize) {
+        const batch = allQuestions.slice(i, i + batchSize);
+        const currentBatch = Math.floor(i / batchSize) + 1;
+        
+        try {
+          // Update progress before processing batch
+          await ctx.runMutation(api.duplicates.updateDuplicateDetectionProgress as any, {
+            progressId,
+            processedQuestions: processedCount,
+            currentBatch,
+            duplicatesFound,
+            errors,
+          });
+          
+          const duplicateGroups = await detectDuplicatesInBatch(batch);
+          
+          // Store each duplicate group as a detection record
+          for (const group of duplicateGroups) {
+            if (group.questionIds.length > 1) {
+              await ctx.runMutation(internal.questions.saveDuplicateDetection, {
+                questionIds: group.questionIds,
+                reason: group.reason,
+                confidence: group.confidence,
+              });
+              duplicatesFound += group.questionIds.length;
+            }
+          }
+          
+          processedCount += batch.length;
+          
+          // Update progress after processing batch
+          await ctx.runMutation(api.duplicates.updateDuplicateDetectionProgress as any, {
+            progressId,
+            processedQuestions: processedCount,
+            currentBatch,
+            duplicatesFound,
+            errors,
+          });
+          
+        } catch (error) {
+          const errorMessage = `Error processing batch ${currentBatch}: ${error instanceof Error ? error.message : String(error)}`;
+          errors.push(errorMessage);
+          console.error(errorMessage);
+          
+          // Update progress with error
+          await ctx.runMutation(api.duplicates.updateDuplicateDetectionProgress as any, {
+            progressId,
+            processedQuestions: processedCount,
+            currentBatch,
+            duplicatesFound,
+            errors,
+          });
+        }
+      }
+      
+      // Mark as completed
+      await ctx.runMutation(api.duplicates.completeDuplicateDetectionProgress as any, {
+        progressId,
+        processedQuestions: processedCount,
+        duplicatesFound,
+        errors,
+      });
+      
+    } catch (error) {
+      const errorMessage = `Error in detectDuplicateQuestionsStreamingAI: ${error instanceof Error ? error.message : String(error)}`;
+      errors.push(errorMessage);
+      console.error(errorMessage);
+      
+      // Mark as failed
+      await ctx.runMutation(api.duplicates.failDuplicateDetectionProgress as any, {
+        progressId,
+        errors,
+      });
+    }
+    
+    return progressId;
   },
 });
 
@@ -449,3 +565,4 @@ ${JSON.stringify(questions.map(q => ({ id: q._id, text: q.text, style: q.style }
     return [];
   }
 }
+

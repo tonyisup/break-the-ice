@@ -17,6 +17,7 @@ import type * as ai from "../ai.js";
 import type * as auth from "../auth.js";
 import type * as categories from "../categories.js";
 import type * as crons from "../crons.js";
+import type * as duplicates from "../duplicates.js";
 import type * as http from "../http.js";
 import type * as models from "../models.js";
 import type * as questions from "../questions.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   categories: typeof categories;
   crons: typeof crons;
+  duplicates: typeof duplicates;
   http: typeof http;
   models: typeof models;
   questions: typeof questions;

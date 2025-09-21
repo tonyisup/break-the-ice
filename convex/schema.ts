@@ -159,4 +159,18 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_detected_at", ["detectedAt"])
     .index("by_status_and_confidence", ["status", "confidence"]),
+  duplicateDetectionProgress: defineTable({
+    status: v.union(v.literal("running"), v.literal("completed"), v.literal("failed")),
+    totalQuestions: v.float64(),
+    processedQuestions: v.float64(),
+    duplicatesFound: v.float64(),
+    currentBatch: v.float64(),
+    totalBatches: v.float64(),
+    errors: v.array(v.string()),
+    startedAt: v.float64(),
+    completedAt: v.optional(v.float64()),
+    lastUpdatedAt: v.float64(),
+  })
+    .index("by_status", ["status"])
+    .index("by_started_at", ["startedAt"]),
 });
