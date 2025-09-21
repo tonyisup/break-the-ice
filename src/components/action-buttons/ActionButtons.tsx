@@ -1,39 +1,62 @@
-import { ArrowBigRight, ArrowBigRightDash, Shuffle, X, SquareArrowRight } from '@/components/ui/icons/icons';
+import { ArrowBigRight, Shuffle, X, SquareArrowRight } from '@/components/ui/icons/icons';
 import { cn } from "../../lib/utils";
 
 interface ActionButtonsProps {
   isColorDark: (color: string) => boolean;
   gradient: string[];
   isGenerating: boolean;
-  currentQuestion: any;
   handleShuffleStyleAndTone: () => void;
   handleConfirmRandomizeStyleAndTone: () => void;
   handleCancelRandomizeStyleAndTone: () => void;
   getNextQuestion: () => void;
   isStyleTonesOpen: boolean;
-  disabled?: boolean;
+  isHighlighting: boolean;
+  setIsHighlighting: (isHighlighting: boolean) => void;
 }
 
 export const ActionButtons = ({
   isColorDark,
   gradient,
   isGenerating,
-  currentQuestion,
   handleShuffleStyleAndTone,
   handleConfirmRandomizeStyleAndTone,
   handleCancelRandomizeStyleAndTone,
   getNextQuestion,
   isStyleTonesOpen,
-  disabled = false,
+  isHighlighting,
+  setIsHighlighting,
 }: ActionButtonsProps) => {
+
+  const handleCancelShuffle = () => {
+    setIsHighlighting(false);
+    handleCancelRandomizeStyleAndTone();
+  }
+
+  const handleShuffle = () => {
+    setIsHighlighting(true);
+    handleShuffleStyleAndTone();
+  }
+
+  const handleConfirmShuffle = () => {
+    setIsHighlighting(false);
+    handleConfirmRandomizeStyleAndTone();
+  }
+
   return (
     <>
       {isStyleTonesOpen ? (
         <div className="flex justify-center p-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="flex gap-4">
+            {isHighlighting && <button
+              onClick={handleCancelShuffle}
+              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors disabled:opacity-50")}
+              title="Cancel Shuffle"
+            >
+              <X size={24} className={isColorDark(gradient[1]) ? "text-black" : "text-white"} />
+              {/* <span className="sm:block hidden text-white font-semibold text-base">Cancel</span> */}
+            </button>}
             <button
-              onClick={handleShuffleStyleAndTone}
-              disabled={disabled}
+              onClick={handleShuffle}
               className={cn(
                 isColorDark(gradient[0])
                   ? "bg-white/20 dark:bg-white/20"
@@ -50,25 +73,23 @@ export const ActionButtons = ({
                 Shuffle
               </span>
             </button>
-            <button
-              onClick={getNextQuestion}
-              disabled={disabled || (isGenerating && !currentQuestion)}
+            {isHighlighting && <button
+              onClick={handleConfirmShuffle}
+              disabled={isGenerating}
               className={cn(
                 isColorDark(gradient[0])
                   ? "bg-white/20 dark:bg-white/20"
                   : "bg-black/20 dark:bg-black/20",
-                " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
+                "px-5 py-3 rounded-full flex justify-center items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
               )}
-              title="Next Question"
+              title="Shuffle Style and Tone"
             >
-              <ArrowBigRight
+              <SquareArrowRight
                 size={24}
                 className={isColorDark(gradient[0]) ? "text-black" : "text-white"}
               />
-              <span className="sm:block hidden text-white font-semibold text-base">
-                Next
-              </span>
-            </button>
+              {/* <span className="text-white font-semibold text-base">New</span> */}
+            </button>}
           </div>
         </div>
       ) : (
@@ -82,7 +103,7 @@ export const ActionButtons = ({
               "px-5 py-3 rounded-full flex justify-center items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
             )}
             title="Shuffle Style and Tone"
-            disabled={isGenerating && !currentQuestion}
+            disabled={isGenerating}
           >
             <SquareArrowRight
               size={24}

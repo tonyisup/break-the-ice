@@ -10,6 +10,8 @@ interface ToneSelectorProps {
   selectedTone: string;
   randomOrder?: boolean;
   onSelectTone: (tone: string) => void;
+  isHighlighting: boolean;
+  setIsHighlighting: (isHighlighting: boolean) => void;
 }
 
 export interface ToneSelectorRef {
@@ -21,17 +23,22 @@ export interface ToneSelectorRef {
   scrollToSelectedItem: () => void;
 }
 
-export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = true, ref }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
+export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = true, ref, isHighlighting, setIsHighlighting }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
   const { addHiddenTone } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
-  const [isRandomizing, setIsRandomizing] = useState(false);
+  const [highlightedItem, setHighlightedItem] = useState<ItemDetails | null>(null);
   
-  const handleHideTone = (toneId: string) => {
-    if (!toneId) return;
+  useEffect(() => {
+    setIsHighlighting(highlightedItem !== null);
+  }, [highlightedItem, setIsHighlighting]);
 
-    addHiddenTone(toneId);
+  const handleHideTone = (item: ItemDetails) => {
+    if (!item.id) return;
+    if (item.type !== "Tone") return;
+
+    addHiddenTone(item.id);
   };
 
   const handleOpenDrawer = (itemId: string) => {
@@ -48,28 +55,22 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
       setIsDrawerOpen(true);
     }
   };
-  const handleSelectTone = (toneId: string) => {
-    if(isRandomizing) {
-      onSelectTone(toneId);
-      setIsRandomizing(false);
-      return;
-    }
-    handleOpenDrawer(toneId);
+
+  const handleSetHighlightedItem = (item: ItemDetails) => {
+    setHighlightedItem(item);
+    genericSelectorRef.current?.scrollToCenter(item.id);
   };
 
   // Expose the randomizeTone function to parent components
   useImperativeHandle(ref, () => ({
     selectedItem: selectedTone,
     randomizeTone: () => {
-      setIsRandomizing(true);
       genericSelectorRef.current?.randomizeItem();
     },
     cancelRandomizingTone: () => {
-      setIsRandomizing(false);
       genericSelectorRef.current?.cancelRandomizingItem();
     },
     confirmRandomizedTone: () => {
-      setIsRandomizing(true);
       genericSelectorRef.current?.confirmRandomizedItem();
     },
     scrollToCenter: (toneId: string) => {
@@ -93,18 +94,23 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
         items={tones.map(tone => ({
           id: tone.id,
           name: tone.name,
+          type: "Tone",
+          description: tone.description || "",
           icon: tone.icon as Icon,
           color: tone.color
         }))}
         selectedItem={selectedTone}
-        onSelectItem={handleSelectTone}
+        onClickItem={handleOpenDrawer}
+        onSelectItem={onSelectTone}
         randomizeLabel="Randomize Tone"
+        highlightedItem={highlightedItem}
+        setHighlightedItem={setHighlightedItem}
       />
       <ItemDetailDrawer
         item={selectedItemForDrawer}
         isOpen={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
-        onSelectItem={onSelectTone}
+        onSelectItem={handleSetHighlightedItem}
         onHideItem={handleHideTone}
       />
     </>

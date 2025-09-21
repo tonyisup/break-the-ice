@@ -10,6 +10,8 @@ interface StyleSelectorProps {
   selectedStyle: string;
   randomOrder?: boolean;
   onSelectStyle: (style: string) => void; 
+  isHighlighting: boolean;
+  setIsHighlighting: (isHighlighting: boolean) => void;
 }
 
 export interface StyleSelectorRef {
@@ -20,18 +22,22 @@ export interface StyleSelectorRef {
   scrollToCenter: (styleId: string) => void;
   scrollToSelectedItem: () => void;
 }
-export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrder = true, ref }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
+export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrder = true, ref, isHighlighting, setIsHighlighting }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
   const { addHiddenStyle } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
-  const [isRandomizing, setIsRandomizing] = useState(false);
+  const [highlightedItem, setHighlightedItem] = useState<ItemDetails | null>(null);
   
-  const handleHideStyle = (styleId: string, itemType: "Style" | "Tone") => {
-    if (!styleId) return;
-    if (itemType !== "Style") return;
+  useEffect(() => {
+    setIsHighlighting(highlightedItem !== null);
+  }, [highlightedItem, setIsHighlighting]);
 
-    addHiddenStyle(styleId);
+  const handleHideStyle = (item: ItemDetails) => {
+    if (!item.id) return;
+    if (item.type !== "Style") return;
+
+    addHiddenStyle(item.id);
   };
 
   const handleOpenDrawer = (itemId: string) => {
@@ -49,28 +55,21 @@ export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrde
     }
   };
 
-  const handleSelectStyle = (styleId: string) => {
-    if(isRandomizing) {
-      onSelectStyle(styleId);
-      setIsRandomizing(false);
-      return;
-    }
-    handleOpenDrawer(styleId);
+  const handleSetHighlightedItem = (item: ItemDetails) => {
+    setHighlightedItem(item);
+    genericSelectorRef.current?.scrollToCenter(item.id);
   };
 
   // Expose the randomizeStyle function to parent components
   useImperativeHandle(ref, () => ({
     selectedItem: selectedStyle,
     randomizeStyle: () => {
-      setIsRandomizing(true);
       genericSelectorRef.current?.randomizeItem();
     },
     cancelRandomizingStyle: () => {
-      setIsRandomizing(false);
       genericSelectorRef.current?.cancelRandomizingItem();
     },
     confirmRandomizedStyle: () => {
-      setIsRandomizing(true);
       genericSelectorRef.current?.confirmRandomizedItem();
     },
     scrollToCenter: (styleId: string) => {
@@ -97,18 +96,23 @@ export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrde
         items={styles.map(style => ({
           id: style.id,
           name: style.name,
+          type: "Style",
+          description: style.description || "",
           icon: style.icon as Icon,
           color: style.color
         }))}
         selectedItem={selectedStyle}
-        onSelectItem={handleSelectStyle}
+        onClickItem={handleOpenDrawer}
+        onSelectItem={onSelectStyle}
         randomizeLabel="Randomize Style"
+        highlightedItem={highlightedItem}
+        setHighlightedItem={setHighlightedItem}
       />
       <ItemDetailDrawer
         item={selectedItemForDrawer}
         isOpen={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
-        onSelectItem={onSelectStyle}
+        onSelectItem={handleSetHighlightedItem}
         onHideItem={handleHideStyle}
       />
     </>
