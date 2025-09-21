@@ -519,7 +519,6 @@ export const getCompletedDuplicateDetections = query({
     detectedAt: v.number(),
     reviewedAt: v.optional(v.number()),
     reviewedBy: v.optional(v.id("users")),
-    reviewer: v.optional(v.object({ name: v.string() })),
     questions: v.array(v.object({
       _id: v.id("questions"),
       _creationTime: v.number(),
@@ -570,25 +569,9 @@ export const getCompletedDuplicateDetections = query({
             };
           })
         );
-
-        let reviewer = null;
-        if (detection.reviewedBy) {
-            try {
-                const user = await ctx.db.get(detection.reviewedBy);
-                if (user) {
-                    reviewer = { name: user.name ?? user.email };
-                }
-            } catch (e) {
-                if (String(detection.reviewedBy).includes("system")) {
-                    reviewer = { name: "System" };
-                }
-            }
-        }
-
         return {
           ...detection,
           questions: questions.filter((q): q is NonNullable<typeof q> => q !== null),
-          reviewer,
         };
       })
     );

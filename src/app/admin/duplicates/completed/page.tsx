@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, Authenticated, Unauthenticated, AuthLoading, useAction } from 'convex/react';
-import { api } from '../../../../convex/_generated/api';
-import { Id } from '../../../../convex/_generated/dataModel';
+import React from 'react';
+import { useQuery, Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { Link } from 'react-router-dom';
-import { HouseIcon, ArrowLeftIcon, CheckIcon, XIcon, TrashIcon, EditIcon, SaveIcon } from 'lucide-react';
+import { ArrowLeftIcon } from '@/components/ui/icons/icons';
 import { useTheme } from '@/hooks/useTheme';
+import { api } from '../../../../../convex/_generated/api';
 
 const CompletedDuplicateDetectionsPage: React.FC = () => {
   return (

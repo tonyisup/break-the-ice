@@ -50,9 +50,8 @@ function DuplicateDetectionComponent() {
   const deleteDuplicates = useMutation(api.questions.deleteDuplicateQuestions);
   const updateQuestion = useMutation(api.questions.updateQuestion);
   const detectDuplicatesStreaming = useAction(api.ai.detectDuplicateQuestionsStreaming);
-  // Temporarily disable progress tracking until duplicates.ts is properly registered
-  // const duplicateDetectionProgress = useQuery(api.duplicates.getLatestDuplicateDetectionProgress);
-  const duplicateDetectionProgress = null;
+  
+  const duplicateDetectionProgress = useQuery(api.duplicates.getLatestDuplicateDetectionProgress);
 
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');
@@ -64,8 +63,7 @@ function DuplicateDetectionComponent() {
       setIsDetectingDuplicates(false);
       if (duplicateDetectionProgress.status === 'completed') {
         console.log('Duplicate detection completed:', duplicateDetectionProgress);
-        // Refresh the duplicate detections list
-        window.location.reload();
+        // No need to reload - React will automatically update the UI when the query data changes
       } else if (duplicateDetectionProgress.status === 'failed') {
         console.error('Duplicate detection failed:', duplicateDetectionProgress.errors);
       }
@@ -78,6 +76,9 @@ function DuplicateDetectionComponent() {
         detectionId: detection._id,
         questionIdsToDelete: detection.questionIds,
       });
+      //clear selected
+      setSelectedQuestions([]);
+      setKeepQuestion(null);
     } catch (error) {
       console.error('Error deleting all duplicates:', error);
       alert('Error deleting all duplicates');
@@ -207,7 +208,7 @@ function DuplicateDetectionComponent() {
           </div>
         </div>
 
-        <div className="mb-6 flex justify-between items-center">
+        <div className="mb-6 flex flex-col justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Duplicate Detection Review</h1>
             <p className="text-gray-600 dark:text-gray-400">
@@ -406,7 +407,6 @@ function DuplicateDetectionComponent() {
                         onChange={(e) => setRejectReason(e.target.value)}
                         className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         rows={3}
-                        autoFocus
                       />
                     </div>
                   )}
