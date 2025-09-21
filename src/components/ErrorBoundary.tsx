@@ -9,6 +9,7 @@ interface Props {
 interface State {
   hasError: boolean;
   error?: Error;
+  errorInfo?: ErrorInfo;
   copied: boolean;
 }
 
@@ -24,6 +25,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    this.setState({ errorInfo });
   }
 
   private copyErrorToClipboard = async () => {
@@ -68,7 +70,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 </button>
               )}
             </div>
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {this.state.error && (
               <details className="mt-4 text-left">
                 <summary className="cursor-pointer text-sm text-gray-500 flex items-center justify-between">
                   <span>Error Details</span>
@@ -86,7 +88,9 @@ export class ErrorBoundary extends Component<Props, State> {
                   </div>
                 </summary>
                 <pre className="mt-2 text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded overflow-auto max-h-64 whitespace-pre-wrap break-words">
-                  {this.state.error.stack}
+                  {this.state.error.toString()}
+                  <br />
+                  {this.state.errorInfo?.componentStack}
                 </pre>
               </details>
             )}
