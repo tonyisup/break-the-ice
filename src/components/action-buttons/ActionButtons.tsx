@@ -93,6 +93,7 @@ export const ActionButtons = ({
                   isHighlighting && shuffledGradient[0] && shuffledGradient[1]
                     ? {
                         background: `linear-gradient(135deg, ${shuffledGradient[0]}, ${shuffledGradient[1]})`,
+                        WebkitBackgroundClip: 'text',
                         backgroundClip: 'text',
                         color: 'transparent',
                       }
