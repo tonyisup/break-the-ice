@@ -88,12 +88,10 @@ export const ActionButtons = ({
             >
               <SquareArrowRight
                 size={24}
-                className={cn(
-                  isColorDark(gradient[0]) ? "text-black" : "text-white",
-                  {
-                    "text-gradient": isHighlighting && shuffledGradient[0] && shuffledGradient[1],
-                  }
-                )}
+                className={cn({
+                  "text-gradient": isHighlighting && shuffledGradient[0] && shuffledGradient[1],
+                  [isColorDark(gradient[0]) ? "text-black" : "text-white"]: !isHighlighting || !shuffledGradient[0] || !shuffledGradient[1],
+                })}
                 style={
                   isHighlighting && shuffledGradient[0] && shuffledGradient[1]
                     ? {
