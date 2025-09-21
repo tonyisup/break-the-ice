@@ -7,28 +7,28 @@ interface QuestionDisplayProps {
   isGenerating: boolean;
   currentQuestion: Doc<"questions"> | null;
   isFavorite: boolean;
-  gradient: string[];
   toggleLike: (questionId: any) => void;
-
   onSwipe: () => void;
-
   toggleHide: (questionId: any) => void;
+  onHideStyle: (styleId: string) => void;
+  onHideTone: (toneId: string) => void;
+  disabled?: boolean;
 }
 
 export const QuestionDisplay = ({
   isGenerating,
   currentQuestion,
   isFavorite,
-  gradient,
   toggleLike,
-
   onSwipe,
-
   toggleHide,
-
+  onHideStyle,
+  onHideTone,
+  disabled = false,
 }: QuestionDisplayProps) => {
   const [dragDirection, setDragDirection] = useState<"left" | "right">("right");
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (disabled) return;
     if (info.offset.y > 100) {
       if (currentQuestion) {
         toggleLike(currentQuestion._id);
@@ -41,6 +41,16 @@ export const QuestionDisplay = ({
       onSwipe();
     } else if (info.offset.y < -100) {
       handleShare();
+    }
+  };
+  const handleHideStyle = () => {
+    if (currentQuestion) {
+      onHideStyle(currentQuestion.style as string);
+    }
+  };
+  const handleHideTone = () => {
+    if (currentQuestion) {
+      onHideTone(currentQuestion.tone as string);
     }
   };
   const handleShare = () => {
@@ -60,11 +70,11 @@ export const QuestionDisplay = ({
       initial={{ x: 0, y:-300, opacity: 0 }}
       animate={{ x: 0, y:0, opacity: 1 }}
       exit={{ x: dragDirection === "left" ? -300 : 300, opacity: 0 }}
-      drag={true}
+      drag={!disabled}
       dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
       onDragEnd={handleDragEnd}
       onDoubleClick={() => {
-        if (currentQuestion) {
+        if (currentQuestion && !disabled) {
           toggleLike(currentQuestion._id);
         }
       }}
@@ -73,9 +83,11 @@ export const QuestionDisplay = ({
         isGenerating={isGenerating}
         question={currentQuestion}
         isFavorite={isFavorite}
-        gradient={gradient}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
         onToggleHidden={() => currentQuestion && toggleHide(currentQuestion._id)}
+        onHideStyle={handleHideStyle}
+        onHideTone={handleHideTone}
+        disabled={disabled}
       />
     </motion.div>
   );

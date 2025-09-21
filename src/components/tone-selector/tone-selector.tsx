@@ -1,116 +1,112 @@
-import { useQuery } from 'convex/react';
-import { useRef, forwardRef, useImperativeHandle, useEffect, useMemo } from 'react';
-import { 
-  Smile, 
-  Brain, 
-  Briefcase, 
-  Gamepad2, 
-  Heart, 
-  Flame, 
-  Clock, 
-  Trophy, 
-  Leaf, 
-  Eye,
-  Mountain,
-  HeartHandshake,
-  Cpu,
-  Zap,
-  Archive,
-  EyeOff,
-  BowArrow,
-  Activity,
-} from 'lucide-react';
-import { api } from '../../../convex/_generated/api';
-import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
-import { useLocalStorage } from '../../hooks/useLocalStorage';
-
-const iconMap = {
-  Smile,        // fun-silly
-  Brain,        // deep-thoughtful
-  Briefcase,    // professional
-  Gamepad2,     // nerdy-geeky
-  Heart,        // wholesome-heartwarming
-  Flame,        // edgy-provocative
-  Clock,        // nostalgic-retro
-  Trophy,       // competitive-trivia
-  Leaf,         // mindful-calm
-  Eye,          // mysterious-intriguing
-  HeartHandshake,   // wholesome-uplifting
-  Mountain,     // outdoorsy-adventurous
-  Cpu,          // nerdy-geeky
-  Zap,          // quick-energizer
-  Archive,      // nostalgic
-  EyeOff,       // mysterious-intriguing
-  BowArrow,
-  Activity
-};
-
+import { useRef, useImperativeHandle, useState, useEffect } from 'react';
+import { GenericSelector, type GenericSelectorRef } from '../generic-selector';
+import { useStorageContext } from '../../hooks/useStorageContext';
+import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer';
+import { Icon } from '@/components/ui/icons/icon';
+import { Doc } from '../../../convex/_generated/dataModel';
 
 interface ToneSelectorProps {
+  tones: Doc<"tones">[];
   selectedTone: string;
   randomOrder?: boolean;
   onSelectTone: (tone: string) => void;
-  onRandomizeTone: (tone: string | null) => void;
 }
 
 export interface ToneSelectorRef {
+  selectedItem: string;
   randomizeTone: () => void;
   cancelRandomizingTone: () => void;
   confirmRandomizedTone: () => void;
   scrollToCenter: (toneId: string) => void;
+  scrollToSelectedItem: () => void;
 }
 
-export const ToneSelector = forwardRef<ToneSelectorRef, ToneSelectorProps>(({ selectedTone, onSelectTone, onRandomizeTone, randomOrder = true }, ref) => {
-  const tones = useQuery(api.tones.getTones);
-  const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>('hiddenTones', []);
+export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = true, ref }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
+  const { addHiddenTone } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
+  const [isRandomizing, setIsRandomizing] = useState(false);
   
   const handleHideTone = (toneId: string) => {
-    setHiddenTones(prev => [...new Set([...prev, toneId])]);
+    if (!toneId) return;
+
+    addHiddenTone(toneId);
   };
 
-  // Convert tones to the format expected by GenericSelector
-  const selectorItems: SelectorItem[] | undefined = useMemo(() => tones
-    ?.filter(tone => !hiddenTones.includes(tone.id))
-    .map(tone => ({
-      id: tone.id,
-      name: tone.name,
-      icon: tone.icon,
-      color: tone.color
-    })), [tones, hiddenTones]);
+  const handleOpenDrawer = (itemId: string) => {
+    const tone = tones?.find(t => t.id === itemId);
+    if (tone) {
+      setSelectedItemForDrawer({
+        id: tone.id,
+        name: tone.name,
+        type: "Tone",
+        description: tone.description || "",
+        icon: tone.icon as Icon,
+        color: tone.color,
+      });
+      setIsDrawerOpen(true);
+    }
+  };
+  const handleSelectTone = (toneId: string) => {
+    if(isRandomizing) {
+      onSelectTone(toneId);
+      setIsRandomizing(false);
+      return;
+    }
+    handleOpenDrawer(toneId);
+  };
 
   // Expose the randomizeTone function to parent components
   useImperativeHandle(ref, () => ({
+    selectedItem: selectedTone,
     randomizeTone: () => {
+      setIsRandomizing(true);
       genericSelectorRef.current?.randomizeItem();
     },
     cancelRandomizingTone: () => {
+      setIsRandomizing(false);
       genericSelectorRef.current?.cancelRandomizingItem();
     },
     confirmRandomizedTone: () => {
+      setIsRandomizing(true);
       genericSelectorRef.current?.confirmRandomizedItem();
     },
     scrollToCenter: (toneId: string) => {
       genericSelectorRef.current?.scrollToCenter(toneId);
     },
+    scrollToSelectedItem: () => {
+      genericSelectorRef.current?.scrollToSelectedItem();
+    },
   }));
 
-  // useEffect(() => {
-  //   if (onSelectTone && selectorItems) {
-  //     onSelectTone(selectorItems[0].id);
-  //   }
-  // }, [selectorItems, onSelectTone]);
+  useEffect(() => {
+    if (onSelectTone && tones) {
+      onSelectTone(tones[0].id);
+    }
+  }, [tones, onSelectTone]);
 
   return (
-    <GenericSelector
-      ref={genericSelectorRef}
-      items={selectorItems}
-      selectedItem={selectedTone}
-      onSelectItem={onSelectTone}
-      onHideItem={handleHideTone}
-      iconMap={iconMap}
-      randomizeLabel="Randomize Tone"
-      onRandomizeItem={onRandomizeTone}
-    />
+    <>
+      <GenericSelector
+        ref={genericSelectorRef}
+        items={tones.map(tone => ({
+          id: tone.id,
+          name: tone.name,
+          icon: tone.icon as Icon,
+          color: tone.color
+        }))}
+        selectedItem={selectedTone}
+        onSelectItem={handleSelectTone}
+        randomizeLabel="Randomize Tone"
+      />
+      <ItemDetailDrawer
+        item={selectedItemForDrawer}
+        isOpen={isDrawerOpen}
+        onOpenChange={setIsDrawerOpen}
+        onSelectItem={onSelectTone}
+        onHideItem={handleHideTone}
+      />
+    </>
   );
-});
+};

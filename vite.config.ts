@@ -6,33 +6,6 @@ import path from "path";
 export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
-    // The code below enables dev tools like taking screenshots of your site
-    // while it is being developed on chef.convex.dev.
-    // Feel free to remove this code if you're no longer developing your app with Chef.
-    mode === "development"
-      ? {
-          name: "inject-chef-dev",
-          transform(code: string, id: string) {
-            if (id.includes("main.tsx")) {
-              return {
-                code: `
-window.addEventListener('message', async (message) => {
-  if (message.source !== window.parent) return;
-  if (message.data.type !== 'chefPreviewRequest') return;
-
-  const worker = await import('https://chef.convex.dev/scripts/worker.bundled.mjs');
-  await worker.respondToMessage(message);
-});
-              ${code}
-            `,
-                map: null,
-              };
-            }
-            return null;
-          },
-        }
-      : null,
-    // End of code for taking screenshots on chef.convex.dev.
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -40,4 +13,15 @@ window.addEventListener('message', async (message) => {
     },
         dedupe: ["react", "react-dom", "react-router", "react-router-dom"],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return id.toString().split('node_modules/')[1].split('/')[0].toString();
+          }
+        }
+      }
+    }
+  }
 }));

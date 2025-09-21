@@ -1,7 +1,8 @@
 "use client";
 
-import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { useQuery } from "convex/react";
+import { useEffect, useMemo } from "react";
+import { useStorageContext } from "../../hooks/useStorageContext";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
 import { CollapsibleSection } from "../../components/collapsible-section/CollapsibleSection";
@@ -18,27 +19,72 @@ const SettingsPage = () => {
   const toggleSection = (section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
-  const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>("hiddenStyles", []);
-  const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>("hiddenTones", []);
-  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<string[]>("hiddenQuestions", []);
-  const [autoAdvanceShuffle, setAutoAdvanceShuffle] = useLocalStorage<boolean>("autoAdvanceShuffle", false);
-  // const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>("bypassLandingPage", false);
+  const {
+    hiddenStyles,
+    setHiddenStyles,
+    removeHiddenStyle,
+    clearHiddenStyles,
+    hiddenTones,
+    setHiddenTones,
+    removeHiddenTone,
+    clearHiddenTones,
+    hiddenQuestions,
+    setHiddenQuestions,
+    removeHiddenQuestion,
+    clearHiddenQuestions,
+    bypassLandingPage,
+    setBypassLandingPage,
+  } = useStorageContext();
+  
 
   const unhideStyle = (styleId: string) => {
-    setHiddenStyles(prev => prev.filter(id => id !== styleId));
+    removeHiddenStyle(styleId);
   };
 
   const unhideTone = (toneId: string) => {
-    setHiddenTones(prev => prev.filter(id => id !== toneId));
+    removeHiddenTone(toneId);
   };
 
-  const unhideQuestion = (questionId: string) => {
-    setHiddenQuestions(prev => prev.filter(id => id !== questionId));
+  const unhideQuestion = (questionId: Id<"questions">) => {
+    removeHiddenQuestion(questionId);
   };
+
 
   const hiddenStyleObjects = allStyles?.filter(style => hiddenStyles.includes(style.id));
   const hiddenToneObjects = allTones?.filter(tone => hiddenTones.includes(tone.id));
-  const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions as Id<"questions">[] });
+  const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions });
+
+
+  useEffect(() => {
+    if (allStyles) {
+      const serverIds = allStyles.map(s => s.id);
+      const localIds = hiddenStyles;
+      const filteredIds = localIds.filter(id => serverIds.includes(id));
+      if (filteredIds.length !== localIds.length) {
+            setHiddenStyles(filteredIds);
+      }
+    }
+  }, [allStyles, hiddenStyles, setHiddenStyles]);
+
+  useEffect(() => {
+    if (allTones) {
+      const serverIds = allTones.map(t => t.id);
+      const localIds = hiddenTones;
+      const filteredIds = localIds.filter(id => serverIds.includes(id));
+      if (filteredIds.length !== localIds.length) {
+        setHiddenTones(filteredIds);
+      }
+    }
+  }, [allTones, hiddenTones, setHiddenTones]);
+
+  useEffect(() => {
+    if (hiddenQuestionObjects) {
+      const serverIds = hiddenQuestionObjects.map(q => q._id);
+      if (serverIds.length !== hiddenQuestions.length) {
+        setHiddenQuestions(serverIds);
+      }
+    }
+  }, [hiddenQuestionObjects, hiddenQuestions, setHiddenQuestions]);
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradientDark = ["#3B2554", "#262D54"];
@@ -57,7 +103,7 @@ const SettingsPage = () => {
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <div className="space-y-8">
-          {/* <CollapsibleSection
+          <CollapsibleSection
             title="General"
             isOpen={!!openSections['general']}
             onOpenChange={() => toggleSection('general')}
@@ -79,29 +125,6 @@ const SettingsPage = () => {
                 />
               </button>
             </div>
-          </CollapsibleSection> */}
-          <CollapsibleSection
-            title="Shuffle"
-            isOpen={!!openSections['shuffle']}
-            onOpenChange={() => toggleSection('shuffle')}
-            count={undefined}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="dark:text-white text-black font-semibold">Auto-advance Shuffle</p>
-                <p className="text-sm dark:text-white/70 text-black/70">Automatically confirm style and tone after shuffling.</p>
-              </div>
-              <button
-                onClick={() => setAutoAdvanceShuffle(!autoAdvanceShuffle)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoAdvanceShuffle ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
-                aria-pressed={autoAdvanceShuffle}
-                aria-label="Toggle auto-advance shuffle"
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoAdvanceShuffle ? 'translate-x-6' : 'translate-x-1'}`}
-                />
-              </button>
-            </div>
           </CollapsibleSection>
           <CollapsibleSection
             title="Hidden Styles"
@@ -112,7 +135,7 @@ const SettingsPage = () => {
             {hiddenStyleObjects && hiddenStyleObjects.length > 0 ? (
               <>
                 <button
-                  onClick={() => setHiddenStyles([])}
+                  onClick={clearHiddenStyles}
                   className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
                 >
                   Clear All
@@ -145,7 +168,7 @@ const SettingsPage = () => {
             {hiddenToneObjects && hiddenToneObjects.length > 0 ? (
               <>
                 <button
-                  onClick={() => setHiddenTones([])}
+                  onClick={clearHiddenTones}
                   className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
                 >
                   Clear All
@@ -178,7 +201,7 @@ const SettingsPage = () => {
             {hiddenQuestionObjects && hiddenQuestionObjects.length > 0 ? (
               <>
                 <button
-                  onClick={() => setHiddenQuestions([])}
+                  onClick={clearHiddenQuestions}
                   className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
                 >
                   Clear All

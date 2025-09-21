@@ -27,14 +27,20 @@ vi.mock('../../hooks/useTheme', () => ({
 vi.mock('../../hooks/useLocalStorage', () => ({
   useLocalStorage: () => [[], vi.fn()],
 }));
+vi.mock('../../hooks/useQuestionHistory', () => ({
+  useQuestionHistory: () => ({
+    history: [],
+    addQuestionToHistory: vi.fn(),
+  }),
+}));
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
   },
 }));
 
-const mockUseParams = useParams as vi.Mock;
-const mockUseQuery = useQuery as vi.Mock;
+const mockUseParams = useParams as any; //vi.Mock;
+const mockUseQuery = useQuery as any; //vi.Mock;
 
 describe('QuestionPage', () => {
   beforeEach(() => {

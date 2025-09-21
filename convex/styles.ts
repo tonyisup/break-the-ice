@@ -46,6 +46,33 @@ export const getStyles = query({
   },
 });
 
+// Get all available styles
+export const getFilteredStyles = query({
+  args: {
+    excluded: v.array(v.string()),
+  },
+  returns: v.array(v.object({
+    _id: v.id("styles"),
+    _creationTime: v.number(),
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    structure: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    example: v.optional(v.string()),
+    promptGuidanceForAI: v.optional(v.string()),
+    order: v.optional(v.float64()),
+  })),
+  handler: async (ctx, args) => {
+      return await ctx.db.query("styles")
+      .withIndex("by_order")
+      .order("asc")
+      .filter((q) => q.and(... args.excluded.map(styleId => q.neq(q.field("id"), styleId))))
+      .collect();    
+  },
+});
+
 export const createStyle = mutation({
   args: {
     id: v.string(),
@@ -115,6 +142,18 @@ export const updateStyle = mutation({
 export const deleteStyle = mutation({
   args: { id: v.id("styles") },
   handler: async (ctx, args) => {
+    const styleToDelete = await ctx.db.get(args.id);
+    if (!styleToDelete) {
+      throw new Error("Style not found");
+    }
+
+    const questionsToDelete = await ctx.db
+      .query("questions")
+      .withIndex("by_style", (q) => q.eq("style", styleToDelete.id))
+      .collect();
+
+    await Promise.all(questionsToDelete.map((q) => ctx.db.delete(q._id)));
+
     await ctx.db.delete(args.id);
   },
 });

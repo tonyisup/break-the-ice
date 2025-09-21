@@ -140,7 +140,23 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.float64()),
     isAdmin: v.optional(v.boolean()),
+    likedQuestions: v.optional(v.array(v.id("questions"))),
+    hiddenQuestions: v.optional(v.array(v.id("questions"))),
+    migratedFromLocalStorage: v.optional(v.boolean()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
+  duplicateDetections: defineTable({
+    questionIds: v.array(v.id("questions")),
+    reason: v.string(),
+    confidence: v.number(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
+    detectedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedBy: v.optional(v.id("users")),
+    rejectReason: v.optional(v.string()),
+  })
+    .index("by_status", ["status"])
+    .index("by_detected_at", ["detectedAt"])
+    .index("by_status_and_confidence", ["status", "confidence"]),
 });

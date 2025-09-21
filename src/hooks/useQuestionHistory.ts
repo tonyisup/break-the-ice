@@ -1,11 +1,20 @@
-import { useLocalStorage } from "./useLocalStorage";
+import { useStorageContext } from "./useStorageContext";
 import { Doc, Id } from "../../convex/_generated/dataModel";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 const MAX_HISTORY_LENGTH = 100;
 
+export type HistoryEntry = {
+  question: Doc<"questions">;
+  viewedAt: number;
+};
+
 // Helper function to validate question data
-const isValidQuestion = (question: any): question is Doc<"questions"> => {
+const isValidQuestion = (questionEntry: any): questionEntry is HistoryEntry => {
+  const question = questionEntry.question;
+  
   return (
     question &&
     typeof question === 'object' &&
@@ -16,34 +25,41 @@ const isValidQuestion = (question: any): question is Doc<"questions"> => {
 };
 
 export function useQuestionHistory() {
-  const [rawHistory, setRawHistory] = useLocalStorage<Doc<"questions">[]>("questionHistory", []);
-  
+  const { questionHistory, setQuestionHistory, addQuestionToHistory, removeQuestionFromHistory, clearQuestionHistory } = useStorageContext();
+  const historyIds = useMemo(() => questionHistory.filter(entry => entry.question).map(entry => entry.question._id), [questionHistory]);
+  const questions = useQuery(api.questions.getQuestionsByIds, { ids: historyIds });
   // Filter out invalid questions
   const history = useMemo(() => {
-    const validQuestions = rawHistory.filter(isValidQuestion);
-    if (validQuestions.length !== rawHistory.length) {
+    const validQuestions = questionHistory.filter(isValidQuestion);
+    if (validQuestions.length !== questionHistory.length) {
       console.log("Cleaning up invalid questions from history");
-      setRawHistory(validQuestions);
+      setQuestionHistory(validQuestions);
     }
     return validQuestions;
-  }, [rawHistory, setRawHistory]);
+  }, [questionHistory, setQuestionHistory]);
+  
+  useEffect(() => {
+    if (questions) {
+      const serverIds = questions.map(q => q._id);
+      const localIds = history.filter(entry => entry.question).map(entry => entry.question._id);
+      if (serverIds.length !== localIds.length) {
+        const newRawHistory = questionHistory.filter(entry => entry.question && serverIds.includes(entry.question._id));
+        setQuestionHistory(newRawHistory);
+      }
+    }
+  }, [questions, history, questionHistory, setQuestionHistory]);
 
-  const addQuestionToHistory = useCallback((question: Doc<"questions">) => {
-    setRawHistory((prevHistory) => {
-      const newHistory = [question, ...prevHistory.filter(q => q._id !== question._id)];
-      return newHistory.slice(0, MAX_HISTORY_LENGTH);
-    });
-  }, [setRawHistory]);
+  const addQuestionHistoryEntry = useCallback((question: Doc<"questions">) => {
+    addQuestionToHistory({ question, viewedAt: Date.now() });
+  }, [addQuestionToHistory]);
+    
+  const removeQuestionHistoryEntry = useCallback((questionId: Id<"questions">) => {
+    removeQuestionFromHistory(questionId);
+  }, [removeQuestionFromHistory]);
+    
+  const clearHistoryEntries = useCallback(() => {
+    clearQuestionHistory();
+  }, [clearQuestionHistory]);
 
-  const removeQuestionFromHistory = useCallback((questionId: Id<"questions">) => {
-    setRawHistory((prevHistory) => {
-      return prevHistory.filter(q => q._id !== questionId);
-    });
-  }, [setRawHistory]);
-
-  const clearHistory = useCallback(() => {
-    setRawHistory([]);
-  }, [setRawHistory]);
-
-  return { history, addQuestionToHistory, removeQuestionFromHistory, clearHistory };
+  return { history, addQuestionHistoryEntry, removeQuestionHistoryEntry, clearHistoryEntries };
 }

@@ -5,6 +5,7 @@ import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./index.css";
+import { StorageProvider } from "./hooks/useStorageContext";
 import App from "./App";
 import Root from "./Root";
 import LikedQuestionsPage from "./app/liked/page";
@@ -17,16 +18,19 @@ import StylesPage from "./app/admin/styles/page";
 import TonesPage from "./app/admin/tones/page";
 import HistoryPage from "./app/history/page";
 import QuestionPage from "./app/question/page";
+import DuplicatesPage from "./app/admin/duplicates/page";
+import IndividualQuestionPage from "./app/admin/questions/[id]/page";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-  <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}>
-    <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Root />} />
+    <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}>
+      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+        <StorageProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Root />} />
           <Route path="/app" element={<App />} />
           <Route path="/question/:id" element={<QuestionPage />} />
           <Route path="/liked" element={<LikedQuestionsPage />} />
@@ -38,8 +42,11 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/admin/models" element={<ModelsPage />} />
           <Route path="/admin/styles" element={<StylesPage />} />
           <Route path="/admin/tones" element={<TonesPage />} />
+          <Route path="/admin/duplicates" element={<DuplicatesPage />} />
+          <Route path="/admin/questions/:id" element={<IndividualQuestionPage />} />
         </Routes>
       </BrowserRouter>
+    </StorageProvider>
     </ConvexProviderWithClerk>
   </ClerkProvider>
   </StrictMode>,

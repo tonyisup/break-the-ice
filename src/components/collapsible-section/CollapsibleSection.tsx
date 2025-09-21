@@ -1,8 +1,10 @@
 import React, { ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown } from '@/components/ui/icons/icons';
+import { Icon, IconComponent } from '../ui/icons/icon';
 
 interface CollapsibleSectionProps {
   title: string;
+  icons?: Icon[];
   children: ReactNode;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
@@ -11,6 +13,7 @@ interface CollapsibleSectionProps {
 
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   title,
+  icons,
   children,
   isOpen,
   onOpenChange,
@@ -19,11 +22,18 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   return (
     <section>
       <div
-        className="flex items-center justify-between cursor-pointer border-b pb-2 mb-4"
+        className="flex items-center justify-between cursor-pointer border-b p-2 mb-1 bg-white/30 dark:bg-black/30 backdrop-blur-sm rounded-lg"
         onClick={() => onOpenChange(!isOpen)}
       >
-        <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-semibold dark:text-white text-black border-white/30">{title}</h2>
+        <div className="flex items-center justify-between gap-2 w-full">
+          <div className="flex items-center justify-between w-full gap-2 font-semibold dark:text-white text-black border-white/30">
+            {title}
+            {icons && <div className="flex items-center gap-2 px-2">
+              {icons.map((icon, index) => (
+                icon && <IconComponent icon={icon} size={24} key={index} />
+              ))}
+            </div>}
+          </div>
           {count !== undefined && (
             <span className="bg-white/20 dark:bg-black/20 text-sm font-semibold px-2 py-1 rounded-full">
               {count}
@@ -35,7 +45,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           size={24}
         />
       </div>
-      {isOpen && <div className="p-4 bg-white/10 backdrop-blur-sm rounded-lg">{children}</div>}
+      {isOpen && <div className="p-4 bg-white/30 dark:bg-black/30 backdrop-blur-sm rounded-lg">{children}</div>}
     </section>
   );
 };

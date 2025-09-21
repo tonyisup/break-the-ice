@@ -1,11 +1,13 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, EyeOff, Shuffle } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from '@/components/ui/icons/icons';
+import { Icon, IconComponent } from '@/components/ui/icons/icon';
 import { cn } from '@/lib/utils';
+import React from 'react';
 
 export interface SelectorItem {
   id: string;
   name: string;
-  icon: string;
+  icon: Icon;
   color: string;
 }
 
@@ -13,9 +15,7 @@ interface GenericSelectorProps {
   items: SelectorItem[] | undefined;
   selectedItem: string;
   onSelectItem: (itemId: string) => void;
-  iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>>;
   randomizeLabel?: string;
-  onHideItem?: (itemId: string) => void;
   onRandomizeItem?: (itemId: string | null) => void;
 }
 
@@ -24,10 +24,11 @@ export interface GenericSelectorRef {
   cancelRandomizingItem: () => void;
   confirmRandomizedItem: () => void;
   scrollToCenter: (itemId: string) => void;
+  scrollToSelectedItem: () => void;
 }
 
 export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorProps>(
-  ({ items, selectedItem, onSelectItem, iconMap, randomizeLabel = "Randomize", onHideItem, onRandomizeItem }, ref) => {
+  ({ items, selectedItem, onSelectItem, randomizeLabel = "Randomize", onRandomizeItem }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const buttonRefs = useRef<{ [key: string]: HTMLElement | null }>({});
     const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -38,10 +39,6 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
     const [isDragging, setIsDragging] = useState(false);
     const [startX, setStartX] = useState(0);
     const [dragScrollLeft, setDragScrollLeft] = useState(0);
-
-    // Long press state for mobile
-    const [longPressedItems, setLongPressedItems] = useState<Set<string>>(new Set());
-    const longPressTimers = useRef<{ [key: string]: NodeJS.Timeout }>({});
 
     const checkScrollButtons = () => {
       const container = containerRef.current;
@@ -143,87 +140,6 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
       setIsDragging(false);
     }, []);
 
-    // Long press handlers for individual items
-    const handleItemTouchStart = useCallback((e: React.TouchEvent, itemId: string) => {
-      // Clear all existing long press states when starting a new touch
-      setLongPressedItems(new Set());
-
-      // Clear any existing timers
-      Object.values(longPressTimers.current).forEach(timer => {
-        if (timer) clearTimeout(timer);
-      });
-      longPressTimers.current = {};
-
-      // Set a timer for long press (500ms)
-      longPressTimers.current[itemId] = setTimeout(() => {
-        setLongPressedItems(prev => new Set(prev).add(itemId));
-      }, 500);
-    }, []);
-
-    const handleItemTouchEnd = useCallback((e: React.TouchEvent, itemId: string) => {
-      // Clear the timer if touch ends before long press
-      if (longPressTimers.current[itemId]) {
-        clearTimeout(longPressTimers.current[itemId]);
-        delete longPressTimers.current[itemId];
-      }
-
-      // Clear long press state immediately when touch ends
-      // This will be overridden if the user clicks the hide button
-      setLongPressedItems(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(itemId);
-        return newSet;
-      });
-    }, []);
-
-    const handleItemTouchMove = useCallback((e: React.TouchEvent, itemId: string) => {
-      // Clear the timer if touch moves (user is scrolling)
-      if (longPressTimers.current[itemId]) {
-        clearTimeout(longPressTimers.current[itemId]);
-        delete longPressTimers.current[itemId];
-      }
-    }, []);
-
-    const handleItemMouseDown = useCallback((e: React.MouseEvent, itemId: string) => {
-      // Clear all long press states when starting mouse interaction
-      setLongPressedItems(new Set());
-
-      // Clear all timers
-      Object.values(longPressTimers.current).forEach(timer => {
-        if (timer) clearTimeout(timer);
-      });
-      longPressTimers.current = {};
-    }, []);
-
-    const handleItemClick = useCallback((e: React.MouseEvent, itemId: string) => {
-      // If item is in long press mode, don't select it
-      if (longPressedItems.has(itemId)) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-    }, [longPressedItems]);
-
-    const handleHideButtonClick = useCallback((e: React.MouseEvent, itemId: string) => {
-      e.stopPropagation();
-      // Remove from long press mode after hiding
-      setLongPressedItems(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(itemId);
-        return newSet;
-      });
-    }, []);
-
-    // Clear all long press states when touching outside
-    const clearAllLongPressStates = useCallback(() => {
-      setLongPressedItems(new Set());
-      // Clear all timers
-      Object.values(longPressTimers.current).forEach(timer => {
-        if (timer) clearTimeout(timer);
-      });
-      longPressTimers.current = {};
-    }, []);
-
     useEffect(() => {
       const container = containerRef.current;
       if (container) {
@@ -238,33 +154,15 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
           }
         };
 
-        // Add global touch events to clear long press states when touching outside
-        const handleGlobalTouchStart = (e: TouchEvent) => {
-          // Check if the touch is outside any item container
-          const target = e.target as HTMLElement;
-          const isInsideItem = target.closest('[data-item-container]');
-          if (!isInsideItem) {
-            clearAllLongPressStates();
-          }
-        };
-
         document.addEventListener('mouseup', handleGlobalMouseUp);
-        document.addEventListener('touchstart', handleGlobalTouchStart);
 
         return () => {
           container.removeEventListener('scroll', checkScrollButtons);
           window.removeEventListener('resize', checkScrollButtons);
           document.removeEventListener('mouseup', handleGlobalMouseUp);
-          document.removeEventListener('touchstart', handleGlobalTouchStart);
-
-          // Clean up long press timers
-          Object.values(longPressTimers.current).forEach(timer => {
-            if (timer) clearTimeout(timer);
-          });
-          longPressTimers.current = {};
         };
       }
-    }, [items, isDragging, handleMouseUp, clearAllLongPressStates]);
+    }, [items, isDragging, handleMouseUp]);
 
     const scrollToCenter = (itemId: string) => {
       const container = containerRef.current;
@@ -302,6 +200,9 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
 
     // Expose the randomizeItem function to parent components
     useImperativeHandle(ref, () => ({
+      scrollToSelectedItem: () => {
+        scrollToCenter(selectedItem);
+      },
       randomizeItem: handleRandomItem,
       cancelRandomizingItem: () => {
         setRandomItem(null);
@@ -338,7 +239,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
             <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
           </button>
         )}
-        <div className={cn("flex items-center gap-2")}>
+        <div className={cn("flex items-center")}>
           <div
             ref={containerRef}
             className={cn(
@@ -354,31 +255,18 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
             style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
           >
             {items && items.map((item) => {
-              const Icon = iconMap[item.icon];
               const isSelected = selectedItem === item.id;
-              const isLongPressed = longPressedItems.has(item.id);
-              const showHideButton = isLongPressed || false; // Will be overridden by CSS hover on desktop
 
               return (
                 <div
                   key={item.id}
                   className="relative group"
-                  data-item-container
                   ref={(el) => {
                     buttonRefs.current[item.id] = el;
                   }}
-                  onTouchStart={(e) => handleItemTouchStart(e, item.id)}
-                  onTouchEnd={(e) => handleItemTouchEnd(e, item.id)}
-                  onTouchMove={(e) => handleItemTouchMove(e, item.id)}
                 >
                   <button
-                    onMouseDown={(e) => handleItemMouseDown(e, item.id)}
-                    onClick={(e) => {
-                      handleItemClick(e, item.id);
-                      if (!isLongPressed) {
-                        handleSetRandomItem(item);
-                      }
-                    }}
+                    onClick={() => onSelectItem(item.id)}
                     className={`flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 ${isSelected
                         ? 'text-white shadow-lg'
                         : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
@@ -395,26 +283,11 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
 
                     }
                   >
-                    {Icon && <Icon size={20} />}
+                    <IconComponent icon={item.icon} size={20} />
                     <span className="text-sm font-semibold whitespace-nowrap">
                       {item.name}
                     </span>
                   </button>
-                  {onHideItem && (
-                    <button
-                      onClick={(e) => {
-                        handleHideButtonClick(e, item.id);
-                        onHideItem(item.id);
-                      }}
-                      onTouchStart={(e) => e.stopPropagation()}
-                      onTouchEnd={(e) => e.stopPropagation()}
-                      className={`absolute -top-1 -right-1 z-20 p-0.5 bg-gray-300 dark:bg-gray-600 rounded-full transition-opacity ${showHideButton ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                        }`}
-                      aria-label={`Hide ${item.name}`}
-                    >
-                      <EyeOff size={12} className="text-gray-600 dark:text-gray-300" />
-                    </button>
-                  )}
                 </div>
               );
             })}

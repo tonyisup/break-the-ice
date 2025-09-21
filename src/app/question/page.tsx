@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { useTheme } from "../../hooks/useTheme";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { useStorageContext } from "../../hooks/useStorageContext";
 import { useQuestionHistory } from "../../hooks/useQuestionHistory";
 import { Header } from "../../components/header";
 import { useEffect } from "react";
@@ -16,7 +16,7 @@ export default function QuestionPage() {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { addQuestionToHistory } = useQuestionHistory();
-  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const { likedQuestions, setLikedQuestions } = useStorageContext();
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
   const question = useQuery(api.questions.getQuestionById, id ? { id } : "skip");

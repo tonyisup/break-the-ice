@@ -1,91 +1,83 @@
-import { useQuery } from 'convex/react';
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import {
-  HelpCircle,
-  GitBranch,
-  Clock,
-  Anchor,
-  Zap,
-  List,
-  Heart,
-  Box,
-  MessageCircle,
-  Type,
-  Award,
-  TrendingUp,
-  Smile,
-  GitPullRequest,
-  BowArrow,
-  Scale
-} from 'lucide-react';
-import { api } from '../../../convex/_generated/api';
-import { GenericSelector, type GenericSelectorRef, type SelectorItem } from '../generic-selector';
-import { useLocalStorage } from '../../hooks/useLocalStorage';
-
-const iconMap = {
-  HelpCircle,
-  GitBranch,
-  Clock,
-  Anchor,
-  Zap,
-  List,
-  Heart,
-  Box,
-  MessageCircle,
-  Type,
-  Award,
-  TrendingUp,
-  Smile,
-  GitPullRequest,
-  BowArrow,
-  Scale  
-};
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { GenericSelector, type GenericSelectorRef } from '../generic-selector';
+import { useStorageContext } from '../../hooks/useStorageContext';
+import { Icon } from '@/components/ui/icons/icon';
+import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer';
+import { Doc } from '../../../convex/_generated/dataModel';
 
 interface StyleSelectorProps {
+  styles: Doc<"styles">[];
   selectedStyle: string;
   randomOrder?: boolean;
-  onSelectStyle: (style: string) => void;
-  onRandomizeStyle: (style: string | null) => void;
+  onSelectStyle: (style: string) => void; 
 }
 
 export interface StyleSelectorRef {
+  selectedItem: string;
   randomizeStyle: () => void;
   cancelRandomizingStyle: () => void;
   confirmRandomizedStyle: () => void;
   scrollToCenter: (styleId: string) => void;
+  scrollToSelectedItem: () => void;
 }
-export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({ selectedStyle, onSelectStyle, onRandomizeStyle, randomOrder = true }, ref) => {
-  const styles = useQuery(api.styles.getStyles);
-  const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>('hiddenStyles', []);
+export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrder = true, ref }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
+  const { addHiddenStyle } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
+  const [isRandomizing, setIsRandomizing] = useState(false);
   
-  const handleHideStyle = (styleId: string) => {
-    setHiddenStyles(prev => [...new Set([...prev, styleId])]);
+  const handleHideStyle = (styleId: string, itemType: "Style" | "Tone") => {
+    if (!styleId) return;
+    if (itemType !== "Style") return;
+
+    addHiddenStyle(styleId);
   };
 
-  // Convert styles to the format expected by GenericSelector
-  const selectorItems: SelectorItem[] | undefined = useMemo(() => styles
-    ?.filter(style => !hiddenStyles.includes(style.id))
-    .map(style => ({
-      id: style.id,
-      name: style.name,
-      icon: style.icon,
-      color: style.color
-    })), [styles, hiddenStyles]);
+  const handleOpenDrawer = (itemId: string) => {
+    const style = styles?.find(s => s.id === itemId);
+    if (style) {
+      setSelectedItemForDrawer({
+        id: style.id,
+        name: style.name,
+        type: "Style",
+        description: style.description || "",
+        icon: style.icon as Icon,
+        color: style.color,
+      });
+      setIsDrawerOpen(true);
+    }
+  };
+
+  const handleSelectStyle = (styleId: string) => {
+    if(isRandomizing) {
+      onSelectStyle(styleId);
+      setIsRandomizing(false);
+      return;
+    }
+    handleOpenDrawer(styleId);
+  };
 
   // Expose the randomizeStyle function to parent components
   useImperativeHandle(ref, () => ({
+    selectedItem: selectedStyle,
     randomizeStyle: () => {
+      setIsRandomizing(true);
       genericSelectorRef.current?.randomizeItem();
     },
     cancelRandomizingStyle: () => {
+      setIsRandomizing(false);
       genericSelectorRef.current?.cancelRandomizingItem();
     },
     confirmRandomizedStyle: () => {
+      setIsRandomizing(true);
       genericSelectorRef.current?.confirmRandomizedItem();
     },
     scrollToCenter: (styleId: string) => {
       genericSelectorRef.current?.scrollToCenter(styleId);
+    },
+    scrollToSelectedItem: () => {
+      genericSelectorRef.current?.scrollToSelectedItem();
     },
   }));
 
@@ -93,21 +85,32 @@ export const StyleSelector = forwardRef<StyleSelectorRef, StyleSelectorProps>(({
     if (!randomOrder) {
       return;
     }
-    if (onSelectStyle && selectorItems) {
-      onSelectStyle(selectorItems[0].id);
+    if (onSelectStyle && styles) {
+      onSelectStyle(styles[0].id);
     }
-  }, [randomOrder, selectorItems, onSelectStyle]);
+  }, [randomOrder, styles, onSelectStyle]);
 
   return (
-    <GenericSelector
-      ref={genericSelectorRef}
-      items={selectorItems}
-      selectedItem={selectedStyle}
-      onSelectItem={onSelectStyle}
-      onHideItem={handleHideStyle}
-      iconMap={iconMap}
-      randomizeLabel="Randomize Style"
-      onRandomizeItem={onRandomizeStyle}
-    />
+    <>
+      <GenericSelector
+        ref={genericSelectorRef}
+        items={styles.map(style => ({
+          id: style.id,
+          name: style.name,
+          icon: style.icon as Icon,
+          color: style.color
+        }))}
+        selectedItem={selectedStyle}
+        onSelectItem={handleSelectStyle}
+        randomizeLabel="Randomize Style"
+      />
+      <ItemDetailDrawer
+        item={selectedItemForDrawer}
+        isOpen={isDrawerOpen}
+        onOpenChange={setIsDrawerOpen}
+        onSelectItem={onSelectStyle}
+        onHideItem={handleHideStyle}
+      />
+    </>
   );
-});
+};

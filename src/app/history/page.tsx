@@ -1,22 +1,20 @@
-import { useQuestionHistory } from "../../hooks/useQuestionHistory";
+import { useQuestionHistory, HistoryEntry } from "../../hooks/useQuestionHistory";
 import { useMemo, useState } from "react";
-import { ModernQuestionCard } from "../../components/modern-question-card";
-import { motion, AnimatePresence } from "framer-motion";
 import { Id } from "../../../convex/_generated/dataModel";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "@/hooks/useTheme";
-// import { HouseIcon } from "lucide-react";
 import { Header } from "@/components/header";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { useStorageContext } from "@/hooks/useStorageContext";
 import { Link } from "react-router-dom";
 import { cn, isColorDark } from "@/lib/utils";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
+import { QuestionList } from "@/components/question-list/QuestionList";
 
 function HistoryPageContent() {
-  const { history, removeQuestionFromHistory, clearHistory } = useQuestionHistory();
-  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>("likedQuestions", []);
+  const { history, removeQuestionHistoryEntry, clearHistoryEntries } = useQuestionHistory();
+  const { likedQuestions, addLikedQuestion, removeLikedQuestion } = useStorageContext();
   const [searchText, setSearchText] = useState("");
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const styles = useQuery(api.styles.getStyles, {});
@@ -39,14 +37,20 @@ function HistoryPageContent() {
     }, {} as { [key: string]: string });
   }, [tones]);
 
+  const filteredHistory = useMemo(() => {
+    return history.filter(entry =>
+      entry.question.text.toLowerCase().includes(searchText.toLowerCase())
+    );
+  }, [history, searchText]);
+
   const toggleLike = async (questionId: Id<"questions">) => {
     const isLiked = likedQuestions.includes(questionId);
 
     if (isLiked) {
-      setLikedQuestions(likedQuestions.filter(id => id !== questionId));
+      removeLikedQuestion(questionId);
       toast.success("Removed from favorites");
     } else {
-      setLikedQuestions([...likedQuestions, questionId]);
+      addLikedQuestion(questionId);
       await recordAnalytics({
         questionId,
         event: "like",
@@ -55,10 +59,12 @@ function HistoryPageContent() {
       toast.success("Added to favorites!");
     }
   };
-
+  const handleToggleLike = (questionId: Id<"questions">) => {
+    void toggleLike(questionId);
+  };
   const handleClearHistory = () => {
     setSearchText("");
-    clearHistory();
+    clearHistoryEntries();
     toast.success("History cleared");
   };
 
@@ -104,54 +110,25 @@ function HistoryPageContent() {
                 </button>
               </div>
             </div>
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              <AnimatePresence>
-                {history.filter((question) => question.text && question.text.toLowerCase().includes(searchText.toLowerCase())).map((question) => {
-                  const styleColor = (question.style && styleColors[question.style]) || '#667EEA';
-                  const toneColor = (question.tone && toneColors[question.tone]) || '#764BA2';
-                  const gradient = [styleColor, toneColor];
-                  return (
-                    <motion.div
-                      key={question._id}
-                      layout
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
-                      drag="x"
-                      dragConstraints={{ left: 0, right: 0 }}
-                      onDragEnd={(event, info) => {
-                        if (Math.abs(info.offset.x) > 100) {
-                          removeQuestionFromHistory(question._id);
-                        }
-                      }}
-                      onDoubleClick={() => {
-                        void toggleLike(question._id);
-                      }}
-                    >
-                      <ModernQuestionCard
-                        question={question}
-                        isGenerating={false}
-                        isFavorite={likedQuestions.includes(question._id)}
-                        onToggleFavorite={() => void toggleLike(question._id)}
-                        onToggleHidden={() => void removeQuestionFromHistory(question._id)}
-                        gradient={gradient}
-                      />
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-            </div>
+            <QuestionList
+              questions={filteredHistory}
+              styleColors={styleColors}
+              toneColors={toneColors}
+              likedQuestions={likedQuestions}
+              onToggleLike={handleToggleLike}
+              onRemoveItem={removeQuestionHistoryEntry}
+              isHistory
+            />
           </div>
         )}
       </main>
     </div>
   );
 }
-
 export default function HistoryPage() {
+  const { setQuestionHistory } = useStorageContext();
   const handleResetHistory = () => {
-    // Clear localStorage and reload the page
-    localStorage.removeItem("questionHistory");
+    setQuestionHistory([]);
     window.location.reload();
   };
 
