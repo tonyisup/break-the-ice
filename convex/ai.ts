@@ -433,6 +433,10 @@ ${JSON.stringify(questions.map(q => ({ id: q._id, text: q.text, style: q.style }
       cleanedResponse = jsonMatch[0];
     }
 
+    if (!cleanedResponse) {
+      // If the cleaned response is empty, there are no duplicates.
+      return [];
+    }
     const duplicateGroups = JSON.parse(cleanedResponse);
     
     if (!Array.isArray(duplicateGroups)) {
