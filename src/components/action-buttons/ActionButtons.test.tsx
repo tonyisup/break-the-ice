@@ -27,11 +27,10 @@ describe("ActionButtons", () => {
     expect(screen.getByTitle("Next Question")).toBeInTheDocument();
   });
 
-  it('renders Cancel, Shuffle, and New buttons when randomizedStyle is present', () => {
-    render(<ActionButtons {...mockProps} randomizedStyle="some-style" />);
-    expect(screen.getByTitle("Cancel Shuffle")).toBeInTheDocument();
+  it('renders a single button when isStyleTonesOpen is false', () => {
+    render(<ActionButtons {...mockProps} isStyleTonesOpen={false} />);
     expect(screen.getByTitle("Shuffle Style and Tone")).toBeInTheDocument();
-    expect(screen.getByTitle("New Question / Confirm Shuffle")).toBeInTheDocument();
+    expect(screen.queryByTitle("Next Question")).not.toBeInTheDocument();
   });
 
   it('calls the correct functions when buttons are clicked', () => {
