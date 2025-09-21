@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { AIQuestionGenerator } from './ai-question-generator';
+import { QuestionStateProvider } from '@/hooks/useQuestionState';
 
 // Mock convex/react
 vi.mock('convex/react', () => ({
@@ -17,9 +18,20 @@ vi.mock('sonner', () => ({
   },
 }));
 
+vi.mock('@/hooks/useQuestionState', () => ({
+    useQuestionState: () => ({
+        styles: [],
+        tones: [],
+        selectedStyle: '',
+        setSelectedStyle: vi.fn(),
+        selectedTone: '',
+        setSelectedTone: vi.fn(),
+    }),
+    QuestionStateProvider: ({ children } : { children: React.ReactNode }) => <div>{children}</div>
+}));
+
 describe('AIQuestionGenerator', () => {
   const mockOnClose = vi.fn();
-  const mockOnQuestionGenerated = vi.fn();
 
   beforeEach(async () => {
     // Reset mocks before each test
@@ -33,7 +45,7 @@ describe('AIQuestionGenerator', () => {
   });
 
   it('renders without crashing', () => {
-    render(<AIQuestionGenerator onClose={mockOnClose} onQuestionGenerated={mockOnQuestionGenerated} />);
+    render(<AIQuestionGenerator onClose={mockOnClose} />);
     expect(screen.getByText('Generate AI Question')).toBeInTheDocument();
   });
 
@@ -46,7 +58,7 @@ describe('AIQuestionGenerator', () => {
       return [];
     });
 
-    render(<AIQuestionGenerator onClose={mockOnClose} onQuestionGenerated={mockOnQuestionGenerated} />);
+    render(<AIQuestionGenerator onClose={mockOnClose} />);
 
     const generateButton = screen.getByText('Generate Question');
     expect(generateButton).toBeDisabled();

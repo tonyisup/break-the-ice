@@ -3,6 +3,7 @@ import MainPage from "./pages/MainPage";
 import { SignIn } from "./SignIn";
 import { useTheme } from "./hooks/useTheme";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { QuestionStateProvider } from "./hooks/useQuestionState";
 
 export default function App() {
   const { isAuthenticated, isLoading } = useStoreUserEffect();
@@ -28,7 +29,9 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <MainPage />
+      <QuestionStateProvider>
+        <MainPage />
+      </QuestionStateProvider>
     </ErrorBoundary>
   );
 }

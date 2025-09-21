@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Doc } from "../../../convex/_generated/dataModel";
+import { useQuestionState } from "@/hooks/useQuestionState";
 
 interface AIQuestionGeneratorProps {
-  onQuestionGenerated: (question: Doc<"questions">) => void;
   onClose: () => void;
 }
 
@@ -15,14 +15,11 @@ type GeneratedQuestion = {
   tags: string[];
 };
 
-export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestionGeneratorProps) => {
+export const AIQuestionGenerator = ({ onClose }: AIQuestionGeneratorProps) => {
 
+  const { styles, tones, selectedStyle, setSelectedStyle, selectedTone, setSelectedTone } = useQuestionState();
   const models = useQuery(api.models.getModels);
-  const styles = useQuery(api.styles.getStyles);
-  const tones = useQuery(api.tones.getTones);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedStyle, setSelectedStyle] = useState<string>(styles?.[0]?.id || "random");
-  const [selectedTone, setSelectedTone] = useState<string>(tones?.[0]?.id || "random");
   const [selectedModel, setSelectedModel] = useState<string>("mistralai/mistral-nemo");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -32,10 +29,6 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
   const tags = useQuery(api.tags.getTags);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
   const saveAIQuestion = useMutation(api.questions.saveAIQuestion);
-  const initializeTags = useMutation(api.tags.initializeTags);
-  const initializeModels = useMutation(api.models.initializeModels);
-  const initializeCategories = useMutation(api.categories.initializeCategories);
-
 
   const handleTagToggle = (tagName: string) => {
     setSelectedTags(prev =>
@@ -99,16 +92,13 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     try {
       // Determine category based on selected tags
 
-      const newQuestion = await saveAIQuestion({
+      await saveAIQuestion({
         text: previewQuestion.text,
         tags: previewQuestion.tags,
         style: selectedStyle,
         tone: selectedTone,
       });
       toast.success("AI question saved!");
-      if (newQuestion) {
-        onQuestionGenerated(newQuestion);
-      }
       onClose();
     } catch (error) {
       console.error("Error saving AI question:", error);
