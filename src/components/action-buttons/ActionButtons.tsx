@@ -1,6 +1,7 @@
 import { ArrowBigRight, Shuffle, X, SquareArrowRight } from '@/components/ui/icons/icons';
 import { cn } from "../../lib/utils";
 import { GradientSquareArrowRightIcon } from '../ui/icons/GradientSquareArrowRightIcon';
+import { GradientXIcon } from '../ui/icons/GradientXIcon';
 
 interface ActionButtonsProps {
   isColorDark: (color: string) => boolean;
@@ -55,7 +56,11 @@ export const ActionButtons = ({
               className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", " px-5 py-3 rounded-full flex items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors disabled:opacity-50")}
               title="Cancel Shuffle"
             >
-              <X size={24} className={isColorDark(gradient[1]) ? "text-black" : "text-white"} />
+              {isHighlighting && gradient[0] && gradient[1] ? (
+                <GradientXIcon size={24} gradient={gradient} />
+              ) : (
+                <X size={24} className={isColorDark(gradient[1]) ? "text-black" : "text-white"} />
+              )}
               {/* <span className="sm:block hidden text-white font-semibold text-base">Cancel</span> */}
             </button>}
             <button
