@@ -40,6 +40,7 @@ export default function MainPage() {
   const { addQuestionHistoryEntry } = useQuestionHistory();
   const [startTime, setStartTime] = useState(Date.now());
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationKey, setGenerationKey] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? styles?.[0]?.id ?? "");
   const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? tones?.[0]?.id ?? "");
@@ -153,6 +154,7 @@ export default function MainPage() {
           });
         } else if ((currentQuestions.length === 0) && !isGenerating) {
           setIsGenerating(true);
+          setGenerationKey(Date.now().toString());
           // Generate only 1 question when shuffling, 2 otherwise
           const count = isShuffling ? 1 : 2;
           // console.log("First useEffect triggering generation:", { count, isShuffling, isShufflingRef: isShufflingRef.current });
@@ -254,6 +256,7 @@ export default function MainPage() {
         // If we're about to remove the last question and no generation is in progress, start generating
         if (newQuestions.length === 0 && !isGenerating) {
           setIsGenerating(true);
+          setGenerationKey(Date.now().toString());
           // Generate questions immediately to prevent empty state
           const count = isShuffling ? 1 : 2;
           const timeout = setTimeout(() => {
@@ -317,6 +320,7 @@ export default function MainPage() {
 
   const getNextQuestion = () => {
     try {
+      setGenerationKey(null);
       setStartTime(Date.now());
       // Reset shuffle ref when user manually advances
       isShufflingRef.current = false;
@@ -423,7 +427,7 @@ export default function MainPage() {
         <AnimatePresence mode="wait">
           {currentQuestion && selectedStyle && selectedTone ? (
             <QuestionDisplay
-              key={currentQuestion._id}
+              key={generationKey ?? currentQuestion._id}
               isGenerating={isGenerating}
               currentQuestion={currentQuestion}
               isFavorite={isFavorite}
@@ -435,7 +439,7 @@ export default function MainPage() {
             />
           ) : (
             <QuestionDisplay
-              key="loading"
+              key={generationKey ?? "loading"}
               isGenerating={true}
               currentQuestion={null}
               isFavorite={false}
