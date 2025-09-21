@@ -37,7 +37,6 @@ function AdminComponentWrapper() {
 
 function TagManager() {
   const tags = useQuery(api.tags.getTags);
-  const categories = useQuery(api.categories.getCategories);
   const createTag = useMutation(api.tags.createTag);
   const updateTag = useMutation(api.tags.updateTag);
   const deleteTag = useMutation(api.tags.deleteTag);
@@ -125,13 +124,13 @@ function TagManager() {
               onChange={(e) => setNewTagCategory(e.target.value)}
               className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:w-1/2"
             >
-              <option value="">Select a category</option>
-              {categories?.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
+            <input
+              type="text"
+              value={newTagGrouping}
+              onChange={(e) => setNewTagGrouping(e.target.value)}
+              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter new tag grouping"
+            />
             <input
               type="text"
               value={newTagDescription}
