@@ -3,12 +3,6 @@
 @tailwind utilities;
 
 @layer utilities {
-  .text-gradient {
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;

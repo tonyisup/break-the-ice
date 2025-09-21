@@ -1,5 +1,6 @@
 import { ArrowBigRight, Shuffle, X, SquareArrowRight } from '@/components/ui/icons/icons';
 import { cn } from "../../lib/utils";
+import { GradientSquareArrowRightIcon } from '../ui/icons/GradientSquareArrowRightIcon';
 
 interface ActionButtonsProps {
   isColorDark: (color: string) => boolean;
@@ -86,20 +87,14 @@ export const ActionButtons = ({
               )}
               title="Shuffle Style and Tone"
             >
-              <SquareArrowRight
-                size={24}
-                className={cn({
-                  "text-gradient": isHighlighting && shuffledGradient[0] && shuffledGradient[1],
-                  [isColorDark(gradient[0]) ? "text-black" : "text-white"]: !isHighlighting || !shuffledGradient[0] || !shuffledGradient[1],
-                })}
-                style={
-                  isHighlighting && shuffledGradient[0] && shuffledGradient[1]
-                    ? {
-                        backgroundImage: `linear-gradient(135deg, ${shuffledGradient[0]}, ${shuffledGradient[1]})`,
-                      }
-                    : {}
-                }
-              />
+              {isHighlighting && shuffledGradient[0] && shuffledGradient[1] ? (
+                <GradientSquareArrowRightIcon size={24} gradient={shuffledGradient} />
+              ) : (
+                <SquareArrowRight
+                  size={24}
+                  className={isColorDark(gradient[0]) ? "text-black" : "text-white"}
+                />
+              )}
               {/* <span className="text-white font-semibold text-base">New</span> */}
             </button>}
           </div>
