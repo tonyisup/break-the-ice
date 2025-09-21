@@ -40,6 +40,7 @@ export default function MainPage() {
   const { addQuestionHistoryEntry } = useQuestionHistory();
   const [startTime, setStartTime] = useState(Date.now());
   const [isGenerating, setIsGenerating] = useState(false);
+  const [cardId, setCardId] = useState(() => Date.now().toString());
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? styles?.[0]?.id ?? "");
   const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? tones?.[0]?.id ?? "");
@@ -317,6 +318,9 @@ export default function MainPage() {
 
   const getNextQuestion = () => {
     try {
+      if (currentQuestions.length > 1) {
+        setCardId(Date.now().toString());
+      }
       setStartTime(Date.now());
       // Reset shuffle ref when user manually advances
       isShufflingRef.current = false;
@@ -421,31 +425,17 @@ export default function MainPage() {
 
       <main className="flex-1 flex flex-col">
         <AnimatePresence mode="wait">
-          {currentQuestion && selectedStyle && selectedTone ? (
-            <QuestionDisplay
-              key={currentQuestion._id}
-              isGenerating={isGenerating}
-              currentQuestion={currentQuestion}
-              isFavorite={isFavorite}
-              toggleLike={() => void toggleLike(currentQuestion._id)}
-              onSwipe={getNextQuestion}
-              toggleHide={() => toggleHide(currentQuestion._id)}
-              onHideStyle={handleHideStyle}
-              onHideTone={handleHideTone}
-            />
-          ) : (
-            <QuestionDisplay
-              key="loading"
-              isGenerating={true}
-              currentQuestion={null}
-              isFavorite={false}
-              toggleLike={() => {}}
-              toggleHide={() => {}}
-              onSwipe={() => {}}
-              onHideStyle={() => {}}
-              onHideTone={() => {}}
-            />
-          )}
+          <QuestionDisplay
+            key={cardId}
+            isGenerating={!currentQuestion || isGenerating}
+            currentQuestion={currentQuestion}
+            isFavorite={isFavorite}
+            toggleLike={currentQuestion ? () => toggleLike(currentQuestion._id) : () => {}}
+            onSwipe={getNextQuestion}
+            toggleHide={currentQuestion ? () => toggleHide(currentQuestion._id) : () => {}}
+            onHideStyle={handleHideStyle}
+            onHideTone={handleHideTone}
+          />
         </AnimatePresence>
 
         <div className="px-4">

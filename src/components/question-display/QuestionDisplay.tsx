@@ -65,7 +65,6 @@ export const QuestionDisplay = ({
   };
   return (
     <motion.div
-      key={currentQuestion?._id}
       className="flex-1 flex items-center justify-center px-5 pb-8"
       initial={{ x: 0, y:-300, opacity: 0 }}
       animate={{ x: 0, y:0, opacity: 1 }}
