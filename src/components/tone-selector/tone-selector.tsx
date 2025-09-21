@@ -39,7 +39,7 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
     <>
       <GenericSelector
         ref={genericSelectorRef}
-        items={tones.map(tone => ({
+        items={(tones || []).map(tone => ({
           id: tone.id,
           name: tone.name,
           icon: tone.icon as Icon,

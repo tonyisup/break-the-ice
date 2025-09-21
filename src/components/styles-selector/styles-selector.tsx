@@ -39,7 +39,7 @@ export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrde
     <>
       <GenericSelector
         ref={genericSelectorRef}
-        items={styles.map(style => ({
+        items={(styles || []).map(style => ({
           id: style.id,
           name: style.name,
           icon: style.icon as Icon,
