@@ -6,8 +6,8 @@ import { api } from "./_generated/api";
 // Mutations for progress tracking
 export const createDuplicateDetectionProgress = mutation({
   args: {
-    totalQuestions: v.float64(),
-    totalBatches: v.float64(),
+    totalQuestions: v.number(),
+    totalBatches: v.number(),
   },
   returns: v.id("duplicateDetectionProgress"),
   handler: async (ctx, args) => {
@@ -29,9 +29,9 @@ export const createDuplicateDetectionProgress = mutation({
 export const updateDuplicateDetectionProgress = mutation({
   args: {
     progressId: v.id("duplicateDetectionProgress"),
-    processedQuestions: v.float64(),
-    currentBatch: v.float64(),
-    duplicatesFound: v.float64(),
+    processedQuestions: v.number(),
+    currentBatch: v.number(),
+    duplicatesFound: v.number(),
     errors: v.array(v.string()),
   },
   returns: v.null(),
@@ -50,8 +50,8 @@ export const updateDuplicateDetectionProgress = mutation({
 export const completeDuplicateDetectionProgress = mutation({
   args: {
     progressId: v.id("duplicateDetectionProgress"),
-    processedQuestions: v.float64(),
-    duplicatesFound: v.float64(),
+    processedQuestions: v.number(),
+    duplicatesFound: v.number(),
     errors: v.array(v.string()),
   },
   returns: v.null(),
@@ -122,15 +122,15 @@ export const getDuplicateDetectionProgress = query({
     v.object({
       _id: v.id("duplicateDetectionProgress"),
       status: v.union(v.literal("running"), v.literal("completed"), v.literal("failed")),
-      totalQuestions: v.float64(),
-      processedQuestions: v.float64(),
-      duplicatesFound: v.float64(),
-      currentBatch: v.float64(),
-      totalBatches: v.float64(),
+      totalQuestions: v.number(),
+      processedQuestions: v.number(),
+      duplicatesFound: v.number(),
+      currentBatch: v.number(),
+      totalBatches: v.number(),
       errors: v.array(v.string()),
-      startedAt: v.float64(),
-      completedAt: v.optional(v.float64()),
-      lastUpdatedAt: v.float64(),
+      startedAt: v.number(),
+      completedAt: v.optional(v.number()),
+      lastUpdatedAt: v.number(),
     }),
     v.null()
   ),
@@ -146,15 +146,15 @@ export const getLatestDuplicateDetectionProgress = query({
     v.object({
       _id: v.id("duplicateDetectionProgress"),
       status: v.union(v.literal("running"), v.literal("completed"), v.literal("failed")),
-      totalQuestions: v.float64(),
-      processedQuestions: v.float64(),
-      duplicatesFound: v.float64(),
-      currentBatch: v.float64(),
-      totalBatches: v.float64(),
+      totalQuestions: v.number(),
+      processedQuestions: v.number(),
+      duplicatesFound: v.number(),
+      currentBatch: v.number(),
+      totalBatches: v.number(),
       errors: v.array(v.string()),
-      startedAt: v.float64(),
-      completedAt: v.optional(v.float64()),
-      lastUpdatedAt: v.float64(),
+      startedAt: v.number(),
+      completedAt: v.optional(v.number()),
+      lastUpdatedAt: v.number(),
     }),
     v.null()
   ),
