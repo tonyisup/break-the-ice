@@ -451,6 +451,7 @@ export default function MainPage() {
           <CollapsibleSection
             title="Customize Style & Tone"
             icons={[style?.icon as Icon, tone?.icon as Icon]}
+            iconColors={[style?.color, tone?.color]}
             isOpen={isStyleTonesOpen}
             onOpenChange={setIsStyleTonesOpen}
           >

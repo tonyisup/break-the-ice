@@ -6,7 +6,7 @@ import Root from './Root';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
 // Mock dependencies
-vi.mock('./hooks/useLocalStorage');
+vi.mock('./hooks/useLocalStorage.ts');
 vi.mock('./pages/LandingPage', () => ({
   default: () => <div>Landing Page</div>,
 }));

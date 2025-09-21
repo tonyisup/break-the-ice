@@ -5,6 +5,7 @@ import { Icon, IconComponent } from '../ui/icons/icon';
 interface CollapsibleSectionProps {
   title: string;
   icons?: Icon[];
+  iconColors?: (string | undefined)[];
   children: ReactNode;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
@@ -14,6 +15,7 @@ interface CollapsibleSectionProps {
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   title,
   icons,
+  iconColors,
   children,
   isOpen,
   onOpenChange,
@@ -30,7 +32,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
             {title}
             {icons && <div className="flex items-center gap-2 px-2">
               {icons.map((icon, index) => (
-                icon && <IconComponent icon={icon} size={24} key={index} />
+                icon && <IconComponent icon={icon} size={24} key={index} color={iconColors?.[index]} />
               ))}
             </div>}
           </div>
