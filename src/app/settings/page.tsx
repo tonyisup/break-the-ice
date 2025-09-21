@@ -22,46 +22,38 @@ const SettingsPage = () => {
   const {
     hiddenStyles,
     setHiddenStyles,
+    removeHiddenStyle,
+    clearHiddenStyles,
     hiddenTones,
     setHiddenTones,
+    removeHiddenTone,
+    clearHiddenTones,
+    hiddenQuestions,
+    setHiddenQuestions,
+    removeHiddenQuestion,
+    clearHiddenQuestions,
     bypassLandingPage,
     setBypassLandingPage,
   } = useStorageContext();
   
-  const settings = useQuery(api.users.getSettings);
-  const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
-
-  const hiddenQuestions = useMemo(() => settings?.hiddenQuestions ?? [], [settings]);
 
   const unhideStyle = (styleId: string) => {
-    setHiddenStyles(prev => prev.filter(id => id !== styleId));
+    removeHiddenStyle(styleId);
   };
 
   const unhideTone = (toneId: string) => {
-    setHiddenTones(prev => prev.filter(id => id !== toneId));
+    removeHiddenTone(toneId);
   };
 
   const unhideQuestion = (questionId: Id<"questions">) => {
-    const newHiddenQuestions = hiddenQuestions.filter(id => id !== questionId);
-    void updateHiddenQuestions({ hiddenQuestions: newHiddenQuestions });
+    removeHiddenQuestion(questionId);
   };
 
-  const clearHiddenQuestions = () => {
-    void updateHiddenQuestions({ hiddenQuestions: [] });
-  }
 
   const hiddenStyleObjects = allStyles?.filter(style => hiddenStyles.includes(style.id));
   const hiddenToneObjects = allTones?.filter(tone => hiddenTones.includes(tone.id));
-  const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions as Id<"questions">[] });
+  const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions });
 
-  useEffect(() => {
-    if (hiddenQuestionObjects) {
-      const serverIds = hiddenQuestionObjects.map(q => q._id);
-      if (serverIds.length !== hiddenQuestions.length) {
-        void updateHiddenQuestions({ hiddenQuestions: serverIds });
-      }
-    }
-  }, [hiddenQuestionObjects, hiddenQuestions, updateHiddenQuestions]);
 
   useEffect(() => {
     if (allStyles) {
@@ -69,7 +61,7 @@ const SettingsPage = () => {
       const localIds = hiddenStyles;
       const filteredIds = localIds.filter(id => serverIds.includes(id));
       if (filteredIds.length !== localIds.length) {
-        setHiddenStyles(filteredIds);
+            setHiddenStyles(filteredIds);
       }
     }
   }, [allStyles, hiddenStyles, setHiddenStyles]);
@@ -84,6 +76,15 @@ const SettingsPage = () => {
       }
     }
   }, [allTones, hiddenTones, setHiddenTones]);
+
+  useEffect(() => {
+    if (hiddenQuestionObjects) {
+      const serverIds = hiddenQuestionObjects.map(q => q._id);
+      if (serverIds.length !== hiddenQuestions.length) {
+        setHiddenQuestions(serverIds);
+      }
+    }
+  }, [hiddenQuestionObjects, hiddenQuestions, setHiddenQuestions]);
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradientDark = ["#3B2554", "#262D54"];
@@ -134,7 +135,7 @@ const SettingsPage = () => {
             {hiddenStyleObjects && hiddenStyleObjects.length > 0 ? (
               <>
                 <button
-                  onClick={() => setHiddenStyles([])}
+                  onClick={clearHiddenStyles}
                   className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
                 >
                   Clear All
@@ -167,7 +168,7 @@ const SettingsPage = () => {
             {hiddenToneObjects && hiddenToneObjects.length > 0 ? (
               <>
                 <button
-                  onClick={() => setHiddenTones([])}
+                  onClick={clearHiddenTones}
                   className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
                 >
                   Clear All

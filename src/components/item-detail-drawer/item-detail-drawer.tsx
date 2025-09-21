@@ -24,8 +24,8 @@ interface ItemDetailDrawerProps {
   item: ItemDetails | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSelectItem: (itemId: string) => void;
-  onHideItem: (itemId: string) => void;
+  onSelectItem?: (itemId: string, itemType: "Style" | "Tone") => void;
+  onHideItem: (itemId: string, itemType: "Style" | "Tone") => void;
 }
 
 export function ItemDetailDrawer({
@@ -41,12 +41,12 @@ export function ItemDetailDrawer({
   }
 
   const handleSelect = () => {
-    onSelectItem(item.id);
+    onSelectItem?.(item.id, item.type);
     onOpenChange(false);
   };
 
   const handleHide = () => {
-    onHideItem(item.id);
+    onHideItem(item.id, item.type);
     onOpenChange(false);
   };
 
@@ -64,11 +64,11 @@ export function ItemDetailDrawer({
           <DrawerDescription className="pt-4 text-sm text-muted-foreground">{item.description}</DrawerDescription>
         </DrawerHeader>
         <DrawerFooter>
-          <Button 
+          {onSelectItem && <Button 
             onClick={handleSelect} 
             className={isColorDark(item.color) ? "text-white" : "text-black"}
             style={{ backgroundColor: item.color }}
-          >Select</Button>
+          >Select</Button>}
           <Button variant="outline" onClick={handleHide}>Hide</Button>
           <DrawerClose asChild>
             <Button variant="ghost">Cancel</Button>

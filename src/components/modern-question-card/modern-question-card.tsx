@@ -1,15 +1,21 @@
-import React, { useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Heart, Share2, ThumbsDown } from '@/components/ui/icons/icons';
 import { Doc } from '../../../convex/_generated/dataModel';
+import { api } from '../../../convex/_generated/api';
+import { useQuery } from 'convex/react';
+import { Icon, IconComponent } from '../ui/icons/icon';
+import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer/item-detail-drawer';
+import { useStorageContext } from '@/hooks/useStorageContext';
 
 interface ModernQuestionCardProps {
   question: Doc<"questions"> | null;
   isGenerating: boolean;
   isFavorite: boolean;
-  gradient?: string[];
   onToggleFavorite: () => void;
   onToggleHidden: () => void;
   onShare?: () => void;
+  onHideStyle: (styleId: string) => void;
+  onHideTone: (toneId: string) => void;
   disabled?: boolean;
 }
 
@@ -17,13 +23,74 @@ export function ModernQuestionCard({
   question,
   isGenerating,
   isFavorite,
-  gradient = ['#667EEA', '#764BA2'],
   onToggleFavorite,
   onToggleHidden,
+  onHideStyle,
+  onHideTone,
   disabled = false,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
-
+  const style = useQuery(api.styles.getStyle, (!question || question?.style === "") ? "skip" : { id: question?.style as string ?? "would-you-rather" });
+  const tone = useQuery(api.tones.getTone, (!question || question?.tone === "") ? "skip" : { id: question?.tone as string ?? "fun-silly" });
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
+  const gradient = useMemo(() => {
+    return [style?.color || '#667EEA', tone?.color || '#764BA2'];
+  }, [style, tone]);
+ 
+  const handleHideStyle = (itemId: string) => {
+    if (!style) return;
+    if (!itemId) return;
+    if (itemId !== style.id) {
+      console.log("Item ID does not match style ID", itemId, style.id);
+      return;
+    }
+    onHideStyle(style.id);
+    setIsDrawerOpen(false);
+  };
+  const handleHideTone = (itemId: string) => {
+    if (!tone) return;
+    if (!itemId) return;
+    if (itemId !== tone.id) {
+      console.log("Item ID does not match tone ID", itemId, tone.id);
+      return;
+    }
+    if (!tone) return;
+    onHideTone(tone.id);
+    setIsDrawerOpen(false);
+  };
+  const handleHideItem = (itemId: string, itemType: "Style" | "Tone") => {
+    if (!itemId) return;
+    if (itemType === "Style") {
+      handleHideStyle(itemId);
+    } else {
+      handleHideTone(itemId);
+    }
+  };
+  const handleOpenStyleDrawer = () => {
+    if (!style) return;
+    setSelectedItemForDrawer({
+      id: style.id,
+      name: style.name,
+      type: "Style",
+      description: style.description || "",
+      icon: style.icon as Icon,
+      color: style.color,
+    });
+    setIsDrawerOpen(true);
+  };
+  const handleOpenToneDrawer = () => {
+    if (!tone) return;
+    setSelectedItemForDrawer({
+      id: tone.id,
+      name: tone.name,
+      type: "Tone",
+      description: tone.description || "",
+      icon: tone.icon as Icon,
+      color: tone.color,
+    });
+    setIsDrawerOpen(true);
+  };
   const handleShare = async () => {
     if (!question || !navigator.share) return;
 
@@ -61,7 +128,28 @@ export function ModernQuestionCard({
             <LoadingSpinner gradient={gradient} />
           ) : (
             // Full Card Content
-            question && <QuestionContent question={question} gradient={gradient} isFavorite={isFavorite} onToggleFavorite={onToggleFavorite} onToggleHidden={onToggleHidden} disabled={disabled} handleShare={() => void handleShare()} />
+            question && 
+            <>
+              <QuestionContent 
+                question={question} 
+                style={style} 
+                tone={tone} 
+                gradient={gradient} 
+                isFavorite={isFavorite} 
+                onToggleFavorite={onToggleFavorite} 
+                onToggleHidden={onToggleHidden} 
+                disabled={disabled} 
+                handleShare={() => void handleShare()} 
+                onClickStyle={handleOpenStyleDrawer} 
+                onClickTone={handleOpenToneDrawer}
+              />
+              <ItemDetailDrawer
+                item={selectedItemForDrawer}
+                isOpen={isDrawerOpen}
+                onOpenChange={setIsDrawerOpen}
+                onHideItem={handleHideItem}
+              />
+            </>
           )}
         </div>
       </div>
@@ -88,7 +176,14 @@ const LoadingSpinner = ({ gradient }: { gradient: string[] }) => {
   );
 };
 
-const QuestionContent = ({ question, gradient, isFavorite, onToggleFavorite, onToggleHidden, disabled, handleShare }: { question: Doc<"questions">, gradient: string[], isFavorite: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void }) => {
+const QuestionContent = ({ question, style, tone, gradient, isFavorite, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone }: { question: Doc<"questions">, style?: Doc<"styles">, tone?: Doc<"tones">, gradient: string[], isFavorite: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void }) => {
+  const handleClickStyle = () => {
+    onClickStyle?.();
+  };
+  const handleClickTone = () => {
+    onClickTone?.();
+  };
+
   return (
     <div className="w-full h-full flex flex-col justify-between min-h-[300px]">
       {/* Category Badge */}
@@ -99,9 +194,17 @@ const QuestionContent = ({ question, gradient, isFavorite, onToggleFavorite, onT
             borderLeftColor: gradient[0]
           }}
         >
-          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-            {question.style}
-          </span>
+          <div 
+            title={style && style.name}
+            className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
+            onClick={handleClickStyle}
+          >
+            {style && <IconComponent icon={style.icon as Icon} size={24} color={style.color} />}
+            <span className="hidden md:block">
+              {style && style.name}
+            </span>
+            {!style && question.style}
+          </div>
         </div>
 
         <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
@@ -110,9 +213,17 @@ const QuestionContent = ({ question, gradient, isFavorite, onToggleFavorite, onT
             borderRightColor: gradient[1]
           }}
         >
-          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-            {question.tone}
-          </span>
+          <div
+            title={tone && tone.name}
+            className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
+            onClick={handleClickTone}
+          >
+            {tone && <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />}
+            <span className="hidden md:block">
+              {tone && tone.name}
+            </span>
+            {!tone && question.tone}
+          </div>
         </div>
       </div>
 

@@ -46,6 +46,33 @@ export const getStyles = query({
   },
 });
 
+// Get all available styles
+export const getFilteredStyles = query({
+  args: {
+    excluded: v.array(v.string()),
+  },
+  returns: v.array(v.object({
+    _id: v.id("styles"),
+    _creationTime: v.number(),
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    structure: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    example: v.optional(v.string()),
+    promptGuidanceForAI: v.optional(v.string()),
+    order: v.optional(v.float64()),
+  })),
+  handler: async (ctx, args) => {
+      return await ctx.db.query("styles")
+      .withIndex("by_order")
+      .order("asc")
+      .filter((q) => q.and(... args.excluded.map(styleId => q.neq(q.field("id"), styleId))))
+      .collect();    
+  },
+});
+
 export const createStyle = mutation({
   args: {
     id: v.string(),

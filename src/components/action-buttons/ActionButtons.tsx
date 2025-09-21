@@ -6,8 +6,6 @@ interface ActionButtonsProps {
   gradient: string[];
   isGenerating: boolean;
   currentQuestion: any;
-  randomizedStyle: string | null;
-  randomizedTone: string | null;
   handleShuffleStyleAndTone: () => void;
   handleConfirmRandomizeStyleAndTone: () => void;
   handleCancelRandomizeStyleAndTone: () => void;
@@ -21,8 +19,6 @@ export const ActionButtons = ({
   gradient,
   isGenerating,
   currentQuestion,
-  randomizedStyle,
-  randomizedTone,
   handleShuffleStyleAndTone,
   handleConfirmRandomizeStyleAndTone,
   handleCancelRandomizeStyleAndTone,
@@ -32,7 +28,7 @@ export const ActionButtons = ({
 }: ActionButtonsProps) => {
   return (
     <>
-      {randomizedStyle || randomizedTone ? (
+      {isStyleTonesOpen ? (
         <div className="flex justify-center p-4">
           <div className="flex gap-4">
             <button

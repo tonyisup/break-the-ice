@@ -57,6 +57,7 @@ export const getNextQuestions = query({
     style: v.string(),
     tone: v.string(),
     seen: v.optional(v.array(v.id("questions"))),
+    hidden: v.optional(v.array(v.id("questions"))),
   },
   returns: v.array(v.object({
     _id: v.id("questions"),
@@ -74,13 +75,15 @@ export const getNextQuestions = query({
     tone: v.optional(v.string()),
   })),
   handler: async (ctx, args) => {
-    const { count, style, tone, seen } = args;
+    const { count, style, tone, seen, hidden } = args;
     const seenIds = new Set(seen ?? []);
 
     // Get all questions first, and filter out seen ones.
     const filteredQuestions = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q) => q.eq("style", style).eq("tone", tone))
+      .filter((q) => q.and(... (hidden ?? []).map(hiddenId => q.neq(q.field("_id"), hiddenId))))
+      .filter((q) => q.and(... (seen ?? []).map(seenId => q.neq(q.field("_id"), seenId))))
       .collect();
 
     const unseenQuestions = filteredQuestions.filter(q => !seenIds.has(q._id));

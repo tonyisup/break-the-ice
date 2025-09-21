@@ -1,6 +1,6 @@
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Doc, Id } from "../../../convex/_generated/dataModel";
+import { Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
 import { useMemo, useState, useEffect } from "react";
@@ -17,7 +17,7 @@ import { toast } from "sonner";
 function LikedQuestionsPageContent() {
   const { theme } = useTheme();
   const [searchText, setSearchText] = useState("");
-  const { likedQuestions, setLikedQuestions } = useStorageContext();
+  const { likedQuestions, removeLikedQuestion, setLikedQuestions, clearLikedQuestions } = useStorageContext();
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   
   // Filter out invalid question IDs to prevent errors
@@ -37,10 +37,14 @@ function LikedQuestionsPageContent() {
     if (isCleaningUp) return;
     
     try {
-      if (validLikedQuestions.length !== likedQuestions.length) {
+      const validQuestions = likedQuestions.filter(id => {
+        return typeof id === 'string' && id.length > 0;
+      });
+      
+      if (validQuestions.length !== likedQuestions.length) {
         console.log("Cleaning up invalid question IDs from localStorage");
         setIsCleaningUp(true);
-        setLikedQuestions(validLikedQuestions);
+        clearLikedQuestions();  
         // Reset cleanup flag after a short delay
         setTimeout(() => setIsCleaningUp(false), 100);
       }
@@ -48,18 +52,18 @@ function LikedQuestionsPageContent() {
       console.error("Error cleaning up invalid question IDs:", error);
       setIsCleaningUp(false);
     }
-  }, [validLikedQuestions.length, likedQuestions.length, setLikedQuestions, validLikedQuestions, isCleaningUp]);
+  }, [likedQuestions, clearLikedQuestions, isCleaningUp]);
 
   // Remove questions that no longer exist in the database
   useEffect(() => {
     if (isCleaningUp) return;
     
     try {
-      if (questions && validLikedQuestions.length > 0) {
+      if (questions && likedQuestions.length > 0) {
         const existingQuestionIds = new Set(questions.map(q => q._id));
-        const validIds = validLikedQuestions.filter(id => existingQuestionIds.has(id));
+        const validIds = likedQuestions.filter(id => existingQuestionIds.has(id));
         
-        if (validIds.length !== validLikedQuestions.length) {
+        if (validIds.length !== likedQuestions.length) {
           console.log("Removing deleted questions from likes");
           setIsCleaningUp(true);
           setLikedQuestions(validIds);
@@ -72,7 +76,7 @@ function LikedQuestionsPageContent() {
       console.error("Error cleaning up deleted questions:", error);
       setIsCleaningUp(false);
     }
-  }, [questions, validLikedQuestions, setLikedQuestions, isCleaningUp]);
+  }, [questions, likedQuestions, setLikedQuestions, isCleaningUp]);
 
   // Cleanup effect to prevent memory leaks
   useEffect(() => {
@@ -101,15 +105,13 @@ function LikedQuestionsPageContent() {
 
   const handleRemoveFavorite = (questionId: Id<"questions">) => {
     if (!questions) return;
-    const currentLikedIds = questions.map(q => q._id);
-    const newLikedIds = currentLikedIds.filter(id => id !== questionId);
-    setLikedQuestions(newLikedIds);
+    removeLikedQuestion(questionId);
   };
 
   const handleClearLikes = () => {
     setSearchText("");
     toast.success("Likes cleared");
-    setLikedQuestions([]);
+    clearLikedQuestions();
   };
 
   const filteredQuestions = useMemo(() => {

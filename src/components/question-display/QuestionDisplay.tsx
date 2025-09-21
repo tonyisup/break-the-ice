@@ -7,10 +7,11 @@ interface QuestionDisplayProps {
   isGenerating: boolean;
   currentQuestion: Doc<"questions"> | null;
   isFavorite: boolean;
-  gradient: string[];
   toggleLike: (questionId: any) => void;
   onSwipe: () => void;
   toggleHide: (questionId: any) => void;
+  onHideStyle: (styleId: string) => void;
+  onHideTone: (toneId: string) => void;
   disabled?: boolean;
 }
 
@@ -18,10 +19,11 @@ export const QuestionDisplay = ({
   isGenerating,
   currentQuestion,
   isFavorite,
-  gradient,
   toggleLike,
   onSwipe,
   toggleHide,
+  onHideStyle,
+  onHideTone,
   disabled = false,
 }: QuestionDisplayProps) => {
   const [dragDirection, setDragDirection] = useState<"left" | "right">("right");
@@ -39,6 +41,16 @@ export const QuestionDisplay = ({
       onSwipe();
     } else if (info.offset.y < -100) {
       handleShare();
+    }
+  };
+  const handleHideStyle = () => {
+    if (currentQuestion) {
+      onHideStyle(currentQuestion.style as string);
+    }
+  };
+  const handleHideTone = () => {
+    if (currentQuestion) {
+      onHideTone(currentQuestion.tone as string);
     }
   };
   const handleShare = () => {
@@ -71,9 +83,10 @@ export const QuestionDisplay = ({
         isGenerating={isGenerating}
         question={currentQuestion}
         isFavorite={isFavorite}
-        gradient={gradient}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
         onToggleHidden={() => currentQuestion && toggleHide(currentQuestion._id)}
+        onHideStyle={handleHideStyle}
+        onHideTone={handleHideTone}
         disabled={disabled}
       />
     </motion.div>

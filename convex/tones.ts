@@ -41,6 +41,30 @@ export const getTones = query({
   },
 });
 
+export const getFilteredTones = query({
+  args: {
+    excluded: v.array(v.string()),
+  },
+  returns: v.array(v.object({
+    _id: v.id("tones"),
+    _creationTime: v.number(),
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    promptGuidanceForAI: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    order: v.optional(v.float64()),
+  })),
+  handler: async (ctx, args) => {
+    return await ctx.db.query("tones")
+    .withIndex("by_order")
+    .order("asc")
+    .filter((q) => q.and(... args.excluded.map(toneId => q.neq(q.field("id"), toneId))))
+    .collect();
+  },
+});
+
 export const createTone = mutation({
   args: {
     id: v.string(),

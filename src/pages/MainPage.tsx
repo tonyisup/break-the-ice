@@ -22,28 +22,34 @@ export default function MainPage() {
 
   const {
     likedQuestions,
-    setLikedQuestions,
+    addLikedQuestion,
+    removeLikedQuestion,
     hiddenQuestions,
-    setHiddenQuestions,
+    addHiddenQuestion,
+    hiddenStyles,
+    hiddenTones,
+    questionHistory,
+    addHiddenStyle,
+    addHiddenTone,
   } = useStorageContext();
 
 
+  const styles = useQuery(api.styles.getFilteredStyles, { excluded: hiddenStyles });
+  const tones = useQuery(api.tones.getFilteredTones, { excluded: hiddenTones });
 
-  const { addQuestionToHistory } = useQuestionHistory();
+  const { addQuestionHistoryEntry } = useQuestionHistory();
   const [startTime, setStartTime] = useState(Date.now());
-  const [seenQuestionIds, setSeenQuestionIds] = useState<Id<"questions">[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? "would-you-rather");
-  const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? "fun-silly");
-  const [randomizedTone, setRandomizedTone] = useState<string | null>(null);
-  const [randomizedStyle, setRandomizedStyle] = useState<string | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? styles?.[0]?.id ?? "would-you-rather");
+  const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? tones?.[0]?.id ?? "fun-silly");
   const [isStyleTonesOpen, setIsStyleTonesOpen] = useState(false);
   const [isShuffling, setIsShuffling] = useState(false);
   const isShufflingRef = useRef(false);
   const toneSelectorRef = useRef<ToneSelectorRef>(null);
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
+  const callGenerateAIQuestionRef = useRef<((count: number, isShuffleGeneration?: boolean) => Promise<void>) | undefined>(undefined);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
   const discardQuestion = useMutation(api.questions.discardQuestion);
   const nextQuestions = useQuery(api.questions.getNextQuestions,
@@ -51,28 +57,25 @@ export default function MainPage() {
       count: 10,
       style: selectedStyle,
       tone: selectedTone,
-      seen: seenQuestionIds,
+      seen: questionHistory.map(q => q.question?._id),
+      hidden: hiddenQuestions,
     });
-  const styles = useQuery(api.styles.getStyles);
-  const tones = useQuery(api.tones.getTones);
   const style = useQuery(api.styles.getStyle, (selectedStyle === "") ? "skip" : { id: selectedStyle });
   const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
-  const allStyles = useQuery(api.styles.getStyles);
-  const allTones = useQuery(api.tones.getTones);
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
   useEffect(() => {
     try {
       // Only scroll if we have data loaded and the URL params are different from defaults
-      if (styles && searchParams.get("style") !== "would-you-rather") {
+      if (styles && searchParams.get("style") !== (styles?.[0]?.id ?? "would-you-rather")) {
         // Small delay to ensure DOM elements are rendered
         const timeout = setTimeout(() => {
           styleSelectorRef.current?.scrollToSelectedItem();
         }, 100);
         timeoutRefs.current.push(timeout);
       }
-      if (tones && searchParams.get("tone") !== "fun-silly") {
+      if (tones && searchParams.get("tone") !== (tones?.[0]?.id ?? "fun-silly")) {
         // Small delay to ensure DOM elements are rendered
         const timeout = setTimeout(() => {
           toneSelectorRef.current?.scrollToSelectedItem();
@@ -122,17 +125,18 @@ export default function MainPage() {
     }
   }, [selectedStyle, selectedTone, generateAIQuestion]);
 
+  // Update the ref whenever callGenerateAIQuestion changes
+  useEffect(() => {
+    callGenerateAIQuestionRef.current = callGenerateAIQuestion;
+  }, [callGenerateAIQuestion]);
+
   useEffect(() => {
     try {
       if (nextQuestions) {
         if (nextQuestions.length > 0) {
           setCurrentQuestions(prevQuestions => {
-            const newQuestions = nextQuestions.filter(q => !hiddenQuestions.includes(q._id));
-            if (prevQuestions.length === 0) {
-              return newQuestions;
-            }
             const existingIds = new Set(prevQuestions.map(q => q._id));
-            const filteredNewQuestions = newQuestions.filter(q => !existingIds.has(q._id));
+            const filteredNewQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
             if (filteredNewQuestions.length > 0) {
               return [...prevQuestions, ...filteredNewQuestions];
             }
@@ -143,14 +147,14 @@ export default function MainPage() {
           // Generate only 1 question when shuffling, 2 otherwise
           const count = isShuffling ? 1 : 2;
           // console.log("First useEffect triggering generation:", { count, isShuffling, isShufflingRef: isShufflingRef.current });
-          void callGenerateAIQuestion(count, isShuffling);
+          void callGenerateAIQuestionRef.current?.(count, isShuffling);
         }
       }
     } catch (error) {
       console.error("Error in first useEffect:", error);
       setIsGenerating(false);
     }
-  }, [nextQuestions, isGenerating, currentQuestions.length, callGenerateAIQuestion, hiddenQuestions, isShuffling]);
+  }, [nextQuestions, isGenerating, currentQuestions.length, isShuffling]);
 
   useEffect(() => {
     try {
@@ -193,10 +197,6 @@ export default function MainPage() {
     }
   }, [currentQuestions, isGenerating, callGenerateAIQuestion, nextQuestions]);
 
-  useEffect(() => {
-    setCurrentQuestions(prev => prev.filter(q => !hiddenQuestions.includes(q._id)));
-  }, [hiddenQuestions]);
-
   // Cleanup effect to prevent memory leaks and race conditions
   useEffect(() => {
     return () => {
@@ -233,13 +233,12 @@ export default function MainPage() {
   const currentQuestion = currentQuestions[0] || null;
   useEffect(() => {
     if (currentQuestion) {
-      addQuestionToHistory(currentQuestion);
+      addQuestionHistoryEntry(currentQuestion);
     }
-  }, [currentQuestion, addQuestionToHistory]);
+  }, [currentQuestion, addQuestionHistoryEntry]);
 
   const handleDiscard = async (questionId: Id<"questions">) => {
     try {
-      setSeenQuestionIds((prev) => [...prev, questionId]);
       setCurrentQuestions(prev => {
         const newQuestions = prev.filter(q => q._id !== questionId);
         
@@ -273,11 +272,11 @@ export default function MainPage() {
       const viewDuration = Math.min(Date.now() - startTime, 10000);
       const isLiked = likedQuestions.includes(questionId);
 
-      const newLikedQuestions = isLiked
-        ? likedQuestions.filter(id => id !== questionId)
-        : [...likedQuestions, questionId];
-
-      setLikedQuestions(newLikedQuestions);
+      if (isLiked) {
+        removeLikedQuestion(questionId);
+      } else {
+        addLikedQuestion(questionId);
+      }
 
       if (isLiked) {
         toast.success("Removed from favorites");
@@ -298,8 +297,7 @@ export default function MainPage() {
   const toggleHide = (questionId: Id<"questions">) => {
     try {
       if (!currentQuestions) return;
-      const newHiddenQuestions = [...hiddenQuestions, questionId];
-      setHiddenQuestions(newHiddenQuestions);
+      addHiddenQuestion(questionId);
       toast.success("Question hidden");
       getNextQuestion();
     } catch (error) {
@@ -324,7 +322,7 @@ export default function MainPage() {
 
   const handleShuffleStyleAndTone = () => {
     if (!isStyleTonesOpen) {
-      // If auto-advance is enabled, immediately shuffle and advance
+      // If customization panel is collapsed, immediately shuffle and advance
       if (toneSelectorRef.current && styleSelectorRef.current) {
         // Components are mounted - first randomize, then confirm
         toneSelectorRef.current.randomizeTone();
@@ -334,7 +332,17 @@ export default function MainPage() {
           handleConfirmRandomizeStyleAndTone();
         }, 50);
       } else {
-        // Components are not mounted - do direct randomization and confirmation
+        // Components are not mounted - do direct randomization and confirmation   
+
+        if (styles && styles.length > 0) {
+          const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+          setSelectedStyle(randomStyle.id);
+        }
+        
+        if (tones && tones.length > 0) {
+          const randomTone = tones[Math.floor(Math.random() * tones.length)];
+          setSelectedTone(randomTone.id);
+        }
         handleConfirmRandomizeStyleAndTone();
       }
     } else {
@@ -343,21 +351,15 @@ export default function MainPage() {
       if (toneSelectorRef.current && styleSelectorRef.current) {
         toneSelectorRef.current.randomizeTone();
         styleSelectorRef.current.randomizeStyle();
-      } else {
-        // If components are not mounted (collapsed), implement randomization directly
-        if (allStyles && allTones) {
-          const availableStyles = allStyles.filter(s => s.id !== selectedStyle);
-          const availableTones = allTones.filter(t => t.id !== selectedTone);
-          
-          if (availableStyles.length > 0) {
-            const randomStyle = availableStyles[Math.floor(Math.random() * availableStyles.length)];
-            setRandomizedStyle(randomStyle.id);
-          }
-          
-          if (availableTones.length > 0) {
-            const randomTone = availableTones[Math.floor(Math.random() * availableTones.length)];
-            setRandomizedTone(randomTone.id);
-          }
+      } else {                  
+        if (styles && styles.length > 0) {
+          const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+          setSelectedStyle(randomStyle.id);
+        }
+        
+        if (tones && tones.length > 0) {
+          const randomTone = tones[Math.floor(Math.random() * tones.length)];
+          setSelectedTone(randomTone.id);
         }
       }
     }
@@ -371,15 +373,10 @@ export default function MainPage() {
     if (toneSelectorRef.current && styleSelectorRef.current) {
       toneSelectorRef.current.cancelRandomizingTone();
       styleSelectorRef.current.cancelRandomizingStyle();
-    } else {
-      // If components are not mounted, clear the randomized values directly
-      setRandomizedStyle(null);
-      setRandomizedTone(null);
     }
   }
   const handleConfirmRandomizeStyleAndTone = () => {
     setCurrentQuestions([]);
-    setSeenQuestionIds([]);
     setIsShuffling(true);
     isShufflingRef.current = true;
     
@@ -387,23 +384,15 @@ export default function MainPage() {
     if (toneSelectorRef.current && styleSelectorRef.current) {
       toneSelectorRef.current.confirmRandomizedTone();
       styleSelectorRef.current.confirmRandomizedStyle();
-    } else {
-      // If components are not mounted, do randomization and apply immediately
-      if (allStyles && allTones) {
-        const availableStyles = allStyles.filter(s => s.id !== selectedStyle);
-        const availableTones = allTones.filter(t => t.id !== selectedTone);
-        
-        if (availableStyles.length > 0) {
-          const randomStyle = availableStyles[Math.floor(Math.random() * availableStyles.length)];
-          setSelectedStyle(randomStyle.id);
-        }
-        
-        if (availableTones.length > 0) {
-          const randomTone = availableTones[Math.floor(Math.random() * availableTones.length)];
-          setSelectedTone(randomTone.id);
-        }
-      }
-    }
+    } 
+  }
+  const handleHideStyle = (styleId: string) => {
+    addHiddenStyle(styleId);
+    handleShuffleStyleAndTone();
+  }
+  const handleHideTone = (toneId: string) => {
+    addHiddenTone(toneId);
+    handleShuffleStyleAndTone();
   }
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
@@ -429,10 +418,11 @@ export default function MainPage() {
               isGenerating={isGenerating}
               currentQuestion={currentQuestion}
               isFavorite={isFavorite}
-              gradient={gradient}
               toggleLike={() => void toggleLike(currentQuestion._id)}
               onSwipe={getNextQuestion}
               toggleHide={() => toggleHide(currentQuestion._id)}
+              onHideStyle={handleHideStyle}
+              onHideTone={handleHideTone}
             />
           ) : (
             <QuestionDisplay
@@ -440,10 +430,11 @@ export default function MainPage() {
               isGenerating={true}
               currentQuestion={null}
               isFavorite={false}
-              gradient={gradient}
               toggleLike={() => {}}
               toggleHide={() => {}}
               onSwipe={() => {}}
+              onHideStyle={() => {}}
+              onHideTone={() => {}}
             />
           )}
         </AnimatePresence>
@@ -456,18 +447,18 @@ export default function MainPage() {
             onOpenChange={setIsStyleTonesOpen}
           >
             <StyleSelector
+              styles={styles || []}
               randomOrder={false}
               selectedStyle={selectedStyle}
               ref={styleSelectorRef}
               onSelectStyle={setSelectedStyle}
-              onRandomizeStyle={setRandomizedStyle}
             />
             <ToneSelector
+              tones={tones || []}
               randomOrder={false}
               ref={toneSelectorRef}
               selectedTone={selectedTone}
               onSelectTone={setSelectedTone}
-              onRandomizeTone={setRandomizedTone}
             />
           </CollapsibleSection>
         </div>
@@ -477,8 +468,6 @@ export default function MainPage() {
           gradient={gradient}
           isGenerating={isGenerating}
           currentQuestion={currentQuestion}
-          randomizedStyle={randomizedStyle}
-          randomizedTone={randomizedTone}
           handleShuffleStyleAndTone={handleShuffleStyleAndTone}
           handleConfirmRandomizeStyleAndTone={handleConfirmRandomizeStyleAndTone}
           handleCancelRandomizeStyleAndTone={handleCancelRandomizeStyleAndTone}
