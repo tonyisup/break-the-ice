@@ -88,14 +88,16 @@ export const ActionButtons = ({
             >
               <SquareArrowRight
                 size={24}
-                className={isColorDark(gradient[0]) ? "text-black" : "text-white"}
+                className={cn(
+                  isColorDark(gradient[0]) ? "text-black" : "text-white",
+                  {
+                    "text-gradient": isHighlighting && shuffledGradient[0] && shuffledGradient[1],
+                  }
+                )}
                 style={
                   isHighlighting && shuffledGradient[0] && shuffledGradient[1]
                     ? {
-                        background: `linear-gradient(135deg, ${shuffledGradient[0]}, ${shuffledGradient[1]})`,
-                        WebkitBackgroundClip: 'text',
-                        backgroundClip: 'text',
-                        color: 'transparent',
+                        backgroundImage: `linear-gradient(135deg, ${shuffledGradient[0]}, ${shuffledGradient[1]})`,
                       }
                     : {}
                 }
