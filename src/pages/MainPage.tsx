@@ -66,6 +66,8 @@ export default function MainPage() {
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
   const [isHighlighting, setIsHighlighting] = useState(false);
+  const [highlightedStyle, setHighlightedStyle] = useState<Doc<"styles"> | null>(null);
+  const [highlightedTone, setHighlightedTone] = useState<Doc<"tones"> | null>(null);
     
   useEffect(() => {
     if (styles && styles.length > 0) {
@@ -409,6 +411,7 @@ export default function MainPage() {
   }
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
+  const shuffledGradient = (highlightedStyle?.color && highlightedTone?.color) ? [highlightedStyle?.color, highlightedTone?.color] : gradient;
   const gradientTarget = theme === "dark" ? "#000" : "#fff";
 
 
@@ -454,6 +457,7 @@ export default function MainPage() {
               onSelectStyle={setSelectedStyle}
               isHighlighting={isHighlighting}
               setIsHighlighting={setIsHighlighting}
+              onHighlightStyle={setHighlightedStyle}
             />
             <ToneSelector
               tones={tones || []}
@@ -463,6 +467,7 @@ export default function MainPage() {
               onSelectTone={setSelectedTone}
               isHighlighting={isHighlighting}
               setIsHighlighting={setIsHighlighting}
+              onHighlightTone={setHighlightedTone}
             />
           </CollapsibleSection>
         </div>
@@ -470,6 +475,7 @@ export default function MainPage() {
         <ActionButtons
           isColorDark={isColorDark}
           gradient={gradient}
+          shuffledGradient={shuffledGradient}
           isGenerating={isGenerating}
           handleShuffleStyleAndTone={handleShuffleStyleAndTone}
           handleConfirmRandomizeStyleAndTone={handleConfirmRandomizeStyleAndTone}

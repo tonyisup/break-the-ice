@@ -12,6 +12,7 @@ interface ToneSelectorProps {
   onSelectTone: (tone: string) => void;
   isHighlighting: boolean;
   setIsHighlighting: (isHighlighting: boolean) => void;
+  onHighlightTone?: (tone: Doc<"tones"> | null) => void;
 }
 
 export interface ToneSelectorRef {
@@ -23,7 +24,7 @@ export interface ToneSelectorRef {
   scrollToSelectedItem: () => void;
 }
 
-export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = true, ref, isHighlighting, setIsHighlighting }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
+export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = true, ref, isHighlighting, setIsHighlighting, onHighlightTone }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
   const { addHiddenTone } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -32,7 +33,15 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
   
   useEffect(() => {
     setIsHighlighting(highlightedItem !== null);
-  }, [highlightedItem, setIsHighlighting]);
+    if (onHighlightTone) {
+      if (highlightedItem) {
+        const tone = tones.find(t => t.id === highlightedItem.id);
+        onHighlightTone(tone ?? null);
+      } else {
+        onHighlightTone(null);
+      }
+    }
+  }, [highlightedItem, setIsHighlighting, onHighlightTone, tones]);
 
   const handleHideTone = (item: ItemDetails) => {
     if (!item.id) return;
