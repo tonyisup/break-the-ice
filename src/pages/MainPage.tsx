@@ -41,8 +41,8 @@ export default function MainPage() {
   const [startTime, setStartTime] = useState(Date.now());
   const [isGenerating, setIsGenerating] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? styles?.[0]?.id ?? "would-you-rather");
-  const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? tones?.[0]?.id ?? "fun-silly");
+  const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? styles?.[0]?.id ?? "");
+  const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? tones?.[0]?.id ?? "");
   const [isStyleTonesOpen, setIsStyleTonesOpen] = useState(false);
   const [isShuffling, setIsShuffling] = useState(false);
   const isShufflingRef = useRef(false);
@@ -66,16 +66,24 @@ export default function MainPage() {
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
 
   useEffect(() => {
+    if (styles && styles.length > 0) {
+      setSelectedStyle(styles[0].id);
+    }
+    if (tones && tones.length > 0) {
+      setSelectedTone(tones[0].id);
+    }
+  }, [styles, tones]);
+  useEffect(() => {
     try {
       // Only scroll if we have data loaded and the URL params are different from defaults
-      if (styles && searchParams.get("style") !== (styles?.[0]?.id ?? "would-you-rather")) {
+      if (selectedStyle !== styleSelectorRef.current?.selectedItem) {
         // Small delay to ensure DOM elements are rendered
         const timeout = setTimeout(() => {
           styleSelectorRef.current?.scrollToSelectedItem();
         }, 100);
         timeoutRefs.current.push(timeout);
       }
-      if (tones && searchParams.get("tone") !== (tones?.[0]?.id ?? "fun-silly")) {
+      if (selectedTone !== toneSelectorRef.current?.selectedItem) {
         // Small delay to ensure DOM elements are rendered
         const timeout = setTimeout(() => {
           toneSelectorRef.current?.scrollToSelectedItem();
@@ -85,9 +93,9 @@ export default function MainPage() {
     } catch (error) {
       console.error("Error in scroll effect:", error);
     }
-  }, [searchParams, styleSelectorRef, toneSelectorRef, styles, tones]);
+  }, [styleSelectorRef, toneSelectorRef, selectedStyle, selectedTone]);
 
-  useEffect(() => {
+  useEffect(() => {    
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set("style", selectedStyle);
     newSearchParams.set("tone", selectedTone);
@@ -412,7 +420,7 @@ export default function MainPage() {
 
       <main className="flex-1 flex flex-col">
         <AnimatePresence mode="wait">
-          {currentQuestion ? (
+          {currentQuestion && selectedStyle && selectedTone ? (
             <QuestionDisplay
               key={currentQuestion._id}
               isGenerating={isGenerating}

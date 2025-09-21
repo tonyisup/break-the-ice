@@ -13,6 +13,7 @@ interface ToneSelectorProps {
 }
 
 export interface ToneSelectorRef {
+  selectedItem: string;
   randomizeTone: () => void;
   cancelRandomizingTone: () => void;
   confirmRandomizedTone: () => void;
@@ -58,6 +59,7 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
 
   // Expose the randomizeTone function to parent components
   useImperativeHandle(ref, () => ({
+    selectedItem: selectedTone,
     randomizeTone: () => {
       setIsRandomizing(true);
       genericSelectorRef.current?.randomizeItem();

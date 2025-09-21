@@ -13,6 +13,7 @@ interface StyleSelectorProps {
 }
 
 export interface StyleSelectorRef {
+  selectedItem: string;
   randomizeStyle: () => void;
   cancelRandomizingStyle: () => void;
   confirmRandomizedStyle: () => void;
@@ -59,6 +60,7 @@ export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrde
 
   // Expose the randomizeStyle function to parent components
   useImperativeHandle(ref, () => ({
+    selectedItem: selectedStyle,
     randomizeStyle: () => {
       setIsRandomizing(true);
       genericSelectorRef.current?.randomizeItem();
