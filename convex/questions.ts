@@ -453,7 +453,7 @@ export const getPendingDuplicateDetections = query({
     reason: v.string(),
     rejectReason: v.optional(v.string()),
     confidence: v.number(),
-    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
     detectedAt: v.number(),
     reviewedAt: v.optional(v.number()),
     reviewedBy: v.optional(v.id("users")),
@@ -502,6 +502,98 @@ export const getPendingDuplicateDetections = query({
     );
 
     return detectionsWithQuestions;
+  },
+});
+
+// Get all completed duplicate detections for admin review
+export const getCompletedDuplicateDetections = query({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id("duplicateDetections"),
+    _creationTime: v.number(),
+    questionIds: v.array(v.id("questions")),
+    reason: v.string(),
+    rejectReason: v.optional(v.string()),
+    confidence: v.number(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
+    detectedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedBy: v.optional(v.id("users")),
+    reviewer: v.optional(v.object({ name: v.string() })),
+    questions: v.array(v.object({
+      _id: v.id("questions"),
+      _creationTime: v.number(),
+      text: v.string(),
+      style: v.optional(v.string()),
+      tone: v.optional(v.string()),
+      totalLikes: v.number(),
+      totalShows: v.number(),
+    })),
+  })),
+  handler: async (ctx): Promise<any> => {
+    await ensureAdmin(ctx);
+
+    const approvedDetections = await ctx.db
+      .query("duplicateDetections")
+      .withIndex("by_status_and_confidence", (q) => q.eq("status", "approved"))
+      .order("desc")
+      .collect();
+
+    const rejectedDetections = await ctx.db
+      .query("duplicateDetections")
+      .withIndex("by_status_and_confidence", (q) => q.eq("status", "rejected"))
+      .order("desc")
+      .collect();
+
+    const deletedDetections = await ctx.db
+      .query("duplicateDetections")
+      .withIndex("by_status_and_confidence", (q) => q.eq("status", "deleted"))
+      .order("desc")
+      .collect();
+
+    const detections = [...approvedDetections, ...rejectedDetections, ...deletedDetections].sort((a, b) => (b.reviewedAt ?? 0) - (a.reviewedAt ?? 0));
+
+    const detectionsWithDetails = await Promise.all(
+      detections.map(async (detection) => {
+        const questions = await Promise.all(
+          detection.questionIds.map(async (id) => {
+            const question = await ctx.db.get(id);
+            if (!question) return null;
+            return {
+              _id: question._id,
+              _creationTime: question._creationTime,
+              text: question.text,
+              style: question.style,
+              tone: question.tone,
+              totalLikes: question.totalLikes,
+              totalShows: question.totalShows,
+            };
+          })
+        );
+
+        let reviewer = null;
+        if (detection.reviewedBy) {
+            try {
+                const user = await ctx.db.get(detection.reviewedBy);
+                if (user) {
+                    reviewer = { name: user.name ?? user.email };
+                }
+            } catch (e) {
+                if (String(detection.reviewedBy).includes("system")) {
+                    reviewer = { name: "System" };
+                }
+            }
+        }
+
+        return {
+          ...detection,
+          questions: questions.filter((q): q is NonNullable<typeof q> => q !== null),
+          reviewer,
+        };
+      })
+    );
+
+    return detectionsWithDetails;
   },
 });
 

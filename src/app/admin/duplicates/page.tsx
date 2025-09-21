@@ -183,11 +183,16 @@ function DuplicateDetectionComponent() {
           </div>
         </div>
 
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Duplicate Detection Review</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Review AI-detected duplicate questions. Select which questions to keep and which to delete.
-          </p>
+        <div className="mb-6 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Duplicate Detection Review</h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Review AI-detected duplicate questions. Select which questions to keep and which to delete.
+            </p>
+          </div>
+          <Link to="/admin/duplicates/completed" className="px-4 py-2 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/30 transition-colors">
+            View Completed Reviews
+          </Link>
         </div>
 
         {duplicateDetections.length === 0 ? (
