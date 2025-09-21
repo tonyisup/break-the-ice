@@ -88,7 +88,7 @@ export const ActionButtons = ({
                 isColorDark(gradient[0])
                   ? "bg-white/20 dark:bg-white/20"
                   : "bg-black/20 dark:bg-black/20",
-                "px-5 py-3 rounded-full flex justify-center items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
+                "px-5 py-3 rounded-full flex justify-center items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors disabled:opacity-50"
               )}
               title="Shuffle Style and Tone"
             >
@@ -112,7 +112,7 @@ export const ActionButtons = ({
               isColorDark(gradient[0])
                 ? "bg-white/20 dark:bg-white/20"
                 : "bg-black/20 dark:bg-black/20",
-              "px-5 py-3 rounded-full flex justify-center items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
+              "px-5 py-3 rounded-full flex justify-center items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors disabled:opacity-50"
             )}
             title="Shuffle Style and Tone"
             disabled={isGenerating}
