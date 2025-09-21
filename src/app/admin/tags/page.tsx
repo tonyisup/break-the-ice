@@ -37,37 +37,36 @@ function AdminComponentWrapper() {
 
 function TagManager() {
   const tags = useQuery(api.tags.getTags);
-  const categories = useQuery(api.categories.getCategories);
   const createTag = useMutation(api.tags.createTag);
   const updateTag = useMutation(api.tags.updateTag);
   const deleteTag = useMutation(api.tags.deleteTag);
   const { theme, setTheme } = useTheme();
 
   const [newTagName, setNewTagName] = useState('');
-  const [newTagCategory, setNewTagCategory] = useState('');
+  const [newTagGrouping, setNewTagGrouping] = useState('');
   const [newTagDescription, setNewTagDescription] = useState('');
   const [editingTag, setEditingTag] = useState<Doc<"tags"> | null>(null);
   const [searchText, setSearchText] = useState('');
 
   const handleCreateTag = () => {
-    if (newTagName.trim() && newTagCategory.trim()) {
+    if (newTagName.trim() && newTagGrouping.trim()) {
       void createTag({
         name: newTagName,
-        category: newTagCategory,
+        grouping: newTagGrouping,
         description: newTagDescription,
       });
       setNewTagName('');
-      setNewTagCategory('');
+      setNewTagGrouping('');
       setNewTagDescription('');
     }
   };
 
   const handleUpdateTag = () => {
-    if (editingTag && editingTag.name.trim() && editingTag.category.trim()) {
+    if (editingTag && editingTag.name.trim() && editingTag.grouping.trim()) {
       void updateTag({
         id: editingTag._id,
         name: editingTag.name,
-        category: editingTag.category,
+        grouping: editingTag.grouping,
         description: editingTag.description,
       });
       setEditingTag(null);
@@ -120,18 +119,13 @@ function TagManager() {
               className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Enter new tag name"
             />
-            <select
-              value={newTagCategory}
-              onChange={(e) => setNewTagCategory(e.target.value)}
-              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:w-1/2"
-            >
-              <option value="">Select a category</option>
-              {categories?.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
+            <input
+              type="text"
+              value={newTagGrouping}
+              onChange={(e) => setNewTagGrouping(e.target.value)}
+              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter new tag grouping"
+            />
             <input
               type="text"
               value={newTagDescription}
@@ -167,7 +161,7 @@ function TagManager() {
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Name</th>
-                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Category</th>
+                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Grouping</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/2">Description</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/4">Actions</th>
               </tr>
@@ -176,7 +170,7 @@ function TagManager() {
               {tags?.filter(tag => {
                 const searchLower = searchText.toLowerCase();
                 return tag.name.toLowerCase().includes(searchLower) ||
-                  tag.category.toLowerCase().includes(searchLower) ||
+                  (tag.grouping && tag.grouping.toLowerCase().includes(searchLower)) ||
                   (tag.description && tag.description.toLowerCase().includes(searchLower))
               }).map((tag) => (
                 <tr key={tag._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
@@ -196,13 +190,13 @@ function TagManager() {
                     {editingTag?._id === tag._id ? (
                       <input
                         type="text"
-                        value={editingTag.category}
-                        onChange={(e) => setEditingTag({ ...editingTag, category: e.target.value })}
+                        value={editingTag.grouping}
+                        onChange={(e) => setEditingTag({ ...editingTag, grouping: e.target.value })}
                         className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     ) : (
                       <span className="text-gray-600 dark:text-gray-400">
-                        {tag.category}
+                        {tag.grouping}
                       </span>
                     )}
                   </td>

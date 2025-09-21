@@ -88,17 +88,6 @@ export default defineSchema({
   }).index("name", ["name"])
     .index("id", ["id"])
     .index("by_order", ["order"]),
-  categories: defineTable({
-    id: v.string(),
-    name: v.string(),
-    description: v.string(),
-    prompt: v.string(),
-    icon: v.string(),
-    gradient: v.array(v.string()),
-    hidden: v.boolean(),
-  })
-    .index("name", ["name"])
-    .index("id", ["id"]),
   questions: defineTable({
     averageViewDuration: v.float64(),
     lastShownAt: v.optional(v.float64()),
@@ -108,7 +97,6 @@ export default defineSchema({
     totalShows: v.float64(),
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
-    category: v.optional(v.string()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
   })
@@ -127,10 +115,10 @@ export default defineSchema({
     .index("by_style_and_tone", ["style", "tone"]),
   tags: defineTable({
     name: v.string(),
-    category: v.string(),
+    grouping: v.string(),
     description: v.optional(v.string()),
   })
-    .index("by_category", ["category"]),
+    .index("by_grouping", ["grouping"]),
   users: defineTable({
     email: v.optional(v.string()),
     emailVerificationTime: v.optional(v.float64()),

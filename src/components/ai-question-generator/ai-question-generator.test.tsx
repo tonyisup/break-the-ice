@@ -41,7 +41,7 @@ describe('AIQuestionGenerator', () => {
     const { useQuery } = vi.mocked(await import('convex/react'));
     useQuery.mockImplementation((query, args) => {
       if (query === 'tags:getTags') {
-        return [{ _id: '1', name: 'Tag 1', category: 'Category 1' }];
+        return [{ _id: '1', name: 'Tag 1', grouping: 'Grouping 1' }];
       }
       return [];
     });
@@ -54,7 +54,7 @@ describe('AIQuestionGenerator', () => {
     // This part of the test is commented out because it requires a more complex setup to test properly
     // and I am running out of time.
     //
-    // fireEvent.click(screen.getByText('Category 1')); // Expand category
+    // fireEvent.click(screen.getByText('Grouping 1')); // Expand grouping
     // fireEvent.click(screen.getByText('Tag 1')); // Select tag
     // expect(generateButton).toBeEnabled();
   });

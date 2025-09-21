@@ -26,7 +26,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
   const [selectedModel, setSelectedModel] = useState<string>("mistralai/mistral-nemo");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [expandedTagCategories, setExpandedTagCategories] = useState<Set<string>>(new Set());
+  const [expandedTagGroupings, setExpandedTagGroupings] = useState<Set<string>>(new Set());
   const [previewQuestion, setPreviewQuestion] = useState<GeneratedQuestion | null>(null);
 
   const tags = useQuery(api.tags.getTags);
@@ -34,7 +34,6 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
   const saveAIQuestion = useMutation(api.questions.saveAIQuestion);
   const initializeTags = useMutation(api.tags.initializeTags);
   const initializeModels = useMutation(api.models.initializeModels);
-  const initializeCategories = useMutation(api.categories.initializeCategories);
 
 
   const handleTagToggle = (tagName: string) => {
@@ -45,27 +44,27 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     );
   };
 
-  const toggleTagCategory = (category: string) => {
-    setExpandedTagCategories(prev => {
+  const toggleTagGrouping = (grouping: string) => {
+    setExpandedTagGroupings(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(category)) {
-        newSet.delete(category);
+      if (newSet.has(grouping)) {
+        newSet.delete(grouping);
       } else {
-        newSet.add(category);
+        newSet.add(grouping);
       }
       return newSet;
     });
   };
 
-  const expandAllTagCategories = () => {
+  const expandAllTagGroupings = () => {
     if (tags) {
-      const categories = Array.from(new Set(tags.map(tag => tag.category)));
-      setExpandedTagCategories(new Set(categories));
+      const groupings = Array.from(new Set(tags.map(tag => tag.grouping)));
+      setExpandedTagGroupings(new Set(groupings));
     }
   };
 
-  const collapseAllTagCategories = () => {
-    setExpandedTagCategories(new Set());
+  const collapseAllTagGroupings = () => {
+    setExpandedTagGroupings(new Set());
   };
 
   const handleGenerateQuestion = async () => {
@@ -97,7 +96,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     if (!previewQuestion) return;
     setIsSaving(true);
     try {
-      // Determine category based on selected tags
+      // Determine grouping based on selected tags
 
       const newQuestion = await saveAIQuestion({
         text: previewQuestion.text,
@@ -118,7 +117,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
     }
   };
 
-  const tagCategories = tags ? Array.from(new Set(tags.map(tag => tag.category))) : [];
+  const tagGroupings = tags ? Array.from(new Set(tags.map(tag => tag.grouping))) : [];
 
   return (
     <motion.div
@@ -201,13 +200,13 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
           <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 py-3 border-b border-gray-200 dark:border-gray-700 mb-4">
             <div className="flex gap-2">
               <button
-                onClick={expandAllTagCategories}
+                onClick={expandAllTagGroupings}
                 className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 Expand All
               </button>
               <button
-                onClick={collapseAllTagCategories}
+                onClick={collapseAllTagGroupings}
                 className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 Collapse All
@@ -217,15 +216,15 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
 
           {tags && (
             <div className="space-y-2 pb-32">
-              {tagCategories.map(category => {
-                const isExpanded = expandedTagCategories.has(category);
-                const categoryTags = tags.filter(tag => tag.category === category);
-                const selectedCount = categoryTags.filter(tag => selectedTags.includes(tag.name)).length;
+              {tagGroupings.map(grouping => {
+                const isExpanded = expandedTagGroupings.has(grouping);
+                const groupingTags = tags.filter(tag => tag.grouping === grouping);
+                const selectedCount = groupingTags.filter(tag => selectedTags.includes(tag.name)).length;
 
                 return (
-                  <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                  <div key={grouping} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                     <button
-                      onClick={() => toggleTagCategory(category)}
+                      onClick={() => toggleTagGrouping(grouping)}
                       className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                     >
                       <div className="flex items-center gap-3">
@@ -244,7 +243,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                           />
                         </svg>
                         <h4 className="font-medium text-gray-900 dark:text-white capitalize">
-                          {category}
+                          {grouping}
                         </h4>
                         {selectedCount > 0 && (
                           <span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">
@@ -253,7 +252,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                         )}
                       </div>
                       <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {categoryTags.length} tags
+                        {groupingTags.length} tags
                       </span>
                     </button>
 
@@ -268,7 +267,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                         >
                           <div className="p-4 bg-white dark:bg-gray-800">
                             <div className="flex flex-wrap gap-2">
-                              {categoryTags.map(tag => (
+                              {groupingTags.map(tag => (
                                 <button
                                   key={tag._id}
                                   onClick={() => handleTagToggle(tag.name)}
