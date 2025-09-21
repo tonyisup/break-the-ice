@@ -1,4 +1,5 @@
 export {
+  CloudLightning,
   ArrowBigRight,
   ArrowBigRightDash,
   ChevronLeft,
