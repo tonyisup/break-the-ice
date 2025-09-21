@@ -416,7 +416,7 @@ ${JSON.stringify(questions.map(q => ({ id: q._id, text: q.text, style: q.style }
           content: prompt
         }
       ],
-      max_tokens: 2000,
+      max_tokens: 200 * questions.length,
       temperature: 0.1, // Low temperature for consistent results
     });
 

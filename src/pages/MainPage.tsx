@@ -64,7 +64,8 @@ export default function MainPage() {
   const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
-
+  const [isHighlighting, setIsHighlighting] = useState(false);
+    
   useEffect(() => {
     if (styles && styles.length > 0) {
       setSelectedStyle(styles[0].id);
@@ -461,6 +462,8 @@ export default function MainPage() {
               selectedStyle={selectedStyle}
               ref={styleSelectorRef}
               onSelectStyle={setSelectedStyle}
+              isHighlighting={isHighlighting}
+              setIsHighlighting={setIsHighlighting}
             />
             <ToneSelector
               tones={tones || []}
@@ -468,6 +471,8 @@ export default function MainPage() {
               ref={toneSelectorRef}
               selectedTone={selectedTone}
               onSelectTone={setSelectedTone}
+              isHighlighting={isHighlighting}
+              setIsHighlighting={setIsHighlighting}
             />
           </CollapsibleSection>
         </div>
@@ -476,12 +481,13 @@ export default function MainPage() {
           isColorDark={isColorDark}
           gradient={gradient}
           isGenerating={isGenerating}
-          currentQuestion={currentQuestion}
           handleShuffleStyleAndTone={handleShuffleStyleAndTone}
           handleConfirmRandomizeStyleAndTone={handleConfirmRandomizeStyleAndTone}
           handleCancelRandomizeStyleAndTone={handleCancelRandomizeStyleAndTone}
           getNextQuestion={getNextQuestion}
           isStyleTonesOpen={isStyleTonesOpen}
+          isHighlighting={isHighlighting}
+          setIsHighlighting={setIsHighlighting}
         />
       </main>
     </div>

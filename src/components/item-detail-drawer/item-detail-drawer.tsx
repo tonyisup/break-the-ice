@@ -24,8 +24,8 @@ interface ItemDetailDrawerProps {
   item: ItemDetails | null;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSelectItem?: (itemId: string, itemType: "Style" | "Tone") => void;
-  onHideItem: (itemId: string, itemType: "Style" | "Tone") => void;
+  onSelectItem?: (item: ItemDetails) => void;
+  onHideItem: (item: ItemDetails) => void;
 }
 
 export function ItemDetailDrawer({
@@ -41,12 +41,12 @@ export function ItemDetailDrawer({
   }
 
   const handleSelect = () => {
-    onSelectItem?.(item.id, item.type);
+    onSelectItem?.(item);
     onOpenChange(false);
   };
 
   const handleHide = () => {
-    onHideItem(item.id, item.type);
+    onHideItem(item);
     onOpenChange(false);
   };
 

@@ -1,22 +1,19 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from '@/components/ui/icons/icons';
-import { Icon, IconComponent } from '@/components/ui/icons/icon';
+import { IconComponent } from '@/components/ui/icons/icon';
 import { cn } from '@/lib/utils';
 import React from 'react';
-
-export interface SelectorItem {
-  id: string;
-  name: string;
-  icon: Icon;
-  color: string;
-}
+import { ItemDetails as SelectorItem } from '../item-detail-drawer';
 
 interface GenericSelectorProps {
   items: SelectorItem[] | undefined;
   selectedItem: string;
+  onClickItem: (itemId: string) => void;
   onSelectItem: (itemId: string) => void;
   randomizeLabel?: string;
-  onRandomizeItem?: (itemId: string | null) => void;
+  onRandomizeItem?: (itemId: string | null) => void;  
+  highlightedItem: SelectorItem | null;
+  setHighlightedItem: (item: SelectorItem | null) => void;
 }
 
 export interface GenericSelectorRef {
@@ -28,12 +25,11 @@ export interface GenericSelectorRef {
 }
 
 export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorProps>(
-  ({ items, selectedItem, onSelectItem, randomizeLabel = "Randomize", onRandomizeItem }, ref) => {
+  ({ items, selectedItem, onClickItem, onSelectItem, randomizeLabel = "Randomize", onRandomizeItem, highlightedItem, setHighlightedItem }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const buttonRefs = useRef<{ [key: string]: HTMLElement | null }>({});
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(false);
-    const [randomItem, setRandomItem] = useState<SelectorItem | null>(null);
 
     // Drag scrolling state
     const [isDragging, setIsDragging] = useState(false);
@@ -183,7 +179,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
 
     const handleSetRandomItem = (item: SelectorItem) => {
       if (!item) return;
-      setRandomItem(item);
+      setHighlightedItem(item);
       onRandomizeItem?.(item.id);
       setTimeout(() => {
         scrollToCenter(item.id);
@@ -205,14 +201,14 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
       },
       randomizeItem: handleRandomItem,
       cancelRandomizingItem: () => {
-        setRandomItem(null);
+        setHighlightedItem(null);
         onRandomizeItem?.(null);
         scrollToCenter(selectedItem);
       },
       confirmRandomizedItem: () => {
-        if (!randomItem) return;
-        onSelectItem(randomItem.id);
-        setRandomItem(null);
+        if (!highlightedItem) return;
+        onSelectItem(highlightedItem.id);
+        setHighlightedItem(null);
         onRandomizeItem?.(null);
       },
       scrollToCenter: scrollToCenter,
@@ -266,7 +262,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
                   }}
                 >
                   <button
-                    onClick={() => onSelectItem(item.id)}
+                    onClick={() => onClickItem(item.id)}
                     className={`flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 ${isSelected
                         ? 'text-white shadow-lg'
                         : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
@@ -276,7 +272,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
                         ? {
                           backgroundColor: item.color
                         }
-                        : (randomItem?.id === item.id) ? {
+                        : (highlightedItem?.id === item.id) ? {
                           borderColor: item.color,
                           borderWidth: '4px'
                         } : {}
