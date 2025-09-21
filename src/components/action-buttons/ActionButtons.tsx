@@ -4,6 +4,7 @@ import { cn } from "../../lib/utils";
 interface ActionButtonsProps {
   isColorDark: (color: string) => boolean;
   gradient: string[];
+  shuffledGradient: (string | undefined)[];
   isGenerating: boolean;
   handleShuffleStyleAndTone: () => void;
   handleConfirmRandomizeStyleAndTone: () => void;
@@ -17,6 +18,7 @@ interface ActionButtonsProps {
 export const ActionButtons = ({
   isColorDark,
   gradient,
+  shuffledGradient,
   isGenerating,
   handleShuffleStyleAndTone,
   handleConfirmRandomizeStyleAndTone,
@@ -87,6 +89,15 @@ export const ActionButtons = ({
               <SquareArrowRight
                 size={24}
                 className={isColorDark(gradient[0]) ? "text-black" : "text-white"}
+                style={
+                  isHighlighting && shuffledGradient[0] && shuffledGradient[1]
+                    ? {
+                        background: `linear-gradient(135deg, ${shuffledGradient[0]}, ${shuffledGradient[1]})`,
+                        backgroundClip: 'text',
+                        color: 'transparent',
+                      }
+                    : {}
+                }
               />
               {/* <span className="text-white font-semibold text-base">New</span> */}
             </button>}
