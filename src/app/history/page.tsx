@@ -13,8 +13,8 @@ import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { QuestionList } from "@/components/question-list/QuestionList";
 
 function HistoryPageContent() {
-  const { history, removeQuestionFromHistory, clearHistory } = useQuestionHistory();
-  const { likedQuestions, setLikedQuestions } = useStorageContext();
+  const { history, removeQuestionHistoryEntry, clearHistoryEntries } = useQuestionHistory();
+  const { likedQuestions, addLikedQuestion, removeLikedQuestion } = useStorageContext();
   const [searchText, setSearchText] = useState("");
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const styles = useQuery(api.styles.getStyles, {});
@@ -47,10 +47,10 @@ function HistoryPageContent() {
     const isLiked = likedQuestions.includes(questionId);
 
     if (isLiked) {
-      setLikedQuestions(likedQuestions.filter(id => id !== questionId));
+      removeLikedQuestion(questionId);
       toast.success("Removed from favorites");
     } else {
-      setLikedQuestions([...likedQuestions, questionId]);
+      addLikedQuestion(questionId);
       await recordAnalytics({
         questionId,
         event: "like",
@@ -59,10 +59,12 @@ function HistoryPageContent() {
       toast.success("Added to favorites!");
     }
   };
-
+  const handleToggleLike = (questionId: Id<"questions">) => {
+    void toggleLike(questionId);
+  };
   const handleClearHistory = () => {
     setSearchText("");
-    clearHistory();
+    clearHistoryEntries();
     toast.success("History cleared");
   };
 
@@ -113,8 +115,8 @@ function HistoryPageContent() {
               styleColors={styleColors}
               toneColors={toneColors}
               likedQuestions={likedQuestions}
-              onToggleLike={toggleLike}
-              onRemoveItem={removeQuestionFromHistory}
+              onToggleLike={handleToggleLike}
+              onRemoveItem={removeQuestionHistoryEntry}
               isHistory
             />
           </div>
