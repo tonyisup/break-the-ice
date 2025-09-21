@@ -193,7 +193,9 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
 
     const handleRandomItem = () => {
       if (!items || items.length === 0) return;
-      const randomItem = items.filter(item => item.id !== selectedItem)[Math.floor(Math.random() * items.length)];
+      const filteredItems = items.filter(item => item.id !== selectedItem);
+      if (filteredItems.length === 0) return;
+      const randomItem = filteredItems[Math.floor(Math.random() * filteredItems.length)];
       // onSelectItem(randomItem.id);
       handleSetRandomItem(randomItem);
     };
@@ -254,7 +256,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
             onTouchEnd={handleTouchEnd}
             style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
           >
-            {items && items.map((item) => {
+            {Array.isArray(items) && items.map((item) => {
               const isSelected = selectedItem === item.id;
 
               return (
