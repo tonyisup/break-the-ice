@@ -40,6 +40,7 @@ export default function MainPage() {
   const { addQuestionHistoryEntry } = useQuestionHistory();
   const [startTime, setStartTime] = useState(Date.now());
   const [isGenerating, setIsGenerating] = useState(false);
+  const isActionInProgress = useRef(false);
   const [cardId, setCardId] = useState(() => Date.now().toString());
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? styles?.[0]?.id ?? "");
@@ -134,6 +135,7 @@ export default function MainPage() {
       toast.error("Failed to generate questions. Please try again.");
     } finally {
       setIsGenerating(false);
+      isActionInProgress.current = false;
     }
   }, [selectedStyle, selectedTone, generateAIQuestion]);
 
@@ -336,7 +338,9 @@ export default function MainPage() {
   };
 
   const handleShuffleStyleAndTone = () => {
+    if (isActionInProgress.current) return;
     if (!isStyleTonesOpen) {
+      isActionInProgress.current = true;
       // If customization panel is collapsed, immediately shuffle and advance
       if (toneSelectorRef.current && styleSelectorRef.current) {
         // Components are mounted - first randomize, then confirm
@@ -391,6 +395,8 @@ export default function MainPage() {
     }
   }
   const handleConfirmRandomizeStyleAndTone = () => {
+    if (isActionInProgress.current) return;
+    isActionInProgress.current = true;
     setCurrentQuestions([]);
     setIsShuffling(true);
     isShufflingRef.current = true;
@@ -413,6 +419,7 @@ export default function MainPage() {
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
   const shuffledGradient = (highlightedStyle?.color && highlightedTone?.color) ? [highlightedStyle?.color, highlightedTone?.color] : gradient;
   const gradientTarget = theme === "dark" ? "#000" : "#fff";
+  const isLoading = isActionInProgress.current || isGenerating;
 
 
   return (
@@ -430,7 +437,7 @@ export default function MainPage() {
         <AnimatePresence mode="wait">
           <QuestionDisplay
             key={cardId}
-            isGenerating={!currentQuestion || isGenerating}
+            isGenerating={!currentQuestion || isLoading}
             currentQuestion={currentQuestion}
             isFavorite={isFavorite}
             toggleLike={currentQuestion ? () => toggleLike(currentQuestion._id) : () => {}}
@@ -476,7 +483,7 @@ export default function MainPage() {
           isColorDark={isColorDark}
           gradient={gradient}
           shuffledGradient={shuffledGradient}
-          isGenerating={isGenerating}
+          isGenerating={isLoading}
           handleShuffleStyleAndTone={handleShuffleStyleAndTone}
           handleConfirmRandomizeStyleAndTone={handleConfirmRandomizeStyleAndTone}
           handleCancelRandomizeStyleAndTone={handleCancelRandomizeStyleAndTone}
