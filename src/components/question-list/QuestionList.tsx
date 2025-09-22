@@ -1,15 +1,21 @@
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
+import { CollapsibleSection } from "../collapsible-section/CollapsibleSection";
 
 interface QuestionListProps {
   questions: Doc<"questions">[] | HistoryEntryWrapper[];
   styleColors: { [key: string]: string };
   toneColors: { [key: string]: string };
+  styles: Doc<"styles">[];
+  tones: Doc<"tones">[];
   likedQuestions: Id<"questions">[];
   onToggleLike: (questionId: Id<"questions">) => void;
   onRemoveItem: (questionId: Id<"questions">) => void;
   isHistory?: boolean;
+  onHideStyle?: (styleId: string) => void;
+  onHideTone?: (toneId: string) => void;
 }
 
 interface HistoryEntryWrapper {
@@ -21,16 +27,32 @@ export function QuestionList({
   questions,
   styleColors,
   toneColors,
+  styles,
+  tones,
   likedQuestions,
   onToggleLike,
   onRemoveItem,
   isHistory = false,
+  onHideStyle = () => {},
+  onHideTone = () => {},
 }: QuestionListProps) {
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
+  const toggleSection = (date: string) => {
+    setOpenSections((prev) => ({
+      ...prev,
+      [date]: !prev[date],
+    }));
+  };
 
   const renderQuestion = (question: Doc<"questions">) => {
-    const styleColor = (question.style && styleColors[question.style]) || '#667EEA';
-    const toneColor = (question.tone && toneColors[question.tone]) || '#764BA2';
+    const styleColor =
+      (question.style && styleColors[question.style]) || "#667EEA";
+    const toneColor = (question.tone && toneColors[question.tone]) || "#764BA2";
     const gradient = [styleColor, toneColor];
+
+    const style = styles.find((s) => s.id === question.style);
+    const tone = tones.find((t) => t.id === question.tone);
 
     return (
       <motion.div
@@ -57,36 +79,55 @@ export function QuestionList({
           onToggleFavorite={() => onToggleLike(question._id)}
           onToggleHidden={() => onRemoveItem(question._id)}
           gradient={gradient}
+          style={style}
+          tone={tone}
+          onHideStyle={onHideStyle}
+          onHideTone={onHideTone}
         />
       </motion.div>
     );
-  }
+  };
 
   return (
     <AnimatePresence>
       {isHistory ? (
-        Object.entries(((questions as HistoryEntryWrapper[]).reduce((acc, entry) => {
-          const date = new Date(entry.viewedAt).toLocaleDateString(undefined, {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          });
-          if (!acc[date]) {
-            acc[date] = [];
-          }
-          acc[date].push(entry);
-          return acc;
-        }, {} as { [key: string]: HistoryEntryWrapper[] }))).map(([date, entries]) => (
-          <div key={date}>
-            <h2 className="text-lg font-bold my-4 text-gray-700 dark:text-gray-300">{date}</h2>
+        Object.entries(
+          (questions as HistoryEntryWrapper[]).reduce(
+            (acc, entry) => {
+              const date = new Date(entry.viewedAt).toLocaleDateString(
+                undefined,
+                {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                },
+              );
+              if (!acc[date]) {
+                acc[date] = [];
+              }
+              acc[date].push(entry);
+              return acc;
+            },
+            {} as { [key: string]: HistoryEntryWrapper[] },
+          ),
+        ).map(([date, entries]) => (
+          <CollapsibleSection
+            key={date}
+            title={date}
+            count={entries.length}
+            isOpen={openSections[date] || false}
+            onOpenChange={() => toggleSection(date)}
+          >
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              {entries.map(entry => renderQuestion(entry.question))}
+              {entries.map((entry) => renderQuestion(entry.question))}
             </div>
-          </div>
+          </CollapsibleSection>
         ))
       ) : (
         <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-          {(questions as Doc<"questions">[]).map(question => renderQuestion(question))}
+          {(questions as Doc<"questions">[]).map((question) =>
+            renderQuestion(question),
+          )}
         </div>
       )}
     </AnimatePresence>
