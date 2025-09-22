@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 
 function LikedQuestionsPageContent() {
-  const { theme } = useTheme();
+  const { effectiveTheme } = useTheme();
   const [searchText, setSearchText] = useState("");
   const { likedQuestions, removeLikedQuestion, setLikedQuestions, clearLikedQuestions } = useStorageContext();
   const [isCleaningUp, setIsCleaningUp] = useState(false);
@@ -127,7 +127,7 @@ function LikedQuestionsPageContent() {
     <div
       className="min-h-screen overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${theme === "dark" ? gradient[0] : gradientLight[0]}, ${theme === "dark" ? gradient[1] : gradientLight[1]}, ${theme === "dark" ? "#000" : "#fff"})`
+        background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradient[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradient[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
       }}
     >
       <Header

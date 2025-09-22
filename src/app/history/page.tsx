@@ -19,7 +19,7 @@ function HistoryPageContent() {
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
-  const { theme } = useTheme();
+  const { effectiveTheme } = useTheme();
 
   const styleColors = useMemo(() => {
     if (!styles) return {};
@@ -74,7 +74,7 @@ function HistoryPageContent() {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
       style={{
-        background: `linear-gradient(135deg, ${theme === "dark" ? gradient[0] : gradientLight[0]}, ${theme === "dark" ? gradient[1] : gradientLight[1]}, ${theme === "dark" ? "#000" : "#fff"})`
+        background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradient[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradient[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
       }}
     >
       <Header
