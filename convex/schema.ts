@@ -73,7 +73,7 @@ export default defineSchema({
     icon: v.string(),
     promptGuidanceForAI: v.optional(v.string()),
     example: v.optional(v.string()),
-    order: v.optional(v.float64()),
+    order: v.optional(v.number()),
   }).index("name", ["name"])
     .index("id", ["id"])
     .index("by_order", ["order"]),
@@ -84,17 +84,17 @@ export default defineSchema({
     color: v.string(),
     icon: v.string(),
     promptGuidanceForAI: v.string(),
-    order: v.optional(v.float64()),
+    order: v.optional(v.number()),
   }).index("name", ["name"])
     .index("id", ["id"])
     .index("by_order", ["order"]),
   questions: defineTable({
-    averageViewDuration: v.float64(),
-    lastShownAt: v.optional(v.float64()),
+    averageViewDuration: v.number(),
+    lastShownAt: v.optional(v.number()),
     text: v.string(),
-    totalLikes: v.float64(),
-    totalThumbsDown: v.optional(v.float64()),
-    totalShows: v.float64(),
+    totalLikes: v.number(),
+    totalThumbsDown: v.optional(v.number()),
+    totalShows: v.number(),
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
     style: v.optional(v.string()),
