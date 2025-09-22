@@ -309,10 +309,13 @@ function DuplicateDetectionComponent() {
                         onClick={() => {
                           if (keepQuestion === question._id) {
                             setKeepQuestion(null);
+                            setSelectedQuestions([]);
                           } else {
                             setKeepQuestion(question._id);
-                            // Remove from selected questions if it was there
-                            setSelectedQuestions(prev => prev.filter(id => id !== question._id));
+                            const otherQuestionIds = detection.questions
+                              .map((q: any) => q._id)
+                              .filter((id: Id<"questions">) => id !== question._id);
+                            setSelectedQuestions(otherQuestionIds);
                           }
                         }}
                       >
