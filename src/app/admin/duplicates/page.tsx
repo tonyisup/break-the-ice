@@ -72,6 +72,9 @@ function DuplicateDetectionComponent() {
 
   const handleDeleteAll = async (detection: any) => {
     try {
+      if (!window.confirm('Are you sure you want to delete all duplicates?')) {
+        return;
+      }
       await deleteDuplicates({
         detectionId: detection._id,
         questionIdsToDelete: detection.questionIds,
@@ -426,13 +429,13 @@ function DuplicateDetectionComponent() {
                       <CheckIcon className="w-4 h-4" />
                       Approve & Delete
                     </button>}
-                    {!keepQuestion && selectedQuestions.length === detection.questionIds.length && <button
+                    <button
                       onClick={() => void handleDeleteAll(detection)}
                       className="px-4 py-2 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/30 transition-colors flex items-center gap-2"
                     >
                       <XIcon className="w-4 h-4" />
                       Delete All
-                    </button>}
+                    </button>
                   </div>
                 </div>
               </div>
