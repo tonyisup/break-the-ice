@@ -89,15 +89,6 @@ export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrde
     },
   }));
 
-  useEffect(() => {
-    if (!randomOrder) {
-      return;
-    }
-    if (onSelectStyle && styles) {
-      onSelectStyle(styles[0].id);
-    }
-  }, [randomOrder, styles, onSelectStyle]);
-
   return (
     <>
       <GenericSelector
