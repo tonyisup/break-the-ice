@@ -1,6 +1,6 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Doc, Id } from "../../convex/_generated/dataModel";
@@ -61,8 +61,8 @@ export default function MainPage() {
       seen: questionHistory.map(q => q.question?._id),
       hidden: hiddenQuestions,
     });
-  const style = useQuery(api.styles.getStyle, (selectedStyle === "") ? "skip" : { id: selectedStyle });
-  const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
+  const style = useMemo(() => styles?.find(s => s.id === selectedStyle), [styles, selectedStyle]);
+  const tone = useMemo(() => tones?.find(t => t.id === selectedTone), [tones, selectedTone]);
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
   const [isHighlighting, setIsHighlighting] = useState(false);
@@ -411,6 +411,8 @@ export default function MainPage() {
   }
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
+  const questionStyle = useMemo(() => styles?.find(s => s.id === currentQuestion?.style), [styles, currentQuestion]);
+  const questionTone = useMemo(() => tones?.find(t => t.id === currentQuestion?.tone), [tones, currentQuestion]);
   const shuffledGradient = (highlightedStyle?.color && highlightedTone?.color) ? [highlightedStyle?.color, highlightedTone?.color] : gradient;
   const gradientTarget = theme === "dark" ? "#000" : "#fff";
 
@@ -433,6 +435,9 @@ export default function MainPage() {
             isGenerating={!currentQuestion || isGenerating}
             currentQuestion={currentQuestion}
             isFavorite={isFavorite}
+            gradient={gradient}
+            style={questionStyle}
+            tone={questionTone}
             toggleLike={currentQuestion ? () => toggleLike(currentQuestion._id) : () => {}}
             onSwipe={getNextQuestion}
             toggleHide={currentQuestion ? () => toggleHide(currentQuestion._id) : () => {}}

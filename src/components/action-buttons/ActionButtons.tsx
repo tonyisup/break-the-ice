@@ -132,7 +132,7 @@ export const ActionButtons = ({
                 : "bg-black/20 dark:bg-black/20",
               "px-5 py-3 rounded-full flex justify-center items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
             )}
-            title="Shuffle Style and Tone"
+            title="Next Question"
             disabled={isGenerating}
           >
             <GradientArrowRightIcon size={24} gradient={gradient} />
