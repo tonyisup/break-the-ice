@@ -3,6 +3,8 @@ import { Id } from "../../convex/_generated/dataModel";
 import { HistoryEntry } from "./useQuestionHistory";
 import { useLocalStorage } from "./useLocalStorage";
 
+const MAX_ITEMS = 100;
+
 type Theme = "light" | "dark" | "system";
 
 interface StorageContextType {
@@ -67,7 +69,17 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const addLikedQuestion = useCallback((id: Id<"questions">) => {
-    setLikedQuestions(prev => [...prev, id]);
+    setLikedQuestions(prev => {
+      if (prev.length >= MAX_ITEMS) {
+        const confirmed = window.confirm("You have reached the maximum number of liked questions. Do you want to remove the oldest item to add this new one?");
+        if (confirmed) {
+          return [...prev.slice(1), id];
+        } else {
+          return prev;
+        }
+      }
+      return [...prev, id];
+    });
   }, [setLikedQuestions]);
   const removeLikedQuestion = useCallback((id: Id<"questions">) => {
     setLikedQuestions(prev => prev.filter(questionId => questionId !== id));
@@ -88,14 +100,34 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
   }, [setHiddenTones]);
 
   const addQuestionToHistory = useCallback((entry: HistoryEntry) => {
-    setQuestionHistory(prev => [entry, ...prev]);
+    setQuestionHistory(prev => {
+      if (prev.length >= MAX_ITEMS) {
+        const confirmed = window.confirm("You have reached the maximum number of history items. Do you want to remove the oldest item to add this new one?");
+        if (confirmed) {
+          return [entry, ...prev.slice(0, -1)];
+        } else {
+          return prev;
+        }
+      }
+      return [entry, ...prev];
+    });
   }, [setQuestionHistory]);
   const removeQuestionFromHistory = useCallback((id: Id<"questions">) => {
     setQuestionHistory(prev => prev.filter(entry => entry.question && entry.question._id !== id));
   }, [setQuestionHistory]);
   
   const addHiddenQuestion = useCallback((id: Id<"questions">) => {
-    setHiddenQuestions(prev => [...prev, id]);
+    setHiddenQuestions(prev => {
+      if (prev.length >= MAX_ITEMS) {
+        const confirmed = window.confirm("You have reached the maximum number of hidden questions. Do you want to remove the oldest item to add this new one?");
+        if (confirmed) {
+          return [...prev.slice(1), id];
+        } else {
+          return prev;
+        }
+      }
+      return [...prev, id];
+    });
   }, [setHiddenQuestions]);
   const removeHiddenQuestion = useCallback((id: Id<"questions">) => {
     setHiddenQuestions(prev => prev.filter(questionId => questionId !== id));
