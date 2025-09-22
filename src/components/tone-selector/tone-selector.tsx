@@ -25,11 +25,13 @@ export interface ToneSelectorRef {
 }
 
 export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = true, ref, isHighlighting, setIsHighlighting, onHighlightTone }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
-  const { addHiddenTone } = useStorageContext();
+  const { addHiddenTone, hiddenTones } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<ItemDetails | null>(null);
+
+  const visibleTones = tones.filter(tone => !hiddenTones.includes(tone.id));
   
   useEffect(() => {
     setIsHighlighting(highlightedItem !== null);
@@ -95,7 +97,7 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
     <>
       <GenericSelector
         ref={genericSelectorRef}
-        items={tones.map(tone => ({
+        items={visibleTones.map(tone => ({
           id: tone.id,
           name: tone.name,
           type: "Tone",

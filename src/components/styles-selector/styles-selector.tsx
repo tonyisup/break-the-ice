@@ -24,12 +24,14 @@ export interface StyleSelectorRef {
   scrollToSelectedItem: () => void;
 }
 export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrder = true, ref, isHighlighting, setIsHighlighting, onHighlightStyle }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
-  const { addHiddenStyle } = useStorageContext();
+  const { addHiddenStyle, hiddenStyles } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<ItemDetails | null>(null);
   
+  const visibleStyles = styles.filter(style => !hiddenStyles.includes(style.id));
+
   useEffect(() => {
     setIsHighlighting(highlightedItem !== null);
     if (onHighlightStyle) {
@@ -93,7 +95,7 @@ export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrde
     <>
       <GenericSelector
         ref={genericSelectorRef}
-        items={styles.map(style => ({
+        items={visibleStyles.map(style => ({
           id: style.id,
           name: style.name,
           type: "Style",
