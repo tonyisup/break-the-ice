@@ -7,6 +7,7 @@ interface QuestionDisplayProps {
   isGenerating: boolean;
   currentQuestion: Doc<"questions"> | null;
   isFavorite: boolean;
+  gradient: string[];
   toggleLike: (questionId: any) => void;
   onSwipe: () => void;
   toggleHide: (questionId: any) => void;
@@ -19,6 +20,7 @@ export const QuestionDisplay = ({
   isGenerating,
   currentQuestion,
   isFavorite,
+  gradient,
   toggleLike,
   onSwipe,
   toggleHide,
@@ -82,6 +84,7 @@ export const QuestionDisplay = ({
         isGenerating={isGenerating}
         question={currentQuestion}
         isFavorite={isFavorite}
+        gradient={gradient}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
         onToggleHidden={() => currentQuestion && toggleHide(currentQuestion._id)}
         onHideStyle={handleHideStyle}

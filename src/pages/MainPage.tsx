@@ -433,6 +433,7 @@ export default function MainPage() {
             isGenerating={!currentQuestion || isGenerating}
             currentQuestion={currentQuestion}
             isFavorite={isFavorite}
+            gradient={gradient}
             toggleLike={currentQuestion ? () => toggleLike(currentQuestion._id) : () => {}}
             onSwipe={getNextQuestion}
             toggleHide={currentQuestion ? () => toggleHide(currentQuestion._id) : () => {}}

@@ -11,6 +11,7 @@ interface ModernQuestionCardProps {
   question: Doc<"questions"> | null;
   isGenerating: boolean;
   isFavorite: boolean;
+  gradient: string[];
   onToggleFavorite: () => void;
   onToggleHidden: () => void;
   onShare?: () => void;
@@ -23,6 +24,7 @@ export function ModernQuestionCard({
   question,
   isGenerating,
   isFavorite,
+  gradient,
   onToggleFavorite,
   onToggleHidden,
   onHideStyle,
@@ -34,9 +36,6 @@ export function ModernQuestionCard({
   const tone = useQuery(api.tones.getTone, (!question || question?.tone === "") ? "skip" : { id: question?.tone as string ?? "fun-silly" });
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
-  const gradient = useMemo(() => {
-    return [style?.color || '#667EEA', tone?.color || '#764BA2'];
-  }, [style, tone]);
  
   const handleHideStyle = (itemId: string) => {
     if (!style) return;
