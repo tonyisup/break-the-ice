@@ -1,6 +1,8 @@
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
+import { CollapsibleSection } from "../collapsible-section/CollapsibleSection";
 
 interface QuestionListProps {
   questions: Doc<"questions">[] | HistoryEntryWrapper[];
@@ -26,10 +28,19 @@ export function QuestionList({
   onRemoveItem,
   isHistory = false,
 }: QuestionListProps) {
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
+  const toggleSection = (date: string) => {
+    setOpenSections((prev) => ({
+      ...prev,
+      [date]: !prev[date],
+    }));
+  };
 
   const renderQuestion = (question: Doc<"questions">) => {
-    const styleColor = (question.style && styleColors[question.style]) || '#667EEA';
-    const toneColor = (question.tone && toneColors[question.tone]) || '#764BA2';
+    const styleColor =
+      (question.style && styleColors[question.style]) || "#667EEA";
+    const toneColor = (question.tone && toneColors[question.tone]) || "#764BA2";
     const gradient = [styleColor, toneColor];
 
     return (
@@ -60,33 +71,48 @@ export function QuestionList({
         />
       </motion.div>
     );
-  }
+  };
 
   return (
     <AnimatePresence>
       {isHistory ? (
-        Object.entries(((questions as HistoryEntryWrapper[]).reduce((acc, entry) => {
-          const date = new Date(entry.viewedAt).toLocaleDateString(undefined, {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          });
-          if (!acc[date]) {
-            acc[date] = [];
-          }
-          acc[date].push(entry);
-          return acc;
-        }, {} as { [key: string]: HistoryEntryWrapper[] }))).map(([date, entries]) => (
-          <div key={date}>
-            <h2 className="text-lg font-bold my-4 text-gray-700 dark:text-gray-300">{date}</h2>
+        Object.entries(
+          (questions as HistoryEntryWrapper[]).reduce(
+            (acc, entry) => {
+              const date = new Date(entry.viewedAt).toLocaleDateString(
+                undefined,
+                {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                },
+              );
+              if (!acc[date]) {
+                acc[date] = [];
+              }
+              acc[date].push(entry);
+              return acc;
+            },
+            {} as { [key: string]: HistoryEntryWrapper[] },
+          ),
+        ).map(([date, entries]) => (
+          <CollapsibleSection
+            key={date}
+            title={date}
+            count={entries.length}
+            isOpen={openSections[date] || false}
+            onOpenChange={() => toggleSection(date)}
+          >
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              {entries.map(entry => renderQuestion(entry.question))}
+              {entries.map((entry) => renderQuestion(entry.question))}
             </div>
-          </div>
+          </CollapsibleSection>
         ))
       ) : (
         <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-          {(questions as Doc<"questions">[]).map(question => renderQuestion(question))}
+          {(questions as Doc<"questions">[]).map((question) =>
+            renderQuestion(question),
+          )}
         </div>
       )}
     </AnimatePresence>
