@@ -41,8 +41,6 @@ export const QuestionDisplay = ({
     } else if (info.offset.x > 100) {
       setDragDirection("right");
       onSwipe();
-    } else if (info.offset.y < -100) {
-      handleShare();
     }
   };
   const handleHideStyle = () => {
