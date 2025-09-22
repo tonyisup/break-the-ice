@@ -11,7 +11,7 @@ import { Id } from "../../../convex/_generated/dataModel";
 import { useState } from "react";
 
 const SettingsPage = () => {
-  const { theme } = useTheme();
+  const { effectiveTheme } = useTheme();
   const allStyles = useQuery(api.styles.getStyles);
   const allTones = useQuery(api.tones.getTones);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
@@ -92,11 +92,11 @@ const SettingsPage = () => {
     <div
       className="min-h-screen transition-colors overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${theme === "dark" ? gradientDark[0] : gradientLight[0]}, ${theme === "dark" ? gradientDark[1] : gradientLight[1]}, ${theme === "dark" ? "#000" : "#fff"})`
+        background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradientDark[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradientDark[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
       }}
     >
       <Header 
-        gradient={theme === "dark" ? gradientDark : gradientLight} 
+        gradient={effectiveTheme === "dark" ? gradientDark : gradientLight}
         homeLinkSlot="settings" />
 
       <div className="container mx-auto p-4 md:p-8">

@@ -3,7 +3,7 @@ import { Id } from "../../convex/_generated/dataModel";
 import { HistoryEntry } from "./useQuestionHistory";
 import { useLocalStorage } from "./useLocalStorage";
 
-type Theme = "light" | "dark";
+type Theme = "light" | "dark" | "system";
 
 interface StorageContextType {
   theme: Theme;
@@ -42,7 +42,7 @@ const StorageContext = createContext<StorageContextType | undefined>(
 );
 
 export const StorageProvider = ({ children }: { children: ReactNode }) => {
-  const [theme, setTheme] = useLocalStorage<Theme>("theme", "light");
+  const [theme, setTheme] = useLocalStorage<Theme>("theme", "system");
   const [likedQuestions, setLikedQuestions] = useLocalStorage<
     Id<"questions">[]
   >("likedQuestions", []);

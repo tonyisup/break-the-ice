@@ -1,54 +1,34 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useStorageContext } from './useStorageContext';
 
-type Theme = 'light' | 'dark';
-
-const THEME_CHANGE_EVENT = 'theme-change';
+type Theme = 'light' | 'dark' | 'system';
 
 export function useTheme() {
   const { theme, setTheme } = useStorageContext();
+  const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    try {
-      const root = window.document.documentElement;
-      if (theme === 'dark') {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
-      }
-      window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: theme }));
-    } catch (error) {
-      console.warn('Error setting theme:', error);
+    const root = window.document.documentElement;
+
+    const applyTheme = () => {
+      const isDark =
+        theme === "dark" ||
+        (theme === "system" &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches);
+      root.classList.toggle("dark", isDark);
+      setEffectiveTheme(isDark ? 'dark' : 'light');
+    };
+
+    applyTheme();
+
+    if (theme === "system") {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      mediaQuery.addEventListener("change", applyTheme);
+      return () => mediaQuery.removeEventListener("change", applyTheme);
     }
   }, [theme]);
 
-  return { theme, setTheme };
+  return { theme, setTheme, effectiveTheme };
 }
-
-import { useState } from 'react';
-
-export function useThemeListener() {
-  const { theme: initialTheme } = useStorageContext();
-  const [theme, setTheme] = useState<Theme>(initialTheme);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    const handleThemeChange = (event: CustomEvent<Theme>) => {
-      setTheme(event.detail);
-    };
-
-    try {
-      window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange as EventListener);
-      return () => {
-        window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange as EventListener);
-      };
-    } catch (error) {
-      console.warn('Error setting up theme listener:', error);
-    }
-  }, []);
-
-  return theme;
-} 
