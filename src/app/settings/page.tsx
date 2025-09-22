@@ -9,6 +9,7 @@ import { CollapsibleSection } from "../../components/collapsible-section/Collaps
 import { Header } from "@/components/header";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useState } from "react";
+import DynamicIcon from "@/components/ui/dynamic-icon";
 
 const SettingsPage = () => {
   const { effectiveTheme } = useTheme();
@@ -156,7 +157,10 @@ const SettingsPage = () => {
                     const isIncluded = !hiddenStyles.includes(style.id);
                     return (
                       <li key={style.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                        <span className="dark:text-white text-black">{style.name}</span>
+                        <div className="flex items-center">
+                          <DynamicIcon name={style.icon} color={style.color} size={24} className="mr-2" />
+                          <span className="dark:text-white text-black">{style.name}</span>
+                        </div>
                         <button
                           onClick={() => handleToggleStyle(style.id)}
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
@@ -204,7 +208,10 @@ const SettingsPage = () => {
                     const isIncluded = !hiddenTones.includes(tone.id);
                     return (
                       <li key={tone.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                        <span className="dark:text-white text-black">{tone.name}</span>
+                        <div className="flex items-center">
+                          <DynamicIcon name={tone.icon} color={tone.color} size={24} className="mr-2" />
+                          <span className="dark:text-white text-black">{tone.name}</span>
+                        </div>
                         <button
                           onClick={() => handleToggleTone(tone.id)}
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
