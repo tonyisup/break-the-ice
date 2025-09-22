@@ -22,12 +22,12 @@ const SettingsPage = () => {
   const {
     hiddenStyles,
     setHiddenStyles,
+    addHiddenStyle,
     removeHiddenStyle,
-    clearHiddenStyles,
     hiddenTones,
     setHiddenTones,
+    addHiddenTone,
     removeHiddenTone,
-    clearHiddenTones,
     hiddenQuestions,
     setHiddenQuestions,
     removeHiddenQuestion,
@@ -35,23 +35,26 @@ const SettingsPage = () => {
     bypassLandingPage,
     setBypassLandingPage,
   } = useStorageContext();
-  
 
-  const unhideStyle = (styleId: string) => {
-    removeHiddenStyle(styleId);
+  const handleToggleStyle = (styleId: string) => {
+    if (hiddenStyles.includes(styleId)) {
+      removeHiddenStyle(styleId);
+    } else {
+      addHiddenStyle(styleId);
+    }
   };
 
-  const unhideTone = (toneId: string) => {
-    removeHiddenTone(toneId);
+  const handleToggleTone = (toneId: string) => {
+    if (hiddenTones.includes(toneId)) {
+      removeHiddenTone(toneId);
+    } else {
+      addHiddenTone(toneId);
+    }
   };
 
   const unhideQuestion = (questionId: Id<"questions">) => {
     removeHiddenQuestion(questionId);
   };
-
-
-  const hiddenStyleObjects = allStyles?.filter(style => hiddenStyles.includes(style.id));
-  const hiddenToneObjects = allTones?.filter(tone => hiddenTones.includes(tone.id));
   const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions });
 
 
@@ -127,68 +130,98 @@ const SettingsPage = () => {
             </div>
           </CollapsibleSection>
           <CollapsibleSection
-            title="Hidden Styles"
-            isOpen={!!openSections['hidden-styles']}
-            onOpenChange={() => toggleSection('hidden-styles')}
-            count={hiddenStyleObjects?.length}
+            title="Manage Styles"
+            isOpen={!!openSections['manage-styles']}
+            onOpenChange={() => toggleSection('manage-styles')}
+            count={allStyles?.length}
           >
-            {hiddenStyleObjects && hiddenStyleObjects.length > 0 ? (
+            {allStyles && allStyles.length > 0 ? (
               <>
-                <button
-                  onClick={clearHiddenStyles}
-                  className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
-                >
-                  Clear All
-                </button>
+                <div className="flex space-x-2 mb-4">
+                  <button
+                    onClick={() => setHiddenStyles([])}
+                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                  >
+                    Include All
+                  </button>
+                  <button
+                    onClick={() => setHiddenStyles(allStyles.map(s => s.id))}
+                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                  >
+                    Hide All
+                  </button>
+                </div>
                 <ul className="space-y-2">
-                  {hiddenStyleObjects.map(style => (
-                    <li key={style.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                      <span className="dark:text-white text-black">{style.name}</span>
-                      <button
-                        onClick={() => unhideStyle(style.id)}
-                        className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
-                      >
-                        Unhide
-                      </button>
-                    </li>
-                  ))}
+                  {allStyles.map(style => {
+                    const isIncluded = !hiddenStyles.includes(style.id);
+                    return (
+                      <li key={style.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                        <span className="dark:text-white text-black">{style.name}</span>
+                        <button
+                          onClick={() => handleToggleStyle(style.id)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
+                          aria-pressed={isIncluded}
+                          aria-label={`Toggle style ${style.name}`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
+                          />
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               </>
             ) : (
-              <p className="dark:text-white/70 text-black/70">You have no hidden styles.</p>
+              <p className="dark:text-white/70 text-black/70">No styles available to manage.</p>
             )}
           </CollapsibleSection>
 
           <CollapsibleSection
-            title="Hidden Tones"
-            isOpen={!!openSections['hidden-tones']}
-            onOpenChange={() => toggleSection('hidden-tones')}
-            count={hiddenToneObjects?.length}
+            title="Manage Tones"
+            isOpen={!!openSections['manage-tones']}
+            onOpenChange={() => toggleSection('manage-tones')}
+            count={allTones?.length}
           >
-            {hiddenToneObjects && hiddenToneObjects.length > 0 ? (
+            {allTones && allTones.length > 0 ? (
               <>
-                <button
-                  onClick={clearHiddenTones}
-                  className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
-                >
-                  Clear All
-                </button>
+                <div className="flex space-x-2 mb-4">
+                  <button
+                    onClick={() => setHiddenTones([])}
+                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                  >
+                    Include All
+                  </button>
+                  <button
+                    onClick={() => setHiddenTones(allTones.map(t => t.id))}
+                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                  >
+                    Hide All
+                  </button>
+                </div>
                 <ul className="space-y-2">
-                  {hiddenToneObjects.map(tone => (
-                    <li key={tone.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                      <span className="dark:text-white text-black">{tone.name}</span>
-                      <button
-                        onClick={() => unhideTone(tone.id)}
-                        className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
-                      >
-                        Unhide
-                      </button>
-                    </li>
-                  ))}
+                  {allTones.map(tone => {
+                    const isIncluded = !hiddenTones.includes(tone.id);
+                    return (
+                      <li key={tone.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                        <span className="dark:text-white text-black">{tone.name}</span>
+                        <button
+                          onClick={() => handleToggleTone(tone.id)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
+                          aria-pressed={isIncluded}
+                          aria-label={`Toggle tone ${tone.name}`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
+                          />
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               </>
             ) : (
-              <p className="dark:text-white/70 text-black/70">You have no hidden tones.</p>
+              <p className="dark:text-white/70 text-black/70">No tones available to manage.</p>
             )}
           </CollapsibleSection>
 
