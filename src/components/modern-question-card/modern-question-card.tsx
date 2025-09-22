@@ -60,12 +60,12 @@ export function ModernQuestionCard({
     onHideTone(tone.id);
     setIsDrawerOpen(false);
   };
-  const handleHideItem = (itemId: string, itemType: "Style" | "Tone") => {
-    if (!itemId) return;
-    if (itemType === "Style") {
-      handleHideStyle(itemId);
+  const handleHideItem = (item: ItemDetails) => {
+    if (!item) return;
+    if (item.type === "Style") {
+      handleHideStyle(item.id);
     } else {
-      handleHideTone(itemId);
+      handleHideTone(item.id);
     }
   };
   const handleOpenStyleDrawer = () => {
