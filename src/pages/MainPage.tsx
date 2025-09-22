@@ -1,6 +1,6 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Doc, Id } from "../../convex/_generated/dataModel";
@@ -61,8 +61,8 @@ export default function MainPage() {
       seen: questionHistory.map(q => q.question?._id),
       hidden: hiddenQuestions,
     });
-  const style = useQuery(api.styles.getStyle, (selectedStyle === "") ? "skip" : { id: selectedStyle });
-  const tone = useQuery(api.tones.getTone, (selectedTone === "") ? "skip" : { id: selectedTone });
+  const style = useMemo(() => styles?.find(s => s.id === selectedStyle), [styles, selectedStyle]);
+  const tone = useMemo(() => tones?.find(t => t.id === selectedTone), [tones, selectedTone]);
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
   const [isHighlighting, setIsHighlighting] = useState(false);
