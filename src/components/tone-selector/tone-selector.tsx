@@ -90,11 +90,6 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
     },
   }));
 
-  useEffect(() => {
-    if (onSelectTone && tones) {
-      onSelectTone(tones[0].id);
-    }
-  }, [tones, onSelectTone]);
 
   return (
     <>
