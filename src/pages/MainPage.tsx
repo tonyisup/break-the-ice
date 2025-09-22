@@ -18,22 +18,7 @@ import { isColorDark } from "@/lib/utils";
 import { Icon } from "@/components/ui/icons/icon";
 
 export default function MainPage() {
-  const { theme } = useTheme();
-  const [effectiveTheme, setEffectiveTheme] = useState(theme);
-
-  useEffect(() => {
-    if (theme === "system") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const updateEffectiveTheme = () => {
-        setEffectiveTheme(mediaQuery.matches ? "dark" : "light");
-      };
-      updateEffectiveTheme();
-      mediaQuery.addEventListener("change", updateEffectiveTheme);
-      return () => mediaQuery.removeEventListener("change", updateEffectiveTheme);
-    } else {
-      setEffectiveTheme(theme);
-    }
-  }, [theme]);
+  const { effectiveTheme } = useTheme();
 
   const {
     likedQuestions,
