@@ -18,7 +18,7 @@ import { isColorDark } from "@/lib/utils";
 import { Icon } from "@/components/ui/icons/icon";
 
 export default function MainPage() {
-  const { theme } = useTheme();
+  const { effectiveTheme } = useTheme();
 
   const {
     likedQuestions,
@@ -414,7 +414,7 @@ export default function MainPage() {
   const questionStyle = useMemo(() => styles?.find(s => s.id === currentQuestion?.style), [styles, currentQuestion]);
   const questionTone = useMemo(() => tones?.find(t => t.id === currentQuestion?.tone), [tones, currentQuestion]);
   const shuffledGradient = (highlightedStyle?.color && highlightedTone?.color) ? [highlightedStyle?.color, highlightedTone?.color] : gradient;
-  const gradientTarget = theme === "dark" ? "#000" : "#fff";
+  const gradientTarget = effectiveTheme === "dark" ? "#000" : "#fff";
 
 
   return (
