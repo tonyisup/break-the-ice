@@ -29,10 +29,10 @@ export function ThemeToggle({ className }: { className?: string }) {
           <span className="flex w-full justify-between">Light <Sun /></span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("dark")}>
-          Dark <Moon />
+          <span className="flex w-full justify-between">Dark <Moon /></span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("system")}>
-          System <Computer />
+          <span className="flex w-full justify-between">System <Computer /></span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
