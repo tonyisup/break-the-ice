@@ -8,6 +8,8 @@ interface QuestionDisplayProps {
   currentQuestion: Doc<"questions"> | null;
   isFavorite: boolean;
   gradient: string[];
+  style?: Doc<"styles">;
+  tone?: Doc<"tones">;
   toggleLike: (questionId: any) => void;
   onSwipe: () => void;
   toggleHide: (questionId: any) => void;
@@ -21,6 +23,8 @@ export const QuestionDisplay = ({
   currentQuestion,
   isFavorite,
   gradient,
+  style,
+  tone,
   toggleLike,
   onSwipe,
   toggleHide,
@@ -85,6 +89,8 @@ export const QuestionDisplay = ({
         question={currentQuestion}
         isFavorite={isFavorite}
         gradient={gradient}
+        style={style}
+        tone={tone}
         onToggleFavorite={() => currentQuestion && toggleLike(currentQuestion._id)}
         onToggleHidden={() => currentQuestion && toggleHide(currentQuestion._id)}
         onHideStyle={handleHideStyle}

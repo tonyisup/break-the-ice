@@ -411,6 +411,8 @@ export default function MainPage() {
   }
   const isFavorite = currentQuestion ? likedQuestions.includes(currentQuestion._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
+  const questionStyle = useMemo(() => styles?.find(s => s.id === currentQuestion?.style), [styles, currentQuestion]);
+  const questionTone = useMemo(() => tones?.find(t => t.id === currentQuestion?.tone), [tones, currentQuestion]);
   const shuffledGradient = (highlightedStyle?.color && highlightedTone?.color) ? [highlightedStyle?.color, highlightedTone?.color] : gradient;
   const gradientTarget = theme === "dark" ? "#000" : "#fff";
 
@@ -434,6 +436,8 @@ export default function MainPage() {
             currentQuestion={currentQuestion}
             isFavorite={isFavorite}
             gradient={gradient}
+            style={questionStyle}
+            tone={questionTone}
             toggleLike={currentQuestion ? () => toggleLike(currentQuestion._id) : () => {}}
             onSwipe={getNextQuestion}
             toggleHide={currentQuestion ? () => toggleHide(currentQuestion._id) : () => {}}
