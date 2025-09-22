@@ -17,7 +17,7 @@ import { toast } from "sonner";
 function LikedQuestionsPageContent() {
   const { effectiveTheme } = useTheme();
   const [searchText, setSearchText] = useState("");
-  const { likedQuestions, removeLikedQuestion, setLikedQuestions, clearLikedQuestions } = useStorageContext();
+  const { likedQuestions, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, addHiddenStyle, addHiddenTone } = useStorageContext();
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   
   // Filter out invalid question IDs to prevent errors
@@ -108,6 +108,16 @@ function LikedQuestionsPageContent() {
     removeLikedQuestion(questionId);
   };
 
+  const handleHideStyle = (styleId: string) => {
+    addHiddenStyle(styleId);
+    toast.success("Style hidden");
+  };
+
+  const handleHideTone = (toneId: string) => {
+    addHiddenTone(toneId);
+    toast.success("Tone hidden");
+  };
+
   const handleClearLikes = () => {
     setSearchText("");
     toast.success("Likes cleared");
@@ -169,9 +179,13 @@ function LikedQuestionsPageContent() {
             questions={filteredQuestions}
             styleColors={styleColors}
             toneColors={toneColors}
+            styles={styles || []}
+            tones={tones || []}
             likedQuestions={likedQuestions}
             onToggleLike={handleRemoveFavorite}
             onRemoveItem={handleRemoveFavorite}
+            onHideStyle={handleHideStyle}
+            onHideTone={handleHideTone}
           />
         </div>
       )}
