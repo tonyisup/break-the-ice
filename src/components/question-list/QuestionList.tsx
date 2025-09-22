@@ -8,10 +8,14 @@ interface QuestionListProps {
   questions: Doc<"questions">[] | HistoryEntryWrapper[];
   styleColors: { [key: string]: string };
   toneColors: { [key: string]: string };
+  styles: Doc<"styles">[];
+  tones: Doc<"tones">[];
   likedQuestions: Id<"questions">[];
   onToggleLike: (questionId: Id<"questions">) => void;
   onRemoveItem: (questionId: Id<"questions">) => void;
   isHistory?: boolean;
+  onHideStyle?: (styleId: string) => void;
+  onHideTone?: (toneId: string) => void;
 }
 
 interface HistoryEntryWrapper {
@@ -23,10 +27,14 @@ export function QuestionList({
   questions,
   styleColors,
   toneColors,
+  styles,
+  tones,
   likedQuestions,
   onToggleLike,
   onRemoveItem,
   isHistory = false,
+  onHideStyle = () => {},
+  onHideTone = () => {},
 }: QuestionListProps) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
@@ -42,6 +50,9 @@ export function QuestionList({
       (question.style && styleColors[question.style]) || "#667EEA";
     const toneColor = (question.tone && toneColors[question.tone]) || "#764BA2";
     const gradient = [styleColor, toneColor];
+
+    const style = styles.find((s) => s.id === question.style);
+    const tone = tones.find((t) => t.id === question.tone);
 
     return (
       <motion.div
@@ -68,6 +79,10 @@ export function QuestionList({
           onToggleFavorite={() => onToggleLike(question._id)}
           onToggleHidden={() => onRemoveItem(question._id)}
           gradient={gradient}
+          style={style}
+          tone={tone}
+          onHideStyle={onHideStyle}
+          onHideTone={onHideTone}
         />
       </motion.div>
     );
