@@ -35,18 +35,12 @@ export const QuestionDisplay = ({
   const [dragDirection, setDragDirection] = useState<"left" | "right">("right");
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (disabled) return;
-    if (info.offset.y > 100) {
-      if (currentQuestion) {
-        toggleLike(currentQuestion._id);
-      }
-    } else if (info.offset.x < -100) {
+    if (info.offset.x < -100) {
       setDragDirection("left");
       onSwipe();
     } else if (info.offset.x > 100) {
       setDragDirection("right");
       onSwipe();
-    } else if (info.offset.y < -100) {
-      handleShare();
     }
   };
   const handleHideStyle = () => {
