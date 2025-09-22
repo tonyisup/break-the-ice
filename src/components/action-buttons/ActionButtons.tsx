@@ -1,6 +1,7 @@
 import { ArrowBigRight, Shuffle, X, SquareArrowRight } from '@/components/ui/icons/icons';
 import { cn } from "../../lib/utils";
 import { GradientSquareArrowRightIcon } from '../ui/icons/GradientSquareArrowRightIcon';
+import { GradientArrowRightIcon } from '../ui/icons/GradientArrowRightIcon';
 import { GradientXIcon } from '../ui/icons/GradientXIcon';
 
 interface ActionButtonsProps {
@@ -105,7 +106,7 @@ export const ActionButtons = ({
           </div>
         </div>
       ) : (
-        <div className="flex justify-center p-4">
+        <div className="flex justify-center p-4 gap-4">
           <button
             onClick={handleShuffleStyleAndTone}
             className={cn(
@@ -117,11 +118,25 @@ export const ActionButtons = ({
             title="Shuffle Style and Tone"
             disabled={isGenerating}
           >
-            <SquareArrowRight
+            <Shuffle
               size={24}
               className={isColorDark(gradient[0]) ? "text-black" : "text-white"}
             />
             <span className="text-white font-semibold text-base">New</span>
+          </button>
+          <button
+            onClick={getNextQuestion}
+            className={cn(
+              isColorDark(gradient[0])
+                ? "bg-white/20 dark:bg-white/20"
+                : "bg-black/20 dark:bg-black/20",
+              "px-5 py-3 rounded-full flex justify-center items-center gap-2 hover:bg-black/30 dark:hover:bg-white/30 transition-colors"
+            )}
+            title="Shuffle Style and Tone"
+            disabled={isGenerating}
+          >
+            <GradientArrowRightIcon size={24} gradient={gradient} />
+            <span className="text-white font-semibold text-base">Next</span>
           </button>
         </div>
       )}
