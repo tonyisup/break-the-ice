@@ -14,7 +14,15 @@ import { QuestionList } from "@/components/question-list/QuestionList";
 
 function HistoryPageContent() {
   const { history, removeQuestionHistoryEntry, clearHistoryEntries } = useQuestionHistory();
-  const { likedQuestions, addLikedQuestion, removeLikedQuestion } = useStorageContext();
+  const {
+    likedQuestions,
+    addLikedQuestion,
+    removeLikedQuestion,
+    hiddenStyles,
+    hiddenTones,
+    addHiddenStyle,
+    addHiddenTone,
+  } = useStorageContext();
   const [searchText, setSearchText] = useState("");
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const styles = useQuery(api.styles.getStyles, {});
@@ -38,10 +46,13 @@ function HistoryPageContent() {
   }, [tones]);
 
   const filteredHistory = useMemo(() => {
-    return history.filter(entry =>
-      entry.question.text.toLowerCase().includes(searchText.toLowerCase())
+    return history.filter(
+      (entry) =>
+        entry.question.text.toLowerCase().includes(searchText.toLowerCase()) &&
+        !hiddenStyles.includes(entry.question.style) &&
+        !hiddenTones.includes(entry.question.tone),
     );
-  }, [history, searchText]);
+  }, [history, searchText, hiddenStyles, hiddenTones]);
 
   const toggleLike = async (questionId: Id<"questions">) => {
     const isLiked = likedQuestions.includes(questionId);
@@ -62,6 +73,17 @@ function HistoryPageContent() {
   const handleToggleLike = (questionId: Id<"questions">) => {
     void toggleLike(questionId);
   };
+
+  const handleHideStyle = (styleId: string) => {
+    addHiddenStyle(styleId);
+    toast.success("Style hidden. It will not appear on the main page.");
+  };
+
+  const handleHideTone = (toneId: string) => {
+    addHiddenTone(toneId);
+    toast.success("Tone hidden. It will not appear on the main page.");
+  };
+
   const handleClearHistory = () => {
     setSearchText("");
     clearHistoryEntries();
@@ -114,10 +136,14 @@ function HistoryPageContent() {
               questions={filteredHistory}
               styleColors={styleColors}
               toneColors={toneColors}
+              styles={styles || []}
+              tones={tones || []}
               likedQuestions={likedQuestions}
               onToggleLike={handleToggleLike}
               onRemoveItem={removeQuestionHistoryEntry}
               isHistory
+              onHideStyle={handleHideStyle}
+              onHideTone={handleHideTone}
             />
           </div>
         )}

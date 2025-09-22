@@ -27,27 +27,42 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         className="flex items-center justify-between cursor-pointer border-b p-2 mb-1 bg-white/30 dark:bg-black/30 backdrop-blur-sm rounded-lg"
         onClick={() => onOpenChange(!isOpen)}
       >
-        <div className="flex items-center justify-between gap-2 w-full">
-          <div className="flex items-center justify-between w-full gap-2 font-semibold dark:text-white text-black border-white/30">
-            {title}
-            {icons && <div className="flex items-center gap-2 px-2">
-              {icons.map((icon, index) => (
-                icon && <IconComponent icon={icon} size={24} key={index} color={iconColors?.[index]} />
-              ))}
-            </div>}
-          </div>
+        <div className="flex items-center gap-2 font-semibold dark:text-white text-black">
+          {title}
+          {icons && (
+            <div className="flex items-center gap-2 px-2">
+              {icons.map((icon, index) =>
+                icon ? (
+                  <IconComponent
+                    icon={icon}
+                    size={24}
+                    key={index}
+                    color={iconColors?.[index]}
+                  />
+                ) : null,
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
           {count !== undefined && (
             <span className="bg-white/20 dark:bg-black/20 text-sm font-semibold px-2 py-1 rounded-full">
               {count}
             </span>
           )}
+          <ChevronDown
+            className={`transform transition-transform duration-200 ${
+              isOpen ? "rotate-180" : ""
+            }`}
+            size={24}
+          />
         </div>
-        <ChevronDown
-          className={`transform transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-          size={24}
-        />
       </div>
-      {isOpen && <div className="p-4 bg-white/30 dark:bg-black/30 backdrop-blur-sm rounded-lg">{children}</div>}
+      {isOpen && (
+        <div className="p-4 bg-white/30 dark:bg-black/30 backdrop-blur-sm rounded-lg">
+          {children}
+        </div>
+      )}
     </section>
   );
 };
