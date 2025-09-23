@@ -7,6 +7,8 @@ import { useMemo, useState, useEffect } from "react";
 import { useStorageContext } from "../../hooks/useStorageContext";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { QuestionList } from "@/components/question-list/QuestionList";
+import { FilterControls } from "@/components/filter-controls/filter-controls";
+import { useFilter } from "@/hooks/useFilter";
 
 import { cn, isColorDark } from "@/lib/utils";
 
@@ -19,6 +21,8 @@ function LikedQuestionsPageContent() {
   const [searchText, setSearchText] = useState("");
   const { likedQuestions, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, addHiddenStyle, addHiddenTone } = useStorageContext();
   const [isCleaningUp, setIsCleaningUp] = useState(false);
+  const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
+  const [selectedTones, setSelectedTones] = useState<string[]>([]);
   
   // Filter out invalid question IDs to prevent errors
   const validLikedQuestions = useMemo(() => {
@@ -31,6 +35,8 @@ function LikedQuestionsPageContent() {
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions });
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
+
+  const filteredQuestions = useFilter(questions || [], searchText, selectedStyles, selectedTones);
 
   // Clean up invalid question IDs automatically
   useEffect(() => {
@@ -124,13 +130,6 @@ function LikedQuestionsPageContent() {
     clearLikedQuestions();
   };
 
-  const filteredQuestions = useMemo(() => {
-    if (!questions) return [];
-    return questions.filter(question =>
-      question.text.toLowerCase().includes(searchText.toLowerCase())
-    );
-  }, [questions, searchText]);
-
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradient = ["#3B2554", "#262D54"];
   return (
@@ -175,6 +174,15 @@ function LikedQuestionsPageContent() {
               </div>
             </div>
           </div>
+          <FilterControls
+            questions={questions || []}
+            styles={styles || []}
+            tones={tones || []}
+            selectedStyles={selectedStyles}
+            onSelectedStylesChange={setSelectedStyles}
+            selectedTones={selectedTones}
+            onSelectedTonesChange={setSelectedTones}
+          />
           <QuestionList
             questions={filteredQuestions}
             styleColors={styleColors}
