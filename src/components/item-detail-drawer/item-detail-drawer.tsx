@@ -26,6 +26,7 @@ interface ItemDetailDrawerProps {
   onOpenChange: (isOpen: boolean) => void;
   onSelectItem?: (item: ItemDetails) => void;
   onHideItem: (item: ItemDetails) => void;
+  onAddFilter?: (item: ItemDetails) => void;
 }
 
 export function ItemDetailDrawer({
@@ -34,6 +35,7 @@ export function ItemDetailDrawer({
   onOpenChange,
   onSelectItem,
   onHideItem,
+  onAddFilter,
 }: ItemDetailDrawerProps) {
 
   if (!item) {
@@ -49,6 +51,11 @@ export function ItemDetailDrawer({
     onHideItem(item);
     onOpenChange(false);
   };
+
+  const handleAddFilter = () => {
+    onAddFilter?.(item);
+    onOpenChange(false);
+  }
 
   return (
     <Drawer open={isOpen} onOpenChange={onOpenChange}>
@@ -69,6 +76,7 @@ export function ItemDetailDrawer({
             className={isColorDark(item.color) ? "text-white" : "text-black"}
             style={{ backgroundColor: item.color }}
           >Select</Button>}
+          {onAddFilter && <Button variant="secondary" onClick={handleAddFilter}>Add to filter</Button>}
           <Button variant="outline" onClick={handleHide}>Hide</Button>
           <DrawerClose asChild>
             <Button variant="ghost">Cancel</Button>
