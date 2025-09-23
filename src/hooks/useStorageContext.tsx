@@ -1,7 +1,9 @@
-import { createContext, useContext, ReactNode, useCallback } from "react";
+import { createContext, useContext, ReactNode, useCallback, useState, useEffect } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { HistoryEntry } from "./useQuestionHistory";
 import { useLocalStorage } from "./useLocalStorage";
+
+const MAX_ITEMS = 100;
 
 type Theme = "light" | "dark" | "system";
 
@@ -35,6 +37,8 @@ interface StorageContextType {
   clearHiddenQuestions: () => void;
   clearHiddenStyles: () => void;
   clearHiddenTones: () => void;
+  hasConsented: boolean;
+  setHasConsented: (consent: boolean) => void;
 }
 
 const StorageContext = createContext<StorageContextType | undefined>(
@@ -42,32 +46,66 @@ const StorageContext = createContext<StorageContextType | undefined>(
 );
 
 export const StorageProvider = ({ children }: { children: ReactNode }) => {
-  const [theme, setTheme] = useLocalStorage<Theme>("theme", "system");
+  const cookieConsent = document.cookie.split("; ").find(row => row.startsWith("cookieConsent="))?.split("=")[1];
+  const [hasConsented, setHasConsented] = useState(cookieConsent === "true");
+  
+  // Listen for cookie changes
+  useEffect(() => {
+    const checkCookieConsent = () => {
+      const currentConsent = document.cookie.split("; ").find(row => row.startsWith("cookieConsent="))?.split("=")[1];
+      if (currentConsent === "true" && !hasConsented) {
+        setHasConsented(true);
+      }
+    };
+    
+    // Check immediately
+    checkCookieConsent();
+    
+    // Set up interval to check for cookie changes
+    const interval = setInterval(checkCookieConsent, 1000);
+    
+    return () => clearInterval(interval);
+  }, [hasConsented]);
+  const [theme, setTheme] = useLocalStorage<Theme>("theme", "system", hasConsented);
   const [likedQuestions, setLikedQuestions] = useLocalStorage<
     Id<"questions">[]
-  >("likedQuestions", []);
+  >("likedQuestions", [], hasConsented);
   const [questionHistory, setQuestionHistory] = useLocalStorage<HistoryEntry[]>(
     "questionHistory",
-    []
+    [],
+    hasConsented
   );
   const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<
     Id<"questions">[]
-  >("hiddenQuestions", []);
+  >("hiddenQuestions", [], hasConsented);
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>(
     "hiddenStyles",
-    []
+    [],
+    hasConsented
   );
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>(
     "hiddenTones",
-    []
+    [],
+    hasConsented
   );
   const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>(
     "bypassLandingPage",
-    true
+    true,
+    hasConsented
   );
 
   const addLikedQuestion = useCallback((id: Id<"questions">) => {
-    setLikedQuestions(prev => [...prev, id]);
+    setLikedQuestions(prev => {
+      if (prev.length >= MAX_ITEMS) {
+        const confirmed = window.confirm("You have reached the maximum number of liked questions. Do you want to remove the oldest item to add this new one?");
+        if (confirmed) {
+          return [...prev.slice(1), id];
+        } else {
+          return prev;
+        }
+      }
+      return [...prev, id];
+    });
   }, [setLikedQuestions]);
   const removeLikedQuestion = useCallback((id: Id<"questions">) => {
     setLikedQuestions(prev => prev.filter(questionId => questionId !== id));
@@ -88,14 +126,34 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
   }, [setHiddenTones]);
 
   const addQuestionToHistory = useCallback((entry: HistoryEntry) => {
-    setQuestionHistory(prev => [entry, ...prev]);
+    setQuestionHistory(prev => {
+      if (prev.length >= MAX_ITEMS) {
+        const confirmed = window.confirm("You have reached the maximum number of history items. Do you want to remove the oldest item to add this new one?");
+        if (confirmed) {
+          return [entry, ...prev.slice(0, -1)];
+        } else {
+          return prev;
+        }
+      }
+      return [entry, ...prev];
+    });
   }, [setQuestionHistory]);
   const removeQuestionFromHistory = useCallback((id: Id<"questions">) => {
     setQuestionHistory(prev => prev.filter(entry => entry.question && entry.question._id !== id));
   }, [setQuestionHistory]);
   
   const addHiddenQuestion = useCallback((id: Id<"questions">) => {
-    setHiddenQuestions(prev => [...prev, id]);
+    setHiddenQuestions(prev => {
+      if (prev.length >= MAX_ITEMS) {
+        const confirmed = window.confirm("You have reached the maximum number of hidden questions. Do you want to remove the oldest item to add this new one?");
+        if (confirmed) {
+          return [...prev.slice(1), id];
+        } else {
+          return prev;
+        }
+      }
+      return [...prev, id];
+    });
   }, [setHiddenQuestions]);
   const removeHiddenQuestion = useCallback((id: Id<"questions">) => {
     setHiddenQuestions(prev => prev.filter(questionId => questionId !== id));
@@ -146,6 +204,8 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
     clearHiddenQuestions,
     clearHiddenStyles,
     clearHiddenTones,
+    hasConsented,
+    setHasConsented,
   };
 
   return (

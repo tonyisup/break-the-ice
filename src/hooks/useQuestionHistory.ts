@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
-const MAX_HISTORY_LENGTH = 100;
-
 export type HistoryEntry = {
   question: Doc<"questions">;
   viewedAt: number;

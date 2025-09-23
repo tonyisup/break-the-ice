@@ -421,7 +421,7 @@ export default function MainPage() {
     <div
       className="min-h-screen transition-colors overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${gradientTarget}, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
+        background: `linear-gradient(135deg, ${gradient[0]}, ${gradientTarget}, ${gradient[1]})`
       }}
     >
       <Header

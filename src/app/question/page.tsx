@@ -15,8 +15,8 @@ export default function QuestionPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  const { addQuestionToHistory } = useQuestionHistory();
-  const { likedQuestions, setLikedQuestions } = useStorageContext();
+  const { addQuestionHistoryEntry } = useQuestionHistory();
+  const { likedQuestions, setLikedQuestions, addHiddenStyle, addHiddenTone } = useStorageContext();
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
   const question = useQuery(api.questions.getQuestionById, id ? { id } : "skip");
@@ -25,9 +25,9 @@ export default function QuestionPage() {
 
   useEffect(() => {
     if (question) {
-      addQuestionToHistory(question);
+      addQuestionHistoryEntry(question);
     }
-  }, [question, addQuestionToHistory]);
+  }, [question, addQuestionHistoryEntry]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -48,6 +48,15 @@ export default function QuestionPage() {
       toast.success("Added to favorites!");
     }
   };
+  
+  const handleHideStyle = (styleId: string) => {
+    addHiddenStyle(styleId);
+    navigate("/app");
+  }
+  const handleHideTone = (toneId: string) => {
+    addHiddenTone(toneId);
+    navigate("/app");
+  }
 
   const isFavorite = question ? likedQuestions.includes(question._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
@@ -90,13 +99,10 @@ export default function QuestionPage() {
     <div
       className="min-h-screen transition-colors overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${gradientTarget}, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`,
+        background: `linear-gradient(135deg, ${gradient[0]}, ${gradientTarget}, ${gradient[1]})`
       }}
     >
       <Header
-        theme={theme}
-        toggleTheme={toggleTheme}
-        isColorDark={isColorDark}
         gradient={gradient}
       />
       <main className="flex-1 flex flex-col">
@@ -108,6 +114,8 @@ export default function QuestionPage() {
           toggleLike={toggleLike}
           onSwipe={() => navigate("/")}
           toggleHide={() => navigate("/")}
+          onHideStyle={handleHideStyle}
+          onHideTone={handleHideTone}
         />
         <div className="flex justify-center p-4">
           <Link

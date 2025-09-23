@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { cn, isColorDark } from "../../lib/utils";
 import { ThemeToggle } from "../ui/theme-toggle";
-import { Heart, Scroll, Settings, Home } from "lucide-react";
+import { Heart, History, Settings, Home } from "lucide-react";
 
 interface HeaderProps {
   homeLinkSlot?: "liked" | "history" | "settings";
@@ -25,13 +25,13 @@ export const Header = ({ gradient = ['#667EEA', '#764BA2'], homeLinkSlot }: Head
           </Link>
         }
         {homeLinkSlot === "history" ? (
-          <HomeLink theme={isColorDark(gradient[0]) ? "dark" : "light"} icon={<Scroll className="w-5 h-5" />} text="History" />
+          <HomeLink theme={isColorDark(gradient[0]) ? "dark" : "light"} icon={<History className="w-5 h-5" />} text="History" />
         ) : (
           <Link
             to="/history"
             className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white flex items-center gap-2")}
           >
-            <Scroll className="w-5 h-5" /><span className="hidden sm:inline"> History</span>
+            <History className="w-5 h-5" /><span className="hidden sm:inline"> History</span>
           </Link>
         )}
       </div>
