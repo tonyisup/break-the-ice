@@ -14,7 +14,7 @@ export const MultiSelectStylesSelector = ({
   onSelectStyle,
 }: MultiSelectStylesSelectorProps) => {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2 overflow-auto">
       {styles.map((style) => (
         <button
           key={style.id}
