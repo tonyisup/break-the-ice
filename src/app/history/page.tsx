@@ -11,6 +11,8 @@ import { Link } from "react-router-dom";
 import { cn, isColorDark } from "@/lib/utils";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { QuestionList } from "@/components/question-list/QuestionList";
+import { FilterControls } from "@/components/filter-controls/filter-controls";
+import { useFilter } from "@/hooks/useFilter";
 
 function HistoryPageContent() {
   const { history, removeQuestionHistoryEntry, clearHistoryEntries } = useQuestionHistory();
@@ -24,10 +26,21 @@ function HistoryPageContent() {
     addHiddenTone,
   } = useStorageContext();
   const [searchText, setSearchText] = useState("");
+  const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
+  const [selectedTones, setSelectedTones] = useState<string[]>([]);
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
   const { effectiveTheme } = useTheme();
+
+  const filteredHistory = useMemo(() => {
+    return history.filter(
+      (entry) =>
+        entry.question.text.toLowerCase().includes(searchText.toLowerCase()) &&
+        (selectedStyles.length === 0 || selectedStyles.includes(entry.question.style!)) &&
+        (selectedTones.length === 0 || selectedTones.includes(entry.question.tone!))
+    );
+  }, [history, searchText, selectedStyles, selectedTones]);
 
   const styleColors = useMemo(() => {
     if (!styles) return {};
@@ -44,15 +57,6 @@ function HistoryPageContent() {
       return acc;
     }, {} as { [key: string]: string });
   }, [tones]);
-
-  const filteredHistory = useMemo(() => {
-    return history.filter(
-      (entry) =>
-        entry.question.text.toLowerCase().includes(searchText.toLowerCase()) &&
-        !hiddenStyles.includes(entry.question.style) &&
-        !hiddenTones.includes(entry.question.tone),
-    );
-  }, [history, searchText, hiddenStyles, hiddenTones]);
 
   const toggleLike = async (questionId: Id<"questions">) => {
     const isLiked = likedQuestions.includes(questionId);
@@ -132,6 +136,14 @@ function HistoryPageContent() {
                 </button>
               </div>
             </div>
+            <FilterControls
+              styles={styles || []}
+              tones={tones || []}
+              selectedStyles={selectedStyles}
+              onSelectedStylesChange={setSelectedStyles}
+              selectedTones={selectedTones}
+              onSelectedTonesChange={setSelectedTones}
+            />
             <QuestionList
               questions={filteredHistory}
               styleColors={styleColors}
@@ -164,4 +176,3 @@ export default function HistoryPage() {
     </ErrorBoundary>
   );
 }
-
