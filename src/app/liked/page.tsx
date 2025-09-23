@@ -194,6 +194,10 @@ function LikedQuestionsPageContent() {
             onRemoveItem={handleRemoveFavorite}
             onHideStyle={handleHideStyle}
             onHideTone={handleHideTone}
+            onSelectedStylesChange={setSelectedStyles}
+            onSelectedTonesChange={setSelectedTones}
+            selectedStyles={selectedStyles}
+            selectedTones={selectedTones}
           />
         </div>
       )}
