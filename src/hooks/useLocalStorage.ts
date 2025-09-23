@@ -87,7 +87,7 @@ export function useLocalStorage<T>(key: string, initialValue: T, hasConsented: b
     } catch (error) {
       console.error("Error in setValue:", error);
     }
-  }, [key, hasConsented, storedValue]);
+  }, [key, hasConsented]);
 
   return [storedValue, setValue] as const;
 }
