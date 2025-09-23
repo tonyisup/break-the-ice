@@ -30,7 +30,7 @@ export function useStoreUserEffect() {
     return () => setUserId(null);
     // Make sure the effect reruns if the user logs in with
     // a different identity
-  }, [isAuthenticated, storeUser, user?.id]);
+  }, [isAuthenticated, user?.id]);
   // Combine the local state with the state from context
   return {
     isLoading: isLoading || (isAuthenticated && userId === null),
