@@ -1,9 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 // The useLocalStorage hook from the old file
-export function useLocalStorage<T>(key: string, initialValue: T) {
+export function useLocalStorage<T>(key: string, initialValue: T, hasConsented: boolean) {
   const [storedValue, setStoredValue] = useState<T>(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || !hasConsented) {
       return initialValue;
     }
     try {
@@ -60,23 +60,34 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
     }
   });
 
+  useEffect(() => {
+    if (hasConsented) {
+      try {
+        const item = window.localStorage.getItem(key);
+        if (item) {
+          setStoredValue(JSON.parse(item));
+        }
+      } catch (error) {
+        console.error("Error reading from localStorage", error);
+      }
+    }
+  }, [key, hasConsented]);
+
   const setValue = useCallback((value: T | ((val: T) => T)) => {
     try {
-      setStoredValue(prevStoredValue => {
-        const valueToStore = value instanceof Function ? value(prevStoredValue) : value;
-        if (typeof window !== "undefined") {
-          try {
-            window.localStorage.setItem(key, JSON.stringify(valueToStore));
-          } catch (storageError) {
-            console.error("Error writing to localStorage:", storageError);
-          }
+      const valueToStore = value instanceof Function ? value(storedValue) : value;
+      setStoredValue(valueToStore);
+      if (typeof window !== "undefined" && hasConsented) {
+        try {
+          window.localStorage.setItem(key, JSON.stringify(valueToStore));
+        } catch (storageError) {
+          console.error("Error writing to localStorage:", storageError);
         }
-        return valueToStore;
-      });
+      }
     } catch (error) {
       console.error("Error in setValue:", error);
     }
-  }, [key]);
+  }, [key, hasConsented, storedValue]);
 
   return [storedValue, setValue] as const;
 }
