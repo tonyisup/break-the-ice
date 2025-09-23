@@ -3,6 +3,7 @@ import MainPage from "./pages/MainPage";
 import { SignIn } from "./SignIn";
 import { useTheme } from "./hooks/useTheme";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import CookieConsentBanner from "./components/CookieConsentBanner";
 
 export default function App() {
   const { isAuthenticated, isLoading } = useStoreUserEffect();
@@ -29,6 +30,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <MainPage />
+      <CookieConsentBanner />
     </ErrorBoundary>
   );
 }

@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useCallback } from "react";
+import { createContext, useContext, ReactNode, useCallback, useState } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { HistoryEntry } from "./useQuestionHistory";
 import { useLocalStorage } from "./useLocalStorage";
@@ -37,6 +37,8 @@ interface StorageContextType {
   clearHiddenQuestions: () => void;
   clearHiddenStyles: () => void;
   clearHiddenTones: () => void;
+  hasConsented: boolean;
+  setHasConsented: (consent: boolean) => void;
 }
 
 const StorageContext = createContext<StorageContextType | undefined>(
@@ -44,28 +46,33 @@ const StorageContext = createContext<StorageContextType | undefined>(
 );
 
 export const StorageProvider = ({ children }: { children: ReactNode }) => {
-  const [theme, setTheme] = useLocalStorage<Theme>("theme", "system");
+  const [hasConsented, setHasConsented] = useState(false);
+  const [theme, setTheme] = useLocalStorage<Theme>("theme", "system", hasConsented);
   const [likedQuestions, setLikedQuestions] = useLocalStorage<
     Id<"questions">[]
-  >("likedQuestions", []);
+  >("likedQuestions", [], hasConsented);
   const [questionHistory, setQuestionHistory] = useLocalStorage<HistoryEntry[]>(
     "questionHistory",
-    []
+    [],
+    hasConsented
   );
   const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<
     Id<"questions">[]
-  >("hiddenQuestions", []);
+  >("hiddenQuestions", [], hasConsented);
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>(
     "hiddenStyles",
-    []
+    [],
+    hasConsented
   );
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>(
     "hiddenTones",
-    []
+    [],
+    hasConsented
   );
   const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>(
     "bypassLandingPage",
-    true
+    true,
+    hasConsented
   );
 
   const addLikedQuestion = useCallback((id: Id<"questions">) => {
@@ -178,6 +185,8 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
     clearHiddenQuestions,
     clearHiddenStyles,
     clearHiddenTones,
+    hasConsented,
+    setHasConsented,
   };
 
   return (
