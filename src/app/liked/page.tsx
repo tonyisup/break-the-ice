@@ -175,6 +175,7 @@ function LikedQuestionsPageContent() {
             </div>
           </div>
           <FilterControls
+            questions={questions || []}
             styles={styles || []}
             tones={tones || []}
             selectedStyles={selectedStyles}

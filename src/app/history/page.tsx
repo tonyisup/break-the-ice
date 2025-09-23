@@ -33,14 +33,8 @@ function HistoryPageContent() {
   const tones = useQuery(api.tones.getTones, {});
   const { effectiveTheme } = useTheme();
 
-  const filteredHistory = useMemo(() => {
-    return history.filter(
-      (entry) =>
-        entry.question.text.toLowerCase().includes(searchText.toLowerCase()) &&
-        (selectedStyles.length === 0 || selectedStyles.includes(entry.question.style!)) &&
-        (selectedTones.length === 0 || selectedTones.includes(entry.question.tone!))
-    );
-  }, [history, searchText, selectedStyles, selectedTones]);
+  const questions = useMemo(() => history.map(entry => entry.question), [history]);
+  const filteredHistory = useFilter(history, searchText, selectedStyles, selectedTones) as HistoryEntry[];
 
   const styleColors = useMemo(() => {
     if (!styles) return {};
@@ -137,6 +131,7 @@ function HistoryPageContent() {
               </div>
             </div>
             <FilterControls
+              questions={questions}
               styles={styles || []}
               tones={tones || []}
               selectedStyles={selectedStyles}

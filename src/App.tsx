@@ -22,9 +22,9 @@ export default function App() {
     );
   }
 
- /* if (!isAuthenticated) {
+  if (!isAuthenticated) {
     return <SignIn />;
-  }*/
+  }
 
   return (
     <ErrorBoundary>

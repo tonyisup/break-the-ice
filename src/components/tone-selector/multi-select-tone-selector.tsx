@@ -5,7 +5,7 @@ import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallba
 import { ChevronLeft, ChevronRight } from '@/components/ui/icons/icons';
 
 interface MultiSelectTonesSelectorProps {
-  tones: Doc<"tones">[];
+  tones: (Doc<"tones"> & { count: number })[];
   selectedTones: string[];
   onSelectTone: (toneId: string) => void;
 }
@@ -90,7 +90,7 @@ export const MultiSelectTonesSelector = ({
                 : "bg-gray-200 dark:bg-gray-800"
             )}
           >
-            {tone.name}
+            {tone.name} <span className="text-xs opacity-75">({tone.count})</span>
           </button>
         ))}
       </div>

@@ -5,7 +5,7 @@ import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallba
 import { ChevronLeft, ChevronRight } from '@/components/ui/icons/icons';
 
 interface MultiSelectStylesSelectorProps {
-  styles: Doc<"styles">[];
+  styles: (Doc<"styles"> & { count: number })[];
   selectedStyles: string[];
   onSelectStyle: (styleId: string) => void;
 }
@@ -90,7 +90,7 @@ export const MultiSelectStylesSelector = ({
                 : "bg-gray-200 dark:bg-gray-800"
             )}
           >
-            {style.name}
+            {style.name} <span className="text-xs opacity-75">({style.count})</span>
           </button>
         ))}
       </div>

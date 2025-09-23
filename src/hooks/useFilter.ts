@@ -1,21 +1,28 @@
 import { useMemo } from "react";
 import { Doc } from "../../convex/_generated/dataModel";
+import { HistoryEntry } from "./useQuestionHistory";
+
+function isHistoryEntry(item: any): item is HistoryEntry {
+    return (item as HistoryEntry).question !== undefined;
+}
 
 export const useFilter = (
-  questions: Doc<"questions">[],
+  items: (Doc<"questions"> | HistoryEntry)[],
   searchText: string,
   selectedStyles: string[],
   selectedTones: string[]
 ) => {
-  const filteredQuestions = useMemo(() => {
-    if (!questions) return [];
-    return questions.filter(
-      (question) =>
-        question.text.toLowerCase().includes(searchText.toLowerCase()) &&
+  const filteredItems = useMemo(() => {
+    if (!items) return [];
+    return items.filter(
+      (item) => {
+        const question = isHistoryEntry(item) ? item.question : item;
+        return question.text.toLowerCase().includes(searchText.toLowerCase()) &&
         (selectedStyles.length === 0 || selectedStyles.includes(question.style!)) &&
         (selectedTones.length === 0 || selectedTones.includes(question.tone!))
+      }
     );
-  }, [questions, searchText, selectedStyles, selectedTones]);
+  }, [items, searchText, selectedStyles, selectedTones]);
 
-  return filteredQuestions;
+  return filteredItems;
 };
