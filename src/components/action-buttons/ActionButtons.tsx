@@ -76,9 +76,9 @@ export const ActionButtons = ({
             >
               <Shuffle
                 size={24}
-                className={isColorDark(gradient[0]) ? "text-black" : "text-white"}
+                className={isColorDark(gradient[0]) ? "text-black" : "dark:text-white"}
               />
-              <span className="sm:block hidden text-white font-semibold text-base">
+              <span className="sm:block hidden text-black dark:text-white font-semibold text-base">
                 Shuffle
               </span>
             </button>

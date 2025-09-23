@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from '@/components/ui/icons/icons';
 import { IconComponent } from '@/components/ui/icons/icon';
-import { cn } from '@/lib/utils';
+import { cn, isColorDark } from '@/lib/utils';
 import React from 'react';
 import { ItemDetails as SelectorItem } from '../item-detail-drawer';
 
@@ -280,8 +280,8 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
 
                     }
                   >
-                    <IconComponent icon={item.icon} size={20} />
-                    <span className="text-sm font-semibold whitespace-nowrap">
+                    <IconComponent color={isSelected ? isColorDark(item.color) ? "white" : "black" : item.color} icon={item.icon} size={20} />
+                    <span className={cn("text-sm font-semibold whitespace-nowrap", isSelected ? isColorDark(item.color) ? "text-white" : "text-black" : "text-gray-600 dark:text-gray-400")}>
                       {item.name}
                     </span>
                   </button>
