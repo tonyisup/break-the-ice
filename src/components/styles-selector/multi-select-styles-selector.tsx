@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
-import { Icon } from "../ui/icons/icon";
 import { Doc } from "../../../convex/_generated/dataModel";
-import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from '@/components/ui/icons/icons';
+import DynamicIcon from "../ui/dynamic-icon";
 
 interface MultiSelectStylesSelectorProps {
   styles: (Doc<"styles"> & { count: number })[];
@@ -78,21 +78,28 @@ export const MultiSelectStylesSelector = ({
         ref={containerRef}
         className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide scroll-smooth"
       >
-        {styles.map((style) => (
-          <button
-            key={style.id}
-            data-testid="style-selector-button"
-            onClick={() => onSelectStyle(style.id)}
-            className={cn(
-              "p-2 rounded-lg border whitespace-nowrap",
-              selectedStyles.includes(style.id)
-                ? "bg-blue-500 text-white"
-                : "bg-gray-200 dark:bg-gray-800"
-            )}
-          >
-            {style.name} <span className="text-xs opacity-75">({style.count})</span>
-          </button>
-        ))}
+        {styles.map((style) => {
+          const isSelected = selectedStyles.includes(style.id);
+          return (
+            <button
+              key={style.id}
+              data-testid="style-selector-button"
+              onClick={() => onSelectStyle(style.id)}
+              className={cn(
+                "p-2 px-4 rounded-lg border whitespace-nowrap flex items-center gap-2 transition-colors",
+                !isSelected && "bg-gray-200 dark:bg-gray-800"
+              )}
+              style={{
+                backgroundColor: isSelected ? style.color : undefined,
+                borderColor: isSelected ? style.color : undefined,
+                color: isSelected ? 'white' : undefined,
+              }}
+            >
+              <DynamicIcon name={style.icon} size={16} />
+              {style.name} <span className="text-xs opacity-75">({style.count})</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
-import { Icon } from "../ui/icons/icon";
 import { Doc } from "../../../convex/_generated/dataModel";
-import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from '@/components/ui/icons/icons';
+import DynamicIcon from "../ui/dynamic-icon";
 
 interface MultiSelectTonesSelectorProps {
   tones: (Doc<"tones"> & { count: number })[];
@@ -78,21 +78,28 @@ export const MultiSelectTonesSelector = ({
         ref={containerRef}
         className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide scroll-smooth"
       >
-        {tones.map((tone) => (
-          <button
-            key={tone.id}
-            data-testid="tone-selector-button"
-            onClick={() => onSelectTone(tone.id)}
-            className={cn(
-              "p-2 rounded-lg border whitespace-nowrap",
-              selectedTones.includes(tone.id)
-                ? "bg-blue-500 text-white"
-                : "bg-gray-200 dark:bg-gray-800"
-            )}
-          >
-            {tone.name} <span className="text-xs opacity-75">({tone.count})</span>
-          </button>
-        ))}
+        {tones.map((tone) => {
+          const isSelected = selectedTones.includes(tone.id);
+          return (
+            <button
+              key={tone.id}
+              data-testid="tone-selector-button"
+              onClick={() => onSelectTone(tone.id)}
+              className={cn(
+                "p-2 px-4 rounded-lg border whitespace-nowrap flex items-center gap-2 transition-colors",
+                !isSelected && "bg-gray-200 dark:bg-gray-800"
+              )}
+              style={{
+                backgroundColor: isSelected ? tone.color : undefined,
+                borderColor: isSelected ? tone.color : undefined,
+                color: isSelected ? 'white' : undefined,
+              }}
+            >
+              <DynamicIcon name={tone.icon} size={16} />
+              {tone.name} <span className="text-xs opacity-75">({tone.count})</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
