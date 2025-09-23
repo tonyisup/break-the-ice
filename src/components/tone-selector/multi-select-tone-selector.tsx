@@ -86,16 +86,15 @@ export const MultiSelectTonesSelector = ({
               data-testid="tone-selector-button"
               onClick={() => onSelectTone(tone.id)}
               className={cn(
-                "p-2 px-4 rounded-lg border whitespace-nowrap flex items-center gap-2 transition-colors",
+                "p-2 px-4 rounded-lg border border-2 whitespace-nowrap flex items-center gap-2 transition-colors",
                 !isSelected && "bg-gray-200 dark:bg-gray-800"
               )}
-              style={{
-                backgroundColor: isSelected ? tone.color : undefined,
+              style={{                
                 borderColor: isSelected ? tone.color : undefined,
                 color: isSelected ? 'white' : undefined,
               }}
             >
-              <DynamicIcon name={tone.icon} size={16} />
+              <DynamicIcon color={tone.color} name={tone.icon} size={16} />
               {tone.name} <span className="text-xs opacity-75">({tone.count})</span>
             </button>
           );

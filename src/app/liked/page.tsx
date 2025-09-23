@@ -1,6 +1,6 @@
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
+import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
 import { useMemo, useState, useEffect } from "react";
@@ -184,7 +184,7 @@ function LikedQuestionsPageContent() {
             onSelectedTonesChange={setSelectedTones}
           />
           <QuestionList
-            questions={filteredQuestions}
+            questions={filteredQuestions as Doc<"questions">[]}
             styleColors={styleColors}
             toneColors={toneColors}
             styles={styles || []}

@@ -8,15 +8,15 @@ import CookieConsentBanner from "./components/CookieConsentBanner";
 export default function App() {
   const { isAuthenticated, isLoading } = useStoreUserEffect();
 
-  const { theme } = useTheme();
-  const gradient = ['#667EEA', '#764BA2'];
-  const gradientTarget = theme === "dark" ? "#000" : "#fff";
+  const { effectiveTheme } = useTheme();
+  const gradientLight = ["#667EEA", "#A064DE"];
+  const gradient = ["#3B2554", "#262D54"];
   if (isLoading) {
     return (
       <div
         className="min-h-screen transition-colors overflow-hidden"
         style={{
-          background: `linear-gradient(135deg, ${gradientTarget}, ${gradient[0]}, ${gradient[1]}, ${gradientTarget})`
+        background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradient[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradient[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
         }}
       >
       </div>
@@ -30,7 +30,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <MainPage />
-      <CookieConsentBanner />
+      <CookieConsentBanner  />
     </ErrorBoundary>
   );
 }

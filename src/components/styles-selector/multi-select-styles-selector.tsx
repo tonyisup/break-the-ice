@@ -90,12 +90,11 @@ export const MultiSelectStylesSelector = ({
                 !isSelected && "bg-gray-200 dark:bg-gray-800"
               )}
               style={{
-                backgroundColor: isSelected ? style.color : undefined,
                 borderColor: isSelected ? style.color : undefined,
                 color: isSelected ? 'white' : undefined,
               }}
             >
-              <DynamicIcon name={style.icon} size={16} />
+              <DynamicIcon color={style.color} name={style.icon} size={16} />
               {style.name} <span className="text-xs opacity-75">({style.count})</span>
             </button>
           );

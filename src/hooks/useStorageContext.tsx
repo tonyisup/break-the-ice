@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useCallback, useState } from "react";
+import { createContext, useContext, ReactNode, useCallback, useState, useEffect } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { HistoryEntry } from "./useQuestionHistory";
 import { useLocalStorage } from "./useLocalStorage";
@@ -46,7 +46,26 @@ const StorageContext = createContext<StorageContextType | undefined>(
 );
 
 export const StorageProvider = ({ children }: { children: ReactNode }) => {
-  const [hasConsented, setHasConsented] = useState(false);
+  const cookieConsent = document.cookie.split("; ").find(row => row.startsWith("cookieConsent="))?.split("=")[1];
+  const [hasConsented, setHasConsented] = useState(cookieConsent === "true");
+  
+  // Listen for cookie changes
+  useEffect(() => {
+    const checkCookieConsent = () => {
+      const currentConsent = document.cookie.split("; ").find(row => row.startsWith("cookieConsent="))?.split("=")[1];
+      if (currentConsent === "true" && !hasConsented) {
+        setHasConsented(true);
+      }
+    };
+    
+    // Check immediately
+    checkCookieConsent();
+    
+    // Set up interval to check for cookie changes
+    const interval = setInterval(checkCookieConsent, 1000);
+    
+    return () => clearInterval(interval);
+  }, [hasConsented]);
   const [theme, setTheme] = useLocalStorage<Theme>("theme", "system", hasConsented);
   const [likedQuestions, setLikedQuestions] = useLocalStorage<
     Id<"questions">[]
