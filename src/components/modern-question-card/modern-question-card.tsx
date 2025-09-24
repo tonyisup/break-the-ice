@@ -19,6 +19,10 @@ interface ModernQuestionCardProps {
   onShare?: () => void;
   onHideStyle: (styleId: string) => void;
   onHideTone: (toneId: string) => void;
+  onSelectedStylesChange?: (styles: string[]) => void;
+  onSelectedTonesChange?: (tones: string[]) => void;
+  selectedStyles?: string[];
+  selectedTones?: string[];
   disabled?: boolean;
 }
 
@@ -33,6 +37,10 @@ export function ModernQuestionCard({
   onToggleHidden,
   onHideStyle,
   onHideTone,
+  onSelectedStylesChange,
+  onSelectedTonesChange,
+  selectedStyles,
+  selectedTones,
   disabled = false,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -66,6 +74,18 @@ export function ModernQuestionCard({
       handleHideStyle(item.id);
     } else {
       handleHideTone(item.id);
+    }
+  };
+
+  const onAddFilter = (item: ItemDetails) => {
+    if (item.type === "Style") {
+      if (onSelectedStylesChange && selectedStyles) {
+        onSelectedStylesChange([...selectedStyles, item.id]);
+      }
+    } else {
+      if (onSelectedTonesChange && selectedTones) {
+        onSelectedTonesChange([...selectedTones, item.id]);
+      }
     }
   };
   const handleOpenStyleDrawer = () => {
@@ -149,6 +169,7 @@ export function ModernQuestionCard({
                 isOpen={isDrawerOpen}
                 onOpenChange={setIsDrawerOpen}
                 onHideItem={handleHideItem}
+                onAddFilter={onAddFilter}
               />
             </>
           )}

@@ -16,6 +16,10 @@ interface QuestionListProps {
   isHistory?: boolean;
   onHideStyle?: (styleId: string) => void;
   onHideTone?: (toneId: string) => void;
+  onSelectedStylesChange?: (styles: string[]) => void;
+  onSelectedTonesChange?: (tones: string[]) => void;
+  selectedStyles?: string[];
+  selectedTones?: string[];
 }
 
 interface HistoryEntryWrapper {
@@ -35,6 +39,10 @@ export function QuestionList({
   isHistory = false,
   onHideStyle = () => {},
   onHideTone = () => {},
+  onSelectedStylesChange,
+  onSelectedTonesChange,
+  selectedStyles,
+  selectedTones,
 }: QuestionListProps) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
@@ -83,6 +91,10 @@ export function QuestionList({
           tone={tone}
           onHideStyle={onHideStyle}
           onHideTone={onHideTone}
+          onSelectedStylesChange={onSelectedStylesChange}
+          onSelectedTonesChange={onSelectedTonesChange}
+          selectedStyles={selectedStyles}
+          selectedTones={selectedTones}
         />
       </motion.div>
     );

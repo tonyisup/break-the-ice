@@ -31,7 +31,7 @@ vi.mock('../../hooks/useLocalStorage', () => ({
 vi.mock('../../hooks/useQuestionHistory', () => ({
   useQuestionHistory: () => ({
     history: [],
-    addQuestionToHistory: vi.fn(),
+    addQuestionHistoryEntry: vi.fn(),
   }),
 }));
 vi.mock('sonner', () => ({
