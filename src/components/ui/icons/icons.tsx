@@ -1,4 +1,5 @@
 export {
+  CircleQuestionMark,
   ArrowLeftIcon,
   CloudLightning,
   ArrowBigRight,

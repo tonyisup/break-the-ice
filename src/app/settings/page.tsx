@@ -10,15 +10,31 @@ import { Header } from "@/components/header";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useState } from "react";
 import DynamicIcon from "@/components/ui/dynamic-icon";
+import { ItemDetailDrawer, ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
+import { Doc } from "../../../convex/_generated/dataModel";
 
 const SettingsPage = () => {
   const { effectiveTheme } = useTheme();
   const allStyles = useQuery(api.styles.getStyles);
   const allTones = useQuery(api.tones.getTones);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ItemDetails | null>(null);
 
   const toggleSection = (section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const handleShowInfo = (item: Doc<"styles"> | Doc<"tones">, type: "Style" | "Tone") => {
+    setSelectedItem({
+      id: item._id,
+      name: item.name,
+      type: type,
+      description: item.description ?? "",
+      icon: item.icon as any,
+      color: item.color,
+    });
+    setIsDrawerOpen(true);
   };
   const {
     hiddenStyles,
@@ -57,6 +73,14 @@ const SettingsPage = () => {
     removeHiddenQuestion(questionId);
   };
   const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions });
+
+  const handleHideItem = (item: ItemDetails) => {
+    if (item.type === "Style") {
+      handleToggleStyle(item.id);
+    } else {
+      handleToggleTone(item.id);
+    }
+  };
 
 
   useEffect(() => {
@@ -161,16 +185,21 @@ const SettingsPage = () => {
                           <DynamicIcon name={style.icon} color={style.color} size={24} className="mr-2" />
                           <span className="dark:text-white text-black">{style.name}</span>
                         </div>
-                        <button
-                          onClick={() => handleToggleStyle(style.id)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
-                          aria-pressed={isIncluded}
-                          aria-label={`Toggle style ${style.name}`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
-                          />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleShowInfo(style, "Style")} className="p-1">
+                            <DynamicIcon name="info" size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleToggleStyle(style.id)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
+                            aria-pressed={isIncluded}
+                            aria-label={`Toggle style ${style.name}`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
+                            />
+                          </button>
+                        </div>
                       </li>
                     );
                   })}
@@ -212,16 +241,21 @@ const SettingsPage = () => {
                           <DynamicIcon name={tone.icon} color={tone.color} size={24} className="mr-2" />
                           <span className="dark:text-white text-black">{tone.name}</span>
                         </div>
-                        <button
-                          onClick={() => handleToggleTone(tone.id)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
-                          aria-pressed={isIncluded}
-                          aria-label={`Toggle tone ${tone.name}`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
-                          />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleShowInfo(tone, "Tone")} className="p-1">
+                            <DynamicIcon name="info" size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleToggleTone(tone.id)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
+                            aria-pressed={isIncluded}
+                            aria-label={`Toggle tone ${tone.name}`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
+                            />
+                          </button>
+                        </div>
                       </li>
                     );
                   })}
@@ -266,6 +300,12 @@ const SettingsPage = () => {
           </CollapsibleSection>
         </div>
       </div>
+      <ItemDetailDrawer
+        item={selectedItem}
+        isOpen={isDrawerOpen}
+        onOpenChange={setIsDrawerOpen}
+        onHideItem={handleHideItem}
+      />
     </div>
   );
 };
