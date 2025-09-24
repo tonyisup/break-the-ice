@@ -304,7 +304,6 @@ const SettingsPage = () => {
         item={selectedItem}
         isOpen={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
-        onHideItem={handleHideItem}
       />
     </div>
   );

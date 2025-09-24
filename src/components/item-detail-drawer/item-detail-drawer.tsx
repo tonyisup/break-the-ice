@@ -25,7 +25,7 @@ interface ItemDetailDrawerProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   onSelectItem?: (item: ItemDetails) => void;
-  onHideItem: (item: ItemDetails) => void;
+  onHideItem?: (item: ItemDetails) => void;
   onAddFilter?: (item: ItemDetails) => void;
 }
 
@@ -48,7 +48,7 @@ export function ItemDetailDrawer({
   };
 
   const handleHide = () => {
-    onHideItem(item);
+    onHideItem?.(item);
     onOpenChange(false);
   };
 
@@ -87,9 +87,9 @@ export function ItemDetailDrawer({
             onClick={handleAddFilter}
             style={{ borderColor: item.color, borderWidth: '4px' }}
           >Add to filter</Button>}
-          <Button variant="outline" onClick={handleHide}>Hide</Button>
+          {onHideItem && <Button variant="outline" onClick={handleHide}>Hide</Button>}
           <DrawerClose asChild>
-            <Button variant="ghost">Cancel</Button>
+            <Button variant="ghost">Close</Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
