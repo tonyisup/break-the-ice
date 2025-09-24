@@ -8,7 +8,7 @@ import {
   DrawerClose,
 } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button'; 
-import { isColorDark } from '@/lib/utils';
+import { cn, isColorDark } from '@/lib/utils';
 import { Icon, IconComponent } from '@/components/ui/icons/icon';
 
 export interface ItemDetails {
@@ -66,7 +66,13 @@ export function ItemDetailDrawer({
               <IconComponent icon={item.icon} size={24} color={item.color} />
               {item.name}
             </span>
-            <span className="text-sm text-muted-foreground">{item.type}</span>
+            <span 
+              style={{ borderColor: item.color }}
+              className={cn(
+                "text-sm text-muted-foreground p-2 rounded-2xl",
+                item.type === "Style" ? "border-l-4 border-t-4 border-r-0 border-b-0" : "border-r-4 border-b-4 border-l-0 border-t-0"
+              )}
+            >{item.type}</span>
           </DrawerTitle>
           <DrawerDescription className="pt-4 text-sm text-muted-foreground">{item.description}</DrawerDescription>
         </DrawerHeader>
