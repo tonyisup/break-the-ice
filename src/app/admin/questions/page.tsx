@@ -39,7 +39,6 @@ const QuestionsPage: React.FC = () => {
 
 function QuestionManager() {
     const questions = useQuery(api.questions.getQuestions);
-    const categories = useQuery(api.categories.getCategories);
     const styles = useQuery(api.styles.getStyles);
     const tones = useQuery(api.tones.getTones);
     const createQuestion = useMutation(api.questions.createQuestion);
