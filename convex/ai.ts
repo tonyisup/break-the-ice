@@ -9,6 +9,7 @@ import { Doc, Id } from "./_generated/dataModel";
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
   apiKey: process.env.OPEN_ROUTER_API_KEY,
+  timeout: 30000, // 30 second timeout
   defaultHeaders: {
     'HTTP-Referer': 'https://breaktheiceberg.com', 
     'X-Title': 'Break the ice(berg)', 
@@ -113,19 +114,29 @@ ${JSON.stringify(promptData, null, 2)}
 Respond with ONLY the JSON array, no other text.`
             }
           ],
-          max_tokens: 200 * generationCount,
+          max_tokens: 500 * generationCount,
           temperature: 0.7,
         });
 
         generatedContent = completion.choices[0]?.message?.content?.trim() || "";
         
         if (!generatedContent) {
-          // console.log(`Attempt ${attempts}: No content generated`);
+          console.log(`Attempt ${attempts}: No content generated`);
           if (attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
             continue;
           }
           throw new Error("Failed to generate question after multiple attempts");
+        }
+
+        // Validate that we have a reasonable response length
+        if (generatedContent.length < 10) {
+          console.log(`Attempt ${attempts}: Response too short (${generatedContent.length} chars):`, generatedContent);
+          if (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+          throw new Error("AI response too short");
         }
 
         // If we get here, we have content, so break out of the retry loop
@@ -202,6 +213,8 @@ Respond with ONLY the JSON array, no other text.`
       console.error("Original content:", generatedContent);
       console.error("Cleaned content:", cleanedContent);
       console.error("Content length:", cleanedContent.length);
+      console.error("Content preview (first 200 chars):", cleanedContent.substring(0, 200));
+      console.error("Content preview (last 200 chars):", cleanedContent.substring(Math.max(0, cleanedContent.length - 200)));
       
       // Try to extract individual questions from the response
       const questionMatches = generatedContent.match(/"([^"]+)"/g);
