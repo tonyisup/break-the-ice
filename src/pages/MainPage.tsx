@@ -446,7 +446,7 @@ export default function MainPage() {
           />
         </AnimatePresence>
 
-        <div className="px-4">
+        <div className="px-4 w-full flex flex-col justify-center max-w-3xl mx-auto">
           <CollapsibleSection
             title="Customize Style & Tone"
             icons={[style?.icon as Icon, tone?.icon as Icon]}
