@@ -76,7 +76,11 @@ export function ItemDetailDrawer({
             className={isColorDark(item.color) ? "text-white" : "text-black"}
             style={{ backgroundColor: item.color }}
           >Select</Button>}
-          {onAddFilter && <Button variant="secondary" onClick={handleAddFilter}>Add to filter</Button>}
+          {onAddFilter && <Button 
+            variant="secondary" 
+            onClick={handleAddFilter}
+            style={{ borderColor: item.color, borderWidth: '4px' }}
+          >Add to filter</Button>}
           <Button variant="outline" onClick={handleHide}>Hide</Button>
           <DrawerClose asChild>
             <Button variant="ghost">Cancel</Button>
