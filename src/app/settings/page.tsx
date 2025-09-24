@@ -30,8 +30,8 @@ const SettingsPage = () => {
       id: item._id,
       name: item.name,
       type: type,
-      description: item.description,
-      icon: item.icon,
+      description: item.description ?? "",
+      icon: item.icon as any,
       color: item.color,
     });
     setIsDrawerOpen(true);

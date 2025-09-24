@@ -16,12 +16,7 @@ const toPascalCase = (str: string) => {
 
 const DynamicIcon: React.FC<DynamicIconProps> = ({ name, ...props }) => {
   let iconName = toPascalCase(name);
-
-  // Special case for HelpCircle -> CircleHelp
-  if (iconName === 'HelpCircle') {
-    iconName = 'CircleHelp';
-  }
-
+  
   // @ts-expect-error - We are using a dynamic name to access the icon
   const LucideIcon = icons[iconName];
 
