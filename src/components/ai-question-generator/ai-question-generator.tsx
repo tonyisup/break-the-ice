@@ -35,6 +35,17 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
   const initializeTags = useMutation(api.tags.initializeTags);
   const initializeModels = useMutation(api.models.initializeModels);
 
+  useEffect(() => {
+    if (styles && styles.length > 0 && (selectedStyle === "random" || !styles.find(s => s.id === selectedStyle))) {
+      setSelectedStyle(styles[0].id);
+    }
+  }, [styles, selectedStyle]);
+
+  useEffect(() => {
+    if (tones && tones.length > 0 && (selectedTone === "random" || !tones.find(t => t.id === selectedTone))) {
+      setSelectedTone(tones[0].id);
+    }
+  }, [tones, selectedTone]);
 
   const handleTagToggle = (tagName: string) => {
     setSelectedTags(prev =>
