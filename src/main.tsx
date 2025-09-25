@@ -9,7 +9,7 @@ import { StorageProvider } from "./hooks/useStorageContext";
 import App from "./App";
 import Root from "./Root";
 import LikedQuestionsPage from "./app/liked/page";
-import AdminPage from "./app/admin/page";
+import { AdminPage } from "./pages/AdminPage";
 import QuestionsPage from "./app/admin/questions/page";
 import TagsPage from "./app/admin/tags/page";
 import ModelsPage from "./app/admin/models/page";
