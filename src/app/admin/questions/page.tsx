@@ -213,62 +213,96 @@ function QuestionManager() {
             {/* Mobile View */}
             <div className="lg:hidden">
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredQuestions?.map((q) => (
-                  <div key={q._id} className="p-4 space-y-3">
-                    {editingQuestion?._id === q._id ? (
-                      <div className="space-y-3">
-                        <textarea
-                          value={editingQuestion.text}
-                          onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
-                          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          rows={3}
-                        />
-                        <select
-                          value={editingQuestion.style ?? ''}
-                          onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
-                          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="">Select a style</option>
-                          {styles?.map((style) => (
-                            <option key={style.id} value={style.id}>
-                              {style.name}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={editingQuestion.tone ?? ''}
-                          onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
-                          className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="">Select a tone</option>
-                          {tones?.map((tone) => (
-                            <option key={tone.id} value={tone.id}>
-                              {tone.name}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="flex gap-2">
-                          <button onClick={handleUpdateQuestion} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Save</button>
-                          <button onClick={() => setEditingQuestion(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Cancel</button>
+                {filteredQuestions?.map((q) => {
+                  const style = styles?.find((s) => s.id === q.style);
+                  const tone = tones?.find((t) => t.id === q.tone);
+                  return (
+                    <div key={q._id} className="p-4 space-y-3">
+                      {editingQuestion?._id === q._id ? (
+                        <div className="space-y-3">
+                          <textarea
+                            value={editingQuestion.text}
+                            onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
+                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            rows={3}
+                          />
+                          <select
+                            value={editingQuestion.style ?? ''}
+                            onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
+                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="">Select a style</option>
+                            {styles?.map((style) => (
+                              <option key={style.id} value={style.id}>
+                                {style.name}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={editingQuestion.tone ?? ''}
+                            onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
+                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="">Select a tone</option>
+                            {tones?.map((tone) => (
+                              <option key={tone.id} value={tone.id}>
+                                {tone.name}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="flex gap-2">
+                            <button onClick={handleUpdateQuestion} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Save</button>
+                            <button onClick={() => setEditingQuestion(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Cancel</button>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <p className="text-gray-900 dark:text-white">{q.text}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Style: {q.style || 'No style'}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Tone: {q.tone || 'No tone'}
-                        </p>
-                        <div className="flex gap-2 pt-2">
-                          <button onClick={() => setEditingQuestion(q)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Edit</button>
-                          <button onClick={() => handleDeleteQuestion(q._id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Delete</button>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-gray-900 dark:text-white">{q.text}</p>
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Style:</span>
+                              {style ? (
+                                <span
+                                  className="flex items-center gap-1.5 text-sm font-medium px-2 py-0.5 rounded-full"
+                                  style={{
+                                    backgroundColor: `${style.color}20`,
+                                    color: style.color,
+                                  }}
+                                >
+                                  <span className="text-base">{style.icon}</span>
+                                  {style.name}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-gray-500">No style</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Tone:</span>
+                              {tone ? (
+                                <span
+                                  className="flex items-center gap-1.5 text-sm font-medium px-2 py-0.5 rounded-full"
+                                  style={{
+                                    backgroundColor: `${tone.color}20`,
+                                    color: tone.color,
+                                  }}
+                                >
+                                  <span className="text-base">{tone.icon}</span>
+                                  {tone.name}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-gray-500">No tone</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2 pt-2">
+                            <button onClick={() => setEditingQuestion(q)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Edit</button>
+                            <button onClick={() => handleDeleteQuestion(q._id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Delete</button>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
             {/* Desktop View */}
@@ -312,9 +346,22 @@ function QuestionManager() {
                             ))}
                           </select>
                         ) : (
-                          <span className="text-gray-600 dark:text-gray-400">
-                            {q.style || <em>No style</em>}
-                          </span>
+                          (() => {
+                            const style = styles?.find(s => s.id === q.style);
+                            if (!style) return <em className="text-gray-500 dark:text-gray-400">No style</em>;
+                            return (
+                              <span
+                                className="flex items-center gap-1.5 text-sm font-medium px-2 py-0.5 rounded-full"
+                                style={{
+                                  backgroundColor: `${style.color}20`,
+                                  color: style.color,
+                                }}
+                              >
+                                <span className="text-base">{style.icon}</span>
+                                {style.name}
+                              </span>
+                            );
+                          })()
                         )}
                       </td>
                       <td className="p-4 align-top">
@@ -332,9 +379,22 @@ function QuestionManager() {
                             ))}
                           </select>
                         ) : (
-                          <span className="text-gray-600 dark:text-gray-400">
-                            {q.tone || <em>No tone</em>}
-                          </span>
+                          (() => {
+                            const tone = tones?.find(t => t.id === q.tone);
+                            if (!tone) return <em className="text-gray-500 dark:text-gray-400">No tone</em>;
+                            return (
+                              <span
+                                className="flex items-center gap-1.5 text-sm font-medium px-2 py-0.5 rounded-full"
+                                style={{
+                                  backgroundColor: `${tone.color}20`,
+                                  color: tone.color,
+                                }}
+                              >
+                                <span className="text-base">{tone.icon}</span>
+                                {tone.name}
+                              </span>
+                            );
+                          })()
                         )}
                       </td>
                       <td className="p-4 align-top">
