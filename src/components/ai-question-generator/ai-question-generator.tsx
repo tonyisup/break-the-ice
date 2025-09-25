@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Doc } from "../../../convex/_generated/dataModel";
 
 interface AIQuestionGeneratorProps {
-  onQuestionGenerated: (question: Doc<"questions">) => void;
+  onQuestionGenerated: (question?: Doc<"questions">) => void;
   onClose: () => void;
 }
 
@@ -27,7 +27,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [expandedTagGroupings, setExpandedTagGroupings] = useState<Set<string>>(new Set());
-  const [previewQuestion, setPreviewQuestion] = useState<GeneratedQuestion | null>(null);
+  const [previewQuestion, setPreviewQuestion] = useState<Doc<"questions"> | null>(null);
 
   const tags = useQuery(api.tags.getTags);
   const generateAIQuestion = useAction(api.ai.generateAIQuestion);
@@ -93,7 +93,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
         tone: selectedTone,
         model: selectedModel,
       });
-      setPreviewQuestion(generatedQuestion as GeneratedQuestion);
+      setPreviewQuestion(generatedQuestion[0] as Doc<"questions">);
       toast.success("Preview generated. Review and accept or try another.");
     } catch (error) {
       console.error("Error generating question:", error);
@@ -111,7 +111,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
 
       const newQuestion = await saveAIQuestion({
         text: previewQuestion.text,
-        tags: previewQuestion.tags,
+        tags: previewQuestion.tags || [],
         style: selectedStyle,
         tone: selectedTone,
       });
@@ -308,9 +308,9 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                 <div className="mb-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
                   <div className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Preview</div>
                   <div className="text-gray-900 dark:text-gray-100 text-base mb-3">{previewQuestion.text}</div>
-                  {previewQuestion.tags.length > 0 && (
+                  {previewQuestion.tags?.length && previewQuestion.tags.length > 0 && (
                     <div className="flex flex-wrap gap-2">
-                      {previewQuestion.tags.map((t) => (
+                      {previewQuestion.tags?.map((t) => (
                         <span key={t} className="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">{t}</span>
                       ))}
                     </div>

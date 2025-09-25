@@ -269,7 +269,7 @@ async function getOldestQuestion(ctx: QueryCtx) {
 export const getQuestions = query({
   handler: async (ctx) => {
     await ensureAdmin(ctx);
-    return await ctx.db.query("questions").collect();
+    return await ctx.db.query("questions").withIndex("by_creation_time").order("desc").collect();
   },
 });
 
