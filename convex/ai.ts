@@ -55,7 +55,7 @@ export const generateAIQuestion = action({
       style: "",
       structure: "",
       tone: "",
-      existingQuestions: existingQuestions.map((q) => q.text),
+      existingQuestions: existingQuestions.map((q: any) => q.text),
       count: generationCount,
     };
 
@@ -578,4 +578,195 @@ ${JSON.stringify(questions.map(q => ({ id: q._id, text: q.text, style: q.style }
     return [];
   }
 }
+
+// Internal action to ensure minimum questions per style/tone combination
+export const ensureMinimumQuestionsPerCombination = internalAction({
+  args: {
+    minimumCount: v.optional(v.number()),
+    maxCombinations: v.optional(v.number()),
+  },
+  returns: v.object({
+    combinationsProcessed: v.number(),
+    questionsGenerated: v.number(),
+    errors: v.array(v.string()),
+    hasMoreWork: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const minimumCount = args.minimumCount ?? 10;
+    const maxCombinations = args.maxCombinations ?? 5; // Process max 5 combinations per run
+    const errors: string[] = [];
+    let combinationsProcessed = 0;
+    let questionsGenerated = 0;
+    let hasMoreWork = false;
+
+    try {
+      // Get all styles and tones
+      const styles = await ctx.runQuery(api.styles.getStyles, {});
+      const tones = await ctx.runQuery(api.tones.getTones, {});
+      
+      // Get current question counts by combination
+      const currentCounts = await ctx.runQuery(internal.questions.getQuestionCountsByStyleAndTone, {});
+      const countsMap = new Map(
+        currentCounts.map((c: any) => [`${c.style}|${c.tone}`, c.count])
+      );
+
+      // Find combinations that need more questions
+      const combinationsNeedingWork: Array<{style: any, tone: any, needed: number}> = [];
+      
+      for (const style of styles) {
+        for (const tone of tones) {
+          const key = `${style.id}|${tone.id}`;
+          const currentCount = (countsMap.get(key) as number) || 0;
+          
+          if (currentCount < minimumCount) {
+            const needed = minimumCount - currentCount;
+            combinationsNeedingWork.push({ style, tone, needed });
+          }
+        }
+      }
+
+      // Check if there's more work to do
+      hasMoreWork = combinationsNeedingWork.length > maxCombinations;
+
+      // Process only the first batch of combinations
+      const combinationsToProcess = combinationsNeedingWork.slice(0, maxCombinations);
+
+      console.log(`Processing ${combinationsToProcess.length} combinations (${hasMoreWork ? 'more work remaining' : 'all work complete'})`);
+
+      // Process each combination in the batch
+      for (const { style, tone, needed } of combinationsToProcess) {
+        console.log(`Generating ${needed} questions for ${style.name}/${tone.name}`);
+        
+        try {
+          // Generate questions for this combination
+          const newQuestions = await ctx.runAction(api.ai.generateAIQuestion, {
+            selectedTags: [],
+            style: style.id,
+            tone: tone.id,
+            count: needed,
+          });
+          
+          questionsGenerated += newQuestions.filter((q: any) => q !== null).length;
+          combinationsProcessed++;
+          
+          // Add a small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+        } catch (error) {
+          const errorMessage = `Error generating questions for ${style.name}/${tone.name}: ${error instanceof Error ? error.message : String(error)}`;
+          errors.push(errorMessage);
+          console.error(errorMessage);
+        }
+      }
+
+    } catch (error) {
+      const errorMessage = `Error in ensureMinimumQuestionsPerCombination: ${error instanceof Error ? error.message : String(error)}`;
+      errors.push(errorMessage);
+      console.error(errorMessage);
+    }
+
+    return {
+      combinationsProcessed,
+      questionsGenerated,
+      errors,
+      hasMoreWork,
+    };
+  },
+});
+
+// Public action to manually test the minimum questions functionality
+export const testMinimumQuestionsGeneration: any = action({
+  args: {
+    minimumCount: v.optional(v.number()),
+    maxCombinations: v.optional(v.number()),
+  },
+  returns: v.object({
+    combinationsProcessed: v.number(),
+    questionsGenerated: v.number(),
+    errors: v.array(v.string()),
+    hasMoreWork: v.boolean(),
+  }),
+  handler: async (ctx, args): Promise<{
+    combinationsProcessed: number;
+    questionsGenerated: number;
+    errors: string[];
+    hasMoreWork: boolean;
+  }> => {
+    return await ctx.runAction(internal.ai.ensureMinimumQuestionsPerCombination, {
+      minimumCount: args.minimumCount ?? 10,
+      maxCombinations: args.maxCombinations ?? 5,
+    });
+  },
+});
+
+// Action to process all combinations in batches (for manual execution)
+export const processAllCombinationsInBatches: any = action({
+  args: {
+    minimumCount: v.optional(v.number()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    totalCombinationsProcessed: v.number(),
+    totalQuestionsGenerated: v.number(),
+    totalErrors: v.array(v.string()),
+    completed: v.boolean(),
+  }),
+  handler: async (ctx, args): Promise<{
+    totalCombinationsProcessed: number;
+    totalQuestionsGenerated: number;
+    totalErrors: string[];
+    completed: boolean;
+  }> => {
+    const minimumCount = args.minimumCount ?? 10;
+    const batchSize = args.batchSize ?? 5;
+    let totalCombinationsProcessed = 0;
+    let totalQuestionsGenerated = 0;
+    const totalErrors: string[] = [];
+    let hasMoreWork = true;
+    let batchCount = 0;
+    const maxBatches = 20; // Safety limit to prevent infinite loops
+
+    console.log(`Starting batch processing with batch size ${batchSize}, max ${maxBatches} batches`);
+
+    while (hasMoreWork && batchCount < maxBatches) {
+      batchCount++;
+      console.log(`Processing batch ${batchCount}/${maxBatches}`);
+      
+      try {
+        const result = await ctx.runAction(internal.ai.ensureMinimumQuestionsPerCombination, {
+          minimumCount,
+          maxCombinations: batchSize,
+        });
+
+        totalCombinationsProcessed += result.combinationsProcessed;
+        totalQuestionsGenerated += result.questionsGenerated;
+        totalErrors.push(...result.errors);
+        hasMoreWork = result.hasMoreWork;
+
+        console.log(`Batch ${batchCount} completed: ${result.combinationsProcessed} combinations, ${result.questionsGenerated} questions generated`);
+
+        // Add delay between batches to avoid overwhelming the system
+        if (hasMoreWork && batchCount < maxBatches) {
+          await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second delay between batches
+        }
+
+      } catch (error) {
+        const errorMessage = `Error in batch ${batchCount}: ${error instanceof Error ? error.message : String(error)}`;
+        totalErrors.push(errorMessage);
+        console.error(errorMessage);
+        break; // Stop processing on error
+      }
+    }
+
+    const completed = !hasMoreWork || batchCount >= maxBatches;
+    console.log(`Batch processing completed: ${totalCombinationsProcessed} combinations processed, ${totalQuestionsGenerated} questions generated, completed: ${completed}`);
+
+    return {
+      totalCombinationsProcessed,
+      totalQuestionsGenerated,
+      totalErrors,
+      completed,
+    };
+  },
+});
 

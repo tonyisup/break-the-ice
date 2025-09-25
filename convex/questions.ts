@@ -632,3 +632,77 @@ export const deleteDuplicateQuestions = mutation({
     return null;
   },
 });
+
+// Internal query to get question counts by style and tone combination
+export const getQuestionCountsByStyleAndTone = internalQuery({
+  args: {},
+  returns: v.array(v.object({
+    style: v.string(),
+    tone: v.string(),
+    count: v.number(),
+  })),
+  handler: async (ctx) => {
+    // Get all questions with style and tone
+    const questions = await ctx.db
+      .query("questions")
+      .filter((q) => q.and(
+        q.neq(q.field("style"), undefined),
+        q.neq(q.field("tone"), undefined)
+      ))
+      .collect();
+
+    // Count by style and tone combination
+    const counts = new Map<string, number>();
+    
+    for (const question of questions) {
+      if (question.style && question.tone) {
+        const key = `${question.style}|${question.tone}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+
+    // Convert to array format
+    return Array.from(counts.entries()).map(([key, count]) => {
+      const [style, tone] = key.split('|');
+      return { style, tone, count };
+    });
+  },
+});
+
+// Public query to get question counts by style and tone combination (for monitoring)
+export const getQuestionCountsByStyleAndTonePublic = query({
+  args: {},
+  returns: v.array(v.object({
+    style: v.string(),
+    tone: v.string(),
+    count: v.number(),
+  })),
+  handler: async (ctx) => {
+    await ensureAdmin(ctx);
+    
+    // Get all questions with style and tone
+    const questions = await ctx.db
+      .query("questions")
+      .filter((q) => q.and(
+        q.neq(q.field("style"), undefined),
+        q.neq(q.field("tone"), undefined)
+      ))
+      .collect();
+
+    // Count by style and tone combination
+    const counts = new Map<string, number>();
+    
+    for (const question of questions) {
+      if (question.style && question.tone) {
+        const key = `${question.style}|${question.tone}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+
+    // Convert to array format
+    return Array.from(counts.entries()).map(([key, count]) => {
+      const [style, tone] = key.split('|');
+      return { style, tone, count };
+    });
+  },
+});
