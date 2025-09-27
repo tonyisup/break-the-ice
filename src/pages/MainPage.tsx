@@ -392,7 +392,7 @@ export default function MainPage() {
   }
   const handleConfirmRandomizeStyleAndTone = () => {
     setCurrentQuestions([]);
-    setIsShuffling(true);
+    setIsShuffling(false);
     isShufflingRef.current = true;
     
     // If components are mounted, use their methods
@@ -415,7 +415,6 @@ export default function MainPage() {
   const questionTone = useMemo(() => tones?.find(t => t.id === currentQuestion?.tone), [tones, currentQuestion]);
   const shuffledGradient = (highlightedStyle?.color && highlightedTone?.color) ? [highlightedStyle?.color, highlightedTone?.color] : gradient;
   const gradientTarget = effectiveTheme === "dark" ? "#000" : "#bbb";
-
 
   return (
     <div
@@ -489,6 +488,7 @@ export default function MainPage() {
           isStyleTonesOpen={isStyleTonesOpen}
           isHighlighting={isHighlighting}
           setIsHighlighting={setIsHighlighting}
+          isShuffling={isShufflingRef.current}
         />
       </main>
     </div>
