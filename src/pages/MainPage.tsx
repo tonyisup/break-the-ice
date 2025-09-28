@@ -400,6 +400,11 @@ export default function MainPage() {
       toneSelectorRef.current.confirmRandomizedTone();
       styleSelectorRef.current.confirmRandomizedStyle();
     } 
+
+    closeCustomizeStyleAndTone();
+  }
+  const closeCustomizeStyleAndTone = () => {
+    setIsStyleTonesOpen(false);
   }
   const handleHideStyle = (styleId: string) => {
     addHiddenStyle(styleId);
