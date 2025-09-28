@@ -9,7 +9,6 @@ import { StorageProvider } from "./hooks/useStorageContext";
 import App from "./App";
 import Root from "./Root";
 import LikedQuestionsPage from "./app/liked/page";
-import { AdminPage } from "./pages/AdminPage";
 import QuestionsPage from "./app/admin/questions/page";
 import TagsPage from "./app/admin/tags/page";
 import ModelsPage from "./app/admin/models/page";
@@ -21,6 +20,7 @@ import QuestionPage from "./app/question/page";
 import DuplicatesPage from "./app/admin/duplicates/page";
 import IndividualQuestionPage from "./app/admin/questions/[id]/page";
 import DuplicateDetectionCompletedPage from "./app/admin/duplicates/completed/page";
+import AdminPage from "./app/admin/page";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
