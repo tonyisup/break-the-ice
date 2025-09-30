@@ -302,10 +302,14 @@ Respond with ONLY the JSON array, no other text.`
         }
       } catch (fallbackError) {
         console.error("Fallback generation also failed:", fallbackError);
+        // If the fallback also fails, we want to throw the original error.
+        // We'll fall through to the throw statement below.
       }
       
-      // Return empty array on complete failure
-      return [];
+      // If we got to this point, the primary generation failed and the fallback
+      // either failed or did not produce a question. In either case, we should
+      // throw the original error to notify the client.
+      throw error;
     }
   },
 });
