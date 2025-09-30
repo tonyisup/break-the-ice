@@ -3,7 +3,6 @@
 import { internalAction } from "./_generated/server";
 import { Resend } from "resend";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
 
 export const sendEmail = internalAction({
   args: {
@@ -11,12 +10,12 @@ export const sendEmail = internalAction({
     html: v.string(),
   },
   handler: async (ctx, args) => {
-    const resendApiKey = process.env.RESEND_API_KEY;
-    const adminEmailVar = await ctx.runQuery(internal.env_variables.get, { key: "ADMIN_EMAIL" });
+    const resendApiKey = process.env.CONVEX_RESEND_API_KEY;
+    const adminEmailVar = process.env.ADMIN_EMAIL;
 
     if (!resendApiKey) {
       console.error("RESEND_API_KEY is not set in environment variables.");
-      return { success: false, error: "RESEND_API_KEY is not configured." };
+      return { success: false, error: "CONVEX_RESEND_API_KEY is not configured." };
     }
     if (!adminEmailVar || !adminEmailVar.value) {
       console.error("ADMIN_EMAIL is not set in the database.");
