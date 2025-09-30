@@ -161,8 +161,4 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_started_at", ["startedAt"]),
-  env_variables: defineTable({
-    key: v.string(),
-    value: v.string(),
-  }).index("by_key", ["key"]),
 });
