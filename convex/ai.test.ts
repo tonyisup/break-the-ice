@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { expect, test, vi } from "vitest";
+import { expect, test, vi, beforeEach } from "vitest";
 import { api } from "./_generated/api";
 import schema from "./schema";
 import OpenAI from "openai";
@@ -19,6 +19,10 @@ vi.mock('openai', () => {
     // Need to mock both the default export and the named export 'OpenAI'
     const MockedOpenAI = vi.fn(() => mockOpenAI);
     return { OpenAI: MockedOpenAI, default: MockedOpenAI, __esModule: true };
+});
+
+beforeEach(() => {
+  mockCreate.mockClear();
 });
 
 
@@ -109,4 +113,45 @@ test("generate AI question with existing questions", async () => {
   expect(messages[1].content).toContain('"Existing question 3"');
   expect(messages[1].content).toContain('"Existing question 4"');
   expect(messages[1].content).toContain('"count": 2');
+});
+
+test("generate AI question should throw error on complete failure", async () => {
+  // 1. Mock the OpenAI API to fail every time
+  mockCreate.mockRejectedValue(new Error("AI generation failed"));
+
+  const t = convexTest(schema);
+
+  // 2. Setup: Populate the database with some initial data
+  await t.run(async (ctx) => {
+    await ctx.db.insert("styles", {
+      name: "Test Style",
+      structure: "Test Structure",
+      promptGuidanceForAI: "Test Guidance",
+      id: "test-style",
+      color: "blue",
+      icon: "test-icon",
+    });
+    await ctx.db.insert("tones", {
+      name: "Test Tone",
+      promptGuidanceForAI: "Test Guidance",
+      id: "test-tone",
+      color: "red",
+      icon: "test-icon",
+    });
+  });
+
+  // 3. Run the action and assert that it throws an error
+  await expect(
+    t.action(api.ai.generateAIQuestion, {
+      selectedTags: [],
+      style: "test-style",
+      tone: "test-tone",
+      count: 1,
+    })
+  ).rejects.toThrow("AI generation failed");
+
+  // 4. Assert that the mock was called for primary and fallback
+  // The primary call has a complex prompt, the fallback has a simple one.
+  // The primary logic retries 3 times. The fallback is tried once.
+  expect(mockCreate).toHaveBeenCalledTimes(4);
 });
