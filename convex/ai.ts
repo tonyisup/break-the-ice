@@ -397,6 +397,40 @@ export const detectDuplicateQuestionsAI = internalAction({
   },
 });
 
+import { createDuplicateDetectionEmail, createMinimumQuestionsEmail } from "./lib/emails";
+
+// New wrapper action for duplicate detection cron job
+export const detectDuplicateQuestionsAndEmail = internalAction({
+  args: {
+    batchSize: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const result = await ctx.runAction(internal.ai.detectDuplicateQuestionsAI, {
+      batchSize: args.batchSize,
+    });
+
+    const { subject, html } = createDuplicateDetectionEmail(result);
+    await ctx.runAction(internal.email.sendEmail, { subject, html });
+  },
+});
+
+// New wrapper action for minimum questions cron job
+export const ensureMinimumQuestionsPerCombinationAndEmail = internalAction({
+  args: {
+    minimumCount: v.optional(v.number()),
+    maxCombinations: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const result = await ctx.runAction(internal.ai.ensureMinimumQuestionsPerCombination, {
+      minimumCount: args.minimumCount,
+      maxCombinations: args.maxCombinations,
+    });
+
+    const { subject, html } = createMinimumQuestionsEmail(result);
+    await ctx.runAction(internal.email.sendEmail, { subject, html });
+  },
+});
+
 // Internal streaming action for duplicate detection with progress tracking
 export const detectDuplicateQuestionsStreamingAI = internalAction({
   args: {

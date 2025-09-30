@@ -7,7 +7,7 @@ const crons = cronJobs();
 crons.interval(
   "detect duplicate questions",
   { hours: 24 },
-  internal.ai.detectDuplicateQuestionsAI,
+  internal.ai.detectDuplicateQuestionsAndEmail,
   { batchSize: 50 }
 );
 
@@ -15,7 +15,7 @@ crons.interval(
 crons.interval(
   "ensure minimum questions per combination",
   { hours: 24 }, // Run daily to process combinations gradually
-  internal.ai.ensureMinimumQuestionsPerCombination,
+  internal.ai.ensureMinimumQuestionsPerCombinationAndEmail,
   { minimumCount: 10, maxCombinations: 3 } // Process only 3 combinations per cron run to avoid timeout
 );
 
