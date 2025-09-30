@@ -21,6 +21,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
   const styles = useQuery(api.styles.getStyles);
   const tones = useQuery(api.tones.getTones);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [customTag, setCustomTag] = useState<string>("");
   const [selectedStyle, setSelectedStyle] = useState<string>(styles?.[0]?.id || "random");
   const [selectedTone, setSelectedTone] = useState<string>(tones?.[0]?.id || "random");
   const [selectedModel, setSelectedModel] = useState<string>("mistralai/mistral-nemo");
@@ -53,6 +54,16 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
         ? prev.filter(tag => tag !== tagName)
         : [...prev, tagName]
     );
+  };
+
+  const handleAddCustomTag = () => {
+    const newTag = customTag.trim();
+    if (newTag && !selectedTags.includes(newTag)) {
+      setSelectedTags(prev => [...prev, newTag]);
+      setCustomTag("");
+    } else if (selectedTags.includes(newTag)) {
+      toast.info("Tag already selected");
+    }
   };
 
   const toggleTagGrouping = (grouping: string) => {
@@ -205,6 +216,27 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               Choose one or more categories to help guide the AI in generating a relevant question.
             </p>
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={customTag}
+                onChange={(e) => setCustomTag(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddCustomTag();
+                  }
+                }}
+                placeholder="Add a custom tag"
+                className="flex-grow px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              />
+              <button
+                onClick={handleAddCustomTag}
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+              >
+                Add
+              </button>
+            </div>
           </div>
 
           {/* Sticky Expand/Collapse All Buttons */}

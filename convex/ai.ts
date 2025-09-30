@@ -182,27 +182,34 @@ Respond with ONLY the JSON array, no other text.`
     try {
       const generatedQuestions = JSON.parse(cleanedContent);
       if (Array.isArray(generatedQuestions)) {
+        // Use a Set to automatically handle duplicates from the AI response
+        const uniqueQuestions = new Set<string>();
+
         // Limit to the requested count even if AI returns more
         const limitedQuestions = generatedQuestions.slice(0, generationCount);
-        // console.log(`AI returned ${generatedQuestions.length} questions, limiting to ${limitedQuestions.length}`);
         
         for (const questionText of limitedQuestions) {
           if (typeof questionText === 'string' && questionText.trim()) {
             const cleanedQuestion = questionText.trim().replace(/^["']|["']$/g, '');
             if (cleanedQuestion.length > 0) {
-              try {
-                const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
-                  text: cleanedQuestion,
-                  style: styleId,
-                  tone: toneId,
-                  tags: selectedTags,
-                });
-                newQuestions.push(newQuestion);
-              } catch (error) {
-                console.error("Failed to save question:", error);
-                // Continue with other questions even if one fails
-              }
+              uniqueQuestions.add(cleanedQuestion);
             }
+          }
+        }
+        
+        // Save the unique questions
+        for (const questionText of uniqueQuestions) {
+          try {
+            const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
+              text: questionText,
+              style: styleId,
+              tone: toneId,
+              tags: selectedTags,
+            });
+            newQuestions.push(newQuestion);
+          } catch (error) {
+            console.error(`Failed to save question: "${questionText}"`, error);
+            // Continue with other questions even if one fails
           }
         }
       } else {
@@ -212,51 +219,10 @@ Respond with ONLY the JSON array, no other text.`
       console.error("Failed to parse AI response as JSON:", e);
       console.error("Original content:", generatedContent);
       console.error("Cleaned content:", cleanedContent);
-      console.error("Content length:", cleanedContent.length);
-      console.error("Content preview (first 200 chars):", cleanedContent.substring(0, 200));
-      console.error("Content preview (last 200 chars):", cleanedContent.substring(Math.max(0, cleanedContent.length - 200)));
-      
-      // Try to extract individual questions from the response
-      const questionMatches = generatedContent.match(/"([^"]+)"/g);
-      if (questionMatches && questionMatches.length > 0) {
-        // Limit to the requested count even if regex finds more
-        const limitedMatches = questionMatches.slice(0, generationCount);
-        // console.log(`Regex found ${questionMatches.length} questions, limiting to ${limitedMatches.length}`);
-        
-        for (const match of limitedMatches) {
-          const questionText = match.replace(/"/g, '').trim();
-          if (questionText.length > 0) {
-            try {
-              const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
-                text: questionText,
-                style: styleId,
-                tone: toneId,
-                tags: selectedTags,
-              });
-              newQuestions.push(newQuestion);
-            } catch (error) {
-              console.error("Failed to save extracted question:", error);
-              // Continue with other questions even if one fails
-            }
-          }
-        }
-      } else {
-        // Last resort: treat the entire response as a single question
-        const cleanedQuestion = generatedContent.replace(/^["']|["']$/g, '').trim();
-        if (cleanedQuestion.length > 0) {
-          try {
-            const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
-              text: cleanedQuestion,
-              style: styleId,
-              tone: toneId,
-              tags: selectedTags,
-            });
-            newQuestions.push(newQuestion);
-          } catch (error) {
-            console.error("Failed to save fallback question:", error);
-          }
-        }
-      }
+
+      // If parsing fails, we'll fall through to the main error handler,
+      // which has its own fallback logic.
+      throw e;
     }
 
     return newQuestions;
@@ -302,10 +268,14 @@ Respond with ONLY the JSON array, no other text.`
         }
       } catch (fallbackError) {
         console.error("Fallback generation also failed:", fallbackError);
+        // If the fallback also fails, we want to throw the original error.
+        // We'll fall through to the throw statement below.
       }
       
-      // Return empty array on complete failure
-      return [];
+      // If we got to this point, the primary generation failed and the fallback
+      // either failed or did not produce a question. In either case, we should
+      // throw the original error to notify the client.
+      throw error;
     }
   },
 });
@@ -394,6 +364,40 @@ export const detectDuplicateQuestionsAI = internalAction({
       duplicatesFound,
       errors,
     };
+  },
+});
+
+import { createDuplicateDetectionEmail, createMinimumQuestionsEmail } from "./lib/emails";
+
+// New wrapper action for duplicate detection cron job
+export const detectDuplicateQuestionsAndEmail = internalAction({
+  args: {
+    batchSize: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const result = await ctx.runAction(internal.ai.detectDuplicateQuestionsAI, {
+      batchSize: args.batchSize,
+    });
+
+    const { subject, html } = createDuplicateDetectionEmail(result);
+    await ctx.runAction(internal.email.sendEmail, { subject, html });
+  },
+});
+
+// New wrapper action for minimum questions cron job
+export const ensureMinimumQuestionsPerCombinationAndEmail = internalAction({
+  args: {
+    minimumCount: v.optional(v.number()),
+    maxCombinations: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const result = await ctx.runAction(internal.ai.ensureMinimumQuestionsPerCombination, {
+      minimumCount: args.minimumCount,
+      maxCombinations: args.maxCombinations,
+    });
+
+    const { subject, html } = createMinimumQuestionsEmail(result);
+    await ctx.runAction(internal.email.sendEmail, { subject, html });
   },
 });
 

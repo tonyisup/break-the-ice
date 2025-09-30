@@ -239,6 +239,18 @@ export const saveAIQuestion = mutation({
   handler: async (ctx, args) => {
     const { text, tags, style, tone } = args;
     
+    // Check if a question with the same text already exists
+    const existingQuestion = await ctx.db
+      .query("questions")
+      .withIndex("by_text", (q) => q.eq("text", text))
+      .first();
+
+    if (existingQuestion) {
+      // If a duplicate is found, do not insert a new one.
+      // Optionally, you could return the existing question or null
+      return null;
+    }
+
     // Use a more robust approach to avoid concurrency issues
     // Generate a unique timestamp with some randomness to avoid conflicts
     const now = Date.now();
