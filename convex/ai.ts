@@ -16,6 +16,21 @@ const openai = new OpenAI({
   },
 });
 
+export const preview = action({
+  args: {
+    count: v.optional(v.number()),
+    style: v.string(),
+    tone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.runQuery(api.questions.getSimilarQuestions, {
+      count: args.count ?? 5,
+      style: args.style,
+      tone: args.tone,
+    });
+  },
+});
+
 // Generate an AI question based on selected tags
 export const generateAIQuestion = action({
   args: {
@@ -25,20 +40,25 @@ export const generateAIQuestion = action({
     tone: v.string(),
     model: v.optional(v.string()),
     count: v.optional(v.number()),
+    _existingQuestionsForTesting: v.optional(v.array(v.string())),
   },
   returns: v.array(v.union(v.any(), v.null())),
   handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
-    const { selectedTags, currentQuestion, style: styleId, tone: toneId, model, count } = args;
+    const { selectedTags, currentQuestion, style: styleId, tone: toneId, model, count, _existingQuestionsForTesting } = args;
     const generationCount = count ?? 1;
     const newQuestions: (Doc<"questions"> | null)[] = [];
 
     try {
 
-    const existingQuestions = await ctx.runQuery(api.questions.getNextQuestions, {
-      count: 5,
-      style: styleId,
-      tone: toneId,
-    });
+    const existingQuestionTexts =
+      _existingQuestionsForTesting ??
+      (
+        await ctx.runQuery(api.questions.getSimilarQuestions, {
+          count: 5,
+          style: styleId,
+          tone: toneId,
+        })
+      ).map((q: any) => q.text);
 
     // Build the prompt data structure once
     const promptData: {
@@ -55,7 +75,7 @@ export const generateAIQuestion = action({
       style: "",
       structure: "",
       tone: "",
-      existingQuestions: existingQuestions.map((q: any) => q.text),
+      existingQuestions: existingQuestionTexts,
       count: generationCount,
     };
 

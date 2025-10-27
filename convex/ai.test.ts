@@ -5,6 +5,7 @@ import schema from "./schema";
 import OpenAI from "openai";
 
 process.env.OPEN_ROUTER_API_KEY = "test-key";
+process.env.AI_API_KEY = "test-key";
 
 // 1. Mock the OpenAI module
 const mockCreate = vi.fn();
@@ -78,6 +79,13 @@ test("generate AI question with existing questions", async () => {
     style: "test-style",
     tone: "test-tone",
     count: 2,
+    _existingQuestionsForTesting: [
+      "Existing question 0",
+      "Existing question 1",
+      "Existing question 2",
+      "Existing question 3",
+      "Existing question 4",
+    ],
   });
 
   // 4. Assert the result

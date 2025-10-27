@@ -1,7 +1,9 @@
 import { v } from "convex/values";
-import { mutation, query, QueryCtx, internalQuery, internalMutation } from "./_generated/server";
+import { mutation, query, QueryCtx, internalQuery, internalMutation, internalAction } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { ensureAdmin } from "./auth";
+import { embed } from "./lib/retriever";
+import { api, internal } from "./_generated/api";
 
 export const discardQuestion = mutation({
   args: {
@@ -51,6 +53,80 @@ const shuffleArray = (array: any[]) => {
     array[j] = temp;
   }
 }
+
+export const getSimilarQuestions = query({
+  args: {
+    count: v.number(),
+    style: v.string(),
+    tone: v.string(),
+    seen: v.optional(v.array(v.id("questions"))),
+    hidden: v.optional(v.array(v.id("questions"))),
+  },
+  handler: async (ctx, args) => {
+    const { count, style, tone, seen, hidden } = args;
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+    if (!user) {
+      return [];
+    }
+    const likedQuestions = user.likedQuestions ?? [];
+    if (likedQuestions.length === 0) {
+      return [];
+    }
+    // Get the embeddings of the liked questions.
+    const likedQuestionDocs = (
+      await Promise.all(
+        likedQuestions.map((id) =>
+          ctx.db
+            .query("questions")
+            .filter((q) => q.eq(q.field("_id"), id))
+            .first()
+        )
+      )
+    ).filter((q) => q !== null) as Doc<"questions">[];
+    const likedQuestionEmbeddings = likedQuestionDocs
+      .map((q) => q.embedding)
+      .filter((e) => e !== undefined) as number[][];
+    if (likedQuestionEmbeddings.length === 0) {
+      return [];
+    }
+
+    // Average the embeddings to get a single vector.
+    const avgEmbedding = new Array(likedQuestionEmbeddings[0].length).fill(0);
+    for (const embedding of likedQuestionEmbeddings) {
+      for (let i = 0; i < avgEmbedding.length; i++) {
+        avgEmbedding[i] += embedding[i];
+      }
+    }
+    for (let i = 0; i < avgEmbedding.length; i++) {
+      avgEmbedding[i] /= likedQuestionEmbeddings.length;
+    }
+
+    const results = await ctx.db
+      .vectorSearch("questions", "by_embedding", {
+        vector: avgEmbedding,
+        limit: count * 4, // Get more results to filter out seen questions.
+        filter: (q) =>
+          q.and(
+            q.eq(q.field("style"), style),
+            q.eq(q.field("tone"), tone),
+            ...(hidden ?? []).map((id) => q.neq(q.field("_id"), id)),
+            ...(seen ?? []).map((id) => q.neq(q.field("_id"), id)),
+            ...likedQuestions.map((id) => q.neq(q.field("_id"), id))
+          ),
+      })
+      .then((results) => results.slice(0, count));
+    return results;
+  },
+});
+
 export const getNextQuestions = query({
   args: {
     count: v.number(),
@@ -270,6 +346,9 @@ export const saveAIQuestion = mutation({
       totalShows: 0,
       averageViewDuration: 0,
     });
+    await ctx.scheduler.runAfter(0, internal.lib.retriever.embedQuestion, {
+      questionId: id,
+    });
     return await ctx.db.get(id);
   },
 });
@@ -368,6 +447,70 @@ export const fixExistingQuestions = mutation({
     }
 
     return { totalQuestions: allQuestions.length, fixedCount };
+  },
+});
+
+export const getQuestionsToEmbed = internalQuery({
+  args: {
+    startCreationTime: v.optional(v.number()),
+    startQuestionId: v.optional(v.id("questions")),
+  },
+  handler: async (ctx, args) => {
+    const questions = await ctx.db
+      .query("questions")
+      .withIndex("by_creation_time")
+      .order("desc")
+      .filter((q) => q.eq(q.field("embedding"), undefined))
+      .take(10);
+    return questions;
+  },
+});
+
+export const backfillQuestionEmbeddings = internalAction({
+  args: {
+    questionId: v.optional(v.id("questions")),
+  },
+  handler: async (ctx, args) => {
+    const startQuestion = args.questionId
+      ? await ctx.runQuery(api.questions.getQuestion, { id: args.questionId })
+      : null;
+    const questions = await ctx.runQuery(
+      internal.questions.getQuestionsToEmbed,
+      {
+        startQuestionId: startQuestion?._id,
+        startCreationTime: startQuestion?._creationTime,
+      }
+    );
+    if (questions.length === 0) {
+      console.log("No more questions to embed");
+      return;
+    }
+    for (const question of questions) {
+      const embedding = await embed(question.text);
+      await ctx.runMutation(internal.questions.addEmbedding, {
+        questionId: question._id,
+        embedding,
+      });
+    }
+    if (questions.length < 10) {
+      console.log("Done");
+      return;
+    }
+    await ctx.runAction(internal.questions.backfillQuestionEmbeddings, {
+      questionId: questions[questions.length - 1]._id,
+    });
+  },
+});
+
+export const addEmbedding = internalMutation({
+  args: {
+    questionId: v.id("questions"),
+    embedding: v.array(v.float64()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.questionId, {
+      embedding: args.embedding,
+    });
   },
 });
 

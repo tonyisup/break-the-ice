@@ -113,7 +113,11 @@ export default defineSchema({
     .index("by_tone_and_last_shown", ["tone", "lastShownAt"])
     .index("by_tone_and_total_likes", ["tone", "totalLikes"])
     .index("by_style_and_tone", ["style", "tone"])
-    .index("by_text", ["text"]),
+    .index("by_text", ["text"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1536,
+    }),
   tags: defineTable({
     name: v.string(),
     grouping: v.string(),
