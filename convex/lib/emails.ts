@@ -49,3 +49,27 @@ export const createMinimumQuestionsEmail = (result: MinimumQuestionsResult) => {
   `;
   return { subject, html };
 };
+
+export type PopulateMissingEmbeddingsResult = {
+  questionsProcessed: number;
+  questionsMissingEmbeddings: number;
+  errors: string[];
+};
+export const createPopulateMissingEmbeddingsEmail = (result: PopulateMissingEmbeddingsResult) => {
+  const subject = "Cron Job Summary: Populate Missing Embeddings";
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Populate Missing Embeddings Summary</title>
+    </head>
+    <body>
+      <h1>Populate Missing Embeddings Summary</h1>
+      <p><strong>Questions Processed:</strong> ${result.questionsProcessed}</p>
+      <p><strong>Questions Missing Embeddings:</strong> ${result.questionsMissingEmbeddings}</p>
+      <p><strong>Errors:</strong> ${result.errors.length > 0 ? result.errors.join("<br>") : "None"}</p>
+    </body>
+    </html>
+  `;
+  return { subject, html };
+};

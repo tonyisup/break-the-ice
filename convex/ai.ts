@@ -22,7 +22,7 @@ export const preview = action({
     style: v.string(),
     tone: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<Doc<"questions">[]> => {
     return await ctx.runQuery(api.questions.getSimilarQuestions, {
       count: args.count ?? 5,
       style: args.style,
@@ -387,7 +387,7 @@ export const detectDuplicateQuestionsAI = internalAction({
   },
 });
 
-import { createDuplicateDetectionEmail, createMinimumQuestionsEmail } from "./lib/emails";
+import { createDuplicateDetectionEmail, createMinimumQuestionsEmail, createPopulateMissingEmbeddingsEmail } from "./lib/emails";
 
 // New wrapper action for duplicate detection cron job
 export const detectDuplicateQuestionsAndEmail = internalAction({
@@ -794,3 +794,35 @@ export const processAllCombinationsInBatches: any = action({
   },
 });
 
+
+export const populateMissingEmbeddings = internalAction({
+  args: {
+    maxBatchSize: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const questions = await ctx.runQuery(internal.questions.getQuestionsWithMissingEmbeddings);
+    let questionsProcessed = 0;
+    let questionsMissingEmbeddings = questions.length;
+    let errors: string[] = [];
+    for (const question of questions) {
+      try {
+        await ctx.runAction(internal.lib.retriever.embedQuestion, { questionId: question._id });
+        questionsProcessed++;
+        if (questionsProcessed >= args.maxBatchSize) {
+          break;
+        }
+      } catch (error) {
+        errors.push(`Error embedding question ${question._id}: ${error instanceof Error ? error.message : String(error)}`);
+        console.error(error);
+      }
+    }
+    const results = {
+      questionsProcessed,
+      questionsMissingEmbeddings,
+      errors,
+    };
+    const { subject, html } = createPopulateMissingEmbeddingsEmail(results);
+    await ctx.runAction(internal.email.sendEmail, { subject, html });
+  },
+});

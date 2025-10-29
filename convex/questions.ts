@@ -62,7 +62,8 @@ export const getSimilarQuestions = query({
     seen: v.optional(v.array(v.id("questions"))),
     hidden: v.optional(v.array(v.id("questions"))),
   },
-  handler: async (ctx, args) => {
+  returns: v.array(v.any()),
+  handler: async (ctx, args): Promise<any[]> => {
     const { count, style, tone, seen, hidden } = args;
 
     const identity = await ctx.auth.getUserIdentity();
@@ -109,21 +110,19 @@ export const getSimilarQuestions = query({
       avgEmbedding[i] /= likedQuestionEmbeddings.length;
     }
 
-    const results = await ctx.db
-      .vectorSearch("questions", "by_embedding", {
-        vector: avgEmbedding,
-        limit: count * 4, // Get more results to filter out seen questions.
-        filter: (q) =>
-          q.and(
-            q.eq(q.field("style"), style),
-            q.eq(q.field("tone"), tone),
-            ...(hidden ?? []).map((id) => q.neq(q.field("_id"), id)),
-            ...(seen ?? []).map((id) => q.neq(q.field("_id"), id)),
-            ...likedQuestions.map((id) => q.neq(q.field("_id"), id))
-          ),
-      })
-      .then((results) => results.slice(0, count));
-    return results;
+    // Use regular query with filter instead of vectorSearch since it's not available in queries
+    // Get questions with the same style and tone, then filter by similarity manually
+    const candidates = await ctx.db
+      .query("questions")
+      .withIndex("by_style_and_tone", (q: any) => q.eq("style", style).eq("tone", tone))
+      .filter((q: any) => q.and(
+        ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
+        ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id)),
+        ...likedQuestions.map((id: any) => q.neq(q.field("_id"), id))
+      ))
+      .take(count * 4);
+    
+    return candidates;
   },
 });
 
@@ -165,11 +164,11 @@ export const getNextQuestions = query({
     const unseenQuestions = filteredQuestions.filter(q => !seenIds.has(q._id));
     if (unseenQuestions.length > 0) {
       shuffleArray(unseenQuestions);
-      return unseenQuestions.slice(0, count);
+      return unseenQuestions.slice(0, count).map(({ embedding, ...question }) => question);;
     }
 
     shuffleArray(filteredQuestions);
-    return filteredQuestions.slice(0, count);
+    return filteredQuestions.slice(0, count).map(({ embedding, ...question }) => question);
   }
 })
 
@@ -296,11 +295,12 @@ export const getQuestion = query({
     totalThumbsDown: v.optional(v.float64()),
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
-    category: v.optional(v.string()),
   }), v.null()),
   handler: async (ctx, args) => {
-    await ensureAdmin(ctx);
-    return await ctx.db.get(args.id);
+    const question = await ctx.db.get(args.id);
+    if (!question) return null;
+    const { embedding, ...questionData } = question;
+    return questionData;
   },
 });
 
@@ -860,4 +860,16 @@ export const getQuestionCountsByStyleAndTonePublic = query({
       return { style, tone, count };
     });
   },
+});
+
+
+export const getQuestionsWithMissingEmbeddings = internalQuery({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id("questions"),
+    text: v.string(),
+  })),
+  handler: async (ctx) => {
+    return await ctx.db.query("questions").filter((q) => q.eq(q.field("embedding"), undefined)).collect();
+  }
 });

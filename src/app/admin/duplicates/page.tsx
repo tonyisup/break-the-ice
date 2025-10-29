@@ -44,6 +44,7 @@ function DuplicateDetectionComponent() {
   const [editedText, setEditedText] = useState<string>("");
   const [rejectReason, setRejectReason] = useState<string>("");
   const [isDetectingDuplicates, setIsDetectingDuplicates] = useState<boolean>(false);
+  const [currentDetection, setCurrentDetection] = useState<Id<"duplicateDetections"> | null>(null);
 
   const duplicateDetections = useQuery(api.questions.getPendingDuplicateDetections);
   const updateStatus = useMutation(api.questions.updateDuplicateDetectionStatus);
@@ -282,7 +283,12 @@ function DuplicateDetectionComponent() {
         ) : (
           <div className="space-y-6">
             {duplicateDetections.map((detection: any) => (
-              <div key={detection._id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+              <div 
+                key={detection._id} 
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+                onMouseOver={() => setCurrentDetection(detection._id)}
+                onMouseLeave={() => setCurrentDetection(null)}
+              >
                 <div className="flex flex-col gap-4 justify-between items-start mb-4">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -296,7 +302,7 @@ function DuplicateDetectionComponent() {
                     </p>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="w-full space-y-3">
                     {detection.questions.map((question: any) => (
                       <div
                         key={question._id}
@@ -398,48 +404,50 @@ function DuplicateDetectionComponent() {
                     ))}
                   </div>
 
-                  {keepQuestion && selectedQuestions.length > 0 && (
-                    <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                        <strong>Action:</strong> Keep 1 question, delete {selectedQuestions.length} question(s)
-                      </p>
-                    </div>
-                  )}
-                  {!keepQuestion && selectedQuestions.length === 0 && (
-                    <div className="w-full mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                      <textarea
-                        value={rejectReason}
-                        placeholder="Enter reason for rejection"
-                        onChange={(e) => setRejectReason(e.target.value)}
-                        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        rows={3}
-                      />
-                    </div>
-                  )}
+                  {currentDetection == detection._id && <div className="flex flex-col gap-2 w-full">
+                    {keepQuestion && selectedQuestions.length > 0 && (
+                      <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                        <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                          <strong>Action:</strong> Keep 1 question, delete {selectedQuestions.length} question(s)
+                        </p>
+                      </div>
+                    )}
+                    {!keepQuestion && selectedQuestions.length === 0 && (
+                      <div className="w-full mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                        <textarea
+                          value={rejectReason}
+                          placeholder="Enter reason for rejection"
+                          onChange={(e) => setRejectReason(e.target.value)}
+                          className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          rows={3}
+                        />
+                      </div>
+                    )}
 
-                  <div className="flex gap-2">
-                    {!keepQuestion && !selectedQuestions.length && <button
-                      onClick={() => void handleReject(detection._id)}
-                      className="px-4 py-2 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/30 transition-colors flex items-center gap-2"
-                    >
-                      <XIcon className="w-4 h-4" />
-                      Reject
-                    </button>}
-                    {keepQuestion && selectedQuestions.length > 0 && <button
-                      onClick={() => void handleApprove(detection._id)}
-                      className="px-4 py-2 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/30 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <CheckIcon className="w-4 h-4" />
-                      Approve & Delete
-                    </button>}
-                    <button
-                      onClick={() => void handleDeleteAll(detection)}
-                      className="px-4 py-2 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/30 transition-colors flex items-center gap-2"
-                    >
-                      <XIcon className="w-4 h-4" />
-                      Delete All
-                    </button>
-                  </div>
+                    <div className="flex gap-2">
+                      {!keepQuestion && !selectedQuestions.length && <button
+                        onClick={() => void handleReject(detection._id)}
+                        className="px-4 py-2 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/30 transition-colors flex items-center gap-2"
+                      >
+                        <XIcon className="w-4 h-4" />
+                        Reject
+                      </button>}
+                      {keepQuestion && selectedQuestions.length > 0 && <button
+                        onClick={() => void handleApprove(detection._id)}
+                        className="px-4 py-2 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/30 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <CheckIcon className="w-4 h-4" />
+                        Approve & Delete
+                      </button>}
+                      <button
+                        onClick={() => void handleDeleteAll(detection)}
+                        className="px-4 py-2 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/30 transition-colors flex items-center gap-2"
+                      >
+                        <XIcon className="w-4 h-4" />
+                        Delete All
+                      </button>
+                    </div>
+                  </div>}
                 </div>
               </div>
             ))}
