@@ -99,6 +99,7 @@ export default defineSchema({
     tags: v.optional(v.array(v.string())),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    embedding: v.optional(v.array(v.number())),
   })
     .index("by_average_view_duration", [
       "averageViewDuration",
@@ -113,7 +114,11 @@ export default defineSchema({
     .index("by_tone_and_last_shown", ["tone", "lastShownAt"])
     .index("by_tone_and_total_likes", ["tone", "totalLikes"])
     .index("by_style_and_tone", ["style", "tone"])
-    .index("by_text", ["text"]),
+    .index("by_text", ["text"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1536,
+    }),
   tags: defineTable({
     name: v.string(),
     grouping: v.string(),
@@ -142,7 +147,7 @@ export default defineSchema({
     status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
     detectedAt: v.number(),
     reviewedAt: v.optional(v.number()),
-    reviewedBy: v.optional(v.id("users")),
+    reviewedBy: v.optional(v.string()),
     rejectReason: v.optional(v.string()),
   })
     .index("by_status", ["status"])

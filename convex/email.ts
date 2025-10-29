@@ -12,7 +12,7 @@ export const sendEmail = internalAction({
   handler: async (ctx, args) => {
     const resendApiKey = process.env.CONVEX_RESEND_API_KEY;
     const adminEmailVar = process.env.ADMIN_EMAIL;
-
+    const environment = process.env.ENVIRONMENT;
     if (!resendApiKey) {
       console.error("RESEND_API_KEY is not set in environment variables.");
       return { success: false, error: "CONVEX_RESEND_API_KEY is not configured." };
@@ -29,7 +29,7 @@ export const sendEmail = internalAction({
       const { data, error } = await resend.emails.send({
         from: "Cron Job Notifier <notifier@breaktheiceberg.com>",
         to: [adminEmail],
-        subject: args.subject,
+        subject: `${environment} - ${args.subject}`,
         html: args.html,
       });
 

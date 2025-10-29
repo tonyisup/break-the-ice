@@ -19,4 +19,10 @@ crons.interval(
   { minimumCount: 10, maxCombinations: 3 } // Process only 3 combinations per cron run to avoid timeout
 );
 
-export default crons;
+crons.interval(
+  "populate missing embeddings",
+  { hours: 24 },
+  internal.ai.populateMissingEmbeddings,
+  { maxBatchSize: 50 }
+);
+export default crons
