@@ -40,6 +40,8 @@ export const getSettings = query({
     v.object({
       likedQuestions: v.optional(v.array(v.id("questions"))),
       hiddenQuestions: v.optional(v.array(v.id("questions"))),
+      hiddenStyles: v.optional(v.array(v.string())),
+      hiddenTones: v.optional(v.array(v.string())),
       migratedFromLocalStorage: v.optional(v.boolean()),
     })
   ),
@@ -61,6 +63,8 @@ export const getSettings = query({
     return {
       likedQuestions: user.likedQuestions,
       hiddenQuestions: user.hiddenQuestions,
+      hiddenStyles: user.hiddenStyles,
+      hiddenTones: user.hiddenTones,
       migratedFromLocalStorage: user.migratedFromLocalStorage,
     };
   },
@@ -149,7 +153,61 @@ export const updateHiddenQuestions = mutation({
     });
     return null;
   },
-}); 
+});
+
+export const updateHiddenStyles = mutation({
+  args: {
+    hiddenStyles: v.array(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    await ctx.db.patch(user._id, {
+      hiddenStyles: args.hiddenStyles,
+    });
+    return null;
+  },
+});
+
+export const updateHiddenTones = mutation({
+  args: {
+    hiddenTones: v.array(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    await ctx.db.patch(user._id, {
+      hiddenTones: args.hiddenTones,
+    });
+    return null;
+  },
+});
 
 export const makeAdmin = mutation({
   args: {
