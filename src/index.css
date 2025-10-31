@@ -32,8 +32,10 @@
 }
 
 :root {
-  --color-light: #ffffff;
-  --color-dark: #171717;
+  --color-light: blue;
+  --color-dark: green;
+  --primary: blue;
+  --primary-foreground: green;
 }
 
 body {
@@ -57,6 +59,8 @@ body {
 
 .dark {
   color-scheme: dark;
+  --primary: blue;
+  --primary-foreground: green;
 }
 
 @layer components {
