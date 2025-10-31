@@ -5,8 +5,8 @@ import { SignOutButton } from './SignOutButton';
 import { useConvexAuth } from 'convex/react';
 
 vi.mock('convex/react');
-vi.mock('@convex-dev/auth/react', () => ({
-  useAuthActions: () => ({ signOut: () => {} }),
+vi.mock('@clerk/clerk-react', () => ({
+  useClerk: () => ({ signOut: () => Promise.resolve() }),
 }));
 
 describe('SignOutButton', () => {

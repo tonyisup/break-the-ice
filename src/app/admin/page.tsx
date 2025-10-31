@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
-import { api } from '../../../convex/_generated/api';
-import { Doc, Id } from '../../../convex/_generated/dataModel';
+import { Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { useTheme } from '../../hooks/useTheme';
 import { Link } from 'react-router-dom';
@@ -26,12 +24,11 @@ const AdminPage: React.FC = () => {
 };
 
 function AdminComponentWrapper() {
-  const isLoggedIn = useQuery(api.auth.loggedInUser);
-  const user = useUser();
-  if (!isLoggedIn) {
+  const { isSignedIn, user } = useUser();
+  if (!isSignedIn) {
     return <div>You are not logged in</div>;
   }
-  if (!user.user?.publicMetadata.isAdmin) {
+  if (!user?.publicMetadata?.isAdmin) {
     return <div>You are not an admin</div>;
   }
   return <AdminComponent />;

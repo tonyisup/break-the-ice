@@ -428,9 +428,7 @@ export default function MainPage() {
         background: `linear-gradient(135deg, ${gradient[0]}, ${gradientTarget}, ${gradient[1]})`
       }}
     >
-      <Header
-        gradient={gradient}
-      />
+      <Header />
 
       <main className="flex-1 flex flex-col">
         <AnimatePresence mode="wait">
