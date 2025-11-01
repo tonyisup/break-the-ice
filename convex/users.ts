@@ -106,7 +106,9 @@ export const migrateLocalStorageSettings = mutation({
   args: {
     likedQuestions: v.array(v.id("questions")),
     hiddenQuestions: v.array(v.id("questions")),
-    autoAdvanceShuffle: v.boolean(),
+    hiddenStyles: v.optional(v.array(v.string())),
+    hiddenTones: v.optional(v.array(v.string())),
+    autoAdvanceShuffle: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -134,6 +136,25 @@ export const migrateLocalStorageSettings = mutation({
       await ctx.db.delete(uq._id);
     }
 
+    // Delete existing hidden styles and tones
+    const existingHiddenStyles = await ctx.db
+      .query("userHiddenStyles")
+      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .collect();
+    
+    for (const us of existingHiddenStyles) {
+      await ctx.db.delete(us._id);
+    }
+
+    const existingHiddenTones = await ctx.db
+      .query("userHiddenTones")
+      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .collect();
+    
+    for (const ut of existingHiddenTones) {
+      await ctx.db.delete(ut._id);
+    }
+
     // Insert new liked questions
     const now = Date.now();
     for (const questionId of args.likedQuestions) {
@@ -153,6 +174,28 @@ export const migrateLocalStorageSettings = mutation({
         status: "hidden",
         updatedAt: now,
       });
+    }
+
+    // Insert new hidden styles
+    if (args.hiddenStyles) {
+      for (const styleId of args.hiddenStyles) {
+        await ctx.db.insert("userHiddenStyles", {
+          userId: user._id,
+          styleId,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // Insert new hidden tones
+    if (args.hiddenTones) {
+      for (const toneId of args.hiddenTones) {
+        await ctx.db.insert("userHiddenTones", {
+          userId: user._id,
+          toneId,
+          updatedAt: now,
+        });
+      }
     }
 
     await ctx.db.patch(user._id, {
