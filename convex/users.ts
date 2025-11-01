@@ -60,9 +60,27 @@ export const getSettings = query({
       return null;
     }
 
+    // Get liked questions from userQuestions table
+    const likedUserQuestions = await ctx.db
+      .query("userQuestions")
+      .withIndex("userIdAndStatus", (q) =>
+        q.eq("userId", user._id).eq("status", "liked")
+      )
+      .collect();
+    const likedQuestions = likedUserQuestions.map((uq) => uq.questionId);
+
+    // Get hidden questions from userQuestions table
+    const hiddenUserQuestions = await ctx.db
+      .query("userQuestions")
+      .withIndex("userIdAndStatus", (q) =>
+        q.eq("userId", user._id).eq("status", "hidden")
+      )
+      .collect();
+    const hiddenQuestions = hiddenUserQuestions.map((uq) => uq.questionId);
+
     return {
-      likedQuestions: user.likedQuestions,
-      hiddenQuestions: user.hiddenQuestions,
+      likedQuestions: likedQuestions.length > 0 ? likedQuestions : undefined,
+      hiddenQuestions: hiddenQuestions.length > 0 ? hiddenQuestions : undefined,
       hiddenStyles: user.hiddenStyles,
       hiddenTones: user.hiddenTones,
       migratedFromLocalStorage: user.migratedFromLocalStorage,
@@ -92,9 +110,38 @@ export const migrateLocalStorageSettings = mutation({
       throw new Error("User not found");
     }
 
+    // Delete existing userQuestions entries for this user
+    const existingUserQuestions = await ctx.db
+      .query("userQuestions")
+      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .collect();
+    
+    for (const uq of existingUserQuestions) {
+      await ctx.db.delete(uq._id);
+    }
+
+    // Insert new liked questions
+    const now = Date.now();
+    for (const questionId of args.likedQuestions) {
+      await ctx.db.insert("userQuestions", {
+        userId: user._id,
+        questionId,
+        status: "liked",
+        updatedAt: now,
+      });
+    }
+
+    // Insert new hidden questions
+    for (const questionId of args.hiddenQuestions) {
+      await ctx.db.insert("userQuestions", {
+        userId: user._id,
+        questionId,
+        status: "hidden",
+        updatedAt: now,
+      });
+    }
+
     await ctx.db.patch(user._id, {
-      likedQuestions: args.likedQuestions,
-      hiddenQuestions: args.hiddenQuestions,
       migratedFromLocalStorage: true,
     });
     return null;
@@ -121,9 +168,29 @@ export const updateLikedQuestions = mutation({
       throw new Error("User not found");
     }
 
-    await ctx.db.patch(user._id, {
-      likedQuestions: args.likedQuestions,
-    });
+    // Delete existing liked questions for this user
+    const existingLikedQuestions = await ctx.db
+      .query("userQuestions")
+      .withIndex("userIdAndStatus", (q) =>
+        q.eq("userId", user._id).eq("status", "liked")
+      )
+      .collect();
+    
+    for (const uq of existingLikedQuestions) {
+      await ctx.db.delete(uq._id);
+    }
+
+    // Insert new liked questions
+    const now = Date.now();
+    for (const questionId of args.likedQuestions) {
+      await ctx.db.insert("userQuestions", {
+        userId: user._id,
+        questionId,
+        status: "liked",
+        updatedAt: now,
+      });
+    }
+
     return null;
   },
 });
@@ -148,9 +215,29 @@ export const updateHiddenQuestions = mutation({
       throw new Error("User not found");
     }
 
-    await ctx.db.patch(user._id, {
-      hiddenQuestions: args.hiddenQuestions,
-    });
+    // Delete existing hidden questions for this user
+    const existingHiddenQuestions = await ctx.db
+      .query("userQuestions")
+      .withIndex("userIdAndStatus", (q) =>
+        q.eq("userId", user._id).eq("status", "hidden")
+      )
+      .collect();
+    
+    for (const uq of existingHiddenQuestions) {
+      await ctx.db.delete(uq._id);
+    }
+
+    // Insert new hidden questions
+    const now = Date.now();
+    for (const questionId of args.hiddenQuestions) {
+      await ctx.db.insert("userQuestions", {
+        userId: user._id,
+        questionId,
+        status: "hidden",
+        updatedAt: now,
+      });
+    }
+
     return null;
   },
 });

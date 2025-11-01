@@ -135,6 +135,9 @@ export default defineSchema({
     isAdmin: v.optional(v.boolean()),
     questionHistory: v.optional(v.array(v.id("questions"))),
     migratedFromLocalStorage: v.optional(v.boolean()),
+    questionPreferenceEmbedding: v.optional(v.array(v.number())),
+    hiddenStyles: v.optional(v.array(v.string())),
+    hiddenTones: v.optional(v.array(v.string())),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
@@ -149,6 +152,7 @@ export default defineSchema({
     .index("status", ["status"])
     .index("userIdAndStatus", ["userId", "status"])
     .index("questionIdAndStatus", ["questionId", "status"])
+    .index("userIdAndQuestionId", ["userId", "questionId"])
   ,duplicateDetections: defineTable({
     questionIds: v.array(v.id("questions")),
     reason: v.string(),
