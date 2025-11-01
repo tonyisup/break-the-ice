@@ -32,24 +32,24 @@ createRoot(document.getElementById("root")!).render(
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Root />} />
-          <Route path="/app" element={<App />} />
-          <Route path="/question/:id" element={<QuestionPage />} />
-          <Route path="/liked" element={<LikedQuestionsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/admin/questions" element={<QuestionsPage />} />
-          <Route path="/admin/tags" element={<TagsPage />} />
-          <Route path="/admin/models" element={<ModelsPage />} />
-          <Route path="/admin/styles" element={<StylesPage />} />
-          <Route path="/admin/tones" element={<TonesPage />} />
-          <Route path="/admin/duplicates" element={<DuplicatesPage />} />
-          <Route path="/admin/duplicates/completed" element={<DuplicateDetectionCompletedPage />} />
-          <Route path="/admin/questions/:id" element={<IndividualQuestionPage />} />
-        </Routes>
-      </BrowserRouter>
-    </StorageProvider>
-    </ConvexProviderWithClerk>
-  </ClerkProvider>
+              <Route path="/app" element={<App />} />
+              <Route path="/question/:id" element={<QuestionPage />} />
+              <Route path="/liked" element={<LikedQuestionsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin/questions" element={<QuestionsPage />} />
+              <Route path="/admin/tags" element={<TagsPage />} />
+              <Route path="/admin/models" element={<ModelsPage />} />
+              <Route path="/admin/styles" element={<StylesPage />} />
+              <Route path="/admin/tones" element={<TonesPage />} />
+              <Route path="/admin/duplicates" element={<DuplicatesPage />} />
+              <Route path="/admin/duplicates/completed" element={<DuplicateDetectionCompletedPage />} />
+              <Route path="/admin/questions/:id" element={<IndividualQuestionPage />} />
+            </Routes>
+          </BrowserRouter>
+        </StorageProvider>
+      </ConvexProviderWithClerk>
+    </ClerkProvider>
   </StrictMode>,
 );

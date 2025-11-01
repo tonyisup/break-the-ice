@@ -129,18 +129,27 @@ export default defineSchema({
     email: v.optional(v.string()),
     emailVerificationTime: v.optional(v.float64()),
     image: v.optional(v.string()),
-    isAnonymous: v.optional(v.boolean()),
     name: v.optional(v.string()),
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.float64()),
     isAdmin: v.optional(v.boolean()),
-    likedQuestions: v.optional(v.array(v.id("questions"))),
-    hiddenQuestions: v.optional(v.array(v.id("questions"))),
+    questionHistory: v.optional(v.array(v.id("questions"))),
     migratedFromLocalStorage: v.optional(v.boolean()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
-  duplicateDetections: defineTable({
+  userQuestions: defineTable({
+    userId: v.id("users"),
+    questionId: v.id("questions"),
+    status: v.union(v.literal("liked"), v.literal("hidden")),
+    updatedAt: v.number(),
+  })
+    .index("userId", ["userId"])
+    .index("questionId", ["questionId"])
+    .index("status", ["status"])
+    .index("userIdAndStatus", ["userId", "status"])
+    .index("questionIdAndStatus", ["questionId", "status"])
+  ,duplicateDetections: defineTable({
     questionIds: v.array(v.id("questions")),
     reason: v.string(),
     confidence: v.number(),
