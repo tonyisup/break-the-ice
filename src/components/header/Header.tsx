@@ -3,13 +3,17 @@ import { ThemeToggle } from "../ui/theme-toggle";
 import { Heart, History, Settings, Home } from "lucide-react";
 import { InlineSignInButton } from "../../InlineSignInButton";
 import { Button } from "../ui/button";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 
 interface HeaderProps {
   homeLinkSlot?: "liked" | "history" | "settings";
 }
 
 export const Header = ({ homeLinkSlot }: HeaderProps) => {
-  
+  const settings = useQuery(api.users.getSettings);
+  const needsMigration = settings && !settings.migratedFromLocalStorage;
+
   return (
     <header className="p-4 flex justify-between items-center">
       <div className="flex gap-2">
@@ -37,11 +41,19 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
         {homeLinkSlot === "settings" ? (
           <HomeLink icon={<Settings className="w-5 h-5" />} text="Settings" />
         ) : (
-          <Button asChild>
-            <Link to="/settings">
-              <Settings className="w-5 h-5" /><span className="hidden sm:inline"> Settings</span>
-            </Link>
-          </Button>
+          <div className="relative">
+            <Button asChild>
+              <Link to="/settings">
+                <Settings className="w-5 h-5" />
+                <span className="hidden sm:inline"> Settings</span>
+              </Link>
+            </Button>
+            {needsMigration && (
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-xs">
+                !
+              </div>
+            )}
+          </div>
         )}
         <ThemeToggle />
         <InlineSignInButton />
