@@ -139,9 +139,7 @@ function LikedQuestionsPageContent() {
         background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradient[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradient[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
       }}
     >
-      <Header
-        homeLinkSlot="liked"
-        gradient={gradient} />
+      <Header homeLinkSlot="liked" />
 
       {questions && questions.length === 0 ? (
         <div className="text-center py-12">

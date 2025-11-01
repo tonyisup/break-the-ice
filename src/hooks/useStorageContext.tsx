@@ -37,7 +37,7 @@ const NonAuthProvider = ({
 };
 
 export const StorageProvider = ({ children }: { children: ReactNode }) => {
-  const { isAuthenticated } = useAuth();
+  const { isSignedIn } = useAuth();
   const cookieConsent = document.cookie
     .split("; ")
     .find((row) => row.startsWith("cookieConsent="))
@@ -59,7 +59,7 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
     return () => clearInterval(interval);
   }, [hasConsented]);
 
-  if (isAuthenticated) {
+  if (isSignedIn) {
     return <AuthProvider hasConsented={hasConsented}>{children}</AuthProvider>;
   }
   return (
