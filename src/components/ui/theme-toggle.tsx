@@ -31,8 +31,12 @@ export function ThemeToggle({ className }: { className?: string }) {
               </span>
             }
           </>}
-          {(theme == "system") && <Computer className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all" />}
-            <span className="sr-only">Toggle theme</span>
+          {(theme == "system") && 
+            <span className="flex items-center gap-2">
+              <Computer className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all" />
+              <span className="hidden sm:inline">System</span>
+            </span>
+          }
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
