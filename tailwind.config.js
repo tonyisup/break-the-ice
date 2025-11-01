@@ -2,9 +2,14 @@ const {} = require("tailwindcss/defaultTheme");
 
 module.exports = {
   mode: "jit",
-  darkMode: 'class',
+  darkMode: "class",
   purge: ["./index.html", "./src/**/*.{vue,js,ts,jsx,tsx}"],
-  variants: {
-    extend: {},
+  theme: {
+    extend: {
+      colors: {
+        primary: "hsl(var(--primary))",
+        "primary-foreground": "hsl(var(--primary-foreground))",
+      },
+    },
   },
 };

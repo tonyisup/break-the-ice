@@ -53,6 +53,31 @@ const shuffleArray = (array: any[]) => {
     array[j] = temp;
   }
 }
+function calculateAverageEmbedding(embeddings: number[][]): number[] {
+  if (embeddings.length === 0) {
+    return []; // Return an empty array if no embeddings are provided
+  }
+
+  // Get the dimensionality of the embeddings (assuming all have the same length)
+  const embeddingDimension = embeddings[0].length;
+
+  // Initialize an array to store the sum of the embedding components
+  const sumEmbedding: number[] = new Array(embeddingDimension).fill(0);
+
+  // Sum the corresponding components of each embedding
+  for (const embedding of embeddings) {
+    for (let i = 0; i < embeddingDimension; i++) {
+      sumEmbedding[i] += embedding[i];
+    }
+  }
+
+  // Divide each component of the sum by the number of embeddings to get the average
+  const averageEmbedding: number[] = sumEmbedding.map(
+    (component) => component / embeddings.length
+  );
+
+  return averageEmbedding;
+}
 
 export const getSimilarQuestions = query({
   args: {
@@ -77,38 +102,14 @@ export const getSimilarQuestions = query({
     if (!user) {
       return [];
     }
-    const likedQuestions = user.likedQuestions ?? [];
-    if (likedQuestions.length === 0) {
-      return [];
-    }
-    // Get the embeddings of the liked questions.
-    const likedQuestionDocs = (
-      await Promise.all(
-        likedQuestions.map((id) =>
-          ctx.db
-            .query("questions")
-            .filter((q) => q.eq(q.field("_id"), id))
-            .first()
-        )
+    const likedQuestionsDocs = await ctx.db
+      .query("userQuestions")
+      .withIndex("userIdAndStatus", (q) =>
+        q.eq("userId", user._id).eq("status", "liked")
       )
-    ).filter((q) => q !== null) as Doc<"questions">[];
-    const likedQuestionEmbeddings = likedQuestionDocs
-      .map((q) => q.embedding)
-      .filter((e) => e !== undefined) as number[][];
-    if (likedQuestionEmbeddings.length === 0) {
-      return [];
-    }
+      .collect();
 
-    // Average the embeddings to get a single vector.
-    const avgEmbedding = new Array(likedQuestionEmbeddings[0].length).fill(0);
-    for (const embedding of likedQuestionEmbeddings) {
-      for (let i = 0; i < avgEmbedding.length; i++) {
-        avgEmbedding[i] += embedding[i];
-      }
-    }
-    for (let i = 0; i < avgEmbedding.length; i++) {
-      avgEmbedding[i] /= likedQuestionEmbeddings.length;
-    }
+    const likedQuestionIds = likedQuestionsDocs.map((uq) => uq.questionId);
 
     // Use regular query with filter instead of vectorSearch since it's not available in queries
     // Get questions with the same style and tone, then filter by similarity manually
@@ -118,7 +119,7 @@ export const getSimilarQuestions = query({
       .filter((q: any) => q.and(
         ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
         ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id)),
-        ...likedQuestions.map((id: any) => q.neq(q.field("_id"), id))
+        ...likedQuestionIds.map((id: any) => q.neq(q.field("_id"), id))
       ))
       .take(count * 4);
     
@@ -250,12 +251,24 @@ export const getLikedQuestions = query({
       .withIndex("email", (q) => q.eq("email", identity.email))
       .unique();
 
-    if (!user || !user.likedQuestions) {
+    if (!user) {
+      return [];
+    }
+
+    // Get liked questions from userQuestions table
+    const likedUserQuestions = await ctx.db
+      .query("userQuestions")
+      .withIndex("userIdAndStatus", (q) =>
+        q.eq("userId", user._id).eq("status", "liked")
+      )
+      .collect();
+
+    if (likedUserQuestions.length === 0) {
       return [];
     }
 
     const questions = await Promise.all(
-      user.likedQuestions.map((id) => ctx.db.get(id))
+      likedUserQuestions.map((uq) => ctx.db.get(uq.questionId))
     );
 
     return questions.filter((q): q is Doc<"questions"> => q !== null);

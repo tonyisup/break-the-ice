@@ -12,14 +12,21 @@ import { useState } from "react";
 import DynamicIcon from "@/components/ui/dynamic-icon";
 import { ItemDetailDrawer, ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Doc } from "../../../convex/_generated/dataModel";
+import { useUser } from "@clerk/clerk-react";
+import { Button } from "@/components/ui/button";
 
 const SettingsPage = () => {
   const { effectiveTheme } = useTheme();
+  const { isSignedIn } = useUser();
   const allStyles = useQuery(api.styles.getStyles);
   const allTones = useQuery(api.tones.getTones);
+  const settings = useQuery(api.users.getSettings);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ItemDetails | null>(null);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const storeUser = useMutation(api.users.store);
+  const migrateData = useMutation(api.users.migrateLocalStorageSettings);
 
   const toggleSection = (section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -51,7 +58,82 @@ const SettingsPage = () => {
     clearHiddenQuestions,
     bypassLandingPage,
     setBypassLandingPage,
+    hasConsented,
   } = useStorageContext();
+
+  // Check if user needs migration: signed in, no user in Convex, and has localStorage data
+  const needsMigration = useMemo(() => {
+    // If not signed in or settings are still loading (undefined), don't show migration
+    if (!isSignedIn || settings === undefined) {
+      return false;
+    }
+    
+    // If settings exist (not null), user already exists in Convex, no migration needed
+    if (settings !== null) {
+      return false;
+    }
+    
+    if (!hasConsented || typeof window === "undefined") {
+      return false;
+    }
+
+    try {
+      const likedQuestions = JSON.parse(window.localStorage.getItem("likedQuestions") || "[]");
+      const hiddenQuestions = JSON.parse(window.localStorage.getItem("hiddenQuestions") || "[]");
+      const hiddenStyles = JSON.parse(window.localStorage.getItem("hiddenStyles") || "[]");
+      const hiddenTones = JSON.parse(window.localStorage.getItem("hiddenTones") || "[]");
+      
+      return (
+        (Array.isArray(likedQuestions) && likedQuestions.length > 0) ||
+        (Array.isArray(hiddenQuestions) && hiddenQuestions.length > 0) ||
+        (Array.isArray(hiddenStyles) && hiddenStyles.length > 0) ||
+        (Array.isArray(hiddenTones) && hiddenTones.length > 0)
+      );
+    } catch {
+      return false;
+    }
+  }, [isSignedIn, settings, hasConsented]);
+
+  const handleMigrate = async () => {
+    if (!hasConsented || typeof window === "undefined") {
+      return;
+    }
+
+    setIsMigrating(true);
+    try {
+      // First, ensure the user exists in Convex
+      await storeUser();
+
+      // Get data from localStorage
+      const likedQuestions = JSON.parse(window.localStorage.getItem("likedQuestions") || "[]") as Id<"questions">[];
+      const hiddenQuestions = JSON.parse(window.localStorage.getItem("hiddenQuestions") || "[]") as Id<"questions">[];
+      const hiddenStyles = JSON.parse(window.localStorage.getItem("hiddenStyles") || "[]") as string[];
+      const hiddenTones = JSON.parse(window.localStorage.getItem("hiddenTones") || "[]") as string[];
+
+      // Filter out invalid IDs
+      const validLikedQuestions = likedQuestions.filter(
+        id => typeof id === 'string' && id.length > 0
+      );
+      const validHiddenQuestions = hiddenQuestions.filter(
+        id => typeof id === 'string' && id.length > 0
+      );
+
+      // Migrate the data
+      await migrateData({
+        likedQuestions: validLikedQuestions,
+        hiddenQuestions: validHiddenQuestions,
+        hiddenStyles: hiddenStyles.length > 0 ? hiddenStyles : undefined,
+        hiddenTones: hiddenTones.length > 0 ? hiddenTones : undefined,
+      });
+
+      // Refresh the page to reload settings
+      window.location.reload();
+    } catch (error) {
+      console.error("Migration failed:", error);
+      alert("Failed to migrate data. Please try again.");
+      setIsMigrating(false);
+    }
+  };
 
   const handleToggleStyle = (styleId: string) => {
     if (hiddenStyles.includes(styleId)) {
@@ -131,6 +213,25 @@ const SettingsPage = () => {
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <div className="space-y-8">
+          {needsMigration && (
+            <div className="p-4 bg-yellow-500/20 dark:bg-yellow-600/20 border border-yellow-500/50 dark:border-yellow-600/50 rounded-lg">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold dark:text-white text-black mb-2">Migrate Your Data</h3>
+                  <p className="text-sm dark:text-white/70 text-black/70">
+                    You have data stored locally that can be migrated to your account. This will sync your liked questions, hidden questions, styles, and tones across all your devices.
+                  </p>
+                </div>
+                <Button
+                  onClick={handleMigrate}
+                  disabled={isMigrating}
+                  className="whitespace-nowrap"
+                >
+                  {isMigrating ? "Migrating..." : "Migrate Data"}
+                </Button>
+              </div>
+            </div>
+          )}
           <CollapsibleSection
             title="General"
             isOpen={!!openSections['general']}
