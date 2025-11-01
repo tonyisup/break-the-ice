@@ -136,8 +136,6 @@ export default defineSchema({
     questionHistory: v.optional(v.array(v.id("questions"))),
     migratedFromLocalStorage: v.optional(v.boolean()),
     questionPreferenceEmbedding: v.optional(v.array(v.number())),
-    hiddenStyles: v.optional(v.array(v.string())),
-    hiddenTones: v.optional(v.array(v.string())),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
@@ -152,8 +150,24 @@ export default defineSchema({
     .index("status", ["status"])
     .index("userIdAndStatus", ["userId", "status"])
     .index("questionIdAndStatus", ["questionId", "status"])
-    .index("userIdAndQuestionId", ["userId", "questionId"])
-  ,duplicateDetections: defineTable({
+    .index("userIdAndQuestionId", ["userId", "questionId"]),
+  userHiddenStyles: defineTable({
+    userId: v.id("users"),
+    styleId: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("userId", ["userId"])
+    .index("styleId", ["styleId"])
+    .index("userIdAndStyleId", ["userId", "styleId"]),
+  userHiddenTones: defineTable({
+    userId: v.id("users"),
+    toneId: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("userId", ["userId"])
+    .index("toneId", ["toneId"])
+    .index("userIdAndToneId", ["userId", "toneId"]),
+  duplicateDetections: defineTable({
     questionIds: v.array(v.id("questions")),
     reason: v.string(),
     confidence: v.number(),

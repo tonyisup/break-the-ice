@@ -78,11 +78,25 @@ export const getSettings = query({
       .collect();
     const hiddenQuestions = hiddenUserQuestions.map((uq) => uq.questionId);
 
+    // Get hidden styles from userHiddenStyles table
+    const hiddenStylesDocs = await ctx.db
+      .query("userHiddenStyles")
+      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .collect();
+    const hiddenStyles = hiddenStylesDocs.map((us) => us.styleId);
+
+    // Get hidden tones from userHiddenTones table
+    const hiddenTonesDocs = await ctx.db
+      .query("userHiddenTones")
+      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .collect();
+    const hiddenTones = hiddenTonesDocs.map((ut) => ut.toneId);
+
     return {
       likedQuestions: likedQuestions.length > 0 ? likedQuestions : undefined,
       hiddenQuestions: hiddenQuestions.length > 0 ? hiddenQuestions : undefined,
-      hiddenStyles: user.hiddenStyles,
-      hiddenTones: user.hiddenTones,
+      hiddenStyles: hiddenStyles.length > 0 ? hiddenStyles : undefined,
+      hiddenTones: hiddenTones.length > 0 ? hiddenTones : undefined,
       migratedFromLocalStorage: user.migratedFromLocalStorage,
     };
   },
@@ -262,9 +276,26 @@ export const updateHiddenStyles = mutation({
       throw new Error("User not found");
     }
 
-    await ctx.db.patch(user._id, {
-      hiddenStyles: args.hiddenStyles,
-    });
+    // Delete existing hidden styles for this user
+    const existingHiddenStyles = await ctx.db
+      .query("userHiddenStyles")
+      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .collect();
+    
+    for (const us of existingHiddenStyles) {
+      await ctx.db.delete(us._id);
+    }
+
+    // Insert new hidden styles
+    const now = Date.now();
+    for (const styleId of args.hiddenStyles) {
+      await ctx.db.insert("userHiddenStyles", {
+        userId: user._id,
+        styleId,
+        updatedAt: now,
+      });
+    }
+
     return null;
   },
 });
@@ -289,9 +320,26 @@ export const updateHiddenTones = mutation({
       throw new Error("User not found");
     }
 
-    await ctx.db.patch(user._id, {
-      hiddenTones: args.hiddenTones,
-    });
+    // Delete existing hidden tones for this user
+    const existingHiddenTones = await ctx.db
+      .query("userHiddenTones")
+      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .collect();
+    
+    for (const ut of existingHiddenTones) {
+      await ctx.db.delete(ut._id);
+    }
+
+    // Insert new hidden tones
+    const now = Date.now();
+    for (const toneId of args.hiddenTones) {
+      await ctx.db.insert("userHiddenTones", {
+        userId: user._id,
+        toneId,
+        updatedAt: now,
+      });
+    }
+
     return null;
   },
 });
