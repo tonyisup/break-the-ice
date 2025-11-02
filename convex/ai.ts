@@ -803,8 +803,8 @@ export const populateMissingEmbeddings = internalAction({
   handler: async (ctx, args) => {
     const questions = await ctx.runQuery(internal.questions.getQuestionsWithMissingEmbeddings);
     let questionsProcessed = 0;
-    let questionsMissingEmbeddings = questions.length;
-    let errors: string[] = [];
+    const questionsMissingEmbeddings = questions.length;
+    const errors: string[] = [];
     for (const question of questions) {
       try {
         await ctx.runAction(internal.lib.retriever.embedQuestion, { questionId: question._id });

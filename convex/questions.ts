@@ -53,31 +53,6 @@ const shuffleArray = (array: any[]) => {
     array[j] = temp;
   }
 }
-function calculateAverageEmbedding(embeddings: number[][]): number[] {
-  if (embeddings.length === 0) {
-    return []; // Return an empty array if no embeddings are provided
-  }
-
-  // Get the dimensionality of the embeddings (assuming all have the same length)
-  const embeddingDimension = embeddings[0].length;
-
-  // Initialize an array to store the sum of the embedding components
-  const sumEmbedding: number[] = new Array(embeddingDimension).fill(0);
-
-  // Sum the corresponding components of each embedding
-  for (const embedding of embeddings) {
-    for (let i = 0; i < embeddingDimension; i++) {
-      sumEmbedding[i] += embedding[i];
-    }
-  }
-
-  // Divide each component of the sum by the number of embeddings to get the average
-  const averageEmbedding: number[] = sumEmbedding.map(
-    (component) => component / embeddings.length
-  );
-
-  return averageEmbedding;
-}
 
 export const getSimilarQuestions = query({
   args: {
@@ -885,4 +860,17 @@ export const getQuestionsWithMissingEmbeddings = internalQuery({
   handler: async (ctx) => {
     return await ctx.db.query("questions").filter((q) => q.eq(q.field("embedding"), undefined)).collect();
   }
+});
+
+export const getQuestionEmbedding = internalQuery({
+  args: {
+    questionId: v.id("questions"),
+  },
+  handler: async (ctx, args) => {
+    const question = await ctx.db.query("questions").withIndex("by_id", (q) => q.eq("_id", args.questionId)).first();
+    if (!question) {
+      return [];
+    }
+    return question.embedding;
+  },
 });

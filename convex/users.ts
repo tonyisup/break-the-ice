@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { api, internal } from "./_generated/api";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 export const store = mutation({
@@ -349,6 +350,9 @@ export const updateHiddenQuestions = mutation({
       });
     }
 
+    await ctx.scheduler.runAfter(0, internal.users.updateUserPreferenceEmbeddingAction, {
+      userId: user._id,
+    });
     return null;
   },
 });
@@ -471,5 +475,118 @@ export const makeAdmin = mutation({
 
     await ctx.db.patch(user._id, { isAdmin: true });
     return null;
+  },
+});
+
+export const getUser = internalQuery({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.query("users").withIndex("by_id", (q) => q.eq("_id", args.userId)).unique();
+  },
+});
+
+export const getUserQuestions = internalQuery({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.query("userQuestions").withIndex("userId", (q) => q.eq("userId", args.userId)).collect();
+  },
+});
+
+export const updateUserPreferenceEmbedding = internalMutation({
+  args: {
+    userId: v.id("users"),
+    questionPreferenceEmbedding: v.array(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, { questionPreferenceEmbedding: args.questionPreferenceEmbedding });
+  },
+});
+
+export const updateUserPreferenceEmbeddingAction = internalAction({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+
+    const user = await ctx.runQuery(internal.users.getUser, {
+      userId: args.userId,
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const userQuestions = await ctx.runQuery(internal.users.getUserQuestions, {
+      userId: args.userId,
+    });
+
+    const userQuestionEmbeddings = userQuestions.map(async (uq) => {
+      const embedding = await ctx.runQuery(internal.questions.getQuestionEmbedding, {
+        questionId: uq.questionId,
+      });
+      if (!embedding) {
+        return [];
+      }
+      return embedding;
+    });
+
+    const averageEmbedding = calculateAverageEmbedding(await Promise.all(userQuestionEmbeddings));
+
+    await ctx.runMutation(internal.users.updateUserPreferenceEmbedding, {
+      userId: args.userId,
+      questionPreferenceEmbedding: averageEmbedding,
+    });
+
+    return null;
+  },
+});
+
+
+function calculateAverageEmbedding(embeddings: number[][]): number[] {
+  if (embeddings.length === 0) {
+    return []; // Return an empty array if no embeddings are provided
+  }
+
+  // Get the dimensionality of the embeddings (assuming all have the same length)
+  const embeddingDimension = embeddings[0].length;
+
+  // Initialize an array to store the sum of the embedding components
+  const sumEmbedding: number[] = new Array(embeddingDimension).fill(0);
+
+  // Sum the corresponding components of each embedding
+  for (const embedding of embeddings) {
+    for (let i = 0; i < embeddingDimension; i++) {
+      sumEmbedding[i] += embedding[i];
+    }
+  }
+
+  // Divide each component of the sum by the number of embeddings to get the average
+  const averageEmbedding: number[] = sumEmbedding.map(
+    (component) => component / embeddings.length
+  );
+
+  return averageEmbedding;
+}
+
+export const getUsersWithMissingEmbeddings = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("users").filter((q) => q.eq(q.field("questionPreferenceEmbedding"), undefined)).collect();
+  },
+});
+
+export const updateUsersWithMissingEmbeddingsAction = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.runQuery(internal.users.getUsersWithMissingEmbeddings);
+    for (const user of users) {
+      await ctx.runAction(internal.users.updateUserPreferenceEmbeddingAction, {
+        userId: user._id,
+      });
+    }
   },
 });
