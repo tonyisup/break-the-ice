@@ -5,14 +5,16 @@ import { InlineSignInButton } from "../../InlineSignInButton";
 import { Button } from "../ui/button";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { useAuth } from "@clerk/clerk-react";
 
 interface HeaderProps {
   homeLinkSlot?: "liked" | "history" | "settings";
 }
 
 export const Header = ({ homeLinkSlot }: HeaderProps) => {
+  const { isSignedIn } = useAuth();
   const settings = useQuery(api.users.getSettings);
-  const needsMigration = settings && !settings.migratedFromLocalStorage;
+  const needsMigration = (isSignedIn && settings && !settings.migratedFromLocalStorage) || (isSignedIn && !settings);
 
   return (
     <header className="p-4 flex justify-between items-center">

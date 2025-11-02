@@ -155,30 +155,76 @@ export const migrateLocalStorageSettings = mutation({
       await ctx.db.delete(ut._id);
     }
 
-    // Insert new liked questions
+    // Deduplicate input arrays
+    const uniqueLikedQuestions = Array.from(new Set(args.likedQuestions));
+    const uniqueHiddenQuestions = Array.from(new Set(args.hiddenQuestions));
+    const uniqueHiddenStyles = args.hiddenStyles ? Array.from(new Set(args.hiddenStyles)) : [];
+    const uniqueHiddenTones = args.hiddenTones ? Array.from(new Set(args.hiddenTones)) : [];
+
+    // Insert new liked questions (check for duplicates)
     const now = Date.now();
-    for (const questionId of args.likedQuestions) {
-      await ctx.db.insert("userQuestions", {
-        userId: user._id,
-        questionId,
-        status: "liked",
-        updatedAt: now,
-      });
+    for (const questionId of uniqueLikedQuestions) {
+      // Check if entry already exists
+      const existing = await ctx.db
+        .query("userQuestions")
+        .withIndex("userIdAndQuestionId", (q) =>
+          q.eq("userId", user._id).eq("questionId", questionId)
+        )
+        .first();
+      
+      if (!existing) {
+        await ctx.db.insert("userQuestions", {
+          userId: user._id,
+          questionId,
+          status: "liked",
+          updatedAt: now,
+        });
+      } else if (existing.status !== "liked") {
+        // Update status if it exists with different status
+        await ctx.db.patch(existing._id, {
+          status: "liked",
+          updatedAt: now,
+        });
+      }
     }
 
-    // Insert new hidden questions
-    for (const questionId of args.hiddenQuestions) {
-      await ctx.db.insert("userQuestions", {
-        userId: user._id,
-        questionId,
-        status: "hidden",
-        updatedAt: now,
-      });
+    // Insert new hidden questions (check for duplicates)
+    for (const questionId of uniqueHiddenQuestions) {
+      // Check if entry already exists
+      const existing = await ctx.db
+        .query("userQuestions")
+        .withIndex("userIdAndQuestionId", (q) =>
+          q.eq("userId", user._id).eq("questionId", questionId)
+        )
+        .first();
+      
+      if (!existing) {
+        await ctx.db.insert("userQuestions", {
+          userId: user._id,
+          questionId,
+          status: "hidden",
+          updatedAt: now,
+        });
+      } else if (existing.status !== "hidden") {
+        // Update status if it exists with different status
+        await ctx.db.patch(existing._id, {
+          status: "hidden",
+          updatedAt: now,
+        });
+      }
     }
 
-    // Insert new hidden styles
-    if (args.hiddenStyles) {
-      for (const styleId of args.hiddenStyles) {
+    // Insert new hidden styles (check for duplicates)
+    for (const styleId of uniqueHiddenStyles) {
+      // Check if entry already exists
+      const existing = await ctx.db
+        .query("userHiddenStyles")
+        .withIndex("userIdAndStyleId", (q) =>
+          q.eq("userId", user._id).eq("styleId", styleId)
+        )
+        .first();
+      
+      if (!existing) {
         await ctx.db.insert("userHiddenStyles", {
           userId: user._id,
           styleId,
@@ -187,9 +233,17 @@ export const migrateLocalStorageSettings = mutation({
       }
     }
 
-    // Insert new hidden tones
-    if (args.hiddenTones) {
-      for (const toneId of args.hiddenTones) {
+    // Insert new hidden tones (check for duplicates)
+    for (const toneId of uniqueHiddenTones) {
+      // Check if entry already exists
+      const existing = await ctx.db
+        .query("userHiddenTones")
+        .withIndex("userIdAndToneId", (q) =>
+          q.eq("userId", user._id).eq("toneId", toneId)
+        )
+        .first();
+      
+      if (!existing) {
         await ctx.db.insert("userHiddenTones", {
           userId: user._id,
           toneId,
