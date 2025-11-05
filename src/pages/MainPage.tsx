@@ -31,6 +31,8 @@ export default function MainPage() {
     questionHistory,
     addHiddenStyle,
     addHiddenTone,
+    defaultStyle,
+    defaultTone,
   } = useStorageContext();
 
 
@@ -42,8 +44,12 @@ export default function MainPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [cardId, setCardId] = useState(() => Date.now().toString());
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? styles?.[0]?.id ?? "");
-  const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? tones?.[0]?.id ?? "");
+  const [selectedStyle, setSelectedStyle] = useState(
+    searchParams.get("style") ?? defaultStyle ?? styles?.[0]?.id ?? ""
+  );
+  const [selectedTone, setSelectedTone] = useState(
+    searchParams.get("tone") ?? defaultTone ?? tones?.[0]?.id ?? ""
+  );
   const [isStyleTonesOpen, setIsStyleTonesOpen] = useState(false);
   const [isShuffling, setIsShuffling] = useState(false);
   const isShufflingRef = useRef(false);
@@ -70,13 +76,13 @@ export default function MainPage() {
   const [highlightedTone, setHighlightedTone] = useState<Doc<"tones"> | null>(null);
     
   useEffect(() => {
-    if (styles && styles.length > 0) {
-      setSelectedStyle(styles[0].id);
+    if (styles && styles.length > 0 && !selectedStyle) {
+      setSelectedStyle(defaultStyle ?? styles[0].id);
     }
-    if (tones && tones.length > 0) {
-      setSelectedTone(tones[0].id);
+    if (tones && tones.length > 0 && !selectedTone) {
+      setSelectedTone(defaultTone ?? tones[0].id);
     }
-  }, [styles, tones]);
+  }, [styles, tones, selectedStyle, selectedTone, defaultStyle, defaultTone]);
   useEffect(() => {
     try {
       // Only scroll if we have data loaded and the URL params are different from defaults

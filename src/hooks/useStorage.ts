@@ -41,17 +41,27 @@ export interface StorageContextType {
   clearHiddenTones: () => void;
   hasConsented: boolean;
   setHasConsented: (consent: boolean) => void;
+  defaultStyle?: string;
+  setDefaultStyle: (style: string) => void;
+  defaultTone?: string;
+  setDefaultTone: (tone: string) => void;
 }
 
-export const useLocalStorageContext = (hasConsented: boolean): StorageContextType => {
-  const [theme, setTheme] = useLocalStorage<Theme>("theme", "system", hasConsented);
+export const useLocalStorageContext = (
+  hasConsented: boolean,
+): StorageContextType => {
+  const [theme, setTheme] = useLocalStorage<Theme>(
+    "theme",
+    "system",
+    hasConsented,
+  );
   const [likedQuestions, setLikedQuestions] = useLocalStorage<
     Id<"questions">[]
   >("likedQuestions", [], hasConsented);
   const [questionHistory, setQuestionHistory] = useLocalStorage<HistoryEntry[]>(
     "questionHistory",
     [],
-    hasConsented
+    hasConsented,
   );
   const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<
     Id<"questions">[]
@@ -59,88 +69,132 @@ export const useLocalStorageContext = (hasConsented: boolean): StorageContextTyp
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>(
     "hiddenStyles",
     [],
-    hasConsented
+    hasConsented,
   );
   const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>(
     "hiddenTones",
     [],
-    hasConsented
+    hasConsented,
   );
   const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>(
     "bypassLandingPage",
     true,
-    hasConsented
+    hasConsented,
   );
 
-  const addLikedQuestion = useCallback((id: Id<"questions">) => {
-    setLikedQuestions(prev => {
-      if (prev.length >= MAX_ITEMS) {
-        const confirmed = window.confirm("You have reached the maximum number of liked questions. Do you want to remove the oldest item to add this new one?");
-        if (confirmed) {
-          return [...prev.slice(1), id];
-        } else {
-          return prev;
+  const addLikedQuestion = useCallback(
+    (id: Id<"questions">) => {
+      setLikedQuestions((prev) => {
+        if (prev.length >= MAX_ITEMS) {
+          const confirmed = window.confirm(
+            "You have reached the maximum number of liked questions. Do you want to remove the oldest item to add this new one?",
+          );
+          if (confirmed) {
+            return [...prev.slice(1), id];
+          } else {
+            return prev;
+          }
         }
-      }
-      return [...prev, id];
-    });
-  }, [setLikedQuestions]);
+        return [...prev, id];
+      });
+    },
+    [setLikedQuestions],
+  );
 
-  const removeLikedQuestion = useCallback((id: Id<"questions">) => {
-    setLikedQuestions(prev => prev.filter(questionId => questionId !== id));
-  }, [setLikedQuestions]);
+  const removeLikedQuestion = useCallback(
+    (id: Id<"questions">) => {
+      setLikedQuestions((prev) =>
+        prev.filter((questionId) => questionId !== id),
+      );
+    },
+    [setLikedQuestions],
+  );
 
-  const addHiddenStyle = useCallback((id: string) => {
-    setHiddenStyles(prev => [...prev, id]);
-  }, [setHiddenStyles]);
+  const addHiddenStyle = useCallback(
+    (id: string) => {
+      setHiddenStyles((prev) => [...prev, id]);
+    },
+    [setHiddenStyles],
+  );
 
-  const removeHiddenStyle = useCallback((id: string) => {
-    setHiddenStyles(prev => prev.filter(styleId => styleId !== id));
-  }, [setHiddenStyles]);
+  const removeHiddenStyle = useCallback(
+    (id: string) => {
+      setHiddenStyles((prev) => prev.filter((styleId) => styleId !== id));
+    },
+    [setHiddenStyles],
+  );
 
-  const addHiddenTone = useCallback((id: string) => {
-    setHiddenTones(prev => [...prev, id]);
-  }, [setHiddenTones]);
+  const addHiddenTone = useCallback(
+    (id: string) => {
+      setHiddenTones((prev) => [...prev, id]);
+    },
+    [setHiddenTones],
+  );
 
-  const removeHiddenTone = useCallback((id: string) => {
-    setHiddenTones(prev => prev.filter(toneId => toneId !== id));
-  }, [setHiddenTones]);
+  const removeHiddenTone = useCallback(
+    (id: string) => {
+      setHiddenTones((prev) => prev.filter((toneId) => toneId !== id));
+    },
+    [setHiddenTones],
+  );
 
-  const addQuestionToHistory = useCallback((entry: HistoryEntry) => {
-    setQuestionHistory(prev => {
-      if (prev.length >= MAX_ITEMS) {
-        const confirmed = window.confirm("You have reached the maximum number of history items. Do you want to remove the oldest item to add this new one?");
-        if (confirmed) {
-          return [entry, ...prev.slice(0, -1)];
-        } else {
-          return prev;
+  const addQuestionToHistory = useCallback(
+    (entry: HistoryEntry) => {
+      setQuestionHistory((prev) => {
+        if (prev.length >= MAX_ITEMS) {
+          const confirmed = window.confirm(
+            "You have reached the maximum number of history items. Do you want to remove the oldest item to add this new one?",
+          );
+          if (confirmed) {
+            return [entry, ...prev.slice(0, -1)];
+          } else {
+            return prev;
+          }
         }
-      }
-      return [entry, ...prev];
-    });
-  }, [setQuestionHistory]);
+        return [entry, ...prev];
+      });
+    },
+    [setQuestionHistory],
+  );
 
-  const removeQuestionFromHistory = useCallback((id: Id<"questions">) => {
-    setQuestionHistory(prev => prev.filter(entry => entry.question && entry.question._id !== id));
-  }, [setQuestionHistory]);
+  const removeQuestionFromHistory = useCallback(
+    (id: Id<"questions">) => {
+      setQuestionHistory((prev) =>
+        prev.filter(
+          (entry) => entry.question && entry.question._id !== id,
+        ),
+      );
+    },
+    [setQuestionHistory],
+  );
 
-  const addHiddenQuestion = useCallback((id: Id<"questions">) => {
-    setHiddenQuestions(prev => {
-      if (prev.length >= MAX_ITEMS) {
-        const confirmed = window.confirm("You have reached the maximum number of hidden questions. Do you want to remove the oldest item to add this new one?");
-        if (confirmed) {
-          return [...prev.slice(1), id];
-        } else {
-          return prev;
+  const addHiddenQuestion = useCallback(
+    (id: Id<"questions">) => {
+      setHiddenQuestions((prev) => {
+        if (prev.length >= MAX_ITEMS) {
+          const confirmed = window.confirm(
+            "You have reached the maximum number of hidden questions. Do you want to remove the oldest item to add this new one?",
+          );
+          if (confirmed) {
+            return [...prev.slice(1), id];
+          } else {
+            return prev;
+          }
         }
-      }
-      return [...prev, id];
-    });
-  }, [setHiddenQuestions]);
+        return [...prev, id];
+      });
+    },
+    [setHiddenQuestions],
+  );
 
-  const removeHiddenQuestion = useCallback((id: Id<"questions">) => {
-    setHiddenQuestions(prev => prev.filter(questionId => questionId !== id));
-  }, [setHiddenQuestions]);
+  const removeHiddenQuestion = useCallback(
+    (id: Id<"questions">) => {
+      setHiddenQuestions((prev) =>
+        prev.filter((questionId) => questionId !== id),
+      );
+    },
+    [setHiddenQuestions],
+  );
 
   const clearLikedQuestions = useCallback(() => {
     setLikedQuestions([]);
@@ -201,42 +255,53 @@ export const useLocalStorageContext = (hasConsented: boolean): StorageContextTyp
       const expires = "expires=" + d.toUTCString();
       document.cookie = "cookieConsent=" + consent + ";" + expires + ";path=/";
     },
+    defaultStyle: undefined,
+    setDefaultStyle: () => {},
+    defaultTone: undefined,
+    setDefaultTone: () => {},
   };
 };
 
 export const useConvexStorageContext = (
-  hasConsented: boolean
+  hasConsented: boolean,
 ): StorageContextType => {
   const [theme, setTheme] = useLocalStorage<Theme>(
     "theme",
     "system",
-    hasConsented
+    hasConsented,
   );
   const [questionHistory, setQuestionHistory] = useLocalStorage<HistoryEntry[]>(
     "questionHistory",
     [],
-    hasConsented
+    hasConsented,
   );
   const [bypassLandingPage, setBypassLandingPage] = useLocalStorage<boolean>(
     "bypassLandingPage",
     true,
-    hasConsented
+    hasConsented,
   );
   const settings = useQuery(api.users.getSettings);
   const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
   const [hiddenQuestions, setHiddenQuestions] = useState<Id<"questions">[]>([]);
   const [hiddenStyles, setHiddenStyles] = useState<string[]>([]);
   const [hiddenTones, setHiddenTones] = useState<string[]>([]);
+  const [defaultStyle, setDefaultStyle] = useState<string | undefined>(
+    undefined,
+  );
+  const [defaultTone, setDefaultTone] = useState<string | undefined>(undefined);
   const updateLikedQuestions = useMutation(api.users.updateLikedQuestions);
   const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
   const updateHiddenStyles = useMutation(api.users.updateHiddenStyles);
   const updateHiddenTones = useMutation(api.users.updateHiddenTones);
+  const updateUserSettings = useMutation(api.users.updateUserSettings);
   useEffect(() => {
     if (settings) {
       setLikedQuestions(settings.likedQuestions ?? []);
       setHiddenQuestions(settings.hiddenQuestions ?? []);
       setHiddenStyles(settings.hiddenStyles ?? []);
       setHiddenTones(settings.hiddenTones ?? []);
+      setDefaultStyle(settings.defaultStyle);
+      setDefaultTone(settings.defaultTone);
     }
   }, [settings]);
   const addLikedQuestion = useCallback(
@@ -245,17 +310,17 @@ export const useConvexStorageContext = (
       setLikedQuestions(newLikedQuestions);
       void updateLikedQuestions({ likedQuestions: newLikedQuestions });
     },
-    [likedQuestions, updateLikedQuestions]
+    [likedQuestions, updateLikedQuestions],
   );
   const removeLikedQuestion = useCallback(
     (id: Id<"questions">) => {
       const newLikedQuestions = likedQuestions.filter(
-        (questionId) => questionId !== id
+        (questionId) => questionId !== id,
       );
       setLikedQuestions(newLikedQuestions);
       void updateLikedQuestions({ likedQuestions: newLikedQuestions });
     },
-    [likedQuestions, updateLikedQuestions]
+    [likedQuestions, updateLikedQuestions],
   );
   const addHiddenQuestion = useCallback(
     (id: Id<"questions">) => {
@@ -263,31 +328,33 @@ export const useConvexStorageContext = (
       setHiddenQuestions(newHiddenQuestions);
       void updateHiddenQuestions({ hiddenQuestions: newHiddenQuestions });
     },
-    [hiddenQuestions, updateHiddenQuestions]
+    [hiddenQuestions, updateHiddenQuestions],
   );
   const removeHiddenQuestion = useCallback(
     (id: Id<"questions">) => {
       const newHiddenQuestions = hiddenQuestions.filter(
-        (questionId) => questionId !== id
+        (questionId) => questionId !== id,
       );
       setHiddenQuestions(newHiddenQuestions);
       void updateHiddenQuestions({ hiddenQuestions: newHiddenQuestions });
     },
-    [hiddenQuestions, updateHiddenQuestions]
+    [hiddenQuestions, updateHiddenQuestions],
   );
   const addQuestionToHistory = useCallback(
     (entry: HistoryEntry) => {
       setQuestionHistory((prev) => [entry, ...prev]);
     },
-    [setQuestionHistory]
+    [setQuestionHistory],
   );
   const removeQuestionFromHistory = useCallback(
     (id: Id<"questions">) => {
       setQuestionHistory((prev) =>
-        prev.filter((entry) => entry.question && entry.question._id !== id)
+        prev.filter(
+          (entry) => entry.question && entry.question._id !== id,
+        ),
       );
     },
-    [setQuestionHistory]
+    [setQuestionHistory],
   );
   const clearLikedQuestions = useCallback(() => {
     setLikedQuestions([]);
@@ -324,7 +391,9 @@ export const useConvexStorageContext = (
       void updateHiddenStyles({ hiddenStyles: newHiddenStyles });
     },
     removeHiddenStyle: (id: string) => {
-      const newHiddenStyles = hiddenStyles.filter((styleId) => styleId !== id);
+      const newHiddenStyles = hiddenStyles.filter(
+        (styleId) => styleId !== id,
+      );
       setHiddenStyles(newHiddenStyles);
       void updateHiddenStyles({ hiddenStyles: newHiddenStyles });
     },
@@ -355,6 +424,16 @@ export const useConvexStorageContext = (
       d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
       const expires = "expires=" + d.toUTCString();
       document.cookie = "cookieConsent=" + consent + ";" + expires + ";path=/";
+    },
+    defaultStyle,
+    setDefaultStyle: (style: string) => {
+      setDefaultStyle(style);
+      void updateUserSettings({ defaultStyle: style });
+    },
+    defaultTone,
+    setDefaultTone: (tone: string) => {
+      setDefaultTone(tone);
+      void updateUserSettings({ defaultTone: tone });
     },
   };
 };

@@ -14,6 +14,8 @@ import { ItemDetailDrawer, ItemDetails } from "@/components/item-detail-drawer/i
 import { Doc } from "../../../convex/_generated/dataModel";
 import { useUser } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
+import { StyleSelector } from "@/components/styles-selector";
+import { ToneSelector } from "@/components/tone-selector";
 
 const SettingsPage = () => {
   const { effectiveTheme } = useTheme();
@@ -59,6 +61,10 @@ const SettingsPage = () => {
     bypassLandingPage,
     setBypassLandingPage,
     hasConsented,
+    defaultStyle,
+    setDefaultStyle,
+    defaultTone,
+    setDefaultTone,
   } = useStorageContext();
 
   // Check if user needs migration: signed in, no user in Convex, and has localStorage data
@@ -253,6 +259,34 @@ const SettingsPage = () => {
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${bypassLandingPage ? 'translate-x-6' : 'translate-x-1'}`}
                 />
               </button>
+            </div>
+          </CollapsibleSection>
+          <CollapsibleSection
+            title="Default Style & Tone"
+            isOpen={!!openSections['default-style-tone']}
+            onOpenChange={() => toggleSection('default-style-tone')}
+          >
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold dark:text-white text-black mb-2">Default Style</h3>
+                <StyleSelector
+                  styles={allStyles ?? []}
+                  selectedStyle={defaultStyle ?? ""}
+                  onSelectStyle={setDefaultStyle}
+                  isHighlighting={false}
+                  setIsHighlighting={() => {}}
+                />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold dark:text-white text-black mb-2">Default Tone</h3>
+                <ToneSelector
+                  tones={allTones ?? []}
+                  selectedTone={defaultTone ?? ""}
+                  onSelectTone={setDefaultTone}
+                  isHighlighting={false}
+                  setIsHighlighting={() => {}}
+                />
+              </div>
             </div>
           </CollapsibleSection>
           <CollapsibleSection
