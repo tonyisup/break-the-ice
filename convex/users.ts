@@ -44,6 +44,8 @@ export const getSettings = query({
       hiddenStyles: v.optional(v.array(v.string())),
       hiddenTones: v.optional(v.array(v.string())),
       migratedFromLocalStorage: v.optional(v.boolean()),
+      defaultStyle: v.optional(v.string()),
+      defaultTone: v.optional(v.string()),
     })
   ),
   handler: async (ctx) => {
@@ -99,6 +101,8 @@ export const getSettings = query({
       hiddenStyles: hiddenStyles.length > 0 ? hiddenStyles : undefined,
       hiddenTones: hiddenTones.length > 0 ? hiddenTones : undefined,
       migratedFromLocalStorage: user.migratedFromLocalStorage,
+      defaultStyle: user.defaultStyle,
+      defaultTone: user.defaultTone,
     };
   },
 });
@@ -256,6 +260,36 @@ export const migrateLocalStorageSettings = mutation({
     await ctx.db.patch(user._id, {
       migratedFromLocalStorage: true,
     });
+    return null;
+  },
+});
+
+export const updateUserSettings = mutation({
+  args: {
+    defaultStyle: v.optional(v.string()),
+    defaultTone: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    await ctx.db.patch(user._id, {
+      defaultStyle: args.defaultStyle,
+      defaultTone: args.defaultTone,
+    });
+
     return null;
   },
 });

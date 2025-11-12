@@ -136,6 +136,8 @@ export default defineSchema({
     questionHistory: v.optional(v.array(v.id("questions"))),
     migratedFromLocalStorage: v.optional(v.boolean()),
     questionPreferenceEmbedding: v.optional(v.array(v.number())),
+    defaultStyle: v.optional(v.string()),
+    defaultTone: v.optional(v.string()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
