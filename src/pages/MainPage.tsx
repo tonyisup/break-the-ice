@@ -15,9 +15,10 @@ import { QuestionDisplay } from "../components/question-display";
 import { AnimatePresence } from "framer-motion";
 import { CollapsibleSection } from "../components/collapsible-section/CollapsibleSection";
 import { isColorDark } from "@/lib/utils";
-import { Icon } from "@/components/ui/icons/icon";
 import { Link } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
+import { Icon } from "@/components/ui/icons/icon";
+import { Plus } from "@/components/ui/icons/icons";
 
 export default function MainPage() {
   const { isSignedIn } = useAuth();
@@ -157,7 +158,7 @@ export default function MainPage() {
         if (nextQuestions.length > 0) {
           setCurrentQuestions(prevQuestions => {
             const existingIds = new Set(prevQuestions.map(q => q._id));
-            const filteredNewQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
+            const filteredNewQuestions = nextQuestions.filter((q: Doc<"questions">) => !existingIds.has(q._id));
             if (filteredNewQuestions.length > 0) {
               return [...prevQuestions, ...filteredNewQuestions];
             }
@@ -508,7 +509,7 @@ export default function MainPage() {
             className="fixed bottom-4 right-4 bg-blue-500 text-white p-4 rounded-full shadow-lg hover:bg-blue-600 transition-colors"
             title="Add a custom question"
           >
-            <Icon name="plus" className="w-6 h-6" />
+            <Plus className="w-6 h-6" />
           </Link>
         )}
       </main>

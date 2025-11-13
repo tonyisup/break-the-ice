@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { HouseIcon } from '@/components/ui/icons/icons';
 import { AnimatePresence } from 'framer-motion';
 import { AIQuestionGenerator } from '../../../components/ai-question-generator/ai-question-generator';
+import { Icon, IconComponent } from '@/components/ui/icons/icon';
 
 const QuestionsPage: React.FC = () => {
     return (
@@ -26,9 +27,9 @@ const QuestionsPage: React.FC = () => {
   };
 
   function AdminComponentWrapper() {
-    const isLoggedIn = useQuery(api.auth.loggedInUser);
+    
     const user = useUser();
-    if (!isLoggedIn) {
+    if (!user.isSignedIn) {
       return <div>You are not logged in</div>;
     }
     if (!user.user?.publicMetadata.isAdmin) {
@@ -93,6 +94,9 @@ function QuestionManager() {
     };
 
     const filteredQuestions = questions?.filter((q) => {
+        if (!q.text) {
+          return false;
+        }
         const lowerCaseSearchText = searchText.toLowerCase();
         const styleName = styles?.find((s) => s.id === q.style)?.name ?? "";
         const toneName = tones?.find((t) => t.id === q.tone)?.name ?? "";
@@ -172,6 +176,7 @@ function QuestionManager() {
                             onBlur={(e) => setEditingQuestion({ ...q, text: editingQuestion?.text ?? q.customText!, style: e.target.value })}
                             className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
                           >
+                            <option value="">Select a style</option>
                             {styles?.map((style) => (
                               <option key={style.id} value={style.id}>{style.name}</option>
                             ))}
@@ -183,6 +188,7 @@ function QuestionManager() {
                             onBlur={(e) => setEditingQuestion({ ...q, text: editingQuestion?.text ?? q.customText!, tone: e.target.value })}
                             className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
                           >
+                            <option value="">Select a tone</option>
                             {tones?.map((tone) => (
                               <option key={tone.id} value={tone.id}>{tone.name}</option>
                             ))}
@@ -350,7 +356,7 @@ function QuestionManager() {
                                     color: style.color,
                                   }}
                                 >
-                                  <span className="text-base">{style.icon}</span>
+                                  <IconComponent icon={style.icon as Icon} size={24} color={style.color} />
                                   {style.name}
                                 </span>
                               ) : (
@@ -367,7 +373,7 @@ function QuestionManager() {
                                     color: tone.color,
                                   }}
                                 >
-                                  <span className="text-base">{tone.icon}</span>
+                                  <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />
                                   {tone.name}
                                 </span>
                               ) : (
@@ -438,7 +444,7 @@ function QuestionManager() {
                                   color: style.color,
                                 }}
                               >
-                                <span className="text-base">{style.icon}</span>
+                                <IconComponent icon={style.icon as Icon} size={24} color={style.color} />
                                 {style.name}
                               </span>
                             );
@@ -471,7 +477,7 @@ function QuestionManager() {
                                   color: tone.color,
                                 }}
                               >
-                                <span className="text-base">{tone.icon}</span>
+                                <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />
                                 {tone.name}
                               </span>
                             );

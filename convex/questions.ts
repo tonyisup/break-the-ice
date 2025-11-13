@@ -117,7 +117,7 @@ export const getNextQuestions = query({
     _creationTime: v.number(),
     averageViewDuration: v.number(),
     lastShownAt: v.optional(v.number()),
-    text: v.string(),
+    text: v.optional(v.string()),
     totalLikes: v.number(),
     totalThumbsDown: v.optional(v.number()),
     totalShows: v.number(),
@@ -126,6 +126,9 @@ export const getNextQuestions = query({
     category: v.optional(v.string()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    authorId: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("personal"))),
   })),
   handler: async (ctx, args) => {
     const { count, style, tone, seen, hidden } = args;
@@ -302,7 +305,7 @@ export const getQuestion = query({
   returns: v.union(v.object({
     _id: v.id("questions"),
     _creationTime: v.float64(),
-    text: v.string(),
+    text: v.optional(v.string()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
     totalLikes: v.float64(),
@@ -312,6 +315,9 @@ export const getQuestion = query({
     totalThumbsDown: v.optional(v.float64()),
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
+    authorId: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("personal"))),
   }), v.null()),
   handler: async (ctx, args) => {
     const question = await ctx.db.get(args.id);
@@ -544,7 +550,11 @@ export const backfillQuestionEmbeddings = internalAction({
       return;
     }
     for (const question of questions) {
-      const embedding = await embed(question.text);
+      const text = question.text ?? question.customText ?? "";
+      if (text.trim().length === 0) {
+        continue;
+      }
+      const embedding = await embed(text);
       await ctx.runMutation(internal.questions.addEmbedding, {
         questionId: question._id,
         embedding,
@@ -620,15 +630,15 @@ export const getAllQuestionsForDuplicateDetection = internalQuery({
   args: {},
   returns: v.array(v.object({
     _id: v.id("questions"),
-    text: v.string(),
-    style: v.string(),
+    text: v.optional(v.string()),
+    style: v.string(),  
   })),
   handler: async (ctx) => {
     const questions = await ctx.db.query("questions").collect();
     //filter out any questions that are already in a duplicate detection
     const duplicateDetections = await ctx.db.query("duplicateDetections").collect();
     const duplicateQuestionIds = duplicateDetections.flatMap(d => d.questionIds);
-    const filteredQuestions = questions.filter(q => !duplicateQuestionIds.includes(q._id));
+    const filteredQuestions = questions.filter(q => q.text !== undefined && !duplicateQuestionIds.includes(q._id));
     return filteredQuestions.map(q => ({
       _id: q._id,
       text: q.text,
@@ -925,10 +935,13 @@ export const getQuestionsWithMissingEmbeddings = internalQuery({
   args: {},
   returns: v.array(v.object({
     _id: v.id("questions"),
-    text: v.string(),
+    text: v.optional(v.string()),
   })),
   handler: async (ctx) => {
-    return await ctx.db.query("questions").filter((q) => q.eq(q.field("embedding"), undefined)).collect();
+    return await ctx.db.query("questions").filter((q) => q.and(
+      q.neq(q.field("text"), undefined),
+      q.eq(q.field("embedding"), undefined)
+    )).collect();
   }
 });
 

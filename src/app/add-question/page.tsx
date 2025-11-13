@@ -3,6 +3,7 @@ import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Link } from "react-router-dom";
 import { Toaster, toast } from 'sonner';
+import { Header } from "@/components/header";
 
 export default function AddQuestionPage() {
   const [questionText, setQuestionText] = useState("");
@@ -28,6 +29,7 @@ export default function AddQuestionPage() {
   return (
     <div className="container mx-auto p-4">
       <Toaster />
+      <Header />
       <h1 className="text-2xl font-bold mb-4">Add a Custom Question</h1>
       <p className="mb-4">
         Your question will be reviewed by our team before it is added to the public pool.

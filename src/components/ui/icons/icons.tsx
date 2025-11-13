@@ -43,5 +43,6 @@ export {
   X,
   MoveRight,
   SquareArrowRight,
+  Plus,
 } from 'lucide-react';
 

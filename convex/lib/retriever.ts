@@ -9,7 +9,10 @@ if (!AI_API_KEY) {
   throw new Error("AI_API_KEY environment variable not set!");
 }
 
-export async function embed(text: string): Promise<number[]> {
+export async function embed(text: string | undefined): Promise<number[]> {
+  if (!text) {
+    return [];
+  }
   const req = {
     model: "text-embedding-ada-002",
     input: text,
