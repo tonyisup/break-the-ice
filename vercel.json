@@ -1,5 +1,12 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/question/:id",
+      "destination": "/api/question"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
-} 
+}
