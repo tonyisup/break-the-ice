@@ -92,6 +92,8 @@ export const getSimilarQuestions = query({
       .query("questions")
       .withIndex("by_style_and_tone", (q: any) => q.eq("style", style).eq("tone", tone))
       .filter((q: any) => q.and(
+        q.neq(q.field("text"), undefined),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
         ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
         ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id)),
         ...likedQuestionIds.map((id: any) => q.neq(q.field("_id"), id))
@@ -133,6 +135,10 @@ export const getNextQuestions = query({
     const filteredQuestions = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q) => q.eq("style", style).eq("tone", tone))
+      .filter((q) => q.and(
+        q.neq(q.field("text"), undefined),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined))
+      ))
       .filter((q) => q.and(... (hidden ?? []).map(hiddenId => q.neq(q.field("_id"), hiddenId))))
       .filter((q) => q.and(... (seen ?? []).map(seenId => q.neq(q.field("_id"), seenId))))
       .collect();
@@ -247,6 +253,29 @@ export const getLikedQuestions = query({
     );
 
     return questions.filter((q): q is Doc<"questions"> => q !== null);
+  },
+});
+
+export const getCustomQuestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .unique();
+    if (!user) {
+      return [];
+    }
+    const questions = await ctx.db
+      .query("questions")
+      .filter((q) => q.eq(q.field("authorId"), user._id))
+      .order("desc")
+      .collect();
+    return questions;
   },
 });
 
@@ -376,6 +405,42 @@ export const createQuestion = mutation({
   },
 });
 
+export const addCustomQuestion = mutation({
+  args: {
+    customText: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("You must be logged in to add a custom question.");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found.");
+    }
+
+    const { customText } = args;
+    if (customText.trim().length === 0) {
+      // do not save empty questions
+      return;
+    }
+    return await ctx.db.insert("questions", {
+      authorId: user._id,
+      customText,
+      status: "pending",
+      totalLikes: 0,
+      totalThumbsDown: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+  },
+});
+
 export const updateQuestion = mutation({
   args: {
     id: v.id("questions"),
@@ -383,10 +448,11 @@ export const updateQuestion = mutation({
     tags: v.optional(v.array(v.string())),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    status: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const { id, text, tags, style, tone } = args;
+    const { id, text, tags, style, tone, status } = args;
     
     // Build update object with only provided fields
     const updateData: any = { text };
@@ -401,6 +467,10 @@ export const updateQuestion = mutation({
     
     if (tone !== undefined) {
       updateData.tone = tone;
+    }
+
+    if (status !== undefined) {
+      updateData.status = status;
     }
     
     await ctx.db.patch(id, updateData);

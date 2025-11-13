@@ -16,8 +16,11 @@ import { AnimatePresence } from "framer-motion";
 import { CollapsibleSection } from "../components/collapsible-section/CollapsibleSection";
 import { isColorDark } from "@/lib/utils";
 import { Icon } from "@/components/ui/icons/icon";
+import { Link } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
 
 export default function MainPage() {
+  const { isSignedIn } = useAuth();
   const { effectiveTheme } = useTheme();
 
   const {
@@ -499,6 +502,15 @@ export default function MainPage() {
           setIsHighlighting={setIsHighlighting}
           isShuffling={isShufflingRef.current}
         />
+        {isSignedIn && (
+          <Link
+            to="/add-question"
+            className="fixed bottom-4 right-4 bg-blue-500 text-white p-4 rounded-full shadow-lg hover:bg-blue-600 transition-colors"
+            title="Add a custom question"
+          >
+            <Icon name="plus" className="w-6 h-6" />
+          </Link>
+        )}
       </main>
     </div>
   );
