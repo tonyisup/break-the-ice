@@ -9,6 +9,7 @@ import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { QuestionList } from "@/components/question-list/QuestionList";
 import { FilterControls } from "@/components/filter-controls/filter-controls";
 import { useFilter } from "@/hooks/useFilter";
+import { CustomQuestionList } from "@/components/custom-question-list/CustomQuestionList";
 
 import { cn, isColorDark } from "@/lib/utils";
 
@@ -25,14 +26,27 @@ function LikedQuestionsPageContent() {
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
   
   // Filter out invalid question IDs to prevent errors
+  const customQuestions = useQuery(api.questions.getCustomQuestions);
+
+  const pendingQuestions = useMemo(() => {
+    return customQuestions?.filter((q) => q.status === "pending") ?? [];
+  }, [customQuestions]);
+
+  const otherCustomQuestionIds = useMemo(() => {
+    return customQuestions
+      ?.filter((q) => q.status === "approved" || q.status === "personal")
+      .map((q) => q._id) ?? [];
+  }, [customQuestions]);
+
   const validLikedQuestions = useMemo(() => {
-    return likedQuestions.filter(id => {
-      // Basic validation - check if it's a string and looks like a valid ID
+    const combined = [...likedQuestions, ...otherCustomQuestionIds];
+    const uniqueIds = Array.from(new Set(combined));
+    return uniqueIds.filter(id => {
       return typeof id === 'string' && id.length > 0;
     });
-  }, [likedQuestions]);
+  }, [likedQuestions, otherCustomQuestionIds]);
   
-  const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions });
+  const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions as Id<"questions">[] });
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
 
@@ -140,6 +154,13 @@ function LikedQuestionsPageContent() {
       }}
     >
       <Header homeLinkSlot="liked" />
+
+      {pendingQuestions.length > 0 && (
+        <div className="container mx-auto p-4">
+          <h2 className="text-xl font-bold mb-4 text-white">My Submitted Questions</h2>
+          <CustomQuestionList questions={pendingQuestions} />
+        </div>
+      )}
 
       {questions && questions.length === 0 ? (
         <div className="text-center py-12">

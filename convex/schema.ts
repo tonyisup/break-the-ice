@@ -91,7 +91,7 @@ export default defineSchema({
   questions: defineTable({
     averageViewDuration: v.number(),
     lastShownAt: v.optional(v.number()),
-    text: v.string(),
+    text: v.optional(v.string()),
     totalLikes: v.number(),
     totalThumbsDown: v.optional(v.number()),
     totalShows: v.number(),
@@ -100,6 +100,15 @@ export default defineSchema({
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
     embedding: v.optional(v.array(v.number())),
+    authorId: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("personal")
+      )
+    ),
   })
     .index("by_average_view_duration", [
       "averageViewDuration",

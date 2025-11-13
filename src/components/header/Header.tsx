@@ -14,6 +14,8 @@ interface HeaderProps {
 export const Header = ({ homeLinkSlot }: HeaderProps) => {
   const { isSignedIn } = useAuth();
   const settings = useQuery(api.users.getSettings);
+  const customQuestions = useQuery(api.questions.getCustomQuestions);
+  const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
   const needsMigration = (isSignedIn && settings && !settings.migratedFromLocalStorage) || (isSignedIn && !settings);
 
   return (
@@ -23,11 +25,18 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
         {homeLinkSlot === "liked" ? (
           <HomeLink icon={<Heart className="w-5 h-5" />} text="Liked" />
         ) :
-          <Button asChild>
-            <Link to="/liked">
-              <Heart className="w-5 h-5" /><span className="hidden sm:inline"> Liked</span>
-            </Link>
-          </Button>
+          <div className="relative">
+            <Button asChild>
+              <Link to="/liked">
+                <Heart className="w-5 h-5" /><span className="hidden sm:inline"> Liked</span>
+              </Link>
+            </Button>
+            {pendingCount > 0 && (
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">
+                {pendingCount}
+              </div>
+            )}
+          </div>
         }
         {homeLinkSlot === "history" ? (
           <HomeLink icon={<History className="w-5 h-5" />} text="History" />

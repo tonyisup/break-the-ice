@@ -24,9 +24,8 @@ const DuplicateDetectionPage: React.FC = () => {
 };
 
 function AdminComponentWrapper() {
-  const isLoggedIn = useQuery(api.auth.loggedInUser);
   const user = useUser();
-  if (!isLoggedIn) {
+  if (!user.isSignedIn) {
     return <div>You are not logged in</div>;
   }
   if (!user.user?.publicMetadata.isAdmin) {

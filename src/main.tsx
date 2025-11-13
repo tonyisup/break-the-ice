@@ -21,6 +21,7 @@ import DuplicatesPage from "./app/admin/duplicates/page";
 import IndividualQuestionPage from "./app/admin/questions/[id]/page";
 import DuplicateDetectionCompletedPage from "./app/admin/duplicates/completed/page";
 import AdminPage from "./app/admin/page";
+import AddQuestionPage from "./app/add-question/page";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -37,6 +38,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/liked" element={<LikedQuestionsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/history" element={<HistoryPage />} />
+              <Route path="/add-question" element={<AddQuestionPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/admin/questions" element={<QuestionsPage />} />
               <Route path="/admin/tags" element={<TagsPage />} />

@@ -92,6 +92,8 @@ export const getSimilarQuestions = query({
       .query("questions")
       .withIndex("by_style_and_tone", (q: any) => q.eq("style", style).eq("tone", tone))
       .filter((q: any) => q.and(
+        q.neq(q.field("text"), undefined),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
         ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
         ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id)),
         ...likedQuestionIds.map((id: any) => q.neq(q.field("_id"), id))
@@ -115,7 +117,7 @@ export const getNextQuestions = query({
     _creationTime: v.number(),
     averageViewDuration: v.number(),
     lastShownAt: v.optional(v.number()),
-    text: v.string(),
+    text: v.optional(v.string()),
     totalLikes: v.number(),
     totalThumbsDown: v.optional(v.number()),
     totalShows: v.number(),
@@ -124,6 +126,9 @@ export const getNextQuestions = query({
     category: v.optional(v.string()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    authorId: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("personal"))),
   })),
   handler: async (ctx, args) => {
     const { count, style, tone, seen, hidden } = args;
@@ -133,6 +138,10 @@ export const getNextQuestions = query({
     const filteredQuestions = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q) => q.eq("style", style).eq("tone", tone))
+      .filter((q) => q.and(
+        q.neq(q.field("text"), undefined),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined))
+      ))
       .filter((q) => q.and(... (hidden ?? []).map(hiddenId => q.neq(q.field("_id"), hiddenId))))
       .filter((q) => q.and(... (seen ?? []).map(seenId => q.neq(q.field("_id"), seenId))))
       .collect();
@@ -250,6 +259,29 @@ export const getLikedQuestions = query({
   },
 });
 
+export const getCustomQuestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .unique();
+    if (!user) {
+      return [];
+    }
+    const questions = await ctx.db
+      .query("questions")
+      .filter((q) => q.eq(q.field("authorId"), user._id))
+      .order("desc")
+      .collect();
+    return questions;
+  },
+});
+
 export const getQuestionById = query({
   args: {
     id: v.string(),
@@ -273,7 +305,7 @@ export const getQuestion = query({
   returns: v.union(v.object({
     _id: v.id("questions"),
     _creationTime: v.float64(),
-    text: v.string(),
+    text: v.optional(v.string()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
     totalLikes: v.float64(),
@@ -283,6 +315,9 @@ export const getQuestion = query({
     totalThumbsDown: v.optional(v.float64()),
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
+    authorId: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("personal"))),
   }), v.null()),
   handler: async (ctx, args) => {
     const question = await ctx.db.get(args.id);
@@ -376,6 +411,42 @@ export const createQuestion = mutation({
   },
 });
 
+export const addCustomQuestion = mutation({
+  args: {
+    customText: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("You must be logged in to add a custom question.");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email!))
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found.");
+    }
+
+    const { customText } = args;
+    if (customText.trim().length === 0) {
+      // do not save empty questions
+      return;
+    }
+    return await ctx.db.insert("questions", {
+      authorId: user._id,
+      customText,
+      status: "pending",
+      totalLikes: 0,
+      totalThumbsDown: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+  },
+});
+
 export const updateQuestion = mutation({
   args: {
     id: v.id("questions"),
@@ -383,10 +454,11 @@ export const updateQuestion = mutation({
     tags: v.optional(v.array(v.string())),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    status: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const { id, text, tags, style, tone } = args;
+    const { id, text, tags, style, tone, status } = args;
     
     // Build update object with only provided fields
     const updateData: any = { text };
@@ -401,6 +473,10 @@ export const updateQuestion = mutation({
     
     if (tone !== undefined) {
       updateData.tone = tone;
+    }
+
+    if (status !== undefined) {
+      updateData.status = status;
     }
     
     await ctx.db.patch(id, updateData);
@@ -474,7 +550,11 @@ export const backfillQuestionEmbeddings = internalAction({
       return;
     }
     for (const question of questions) {
-      const embedding = await embed(question.text);
+      const text = question.text ?? question.customText ?? "";
+      if (text.trim().length === 0) {
+        continue;
+      }
+      const embedding = await embed(text);
       await ctx.runMutation(internal.questions.addEmbedding, {
         questionId: question._id,
         embedding,
@@ -550,15 +630,15 @@ export const getAllQuestionsForDuplicateDetection = internalQuery({
   args: {},
   returns: v.array(v.object({
     _id: v.id("questions"),
-    text: v.string(),
-    style: v.string(),
+    text: v.optional(v.string()),
+    style: v.string(),  
   })),
   handler: async (ctx) => {
     const questions = await ctx.db.query("questions").collect();
     //filter out any questions that are already in a duplicate detection
     const duplicateDetections = await ctx.db.query("duplicateDetections").collect();
     const duplicateQuestionIds = duplicateDetections.flatMap(d => d.questionIds);
-    const filteredQuestions = questions.filter(q => !duplicateQuestionIds.includes(q._id));
+    const filteredQuestions = questions.filter(q => q.text !== undefined && !duplicateQuestionIds.includes(q._id));
     return filteredQuestions.map(q => ({
       _id: q._id,
       text: q.text,
@@ -855,10 +935,13 @@ export const getQuestionsWithMissingEmbeddings = internalQuery({
   args: {},
   returns: v.array(v.object({
     _id: v.id("questions"),
-    text: v.string(),
+    text: v.optional(v.string()),
   })),
   handler: async (ctx) => {
-    return await ctx.db.query("questions").filter((q) => q.eq(q.field("embedding"), undefined)).collect();
+    return await ctx.db.query("questions").filter((q) => q.and(
+      q.neq(q.field("text"), undefined),
+      q.eq(q.field("embedding"), undefined)
+    )).collect();
   }
 });
 

@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { HouseIcon } from '@/components/ui/icons/icons';
 import { AnimatePresence } from 'framer-motion';
 import { AIQuestionGenerator } from '../../../components/ai-question-generator/ai-question-generator';
+import { Icon, IconComponent } from '@/components/ui/icons/icon';
 
 const QuestionsPage: React.FC = () => {
     return (
@@ -26,9 +27,9 @@ const QuestionsPage: React.FC = () => {
   };
 
   function AdminComponentWrapper() {
-    const isLoggedIn = useQuery(api.auth.loggedInUser);
+    
     const user = useUser();
-    if (!isLoggedIn) {
+    if (!user.isSignedIn) {
       return <div>You are not logged in</div>;
     }
     if (!user.user?.publicMetadata.isAdmin) {
@@ -38,7 +39,9 @@ const QuestionsPage: React.FC = () => {
   }
 
 function QuestionManager() {
-    const questions = useQuery(api.questions.getQuestions);
+    const allQuestions = useQuery(api.questions.getQuestions);
+    const pendingQuestions = allQuestions?.filter(q => q.status === 'pending');
+    const questions = allQuestions?.filter(q => q.status !== 'pending');
     const styles = useQuery(api.styles.getStyles);
     const tones = useQuery(api.tones.getTones);
     const createQuestion = useMutation(api.questions.createQuestion);
@@ -70,12 +73,13 @@ function QuestionManager() {
     };
 
     const handleUpdateQuestion = () => {
-      if (editingQuestion && editingQuestion.text.trim()) {
+      if (editingQuestion && (editingQuestion.text?.trim() || editingQuestion.customText?.trim())) {
         void updateQuestion({
           id: editingQuestion._id,
-          text: editingQuestion.text,
+          text: editingQuestion.text || editingQuestion.customText!,
           style: editingQuestion.style || undefined,
           tone: editingQuestion.tone || undefined,
+          status: editingQuestion.status === 'pending' ? 'approved' : editingQuestion.status,
         });
         setEditingQuestion(null);
       }
@@ -90,6 +94,9 @@ function QuestionManager() {
     };
 
     const filteredQuestions = questions?.filter((q) => {
+        if (!q.text) {
+          return false;
+        }
         const lowerCaseSearchText = searchText.toLowerCase();
         const styleName = styles?.find((s) => s.id === q.style)?.name ?? "";
         const toneName = tones?.find((t) => t.id === q.tone)?.name ?? "";
@@ -136,6 +143,86 @@ function QuestionManager() {
               </div>
             </div>
           </div>
+
+          {pendingQuestions && pendingQuestions.length > 0 && (
+            <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+              <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Review Pending Questions</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Submitted Question</th>
+                      <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Official Text</th>
+                      <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Style</th>
+                      <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Tone</th>
+                      <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {pendingQuestions.map((q) => (
+                      <tr key={q._id}>
+                        <td className="p-4 text-gray-900 dark:text-white">{q.customText}</td>
+                        <td className="p-4">
+                          <input
+                            type="text"
+                            defaultValue={q.customText}
+                            onBlur={(e) => setEditingQuestion({ ...q, text: e.target.value })}
+                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
+                          />
+                        </td>
+                        <td className="p-4">
+                          <select
+                            defaultValue={q.style ?? ''}
+                            onBlur={(e) => setEditingQuestion({ ...q, text: editingQuestion?.text ?? q.customText!, style: e.target.value })}
+                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
+                          >
+                            <option value="">Select a style</option>
+                            {styles?.map((style) => (
+                              <option key={style.id} value={style.id}>{style.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-4">
+                          <select
+                            defaultValue={q.tone ?? ''}
+                            onBlur={(e) => setEditingQuestion({ ...q, text: editingQuestion?.text ?? q.customText!, tone: e.target.value })}
+                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
+                          >
+                            <option value="">Select a tone</option>
+                            {tones?.map((tone) => (
+                              <option key={tone.id} value={tone.id}>{tone.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingQuestion(q);
+                                handleUpdateQuestion();
+                              }}
+                              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingQuestion({ ...q, status: 'personal' });
+                                handleUpdateQuestion();
+                              }}
+                              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-sm"
+                            >
+                              Personal
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Create New Question</h2>
@@ -269,7 +356,7 @@ function QuestionManager() {
                                     color: style.color,
                                   }}
                                 >
-                                  <span className="text-base">{style.icon}</span>
+                                  <IconComponent icon={style.icon as Icon} size={24} color={style.color} />
                                   {style.name}
                                 </span>
                               ) : (
@@ -286,7 +373,7 @@ function QuestionManager() {
                                     color: tone.color,
                                   }}
                                 >
-                                  <span className="text-base">{tone.icon}</span>
+                                  <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />
                                   {tone.name}
                                 </span>
                               ) : (
@@ -357,7 +444,7 @@ function QuestionManager() {
                                   color: style.color,
                                 }}
                               >
-                                <span className="text-base">{style.icon}</span>
+                                <IconComponent icon={style.icon as Icon} size={24} color={style.color} />
                                 {style.name}
                               </span>
                             );
@@ -390,7 +477,7 @@ function QuestionManager() {
                                   color: tone.color,
                                 }}
                               >
-                                <span className="text-base">{tone.icon}</span>
+                                <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />
                                 {tone.name}
                               </span>
                             );
