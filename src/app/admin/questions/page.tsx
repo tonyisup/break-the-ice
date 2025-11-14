@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useQuery, useMutation, Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { Doc, Id } from '../../../../convex/_generated/dataModel';
@@ -38,22 +38,23 @@ const QuestionsPage: React.FC = () => {
     return <QuestionManager />;
   }
 
-function QuestionManager() {
+  function QuestionManager() {
     const allQuestions = useQuery(api.questions.getQuestions);
-    const pendingQuestions = allQuestions?.filter(q => q.status === 'pending');
-    const questions = allQuestions?.filter(q => q.status !== 'pending');
-    const styles = useQuery(api.styles.getStyles);
-    const tones = useQuery(api.tones.getTones);
-    const createQuestion = useMutation(api.questions.createQuestion);
-    const updateQuestion = useMutation(api.questions.updateQuestion);
-    const deleteQuestion = useMutation(api.questions.deleteQuestion);
-    const { theme, setTheme } = useTheme();
-    const [newQuestionText, setNewQuestionText] = useState('');
-    const [newQuestionStyle, setNewQuestionStyle] = useState('open-ended');
-    const [newQuestionTone, setNewQuestionTone] = useState('fun-silly');
-    const [editingQuestion, setEditingQuestion] = useState<Doc<"questions"> | null>(null);
-    const [searchText, setSearchText] = useState('');
-    const [showAIGenerator, setShowAIGenerator] = useState(false);
+      const pendingQuestions = allQuestions?.filter(q => q.status === 'pending');
+      const questions = allQuestions?.filter(q => q.status !== 'pending');
+      const styles = useQuery(api.styles.getStyles);
+      const tones = useQuery(api.tones.getTones);
+      const createQuestion = useMutation(api.questions.createQuestion);
+      const updateQuestion = useMutation(api.questions.updateQuestion);
+      const deleteQuestion = useMutation(api.questions.deleteQuestion);
+      const { theme, setTheme } = useTheme();
+      const [newQuestionText, setNewQuestionText] = useState('');
+      const [newQuestionStyle, setNewQuestionStyle] = useState('open-ended');
+      const [newQuestionTone, setNewQuestionTone] = useState('fun-silly');
+      const [editingQuestion, setEditingQuestion] = useState<Doc<"questions"> | null>(null);
+      const [searchText, setSearchText] = useState('');
+      const [showAIGenerator, setShowAIGenerator] = useState(false);
+      const officialTextDraftsRef = useRef<Partial<Record<Id<"questions">, string>>>({});
 
     const toggleTheme = () => {
       setTheme(theme === 'light' ? 'dark' : 'light');
@@ -72,8 +73,13 @@ function QuestionManager() {
       }
     };
 
+    const getOfficialTextValue = (question: Doc<"questions">) => {
+      return officialTextDraftsRef.current[question._id] ?? question.customText ?? question.text ?? '';
+    };
+
     const handleUpdateQuestion = () => {
       if (editingQuestion && (editingQuestion.text?.trim() || editingQuestion.customText?.trim())) {
+        const questionId = editingQuestion._id;
         void updateQuestion({
           id: editingQuestion._id,
           text: editingQuestion.text || editingQuestion.customText!,
@@ -81,6 +87,7 @@ function QuestionManager() {
           tone: editingQuestion.tone || undefined,
           status: editingQuestion.status === 'pending' ? 'approved' : editingQuestion.status,
         });
+        delete officialTextDraftsRef.current[questionId];
         setEditingQuestion(null);
       }
     };
@@ -162,38 +169,50 @@ function QuestionManager() {
                     {pendingQuestions.map((q) => (
                       <tr key={q._id}>
                         <td className="p-4 text-gray-900 dark:text-white">{q.customText}</td>
-                        <td className="p-4">
-                          <input
-                            type="text"
-                            defaultValue={q.customText}
-                            onBlur={(e) => setEditingQuestion({ ...q, text: e.target.value })}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
-                          />
-                        </td>
-                        <td className="p-4">
-                          <select
-                            defaultValue={q.style ?? ''}
-                            onBlur={(e) => setEditingQuestion({ ...q, text: editingQuestion?.text ?? q.customText!, style: e.target.value })}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
-                          >
-                            <option value="">Select a style</option>
-                            {styles?.map((style) => (
-                              <option key={style.id} value={style.id}>{style.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-4">
-                          <select
-                            defaultValue={q.tone ?? ''}
-                            onBlur={(e) => setEditingQuestion({ ...q, text: editingQuestion?.text ?? q.customText!, tone: e.target.value })}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
-                          >
-                            <option value="">Select a tone</option>
-                            {tones?.map((tone) => (
-                              <option key={tone.id} value={tone.id}>{tone.name}</option>
-                            ))}
-                          </select>
-                        </td>
+                          <td className="p-4">
+                            <input
+                              type="text"
+                              defaultValue={q.customText}
+                              onBlur={(e) => {
+                                const value = e.target.value;
+                                officialTextDraftsRef.current[q._id] = value;
+                                setEditingQuestion({ ...q, text: value });
+                              }}
+                              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
+                            />
+                          </td>
+                          <td className="p-4">
+                            <select
+                              defaultValue={q.style ?? ''}
+                              onBlur={(e) => setEditingQuestion({
+                                ...q,
+                                text: getOfficialTextValue(q),
+                                style: e.target.value || undefined,
+                              })}
+                              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
+                            >
+                              <option value="">Select a style</option>
+                              {styles?.map((style) => (
+                                <option key={style.id} value={style.id}>{style.name}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="p-4">
+                            <select
+                              defaultValue={q.tone ?? ''}
+                              onBlur={(e) => setEditingQuestion({
+                                ...q,
+                                text: getOfficialTextValue(q),
+                                tone: e.target.value || undefined,
+                              })}
+                              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
+                            >
+                              <option value="">Select a tone</option>
+                              {tones?.map((tone) => (
+                                <option key={tone.id} value={tone.id}>{tone.name}</option>
+                              ))}
+                            </select>
+                          </td>
                         <td className="p-4">
                           <div className="flex gap-2">
                             <button
