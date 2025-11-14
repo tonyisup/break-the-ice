@@ -102,10 +102,8 @@ const QuestionsPage: React.FC = () => {
         };
       };
 
-      const handleUpdateQuestion = (questionOverride?: Doc<"questions"> | null) => {
-        const questionToUpdate = questionOverride ?? editingQuestion;
-
-        if (questionToUpdate && (questionToUpdate.text?.trim() || questionToUpdate.customText?.trim())) {
+        const handleUpdateQuestion = (questionToUpdate: Doc<"questions"> | null) => {
+          if (questionToUpdate && (questionToUpdate.text?.trim() || questionToUpdate.customText?.trim())) {
           const questionId = questionToUpdate._id;
           void updateQuestion({
             id: questionToUpdate._id,
@@ -250,20 +248,20 @@ const QuestionsPage: React.FC = () => {
                           </td>
                         <td className="p-4">
                           <div className="flex gap-2">
-                              <button
-                                onClick={() => {
-                                  const pendingDraft = buildPendingQuestionDraft(q);
-                                  handleUpdateQuestion(pendingDraft);
-                                }}
+                                <button
+                                  onClick={() => {
+                                    const pendingDraft = buildPendingQuestionDraft(q);
+                                    handleUpdateQuestion(pendingDraft);
+                                  }}
                                 className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm"
                               >
                                 Approve
                               </button>
-                              <button
-                                onClick={() => {
-                                  const personalDraft = buildPendingQuestionDraft(q, { status: 'personal' });
-                                  handleUpdateQuestion(personalDraft);
-                                }}
+                                <button
+                                  onClick={() => {
+                                    const personalDraft = buildPendingQuestionDraft(q, { status: 'personal' });
+                                    handleUpdateQuestion(personalDraft);
+                                  }}
                                 className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-sm"
                               >
                                 Personal
@@ -392,7 +390,12 @@ const QuestionsPage: React.FC = () => {
                             ))}
                           </select>
                           <div className="flex gap-2">
-                            <button onClick={handleUpdateQuestion} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Save</button>
+                              <button
+                                onClick={() => handleUpdateQuestion(editingQuestion)}
+                                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1"
+                              >
+                                Save
+                              </button>
                             <button onClick={() => setEditingQuestion(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Cancel</button>
                           </div>
                         </div>
@@ -542,7 +545,12 @@ const QuestionsPage: React.FC = () => {
                         <div className="flex gap-2">
                           {editingQuestion?._id === q._id ? (
                             <div className="flex gap-2">
-                              <button onClick={handleUpdateQuestion} className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Save</button>
+                                <button
+                                  onClick={() => handleUpdateQuestion(editingQuestion)}
+                                  className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors"
+                                >
+                                  Save
+                                </button>
                               <button onClick={() => setEditingQuestion(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Cancel</button>
                             </div>
                           ) : (
