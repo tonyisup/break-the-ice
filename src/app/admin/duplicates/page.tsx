@@ -4,7 +4,7 @@ import { api } from '../../../../convex/_generated/api';
 import { Id } from '../../../../convex/_generated/dataModel';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { Link } from 'react-router-dom';
-import { HouseIcon, ArrowLeftIcon, CheckIcon, XIcon, TrashIcon, EditIcon, SaveIcon } from 'lucide-react';
+import { HouseIcon, ArrowLeftIcon, CheckIcon, XIcon, TrashIcon, EditIcon, SaveIcon } from '@/components/ui/icons/icons';
 import { useTheme } from '@/hooks/useTheme';
 
 const DuplicateDetectionPage: React.FC = () => {

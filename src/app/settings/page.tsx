@@ -211,9 +211,7 @@ const SettingsPage = () => {
         background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradientDark[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradientDark[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
       }}
     >
-      <Header 
-        gradient={effectiveTheme === "dark" ? gradientDark : gradientLight}
-        homeLinkSlot="settings" />
+      <Header homeLinkSlot="settings" />
 
       <div className="container mx-auto p-4 md:p-8">
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
@@ -229,7 +227,7 @@ const SettingsPage = () => {
                   </p>
                 </div>
                 <Button
-                  onClick={handleMigrate}
+                  onClick={() => void handleMigrate()}
                   disabled={isMigrating}
                   className="whitespace-nowrap"
                 >

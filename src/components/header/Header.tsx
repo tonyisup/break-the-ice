@@ -1,12 +1,11 @@
 import { Link } from "react-router-dom";
 import { ThemeToggle } from "../ui/theme-toggle";
-import { Heart, History, Settings, Home } from "lucide-react";
 import { InlineSignInButton } from "../../InlineSignInButton";
 import { Button } from "../ui/button";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@clerk/clerk-react";
-
+import { Heart, History, Settings, Home } from "@/components/ui/icons/icons";
 interface HeaderProps {
   homeLinkSlot?: "liked" | "history" | "settings";
 }

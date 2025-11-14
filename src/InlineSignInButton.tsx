@@ -1,7 +1,7 @@
 import { SignInButton, UserButton } from "@clerk/clerk-react";
 import { Button } from "./components/ui/button";
-import { LogIn } from "lucide-react";
 import { Authenticated, Unauthenticated } from "convex/react";
+import { LogIn } from "./components/ui/icons/icons";
 
 export function InlineSignInButton() {
   return (

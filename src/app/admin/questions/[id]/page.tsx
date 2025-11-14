@@ -4,7 +4,7 @@ import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { HouseIcon, ArrowLeftIcon, SaveIcon, XIcon } from 'lucide-react';
+import { HouseIcon, ArrowLeftIcon, SaveIcon, XIcon } from '@/components/ui/icons/icons';
 import { useTheme } from '@/hooks/useTheme';
 
 const IndividualQuestionPage: React.FC = () => {
