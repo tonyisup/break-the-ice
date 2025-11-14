@@ -92,9 +92,9 @@ export const getSimilarQuestions = query({
         )
       )
     ).filter((q) => q !== null) as Doc<"questions">[];
-    const likedQuestionEmbeddings = likedQuestionDocs
+    const likedQuestionEmbeddings: number[][] = likedQuestionDocs
       .map((q) => q.embedding)
-      .filter((e) => e !== undefined) as number[][];
+      .filter((e) => e !== undefined);
     if (likedQuestionEmbeddings.length === 0) {
       return [];
     }
@@ -571,11 +571,19 @@ export const getAllQuestionsForDuplicateDetection = internalQuery({
     const duplicateDetections = await ctx.db.query("duplicateDetections").collect();
     const duplicateQuestionIds = duplicateDetections.flatMap(d => d.questionIds);
     const filteredQuestions = questions.filter(q => !duplicateQuestionIds.includes(q._id));
-    return filteredQuestions.map(q => ({
-      _id: q._id,
-      text: q.text,
-      style: q.style ?? "",
-    }));
+    
+    // Explicitly create new objects with only the required fields to avoid returning full documents
+    const result: Array<{_id: Id<"questions">, text: string, style: string}> = [];
+    for (const q of filteredQuestions) {
+      if (q._id && q.text) {
+        result.push({
+          _id: q._id,
+          text: q.text,
+          style: q.style ?? "",
+        });
+      }
+    }
+    return result;
   },
 });
 
