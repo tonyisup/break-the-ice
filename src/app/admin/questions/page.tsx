@@ -77,6 +77,20 @@ const QuestionsPage: React.FC = () => {
       return officialTextDraftsRef.current[question._id] ?? question.customText ?? question.text ?? '';
     };
 
+    const buildPendingQuestionDraft = (
+      question: Doc<"questions">,
+      overrides: Partial<Doc<"questions">> = {},
+    ) => {
+      const baseText = getOfficialTextValue(question);
+      const hasTextOverride = Object.prototype.hasOwnProperty.call(overrides, 'text');
+
+      return {
+        ...question,
+        text: hasTextOverride ? overrides.text ?? '' : baseText,
+        ...overrides,
+      };
+    };
+
     const handleUpdateQuestion = () => {
       if (editingQuestion && (editingQuestion.text?.trim() || editingQuestion.customText?.trim())) {
         const questionId = editingQuestion._id;
@@ -170,27 +184,29 @@ const QuestionsPage: React.FC = () => {
                       <tr key={q._id}>
                         <td className="p-4 text-gray-900 dark:text-white">{q.customText}</td>
                           <td className="p-4">
-                            <input
-                              type="text"
-                              defaultValue={q.customText}
-                              onBlur={(e) => {
-                                const value = e.target.value;
-                                officialTextDraftsRef.current[q._id] = value;
-                                setEditingQuestion({ ...q, text: value });
-                              }}
-                              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
-                            />
+                              <input
+                                type="text"
+                                defaultValue={q.customText}
+                                onBlur={(e) => {
+                                  const value = e.target.value;
+                                  officialTextDraftsRef.current[q._id] = value;
+                                  setEditingQuestion(buildPendingQuestionDraft(q, { text: value }));
+                                }}
+                                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
+                              />
                           </td>
                           <td className="p-4">
-                            <select
-                              defaultValue={q.style ?? ''}
-                              onBlur={(e) => setEditingQuestion({
-                                ...q,
-                                text: getOfficialTextValue(q),
-                                style: e.target.value || undefined,
-                              })}
-                              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
-                            >
+                              <select
+                                defaultValue={q.style ?? ''}
+                                onBlur={(e) =>
+                                  setEditingQuestion(
+                                    buildPendingQuestionDraft(q, {
+                                      style: e.target.value || undefined,
+                                    }),
+                                  )
+                                }
+                                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
+                              >
                               <option value="">Select a style</option>
                               {styles?.map((style) => (
                                 <option key={style.id} value={style.id}>{style.name}</option>
@@ -198,15 +214,17 @@ const QuestionsPage: React.FC = () => {
                             </select>
                           </td>
                           <td className="p-4">
-                            <select
-                              defaultValue={q.tone ?? ''}
-                              onBlur={(e) => setEditingQuestion({
-                                ...q,
-                                text: getOfficialTextValue(q),
-                                tone: e.target.value || undefined,
-                              })}
-                              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
-                            >
+                              <select
+                                defaultValue={q.tone ?? ''}
+                                onBlur={(e) =>
+                                  setEditingQuestion(
+                                    buildPendingQuestionDraft(q, {
+                                      tone: e.target.value || undefined,
+                                    }),
+                                  )
+                                }
+                                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
+                              >
                               <option value="">Select a tone</option>
                               {tones?.map((tone) => (
                                 <option key={tone.id} value={tone.id}>{tone.name}</option>
