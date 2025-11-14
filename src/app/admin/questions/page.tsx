@@ -55,6 +55,9 @@ const QuestionsPage: React.FC = () => {
       const [searchText, setSearchText] = useState('');
       const [showAIGenerator, setShowAIGenerator] = useState(false);
       const officialTextDraftsRef = useRef<Partial<Record<Id<"questions">, string>>>({});
+      const pendingQuestionOverridesRef = useRef<
+        Partial<Record<Id<"questions">, Partial<Doc<"questions">>>>
+      >({});
 
     const toggleTheme = () => {
       setTheme(theme === 'light' ? 'dark' : 'light');
@@ -77,34 +80,48 @@ const QuestionsPage: React.FC = () => {
       return officialTextDraftsRef.current[question._id] ?? question.customText ?? question.text ?? '';
     };
 
-    const buildPendingQuestionDraft = (
-      question: Doc<"questions">,
-      overrides: Partial<Doc<"questions">> = {},
-    ) => {
-      const baseText = getOfficialTextValue(question);
-      const hasTextOverride = Object.prototype.hasOwnProperty.call(overrides, 'text');
+      const buildPendingQuestionDraft = (
+        question: Doc<"questions">,
+        overrides: Partial<Doc<"questions">> = {},
+      ) => {
+        const existingOverrides = pendingQuestionOverridesRef.current[question._id] ?? {};
+        const mergedOverrides = {
+          ...existingOverrides,
+          ...overrides,
+        };
 
-      return {
-        ...question,
-        text: hasTextOverride ? overrides.text ?? '' : baseText,
-        ...overrides,
+        pendingQuestionOverridesRef.current[question._id] = mergedOverrides;
+
+        const baseText = getOfficialTextValue(question);
+        const hasTextOverride = Object.prototype.hasOwnProperty.call(mergedOverrides, 'text');
+
+        return {
+          ...question,
+          text: hasTextOverride ? mergedOverrides.text ?? '' : baseText,
+          ...mergedOverrides,
+        };
       };
-    };
 
-    const handleUpdateQuestion = () => {
-      if (editingQuestion && (editingQuestion.text?.trim() || editingQuestion.customText?.trim())) {
-        const questionId = editingQuestion._id;
-        void updateQuestion({
-          id: editingQuestion._id,
-          text: editingQuestion.text || editingQuestion.customText!,
-          style: editingQuestion.style || undefined,
-          tone: editingQuestion.tone || undefined,
-          status: editingQuestion.status === 'pending' ? 'approved' : editingQuestion.status,
-        });
-        delete officialTextDraftsRef.current[questionId];
-        setEditingQuestion(null);
-      }
-    };
+      const handleUpdateQuestion = (questionOverride?: Doc<"questions"> | null) => {
+        const questionToUpdate = questionOverride ?? editingQuestion;
+
+        if (questionToUpdate && (questionToUpdate.text?.trim() || questionToUpdate.customText?.trim())) {
+          const questionId = questionToUpdate._id;
+          void updateQuestion({
+            id: questionToUpdate._id,
+            text: questionToUpdate.text || questionToUpdate.customText!,
+            style: questionToUpdate.style || undefined,
+            tone: questionToUpdate.tone || undefined,
+            status: questionToUpdate.status === 'pending' ? 'approved' : questionToUpdate.status,
+          });
+          delete officialTextDraftsRef.current[questionId];
+          delete pendingQuestionOverridesRef.current[questionId];
+
+          if (editingQuestion?._id === questionId) {
+            setEditingQuestion(null);
+          }
+        }
+      };
 
     const handleDeleteQuestion = (id: Id<"questions">) => {
       void deleteQuestion({ id });
@@ -233,24 +250,24 @@ const QuestionsPage: React.FC = () => {
                           </td>
                         <td className="p-4">
                           <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setEditingQuestion(q);
-                                handleUpdateQuestion();
-                              }}
-                              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingQuestion({ ...q, status: 'personal' });
-                                handleUpdateQuestion();
-                              }}
-                              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-sm"
-                            >
-                              Personal
-                            </button>
+                              <button
+                                onClick={() => {
+                                  const pendingDraft = buildPendingQuestionDraft(q);
+                                  handleUpdateQuestion(pendingDraft);
+                                }}
+                                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const personalDraft = buildPendingQuestionDraft(q, { status: 'personal' });
+                                  handleUpdateQuestion(personalDraft);
+                                }}
+                                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-sm"
+                              >
+                                Personal
+                              </button>
                           </div>
                         </td>
                       </tr>
