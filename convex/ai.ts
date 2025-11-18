@@ -533,6 +533,11 @@ async function detectDuplicatesInBatch(questions: Array<{_id: string, text: stri
 
   const questionsWithText = questions.filter(q => q.text !== undefined);
   if (questionsWithText.length < 2) return [];
+  // Create a mapping from question ID to the actual question object
+  const idToQuestionMap = new Map<string, {_id: string, text: string, style: string}>();
+  questionsWithText.forEach(q => {
+    idToQuestionMap.set(q._id, q);
+  });
 
   const prompt = `
 You are an expert at detecting duplicate or very similar ice-breaker questions. Analyze the following questions and identify groups of questions that are essentially asking the same thing, even if worded differently.
@@ -583,25 +588,136 @@ ${JSON.stringify(questionsWithText.map(q => ({ id: q._id, text: q.text, style: q
 
     // Clean and parse the response
     let cleanedResponse = response;
-    cleanedResponse = cleanedResponse.replace(/```json\s*|\s*```/g, '');
-    const jsonMatch = cleanedResponse.match(/\[.*\]/s);
-    if (jsonMatch) {
-      cleanedResponse = jsonMatch[0];
+    
+    // Remove markdown code blocks
+    cleanedResponse = cleanedResponse.replace(/```json\s*/g, '');
+    cleanedResponse = cleanedResponse.replace(/```\s*/g, '');
+    cleanedResponse = cleanedResponse.replace(/\s*```/g, '');
+    
+    // Try to extract JSON array more carefully
+    // First, try to find a complete JSON array
+    const jsonArrayMatch = cleanedResponse.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    if (jsonArrayMatch) {
+      cleanedResponse = jsonArrayMatch[0];
+    } else {
+      // Fallback: try to find any array-like structure
+      const bracketMatch = cleanedResponse.match(/\[[\s\S]*\]/);
+      if (bracketMatch) {
+        cleanedResponse = bracketMatch[0];
+      }
     }
 
-    if (!cleanedResponse) {
+    if (!cleanedResponse || cleanedResponse.trim().length === 0) {
       // If the cleaned response is empty, there are no duplicates.
+      console.log("No JSON found in response, assuming no duplicates");
       return [];
     }
-    const duplicateGroups = JSON.parse(cleanedResponse);
-    
-    if (!Array.isArray(duplicateGroups)) {
-      throw new Error("Response is not an array");
+
+    // Validate that it looks like JSON before parsing
+    cleanedResponse = cleanedResponse.trim();
+    if (!cleanedResponse.startsWith('[') || !cleanedResponse.endsWith(']')) {
+      console.error("Response does not appear to be a JSON array:", cleanedResponse.substring(0, 200));
+      return [];
     }
 
-    return duplicateGroups;
+    // Try to parse with better error handling
+    let duplicateGroups;
+    try {
+      duplicateGroups = JSON.parse(cleanedResponse);
+    } catch (parseError) {
+      // Log the problematic response for debugging
+      console.error("JSON parse error in detectDuplicatesInBatch:", parseError);
+      console.error("Response length:", cleanedResponse.length);
+      console.error("Response preview (first 500 chars):", cleanedResponse.substring(0, 500));
+      console.error("Response preview (last 200 chars):", cleanedResponse.substring(Math.max(0, cleanedResponse.length - 200)));
+      
+      // Try to fix common issues
+      try {
+        let fixedResponse = cleanedResponse;
+        
+        // Fix unterminated fractional numbers - find patterns like "0." or "0.9" followed by invalid chars
+        // This regex finds incomplete decimal numbers and removes them or completes them
+        fixedResponse = fixedResponse.replace(/0\.(?![0-9])/g, '0');
+        fixedResponse = fixedResponse.replace(/0\.(\d*)(?![0-9\s,}\]])/g, (match, digits) => {
+          // If we have some digits but it's followed by invalid char, try to complete it
+          if (digits && digits.length > 0) {
+            return `0.${digits}`;
+          }
+          return '0';
+        });
+        
+        // Remove incomplete numbers at boundaries (e.g., ", 0." or ": 0.")
+        fixedResponse = fixedResponse.replace(/,\s*0\.\s*([,}\]])/g, '$1');
+        fixedResponse = fixedResponse.replace(/:\s*0\.\s*([,}\]])/g, ': 0$1');
+        
+        // Try to close any unclosed brackets/braces
+        const openBraces = (fixedResponse.match(/\{/g) || []).length;
+        const closeBraces = (fixedResponse.match(/\}/g) || []).length;
+        const openBrackets = (fixedResponse.match(/\[/g) || []).length;
+        const closeBrackets = (fixedResponse.match(/\]/g) || []).length;
+        
+        // Close unclosed structures
+        if (openBraces > closeBraces) {
+          fixedResponse += '}'.repeat(openBraces - closeBraces);
+        }
+        if (openBrackets > closeBrackets) {
+          fixedResponse += ']'.repeat(openBrackets - closeBrackets);
+        }
+        
+        // Try parsing again
+        duplicateGroups = JSON.parse(fixedResponse);
+        console.log("Successfully parsed after fixing");
+      } catch (fixError) {
+        console.error("Failed to fix JSON, returning empty array:", fixError);
+        return [];
+      }
+    }
+    
+    if (!Array.isArray(duplicateGroups)) {
+      console.error("Response is not an array:", typeof duplicateGroups);
+      return [];
+    }
+
+    // Map and validate the returned question IDs
+    const validatedGroups = duplicateGroups
+      .map((group: any) => {
+        if (!group.questionIds || !Array.isArray(group.questionIds)) {
+          console.warn("Invalid group structure:", group);
+          return null;
+        }
+
+        // Map string IDs from AI response back to actual Convex IDs
+        const validQuestionIds = group.questionIds
+          .map((id: any) => {
+            const idStr = String(id);
+            // Check if this ID exists in our original batch
+            if (idToQuestionMap.has(idStr)) {
+              return idStr as Id<"questions">;
+            } else {
+              console.warn(`Question ID ${idStr} not found in batch, skipping`);
+              return null;
+            }
+          })
+          .filter((id: Id<"questions"> | null): id is Id<"questions"> => id !== null);
+
+        // Only return groups with at least 2 valid question IDs
+        if (validQuestionIds.length < 2) {
+          console.warn(`Group has less than 2 valid question IDs, skipping:`, group);
+          return null;
+        }
+
+        return {
+          questionIds: validQuestionIds,
+          reason: group.reason || "No reason provided",
+          confidence: typeof group.confidence === 'number' ? group.confidence : 0.5,
+        };
+      })
+      .filter((group: any): group is {questionIds: Id<"questions">[], reason: string, confidence: number} => group !== null);
+
+    return validatedGroups;
   } catch (error) {
     console.error("Error in detectDuplicatesInBatch:", error);
+    console.error("Error details:", error instanceof Error ? error.message : String(error));
     return [];
   }
 }

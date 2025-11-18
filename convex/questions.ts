@@ -685,12 +685,20 @@ export const getAllQuestionsForDuplicateDetection = internalQuery({
     //filter out any questions that are already in a duplicate detection
     const duplicateDetections = await ctx.db.query("duplicateDetections").collect();
     const duplicateQuestionIds = duplicateDetections.flatMap(d => d.questionIds);
-    const filteredQuestions = questions.filter(q => q.text !== undefined && !duplicateQuestionIds.includes(q._id));
-    return filteredQuestions.map(q => ({
-      _id: q._id,
-      text: q.text,
-      style: q.style ?? "",
-    }));
+    const filteredQuestions = questions.filter(q => !duplicateQuestionIds.includes(q._id));
+    
+    // Explicitly create new objects with only the required fields to avoid returning full documents
+    const result: Array<{_id: Id<"questions">, text: string, style: string}> = [];
+    for (const q of filteredQuestions) {
+      if (q._id && q.text) {
+        result.push({
+          _id: q._id,
+          text: q.text,
+          style: q.style ?? "",
+        });
+      }
+    }
+    return result;
   },
 });
 

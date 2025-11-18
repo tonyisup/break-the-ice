@@ -10,16 +10,16 @@ export const sendEmail = internalAction({
     html: v.string(),
   },
   handler: async (ctx, args) => {
-    const resendApiKey = process.env.CONVEX_RESEND_API_KEY;
-    const adminEmailVar = process.env.ADMIN_EMAIL;
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const adminEmailVar = process.env.CRONS_NOTICE_EMAIL;
     const environment = process.env.ENVIRONMENT;
     if (!resendApiKey) {
       console.error("RESEND_API_KEY is not set in environment variables.");
-      return { success: false, error: "CONVEX_RESEND_API_KEY is not configured." };
+      return { success: false, error: "RESEND_API_KEY is not configured." };
     }
     if (!adminEmailVar) {
-      console.error("ADMIN_EMAIL is not set in the database.");
-      return { success: false, error: "ADMIN_EMAIL is not configured." };
+      console.error("CRONS_NOTICE_EMAIL is not set in the database.");
+      return { success: false, error: "CRONS_NOTICE_EMAIL is not configured." };
     }
 
     const adminEmail = adminEmailVar;
