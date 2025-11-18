@@ -37,6 +37,47 @@ export const discardQuestion = mutation({
   },
 });
 
+export const addPersonalQuestion = mutation({
+  args: {
+    customText: v.string(),
+    authorId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    let userId;
+    if (args.authorId) {
+      userId = args.authorId;
+    } else {
+      const identity = await ctx.auth.getUserIdentity();
+      if (!identity) {
+        throw new Error("You must be logged in to add a personal question.");
+      }
+      const user = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", identity.email))
+        .unique();
+      if (!user) {
+        throw new Error("User not found.");
+      }
+      userId = user._id;
+    }
+
+    const { customText } = args;
+    if (customText.trim().length === 0) {
+      // do not save empty questions
+      return;
+    }
+    return await ctx.db.insert("questions", {
+      authorId: userId,
+      customText,
+      status: "personal",
+      totalLikes: 0,
+      totalThumbsDown: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+  },
+});
+
 function mulberry32(a: number) {
   return function () {
     let t = a += 0x6D2B79F5;
