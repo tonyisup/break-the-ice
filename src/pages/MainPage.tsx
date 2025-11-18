@@ -19,6 +19,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { Icon } from "@/components/ui/icons/icon";
 import { Plus } from "@/components/ui/icons/icons";
+import { Button } from "@/components/ui/button";
 
 export default function MainPage() {
   const { isSignedIn } = useAuth();
@@ -506,10 +507,12 @@ export default function MainPage() {
         {isSignedIn && (
           <Link
             to="/add-question"
-            className="fixed bottom-4 right-4 bg-blue-500 text-white p-4 rounded-full shadow-lg hover:bg-blue-600 transition-colors"
+            className="fixed bottom-4 right-4"
             title="Add a custom question"
           >
-            <Plus className="w-6 h-6" />
+            <Button variant="opaque"> 
+              <Plus className="w-6 h-6" /> 
+            </Button>
           </Link>
         )}
       </main>

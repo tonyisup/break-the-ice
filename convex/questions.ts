@@ -1,9 +1,10 @@
 import { v } from "convex/values";
-import { mutation, query, QueryCtx, internalQuery, internalMutation, internalAction } from "./_generated/server";
+import { mutation, query, QueryCtx, internalQuery, internalMutation, internalAction, action } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { ensureAdmin } from "./auth";
 import { embed } from "./lib/retriever";
 import { api, internal } from "./_generated/api";
+import { createPrunedStaleQuestionsEmail } from "./lib/emails";
 
 export const discardQuestion = mutation({
   args: {
@@ -91,6 +92,7 @@ export const getSimilarQuestions = query({
     const candidates = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q: any) => q.eq("style", style).eq("tone", tone))
+      .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
       .filter((q: any) => q.and(
         q.neq(q.field("text"), undefined),
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
@@ -138,6 +140,7 @@ export const getNextQuestions = query({
     const filteredQuestions = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q) => q.eq("style", style).eq("tone", tone))
+      .filter((q) => q.eq(q.field("prunedAt"), undefined))
       .filter((q) => q.and(
         q.neq(q.field("text"), undefined),
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined))
@@ -383,7 +386,10 @@ async function getOldestQuestion(ctx: QueryCtx) {
 export const getQuestions = query({
   handler: async (ctx) => {
     await ensureAdmin(ctx);
-    return await ctx.db.query("questions").withIndex("by_creation_time").order("desc").collect();
+    return await ctx.db.query("questions")
+      .withIndex("by_creation_time").order("desc")
+      .filter((q) => q.eq(q.field("prunedAt"), undefined))
+      .collect();
   },
 });
 
@@ -955,5 +961,163 @@ export const getQuestionEmbedding = internalQuery({
       return [];
     }
     return question.embedding;
+  },
+});
+
+
+// Public query for admin to preview stale questions
+export const getStaleQuestionsPreview = query({
+  args: {
+    maxQuestions: v.optional(v.number()),
+  },
+  returns: v.array(v.object({
+    _id: v.id("questions"),
+    _creationTime: v.number(),
+    text: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    totalShows: v.number(),
+    totalLikes: v.number(),
+    totalThumbsDown: v.optional(v.number()),
+    lastShownAt: v.optional(v.number()),
+    averageViewDuration: v.number(),
+  })),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    // pull questions that are a week old 
+    // and totalShows more than zero 
+    // and totalLikes is zero
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const questions = await ctx.db.query("questions")
+      .filter((q) => q.and(
+        q.lt(q.field("_creationTime"), oneWeekAgo),
+        q.gt(q.field("totalShows"), 0),
+        q.eq(q.field("totalLikes"), 0),
+        q.eq(q.field("prunedAt"), undefined)
+      ))
+      .order("desc")
+      .take(args.maxQuestions ?? 50);
+    
+    return questions.map((q) => {
+      const { embedding: _embedding, prunedAt: _prunedAt, ...questionData } = q;
+      return questionData;
+    });
+  },
+});
+
+export const getStaleQuestions = internalQuery({
+  args: {
+    maxQuestions: v.optional(v.number()),
+  },
+  returns: v.array(v.object({
+    _id: v.id("questions")
+  })),
+  handler: async (ctx, args) => {
+    // pull questions that are a week old 
+    // and totalShows more than zoer 
+    // and totalLikes is zero
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const questions = await ctx.db.query("questions")
+      .filter((q) => q.and(
+        q.lt(q.field("_creationTime"), oneWeekAgo),
+        q.gt(q.field("totalShows"), 0),
+        q.eq(q.field("totalLikes"), 0),
+        q.eq(q.field("prunedAt"), undefined)
+      )).take(args.maxQuestions ?? 50);
+    return [...questions].map((q) => ({ _id: q._id }));
+  }
+});
+
+export const deleteQuestions = internalMutation({
+  args: {
+    ids: v.array(v.id("questions")),
+  },
+  handler: async (ctx, args) => {
+    for (const id of args.ids) {
+      await ctx.db.patch(id, {
+        prunedAt: Date.now(),
+      });
+    }
+  }
+});
+
+export const pruneStaleQuestions = internalAction({
+  args: {
+    maxQuestions: v.optional(v.number()),
+  },
+  returns: v.object({
+    questionsDeleted: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const errors: string[] = [];
+    let questionsDeleted = 0;
+    try {
+      const staleQuestions: { _id: Id<"questions"> }[] = await ctx.runQuery(internal.questions.getStaleQuestions, { maxQuestions: args.maxQuestions ?? 50 });
+      await ctx.runMutation(internal.questions.deleteQuestions, { ids: staleQuestions.map((q) => q._id) });
+      questionsDeleted = staleQuestions.length;
+    } catch (error) {
+      errors.push(`Error deleting questions: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return {
+      questionsDeleted,
+      errors,
+    };
+  },
+});
+
+export const pruneStaleQuestionsAndEmail = internalAction({
+  args: {
+    maxQuestions: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const result: { questionsDeleted: number, errors: string[] } = await ctx.runAction(internal.questions.pruneStaleQuestions, { maxQuestions: args.maxQuestions ?? 50 });
+    const { subject, html } = createPrunedStaleQuestionsEmail(result);
+    await ctx.runAction(internal.email.sendEmail, { subject, html });
+  },
+});
+
+// Query to check if current user is admin (for use in actions)
+export const checkIsAdmin = query({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx) => {
+    try {
+      await ensureAdmin(ctx);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+});
+
+// Public action for admin to manually trigger prune process
+export const pruneStaleQuestionsAdmin = action({
+  args: {
+    maxQuestions: v.optional(v.number()),
+    sendEmail: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    questionsDeleted: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    // Check admin status via query
+    const isAdmin: boolean = await ctx.runQuery(api.questions.checkIsAdmin, {});
+    if (!isAdmin) {
+      throw new Error("Not authorized: Admin access required");
+    }
+    
+    const result: { questionsDeleted: number, errors: string[] } = await ctx.runAction(internal.questions.pruneStaleQuestions, { 
+      maxQuestions: args.maxQuestions ?? 50 
+    });
+    
+    if (args.sendEmail) {
+      const { subject, html } = createPrunedStaleQuestionsEmail(result);
+      await ctx.runAction(internal.email.sendEmail, { subject, html });
+    }
+    
+    return result;
   },
 });

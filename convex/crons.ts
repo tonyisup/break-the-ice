@@ -32,5 +32,11 @@ crons.interval(
   internal.users.updateUsersWithMissingEmbeddingsAction,
 );
 
+crons.interval(
+  "prune stale questions",
+  { hours: 24 },
+  internal.questions.pruneStaleQuestionsAndEmail,
+  { maxQuestions: 50 }
+);
 
 export default crons

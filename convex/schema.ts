@@ -109,6 +109,7 @@ export default defineSchema({
         v.literal("personal")
       )
     ),
+    prunedAt: v.optional(v.number()),
   })
     .index("by_average_view_duration", [
       "averageViewDuration",

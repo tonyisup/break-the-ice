@@ -105,6 +105,10 @@ function AdminComponent() {
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Completed Duplicate Reviews</h2>
             <p className="text-gray-600 dark:text-gray-400">View history of completed duplicate reviews.</p>
           </Link>
+          <Link to="/admin/prune" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Prune Stale Questions</h2>
+            <p className="text-gray-600 dark:text-gray-400">Prune stale questions from the database.</p>
+          </Link>
         </div>
       </div>
       
