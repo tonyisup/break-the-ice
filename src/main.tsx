@@ -21,6 +21,8 @@ import DuplicatesPage from "./app/admin/duplicates/page";
 import IndividualQuestionPage from "./app/admin/questions/[id]/page";
 import DuplicateDetectionCompletedPage from "./app/admin/duplicates/completed/page";
 import AdminPage from "./app/admin/page";
+import AddQuestionPage from "./app/add-question/page";
+import PrunePage from "./app/admin/prune/page";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -32,24 +34,26 @@ createRoot(document.getElementById("root")!).render(
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Root />} />
-          <Route path="/app" element={<App />} />
-          <Route path="/question/:id" element={<QuestionPage />} />
-          <Route path="/liked" element={<LikedQuestionsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/admin/questions" element={<QuestionsPage />} />
-          <Route path="/admin/tags" element={<TagsPage />} />
-          <Route path="/admin/models" element={<ModelsPage />} />
-          <Route path="/admin/styles" element={<StylesPage />} />
-          <Route path="/admin/tones" element={<TonesPage />} />
-          <Route path="/admin/duplicates" element={<DuplicatesPage />} />
-          <Route path="/admin/duplicates/completed" element={<DuplicateDetectionCompletedPage />} />
-          <Route path="/admin/questions/:id" element={<IndividualQuestionPage />} />
-        </Routes>
-      </BrowserRouter>
-    </StorageProvider>
-    </ConvexProviderWithClerk>
-  </ClerkProvider>
+              <Route path="/app" element={<App />} />
+              <Route path="/question/:id" element={<QuestionPage />} />
+              <Route path="/liked" element={<LikedQuestionsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/add-question" element={<AddQuestionPage />} />
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin/questions" element={<QuestionsPage />} />
+              <Route path="/admin/tags" element={<TagsPage />} />
+              <Route path="/admin/models" element={<ModelsPage />} />
+              <Route path="/admin/styles" element={<StylesPage />} />
+              <Route path="/admin/tones" element={<TonesPage />} />
+              <Route path="/admin/duplicates" element={<DuplicatesPage />} />
+              <Route path="/admin/duplicates/completed" element={<DuplicateDetectionCompletedPage />} />
+              <Route path="/admin/questions/:id" element={<IndividualQuestionPage />} />
+              <Route path="/admin/prune" element={<PrunePage />} />
+            </Routes>
+          </BrowserRouter>
+        </StorageProvider>
+      </ConvexProviderWithClerk>
+    </ClerkProvider>
   </StrictMode>,
 );

@@ -15,9 +15,14 @@ import { QuestionDisplay } from "../components/question-display";
 import { AnimatePresence } from "framer-motion";
 import { CollapsibleSection } from "../components/collapsible-section/CollapsibleSection";
 import { isColorDark } from "@/lib/utils";
+import { Link } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
 import { Icon } from "@/components/ui/icons/icon";
+import { Plus } from "@/components/ui/icons/icons";
+import { Button } from "@/components/ui/button";
 
 export default function MainPage() {
+  const { isSignedIn } = useAuth();
   const { effectiveTheme } = useTheme();
 
   const {
@@ -31,6 +36,8 @@ export default function MainPage() {
     questionHistory,
     addHiddenStyle,
     addHiddenTone,
+    defaultStyle,
+    defaultTone,
   } = useStorageContext();
 
 
@@ -42,8 +49,12 @@ export default function MainPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [cardId, setCardId] = useState(() => Date.now().toString());
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedStyle, setSelectedStyle] = useState(searchParams.get("style") ?? styles?.[0]?.id ?? "");
-  const [selectedTone, setSelectedTone] = useState(searchParams.get("tone") ?? tones?.[0]?.id ?? "");
+  const [selectedStyle, setSelectedStyle] = useState(
+    searchParams.get("style") ?? defaultStyle ?? styles?.[0]?.id ?? ""
+  );
+  const [selectedTone, setSelectedTone] = useState(
+    searchParams.get("tone") ?? defaultTone ?? tones?.[0]?.id ?? ""
+  );
   const [isStyleTonesOpen, setIsStyleTonesOpen] = useState(false);
   const [isShuffling, setIsShuffling] = useState(false);
   const isShufflingRef = useRef(false);
@@ -70,13 +81,13 @@ export default function MainPage() {
   const [highlightedTone, setHighlightedTone] = useState<Doc<"tones"> | null>(null);
     
   useEffect(() => {
-    if (styles && styles.length > 0) {
-      setSelectedStyle(styles[0].id);
+    if (styles && styles.length > 0 && !selectedStyle) {
+      setSelectedStyle(defaultStyle ?? styles[0].id);
     }
-    if (tones && tones.length > 0) {
-      setSelectedTone(tones[0].id);
+    if (tones && tones.length > 0 && !selectedTone) {
+      setSelectedTone(defaultTone ?? tones[0].id);
     }
-  }, [styles, tones]);
+  }, [styles, tones, selectedStyle, selectedTone, defaultStyle, defaultTone]);
   useEffect(() => {
     try {
       // Only scroll if we have data loaded and the URL params are different from defaults
@@ -148,7 +159,7 @@ export default function MainPage() {
         if (nextQuestions.length > 0) {
           setCurrentQuestions(prevQuestions => {
             const existingIds = new Set(prevQuestions.map(q => q._id));
-            const filteredNewQuestions = nextQuestions.filter(q => !existingIds.has(q._id));
+            const filteredNewQuestions = nextQuestions.filter((q: Doc<"questions">) => !existingIds.has(q._id));
             if (filteredNewQuestions.length > 0) {
               return [...prevQuestions, ...filteredNewQuestions];
             }
@@ -428,9 +439,7 @@ export default function MainPage() {
         background: `linear-gradient(135deg, ${gradient[0]}, ${gradientTarget}, ${gradient[1]})`
       }}
     >
-      <Header
-        gradient={gradient}
-      />
+      <Header />
 
       <main className="flex-1 flex flex-col">
         <AnimatePresence mode="wait">
@@ -495,6 +504,17 @@ export default function MainPage() {
           setIsHighlighting={setIsHighlighting}
           isShuffling={isShufflingRef.current}
         />
+        {isSignedIn && (
+          <Link
+            to="/add-question"
+            className="fixed bottom-4 right-4"
+            title="Add a custom question"
+          >
+            <Button variant="opaque"> 
+              <Plus className="w-6 h-6" /> 
+            </Button>
+          </Link>
+        )}
       </main>
     </div>
   );

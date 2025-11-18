@@ -73,3 +73,24 @@ export const createPopulateMissingEmbeddingsEmail = (result: PopulateMissingEmbe
   `;
   return { subject, html };
 };
+export type PrunedStaleQuestionsResult = {
+  questionsDeleted: number;
+  errors: string[];
+};
+export const createPrunedStaleQuestionsEmail = (result: PrunedStaleQuestionsResult) => {
+  const subject = "Cron Job Summary: Prune Stale Questions";
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Pruned Stale Questions Summary</title>
+    </head>
+    <body>
+      <h1>Pruned Stale Questions Summary</h1>
+      <p><strong>Questions Deleted:</strong> ${result.questionsDeleted}</p>
+      <p><strong>Errors:</strong> ${result.errors.length > 0 ? result.errors.join("<br>") : "None"}</p>
+    </body>
+    </html>
+  `;
+  return { subject, html };
+};

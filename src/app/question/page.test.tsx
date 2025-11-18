@@ -6,6 +6,7 @@ import { useQuery } from 'convex/react';
 import { useParams, MemoryRouter } from 'react-router-dom';
 import { Id } from '../../../convex/_generated/dataModel';
 import { StorageProvider } from '../../hooks/useStorageContext';
+import React from 'react';
 
 // Mock dependencies
 vi.mock('react-router-dom', async () => {
@@ -19,6 +20,17 @@ vi.mock('react-router-dom', async () => {
 });
 
 vi.mock('convex/react');
+vi.mock('@clerk/clerk-react', async () => {
+  const actual = await vi.importActual('@clerk/clerk-react');
+  return {
+    ...actual,
+    useAuth: () => ({
+      isAuthenticated: false,
+      userId: null,
+      isSignedIn: false,
+    }),
+  };
+});
 vi.mock('../../hooks/useTheme', () => ({
   useTheme: () => ({
     theme: 'light',
@@ -44,9 +56,12 @@ const mockUseParams = useParams as any; //vi.Mock;
 const mockUseQuery = useQuery as any; //vi.Mock;
 
 describe('QuestionPage', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetAllMocks();
     mockUseParams.mockReturnValue({ id: 'test_id' });
+    // Mock useMutation for the recordAnalytics hook
+    const { useMutation } = vi.mocked(await import('convex/react'));
+    useMutation.mockReturnValue(vi.fn() as any);
   });
 
   it('renders a loading spinner while fetching the question', () => {

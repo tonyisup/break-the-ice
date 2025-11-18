@@ -252,7 +252,7 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, onToggle
       {/* Question Text */}
       <div className="py-8 flex-1 flex items-center justify-center text-center">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white leading-relaxed">
-          {question.text}
+          {question.text ?? question.customText}
         </h2>
       </div>
 

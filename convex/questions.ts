@@ -1,9 +1,10 @@
 import { v } from "convex/values";
-import { mutation, query, QueryCtx, internalQuery, internalMutation, internalAction } from "./_generated/server";
+import { mutation, query, QueryCtx, internalQuery, internalMutation, internalAction, action } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { ensureAdmin } from "./auth";
 import { embed } from "./lib/retriever";
 import { api, internal } from "./_generated/api";
+import { createPrunedStaleQuestionsEmail } from "./lib/emails";
 
 export const discardQuestion = mutation({
   args: {
@@ -33,6 +34,47 @@ export const discardQuestion = mutation({
       await Promise.all([analytics, updateQuestion]);
     }
     return null;
+  },
+});
+
+export const addPersonalQuestion = mutation({
+  args: {
+    customText: v.string(),
+    authorId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    let userId;
+    if (args.authorId) {
+      userId = args.authorId;
+    } else {
+      const identity = await ctx.auth.getUserIdentity();
+      if (!identity) {
+        throw new Error("You must be logged in to add a personal question.");
+      }
+      const user = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", identity.email))
+        .unique();
+      if (!user) {
+        throw new Error("User not found.");
+      }
+      userId = user._id;
+    }
+
+    const { customText } = args;
+    if (customText.trim().length === 0) {
+      // do not save empty questions
+      return;
+    }
+    return await ctx.db.insert("questions", {
+      authorId: userId,
+      customText,
+      status: "personal",
+      totalLikes: 0,
+      totalThumbsDown: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
   },
 });
 
@@ -77,48 +119,27 @@ export const getSimilarQuestions = query({
     if (!user) {
       return [];
     }
-    const likedQuestions = user.likedQuestions ?? [];
-    if (likedQuestions.length === 0) {
-      return [];
-    }
-    // Get the embeddings of the liked questions.
-    const likedQuestionDocs = (
-      await Promise.all(
-        likedQuestions.map((id) =>
-          ctx.db
-            .query("questions")
-            .filter((q) => q.eq(q.field("_id"), id))
-            .first()
-        )
+    const likedQuestionsDocs = await ctx.db
+      .query("userQuestions")
+      .withIndex("userIdAndStatus", (q) =>
+        q.eq("userId", user._id).eq("status", "liked")
       )
-    ).filter((q) => q !== null) as Doc<"questions">[];
-    const likedQuestionEmbeddings: number[][] = likedQuestionDocs
-      .map((q) => q.embedding)
-      .filter((e) => e !== undefined);
-    if (likedQuestionEmbeddings.length === 0) {
-      return [];
-    }
+      .collect();
 
-    // Average the embeddings to get a single vector.
-    const avgEmbedding = new Array(likedQuestionEmbeddings[0].length).fill(0);
-    for (const embedding of likedQuestionEmbeddings) {
-      for (let i = 0; i < avgEmbedding.length; i++) {
-        avgEmbedding[i] += embedding[i];
-      }
-    }
-    for (let i = 0; i < avgEmbedding.length; i++) {
-      avgEmbedding[i] /= likedQuestionEmbeddings.length;
-    }
+    const likedQuestionIds = likedQuestionsDocs.map((uq) => uq.questionId);
 
     // Use regular query with filter instead of vectorSearch since it's not available in queries
     // Get questions with the same style and tone, then filter by similarity manually
     const candidates = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q: any) => q.eq("style", style).eq("tone", tone))
+      .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
       .filter((q: any) => q.and(
+        q.neq(q.field("text"), undefined),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
         ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
         ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id)),
-        ...likedQuestions.map((id: any) => q.neq(q.field("_id"), id))
+        ...likedQuestionIds.map((id: any) => q.neq(q.field("_id"), id))
       ))
       .take(count * 4);
     
@@ -139,7 +160,7 @@ export const getNextQuestions = query({
     _creationTime: v.number(),
     averageViewDuration: v.number(),
     lastShownAt: v.optional(v.number()),
-    text: v.string(),
+    text: v.optional(v.string()),
     totalLikes: v.number(),
     totalThumbsDown: v.optional(v.number()),
     totalShows: v.number(),
@@ -148,6 +169,9 @@ export const getNextQuestions = query({
     category: v.optional(v.string()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    authorId: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("personal"))),
   })),
   handler: async (ctx, args) => {
     const { count, style, tone, seen, hidden } = args;
@@ -157,6 +181,11 @@ export const getNextQuestions = query({
     const filteredQuestions = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q) => q.eq("style", style).eq("tone", tone))
+      .filter((q) => q.eq(q.field("prunedAt"), undefined))
+      .filter((q) => q.and(
+        q.neq(q.field("text"), undefined),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined))
+      ))
       .filter((q) => q.and(... (hidden ?? []).map(hiddenId => q.neq(q.field("_id"), hiddenId))))
       .filter((q) => q.and(... (seen ?? []).map(seenId => q.neq(q.field("_id"), seenId))))
       .collect();
@@ -250,15 +279,50 @@ export const getLikedQuestions = query({
       .withIndex("email", (q) => q.eq("email", identity.email))
       .unique();
 
-    if (!user || !user.likedQuestions) {
+    if (!user) {
+      return [];
+    }
+
+    // Get liked questions from userQuestions table
+    const likedUserQuestions = await ctx.db
+      .query("userQuestions")
+      .withIndex("userIdAndStatus", (q) =>
+        q.eq("userId", user._id).eq("status", "liked")
+      )
+      .collect();
+
+    if (likedUserQuestions.length === 0) {
       return [];
     }
 
     const questions = await Promise.all(
-      user.likedQuestions.map((id) => ctx.db.get(id))
+      likedUserQuestions.map((uq) => ctx.db.get(uq.questionId))
     );
 
     return questions.filter((q): q is Doc<"questions"> => q !== null);
+  },
+});
+
+export const getCustomQuestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+    if (!user) {
+      return [];
+    }
+    const questions = await ctx.db
+      .query("questions")
+      .filter((q) => q.eq(q.field("authorId"), user._id))
+      .order("desc")
+      .collect();
+    return questions;
   },
 });
 
@@ -285,7 +349,7 @@ export const getQuestion = query({
   returns: v.union(v.object({
     _id: v.id("questions"),
     _creationTime: v.float64(),
-    text: v.string(),
+    text: v.optional(v.string()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
     totalLikes: v.float64(),
@@ -295,6 +359,9 @@ export const getQuestion = query({
     totalThumbsDown: v.optional(v.float64()),
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
+    authorId: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("personal"))),
   }), v.null()),
   handler: async (ctx, args) => {
     const question = await ctx.db.get(args.id);
@@ -360,7 +427,10 @@ async function getOldestQuestion(ctx: QueryCtx) {
 export const getQuestions = query({
   handler: async (ctx) => {
     await ensureAdmin(ctx);
-    return await ctx.db.query("questions").withIndex("by_creation_time").order("desc").collect();
+    return await ctx.db.query("questions")
+      .withIndex("by_creation_time").order("desc")
+      .filter((q) => q.eq(q.field("prunedAt"), undefined))
+      .collect();
   },
 });
 
@@ -388,6 +458,42 @@ export const createQuestion = mutation({
   },
 });
 
+export const addCustomQuestion = mutation({
+  args: {
+    customText: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("You must be logged in to add a custom question.");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found.");
+    }
+
+    const { customText } = args;
+    if (customText.trim().length === 0) {
+      // do not save empty questions
+      return;
+    }
+    return await ctx.db.insert("questions", {
+      authorId: user._id,
+      customText,
+      status: "pending",
+      totalLikes: 0,
+      totalThumbsDown: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+  },
+});
+
 export const updateQuestion = mutation({
   args: {
     id: v.id("questions"),
@@ -395,10 +501,11 @@ export const updateQuestion = mutation({
     tags: v.optional(v.array(v.string())),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    status: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const { id, text, tags, style, tone } = args;
+    const { id, text, tags, style, tone, status } = args;
     
     // Build update object with only provided fields
     const updateData: any = { text };
@@ -413,6 +520,10 @@ export const updateQuestion = mutation({
     
     if (tone !== undefined) {
       updateData.tone = tone;
+    }
+
+    if (status !== undefined) {
+      updateData.status = status;
     }
     
     await ctx.db.patch(id, updateData);
@@ -486,7 +597,11 @@ export const backfillQuestionEmbeddings = internalAction({
       return;
     }
     for (const question of questions) {
-      const embedding = await embed(question.text);
+      const text = question.text ?? question.customText ?? "";
+      if (text.trim().length === 0) {
+        continue;
+      }
+      const embedding = await embed(text);
       await ctx.runMutation(internal.questions.addEmbedding, {
         questionId: question._id,
         embedding,
@@ -562,8 +677,8 @@ export const getAllQuestionsForDuplicateDetection = internalQuery({
   args: {},
   returns: v.array(v.object({
     _id: v.id("questions"),
-    text: v.string(),
-    style: v.string(),
+    text: v.optional(v.string()),
+    style: v.string(),  
   })),
   handler: async (ctx) => {
     const questions = await ctx.db.query("questions").collect();
@@ -875,9 +990,183 @@ export const getQuestionsWithMissingEmbeddings = internalQuery({
   args: {},
   returns: v.array(v.object({
     _id: v.id("questions"),
-    text: v.string(),
+    text: v.optional(v.string()),
   })),
   handler: async (ctx) => {
-    return await ctx.db.query("questions").filter((q) => q.eq(q.field("embedding"), undefined)).collect();
+    return await ctx.db.query("questions").filter((q) => q.and(
+      q.neq(q.field("text"), undefined),
+      q.eq(q.field("embedding"), undefined)
+    )).collect();
   }
+});
+
+export const getQuestionEmbedding = internalQuery({
+  args: {
+    questionId: v.id("questions"),
+  },
+  handler: async (ctx, args) => {
+    const question = await ctx.db.query("questions").withIndex("by_id", (q) => q.eq("_id", args.questionId)).first();
+    if (!question) {
+      return [];
+    }
+    return question.embedding;
+  },
+});
+
+
+// Public query for admin to preview stale questions
+export const getStaleQuestionsPreview = query({
+  args: {
+    maxQuestions: v.optional(v.number()),
+  },
+  returns: v.array(v.object({
+    _id: v.id("questions"),
+    _creationTime: v.number(),
+    text: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    totalShows: v.number(),
+    totalLikes: v.number(),
+    totalThumbsDown: v.optional(v.number()),
+    lastShownAt: v.optional(v.number()),
+    averageViewDuration: v.number(),
+  })),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    // pull questions that are a week old 
+    // and totalShows more than zero 
+    // and totalLikes is zero
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const questions = await ctx.db.query("questions")
+      .filter((q) => q.and(
+        q.lt(q.field("_creationTime"), oneWeekAgo),
+        q.gt(q.field("totalShows"), 0),
+        q.eq(q.field("totalLikes"), 0),
+        q.eq(q.field("prunedAt"), undefined)
+      ))
+      .order("desc")
+      .take(args.maxQuestions ?? 50);
+    
+    return questions.map((q) => {
+      const { embedding: _embedding, prunedAt: _prunedAt, ...questionData } = q;
+      return questionData;
+    });
+  },
+});
+
+export const getStaleQuestions = internalQuery({
+  args: {
+    maxQuestions: v.optional(v.number()),
+  },
+  returns: v.array(v.object({
+    _id: v.id("questions")
+  })),
+  handler: async (ctx, args) => {
+    // pull questions that are a week old 
+    // and totalShows more than zoer 
+    // and totalLikes is zero
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const questions = await ctx.db.query("questions")
+      .filter((q) => q.and(
+        q.lt(q.field("_creationTime"), oneWeekAgo),
+        q.gt(q.field("totalShows"), 0),
+        q.eq(q.field("totalLikes"), 0),
+        q.eq(q.field("prunedAt"), undefined)
+      )).take(args.maxQuestions ?? 50);
+    return [...questions].map((q) => ({ _id: q._id }));
+  }
+});
+
+export const deleteQuestions = internalMutation({
+  args: {
+    ids: v.array(v.id("questions")),
+  },
+  handler: async (ctx, args) => {
+    for (const id of args.ids) {
+      await ctx.db.patch(id, {
+        prunedAt: Date.now(),
+      });
+    }
+  }
+});
+
+export const pruneStaleQuestions = internalAction({
+  args: {
+    maxQuestions: v.optional(v.number()),
+  },
+  returns: v.object({
+    questionsDeleted: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const errors: string[] = [];
+    let questionsDeleted = 0;
+    try {
+      const staleQuestions: { _id: Id<"questions"> }[] = await ctx.runQuery(internal.questions.getStaleQuestions, { maxQuestions: args.maxQuestions ?? 50 });
+      await ctx.runMutation(internal.questions.deleteQuestions, { ids: staleQuestions.map((q) => q._id) });
+      questionsDeleted = staleQuestions.length;
+    } catch (error) {
+      errors.push(`Error deleting questions: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return {
+      questionsDeleted,
+      errors,
+    };
+  },
+});
+
+export const pruneStaleQuestionsAndEmail = internalAction({
+  args: {
+    maxQuestions: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const result: { questionsDeleted: number, errors: string[] } = await ctx.runAction(internal.questions.pruneStaleQuestions, { maxQuestions: args.maxQuestions ?? 50 });
+    const { subject, html } = createPrunedStaleQuestionsEmail(result);
+    await ctx.runAction(internal.email.sendEmail, { subject, html });
+  },
+});
+
+// Query to check if current user is admin (for use in actions)
+export const checkIsAdmin = query({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx) => {
+    try {
+      await ensureAdmin(ctx);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+});
+
+// Public action for admin to manually trigger prune process
+export const pruneStaleQuestionsAdmin = action({
+  args: {
+    maxQuestions: v.optional(v.number()),
+    sendEmail: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    questionsDeleted: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    // Check admin status via query
+    const isAdmin: boolean = await ctx.runQuery(api.questions.checkIsAdmin, {});
+    if (!isAdmin) {
+      throw new Error("Not authorized: Admin access required");
+    }
+    
+    const result: { questionsDeleted: number, errors: string[] } = await ctx.runAction(internal.questions.pruneStaleQuestions, { 
+      maxQuestions: args.maxQuestions ?? 50 
+    });
+    
+    if (args.sendEmail) {
+      const { subject, html } = createPrunedStaleQuestionsEmail(result);
+      await ctx.runAction(internal.email.sendEmail, { subject, html });
+    }
+    
+    return result;
+  },
 });

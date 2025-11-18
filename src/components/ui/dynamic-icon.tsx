@@ -1,6 +1,7 @@
 import React from 'react';
-import { icons, Circle } from 'lucide-react';
+
 import { LucideProps } from 'lucide-react';
+import { iconMap, Circle } from '@/components/ui/icons/icons';
 
 interface DynamicIconProps extends LucideProps {
   name: string;
@@ -15,17 +16,16 @@ const toPascalCase = (str: string) => {
 };
 
 const DynamicIcon: React.FC<DynamicIconProps> = ({ name, ...props }) => {
-  let iconName = toPascalCase(name);
+  const iconName = toPascalCase(name);
   
-  // @ts-expect-error - We are using a dynamic name to access the icon
-  const LucideIcon = icons[iconName];
+  const IconComponent = iconMap[iconName];
 
-  if (!LucideIcon) {
+  if (!IconComponent) {
     // Fallback to a default icon
     return <Circle {...props} />;
   }
 
-  return <LucideIcon {...props} />;
+  return <IconComponent {...props} />;
 };
 
 export default DynamicIcon;

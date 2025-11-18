@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
-import { api } from '../../../convex/_generated/api';
-import { Doc, Id } from '../../../convex/_generated/dataModel';
+import { Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { useTheme } from '../../hooks/useTheme';
 import { Link } from 'react-router-dom';
@@ -26,12 +24,11 @@ const AdminPage: React.FC = () => {
 };
 
 function AdminComponentWrapper() {
-  const isLoggedIn = useQuery(api.auth.loggedInUser);
-  const user = useUser();
-  if (!isLoggedIn) {
+  const { isSignedIn, user } = useUser();
+  if (!isSignedIn) {
     return <div>You are not logged in</div>;
   }
-  if (!user.user?.publicMetadata.isAdmin) {
+  if (!user?.publicMetadata?.isAdmin) {
     return <div>You are not an admin</div>;
   }
   return <AdminComponent />;
@@ -107,6 +104,10 @@ function AdminComponent() {
           <Link to="/admin/duplicates/completed" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Completed Duplicate Reviews</h2>
             <p className="text-gray-600 dark:text-gray-400">View history of completed duplicate reviews.</p>
+          </Link>
+          <Link to="/admin/prune" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Prune Stale Questions</h2>
+            <p className="text-gray-600 dark:text-gray-400">Prune stale questions from the database.</p>
           </Link>
         </div>
       </div>

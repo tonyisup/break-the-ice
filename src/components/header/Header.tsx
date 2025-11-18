@@ -1,65 +1,85 @@
 import { Link } from "react-router-dom";
-import { cn, isColorDark } from "../../lib/utils";
 import { ThemeToggle } from "../ui/theme-toggle";
-import { Heart, History, Settings, Home } from "lucide-react";
-
+import { InlineSignInButton } from "../../InlineSignInButton";
+import { Button } from "../ui/button";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { useAuth } from "@clerk/clerk-react";
+import { Heart, History, Settings, Home } from "@/components/ui/icons/icons";
 interface HeaderProps {
   homeLinkSlot?: "liked" | "history" | "settings";
-  gradient?: string[];
 }
 
-export const Header = ({ gradient = ['#667EEA', '#764BA2'], homeLinkSlot }: HeaderProps) => {
-  
+export const Header = ({ homeLinkSlot }: HeaderProps) => {
+  const { isSignedIn } = useAuth();
+  const settings = useQuery(api.users.getSettings);
+  const customQuestions = useQuery(api.questions.getCustomQuestions);
+  const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
+  const needsMigration = (isSignedIn && settings && !settings.migratedFromLocalStorage) || (isSignedIn && !settings);
+
   return (
     <header className="p-4 flex justify-between items-center">
       <div className="flex gap-2">
-        <HomeLink theme={isColorDark(gradient[0]) ? "dark" : "light"} />
+        <HomeLink />
         {homeLinkSlot === "liked" ? (
-          <HomeLink theme={isColorDark(gradient[0]) ? "dark" : "light"} icon={<Heart className="w-5 h-5" />} text="Liked" />
+          <HomeLink icon={<Heart className="w-5 h-5" />} text="Liked" />
         ) :
-          <Link
-            to="/liked"
-            className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white flex items-center gap-2")}
-          >
-            <Heart className="w-5 h-5" /><span className="hidden sm:inline"> Liked</span>
-          </Link>
+          <div className="relative">
+            <Button asChild>
+              <Link to="/liked">
+                <Heart className="w-5 h-5" /><span className="hidden sm:inline"> Liked</span>
+              </Link>
+            </Button>
+            {pendingCount > 0 && (
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">
+                {pendingCount}
+              </div>
+            )}
+          </div>
         }
         {homeLinkSlot === "history" ? (
-          <HomeLink theme={isColorDark(gradient[0]) ? "dark" : "light"} icon={<History className="w-5 h-5" />} text="History" />
+          <HomeLink icon={<History className="w-5 h-5" />} text="History" />
         ) : (
-          <Link
-            to="/history"
-            className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white flex items-center gap-2")}
-          >
-            <History className="w-5 h-5" /><span className="hidden sm:inline"> History</span>
-          </Link>
+          <Button asChild>
+            <Link to="/history">
+              <History className="w-5 h-5" /><span className="hidden sm:inline"> History</span>
+            </Link>
+          </Button>
         )}
       </div>
       <div className="flex items-center gap-2">
         {homeLinkSlot === "settings" ? (
-          <HomeLink theme={isColorDark(gradient[1]) ? "dark" : "light"} icon={<Settings className="w-5 h-5" />} text="Settings" />
+          <HomeLink icon={<Settings className="w-5 h-5" />} text="Settings" />
         ) : (
-        <Link
-            to="/settings"
-            className={cn(isColorDark(gradient[1]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white flex items-center gap-2")}
-          >
-            <Settings className="w-5 h-5" /><span className="hidden sm:inline"> Settings</span>
-          </Link>
+          <div className="relative">
+            <Button asChild>
+              <Link to="/settings">
+                <Settings className="w-5 h-5" />
+                <span className="hidden sm:inline"> Settings</span>
+              </Link>
+            </Button>
+            {needsMigration && (
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-xs">
+                !
+              </div>
+            )}
+          </div>
         )}
-        <ThemeToggle className={cn(isColorDark(gradient[1]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")} />
+        <ThemeToggle />
+        <InlineSignInButton />
       </div>
+
     </header>
   );
 };
 
-export const HomeLink = ({ theme = "dark", icon = <Home className="w-5 h-5" />, text = "Home" }: { theme: string, icon?: React.ReactNode, text?: string }) => {
+export const HomeLink = ({ icon = <Home className="w-5 h-5" />, text = "Home" }: { icon?: React.ReactNode, text?: string }) => {
   return (
-    <Link
-      to="/app"
-      className={cn(theme === "dark" ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "p-2 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white flex items-center gap-2")}
-    >
-      {icon}
-      <span className="hidden sm:inline"> {text}</span>
-    </Link>
+    <Button asChild>
+      <Link to="/app">
+        {icon}
+        <span className="hidden sm:inline"> {text}</span>
+      </Link>
+    </Button>
   );
 };

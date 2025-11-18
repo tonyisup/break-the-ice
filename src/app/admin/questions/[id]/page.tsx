@@ -4,7 +4,7 @@ import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { HouseIcon, ArrowLeftIcon, SaveIcon, XIcon } from 'lucide-react';
+import { HouseIcon, ArrowLeftIcon, SaveIcon, XIcon } from '@/components/ui/icons/icons';
 import { useTheme } from '@/hooks/useTheme';
 
 const IndividualQuestionPage: React.FC = () => {
@@ -24,9 +24,8 @@ const IndividualQuestionPage: React.FC = () => {
 };
 
 function AdminComponentWrapper() {
-  const isLoggedIn = useQuery(api.auth.loggedInUser);
   const user = useUser();
-  if (!isLoggedIn) {
+  if (!user.isSignedIn) {
     return <div>You are not logged in</div>;
   }
   if (!user.user?.publicMetadata.isAdmin) {
@@ -59,7 +58,7 @@ function IndividualQuestionEditor() {
 
   // Initialize form when question loads
   React.useEffect(() => {
-    if (question) {
+    if (question && question.text) {
       setEditedText(question.text);
       setEditedStyle(question.style || "");
       setEditedTone(question.tone || "");
@@ -83,7 +82,7 @@ function IndividualQuestionEditor() {
   };
 
   const handleCancelEdit = () => {
-    if (question) {
+    if (question && question.text) {
       setEditedText(question.text);
       setEditedStyle(question.style || "");
       setEditedTone(question.tone || "");

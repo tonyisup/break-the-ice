@@ -20,9 +20,23 @@ crons.interval(
 );
 
 crons.interval(
-  "populate missing embeddings",
+  "populate missing question embeddings",
   { hours: 24 },
   internal.ai.populateMissingEmbeddings,
   { maxBatchSize: 50 }
 );
+
+crons.interval(
+  "update users with missing embeddings",
+  { hours: 24 },
+  internal.users.updateUsersWithMissingEmbeddingsAction,
+);
+
+crons.interval(
+  "prune stale questions",
+  { hours: 24 },
+  internal.questions.pruneStaleQuestionsAndEmail,
+  { maxQuestions: 50 }
+);
+
 export default crons

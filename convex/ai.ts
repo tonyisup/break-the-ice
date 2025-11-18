@@ -528,12 +528,14 @@ export const detectDuplicateQuestionsStreamingAI = internalAction({
 });
 
 // Helper function to detect duplicates in a batch of questions
-async function detectDuplicatesInBatch(questions: Array<{_id: string, text: string, style: string}>) {
+async function detectDuplicatesInBatch(questions: Array<{_id: string, text: string | undefined, style: string}>) {
   if (questions.length < 2) return [];
 
+  const questionsWithText = questions.filter(q => q.text !== undefined);
+  if (questionsWithText.length < 2) return [];
   // Create a mapping from question ID to the actual question object
   const idToQuestionMap = new Map<string, {_id: string, text: string, style: string}>();
-  questions.forEach(q => {
+  questionsWithText.forEach(q => {
     idToQuestionMap.set(q._id, q);
   });
 
@@ -559,7 +561,7 @@ Guidelines:
 - Consider the style of the questions. If questions are in the same style, they will have similar wording and structure and therefore should NOT be considered duplicate based on style.
 
 Questions to analyze:
-${JSON.stringify(questions.map(q => ({ id: q._id, text: q.text, style: q.style })), null, 2)}
+${JSON.stringify(questionsWithText.map(q => ({ id: q._id, text: q.text, style: q.style })), null, 2)}
 `;
 
   try {

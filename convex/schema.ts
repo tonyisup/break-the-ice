@@ -91,7 +91,7 @@ export default defineSchema({
   questions: defineTable({
     averageViewDuration: v.number(),
     lastShownAt: v.optional(v.number()),
-    text: v.string(),
+    text: v.optional(v.string()),
     totalLikes: v.number(),
     totalThumbsDown: v.optional(v.number()),
     totalShows: v.number(),
@@ -100,6 +100,16 @@ export default defineSchema({
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
     embedding: v.optional(v.array(v.number())),
+    authorId: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("personal")
+      )
+    ),
+    prunedAt: v.optional(v.number()),
   })
     .index("by_average_view_duration", [
       "averageViewDuration",
@@ -129,17 +139,46 @@ export default defineSchema({
     email: v.optional(v.string()),
     emailVerificationTime: v.optional(v.float64()),
     image: v.optional(v.string()),
-    isAnonymous: v.optional(v.boolean()),
     name: v.optional(v.string()),
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.float64()),
     isAdmin: v.optional(v.boolean()),
-    likedQuestions: v.optional(v.array(v.id("questions"))),
-    hiddenQuestions: v.optional(v.array(v.id("questions"))),
+    questionHistory: v.optional(v.array(v.id("questions"))),
     migratedFromLocalStorage: v.optional(v.boolean()),
+    questionPreferenceEmbedding: v.optional(v.array(v.number())),
+    defaultStyle: v.optional(v.string()),
+    defaultTone: v.optional(v.string()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
+  userQuestions: defineTable({
+    userId: v.id("users"),
+    questionId: v.id("questions"),
+    status: v.union(v.literal("liked"), v.literal("hidden")),
+    updatedAt: v.number(),
+  })
+    .index("userId", ["userId"])
+    .index("questionId", ["questionId"])
+    .index("status", ["status"])
+    .index("userIdAndStatus", ["userId", "status"])
+    .index("questionIdAndStatus", ["questionId", "status"])
+    .index("userIdAndQuestionId", ["userId", "questionId"]),
+  userHiddenStyles: defineTable({
+    userId: v.id("users"),
+    styleId: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("userId", ["userId"])
+    .index("styleId", ["styleId"])
+    .index("userIdAndStyleId", ["userId", "styleId"]),
+  userHiddenTones: defineTable({
+    userId: v.id("users"),
+    toneId: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("userId", ["userId"])
+    .index("toneId", ["toneId"])
+    .index("userIdAndToneId", ["userId", "toneId"]),
   duplicateDetections: defineTable({
     questionIds: v.array(v.id("questions")),
     reason: v.string(),

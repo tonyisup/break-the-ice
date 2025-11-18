@@ -9,11 +9,14 @@ import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { QuestionList } from "@/components/question-list/QuestionList";
 import { FilterControls } from "@/components/filter-controls/filter-controls";
 import { useFilter } from "@/hooks/useFilter";
+import { CustomQuestionList } from "@/components/custom-question-list/CustomQuestionList";
+import { AddPersonalQuestionDialog } from "@/components/add-personal-question-dialog/AddPersonalQuestionDialog";
 
 import { cn, isColorDark } from "@/lib/utils";
 
 import { Header } from "@/components/header";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 
 function LikedQuestionsPageContent() {
@@ -23,16 +26,34 @@ function LikedQuestionsPageContent() {
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
+  const [isAddPersonalQuestionDialogOpen, setIsAddPersonalQuestionDialogOpen] = useState(false);
   
   // Filter out invalid question IDs to prevent errors
+  const customQuestions = useQuery(api.questions.getCustomQuestions);
+
+  const pendingQuestions = useMemo(() => {
+    return customQuestions?.filter((q) => q.status === "pending") ?? [];
+  }, [customQuestions]);
+
+  const personalQuestions = useMemo(() => {
+    return customQuestions?.filter((q) => q.status === "personal") ?? [];
+  }, [customQuestions]);
+
+  const otherCustomQuestionIds = useMemo(() => {
+    return customQuestions
+      ?.filter((q) => q.status === "approved")
+      .map((q) => q._id) ?? [];
+  }, [customQuestions]);
+
   const validLikedQuestions = useMemo(() => {
-    return likedQuestions.filter(id => {
-      // Basic validation - check if it's a string and looks like a valid ID
+    const combined = [...likedQuestions, ...otherCustomQuestionIds];
+    const uniqueIds = Array.from(new Set(combined));
+    return uniqueIds.filter(id => {
       return typeof id === 'string' && id.length > 0;
     });
-  }, [likedQuestions]);
+  }, [likedQuestions, otherCustomQuestionIds]);
   
-  const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions });
+  const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions as Id<"questions">[] });
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
 
@@ -139,9 +160,44 @@ function LikedQuestionsPageContent() {
         background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradient[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradient[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
       }}
     >
-      <Header
-        homeLinkSlot="liked"
-        gradient={gradient} />
+      <Header homeLinkSlot="liked" />
+
+      <AddPersonalQuestionDialog
+        isOpen={isAddPersonalQuestionDialogOpen}
+        onOpenChange={setIsAddPersonalQuestionDialogOpen}
+      />
+
+      <div className="container mx-auto p-4">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-white">My Personal Questions</h2>
+          <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add</Button>
+        </div>
+        {personalQuestions.length > 0 && (
+          <QuestionList
+            questions={personalQuestions as Doc<"questions">[]}
+            styleColors={styleColors}
+            toneColors={toneColors}
+            styles={styles || []}
+            tones={tones || []}
+            likedQuestions={likedQuestions}
+            onToggleLike={handleRemoveFavorite}
+            onRemoveItem={handleRemoveFavorite}
+            onHideStyle={handleHideStyle}
+            onHideTone={handleHideTone}
+            onSelectedStylesChange={setSelectedStyles}
+            onSelectedTonesChange={setSelectedTones}
+            selectedStyles={selectedStyles}
+            selectedTones={selectedTones}
+          />
+        )}
+      </div>
+
+      {pendingQuestions.length > 0 && (
+        <div className="container mx-auto p-4">
+          <h2 className="text-xl font-bold mb-4 text-white">My Submitted Questions</h2>
+          <CustomQuestionList questions={pendingQuestions} />
+        </div>
+      )}
 
       {questions && questions.length === 0 ? (
         <div className="text-center py-12">
