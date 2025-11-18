@@ -10,11 +10,13 @@ import { QuestionList } from "@/components/question-list/QuestionList";
 import { FilterControls } from "@/components/filter-controls/filter-controls";
 import { useFilter } from "@/hooks/useFilter";
 import { CustomQuestionList } from "@/components/custom-question-list/CustomQuestionList";
+import { AddPersonalQuestionDialog } from "@/components/add-personal-question-dialog/AddPersonalQuestionDialog";
 
 import { cn, isColorDark } from "@/lib/utils";
 
 import { Header } from "@/components/header";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 
 function LikedQuestionsPageContent() {
@@ -24,6 +26,7 @@ function LikedQuestionsPageContent() {
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
+  const [isAddPersonalQuestionDialogOpen, setIsAddPersonalQuestionDialogOpen] = useState(false);
   
   // Filter out invalid question IDs to prevent errors
   const customQuestions = useQuery(api.questions.getCustomQuestions);
@@ -32,9 +35,13 @@ function LikedQuestionsPageContent() {
     return customQuestions?.filter((q) => q.status === "pending") ?? [];
   }, [customQuestions]);
 
+  const personalQuestions = useMemo(() => {
+    return customQuestions?.filter((q) => q.status === "personal") ?? [];
+  }, [customQuestions]);
+
   const otherCustomQuestionIds = useMemo(() => {
     return customQuestions
-      ?.filter((q) => q.status === "approved" || q.status === "personal")
+      ?.filter((q) => q.status === "approved")
       .map((q) => q._id) ?? [];
   }, [customQuestions]);
 
@@ -154,6 +161,36 @@ function LikedQuestionsPageContent() {
       }}
     >
       <Header homeLinkSlot="liked" />
+
+      <AddPersonalQuestionDialog
+        isOpen={isAddPersonalQuestionDialogOpen}
+        onOpenChange={setIsAddPersonalQuestionDialogOpen}
+      />
+
+      <div className="container mx-auto p-4">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-white">My Personal Questions</h2>
+          <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add</Button>
+        </div>
+        {personalQuestions.length > 0 && (
+          <QuestionList
+            questions={personalQuestions as Doc<"questions">[]}
+            styleColors={styleColors}
+            toneColors={toneColors}
+            styles={styles || []}
+            tones={tones || []}
+            likedQuestions={likedQuestions}
+            onToggleLike={handleRemoveFavorite}
+            onRemoveItem={handleRemoveFavorite}
+            onHideStyle={handleHideStyle}
+            onHideTone={handleHideTone}
+            onSelectedStylesChange={setSelectedStyles}
+            onSelectedTonesChange={setSelectedTones}
+            selectedStyles={selectedStyles}
+            selectedTones={selectedTones}
+          />
+        )}
+      </div>
 
       {pendingQuestions.length > 0 && (
         <div className="container mx-auto p-4">
