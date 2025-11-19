@@ -531,7 +531,7 @@ export const detectDuplicateQuestionsStreamingAI = internalAction({
 async function detectDuplicatesInBatch(questions: Array<{_id: string, text: string | undefined, style: string}>) {
   if (questions.length < 2) return [];
 
-  const questionsWithText = questions.filter(q => q.text !== undefined);
+  const questionsWithText = questions.filter((q): q is { _id: string; text: string; style: string } => q.text !== undefined);
   if (questionsWithText.length < 2) return [];
   // Create a mapping from question ID to the actual question object
   const idToQuestionMap = new Map<string, {_id: string, text: string, style: string}>();
