@@ -355,7 +355,7 @@ export const getQuestion = query({
     totalLikes: v.float64(),
     totalShows: v.float64(),
     averageViewDuration: v.float64(),
-    lastShownAt: v.optional(v.float64()),
+    lastShownAt: v.optional(v.number()),
     totalThumbsDown: v.optional(v.float64()),
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
@@ -393,12 +393,6 @@ export const saveAIQuestion = mutation({
       // Optionally, you could return the existing question or null
       return null;
     }
-
-    // Use a more robust approach to avoid concurrency issues
-    // Generate a unique timestamp with some randomness to avoid conflicts
-    const now = Date.now();
-    const randomOffset = Math.floor(Math.random() * 1000); // 0-999ms random offset
-    const lastShownAt = now - randomOffset;
     
     const id = await ctx.db.insert("questions", {
       text,
@@ -406,8 +400,7 @@ export const saveAIQuestion = mutation({
       style,
       tone,
       isAIGenerated: true,
-      // Use a negative timestamp to ensure new questions appear first
-      lastShownAt: -lastShownAt,
+      lastShownAt: 0,
       totalLikes: 0,
       totalThumbsDown: 0,
       totalShows: 0,
@@ -1023,25 +1016,34 @@ export const getStaleQuestionsPreview = query({
   returns: v.array(v.object({
     _id: v.id("questions"),
     _creationTime: v.number(),
+    averageViewDuration: v.number(),
+    lastShownAt: v.optional(v.number()),
     text: v.optional(v.string()),
-    customText: v.optional(v.string()),
-    style: v.optional(v.string()),
-    tone: v.optional(v.string()),
-    totalShows: v.number(),
     totalLikes: v.number(),
     totalThumbsDown: v.optional(v.number()),
-    lastShownAt: v.optional(v.number()),
-    averageViewDuration: v.number(),
+    totalShows: v.number(),
+    isAIGenerated: v.optional(v.boolean()),
+    tags: v.optional(v.array(v.string())),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    authorId: v.optional(v.string()),
+    customText: v.optional(v.string()),
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("personal")
+      )
+    ),
   })),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
     // pull questions that are a week old 
-    // and totalShows more than zero 
     // and totalLikes is zero
     const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const questions = await ctx.db.query("questions")
       .filter((q) => q.and(
-        q.lt(q.field("_creationTime"), oneWeekAgo),
+        q.lt(q.field("lastShownAt"), oneWeekAgo),
         q.gt(q.field("totalShows"), 0),
         q.eq(q.field("totalLikes"), 0),
         q.eq(q.field("prunedAt"), undefined)
@@ -1065,12 +1067,11 @@ export const getStaleQuestions = internalQuery({
   })),
   handler: async (ctx, args) => {
     // pull questions that are a week old 
-    // and totalShows more than zoer 
     // and totalLikes is zero
     const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const questions = await ctx.db.query("questions")
       .filter((q) => q.and(
-        q.lt(q.field("_creationTime"), oneWeekAgo),
+        q.lt(q.field("lastShownAt"), oneWeekAgo),
         q.gt(q.field("totalShows"), 0),
         q.eq(q.field("totalLikes"), 0),
         q.eq(q.field("prunedAt"), undefined)
@@ -1169,5 +1170,17 @@ export const pruneStaleQuestionsAdmin = action({
     }
     
     return result;
+  },
+});
+
+export const doNotPruneQuestion = mutation({
+  args: {
+    questionId: v.id("questions"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.questionId, {
+      totalShows: 0,
+      prunedAt: undefined,
+    });
   },
 });
