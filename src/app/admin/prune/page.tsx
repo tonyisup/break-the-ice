@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { useQuery, useAction, Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
+import { useQuery, useAction, Authenticated, Unauthenticated, AuthLoading, useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { useTheme } from '@/hooks/useTheme';
 import { Link } from 'react-router-dom';
-import { HouseIcon, ArrowLeftIcon } from '@/components/ui/icons/icons';
-import { TrashIcon, AlertCircleIcon, CheckCircleIcon } from 'lucide-react';
+import { HouseIcon, ArrowLeftIcon, CheckIcon, TrashIcon, AlertCircleIcon, CheckCircleIcon, ThumbsUpIcon } from '@/components/ui/icons/icons';
+import { Button } from '@/components/ui/button';
+import { Id } from '../../../../convex/_generated/dataModel';
 
 const PrunePage: React.FC = () => {
   return (
@@ -39,10 +40,15 @@ function PruneManager() {
   const [lastResult, setLastResult] = useState<{ questionsDeleted: number; errors: string[] } | null>(null);
 
   const pruneStaleQuestions = useAction(api.questions.pruneStaleQuestionsAdmin);
+  const doNotPruneQuestion = useMutation(api.questions.doNotPruneQuestion);
   const staleQuestions = useQuery(api.questions.getStaleQuestionsPreview, { maxQuestions });
 
   const toggleTheme = () => {
     setTheme(theme === 'light' ? 'dark' : 'light');
+  };
+
+  const handleDoNotPruneQuestion = (questionId: Id<"questions">) => {
+    void doNotPruneQuestion({ questionId });
   };
 
   const handlePrune = () => {
@@ -165,6 +171,12 @@ function PruneManager() {
                               Last shown: {new Date(question.lastShownAt).toLocaleDateString()}
                             </span>
                           )}
+                          <span>
+                            {/* add  Keep button to not prune this question */}
+                            <Button onClick={() => handleDoNotPruneQuestion(question._id)}>
+                              <ThumbsUpIcon className="w-4 h-4" />
+                            </Button>
+                          </span>
                         </div>
                       </div>
                     </div>
