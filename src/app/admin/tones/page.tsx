@@ -7,6 +7,7 @@ import { useTheme } from '../../../hooks/useTheme';
 import { Link } from 'react-router-dom';
 import { HouseIcon, iconMap } from '@/components/ui/icons/icons';
 import { ColorPicker } from '@/components/ui/color-picker';
+import { IconPicker, IconDisplay } from '@/components/ui/icon-picker';
 
 const TonesPage: React.FC = () => {
   return (
@@ -159,12 +160,9 @@ function ToneManager() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Icon</label>
-              <input
-                type="text"
+              <IconPicker
                 value={newToneIcon}
-                onChange={(e) => setNewToneIcon(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter tone icon"
+                onChange={setNewToneIcon}
               />
             </div>
             <div>
@@ -297,15 +295,13 @@ function ToneManager() {
                   </td>
                   <td className="p-4 align-top">
                     {editingTone?._id === tone._id ? (
-                      <input
-                        type="text"
+                      <IconPicker
                         value={editingTone.icon}
-                        onChange={(e) => setEditingTone({ ...editingTone, icon: e.target.value })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(icon) => setEditingTone({ ...editingTone, icon })}
                       />
                     ) : (
                       <div className="flex items-center gap-2">
-                        {iconMap[tone.icon] && React.createElement(iconMap[tone.icon], { className: "w-5 h-5 text-gray-600 dark:text-gray-400" })}
+                        <IconDisplay name={tone.icon} className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                         <span className="text-gray-600 dark:text-gray-400">{tone.icon}</span>
                       </div>
                     )}
@@ -400,15 +396,13 @@ function ToneManager() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Icon</label>
                     {editingTone?._id === tone._id ? (
-                      <input
-                        type="text"
+                      <IconPicker
                         value={editingTone.icon}
-                        onChange={(e) => setEditingTone({ ...editingTone, icon: e.target.value })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(icon) => setEditingTone({ ...editingTone, icon })}
                       />
                     ) : (
                       <div className="flex items-center gap-2">
-                        {iconMap[tone.icon] && React.createElement(iconMap[tone.icon], { className: "w-5 h-5 text-gray-600 dark:text-gray-400" })}
+                        <IconDisplay name={tone.icon} className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                         <span className="text-gray-600 dark:text-gray-400 text-sm">{tone.icon}</span>
                       </div>
                     )}
