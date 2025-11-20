@@ -986,11 +986,19 @@ export const getQuestionsWithMissingEmbeddings = internalQuery({
     text: v.optional(v.string()),
   })),
   handler: async (ctx) => {
-    const result = await ctx.db.query("questions").filter((q) => q.and(
+    const questions = await ctx.db.query("questions").filter((q) => q.and(
       q.neq(q.field("text"), undefined),
       q.eq(q.field("embedding"), undefined)
     )).collect();
-    return result.map((q) => ({ _id: q._id, text: q.text }));
+
+    const result = [];
+    for (const q of questions) {
+      result.push({
+        _id: q._id,
+        text: q.text,
+      });
+    }
+    return result;
   }
 });
 
