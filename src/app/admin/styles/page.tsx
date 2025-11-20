@@ -5,7 +5,7 @@ import { Doc, Id } from '../../../../convex/_generated/dataModel';
 import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { useTheme } from '../../../hooks/useTheme';
 import { Link } from 'react-router-dom';
-import { HouseIcon } from '@/components/ui/icons/icons';
+import { HouseIcon, iconMap } from '@/components/ui/icons/icons';
 import { ColorPicker } from '@/components/ui/color-picker';
 
 const StylesPage: React.FC = () => {
@@ -333,7 +333,10 @@ function StyleManager() {
                         className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     ) : (
-                      <span className="text-gray-600 dark:text-gray-400">{style.icon}</span>
+                      <div className="flex items-center gap-2">
+                        {iconMap[style.icon] && React.createElement(iconMap[style.icon], { className: "w-5 h-5 text-gray-600 dark:text-gray-400" })}
+                        <span className="text-gray-600 dark:text-gray-400">{style.icon}</span>
+                      </div>
                     )}
                   </td>
                   <td className="p-4 align-top">
@@ -457,7 +460,10 @@ function StyleManager() {
                         className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     ) : (
-                      <span className="text-gray-600 dark:text-gray-400 text-sm">{style.icon}</span>
+                      <div className="flex items-center gap-2">
+                        {iconMap[style.icon] && React.createElement(iconMap[style.icon], { className: "w-5 h-5 text-gray-600 dark:text-gray-400" })}
+                        <span className="text-gray-600 dark:text-gray-400 text-sm">{style.icon}</span>
+                      </div>
                     )}
                   </div>
                 </div>
