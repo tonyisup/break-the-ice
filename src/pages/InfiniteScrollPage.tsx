@@ -91,6 +91,7 @@ export default function InfiniteScrollPage() {
     setSeenIds(new Set());
     setHasMore(true);
     setIsLoading(false); // Reset loading state to allow new requests immediately
+    window.scrollTo({ top: 0, behavior: "instant" });
   }, [selectedStyle, selectedTone]);
 
   // Function to load more questions
