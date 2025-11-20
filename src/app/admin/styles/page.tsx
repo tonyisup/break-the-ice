@@ -6,6 +6,7 @@ import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { useTheme } from '../../../hooks/useTheme';
 import { Link } from 'react-router-dom';
 import { HouseIcon } from '@/components/ui/icons/icons';
+import { ColorPicker } from '@/components/ui/color-picker';
 
 const StylesPage: React.FC = () => {
   return (
@@ -157,12 +158,10 @@ function StyleManager() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Color</label>
-              <input
-                type="text"
-                value={newStyleColor}
-                onChange={(e) => setNewStyleColor(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter style color"
+              <ColorPicker
+                color={newStyleColor}
+                onChange={setNewStyleColor}
+                className="w-10"
               />
             </div>
             <div>
@@ -313,14 +312,16 @@ function StyleManager() {
                   </td>
                   <td className="p-4 align-top">
                     {editingStyle?._id === style._id ? (
-                      <input
-                        type="text"
-                        value={editingStyle.color}
-                        onChange={(e) => setEditingStyle({ ...editingStyle, color: e.target.value })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      <ColorPicker
+                        color={editingStyle.color}
+                        onChange={(color) => setEditingStyle({ ...editingStyle, color })}
+                        className="w-10"
                       />
                     ) : (
-                      <span className="text-gray-600 dark:text-gray-400">{style.color}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded border border-gray-200 dark:border-gray-700" style={{ backgroundColor: style.color }}></div>
+                        <span className="text-gray-600 dark:text-gray-400">{style.color}</span>
+                      </div>
                     )}
                   </td>
                   <td className="p-4 align-top">
@@ -434,14 +435,16 @@ function StyleManager() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Color</label>
                     {editingStyle?._id === style._id ? (
-                      <input
-                        type="text"
-                        value={editingStyle.color}
-                        onChange={(e) => setEditingStyle({ ...editingStyle, color: e.target.value })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      <ColorPicker
+                        color={editingStyle.color}
+                        onChange={(color) => setEditingStyle({ ...editingStyle, color })}
+                        className="w-10"
                       />
                     ) : (
-                      <span className="text-gray-600 dark:text-gray-400 text-sm">{style.color}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded border border-gray-200 dark:border-gray-700" style={{ backgroundColor: style.color }}></div>
+                        <span className="text-gray-600 dark:text-gray-400 text-sm">{style.color}</span>
+                      </div>
                     )}
                   </div>
                   <div>
