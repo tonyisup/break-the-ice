@@ -9,6 +9,7 @@ process.env.OPENAI_API_KEY = "test-key";
 
 // 1. Mock the OpenAI module
 const mockCreate = vi.fn();
+const mockEmbeddingsCreate = vi.fn();
 vi.mock('openai', () => {
     const mockOpenAI = {
         chat: {
@@ -16,6 +17,9 @@ vi.mock('openai', () => {
                 create: mockCreate,
             },
         },
+        embeddings: {
+            create: mockEmbeddingsCreate,
+        }
     };
     // Need to mock both the default export and the named export 'OpenAI'
     const MockedOpenAI = vi.fn(() => mockOpenAI);
@@ -24,6 +28,10 @@ vi.mock('openai', () => {
 
 beforeEach(() => {
   mockCreate.mockClear();
+  mockEmbeddingsCreate.mockClear();
+  mockEmbeddingsCreate.mockResolvedValue({
+    data: [{ embedding: new Array(384).fill(0.1) }],
+  });
 });
 
 

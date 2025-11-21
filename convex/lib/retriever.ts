@@ -3,38 +3,41 @@
 import { action, internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
+import OpenAI from "openai";
 
-const AI_API_KEY = process.env.OPENAI_API_KEY;
-if (!AI_API_KEY) {
-  throw new Error("AI_API_KEY environment variable not set!");
+const OPEN_ROUTER_API_KEY = process.env.OPEN_ROUTER_API_KEY;
+if (!OPEN_ROUTER_API_KEY) {
+  throw new Error("OPEN_ROUTER_API_KEY environment variable not set!");
 }
+
+const openai = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: OPEN_ROUTER_API_KEY,
+  timeout: 30000,
+  defaultHeaders: {
+    'HTTP-Referer': 'https://breaktheiceberg.com',
+    'X-Title': 'Break the ice(berg)',
+  },
+});
 
 export async function embed(text: string | undefined): Promise<number[]> {
   if (!text) {
     return [];
   }
-  const req = {
-    model: "text-embedding-ada-002",
-    input: text,
-  };
 
-  const resp = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${AI_API_KEY}`,
-    },
-    body: JSON.stringify(req),
-  });
+  try {
+    const response = await openai.embeddings.create({
+      model: "sentence-transformers/all-minilm-l6-v2",
+      input: text,
+    });
 
-  if (!resp.ok) {
-    const msg = await resp.text();
-    throw new Error(`OpenAI API error: ${msg}`);
+    const vector = response.data[0].embedding;
+    // console.log(`Embedded text "${text}"`);
+    return vector;
+  } catch (error) {
+    console.error(`Embedding error for text "${text}":`, error);
+    throw error;
   }
-  const json = await resp.json();
-  const vector = json["data"][0]["embedding"];
-  console.log(`Embedded text "${text}"`);
-  return vector;
 }
 
 export const embedQuestion = internalAction({
@@ -48,7 +51,11 @@ export const embedQuestion = internalAction({
     if (!question) {
       return;
     }
-    const vector = await embed(question.text);
+    // Only embed if there is text
+    const textToEmbed = question.text ?? question.customText;
+    if (!textToEmbed) return;
+
+    const vector = await embed(textToEmbed);
     await ctx.runMutation(internal.questions.addEmbedding, {
       questionId: args.questionId,
       embedding: vector,

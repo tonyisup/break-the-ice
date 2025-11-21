@@ -19,7 +19,8 @@ export const getTone = query({
     if (!tone) {
       throw new Error("Tone not found");
     }
-    return tone;
+    const { embedding, ...rest } = tone;
+    return rest;
   },
 });
 // Get all available tones
@@ -37,7 +38,8 @@ export const getTones = query({
     order: v.optional(v.float64()),
   })),
   handler: async (ctx) => {
-    return await ctx.db.query("tones").withIndex("by_order").order("asc").collect();
+    const tones = await ctx.db.query("tones").withIndex("by_order").order("asc").collect();
+    return tones.map(({ embedding, ...rest }) => rest);
   },
 });
 
@@ -57,11 +59,12 @@ export const getFilteredTones = query({
     order: v.optional(v.float64()),
   })),
   handler: async (ctx, args) => {
-    return await ctx.db.query("tones")
+    const tones = await ctx.db.query("tones")
     .withIndex("by_order")
     .order("asc")
     .filter((q) => q.and(... args.excluded.map(toneId => q.neq(q.field("id"), toneId))))
     .collect();
+    return tones.map(({ embedding, ...rest }) => rest);
   },
 });
 

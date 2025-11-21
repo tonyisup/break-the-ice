@@ -362,6 +362,7 @@ export const getQuestion = query({
     authorId: v.optional(v.string()),
     customText: v.optional(v.string()),
     status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("personal"))),
+    prunedAt: v.optional(v.number()),
   }), v.null()),
   handler: async (ctx, args) => {
     const question = await ctx.db.get(args.id);
@@ -1169,6 +1170,55 @@ export const pruneStaleQuestionsAdmin = action({
     }
     
     return result;
+  },
+});
+
+export const getNearestQuestionsByEmbedding = action({
+  args: {
+    embedding: v.array(v.number()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    count: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { embedding, style, tone, count } = args;
+    const limit = count ?? 10;
+
+    // Construct filter expression
+    const results = await ctx.vectorSearch("questions", "by_embedding", {
+      vector: embedding,
+      limit,
+      filter: (q) => {
+         const filters = [];
+         if (style) filters.push(q.eq("style", style));
+         if (tone) filters.push(q.eq("tone", tone));
+
+         // Standard filters for validity
+         // Note: vector search filters are more limited.
+         // Checking for undefined fields might be tricky.
+         // q.eq("field", undefined) usually works if the field is indexed?
+         // filterFields in schema are "style" and "tone".
+         // You can only filter on fields defined in `filterFields`!
+         // My schema update only added `style` and `tone`.
+         // So I CANNOT filter by `prunedAt` or `status` or `text` in vectorSearch!
+
+         return q.and(...filters);
+      }
+    });
+
+    // Fetch the actual documents using a query
+    // We must filter out pruned/hidden questions here since we couldn't in vectorSearch
+    const ids = results.map(r => r._id);
+    if (ids.length === 0) return [];
+
+    const questions = await ctx.runQuery(api.questions.getQuestionsByIds, { ids });
+
+    // Apply post-filtering for status/pruned
+    return questions.filter(q =>
+        q.prunedAt === undefined &&
+        q.text !== undefined &&
+        (q.status === "approved" || q.status === undefined)
+    );
   },
 });
 

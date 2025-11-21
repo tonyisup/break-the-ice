@@ -21,7 +21,8 @@ export const getStyle = query({
     if (!style) {
       throw new Error("Style not found");
     }
-    return style;
+    const { embedding, ...rest } = style;
+    return rest;
   },
 });
 
@@ -42,7 +43,8 @@ export const getStyles = query({
     order: v.optional(v.float64()),
   })),
   handler: async (ctx) => {
-    return await ctx.db.query("styles").withIndex("by_order").order("asc").collect();
+    const styles = await ctx.db.query("styles").withIndex("by_order").order("asc").collect();
+    return styles.map(({ embedding, ...rest }) => rest);
   },
 });
 
@@ -65,11 +67,12 @@ export const getFilteredStyles = query({
     order: v.optional(v.float64()),
   })),
   handler: async (ctx, args) => {
-      return await ctx.db.query("styles")
+      const styles = await ctx.db.query("styles")
       .withIndex("by_order")
       .order("asc")
       .filter((q) => q.and(... args.excluded.map(styleId => q.neq(q.field("id"), styleId))))
-      .collect();    
+      .collect();
+      return styles.map(({ embedding, ...rest }) => rest);
   },
 });
 

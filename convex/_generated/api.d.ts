@@ -21,6 +21,8 @@ import type * as email from "../email.js";
 import type * as http from "../http.js";
 import type * as lib_emails from "../lib/emails.js";
 import type * as lib_retriever from "../lib/retriever.js";
+import type * as migrations from "../migrations.js";
+import type * as migrations_db from "../migrations_db.js";
 import type * as models from "../models.js";
 import type * as questions from "../questions.js";
 import type * as router from "../router.js";
@@ -46,6 +48,8 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/emails": typeof lib_emails;
   "lib/retriever": typeof lib_retriever;
+  migrations: typeof migrations;
+  migrations_db: typeof migrations_db;
   models: typeof models;
   questions: typeof questions;
   router: typeof router;
