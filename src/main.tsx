@@ -23,6 +23,7 @@ import DuplicateDetectionCompletedPage from "./app/admin/duplicates/completed/pa
 import AdminPage from "./app/admin/page";
 import AddQuestionPage from "./app/add-question/page";
 import PrunePage from "./app/admin/prune/page";
+import InfiniteScrollPage from "./pages/InfiniteScrollPage";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -35,6 +36,7 @@ createRoot(document.getElementById("root")!).render(
             <Routes>
               <Route path="/" element={<Root />} />
               <Route path="/app" element={<App />} />
+              <Route path="/infinite" element={<InfiniteScrollPage />} />
               <Route path="/question/:id" element={<QuestionPage />} />
               <Route path="/liked" element={<LikedQuestionsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
