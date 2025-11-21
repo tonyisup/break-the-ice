@@ -1180,45 +1180,40 @@ export const getNearestQuestionsByEmbedding = action({
     tone: v.optional(v.string()),
     count: v.optional(v.number()),
   },
+  returns: v.array(v.any()),
   handler: async (ctx, args) => {
     const { embedding, style, tone, count } = args;
-    const limit = count ?? 10;
+    const requestedCount = count ?? 10;
+    const limit = requestedCount * 10; // Fetch more candidates for post-filtering
 
-    // Construct filter expression
+    // Use simple vector search without complex filters
+    // We rely on post-filtering for strict style/tone/status matching
     const results = await ctx.vectorSearch("questions", "by_embedding", {
       vector: embedding,
       limit,
-      filter: (q) => {
-         const filters = [];
-         if (style) filters.push(q.eq("style", style));
-         if (tone) filters.push(q.eq("tone", tone));
-
-         // Standard filters for validity
-         // Note: vector search filters are more limited.
-         // Checking for undefined fields might be tricky.
-         // q.eq("field", undefined) usually works if the field is indexed?
-         // filterFields in schema are "style" and "tone".
-         // You can only filter on fields defined in `filterFields`!
-         // My schema update only added `style` and `tone`.
-         // So I CANNOT filter by `prunedAt` or `status` or `text` in vectorSearch!
-
-         return q.and(...filters);
-      }
     });
 
-    // Fetch the actual documents using a query
-    // We must filter out pruned/hidden questions here since we couldn't in vectorSearch
-    const ids = results.map(r => r._id);
+    const ids = results.map((r) => r._id);
     if (ids.length === 0) return [];
 
-    const questions = await ctx.runQuery(api.questions.getQuestionsByIds, { ids });
+    const questions = (await ctx.runQuery(api.questions.getQuestionsByIds, { ids })) as any[];
 
-    // Apply post-filtering for status/pruned
-    return questions.filter(q =>
-        q.prunedAt === undefined &&
-        q.text !== undefined &&
-        (q.status === "approved" || q.status === undefined)
-    );
+    // Apply strict filtering
+    const filtered = questions.filter((q) => {
+        // Basic validity
+        if (q.prunedAt !== undefined) return false;
+        if (q.text === undefined) return false;
+        if (q.status !== "approved" && q.status !== undefined) return false;
+
+        // Style/Tone filtering
+        if (style && q.style !== style) return false;
+        if (tone && q.tone !== tone) return false;
+
+        return true;
+    });
+
+    // Return only the requested count
+    return filtered.slice(0, requestedCount);
   },
 });
 

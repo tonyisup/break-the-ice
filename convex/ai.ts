@@ -65,7 +65,7 @@ export const generateAIQuestion = action({
             const likedQuestions = await ctx.runQuery(api.questions.getLikedQuestions, {});
             if (likedQuestions.length > 0) {
                  // take 3 recent
-                 const recent = likedQuestions.slice(0, 3).map(q => q.text).join("; ");
+                 const recent = likedQuestions.slice(0, 3).map((q: any) => q.text).join("; ");
                  userContext = "User likes questions similar to: " + recent;
             }
         } catch (e) {
