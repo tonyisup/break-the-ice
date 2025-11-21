@@ -362,6 +362,7 @@ export const getQuestion = query({
     authorId: v.optional(v.string()),
     customText: v.optional(v.string()),
     status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("personal"))),
+    prunedAt: v.optional(v.number()),
   }), v.null()),
   handler: async (ctx, args) => {
     const question = await ctx.db.get(args.id);
@@ -1169,6 +1170,50 @@ export const pruneStaleQuestionsAdmin = action({
     }
     
     return result;
+  },
+});
+
+export const getNearestQuestionsByEmbedding = action({
+  args: {
+    embedding: v.array(v.number()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    count: v.optional(v.number()),
+  },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    const { embedding, style, tone, count } = args;
+    const requestedCount = count ?? 10;
+    const limit = requestedCount * 10; // Fetch more candidates for post-filtering
+
+    // Use simple vector search without complex filters
+    // We rely on post-filtering for strict style/tone/status matching
+    const results = await ctx.vectorSearch("questions", "by_embedding", {
+      vector: embedding,
+      limit,
+    });
+
+    const ids = results.map((r) => r._id);
+    if (ids.length === 0) return [];
+
+    const questions = (await ctx.runQuery(api.questions.getQuestionsByIds, { ids })) as any[];
+
+    // Apply strict filtering
+    const filtered = questions.filter((q) => {
+        // Basic validity
+        if (q.prunedAt !== undefined) return false;
+        if (q.text === undefined) return false;
+        if (q.status !== "approved" && q.status !== undefined) return false;
+
+        // Style/Tone filtering
+        if (style && q.style !== style) return false;
+        if (tone && q.tone !== tone) return false;
+
+        return true;
+    });
+
+    // Return only the requested count
+    return filtered.slice(0, requestedCount);
   },
 });
 
