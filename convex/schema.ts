@@ -74,6 +74,7 @@ export default defineSchema({
     promptGuidanceForAI: v.optional(v.string()),
     example: v.optional(v.string()),
     order: v.optional(v.number()),
+    embedding: v.optional(v.array(v.number())),
   }).index("name", ["name"])
     .index("id", ["id"])
     .index("by_order", ["order"]),
@@ -85,6 +86,7 @@ export default defineSchema({
     icon: v.string(),
     promptGuidanceForAI: v.string(),
     order: v.optional(v.number()),
+    embedding: v.optional(v.array(v.number())),
   }).index("name", ["name"])
     .index("id", ["id"])
     .index("by_order", ["order"]),
@@ -127,7 +129,8 @@ export default defineSchema({
     .index("by_text", ["text"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
-      dimensions: 1536,
+      dimensions: 384,
+      filterFields: ["style", "tone"],
     }),
   tags: defineTable({
     name: v.string(),

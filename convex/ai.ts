@@ -5,6 +5,7 @@ import { action, internalAction } from "./_generated/server";
 import OpenAI from "openai";
 import { api, internal } from "./_generated/api";
 import { Doc, Id } from "./_generated/dataModel";
+import { embed } from "./lib/retriever";
 
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
@@ -50,15 +51,63 @@ export const generateAIQuestion = action({
 
     try {
 
-    const existingQuestionTexts =
-      _existingQuestionsForTesting ??
-      (
-        await ctx.runQuery(api.questions.getSimilarQuestions, {
-          count: 5,
-          style: styleId,
-          tone: toneId,
-        })
-      ).map((q: any) => q.text);
+    let examples: string[] = [];
+    if (_existingQuestionsForTesting) {
+      examples = _existingQuestionsForTesting;
+    } else {
+        // 1. Get Style and Tone details
+        const styleDoc = styleId ? await ctx.runQuery(api.styles.getStyle, { id: styleId }).catch(() => null) : null;
+        const toneDoc = toneId ? await ctx.runQuery(api.tones.getTone, { id: toneId }).catch(() => null) : null;
+
+        // 2. Get User Context (Liked Questions)
+        let userContext = "";
+        try {
+            const likedQuestions = await ctx.runQuery(api.questions.getLikedQuestions, {});
+            if (likedQuestions.length > 0) {
+                 // take 3 recent
+                 const recent = likedQuestions.slice(0, 3).map((q: any) => q.text).join("; ");
+                 userContext = "User likes questions similar to: " + recent;
+            }
+        } catch (e) {
+            // Ignore
+        }
+
+        // 3. Construct Target Text
+        const components = [];
+        if (styleDoc) components.push(`Style: ${styleDoc.name}. ${styleDoc.description ?? ""} ${styleDoc.promptGuidanceForAI ?? ""}`);
+        if (toneDoc) components.push(`Tone: ${toneDoc.name}. ${toneDoc.description ?? ""} ${toneDoc.promptGuidanceForAI ?? ""}`);
+        if (selectedTags.length > 0) components.push(`Tags: ${selectedTags.join(", ")}`);
+        if (currentQuestion) components.push(`Similar to: ${currentQuestion}`);
+        if (userContext) components.push(userContext);
+
+        const targetText = components.join(". ");
+
+        // 4. Embed & Search
+        try {
+            const embedding = await embed(targetText);
+            const nearestQuestions = await ctx.runAction(api.questions.getNearestQuestionsByEmbedding, {
+                embedding,
+                style: styleId,
+                tone: toneId,
+                count: 5
+            });
+            examples = nearestQuestions.map((q: any) => q.text).filter((t: any): t is string => !!t);
+
+            // Fallback if vector search returns empty (e.g. strict filter with no results)
+            if (examples.length === 0) {
+                 throw new Error("No vector search results");
+            }
+        } catch (e) {
+            console.warn("Vector search failed or returned 0 results, falling back to basic retrieval", e);
+             examples = (await ctx.runQuery(api.questions.getSimilarQuestions, {
+                count: 5,
+                style: styleId,
+                tone: toneId,
+            })).map((q: any) => q.text);
+        }
+    }
+
+    const existingQuestionTexts = examples;
 
     // Build the prompt data structure once
     const promptData: {

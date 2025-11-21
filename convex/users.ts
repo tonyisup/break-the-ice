@@ -558,7 +558,7 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
       userId: args.userId,
     });
 
-    const userQuestionEmbeddings = userQuestions.map(async (uq) => {
+    const userQuestionEmbeddings = userQuestions.map(async (uq: any) => {
       const embedding = await ctx.runQuery(internal.questions.getQuestionEmbedding, {
         questionId: uq.questionId,
       });
