@@ -34,7 +34,7 @@ export const sendEmail = internalAction({
       });
 
       if (error) {
-        console.error("Error sending email:", error);
+        console.error("Error sending email:", error.name, error.message);
         return { success: false, error: error.message };
       }
 

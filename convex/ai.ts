@@ -12,8 +12,8 @@ const openai = new OpenAI({
   apiKey: process.env.OPEN_ROUTER_API_KEY,
   timeout: 30000, // 30 second timeout
   defaultHeaders: {
-    'HTTP-Referer': 'https://breaktheiceberg.com', 
-    'X-Title': 'Break the ice(berg)', 
+    'HTTP-Referer': 'https://breaktheiceberg.com',
+    'X-Title': 'Break the ice(berg)',
   },
 });
 
@@ -51,10 +51,10 @@ export const generateAIQuestion = action({
 
     try {
 
-    let examples: string[] = [];
-    if (_existingQuestionsForTesting) {
-      examples = _existingQuestionsForTesting;
-    } else {
+      let examples: string[] = [];
+      if (_existingQuestionsForTesting) {
+        examples = _existingQuestionsForTesting;
+      } else {
         // 1. Get Style and Tone details
         const styleDoc = styleId ? await ctx.runQuery(api.styles.getStyle, { id: styleId }).catch(() => null) : null;
         const toneDoc = toneId ? await ctx.runQuery(api.tones.getTone, { id: toneId }).catch(() => null) : null;
@@ -62,14 +62,14 @@ export const generateAIQuestion = action({
         // 2. Get User Context (Liked Questions)
         let userContext = "";
         try {
-            const likedQuestions = await ctx.runQuery(api.questions.getLikedQuestions, {});
-            if (likedQuestions.length > 0) {
-                 // take 3 recent
-                 const recent = likedQuestions.slice(0, 3).map((q: any) => q.text).join("; ");
-                 userContext = "User likes questions similar to: " + recent;
-            }
+          const likedQuestions = await ctx.runQuery(api.questions.getLikedQuestions, {});
+          if (likedQuestions.length > 0) {
+            // take 3 recent
+            const recent = likedQuestions.slice(0, 3).map((q: any) => q.text).join("; ");
+            userContext = "User likes questions similar to: " + recent;
+          }
         } catch (e) {
-            // Ignore
+          // Ignore
         }
 
         // 3. Construct Target Text
@@ -84,86 +84,86 @@ export const generateAIQuestion = action({
 
         // 4. Embed & Search
         try {
-            const embedding = await embed(targetText);
-            const nearestQuestions = await ctx.runAction(api.questions.getNearestQuestionsByEmbedding, {
-                embedding,
-                style: styleId,
-                tone: toneId,
-                count: 5
-            });
-            examples = nearestQuestions.map((q: any) => q.text).filter((t: any): t is string => !!t);
+          const embedding = await embed(targetText);
+          const nearestQuestions = await ctx.runAction(api.questions.getNearestQuestionsByEmbedding, {
+            embedding,
+            style: styleId,
+            tone: toneId,
+            count: 5
+          });
+          examples = nearestQuestions.map((q: any) => q.text).filter((t: any): t is string => !!t);
 
-            // Fallback if vector search returns empty (e.g. strict filter with no results)
-            if (examples.length === 0) {
-                 throw new Error("No vector search results");
-            }
+          // Fallback if vector search returns empty (e.g. strict filter with no results)
+          if (examples.length === 0) {
+            throw new Error("No vector search results");
+          }
         } catch (e) {
-            console.warn("Vector search failed or returned 0 results, falling back to basic retrieval", e);
-             examples = (await ctx.runQuery(api.questions.getSimilarQuestions, {
-                count: 5,
-                style: styleId,
-                tone: toneId,
-            })).map((q: any) => q.text);
+          console.warn("Vector search failed or returned 0 results, falling back to basic retrieval", e);
+          examples = (await ctx.runQuery(api.questions.getSimilarQuestions, {
+            count: 5,
+            style: styleId,
+            tone: toneId,
+          })).map((q: any) => q.text);
         }
-    }
-
-    const existingQuestionTexts = examples;
-
-    // Build the prompt data structure once
-    const promptData: {
-      style:string;
-      structure: string;
-      styleGuidance?: string;
-      tone: string;
-      toneGuidance?: string;
-      currentQuestion?: string;
-      tags?: string;
-      existingQuestions?: string[];
-      count: number;
-    } = {
-      style: "",
-      structure: "",
-      tone: "",
-      existingQuestions: existingQuestionTexts,
-      count: generationCount,
-    };
-
-    if (styleId) {
-      const style = await ctx.runQuery(api.styles.getStyle, { id: styleId });
-      if (style) {
-        promptData.style = style.name;
-        promptData.structure = style.structure;
-        promptData.styleGuidance = style.promptGuidanceForAI;
       }
-    }
-    if (toneId) {
-      const tone = await ctx.runQuery(api.tones.getTone, { id: toneId });
-      if (tone) {
-        promptData.tone = tone.name;
-        promptData.toneGuidance = tone.promptGuidanceForAI;
+
+      const existingQuestionTexts = examples;
+
+      // Build the prompt data structure once
+      const promptData: {
+        style: string;
+        structure: string;
+        styleGuidance?: string;
+        tone: string;
+        toneGuidance?: string;
+        currentQuestion?: string;
+        tags?: string;
+        existingQuestions?: string[];
+        count: number;
+      } = {
+        style: "",
+        structure: "",
+        tone: "",
+        existingQuestions: existingQuestionTexts,
+        count: generationCount,
+      };
+
+      if (styleId) {
+        const style = await ctx.runQuery(api.styles.getStyle, { id: styleId });
+        if (style) {
+          promptData.style = style.name;
+          promptData.structure = style.structure;
+          promptData.styleGuidance = style.promptGuidanceForAI;
+        }
       }
-    }
-    if (currentQuestion) {
-      promptData.currentQuestion = currentQuestion;
-    }
-    if (selectedTags.length > 0) {
-      promptData.tags = selectedTags.join(", ");
-    }
+      if (toneId) {
+        const tone = await ctx.runQuery(api.tones.getTone, { id: toneId });
+        if (tone) {
+          promptData.tone = tone.name;
+          promptData.toneGuidance = tone.promptGuidanceForAI;
+        }
+      }
+      if (currentQuestion) {
+        promptData.currentQuestion = currentQuestion;
+      }
+      if (selectedTags.length > 0) {
+        promptData.tags = selectedTags.join(", ");
+      }
 
-    // Retry logic for AI generation
-    let attempts = 0;
-    const maxAttempts = 3;
-    let generatedContent = "";
+      // Retry logic for AI generation
+      let attempts = 0;
+      const maxAttempts = 3;
+      let generatedContent = "";
 
-    while (attempts < maxAttempts && !generatedContent) {
-      try {
-        attempts++;
-        const completion = await openai.chat.completions.create({
-          model: model ?? "@preset/break-the-ice-berg-default",
-          messages: [
-            {
-              role: "system",
-              content: `You are an ice-breaker generator that creates engaging ice-breaker questions for conversations. 
+      while (attempts < maxAttempts && !generatedContent) {
+        try {
+          attempts++;
+          const completion = await openai.chat.completions.create({
+            model: model ?? "@preset/break-the-ice-berg-default",
+            messages: [
+              {
+                role: "system",
+                content: `You are an ice-breaker generator that creates engaging ice-breaker questions for conversations. 
 
 CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of strings. Do not include any text before or after the JSON. Do not use markdown formatting. Do not include explanations or comments.
 
@@ -174,130 +174,130 @@ Requirements:
 - Each question should be a string in the JSON array
 - Avoid questions too similar to existing ones
 - Make questions engaging and conversation-starting`
-            },
-            {
-              role: "user",
-              content: `Generate ${generationCount} ice-breaker question(s) with these parameters:
+              },
+              {
+                role: "user",
+                content: `Generate ${generationCount} ice-breaker question(s) with these parameters:
 ${JSON.stringify(promptData, null, 2)}
 
 Respond with ONLY the JSON array, no other text.`
+              }
+            ],
+            max_tokens: 500 * generationCount,
+            temperature: 0.7,
+          });
+
+          generatedContent = completion.choices[0]?.message?.content?.trim() || "";
+
+          if (!generatedContent) {
+            console.log(`Attempt ${attempts}: No content generated`);
+            if (attempts < maxAttempts) {
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+              continue;
             }
-          ],
-          max_tokens: 500 * generationCount,
-          temperature: 0.7,
-        });
-
-        generatedContent = completion.choices[0]?.message?.content?.trim() || "";
-        
-        if (!generatedContent) {
-          console.log(`Attempt ${attempts}: No content generated`);
-          if (attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-            continue;
+            throw new Error("Failed to generate question after multiple attempts");
           }
-          throw new Error("Failed to generate question after multiple attempts");
-        }
 
-        // Validate that we have a reasonable response length
-        if (generatedContent.length < 10) {
-          console.log(`Attempt ${attempts}: Response too short (${generatedContent.length} chars):`, generatedContent);
-          if (attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            continue;
+          // Validate that we have a reasonable response length
+          if (generatedContent.length < 10) {
+            console.log(`Attempt ${attempts}: Response too short (${generatedContent.length} chars):`, generatedContent);
+            if (attempts < maxAttempts) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              continue;
+            }
+            throw new Error("AI response too short");
           }
-          throw new Error("AI response too short");
+
+          // If we get here, we have content, so break out of the retry loop
+          break;
+
+        } catch (error) {
+          console.error(`Attempt ${attempts} failed:`, error);
+          if (attempts >= maxAttempts) {
+            throw error;
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
         }
+      }
 
-        // If we get here, we have content, so break out of the retry loop
-        break;
-        
-      } catch (error) {
-        console.error(`Attempt ${attempts} failed:`, error);
-        if (attempts >= maxAttempts) {
-          throw error;
+      if (!generatedContent) {
+        throw new Error("Failed to generate question after all attempts");
+      }
+      // Try to clean and parse the response
+      let cleanedContent = generatedContent;
+
+      // Remove any markdown code blocks
+      cleanedContent = cleanedContent.replace(/```json\s*|\s*```/g, '');
+      cleanedContent = cleanedContent.replace(/```\s*|\s*```/g, '');
+
+      // Remove any leading/trailing text that's not JSON
+      const jsonMatch = cleanedContent.match(/\[.*\]/s);
+      if (jsonMatch) {
+        cleanedContent = jsonMatch[0];
+      }
+
+      // Additional cleaning: ensure the JSON is properly closed
+      cleanedContent = cleanedContent.trim();
+
+      // If the JSON doesn't end with ], try to fix it
+      if (cleanedContent.startsWith('[') && !cleanedContent.endsWith(']')) {
+        // Find the last complete string and add closing bracket
+        const lastQuoteIndex = cleanedContent.lastIndexOf('"');
+        if (lastQuoteIndex > 0) {
+          cleanedContent = cleanedContent.substring(0, lastQuoteIndex + 1) + ']';
         }
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
       }
-    }
 
-    if (!generatedContent) {
-      throw new Error("Failed to generate question after all attempts");
-    }
-    // Try to clean and parse the response
-    let cleanedContent = generatedContent;
-    
-    // Remove any markdown code blocks
-    cleanedContent = cleanedContent.replace(/```json\s*|\s*```/g, '');
-    cleanedContent = cleanedContent.replace(/```\s*|\s*```/g, '');
-    
-    // Remove any leading/trailing text that's not JSON
-    const jsonMatch = cleanedContent.match(/\[.*\]/s);
-    if (jsonMatch) {
-      cleanedContent = jsonMatch[0];
-    }
+      try {
+        const generatedQuestions = JSON.parse(cleanedContent);
+        if (Array.isArray(generatedQuestions)) {
+          // Use a Set to automatically handle duplicates from the AI response
+          const uniqueQuestions = new Set<string>();
 
-    // Additional cleaning: ensure the JSON is properly closed
-    cleanedContent = cleanedContent.trim();
-    
-    // If the JSON doesn't end with ], try to fix it
-    if (cleanedContent.startsWith('[') && !cleanedContent.endsWith(']')) {
-      // Find the last complete string and add closing bracket
-      const lastQuoteIndex = cleanedContent.lastIndexOf('"');
-      if (lastQuoteIndex > 0) {
-        cleanedContent = cleanedContent.substring(0, lastQuoteIndex + 1) + ']';
-      }
-    }
+          // Limit to the requested count even if AI returns more
+          const limitedQuestions = generatedQuestions.slice(0, generationCount);
 
-    try {
-      const generatedQuestions = JSON.parse(cleanedContent);
-      if (Array.isArray(generatedQuestions)) {
-        // Use a Set to automatically handle duplicates from the AI response
-        const uniqueQuestions = new Set<string>();
-
-        // Limit to the requested count even if AI returns more
-        const limitedQuestions = generatedQuestions.slice(0, generationCount);
-        
-        for (const questionText of limitedQuestions) {
-          if (typeof questionText === 'string' && questionText.trim()) {
-            const cleanedQuestion = questionText.trim().replace(/^["']|["']$/g, '');
-            if (cleanedQuestion.length > 0) {
-              uniqueQuestions.add(cleanedQuestion);
+          for (const questionText of limitedQuestions) {
+            if (typeof questionText === 'string' && questionText.trim()) {
+              const cleanedQuestion = questionText.trim().replace(/^["']|["']$/g, '');
+              if (cleanedQuestion.length > 0) {
+                uniqueQuestions.add(cleanedQuestion);
+              }
             }
           }
-        }
-        
-        // Save the unique questions
-        for (const questionText of uniqueQuestions) {
-          try {
-            const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
-              text: questionText,
-              style: styleId,
-              tone: toneId,
-              tags: selectedTags,
-            });
-            newQuestions.push(newQuestion);
-          } catch (error) {
-            console.error(`Failed to save question: "${questionText}"`, error);
-            // Continue with other questions even if one fails
+
+          // Save the unique questions
+          for (const questionText of uniqueQuestions) {
+            try {
+              const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
+                text: questionText,
+                style: styleId,
+                tone: toneId,
+                tags: selectedTags,
+              });
+              newQuestions.push(newQuestion);
+            } catch (error) {
+              console.error(`Failed to save question: "${questionText}"`, error);
+              // Continue with other questions even if one fails
+            }
           }
+        } else {
+          throw new Error("Response is not an array");
         }
-      } else {
-        throw new Error("Response is not an array");
+      } catch (e) {
+        console.error("Failed to parse AI response as JSON:", e);
+        console.error("Original content:", generatedContent);
+        console.error("Cleaned content:", cleanedContent);
+
+        // If parsing fails, we'll fall through to the main error handler,
+        // which has its own fallback logic.
+        throw e;
       }
-    } catch (e) {
-      console.error("Failed to parse AI response as JSON:", e);
-      console.error("Original content:", generatedContent);
-      console.error("Cleaned content:", cleanedContent);
 
-      // If parsing fails, we'll fall through to the main error handler,
-      // which has its own fallback logic.
-      throw e;
-    }
-
-    return newQuestions;
+      return newQuestions;
     } catch (error) {
       console.error("AI generation failed:", error);
-      
+
       // Try to generate a single fallback question
       try {
         // console.log("Attempting fallback single question generation...");
@@ -340,7 +340,7 @@ Respond with ONLY the JSON array, no other text.`
         // If the fallback also fails, we want to throw the original error.
         // We'll fall through to the throw statement below.
       }
-      
+
       // If we got to this point, the primary generation failed and the fallback
       // either failed or did not produce a question. In either case, we should
       // throw the original error to notify the client.
@@ -395,14 +395,14 @@ export const detectDuplicateQuestionsAI = internalAction({
     try {
       // Get all questions in batches
       const allQuestions = await ctx.runQuery(internal.questions.getAllQuestionsForDuplicateDetection);
-      
+
       // Process questions in batches to avoid token limits
       for (let i = 0; i < allQuestions.length; i += batchSize) {
         const batch = allQuestions.slice(i, i + batchSize);
-        
+
         try {
           const duplicateGroups = await detectDuplicatesInBatch(batch);
-          
+
           // Store each duplicate group as a detection record
           for (const group of duplicateGroups) {
             if (group.questionIds.length > 1) {
@@ -414,7 +414,7 @@ export const detectDuplicateQuestionsAI = internalAction({
               duplicatesFound += group.questionIds.length;
             }
           }
-          
+
           processedCount += batch.length;
         } catch (error) {
           const errorMessage = `Error processing batch ${i}-${i + batchSize}: ${error instanceof Error ? error.message : String(error)}`;
@@ -436,7 +436,7 @@ export const detectDuplicateQuestionsAI = internalAction({
   },
 });
 
-import { createDuplicateDetectionEmail, createMinimumQuestionsEmail, createPopulateMissingEmbeddingsEmail } from "./lib/emails";
+import { createDuplicateDetectionEmail, createMinimumQuestionsEmail, createPopulateMissingEmbeddingsEmail, createPopulateMissingStyleEmbeddingsEmail, createPopulateMissingToneEmbeddingsEmail } from "./lib/emails";
 
 // New wrapper action for duplicate detection cron job
 export const detectDuplicateQuestionsAndEmail = internalAction({
@@ -478,29 +478,29 @@ export const detectDuplicateQuestionsStreamingAI = internalAction({
   returns: v.id("duplicateDetectionProgress"),
   handler: async (ctx, args): Promise<Id<"duplicateDetectionProgress">> => {
     const batchSize = args.batchSize ?? 50;
-    
+
     // Get all questions first to calculate total
     const allQuestions = await ctx.runQuery(internal.questions.getAllQuestionsForDuplicateDetection);
     const totalQuestions = allQuestions.length;
     const totalBatches = Math.ceil(totalQuestions / batchSize);
-    
+
     // Create initial progress record
     // Note: This will work once duplicates.ts is deployed and types are regenerated
     const progressId = await ctx.runMutation(api.duplicates.createDuplicateDetectionProgress as any, {
       totalQuestions,
       totalBatches,
     });
-    
+
     // Process questions in batches with progress updates
     let processedCount = 0;
     let duplicatesFound = 0;
     const errors: string[] = [];
-    
+
     try {
       for (let i = 0; i < allQuestions.length; i += batchSize) {
         const batch = allQuestions.slice(i, i + batchSize);
         const currentBatch = Math.floor(i / batchSize) + 1;
-        
+
         try {
           // Update progress before processing batch
           await ctx.runMutation(api.duplicates.updateDuplicateDetectionProgress as any, {
@@ -510,9 +510,9 @@ export const detectDuplicateQuestionsStreamingAI = internalAction({
             duplicatesFound,
             errors,
           });
-          
+
           const duplicateGroups = await detectDuplicatesInBatch(batch);
-          
+
           // Store each duplicate group as a detection record
           for (const group of duplicateGroups) {
             if (group.questionIds.length > 1) {
@@ -524,9 +524,9 @@ export const detectDuplicateQuestionsStreamingAI = internalAction({
               duplicatesFound += group.questionIds.length;
             }
           }
-          
+
           processedCount += batch.length;
-          
+
           // Update progress after processing batch
           await ctx.runMutation(api.duplicates.updateDuplicateDetectionProgress as any, {
             progressId,
@@ -535,12 +535,12 @@ export const detectDuplicateQuestionsStreamingAI = internalAction({
             duplicatesFound,
             errors,
           });
-          
+
         } catch (error) {
           const errorMessage = `Error processing batch ${currentBatch}: ${error instanceof Error ? error.message : String(error)}`;
           errors.push(errorMessage);
           console.error(errorMessage);
-          
+
           // Update progress with error
           await ctx.runMutation(api.duplicates.updateDuplicateDetectionProgress as any, {
             progressId,
@@ -551,7 +551,7 @@ export const detectDuplicateQuestionsStreamingAI = internalAction({
           });
         }
       }
-      
+
       // Mark as completed
       await ctx.runMutation(api.duplicates.completeDuplicateDetectionProgress as any, {
         progressId,
@@ -559,31 +559,31 @@ export const detectDuplicateQuestionsStreamingAI = internalAction({
         duplicatesFound,
         errors,
       });
-      
+
     } catch (error) {
       const errorMessage = `Error in detectDuplicateQuestionsStreamingAI: ${error instanceof Error ? error.message : String(error)}`;
       errors.push(errorMessage);
       console.error(errorMessage);
-      
+
       // Mark as failed
       await ctx.runMutation(api.duplicates.failDuplicateDetectionProgress as any, {
         progressId,
         errors,
       });
     }
-    
+
     return progressId;
   },
 });
 
 // Helper function to detect duplicates in a batch of questions
-async function detectDuplicatesInBatch(questions: Array<{_id: string, text: string | undefined, style: string}>) {
+async function detectDuplicatesInBatch(questions: Array<{ _id: string, text: string | undefined, style: string }>) {
   if (questions.length < 2) return [];
 
   const questionsWithText = questions.filter((q): q is { _id: string; text: string; style: string } => q.text !== undefined);
   if (questionsWithText.length < 2) return [];
   // Create a mapping from question ID to the actual question object
-  const idToQuestionMap = new Map<string, {_id: string, text: string, style: string}>();
+  const idToQuestionMap = new Map<string, { _id: string, text: string, style: string }>();
   questionsWithText.forEach(q => {
     idToQuestionMap.set(q._id, q);
   });
@@ -637,12 +637,12 @@ ${JSON.stringify(questionsWithText.map(q => ({ id: q._id, text: q.text, style: q
 
     // Clean and parse the response
     let cleanedResponse = response;
-    
+
     // Remove markdown code blocks
     cleanedResponse = cleanedResponse.replace(/```json\s*/g, '');
     cleanedResponse = cleanedResponse.replace(/```\s*/g, '');
     cleanedResponse = cleanedResponse.replace(/\s*```/g, '');
-    
+
     // Try to extract JSON array more carefully
     // First, try to find a complete JSON array
     const jsonArrayMatch = cleanedResponse.match(/\[\s*\{[\s\S]*\}\s*\]/);
@@ -679,11 +679,11 @@ ${JSON.stringify(questionsWithText.map(q => ({ id: q._id, text: q.text, style: q
       console.error("Response length:", cleanedResponse.length);
       console.error("Response preview (first 500 chars):", cleanedResponse.substring(0, 500));
       console.error("Response preview (last 200 chars):", cleanedResponse.substring(Math.max(0, cleanedResponse.length - 200)));
-      
+
       // Try to fix common issues
       try {
         let fixedResponse = cleanedResponse;
-        
+
         // Fix unterminated fractional numbers - find patterns like "0." or "0.9" followed by invalid chars
         // This regex finds incomplete decimal numbers and removes them or completes them
         fixedResponse = fixedResponse.replace(/0\.(?![0-9])/g, '0');
@@ -694,17 +694,17 @@ ${JSON.stringify(questionsWithText.map(q => ({ id: q._id, text: q.text, style: q
           }
           return '0';
         });
-        
+
         // Remove incomplete numbers at boundaries (e.g., ", 0." or ": 0.")
         fixedResponse = fixedResponse.replace(/,\s*0\.\s*([,}\]])/g, '$1');
         fixedResponse = fixedResponse.replace(/:\s*0\.\s*([,}\]])/g, ': 0$1');
-        
+
         // Try to close any unclosed brackets/braces
         const openBraces = (fixedResponse.match(/\{/g) || []).length;
         const closeBraces = (fixedResponse.match(/\}/g) || []).length;
         const openBrackets = (fixedResponse.match(/\[/g) || []).length;
         const closeBrackets = (fixedResponse.match(/\]/g) || []).length;
-        
+
         // Close unclosed structures
         if (openBraces > closeBraces) {
           fixedResponse += '}'.repeat(openBraces - closeBraces);
@@ -712,7 +712,7 @@ ${JSON.stringify(questionsWithText.map(q => ({ id: q._id, text: q.text, style: q
         if (openBrackets > closeBrackets) {
           fixedResponse += ']'.repeat(openBrackets - closeBrackets);
         }
-        
+
         // Try parsing again
         duplicateGroups = JSON.parse(fixedResponse);
         console.log("Successfully parsed after fixing");
@@ -721,7 +721,7 @@ ${JSON.stringify(questionsWithText.map(q => ({ id: q._id, text: q.text, style: q
         return [];
       }
     }
-    
+
     if (!Array.isArray(duplicateGroups)) {
       console.error("Response is not an array:", typeof duplicateGroups);
       return [];
@@ -761,7 +761,7 @@ ${JSON.stringify(questionsWithText.map(q => ({ id: q._id, text: q.text, style: q
           confidence: typeof group.confidence === 'number' ? group.confidence : 0.5,
         };
       })
-      .filter((group: any): group is {questionIds: Id<"questions">[], reason: string, confidence: number} => group !== null);
+      .filter((group: any): group is { questionIds: Id<"questions">[], reason: string, confidence: number } => group !== null);
 
     return validatedGroups;
   } catch (error) {
@@ -795,7 +795,7 @@ export const ensureMinimumQuestionsPerCombination = internalAction({
       // Get all styles and tones
       const styles = await ctx.runQuery(api.styles.getStyles, {});
       const tones = await ctx.runQuery(api.tones.getTones, {});
-      
+
       // Get current question counts by combination
       const currentCounts = await ctx.runQuery(internal.questions.getQuestionCountsByStyleAndTone, {});
       const countsMap = new Map(
@@ -803,13 +803,13 @@ export const ensureMinimumQuestionsPerCombination = internalAction({
       );
 
       // Find combinations that need more questions
-      const combinationsNeedingWork: Array<{style: any, tone: any, needed: number}> = [];
-      
+      const combinationsNeedingWork: Array<{ style: any, tone: any, needed: number }> = [];
+
       for (const style of styles) {
         for (const tone of tones) {
           const key = `${style.id}|${tone.id}`;
           const currentCount = (countsMap.get(key) as number) || 0;
-          
+
           if (currentCount < minimumCount) {
             const needed = minimumCount - currentCount;
             combinationsNeedingWork.push({ style, tone, needed });
@@ -828,7 +828,7 @@ export const ensureMinimumQuestionsPerCombination = internalAction({
       // Process each combination in the batch
       for (const { style, tone, needed } of combinationsToProcess) {
         console.log(`Generating ${needed} questions for ${style.name}/${tone.name}`);
-        
+
         try {
           // Generate questions for this combination
           const newQuestions = await ctx.runAction(api.ai.generateAIQuestion, {
@@ -837,13 +837,13 @@ export const ensureMinimumQuestionsPerCombination = internalAction({
             tone: tone.id,
             count: needed,
           });
-          
+
           questionsGenerated += newQuestions.filter((q: any) => q !== null).length;
           combinationsProcessed++;
-          
+
           // Add a small delay to avoid rate limiting
           await new Promise(resolve => setTimeout(resolve, 2000));
-          
+
         } catch (error) {
           const errorMessage = `Error generating questions for ${style.name}/${tone.name}: ${error instanceof Error ? error.message : String(error)}`;
           errors.push(errorMessage);
@@ -923,7 +923,7 @@ export const processAllCombinationsInBatches: any = action({
     while (hasMoreWork && batchCount < maxBatches) {
       batchCount++;
       console.log(`Processing batch ${batchCount}/${maxBatches}`);
-      
+
       try {
         const result = await ctx.runAction(internal.ai.ensureMinimumQuestionsPerCombination, {
           minimumCount,
@@ -991,6 +991,60 @@ export const populateMissingEmbeddings = internalAction({
       errors,
     };
     const { subject, html } = createPopulateMissingEmbeddingsEmail(results);
+    await ctx.runAction(internal.email.sendEmail, { subject, html });
+  },
+});
+
+export const populateMissingStyleEmbeddings = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const styles = await ctx.runQuery(internal.styles.getStylesWithMissingEmbeddings);
+    let stylesProcessed = 0;
+    const stylesMissingEmbeddings = styles.length;
+    const errors: string[] = [];
+    for (const style of styles) {
+      try {
+        await ctx.runAction(internal.lib.retriever.embedStyle, { styleId: style._id });
+        stylesProcessed++;
+      } catch (error) {
+        errors.push(`Error embedding style ${style._id}: ${error instanceof Error ? error.message : String(error)}`);
+        console.error(error);
+      }
+    }
+    const results = {
+      stylesProcessed,
+      stylesMissingEmbeddings,
+      errors,
+    };
+    const { subject, html } = createPopulateMissingStyleEmbeddingsEmail(results);
+    await ctx.runAction(internal.email.sendEmail, { subject, html });
+  },
+});
+
+export const populateMissingToneEmbeddings = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const tones = await ctx.runQuery(internal.tones.getTonesWithMissingEmbeddings);
+    let tonesProcessed = 0;
+    const tonesMissingEmbeddings = tones.length;
+    const errors: string[] = [];
+    for (const tone of tones) {
+      try {
+        await ctx.runAction(internal.lib.retriever.embedTone, { toneId: tone._id });
+        tonesProcessed++;
+      } catch (error) {
+        errors.push(`Error embedding tone ${tone._id}: ${error instanceof Error ? error.message : String(error)}`);
+        console.error(error);
+      }
+    }
+    const results = {
+      tonesProcessed,
+      tonesMissingEmbeddings,
+      errors,
+    };
+    const { subject, html } = createPopulateMissingToneEmbeddingsEmail(results);
     await ctx.runAction(internal.email.sendEmail, { subject, html });
   },
 });

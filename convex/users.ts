@@ -66,7 +66,7 @@ export const getSettings = query({
     // Get liked questions from userQuestions table
     const likedUserQuestions = await ctx.db
       .query("userQuestions")
-      .withIndex("userIdAndStatus", (q) =>
+      .withIndex("by_userIdAndStatus", (q) =>
         q.eq("userId", user._id).eq("status", "liked")
       )
       .collect();
@@ -75,7 +75,7 @@ export const getSettings = query({
     // Get hidden questions from userQuestions table
     const hiddenUserQuestions = await ctx.db
       .query("userQuestions")
-      .withIndex("userIdAndStatus", (q) =>
+      .withIndex("by_userIdAndStatus", (q) =>
         q.eq("userId", user._id).eq("status", "hidden")
       )
       .collect();
@@ -83,15 +83,15 @@ export const getSettings = query({
 
     // Get hidden styles from userHiddenStyles table
     const hiddenStylesDocs = await ctx.db
-      .query("userHiddenStyles")
-      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .query("userStyles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
     const hiddenStyles = hiddenStylesDocs.map((us) => us.styleId);
 
     // Get hidden tones from userHiddenTones table
     const hiddenTonesDocs = await ctx.db
-      .query("userHiddenTones")
-      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .query("userTones")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
     const hiddenTones = hiddenTonesDocs.map((ut) => ut.toneId);
 
@@ -123,7 +123,7 @@ export const migrateLocalStorageSettings = mutation({
     }
 
     const user = await ctx.db
-      .query("users") 
+      .query("users")
       .withIndex("email", (q) => q.eq("email", identity.email))
       .unique();
 
@@ -134,28 +134,28 @@ export const migrateLocalStorageSettings = mutation({
     // Delete existing userQuestions entries for this user
     const existingUserQuestions = await ctx.db
       .query("userQuestions")
-      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
-    
+
     for (const uq of existingUserQuestions) {
       await ctx.db.delete(uq._id);
     }
 
     // Delete existing hidden styles and tones
     const existingHiddenStyles = await ctx.db
-      .query("userHiddenStyles")
-      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .query("userStyles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
-    
+
     for (const us of existingHiddenStyles) {
       await ctx.db.delete(us._id);
     }
 
     const existingHiddenTones = await ctx.db
-      .query("userHiddenTones")
-      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .query("userTones")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
-    
+
     for (const ut of existingHiddenTones) {
       await ctx.db.delete(ut._id);
     }
@@ -172,11 +172,11 @@ export const migrateLocalStorageSettings = mutation({
       // Check if entry already exists
       const existing = await ctx.db
         .query("userQuestions")
-        .withIndex("userIdAndQuestionId", (q) =>
+        .withIndex("by_userIdAndQuestionId", (q) =>
           q.eq("userId", user._id).eq("questionId", questionId)
         )
         .first();
-      
+
       if (!existing) {
         await ctx.db.insert("userQuestions", {
           userId: user._id,
@@ -198,11 +198,11 @@ export const migrateLocalStorageSettings = mutation({
       // Check if entry already exists
       const existing = await ctx.db
         .query("userQuestions")
-        .withIndex("userIdAndQuestionId", (q) =>
+        .withIndex("by_userIdAndQuestionId", (q) =>
           q.eq("userId", user._id).eq("questionId", questionId)
         )
         .first();
-      
+
       if (!existing) {
         await ctx.db.insert("userQuestions", {
           userId: user._id,
@@ -223,17 +223,18 @@ export const migrateLocalStorageSettings = mutation({
     for (const styleId of uniqueHiddenStyles) {
       // Check if entry already exists
       const existing = await ctx.db
-        .query("userHiddenStyles")
-        .withIndex("userIdAndStyleId", (q) =>
+        .query("userStyles")
+        .withIndex("by_userIdAndStyleId", (q) =>
           q.eq("userId", user._id).eq("styleId", styleId)
         )
         .first();
-      
+
       if (!existing) {
-        await ctx.db.insert("userHiddenStyles", {
+        await ctx.db.insert("userStyles", {
           userId: user._id,
           styleId,
           updatedAt: now,
+          status: "hidden",
         });
       }
     }
@@ -242,17 +243,18 @@ export const migrateLocalStorageSettings = mutation({
     for (const toneId of uniqueHiddenTones) {
       // Check if entry already exists
       const existing = await ctx.db
-        .query("userHiddenTones")
-        .withIndex("userIdAndToneId", (q) =>
+        .query("userTones")
+        .withIndex("by_userIdAndToneId", (q) =>
           q.eq("userId", user._id).eq("toneId", toneId)
         )
         .first();
-      
+
       if (!existing) {
-        await ctx.db.insert("userHiddenTones", {
+        await ctx.db.insert("userTones", {
           userId: user._id,
           toneId,
           updatedAt: now,
+          status: "hidden",
         });
       }
     }
@@ -317,11 +319,11 @@ export const updateLikedQuestions = mutation({
     // Delete existing liked questions for this user
     const existingLikedQuestions = await ctx.db
       .query("userQuestions")
-      .withIndex("userIdAndStatus", (q) =>
+      .withIndex("by_userIdAndStatus", (q) =>
         q.eq("userId", user._id).eq("status", "liked")
       )
       .collect();
-    
+
     for (const uq of existingLikedQuestions) {
       await ctx.db.delete(uq._id);
     }
@@ -364,11 +366,11 @@ export const updateHiddenQuestions = mutation({
     // Delete existing hidden questions for this user
     const existingHiddenQuestions = await ctx.db
       .query("userQuestions")
-      .withIndex("userIdAndStatus", (q) =>
+      .withIndex("by_userIdAndStatus", (q) =>
         q.eq("userId", user._id).eq("status", "hidden")
       )
       .collect();
-    
+
     for (const uq of existingHiddenQuestions) {
       await ctx.db.delete(uq._id);
     }
@@ -413,10 +415,10 @@ export const updateHiddenStyles = mutation({
 
     // Delete existing hidden styles for this user
     const existingHiddenStyles = await ctx.db
-      .query("userHiddenStyles")
-      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .query("userStyles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
-    
+
     for (const us of existingHiddenStyles) {
       await ctx.db.delete(us._id);
     }
@@ -424,10 +426,11 @@ export const updateHiddenStyles = mutation({
     // Insert new hidden styles
     const now = Date.now();
     for (const styleId of args.hiddenStyles) {
-      await ctx.db.insert("userHiddenStyles", {
+      await ctx.db.insert("userStyles", {
         userId: user._id,
         styleId,
         updatedAt: now,
+        status: "hidden",
       });
     }
 
@@ -457,10 +460,10 @@ export const updateHiddenTones = mutation({
 
     // Delete existing hidden tones for this user
     const existingHiddenTones = await ctx.db
-      .query("userHiddenTones")
-      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .query("userTones")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
-    
+
     for (const ut of existingHiddenTones) {
       await ctx.db.delete(ut._id);
     }
@@ -468,10 +471,11 @@ export const updateHiddenTones = mutation({
     // Insert new hidden tones
     const now = Date.now();
     for (const toneId of args.hiddenTones) {
-      await ctx.db.insert("userHiddenTones", {
+      await ctx.db.insert("userTones", {
         userId: user._id,
         toneId,
         updatedAt: now,
+        status: "hidden",
       });
     }
 
@@ -490,12 +494,12 @@ export const makeAdmin = mutation({
       throw new Error("Not authenticated");
     }
     const tempUser = await ctx.db
-        .query("users")
-        .withIndex("email", (q) => q.eq("email", identity.email))
-        .unique();
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
 
     if (!tempUser || !tempUser.isAdmin) {
-        throw new Error("Not authorized to make admins");
+      throw new Error("Not authorized to make admins");
     }
 
     const user = await ctx.db
@@ -526,7 +530,7 @@ export const getUserQuestions = internalQuery({
     userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.query("userQuestions").withIndex("userId", (q) => q.eq("userId", args.userId)).collect();
+    return await ctx.db.query("userQuestions").withIndex("by_userId", (q) => q.eq("userId", args.userId)).collect();
   },
 });
 

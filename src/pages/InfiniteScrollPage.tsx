@@ -122,35 +122,35 @@ export default function InfiniteScrollPage() {
 
       // 2. If not enough, generate more
       if (combinedQuestions.length < BATCH_SIZE) {
-         const needed = BATCH_SIZE - combinedQuestions.length;
-         // Limit generation to avoid long waits, max 3 at a time
-         const countToGenerate = Math.min(needed, 3);
+        const needed = BATCH_SIZE - combinedQuestions.length;
+        // Limit generation to avoid long waits, max 3 at a time
+        const countToGenerate = Math.min(needed, 3);
 
-         try {
-             const generated = await generateAIQuestion({
-                 style: selectedStyle,
-                 tone: selectedTone,
-                 count: countToGenerate,
-                 selectedTags: [],
-             });
+        try {
+          const generated = await generateAIQuestion({
+            style: selectedStyle,
+            tone: selectedTone,
+            count: countToGenerate,
+            selectedTags: [],
+          });
 
-             // Check for staleness after generation await
-             if (currentRequestId !== requestIdRef.current) return;
+          // Check for staleness after generation await
+          if (currentRequestId !== requestIdRef.current) return;
 
-             const validGenerated = generated.filter((q): q is Doc<"questions"> => q !== null);
-             combinedQuestions = [...combinedQuestions, ...validGenerated];
+          const validGenerated = generated.filter((q): q is Doc<"questions"> => q !== null);
+          combinedQuestions = [...combinedQuestions, ...validGenerated];
 
-             if (combinedQuestions.length === 0 && generated.length === 0) {
-                 // If we still have 0 questions after generating, then truly no more
-                 setHasMore(false);
-             }
-         } catch (err) {
-             console.error("Generation failed", err);
-             // Check for staleness in error case too
-             if (currentRequestId !== requestIdRef.current) return;
+          if (combinedQuestions.length === 0 && generated.length === 0) {
+            // If we still have 0 questions after generating, then truly no more
+            setHasMore(false);
+          }
+        } catch (err) {
+          console.error("Generation failed", err);
+          // Check for staleness in error case too
+          if (currentRequestId !== requestIdRef.current) return;
 
-             // If generation fails, we just use what we have.
-         }
+          // If generation fails, we just use what we have.
+        }
       }
 
       if (combinedQuestions.length > 0) {
@@ -218,7 +218,7 @@ export default function InfiniteScrollPage() {
         addLikedQuestion(questionId);
         await recordAnalytics({
           questionId,
-          event: "like",
+          event: "liked",
           viewDuration: 0, // Not tracking duration in list view accurately
         });
         toast.success("Added to favorites!");
@@ -286,7 +286,7 @@ export default function InfiniteScrollPage() {
               onSelectStyle={setSelectedStyle}
               isHighlighting={isHighlighting}
               setIsHighlighting={setIsHighlighting}
-              onHighlightStyle={() => {}}
+              onHighlightStyle={() => { }}
             />
             <ToneSelector
               tones={tones || []}
@@ -296,7 +296,7 @@ export default function InfiniteScrollPage() {
               onSelectTone={setSelectedTone}
               isHighlighting={isHighlighting}
               setIsHighlighting={setIsHighlighting}
-              onHighlightTone={() => {}}
+              onHighlightTone={() => { }}
             />
           </CollapsibleSection>
         </div>
@@ -324,9 +324,9 @@ export default function InfiniteScrollPage() {
           })}
 
           {isLoading && (
-             <div className="flex justify-center py-8">
-               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-             </div>
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            </div>
           )}
 
           {!hasMore && questions.length > 0 && (
@@ -335,7 +335,7 @@ export default function InfiniteScrollPage() {
             </div>
           )}
 
-           {!hasMore && questions.length === 0 && !isLoading && (
+          {!hasMore && questions.length === 0 && !isLoading && (
             <div className="text-center py-8 text-white/70">
               No questions found. Try changing the style or tone.
             </div>

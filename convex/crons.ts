@@ -4,20 +4,20 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 // Run duplicate detection daily at 2 AM UTC
-crons.interval(
-  "detect duplicate questions",
-  { hours: 24 },
-  internal.ai.detectDuplicateQuestionsAndEmail,
-  { batchSize: 50 }
-);
+// crons.interval(
+//   "detect duplicate questions",
+//   { hours: 24 },
+//   internal.ai.detectDuplicateQuestionsAndEmail,
+//   { batchSize: 50 }
+// );
 
 // Run daily question generation to ensure minimum 10 questions per style/tone combination
-crons.interval(
-  "ensure minimum questions per combination",
-  { hours: 24 }, // Run daily to process combinations gradually
-  internal.ai.ensureMinimumQuestionsPerCombinationAndEmail,
-  { minimumCount: 10, maxCombinations: 3 } // Process only 3 combinations per cron run to avoid timeout
-);
+// crons.interval(
+//   "ensure minimum questions per combination",
+//   { hours: 24 }, // Run daily to process combinations gradually
+//   internal.ai.ensureMinimumQuestionsPerCombinationAndEmail,
+//   { minimumCount: 10, maxCombinations: 3 } // Process only 3 combinations per cron run to avoid timeout
+// );
 
 crons.interval(
   "populate missing question embeddings",
@@ -27,16 +27,33 @@ crons.interval(
 );
 
 crons.interval(
+  "populate missing style embeddings",
+  { hours: 24 },
+  internal.ai.populateMissingStyleEmbeddings,
+);
+
+crons.interval(
   "update users with missing embeddings",
   { hours: 24 },
   internal.users.updateUsersWithMissingEmbeddingsAction,
 );
 
 crons.interval(
-  "prune stale questions",
+  "populate missing styles embeddings",
   { hours: 24 },
-  internal.questions.pruneStaleQuestionsAndEmail,
-  { maxQuestions: 50 }
+  internal.ai.populateMissingStyleEmbeddings,
 );
+
+crons.interval(
+  "populate missing tones embeddings",
+  { hours: 24 },
+  internal.ai.populateMissingToneEmbeddings
+);
+// crons.interval(
+//   "prune stale questions",
+//   { hours: 24 },
+//   internal.questions.pruneStaleQuestionsAndEmail,
+//   { maxQuestions: 50 }
+// );
 
 export default crons

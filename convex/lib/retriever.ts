@@ -62,3 +62,52 @@ export const embedQuestion = internalAction({
     });
   },
 });
+export const embedStyle = internalAction({
+  args: {
+    styleId: v.id("styles"),
+  },
+  handler: async (ctx, args) => {
+    const style = await ctx.runQuery(internal.styles.getStyleBySystemId, {
+      id: args.styleId,
+    });
+    if (!style) {
+      return;
+    }
+
+    // Construct text to embed: name + description + promptGuidanceForAI
+    const textParts = [style.name];
+    if (style.description) textParts.push(style.description);
+    if (style.promptGuidanceForAI) textParts.push(style.promptGuidanceForAI);
+
+    const textToEmbed = textParts.join(". ");
+
+    const vector = await embed(textToEmbed);
+    await ctx.runMutation(internal.styles.addStyleEmbedding, {
+      styleId: args.styleId,
+      embedding: vector,
+    });
+  },
+});
+
+export const embedTone = internalAction({
+  args: {
+    toneId: v.id("tones"),
+  },
+  handler: async (ctx, args) => {
+    const tone = await ctx.runQuery(api.tones.getTone, {
+      id: args.toneId,
+    });
+    if (!tone) {
+      return;
+    }
+    // Only embed if there is text
+    const textToEmbed = tone.name;
+    if (!textToEmbed) return;
+
+    const vector = await embed(textToEmbed);
+    await ctx.runMutation(internal.tones.addToneEmbedding, {
+      toneId: args.toneId,
+      embedding: vector,
+    });
+  },
+});
