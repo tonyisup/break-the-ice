@@ -183,7 +183,8 @@ export const getNextRandomQuestions = query({
       ))
       .take(count * 4);
 
-    return filteredQuestions;
+    shuffleArray(filteredQuestions);
+    return filteredQuestions.slice(0, count);
   },
 });
 
