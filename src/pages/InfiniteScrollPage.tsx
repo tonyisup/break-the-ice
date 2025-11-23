@@ -41,6 +41,21 @@ export default function InfiniteScrollPage() {
   const [showTopButton, setShowTopButton] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
 
+  // Fetch all styles and tones for card rendering
+  const allStyles = useQuery(api.styles.getStyles);
+  const allTones = useQuery(api.tones.getTones);
+
+  const stylesMap = useMemo(() => {
+    if (!allStyles) return new Map<string, Doc<"styles">>();
+    // Cast to Doc<"styles"> as getStyles returns objects compatible with the Doc type
+    return new Map(allStyles.map(s => [s.id, s as unknown as Doc<"styles">]));
+  }, [allStyles]);
+
+  const tonesMap = useMemo(() => {
+    if (!allTones) return new Map<string, Doc<"tones">>();
+    return new Map(allTones.map(t => [t.id, t as unknown as Doc<"tones">]));
+  }, [allTones]);
+
   // Request ID to handle race conditions
   const requestIdRef = useRef(0);
 
@@ -279,6 +294,13 @@ export default function InfiniteScrollPage() {
       <main className="flex-1 flex flex-col pb-20">
         <div className="flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full">
           {questions.map((question) => {
+            // Derive specific style/tone/gradient for this card
+            const cardStyle = question.style ? stylesMap.get(question.style) : undefined;
+            const cardTone = question.tone ? tonesMap.get(question.tone) : undefined;
+            const cardGradient = (cardStyle?.color && cardTone?.color)
+              ? [cardStyle.color, cardTone.color]
+              : ['#667EEA', '#764BA2'];
+
             return (
               <div
                 key={question._id}
@@ -290,7 +312,9 @@ export default function InfiniteScrollPage() {
                   isGenerating={false}
                   question={question}
                   isFavorite={likedQuestions.includes(question._id)}
-                  gradient={gradient}
+                  gradient={cardGradient}
+                  style={cardStyle}
+                  tone={cardTone}
                   onToggleFavorite={() => toggleLike(question._id)}
                   onToggleHidden={() => toggleHide(question._id)}
                   onHideStyle={handleHideStyle}
