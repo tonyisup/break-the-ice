@@ -235,14 +235,16 @@ export const recordAnalytics = mutation({
       v.literal("hidden"),
     ),
     viewDuration: v.number(),
+    sessionId: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { questionId, event, viewDuration } = args;
+    const { questionId, event, viewDuration, sessionId } = args;
     const question = await ctx.db.get(questionId);
     if (!question) return;
 
     const identity = await ctx.auth.getUserIdentity();
+    console.log("identity", identity);
     let userId = null;
     if (identity) {
       const user = await ctx.db
@@ -260,6 +262,7 @@ export const recordAnalytics = mutation({
       viewDuration,
       timestamp: Date.now(),
       userId: userId ?? undefined,
+      sessionId,
     });
 
     if (event === "liked") {

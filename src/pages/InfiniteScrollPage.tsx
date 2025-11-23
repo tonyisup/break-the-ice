@@ -14,10 +14,12 @@ import { Icon } from "@/components/ui/icons/icon";
 import { Button } from "@/components/ui/button";
 import { ArrowUp } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
+import { useAuth } from "@clerk/clerk-react";
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
   const convex = useConvex();
+  const user = useAuth();
   const generateAIQuestions = useAction(api.ai.generateAIQuestions);
 
   const {
@@ -132,6 +134,7 @@ export default function InfiniteScrollPage() {
             questionId: activeQuestionRef.current._id,
             event: "seen",
             viewDuration: duration,
+            sessionId: user.sessionId ?? undefined,
           }); // No catch here as it might run during unmount
         }
       }
