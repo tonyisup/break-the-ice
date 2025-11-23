@@ -44,6 +44,7 @@ export default function InfiniteScrollPage() {
   // Fetch all styles and tones for card rendering
   const allStyles = useQuery(api.styles.getStyles);
   const allTones = useQuery(api.tones.getTones);
+  const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
   const stylesMap = useMemo(() => {
     if (!allStyles) return new Map<string, Doc<"styles">>();
@@ -111,6 +112,32 @@ export default function InfiniteScrollPage() {
     };
   }, []);
 
+  // Track view duration
+  const activeQuestionRef = useRef<Doc<"questions"> | null>(null);
+  const startTimeRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+
+
+    // Update refs for the new active question
+    activeQuestionRef.current = activeQuestion;
+    startTimeRef.current = Date.now();
+
+    // Cleanup function to record the last question when component unmounts
+    return () => {
+      if (activeQuestionRef.current) {
+        const duration = Date.now() - startTimeRef.current;
+        if (duration > 1000) {
+          recordAnalytics({
+            questionId: activeQuestionRef.current._id,
+            event: "seen",
+            viewDuration: duration,
+          }); // No catch here as it might run during unmount
+        }
+      }
+    };
+  }, [activeQuestion, recordAnalytics]);
+
   const style = useQuery(api.styles.getStyle, { id: activeQuestion?.style || defaultStyle || "would-you-rather" });
   const tone = useQuery(api.tones.getTone, { id: activeQuestion?.tone || defaultTone || "fun-silly" });
 
@@ -118,7 +145,7 @@ export default function InfiniteScrollPage() {
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
   const gradientTarget = effectiveTheme === "dark" ? "#000" : "#bbb";
 
-  const recordAnalytics = useMutation(api.questions.recordAnalytics);
+
 
   // Function to load more questions
   const loadMoreQuestions = useCallback(async () => {

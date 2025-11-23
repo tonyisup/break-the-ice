@@ -116,6 +116,8 @@ export default defineSchema({
       v.literal("liked"),
       v.literal("hidden")
     ),
+    viewDuration: v.optional(v.number()),
+    seenCount: v.optional(v.number()),
     updatedAt: v.number(),
   })
     .index("by_userId", ["userId"])

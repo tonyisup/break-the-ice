@@ -242,11 +242,24 @@ export const recordAnalytics = mutation({
     const question = await ctx.db.get(questionId);
     if (!question) return;
 
+    const identity = await ctx.auth.getUserIdentity();
+    let userId = null;
+    if (identity) {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", identity.email))
+        .unique();
+      if (user) {
+        userId = user._id;
+      }
+    }
+
     await ctx.db.insert("analytics", {
       questionId,
       event,
       viewDuration,
       timestamp: Date.now(),
+      userId: userId ?? undefined,
     });
 
     if (event === "liked") {
@@ -262,7 +275,39 @@ export const recordAnalytics = mutation({
 
     await ctx.db.patch(questionId, {
       averageViewDuration: newAverage,
+      totalShows: question.totalShows + 1,
+      lastShownAt: Date.now(),
     });
+
+    // Update userQuestions if user is logged in
+    if (userId) {
+      const userQuestion = await ctx.db
+        .query("userQuestions")
+        .withIndex("by_userIdAndQuestionId", (q) =>
+          q.eq("userId", userId!).eq("questionId", questionId)
+        )
+        .unique();
+
+      if (userQuestion) {
+        await ctx.db.patch(userQuestion._id, {
+          viewDuration: userQuestion.viewDuration ? userQuestion.viewDuration + viewDuration : viewDuration,
+          seenCount: userQuestion.seenCount ? userQuestion.seenCount + 1 : 1,
+          updatedAt: Date.now(),
+          // Don't overwrite "liked" status with "seen"
+          status: userQuestion.status === "liked" ? "liked" : (event === "liked" ? "liked" : userQuestion.status),
+        });
+      } else {
+        await ctx.db.insert("userQuestions", {
+          userId,
+          questionId,
+          status: event === "liked" ? "liked" : "seen",
+          viewDuration,
+          seenCount: 1,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
     return null;
   },
 });
@@ -294,6 +339,7 @@ export const getQuestionsByIds = query({
     return questions.filter((q): q is Doc<"questions"> => q !== null);
   },
 });
+
 export const getUserLikedAndPreferredEmbedding = query({
   args: {},
   handler: async (ctx) => {
@@ -324,6 +370,7 @@ export const getUserLikedAndPreferredEmbedding = query({
     return results;
   },
 });
+
 export const getCustomQuestions = query({
   args: {},
   handler: async (ctx, args) => {
@@ -345,6 +392,7 @@ export const getCustomQuestions = query({
     return questions;
   },
 });
+
 export const getLikedQuestions = query({
   args: {},
   handler: async (ctx) => {
@@ -897,6 +945,7 @@ export const deleteDuplicateQuestions = mutation({
     return null;
   },
 });
+
 
 // Internal query to get question counts by style and tone combination
 export const getQuestionCountsByStyleAndTone = internalQuery({
