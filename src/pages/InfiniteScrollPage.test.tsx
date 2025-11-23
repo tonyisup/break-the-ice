@@ -44,6 +44,11 @@ vi.mock('@/components/modern-question-card', () => ({
   ModernQuestionCard: vi.fn(() => <div data-testid="modern-question-card">Card</div>),
 }));
 
+vi.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({ isSignedIn: true, userId: 'user123' }),
+  useUser: () => ({ isSignedIn: true, user: { id: 'user123' } }),
+}));
+
 // Mock api object structure
 vi.mock('../../convex/_generated/api', () => ({
   api: {

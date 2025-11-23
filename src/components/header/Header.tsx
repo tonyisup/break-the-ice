@@ -12,10 +12,8 @@ interface HeaderProps {
 
 export const Header = ({ homeLinkSlot }: HeaderProps) => {
   const { isSignedIn } = useAuth();
-  const settings = useQuery(api.users.getSettings);
   const customQuestions = useQuery(api.questions.getCustomQuestions);
   const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
-  const needsMigration = (isSignedIn && settings && !settings.migratedFromLocalStorage) || (isSignedIn && !settings);
 
   return (
     <header className="p-4 flex justify-between items-center">
@@ -58,11 +56,6 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
                 <span className="hidden sm:inline"> Settings</span>
               </Link>
             </Button>
-            {needsMigration && (
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-xs">
-                !
-              </div>
-            )}
           </div>
         )}
         <ThemeToggle />
