@@ -1,6 +1,25 @@
 import { api, internal } from "./_generated/api";
+import { Doc } from "./_generated/dataModel";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+
+export const getCurrentUser = query({
+  args: {},
+  returns: v.union(v.null(), v.any()),
+  handler: async (ctx): Promise<Doc<"users"> | null> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+
+    return user;
+  },
+});
 
 export const store = mutation({
   args: {},
@@ -525,12 +544,14 @@ export const getUser = internalQuery({
   },
 });
 
-export const getUserQuestions = internalQuery({
+export const getUserLikedQuestions = internalQuery({
   args: {
     userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.query("userQuestions").withIndex("by_userId", (q) => q.eq("userId", args.userId)).collect();
+    return await ctx.db.query("userQuestions")
+      .withIndex("by_userIdAndStatus", (q) => q.eq("userId", args.userId).eq("status", "liked"))
+      .collect();
   },
 });
 
@@ -558,7 +579,7 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
       throw new Error("User not found");
     }
 
-    const userQuestions = await ctx.runQuery(internal.users.getUserQuestions, {
+    const userQuestions = await ctx.runQuery(internal.users.getUserLikedQuestions, {
       userId: args.userId,
     });
 

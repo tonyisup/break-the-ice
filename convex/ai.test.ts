@@ -11,19 +11,19 @@ process.env.OPENAI_API_KEY = "test-key";
 const mockCreate = vi.fn();
 const mockEmbeddingsCreate = vi.fn();
 vi.mock('openai', () => {
-    const mockOpenAI = {
-        chat: {
-            completions: {
-                create: mockCreate,
-            },
-        },
-        embeddings: {
-            create: mockEmbeddingsCreate,
-        }
-    };
-    // Need to mock both the default export and the named export 'OpenAI'
-    const MockedOpenAI = vi.fn(() => mockOpenAI);
-    return { OpenAI: MockedOpenAI, default: MockedOpenAI, __esModule: true };
+  const mockOpenAI = {
+    chat: {
+      completions: {
+        create: mockCreate,
+      },
+    },
+    embeddings: {
+      create: mockEmbeddingsCreate,
+    }
+  };
+  // Need to mock both the default export and the named export 'OpenAI'
+  const MockedOpenAI = vi.fn(() => mockOpenAI);
+  return { OpenAI: MockedOpenAI, default: MockedOpenAI, __esModule: true };
 });
 
 beforeEach(() => {
@@ -57,11 +57,11 @@ test("generate AI question with existing questions", async () => {
 
     // Insert a tone
     await ctx.db.insert("tones", {
-        name: "Test Tone",
-        promptGuidanceForAI: "Test Guidance",
-        id: "test-tone",
-        color: "red",
-        icon: "test-icon",
+      name: "Test Tone",
+      promptGuidanceForAI: "Test Guidance",
+      id: "test-tone",
+      color: "red",
+      icon: "test-icon",
     });
 
     // Insert some questions
@@ -82,18 +82,9 @@ test("generate AI question with existing questions", async () => {
 
 
   // 3. Run the action
-  const result = await t.action(api.ai.generateAIQuestion, {
-    selectedTags: [],
-    style: "test-style",
-    tone: "test-tone",
-    count: 2,
-    _existingQuestionsForTesting: [
-      "Existing question 0",
-      "Existing question 1",
-      "Existing question 2",
-      "Existing question 3",
-      "Existing question 4",
-    ],
+  const result = await t.action(api.ai.generateAIQuestions, {
+    prompt: "test-style",
+    count: 2
   });
 
   // 4. Assert the result
@@ -110,7 +101,7 @@ test("generate AI question with existing questions", async () => {
   // 5. Assert that the mock was called correctly
   const calls = mockCreate.mock.calls;
   expect(calls.length).toBe(1);
-  
+
   const messages = calls[0][0].messages;
   expect(messages.length).toBe(2);
   expect(messages[0].role).toBe("system");

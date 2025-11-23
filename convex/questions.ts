@@ -6,6 +6,19 @@ import { embed } from "./lib/retriever";
 import { api, internal } from "./_generated/api";
 import { createPrunedStaleQuestionsEmail } from "./lib/emails";
 
+export const calculateAverageEmbedding = (embeddings: number[][]) => {
+  if (embeddings.length === 0) {
+    return [];
+  }
+  if (embeddings[0].length === 0) {
+    return [];
+  }
+  const averageEmbedding = embeddings.reduce((acc, embedding) => {
+    return acc.map((value, index) => value + embedding[index]);
+  }, Array(embeddings[0].length).fill(0));
+  return averageEmbedding.map((value) => value / embeddings.length);
+};
+
 export const discardQuestion = mutation({
   args: {
     questionId: v.id("questions"),
@@ -147,6 +160,33 @@ export const getSimilarQuestions = query({
   },
 });
 
+export const getNextRandomQuestions = query({
+  args: {
+    count: v.number(),
+    seen: v.optional(v.array(v.id("questions"))),
+    hidden: v.optional(v.array(v.id("questions"))),
+  },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    const { count, seen, hidden } = args;
+    const seenIds = new Set(seen ?? []);
+
+    // Get all questions first, and filter out seen ones.
+    const filteredQuestions = await ctx.db
+      .query("questions")
+      .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
+      .filter((q: any) => q.and(
+        q.neq(q.field("text"), undefined),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
+        ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
+        ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id))
+      ))
+      .take(count * 4);
+
+    return filteredQuestions;
+  },
+});
+
 export const getNextQuestions = query({
   args: {
     count: v.number(),
@@ -253,7 +293,57 @@ export const getQuestionsByIds = query({
     return questions.filter((q): q is Doc<"questions"> => q !== null);
   },
 });
-
+export const getUserLikedAndPreferredEmbedding = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+    if (!user) {
+      return [];
+    }
+    const likedQuestionIds = await ctx.db
+      .query("userQuestions")
+      .withIndex("by_userIdAndStatus", (q) =>
+        q.eq("userId", user._id).eq("status", "liked")
+      )
+      .collect();
+    const likedQuestions = await Promise.all(
+      likedQuestionIds.map((q) => ctx.db.get(q.questionId))
+    );
+    const embeddings = likedQuestions
+      .map((q) => q?.embedding)
+      .filter((e) => e !== undefined);
+    const results = calculateAverageEmbedding([...embeddings, user.questionPreferenceEmbedding ?? []]);
+    return results;
+  },
+});
+export const getCustomQuestions = query({
+  args: {},
+  handler: async (ctx, args) => {
+    const userIdentity = await ctx.auth.getUserIdentity();
+    if (!userIdentity) {
+      return [];
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", userIdentity.email))
+      .unique();
+    if (!user) {
+      return [];
+    }
+    const questions = await ctx.db
+      .query("questions")
+      .withIndex("by_author", (q) => q.eq("authorId", user._id))
+      .collect();
+    return questions;
+  },
+});
 export const getLikedQuestions = query({
   args: {},
   handler: async (ctx) => {
@@ -288,29 +378,6 @@ export const getLikedQuestions = query({
     );
 
     return questions.filter((q): q is Doc<"questions"> => q !== null);
-  },
-});
-
-export const getCustomQuestions = query({
-  args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return [];
-    }
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email))
-      .unique();
-    if (!user) {
-      return [];
-    }
-    const questions = await ctx.db
-      .query("questions")
-      .filter((q) => q.eq(q.field("authorId"), user._id))
-      .order("desc")
-      .collect();
-    return questions;
   },
 });
 
@@ -539,46 +606,6 @@ export const getQuestionsToEmbed = internalQuery({
       .filter((q) => q.eq(q.field("embedding"), undefined))
       .take(10);
     return questions;
-  },
-});
-
-export const backfillQuestionEmbeddings = internalAction({
-  args: {
-    questionId: v.optional(v.id("questions")),
-  },
-  handler: async (ctx, args) => {
-    const startQuestion = args.questionId
-      ? await ctx.runQuery(api.questions.getQuestion, { id: args.questionId })
-      : null;
-    const questions = await ctx.runQuery(
-      internal.questions.getQuestionsToEmbed,
-      {
-        startQuestionId: startQuestion?._id,
-        startCreationTime: startQuestion?._creationTime,
-      }
-    );
-    if (questions.length === 0) {
-      console.log("No more questions to embed");
-      return;
-    }
-    for (const question of questions) {
-      const text = question.text ?? question.customText ?? "";
-      if (text.trim().length === 0) {
-        continue;
-      }
-      const embedding = await embed(text);
-      await ctx.runMutation(internal.questions.addEmbedding, {
-        questionId: question._id,
-        embedding,
-      });
-    }
-    if (questions.length < 10) {
-      console.log("Done");
-      return;
-    }
-    await ctx.runAction(internal.questions.backfillQuestionEmbeddings, {
-      questionId: questions[questions.length - 1]._id,
-    });
   },
 });
 
@@ -972,192 +999,6 @@ export const getQuestionEmbedding = internalQuery({
   },
 });
 
-
-// Public query for admin to preview stale questions
-export const getStaleQuestionsPreview = query({
-  args: {
-    maxQuestions: v.optional(v.number()),
-  },
-  returns: v.array(v.any()),
-  handler: async (ctx, args) => {
-    await ensureAdmin(ctx);
-    // pull questions that are a week old 
-    // and totalLikes is zero
-    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const questions = await ctx.db.query("questions")
-      .filter((q) => q.and(
-        q.lt(q.field("lastShownAt"), oneWeekAgo),
-        q.gt(q.field("totalShows"), 0),
-        q.eq(q.field("totalLikes"), 0),
-        q.eq(q.field("prunedAt"), undefined)
-      ))
-      .order("desc")
-      .take(args.maxQuestions ?? 50);
-
-    return questions.map((q) => {
-      const { embedding: _embedding, prunedAt: _prunedAt, ...questionData } = q;
-      return questionData;
-    });
-  },
-});
-
-export const getStaleQuestions = internalQuery({
-  args: {
-    maxQuestions: v.optional(v.number()),
-  },
-  returns: v.array(v.any()),
-  handler: async (ctx, args) => {
-    // pull questions that are a week old 
-    // and totalLikes is zero
-    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const questions = await ctx.db.query("questions")
-      .filter((q) => q.and(
-        q.lt(q.field("lastShownAt"), oneWeekAgo),
-        q.gt(q.field("totalShows"), 0),
-        q.eq(q.field("totalLikes"), 0),
-        q.eq(q.field("prunedAt"), undefined)
-      )).take(args.maxQuestions ?? 50);
-    return [...questions].map((q) => ({ _id: q._id }));
-  }
-});
-
-export const deleteQuestions = internalMutation({
-  args: {
-    ids: v.array(v.id("questions")),
-  },
-  handler: async (ctx, args) => {
-    for (const id of args.ids) {
-      await ctx.db.patch(id, {
-        prunedAt: Date.now(),
-      });
-    }
-  }
-});
-
-export const pruneStaleQuestions = internalAction({
-  args: {
-    maxQuestions: v.optional(v.number()),
-  },
-  returns: v.object({
-    questionsDeleted: v.number(),
-    errors: v.array(v.string()),
-  }),
-  handler: async (ctx, args) => {
-    const errors: string[] = [];
-    let questionsDeleted = 0;
-    try {
-      const staleQuestions: { _id: Id<"questions"> }[] = await ctx.runQuery(internal.questions.getStaleQuestions, { maxQuestions: args.maxQuestions ?? 50 });
-      await ctx.runMutation(internal.questions.deleteQuestions, { ids: staleQuestions.map((q) => q._id) });
-      questionsDeleted = staleQuestions.length;
-    } catch (error) {
-      errors.push(`Error deleting questions: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    return {
-      questionsDeleted,
-      errors,
-    };
-  },
-});
-
-export const pruneStaleQuestionsAndEmail = internalAction({
-  args: {
-    maxQuestions: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const result: { questionsDeleted: number, errors: string[] } = await ctx.runAction(internal.questions.pruneStaleQuestions, { maxQuestions: args.maxQuestions ?? 50 });
-    const { subject, html } = createPrunedStaleQuestionsEmail(result);
-    await ctx.runAction(internal.email.sendEmail, { subject, html });
-  },
-});
-
-// Query to check if current user is admin (for use in actions)
-export const checkIsAdmin = query({
-  args: {},
-  returns: v.boolean(),
-  handler: async (ctx) => {
-    try {
-      await ensureAdmin(ctx);
-      return true;
-    } catch {
-      return false;
-    }
-  },
-});
-
-// Public action for admin to manually trigger prune process
-export const pruneStaleQuestionsAdmin = action({
-  args: {
-    maxQuestions: v.optional(v.number()),
-    sendEmail: v.optional(v.boolean()),
-  },
-  returns: v.object({
-    questionsDeleted: v.number(),
-    errors: v.array(v.string()),
-  }),
-  handler: async (ctx, args) => {
-    // Check admin status via query
-    const isAdmin: boolean = await ctx.runQuery(api.questions.checkIsAdmin, {});
-    if (!isAdmin) {
-      throw new Error("Not authorized: Admin access required");
-    }
-
-    const result: { questionsDeleted: number, errors: string[] } = await ctx.runAction(internal.questions.pruneStaleQuestions, {
-      maxQuestions: args.maxQuestions ?? 50
-    });
-
-    if (args.sendEmail) {
-      const { subject, html } = createPrunedStaleQuestionsEmail(result);
-      await ctx.runAction(internal.email.sendEmail, { subject, html });
-    }
-
-    return result;
-  },
-});
-
-export const calculateAverageEmbedding = (embeddings: number[][]) => {
-  if (embeddings.length === 0) {
-    return [];
-  }
-  if (embeddings[0].length === 0) {
-    return [];
-  }
-  const averageEmbedding = embeddings.reduce((acc, embedding) => {
-    return acc.map((value, index) => value + embedding[index]);
-  }, Array(embeddings[0].length).fill(0));
-  return averageEmbedding.map((value) => value / embeddings.length);
-};
-export const getNextQuestionsByEmbedding = action({
-  args: {
-    style: v.optional(v.string()),
-    tone: v.optional(v.string()),
-    count: v.optional(v.number()),
-    userId: v.optional(v.id("users")),
-  },
-  returns: v.array(v.any()),
-  handler: async (ctx, args) => {
-    const { style, tone, count, userId } = args;
-    if (!userId) {
-      return [];
-    }
-    const user: Doc<"users"> | null = await ctx.runQuery(internal.users.getUser, {
-      userId: userId,
-    });
-    if (!user) {
-      return [];
-    }
-    const embedding = await embed(style + " " + tone);
-    if (!embedding) {
-      return [];
-    }
-    const averageEmbedding = calculateAverageEmbedding([embedding, user.questionPreferenceEmbedding ?? []] as number[][]);
-    const results: Array<Doc<"questions">> = await ctx.runAction(api.questions.getNearestQuestionsByEmbedding, {
-      embedding: averageEmbedding,
-      count: count,
-    });
-
-    return results;
-  },
-});
 export const getNearestQuestionsByEmbedding = action({
   args: {
     embedding: v.array(v.number()),
@@ -1202,14 +1043,35 @@ export const getNearestQuestionsByEmbedding = action({
   },
 });
 
-export const doNotPruneQuestion = mutation({
+export const getNextQuestionsByEmbedding = action({
   args: {
-    questionId: v.id("questions"),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    count: v.optional(v.number()),
+    userId: v.optional(v.id("users")),
   },
+  returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.questionId, {
-      totalShows: 0,
-      prunedAt: undefined,
+    const { style, tone, count, userId } = args;
+    if (!userId) {
+      return [];
+    }
+    const user: Doc<"users"> | null = await ctx.runQuery(internal.users.getUser, {
+      userId: userId,
     });
+    if (!user) {
+      return [];
+    }
+    const embedding = await embed(style + " " + tone);
+    if (!embedding) {
+      return [];
+    }
+    const averageEmbedding = calculateAverageEmbedding([embedding, user.questionPreferenceEmbedding ?? []] as number[][]);
+    const results: Array<Doc<"questions">> = await ctx.runAction(api.questions.getNearestQuestionsByEmbedding, {
+      embedding: averageEmbedding,
+      count: count,
+    });
+
+    return results;
   },
 });

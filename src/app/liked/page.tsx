@@ -27,7 +27,7 @@ function LikedQuestionsPageContent() {
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
   const [isAddPersonalQuestionDialogOpen, setIsAddPersonalQuestionDialogOpen] = useState(false);
-  
+
   const [isPersonalOpen, setIsPersonalOpen] = useState(true);
   const [isPendingOpen, setIsPendingOpen] = useState(true);
   const [isLikedOpen, setIsLikedOpen] = useState(true);
@@ -56,7 +56,7 @@ function LikedQuestionsPageContent() {
       return typeof id === 'string' && id.length > 0;
     });
   }, [likedQuestions, otherCustomQuestionIds]);
-  
+
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions as Id<"questions">[] });
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
@@ -66,16 +66,16 @@ function LikedQuestionsPageContent() {
   // Clean up invalid question IDs automatically
   useEffect(() => {
     if (isCleaningUp) return;
-    
+
     try {
       const validQuestions = likedQuestions.filter(id => {
         return typeof id === 'string' && id.length > 0;
       });
-      
+
       if (validQuestions.length !== likedQuestions.length) {
         console.log("Cleaning up invalid question IDs from localStorage");
         setIsCleaningUp(true);
-        clearLikedQuestions();  
+        clearLikedQuestions();
         // Reset cleanup flag after a short delay
         setTimeout(() => setIsCleaningUp(false), 100);
       }
@@ -88,12 +88,12 @@ function LikedQuestionsPageContent() {
   // Remove questions that no longer exist in the database
   useEffect(() => {
     if (isCleaningUp) return;
-    
+
     try {
       if (questions && likedQuestions.length > 0) {
         const existingQuestionIds = new Set(questions.map(q => q._id));
         const validIds = likedQuestions.filter(id => existingQuestionIds.has(id));
-        
+
         if (validIds.length !== likedQuestions.length) {
           console.log("Removing deleted questions from likes");
           setIsCleaningUp(true);
@@ -175,22 +175,22 @@ function LikedQuestionsPageContent() {
 
         {/* Pending Questions Section */}
         {pendingQuestions.length > 0 && (
-           <CollapsibleSection
-             title="My Submitted Questions"
-             count={pendingQuestions.length}
-             isOpen={isPendingOpen}
-             onOpenChange={setIsPendingOpen}
-           >
-             <QuestionGrid
-               questions={pendingQuestions as Doc<"questions">[]}
-               styles={styles || []}
-               tones={tones || []}
-               likedQuestions={likedQuestions}
-               onToggleLike={handleRemoveFavorite}
-               onRemoveItem={handleRemoveFavorite}
-               variant="condensed"
-             />
-           </CollapsibleSection>
+          <CollapsibleSection
+            title="My Submitted Questions"
+            count={pendingQuestions.length}
+            isOpen={isPendingOpen}
+            onOpenChange={setIsPendingOpen}
+          >
+            <QuestionGrid
+              questions={pendingQuestions as Doc<"questions">[]}
+              styles={styles || []}
+              tones={tones || []}
+              likedQuestions={likedQuestions}
+              onToggleLike={handleRemoveFavorite}
+              onRemoveItem={handleRemoveFavorite}
+              variant="condensed"
+            />
+          </CollapsibleSection>
         )}
 
         {/* Liked Questions Section */}

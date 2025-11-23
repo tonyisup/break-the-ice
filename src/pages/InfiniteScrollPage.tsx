@@ -18,7 +18,7 @@ import { ModernQuestionCard } from "@/components/modern-question-card";
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
   const convex = useConvex();
-  const generateAIQuestion = useAction(api.ai.generateAIQuestion);
+  const generateAIQuestions = useAction(api.ai.generateAIQuestions);
 
   const {
     likedQuestions,
@@ -34,70 +34,81 @@ export default function InfiniteScrollPage() {
     defaultTone,
   } = useStorageContext();
 
-  const styles = useQuery(api.styles.getFilteredStyles, { excluded: hiddenStyles });
-  const tones = useQuery(api.tones.getFilteredTones, { excluded: hiddenTones });
-
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedStyle, setSelectedStyle] = useState(
-    searchParams.get("style") ?? defaultStyle ?? styles?.[0]?.id ?? ""
-  );
-  const [selectedTone, setSelectedTone] = useState(
-    searchParams.get("tone") ?? defaultTone ?? tones?.[0]?.id ?? ""
-  );
-
-  const [isStyleTonesOpen, setIsStyleTonesOpen] = useState(true); // Default open
-  const styleSelectorRef = useRef<StyleSelectorRef>(null);
-  const toneSelectorRef = useRef<ToneSelectorRef>(null);
-
   const [questions, setQuestions] = useState<Doc<"questions">[]>([]);
   const [seenIds, setSeenIds] = useState<Set<Id<"questions">>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [showTopButton, setShowTopButton] = useState(false);
+  const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
 
   // Request ID to handle race conditions
   const requestIdRef = useRef(0);
 
+  const questionsRef = useRef(questions);
+  questionsRef.current = questions;
+
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const setQuestionRef = useCallback((element: HTMLDivElement | null, questionId: string) => {
+    if (element) {
+      cardRefs.current.set(questionId, element);
+      observerRef.current?.observe(element);
+    } else {
+      const el = cardRefs.current.get(questionId);
+      if (el) {
+        observerRef.current?.unobserve(el);
+        cardRefs.current.delete(questionId);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const options = {
+      root: null,
+      rootMargin: '-50% 0px -50% 0px',
+      threshold: 0
+    };
+
+    const handleIntersect: IntersectionObserverCallback = (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const questionId = entry.target.getAttribute('data-question-id');
+          if (questionId) {
+            const question = questionsRef.current.find(q => q._id === questionId);
+            if (question) {
+              setActiveQuestion(question);
+            }
+          }
+        }
+      });
+    };
+
+    observerRef.current = new IntersectionObserver(handleIntersect, options);
+
+    // Observe existing elements
+    cardRefs.current.forEach((element) => {
+      observerRef.current?.observe(element);
+    });
+
+    return () => {
+      observerRef.current?.disconnect();
+    };
+  }, []);
+
+  const style = useQuery(api.styles.getStyle, { id: activeQuestion?.style || defaultStyle || "would-you-rather" });
+  const tone = useQuery(api.tones.getTone, { id: activeQuestion?.tone || defaultTone || "fun-silly" });
+
   // Used for styling and gradient
-  const style = useMemo(() => styles?.find(s => s.id === selectedStyle), [styles, selectedStyle]);
-  const tone = useMemo(() => tones?.find(t => t.id === selectedTone), [tones, selectedTone]);
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
   const gradientTarget = effectiveTheme === "dark" ? "#000" : "#bbb";
 
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
-  // Initialize defaults if needed
-  useEffect(() => {
-    if (styles && styles.length > 0 && !selectedStyle) {
-      setSelectedStyle(defaultStyle ?? styles[0].id);
-    }
-    if (tones && tones.length > 0 && !selectedTone) {
-      setSelectedTone(defaultTone ?? tones[0].id);
-    }
-  }, [styles, tones, selectedStyle, selectedTone, defaultStyle, defaultTone]);
-
-  // Update URL params
-  useEffect(() => {
-    const newSearchParams = new URLSearchParams(searchParams);
-    newSearchParams.set("style", selectedStyle);
-    newSearchParams.set("tone", selectedTone);
-    setSearchParams(newSearchParams);
-  }, [searchParams, selectedStyle, selectedTone, setSearchParams]);
-
-  // Reset questions when style/tone changes
-  useEffect(() => {
-    requestIdRef.current += 1;
-    setQuestions([]);
-    setSeenIds(new Set());
-    setHasMore(true);
-    setIsLoading(false); // Reset loading state to allow new requests immediately
-    window.scrollTo({ top: 0, behavior: "instant" });
-  }, [selectedStyle, selectedTone]);
-
   // Function to load more questions
   const loadMoreQuestions = useCallback(async () => {
     // Check if we are already loading or missing params
-    if (isLoading || !selectedStyle || !selectedTone) return;
+    if (isLoading) return;
 
     // Capture current request ID
     const currentRequestId = requestIdRef.current;
@@ -107,10 +118,8 @@ export default function InfiniteScrollPage() {
       const BATCH_SIZE = 5;
 
       // 1. Try to get from DB
-      const dbQuestions = await convex.query(api.questions.getNextQuestions, {
+      const dbQuestions = await convex.query(api.questions.getNextRandomQuestions, {
         count: BATCH_SIZE,
-        style: selectedStyle,
-        tone: selectedTone,
         seen: Array.from(seenIds), // Pass currently seen IDs to avoid duplicates
         hidden: hiddenQuestions,
       });
@@ -127,11 +136,9 @@ export default function InfiniteScrollPage() {
         const countToGenerate = Math.min(needed, 3);
 
         try {
-          const generated = await generateAIQuestion({
-            style: selectedStyle,
-            tone: selectedTone,
-            count: countToGenerate,
-            selectedTags: [],
+          const generated = await generateAIQuestions({
+            prompt: "",
+            count: countToGenerate
           });
 
           // Check for staleness after generation await
@@ -176,14 +183,14 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, isLoading, selectedStyle, selectedTone, seenIds, hiddenQuestions, generateAIQuestion]);
+  }, [convex, isLoading, seenIds, hiddenQuestions, generateAIQuestions]);
 
   // Initial load
   useEffect(() => {
-    if (questions.length === 0 && hasMore && selectedStyle && selectedTone) {
+    if (questions.length === 0 && hasMore) {
       loadMoreQuestions();
     }
-  }, [questions.length, hasMore, selectedStyle, selectedTone]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [questions.length, hasMore]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Infinite scroll handler
   useEffect(() => {
@@ -270,56 +277,26 @@ export default function InfiniteScrollPage() {
       <Header />
 
       <main className="flex-1 flex flex-col pb-20">
-        <div className="px-4 w-full flex flex-col justify-center max-w-3xl mx-auto mb-6 pt-4">
-          <CollapsibleSection
-            title="Customize Style & Tone"
-            icons={[style?.icon as Icon, tone?.icon as Icon]}
-            iconColors={[style?.color, tone?.color]}
-            isOpen={isStyleTonesOpen}
-            onOpenChange={setIsStyleTonesOpen}
-          >
-            <StyleSelector
-              styles={styles || []}
-              randomOrder={false}
-              selectedStyle={selectedStyle}
-              ref={styleSelectorRef}
-              onSelectStyle={setSelectedStyle}
-              isHighlighting={isHighlighting}
-              setIsHighlighting={setIsHighlighting}
-              onHighlightStyle={() => { }}
-            />
-            <ToneSelector
-              tones={tones || []}
-              randomOrder={false}
-              ref={toneSelectorRef}
-              selectedTone={selectedTone}
-              onSelectTone={setSelectedTone}
-              isHighlighting={isHighlighting}
-              setIsHighlighting={setIsHighlighting}
-              onHighlightTone={() => { }}
-            />
-          </CollapsibleSection>
-        </div>
-
         <div className="flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full">
           {questions.map((question) => {
-            const qStyle = styles?.find(s => s.id === question.style);
-            const qTone = tones?.find(t => t.id === question.tone);
-
             return (
-              <ModernQuestionCard
+              <div
                 key={question._id}
-                isGenerating={false}
-                question={question}
-                isFavorite={likedQuestions.includes(question._id)}
-                gradient={gradient}
-                style={qStyle}
-                tone={qTone}
-                onToggleFavorite={() => toggleLike(question._id)}
-                onToggleHidden={() => toggleHide(question._id)}
-                onHideStyle={handleHideStyle}
-                onHideTone={handleHideTone}
-              />
+                ref={(el) => setQuestionRef(el, question._id)}
+                data-question-id={question._id}
+                className="w-full"
+              >
+                <ModernQuestionCard
+                  isGenerating={false}
+                  question={question}
+                  isFavorite={likedQuestions.includes(question._id)}
+                  gradient={gradient}
+                  onToggleFavorite={() => toggleLike(question._id)}
+                  onToggleHidden={() => toggleHide(question._id)}
+                  onHideStyle={handleHideStyle}
+                  onHideTone={handleHideTone}
+                />
+              </div>
             );
           })}
 
