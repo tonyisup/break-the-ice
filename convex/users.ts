@@ -62,7 +62,6 @@ export const getSettings = query({
       hiddenQuestions: v.optional(v.array(v.id("questions"))),
       hiddenStyles: v.optional(v.array(v.string())),
       hiddenTones: v.optional(v.array(v.string())),
-      migratedFromLocalStorage: v.optional(v.boolean()),
       defaultStyle: v.optional(v.string()),
       defaultTone: v.optional(v.string()),
     })
@@ -119,26 +118,20 @@ export const getSettings = query({
       hiddenQuestions: hiddenQuestions.length > 0 ? hiddenQuestions : undefined,
       hiddenStyles: hiddenStyles.length > 0 ? hiddenStyles : undefined,
       hiddenTones: hiddenTones.length > 0 ? hiddenTones : undefined,
-      migratedFromLocalStorage: user.migratedFromLocalStorage,
       defaultStyle: user.defaultStyle,
       defaultTone: user.defaultTone,
     };
   },
 });
 
-export const migrateLocalStorageSettings = mutation({
+export const getQuestionHistory = query({
   args: {
-    likedQuestions: v.array(v.id("questions")),
-    hiddenQuestions: v.array(v.id("questions")),
-    hiddenStyles: v.optional(v.array(v.string())),
-    hiddenTones: v.optional(v.array(v.string())),
-    autoAdvanceShuffle: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
   },
-  returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
-      throw new Error("Not authenticated");
+      return [];
     }
 
     const user = await ctx.db
@@ -147,141 +140,31 @@ export const migrateLocalStorageSettings = mutation({
       .unique();
 
     if (!user) {
-      throw new Error("User not found");
+      return [];
     }
 
-    // Delete existing userQuestions entries for this user
-    const existingUserQuestions = await ctx.db
-      .query("userQuestions")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
+    const limit = args.limit ?? 50;
 
-    for (const uq of existingUserQuestions) {
-      await ctx.db.delete(uq._id);
-    }
+    const history = await ctx.db
+      .query("analytics")
+      .withIndex("by_userId_event_timestamp", (q) =>
+        q.eq("userId", user._id).eq("event", "seen")
+      )
+      .order("desc")
+      .take(limit);
 
-    // Delete existing hidden styles and tones
-    const existingHiddenStyles = await ctx.db
-      .query("userStyles")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
+    const questions = await Promise.all(
+      history.map(async (h) => {
+        const question = await ctx.db.get(h.questionId);
+        if (!question) return null;
+        return {
+          question,
+          viewedAt: h.timestamp,
+        };
+      })
+    );
 
-    for (const us of existingHiddenStyles) {
-      await ctx.db.delete(us._id);
-    }
-
-    const existingHiddenTones = await ctx.db
-      .query("userTones")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
-
-    for (const ut of existingHiddenTones) {
-      await ctx.db.delete(ut._id);
-    }
-
-    // Deduplicate input arrays
-    const uniqueLikedQuestions = Array.from(new Set(args.likedQuestions));
-    const uniqueHiddenQuestions = Array.from(new Set(args.hiddenQuestions));
-    const uniqueHiddenStyles = args.hiddenStyles ? Array.from(new Set(args.hiddenStyles)) : [];
-    const uniqueHiddenTones = args.hiddenTones ? Array.from(new Set(args.hiddenTones)) : [];
-
-    // Insert new liked questions (check for duplicates)
-    const now = Date.now();
-    for (const questionId of uniqueLikedQuestions) {
-      // Check if entry already exists
-      const existing = await ctx.db
-        .query("userQuestions")
-        .withIndex("by_userIdAndQuestionId", (q) =>
-          q.eq("userId", user._id).eq("questionId", questionId)
-        )
-        .first();
-
-      if (!existing) {
-        await ctx.db.insert("userQuestions", {
-          userId: user._id,
-          questionId,
-          status: "liked",
-          updatedAt: now,
-        });
-      } else if (existing.status !== "liked") {
-        // Update status if it exists with different status
-        await ctx.db.patch(existing._id, {
-          status: "liked",
-          updatedAt: now,
-        });
-      }
-    }
-
-    // Insert new hidden questions (check for duplicates)
-    for (const questionId of uniqueHiddenQuestions) {
-      // Check if entry already exists
-      const existing = await ctx.db
-        .query("userQuestions")
-        .withIndex("by_userIdAndQuestionId", (q) =>
-          q.eq("userId", user._id).eq("questionId", questionId)
-        )
-        .first();
-
-      if (!existing) {
-        await ctx.db.insert("userQuestions", {
-          userId: user._id,
-          questionId,
-          status: "hidden",
-          updatedAt: now,
-        });
-      } else if (existing.status !== "hidden") {
-        // Update status if it exists with different status
-        await ctx.db.patch(existing._id, {
-          status: "hidden",
-          updatedAt: now,
-        });
-      }
-    }
-
-    // Insert new hidden styles (check for duplicates)
-    for (const styleId of uniqueHiddenStyles) {
-      // Check if entry already exists
-      const existing = await ctx.db
-        .query("userStyles")
-        .withIndex("by_userIdAndStyleId", (q) =>
-          q.eq("userId", user._id).eq("styleId", styleId)
-        )
-        .first();
-
-      if (!existing) {
-        await ctx.db.insert("userStyles", {
-          userId: user._id,
-          styleId,
-          updatedAt: now,
-          status: "hidden",
-        });
-      }
-    }
-
-    // Insert new hidden tones (check for duplicates)
-    for (const toneId of uniqueHiddenTones) {
-      // Check if entry already exists
-      const existing = await ctx.db
-        .query("userTones")
-        .withIndex("by_userIdAndToneId", (q) =>
-          q.eq("userId", user._id).eq("toneId", toneId)
-        )
-        .first();
-
-      if (!existing) {
-        await ctx.db.insert("userTones", {
-          userId: user._id,
-          toneId,
-          updatedAt: now,
-          status: "hidden",
-        });
-      }
-    }
-
-    await ctx.db.patch(user._id, {
-      migratedFromLocalStorage: true,
-    });
-    return null;
+    return questions.filter((q): q is NonNullable<typeof q> => q !== null);
   },
 });
 

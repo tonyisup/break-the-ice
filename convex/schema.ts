@@ -101,7 +101,6 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.float64()),
     isAdmin: v.optional(v.boolean()),
-    migratedFromLocalStorage: v.optional(v.boolean()),
     questionPreferenceEmbedding: v.optional(v.array(v.number())),
     defaultStyle: v.optional(v.string()),
     defaultTone: v.optional(v.string()),

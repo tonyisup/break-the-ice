@@ -44,7 +44,6 @@ export default function MainPage() {
   const styles = useQuery(api.styles.getFilteredStyles, { excluded: hiddenStyles });
   const tones = useQuery(api.tones.getFilteredTones, { excluded: hiddenTones });
 
-  const { addQuestionHistoryEntry } = useQuestionHistory();
   const [startTime, setStartTime] = useState(Date.now());
   const [isGenerating, setIsGenerating] = useState(false);
   const [cardId, setCardId] = useState(() => Date.now().toString());
@@ -254,11 +253,6 @@ export default function MainPage() {
   }, [isStyleTonesOpen, selectedStyle, selectedTone]);
 
   const currentQuestion = currentQuestions[0] || null;
-  useEffect(() => {
-    if (currentQuestion) {
-      addQuestionHistoryEntry(currentQuestion);
-    }
-  }, [currentQuestion, addQuestionHistoryEntry]);
 
   const handleDiscard = async (questionId: Id<"questions">) => {
     try {
@@ -291,6 +285,10 @@ export default function MainPage() {
 
   const toggleLike = async (questionId: Id<"questions">) => {
     try {
+      if (!isSignedIn) {
+        toast.error("Please log in to save favorites");
+        return;
+      }
       if (!currentQuestions) return;
       const viewDuration = Math.min(Date.now() - startTime, 10000);
       const isLiked = likedQuestions.includes(questionId);
@@ -319,6 +317,10 @@ export default function MainPage() {
 
   const toggleHide = (questionId: Id<"questions">) => {
     try {
+      if (!isSignedIn) {
+        toast.error("Please log in to hide questions");
+        return;
+      }
       if (!currentQuestions) return;
       addHiddenQuestion(questionId);
       toast.success("Question hidden");
