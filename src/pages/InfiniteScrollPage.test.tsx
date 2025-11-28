@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, waitFor, screen } from '@testing-library/react';
 import InfiniteScrollPage from './InfiniteScrollPage';
 import { useQuery, useConvex, useAction, useMutation } from 'convex/react';
+import { WorkspaceProvider } from '@/hooks/useWorkspace.tsx';
 import { ModernQuestionCard } from '@/components/modern-question-card';
 
 // Mocks
@@ -102,7 +103,11 @@ describe('InfiniteScrollPage', () => {
   });
 
   it('renders cards with specific styles and tones', async () => {
-    render(<InfiniteScrollPage />);
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
 
     await waitFor(() => {
         expect(screen.getAllByTestId('modern-question-card')).toHaveLength(2);

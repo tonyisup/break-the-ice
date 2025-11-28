@@ -28,7 +28,9 @@ export const getStyle = query({
 
 // Get all available styles
 export const getStyles = query({
-  args: {},
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
   returns: v.array(v.object({
     _id: v.id("styles"),
     _creationTime: v.number(),
@@ -42,8 +44,13 @@ export const getStyles = query({
     promptGuidanceForAI: v.optional(v.string()),
     order: v.optional(v.float64()),
   })),
-  handler: async (ctx) => {
-    const styles = await ctx.db.query("styles").withIndex("by_order").order("asc").collect();
+  handler: async (ctx, args) => {
+    const styles = await ctx.db
+      .query("styles")
+      .withIndex("by_order")
+      .order("asc")
+      .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+      .collect();
     return styles.map(({ embedding, ...rest }) => rest);
   },
 });
@@ -52,6 +59,7 @@ export const getStyles = query({
 export const getFilteredStyles = query({
   args: {
     excluded: v.array(v.string()),
+    organizationId: v.optional(v.id("organizations")),
   },
   returns: v.array(v.object({
     _id: v.id("styles"),
@@ -70,6 +78,7 @@ export const getFilteredStyles = query({
     const styles = await ctx.db.query("styles")
       .withIndex("by_order")
       .order("asc")
+      .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
       .filter((q) => q.and(...args.excluded.map(styleId => q.neq(q.field("id"), styleId))))
       .collect();
     return styles.map(({ embedding, ...rest }) => rest);

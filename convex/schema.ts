@@ -29,6 +29,7 @@ export default defineSchema({
     example: v.optional(v.string()),
     order: v.optional(v.number()),
     embedding: v.optional(v.array(v.number())),
+    organizationId: v.optional(v.id("organizations")),
   }).index("by_name", ["name"])
     .index("by_order", ["order"]),
   tones: defineTable({
@@ -40,9 +41,11 @@ export default defineSchema({
     promptGuidanceForAI: v.string(),
     order: v.optional(v.number()),
     embedding: v.optional(v.array(v.number())),
+    organizationId: v.optional(v.id("organizations")),
   }).index("by_name", ["name"])
     .index("by_order", ["order"]),
   questions: defineTable({
+    organizationId: v.optional(v.id("organizations")),
     averageViewDuration: v.number(),
     lastShownAt: v.optional(v.number()),
     text: v.optional(v.string()),
@@ -201,5 +204,39 @@ export default defineSchema({
     ),
     reason: v.string(),
     prunedAt: v.number(),
+  }),
+  organizations: defineTable({
+    name: v.string(),
+  }),
+  organization_members: defineTable({
+    userId: v.id("users"),
+    organizationId: v.id("organizations"),
+    role: v.union(
+      v.literal("admin"),
+      v.literal("manager"),
+      v.literal("member")
+    ),
   })
+    .index("by_userId", ["userId"])
+    .index("by_organizationId", ["organizationId"])
+    .index("by_userId_organizationId", ["userId", "organizationId"]),
+  invitations: defineTable({
+    email: v.string(),
+    organizationId: v.id("organizations"),
+    role: v.union(
+      v.literal("admin"),
+      v.literal("manager"),
+      v.literal("member")
+    ),
+  }).index("by_email", ["email"]),
+  collections: defineTable({
+    name: v.string(),
+    organizationId: v.id("organizations"),
+  }).index("by_organizationId", ["organizationId"]),
+  question_collections: defineTable({
+    questionId: v.id("questions"),
+    collectionId: v.id("collections"),
+  })
+    .index("by_questionId", ["questionId"])
+    .index("by_collectionId", ["collectionId"]),
 });
