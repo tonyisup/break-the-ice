@@ -12,12 +12,21 @@ export const createOrganization = mutation({
       throw new Error("Called createOrganization without authentication.");
     }
 
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
     const organizationId = await ctx.db.insert("organizations", {
       name: args.name,
     });
 
     await ctx.db.insert("organization_members", {
-      userId: identity.subject,
+      userId: user._id,
       organizationId: organizationId,
       role: "admin",
     });
@@ -57,6 +66,15 @@ export const acceptInvitation = mutation({
       throw new Error("Called acceptInvitation without authentication.");
     }
 
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
     const invitation = await ctx.db.get(args.invitationId);
     if (!invitation) {
       throw new Error("Invitation not found.");
@@ -65,7 +83,7 @@ export const acceptInvitation = mutation({
     // check if user is already a member of an organization
     const existingMembership = await ctx.db
       .query("organization_members")
-      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .unique();
 
     if (existingMembership) {
@@ -73,7 +91,7 @@ export const acceptInvitation = mutation({
     }
 
     await ctx.db.insert("organization_members", {
-      userId: identity.subject,
+      userId: user._id,
       organizationId: invitation.organizationId,
       role: invitation.role,
     });
@@ -89,9 +107,18 @@ export const getOrganizations = query({
       return [];
     }
 
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+
+    if (!user) {
+      return [];
+    }
+
     const memberships = await ctx.db
       .query("organization_members")
-      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
 
     const organizations = await Promise.all(
