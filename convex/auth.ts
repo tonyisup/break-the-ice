@@ -25,10 +25,19 @@ export const ensureOrgMember = async (
     throw new Error("Not authenticated");
   }
 
+  const user = await ctx.db
+    .query("users")
+    .withIndex("email", (q: any) => q.eq("email", identity.email))
+    .unique();
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
   const membership = await ctx.db
     .query("organization_members")
     .withIndex("by_userId_organizationId", (q: any) =>
-      q.eq("userId", identity.subject).eq("organizationId", organizationId)
+      q.eq("userId", user._id).eq("organizationId", organizationId)
     )
     .unique();
 
