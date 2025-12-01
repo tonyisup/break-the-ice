@@ -13,12 +13,23 @@ import { ItemDetailDrawer, ItemDetails } from "@/components/item-detail-drawer/i
 import { Doc } from "../../../convex/_generated/dataModel";
 import { StyleSelector } from "@/components/styles-selector";
 import { ToneSelector } from "@/components/tone-selector";
+import OrganizationSettings from "@/app/settings/organization/page";
+import WorkspaceSwitcher from "@/app/settings/organization/WorkspaceSwitcher";
+import CollectionsSettings from "@/app/settings/collections/page";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 const SettingsPage = () => {
   const { effectiveTheme } = useTheme();
+  const { activeWorkspace } = useWorkspace();
 
-  const allStyles = useQuery(api.styles.getStyles);
-  const allTones = useQuery(api.tones.getTones);
+  const allStyles = useQuery(
+    api.styles.getStyles,
+    activeWorkspace ? { organizationId: activeWorkspace } : "skip"
+  );
+  const allTones = useQuery(
+    api.tones.getTones,
+    activeWorkspace ? { organizationId: activeWorkspace } : "skip"
+  );
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -126,7 +137,13 @@ const SettingsPage = () => {
       <div className="container mx-auto p-4 md:p-8">
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
+        <WorkspaceSwitcher />
+
         <div className="space-y-8">
+
+          <OrganizationSettings />
+
+          <CollectionsSettings />
 
           <CollapsibleSection
             title="Default Style & Tone"

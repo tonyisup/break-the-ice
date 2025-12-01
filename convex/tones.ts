@@ -25,7 +25,9 @@ export const getTone = query({
 });
 // Get all available tones
 export const getTones = query({
-  args: {},
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
   returns: v.array(v.object({
     _id: v.id("tones"),
     _creationTime: v.number(),
@@ -37,8 +39,13 @@ export const getTones = query({
     icon: v.string(),
     order: v.optional(v.float64()),
   })),
-  handler: async (ctx) => {
-    const tones = await ctx.db.query("tones").withIndex("by_order").order("asc").collect();
+  handler: async (ctx, args) => {
+    const tones = await ctx.db
+      .query("tones")
+      .withIndex("by_order")
+      .order("asc")
+      .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+      .collect();
     return tones.map(({ embedding, ...rest }) => rest);
   },
 });
@@ -46,6 +53,7 @@ export const getTones = query({
 export const getFilteredTones = query({
   args: {
     excluded: v.array(v.string()),
+    organizationId: v.optional(v.id("organizations")),
   },
   returns: v.array(v.object({
     _id: v.id("tones"),
@@ -62,6 +70,7 @@ export const getFilteredTones = query({
     const tones = await ctx.db.query("tones")
       .withIndex("by_order")
       .order("asc")
+      .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
       .filter((q) => q.and(...args.excluded.map(toneId => q.neq(q.field("id"), toneId))))
       .collect();
     return tones.map(({ embedding, ...rest }) => rest);

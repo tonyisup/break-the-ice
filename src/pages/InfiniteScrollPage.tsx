@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Doc, Id } from "../../convex/_generated/dataModel";
 import { useTheme } from "@/hooks/useTheme";
 import { useStorageContext } from "@/hooks/useStorageContext";
+import { useWorkspace } from "@/hooks/useWorkspace.tsx";
 import { StyleSelector, StyleSelectorRef } from "@/components/styles-selector";
 import { ToneSelector, ToneSelectorRef } from "@/components/tone-selector";
 import { Header } from "@/components/header";
@@ -20,6 +21,7 @@ export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
   const convex = useConvex();
   const user = useAuth();
+  const { activeWorkspace } = useWorkspace();
   const generateAIQuestions = useAction(api.ai.generateAIQuestions);
 
   const {
@@ -44,8 +46,12 @@ export default function InfiniteScrollPage() {
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
 
   // Fetch all styles and tones for card rendering
-  const allStyles = useQuery(api.styles.getStyles);
-  const allTones = useQuery(api.tones.getTones);
+  const allStyles = useQuery(api.styles.getStyles, {
+    organizationId: activeWorkspace,
+  });
+  const allTones = useQuery(api.tones.getTones, {
+    organizationId: activeWorkspace,
+  });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
   const stylesMap = useMemo(() => {
@@ -167,6 +173,7 @@ export default function InfiniteScrollPage() {
         count: BATCH_SIZE,
         seen: Array.from(seenIds), // Pass currently seen IDs to avoid duplicates
         hidden: hiddenQuestions,
+        organizationId: activeWorkspace,
       });
 
       // Check for staleness after await

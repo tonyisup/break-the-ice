@@ -6,6 +6,7 @@ import { ConvexReactClient } from "convex/react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./index.css";
 import { StorageProvider } from "./hooks/useStorageContext";
+import { WorkspaceProvider } from "./hooks/useWorkspace.tsx";
 import App from "./App";
 import Root from "./Root";
 import LikedQuestionsPage from "./app/liked/page";
@@ -32,9 +33,10 @@ createRoot(document.getElementById("root")!).render(
     <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <StorageProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Root />} />
+          <WorkspaceProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Root />} />
               <Route path="/app" element={<App />} />
               <Route path="/infinite" element={<InfiniteScrollPage />} />
               <Route path="/question/:id" element={<QuestionPage />} />
@@ -54,6 +56,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/admin/prune" element={<PrunePage />} />
             </Routes>
           </BrowserRouter>
+        </WorkspaceProvider>
         </StorageProvider>
       </ConvexProviderWithClerk>
     </ClerkProvider>

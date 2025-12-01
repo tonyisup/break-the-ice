@@ -116,10 +116,11 @@ export const getSimilarQuestions = query({
     tone: v.string(),
     seen: v.optional(v.array(v.id("questions"))),
     hidden: v.optional(v.array(v.id("questions"))),
+    organizationId: v.optional(v.id("organizations")),
   },
   returns: v.array(v.any()),
   handler: async (ctx, args): Promise<any[]> => {
-    const { count, style, tone, seen, hidden } = args;
+    const { count, style, tone, seen, hidden, organizationId } = args;
 
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -146,6 +147,7 @@ export const getSimilarQuestions = query({
     const candidates = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q: any) => q.eq("style", style).eq("tone", tone))
+      .filter((q: any) => q.eq(q.field("organizationId"), organizationId))
       .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
       .filter((q: any) => q.and(
         q.neq(q.field("text"), undefined),
@@ -165,15 +167,17 @@ export const getNextRandomQuestions = query({
     count: v.number(),
     seen: v.optional(v.array(v.id("questions"))),
     hidden: v.optional(v.array(v.id("questions"))),
+    organizationId: v.optional(v.id("organizations")),
   },
   returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    const { count, seen, hidden } = args;
+    const { count, seen, hidden, organizationId } = args;
     const seenIds = new Set(seen ?? []);
 
     // Get all questions first, and filter out seen ones.
     const filteredQuestions = await ctx.db
       .query("questions")
+      .filter((q: any) => q.eq(q.field("organizationId"), organizationId))
       .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
       .filter((q: any) => q.and(
         q.neq(q.field("text"), undefined),
@@ -195,16 +199,18 @@ export const getNextQuestions = query({
     tone: v.string(),
     seen: v.optional(v.array(v.id("questions"))),
     hidden: v.optional(v.array(v.id("questions"))),
+    organizationId: v.optional(v.id("organizations")),
   },
   returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    const { count, style, tone, seen, hidden } = args;
+    const { count, style, tone, seen, hidden, organizationId } = args;
     const seenIds = new Set(seen ?? []);
 
     // Get all questions first, and filter out seen ones.
     const filteredQuestions = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q) => q.eq("style", style).eq("tone", tone))
+      .filter((q) => q.eq(q.field("organizationId"), organizationId))
       .filter((q) => q.eq(q.field("prunedAt"), undefined))
       .filter((q) => q.and(
         q.neq(q.field("text"), undefined),
@@ -375,7 +381,9 @@ export const getUserLikedAndPreferredEmbedding = query({
 });
 
 export const getCustomQuestions = query({
-  args: {},
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
   handler: async (ctx, args) => {
     const userIdentity = await ctx.auth.getUserIdentity();
     if (!userIdentity) {
@@ -391,14 +399,17 @@ export const getCustomQuestions = query({
     const questions = await ctx.db
       .query("questions")
       .withIndex("by_author", (q) => q.eq("authorId", user._id))
+      .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
       .collect();
     return questions;
   },
 });
 
 export const getLikedQuestions = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       return [];
@@ -429,7 +440,9 @@ export const getLikedQuestions = query({
       likedUserQuestions.map((uq) => ctx.db.get(uq.questionId))
     );
 
-    return questions.filter((q): q is Doc<"questions"> => q !== null);
+    return questions
+      .filter((q): q is Doc<"questions"> => q !== null)
+      .filter((q) => q.organizationId === args.organizationId);
   },
 });
 
