@@ -110,7 +110,10 @@ export default defineSchema({
       )
     ),
     prunedAt: v.optional(v.number()),
+    lastPostedAt: v.optional(v.number()),
   })
+    .index("by_last_posted_at", ["lastPostedAt"])
+    .index("by_status_and_last_posted", ["status", "lastPostedAt"])
     .index("by_average_view_duration", [
       "averageViewDuration",
     ])
