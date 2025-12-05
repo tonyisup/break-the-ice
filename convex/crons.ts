@@ -39,4 +39,10 @@ crons.interval(
   { maxQuestions: 50 }
 );
 
+crons.daily(
+  "Post to Instagram",
+  { hourUTC: 17, minuteUTC: 0 }, // 5:00 PM UTC (e.g. 9 AM PST / 12 PM EST)
+  internal.instagram.postToInstagram
+);
+
 export default crons
