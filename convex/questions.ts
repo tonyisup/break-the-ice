@@ -250,7 +250,6 @@ export const recordAnalytics = mutation({
     if (!question) return;
 
     const identity = await ctx.auth.getUserIdentity();
-    console.log("identity", identity);
     let userId = null;
     if (identity) {
       const user = await ctx.db
