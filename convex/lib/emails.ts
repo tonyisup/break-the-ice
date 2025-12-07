@@ -94,3 +94,53 @@ export const createPrunedStaleQuestionsEmail = (result: PrunedStaleQuestionsResu
   `;
   return { subject, html };
 };
+
+export type PopulateMissingStyleEmbeddingsResult = {
+  stylesProcessed: number;
+  stylesMissingEmbeddings: number;
+  errors: string[];
+};
+
+export const createPopulateMissingStyleEmbeddingsEmail = (result: PopulateMissingStyleEmbeddingsResult) => {
+  const subject = "Cron Job Summary: Populate Missing Style Embeddings";
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Populate Missing Style Embeddings Summary</title>
+    </head>
+    <body>
+      <h1>Populate Missing Style Embeddings Summary</h1>
+      <p><strong>Styles Processed:</strong> ${result.stylesProcessed}</p>
+      <p><strong>Styles Missing Embeddings:</strong> ${result.stylesMissingEmbeddings}</p>
+      <p><strong>Errors:</strong> ${result.errors.length > 0 ? result.errors.join("<br>") : "None"}</p>
+    </body>
+    </html>
+  `;
+  return { subject, html };
+};
+
+export type PopulateMissingToneEmbeddingsResult = {
+  tonesProcessed: number;
+  tonesMissingEmbeddings: number;
+  errors: string[];
+};
+
+export const createPopulateMissingToneEmbeddingsEmail = (result: PopulateMissingToneEmbeddingsResult) => {
+  const subject = "Cron Job Summary: Populate Missing Tone Embeddings";
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Populate Missing Tone Embeddings Summary</title>
+    </head>
+    <body>
+      <h1>Populate Missing Tone Embeddings Summary</h1>
+      <p><strong>Tones Processed:</strong> ${result.tonesProcessed}</p>
+      <p><strong>Tones Missing Embeddings:</strong> ${result.tonesMissingEmbeddings}</p>
+      <p><strong>Errors:</strong> ${result.errors.length > 0 ? result.errors.join("<br>") : "None"}</p>
+    </body>
+    </html>
+  `;
+  return { subject, html };
+};

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 
 export const getTone = query({
   args: { id: v.string() },
@@ -19,31 +19,14 @@ export const getTone = query({
     if (!tone) {
       throw new Error("Tone not found");
     }
-    return tone;
+    const { embedding, ...rest } = tone;
+    return rest;
   },
 });
 // Get all available tones
 export const getTones = query({
-  args: {},
-  returns: v.array(v.object({
-    _id: v.id("tones"),
-    _creationTime: v.number(),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    promptGuidanceForAI: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    order: v.optional(v.float64()),
-  })),
-  handler: async (ctx) => {
-    return await ctx.db.query("tones").withIndex("by_order").order("asc").collect();
-  },
-});
-
-export const getFilteredTones = query({
   args: {
-    excluded: v.array(v.string()),
+    organizationId: v.optional(v.id("organizations")),
   },
   returns: v.array(v.object({
     _id: v.id("tones"),
@@ -57,11 +40,40 @@ export const getFilteredTones = query({
     order: v.optional(v.float64()),
   })),
   handler: async (ctx, args) => {
-    return await ctx.db.query("tones")
-    .withIndex("by_order")
-    .order("asc")
-    .filter((q) => q.and(... args.excluded.map(toneId => q.neq(q.field("id"), toneId))))
-    .collect();
+    const tones = await ctx.db
+      .query("tones")
+      .withIndex("by_order")
+      .order("asc")
+      .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+      .collect();
+    return tones.map(({ embedding, ...rest }) => rest);
+  },
+});
+
+export const getFilteredTones = query({
+  args: {
+    excluded: v.array(v.string()),
+    organizationId: v.optional(v.id("organizations")),
+  },
+  returns: v.array(v.object({
+    _id: v.id("tones"),
+    _creationTime: v.number(),
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    promptGuidanceForAI: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    order: v.optional(v.float64()),
+  })),
+  handler: async (ctx, args) => {
+    const tones = await ctx.db.query("tones")
+      .withIndex("by_order")
+      .order("asc")
+      .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+      .filter((q) => q.and(...args.excluded.map(toneId => q.neq(q.field("id"), toneId))))
+      .collect();
+    return tones.map(({ embedding, ...rest }) => rest);
   },
 });
 
@@ -139,5 +151,56 @@ export const deleteTone = mutation({
     await Promise.all(questionsToDelete.map((q) => ctx.db.delete(q._id)));
 
     await ctx.db.delete(args.id);
+  },
+});
+
+export const getTonesWithMissingEmbeddings = internalQuery({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id("tones"),
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    promptGuidanceForAI: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    order: v.optional(v.float64()),
+  })),
+  handler: async (ctx) => {
+    const tones = await ctx.db.query("tones").filter((q) => q.eq(q.field("embedding"), undefined)).collect();
+    return tones.map(({ embedding, ...rest }) => rest);
+  },
+});
+
+export const addToneEmbedding = internalMutation({
+  args: {
+    toneId: v.id("tones"),
+    embedding: v.array(v.float64()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.toneId, {
+      embedding: args.embedding,
+    });
+  },
+});
+
+export const getRandomTone = query({
+  args: {},
+  returns: v.object({
+    _id: v.id("tones"),
+    _creationTime: v.number(),
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    promptGuidanceForAI: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    order: v.optional(v.float64()),
+  }),
+  handler: async (ctx) => {
+    const tones = await ctx.db.query("tones").withIndex("by_order").order("asc").collect();
+    const randomTone = tones[Math.floor(Math.random() * tones.length)];
+    const { embedding, ...rest } = randomTone;
+    return rest;
   },
 });

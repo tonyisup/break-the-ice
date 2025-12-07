@@ -6,11 +6,11 @@ import { useTheme } from "../../hooks/useTheme";
 import { useMemo, useState, useEffect } from "react";
 import { useStorageContext } from "../../hooks/useStorageContext";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
-import { QuestionList } from "@/components/question-list/QuestionList";
 import { FilterControls } from "@/components/filter-controls/filter-controls";
 import { useFilter } from "@/hooks/useFilter";
-import { CustomQuestionList } from "@/components/custom-question-list/CustomQuestionList";
 import { AddPersonalQuestionDialog } from "@/components/add-personal-question-dialog/AddPersonalQuestionDialog";
+import { QuestionGrid } from "@/components/question-grid/QuestionGrid";
+import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
 
 import { cn, isColorDark } from "@/lib/utils";
 
@@ -27,7 +27,11 @@ function LikedQuestionsPageContent() {
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
   const [isAddPersonalQuestionDialogOpen, setIsAddPersonalQuestionDialogOpen] = useState(false);
-  
+
+  const [isPersonalOpen, setIsPersonalOpen] = useState(true);
+  const [isPendingOpen, setIsPendingOpen] = useState(true);
+  const [isLikedOpen, setIsLikedOpen] = useState(true);
+
   // Filter out invalid question IDs to prevent errors
   const customQuestions = useQuery(api.questions.getCustomQuestions);
 
@@ -52,7 +56,7 @@ function LikedQuestionsPageContent() {
       return typeof id === 'string' && id.length > 0;
     });
   }, [likedQuestions, otherCustomQuestionIds]);
-  
+
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions as Id<"questions">[] });
   const styles = useQuery(api.styles.getStyles, {});
   const tones = useQuery(api.tones.getTones, {});
@@ -62,16 +66,16 @@ function LikedQuestionsPageContent() {
   // Clean up invalid question IDs automatically
   useEffect(() => {
     if (isCleaningUp) return;
-    
+
     try {
       const validQuestions = likedQuestions.filter(id => {
         return typeof id === 'string' && id.length > 0;
       });
-      
+
       if (validQuestions.length !== likedQuestions.length) {
         console.log("Cleaning up invalid question IDs from localStorage");
         setIsCleaningUp(true);
-        clearLikedQuestions();  
+        clearLikedQuestions();
         // Reset cleanup flag after a short delay
         setTimeout(() => setIsCleaningUp(false), 100);
       }
@@ -84,12 +88,12 @@ function LikedQuestionsPageContent() {
   // Remove questions that no longer exist in the database
   useEffect(() => {
     if (isCleaningUp) return;
-    
+
     try {
       if (questions && likedQuestions.length > 0) {
         const existingQuestionIds = new Set(questions.map(q => q._id));
         const validIds = likedQuestions.filter(id => existingQuestionIds.has(id));
-        
+
         if (validIds.length !== likedQuestions.length) {
           console.log("Removing deleted questions from likes");
           setIsCleaningUp(true);
@@ -113,36 +117,10 @@ function LikedQuestionsPageContent() {
     };
   }, []);
 
-  const styleColors = useMemo(() => {
-    if (!styles) return {};
-    return styles.reduce((acc, style) => {
-      acc[style.id] = style.color;
-      return acc;
-    }, {} as { [key: string]: string });
-  }, [styles]);
-
-  const toneColors = useMemo(() => {
-    if (!tones) return {};
-    return tones.reduce((acc, tone) => {
-      acc[tone.id] = tone.color;
-      return acc;
-    }, {} as { [key: string]: string });
-  }, [tones]);
-
 
   const handleRemoveFavorite = (questionId: Id<"questions">) => {
     if (!questions) return;
     removeLikedQuestion(questionId);
-  };
-
-  const handleHideStyle = (styleId: string) => {
-    addHiddenStyle(styleId);
-    toast.success("Style hidden");
-  };
-
-  const handleHideTone = (toneId: string) => {
-    addHiddenTone(toneId);
-    toast.success("Tone hidden");
   };
 
   const handleClearLikes = () => {
@@ -167,98 +145,116 @@ function LikedQuestionsPageContent() {
         onOpenChange={setIsAddPersonalQuestionDialogOpen}
       />
 
-      <div className="container mx-auto p-4">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-white">My Personal Questions</h2>
-          <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add</Button>
-        </div>
-        {personalQuestions.length > 0 && (
-          <QuestionList
-            questions={personalQuestions as Doc<"questions">[]}
-            styleColors={styleColors}
-            toneColors={toneColors}
-            styles={styles || []}
-            tones={tones || []}
-            likedQuestions={likedQuestions}
-            onToggleLike={handleRemoveFavorite}
-            onRemoveItem={handleRemoveFavorite}
-            onHideStyle={handleHideStyle}
-            onHideTone={handleHideTone}
-            onSelectedStylesChange={setSelectedStyles}
-            onSelectedTonesChange={setSelectedTones}
-            selectedStyles={selectedStyles}
-            selectedTones={selectedTones}
-          />
-        )}
-      </div>
+      <div className="container mx-auto p-4 space-y-8">
+        {/* Personal Questions Section */}
+        <div>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-white sr-only">My Personal Questions</h2>
+            <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add Question</Button>
+          </div>
 
-      {pendingQuestions.length > 0 && (
-        <div className="container mx-auto p-4">
-          <h2 className="text-xl font-bold mb-4 text-white">My Submitted Questions</h2>
-          <CustomQuestionList questions={pendingQuestions} />
-        </div>
-      )}
-
-      {questions && questions.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-500 dark:text-gray-400 text-lg">You haven't liked any questions yet.</p>
-          <Link
-            to="/"
-            className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "inline-block mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
-          >
-            Start Exploring
-          </Link>
-        </div>
-      ) : (
-        <div className="container mx-auto flex flex-col gap-4 p-4">
-          <div className="container mx-auto flex flex-col gap-4">
-            <div className="flex justify-between gap-2 w-full">
-              <input
-                type="text"
-                placeholder="Search questions"
-                className="flex-grow pl-2 rounded-md border border-gray-300 dark:border-gray-700"
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
+          {personalQuestions.length > 0 && (
+            <CollapsibleSection
+              title="My Personal Questions"
+              count={personalQuestions.length}
+              isOpen={isPersonalOpen}
+              onOpenChange={setIsPersonalOpen}
+            >
+              <QuestionGrid
+                questions={personalQuestions as Doc<"questions">[]}
+                styles={styles || []}
+                tones={tones || []}
+                likedQuestions={likedQuestions}
+                onToggleLike={handleRemoveFavorite}
+                onRemoveItem={handleRemoveFavorite}
+                variant="condensed"
               />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleClearLikes}
-                  className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
-                >
-                  Clear likes
-                </button>
+            </CollapsibleSection>
+          )}
+        </div>
+
+        {/* Pending Questions Section */}
+        {pendingQuestions.length > 0 && (
+          <CollapsibleSection
+            title="My Submitted Questions"
+            count={pendingQuestions.length}
+            isOpen={isPendingOpen}
+            onOpenChange={setIsPendingOpen}
+          >
+            <QuestionGrid
+              questions={pendingQuestions as Doc<"questions">[]}
+              styles={styles || []}
+              tones={tones || []}
+              likedQuestions={likedQuestions}
+              onToggleLike={handleRemoveFavorite}
+              onRemoveItem={handleRemoveFavorite}
+              variant="condensed"
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Liked Questions Section */}
+        {questions && questions.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500 dark:text-gray-400 text-lg">You haven't liked any questions yet.</p>
+            <Link
+              to="/"
+              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "inline-block mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
+            >
+              Start Exploring
+            </Link>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between gap-2 w-full">
+                <input
+                  type="text"
+                  placeholder="Search questions"
+                  className="flex-grow pl-2 rounded-md border border-gray-300 dark:border-gray-700 h-10"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleClearLikes}
+                    className="px-4 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
+                  >
+                    Clear likes
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-          <FilterControls
-            questions={questions || []}
-            styles={styles || []}
-            tones={tones || []}
-            selectedStyles={selectedStyles}
-            onSelectedStylesChange={setSelectedStyles}
-            selectedTones={selectedTones}
-            onSelectedTonesChange={setSelectedTones}
-          />
-          <QuestionList
-            questions={filteredQuestions as Doc<"questions">[]}
-            styleColors={styleColors}
-            toneColors={toneColors}
-            styles={styles || []}
-            tones={tones || []}
-            likedQuestions={likedQuestions}
-            onToggleLike={handleRemoveFavorite}
-            onRemoveItem={handleRemoveFavorite}
-            onHideStyle={handleHideStyle}
-            onHideTone={handleHideTone}
-            onSelectedStylesChange={setSelectedStyles}
-            onSelectedTonesChange={setSelectedTones}
-            selectedStyles={selectedStyles}
-            selectedTones={selectedTones}
-          />
-        </div>
-      )}
-    </div>
+            <FilterControls
+              questions={questions || []}
+              styles={styles || []}
+              tones={tones || []}
+              selectedStyles={selectedStyles}
+              onSelectedStylesChange={setSelectedStyles}
+              selectedTones={selectedTones}
+              onSelectedTonesChange={setSelectedTones}
+            />
 
+            <CollapsibleSection
+              title="Liked Questions"
+              count={filteredQuestions.length}
+              isOpen={isLikedOpen}
+              onOpenChange={setIsLikedOpen}
+            >
+              <QuestionGrid
+                questions={filteredQuestions as Doc<"questions">[]}
+                styles={styles || []}
+                tones={tones || []}
+                likedQuestions={likedQuestions}
+                onToggleLike={handleRemoveFavorite}
+                onRemoveItem={handleRemoveFavorite}
+                variant="condensed"
+              />
+            </CollapsibleSection>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -274,4 +270,4 @@ export default function LikedQuestionsPage() {
       <LikedQuestionsPageContent />
     </ErrorBoundary>
   );
-} 
+}

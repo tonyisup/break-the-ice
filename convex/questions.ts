@@ -6,6 +6,19 @@ import { embed } from "./lib/retriever";
 import { api, internal } from "./_generated/api";
 import { createPrunedStaleQuestionsEmail } from "./lib/emails";
 
+export const calculateAverageEmbedding = (embeddings: number[][]) => {
+  if (embeddings.length === 0) {
+    return [];
+  }
+  if (embeddings[0].length === 0) {
+    return [];
+  }
+  const averageEmbedding = embeddings.reduce((acc, embedding) => {
+    return acc.map((value, index) => value + embedding[index]);
+  }, Array(embeddings[0].length).fill(0));
+  return averageEmbedding.map((value) => value / embeddings.length);
+};
+
 export const discardQuestion = mutation({
   args: {
     questionId: v.id("questions"),
@@ -21,7 +34,7 @@ export const discardQuestion = mutation({
       const analytics = ctx.db.insert("analytics", {
         questionId,
         viewDuration: Date.now() - startTime,
-        event: "discard",
+        event: "seen",
         timestamp: Date.now(),
       });
 
@@ -103,10 +116,11 @@ export const getSimilarQuestions = query({
     tone: v.string(),
     seen: v.optional(v.array(v.id("questions"))),
     hidden: v.optional(v.array(v.id("questions"))),
+    organizationId: v.optional(v.id("organizations")),
   },
   returns: v.array(v.any()),
   handler: async (ctx, args): Promise<any[]> => {
-    const { count, style, tone, seen, hidden } = args;
+    const { count, style, tone, seen, hidden, organizationId } = args;
 
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -121,7 +135,7 @@ export const getSimilarQuestions = query({
     }
     const likedQuestionsDocs = await ctx.db
       .query("userQuestions")
-      .withIndex("userIdAndStatus", (q) =>
+      .withIndex("by_userIdAndStatus", (q) =>
         q.eq("userId", user._id).eq("status", "liked")
       )
       .collect();
@@ -133,6 +147,7 @@ export const getSimilarQuestions = query({
     const candidates = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q: any) => q.eq("style", style).eq("tone", tone))
+      .filter((q: any) => q.eq(q.field("organizationId"), organizationId))
       .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
       .filter((q: any) => q.and(
         q.neq(q.field("text"), undefined),
@@ -142,8 +157,38 @@ export const getSimilarQuestions = query({
         ...likedQuestionIds.map((id: any) => q.neq(q.field("_id"), id))
       ))
       .take(count * 4);
-    
+
     return candidates;
+  },
+});
+
+export const getNextRandomQuestions = query({
+  args: {
+    count: v.number(),
+    seen: v.optional(v.array(v.id("questions"))),
+    hidden: v.optional(v.array(v.id("questions"))),
+    organizationId: v.optional(v.id("organizations")),
+  },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    const { count, seen, hidden, organizationId } = args;
+    const seenIds = new Set(seen ?? []);
+
+    // Get all questions first, and filter out seen ones.
+    const filteredQuestions = await ctx.db
+      .query("questions")
+      .filter((q: any) => q.eq(q.field("organizationId"), organizationId))
+      .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
+      .filter((q: any) => q.and(
+        q.neq(q.field("text"), undefined),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
+        ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
+        ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id))
+      ))
+      .take(count * 4);
+
+    shuffleArray(filteredQuestions);
+    return filteredQuestions.slice(0, count);
   },
 });
 
@@ -154,33 +199,18 @@ export const getNextQuestions = query({
     tone: v.string(),
     seen: v.optional(v.array(v.id("questions"))),
     hidden: v.optional(v.array(v.id("questions"))),
+    organizationId: v.optional(v.id("organizations")),
   },
-  returns: v.array(v.object({
-    _id: v.id("questions"),
-    _creationTime: v.number(),
-    averageViewDuration: v.number(),
-    lastShownAt: v.optional(v.number()),
-    text: v.optional(v.string()),
-    totalLikes: v.number(),
-    totalThumbsDown: v.optional(v.number()),
-    totalShows: v.number(),
-    isAIGenerated: v.optional(v.boolean()),
-    tags: v.optional(v.array(v.string())),
-    category: v.optional(v.string()),
-    style: v.optional(v.string()),
-    tone: v.optional(v.string()),
-    authorId: v.optional(v.string()),
-    customText: v.optional(v.string()),
-    status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("personal"))),
-  })),
+  returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    const { count, style, tone, seen, hidden } = args;
+    const { count, style, tone, seen, hidden, organizationId } = args;
     const seenIds = new Set(seen ?? []);
 
     // Get all questions first, and filter out seen ones.
     const filteredQuestions = await ctx.db
       .query("questions")
       .withIndex("by_style_and_tone", (q) => q.eq("style", style).eq("tone", tone))
+      .filter((q) => q.eq(q.field("organizationId"), organizationId))
       .filter((q) => q.eq(q.field("prunedAt"), undefined))
       .filter((q) => q.and(
         q.neq(q.field("text"), undefined),
@@ -204,23 +234,44 @@ export const getNextQuestions = query({
 export const recordAnalytics = mutation({
   args: {
     questionId: v.id("questions"),
-    event: v.union(v.literal("like"), v.literal("discard")),
+    event: v.union(
+      v.literal("seen"),
+      v.literal("liked"),
+      v.literal("shared"),
+      v.literal("hidden"),
+    ),
     viewDuration: v.number(),
+    sessionId: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { questionId, event, viewDuration } = args;
+    const { questionId, event, viewDuration, sessionId } = args;
     const question = await ctx.db.get(questionId);
     if (!question) return;
+
+    const identity = await ctx.auth.getUserIdentity();
+    console.log("identity", identity);
+    let userId = null;
+    if (identity) {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", identity.email))
+        .unique();
+      if (user) {
+        userId = user._id;
+      }
+    }
 
     await ctx.db.insert("analytics", {
       questionId,
       event,
       viewDuration,
       timestamp: Date.now(),
+      userId: userId ?? undefined,
+      sessionId,
     });
 
-    if (event === "like") {
+    if (event === "liked") {
       await ctx.db.patch(questionId, {
         totalLikes: question.totalLikes + 1,
       });
@@ -233,7 +284,39 @@ export const recordAnalytics = mutation({
 
     await ctx.db.patch(questionId, {
       averageViewDuration: newAverage,
+      totalShows: question.totalShows + 1,
+      lastShownAt: Date.now(),
     });
+
+    // Update userQuestions if user is logged in
+    if (userId) {
+      const userQuestion = await ctx.db
+        .query("userQuestions")
+        .withIndex("by_userIdAndQuestionId", (q) =>
+          q.eq("userId", userId!).eq("questionId", questionId)
+        )
+        .unique();
+
+      if (userQuestion) {
+        await ctx.db.patch(userQuestion._id, {
+          viewDuration: userQuestion.viewDuration ? userQuestion.viewDuration + viewDuration : viewDuration,
+          seenCount: userQuestion.seenCount ? userQuestion.seenCount + 1 : 1,
+          updatedAt: Date.now(),
+          // Don't overwrite "liked" status with "seen"
+          status: userQuestion.status === "liked" ? "liked" : (event === "liked" ? "liked" : userQuestion.status),
+        });
+      } else {
+        await ctx.db.insert("userQuestions", {
+          userId,
+          questionId,
+          status: event === "liked" ? "liked" : "seen",
+          viewDuration,
+          seenCount: 1,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
     return null;
   },
 });
@@ -244,7 +327,7 @@ export const getQuestionsByIds = query({
   },
   handler: async (ctx, args) => {
     const { ids } = args;
-    
+
     // Filter out any invalid IDs before querying
     const validIds = ids.filter(id => {
       try {
@@ -254,11 +337,11 @@ export const getQuestionsByIds = query({
         return false;
       }
     });
-    
+
     if (validIds.length === 0) {
       return [];
     }
-    
+
     const questions = await Promise.all(
       validIds.map((id) => ctx.db.get(id))
     );
@@ -266,9 +349,67 @@ export const getQuestionsByIds = query({
   },
 });
 
-export const getLikedQuestions = query({
+export const getUserLikedAndPreferredEmbedding = query({
   args: {},
   handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
+    if (!user) {
+      return [];
+    }
+    const likedQuestionIds = await ctx.db
+      .query("userQuestions")
+      .withIndex("by_userIdAndStatus", (q) =>
+        q.eq("userId", user._id).eq("status", "liked")
+      )
+      .collect();
+    const likedQuestions = await Promise.all(
+      likedQuestionIds.map((q) => ctx.db.get(q.questionId))
+    );
+    const embeddings = likedQuestions
+      .map((q) => q?.embedding)
+      .filter((e) => e !== undefined);
+    const results = calculateAverageEmbedding([...embeddings, user.questionPreferenceEmbedding ?? []]);
+    return results;
+  },
+});
+
+export const getCustomQuestions = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const userIdentity = await ctx.auth.getUserIdentity();
+    if (!userIdentity) {
+      return [];
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", userIdentity.email))
+      .unique();
+    if (!user) {
+      return [];
+    }
+    const questions = await ctx.db
+      .query("questions")
+      .withIndex("by_author", (q) => q.eq("authorId", user._id))
+      .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+      .collect();
+    return questions;
+  },
+});
+
+export const getLikedQuestions = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       return [];
@@ -286,7 +427,7 @@ export const getLikedQuestions = query({
     // Get liked questions from userQuestions table
     const likedUserQuestions = await ctx.db
       .query("userQuestions")
-      .withIndex("userIdAndStatus", (q) =>
+      .withIndex("by_userIdAndStatus", (q) =>
         q.eq("userId", user._id).eq("status", "liked")
       )
       .collect();
@@ -299,30 +440,9 @@ export const getLikedQuestions = query({
       likedUserQuestions.map((uq) => ctx.db.get(uq.questionId))
     );
 
-    return questions.filter((q): q is Doc<"questions"> => q !== null);
-  },
-});
-
-export const getCustomQuestions = query({
-  args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return [];
-    }
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email))
-      .unique();
-    if (!user) {
-      return [];
-    }
-    const questions = await ctx.db
-      .query("questions")
-      .filter((q) => q.eq(q.field("authorId"), user._id))
-      .order("desc")
-      .collect();
-    return questions;
+    return questions
+      .filter((q): q is Doc<"questions"> => q !== null)
+      .filter((q) => q.organizationId === args.organizationId);
   },
 });
 
@@ -346,23 +466,7 @@ export const getQuestion = query({
   args: {
     id: v.id("questions"),
   },
-  returns: v.union(v.object({
-    _id: v.id("questions"),
-    _creationTime: v.float64(),
-    text: v.optional(v.string()),
-    style: v.optional(v.string()),
-    tone: v.optional(v.string()),
-    totalLikes: v.float64(),
-    totalShows: v.float64(),
-    averageViewDuration: v.float64(),
-    lastShownAt: v.optional(v.number()),
-    totalThumbsDown: v.optional(v.float64()),
-    isAIGenerated: v.optional(v.boolean()),
-    tags: v.optional(v.array(v.string())),
-    authorId: v.optional(v.string()),
-    customText: v.optional(v.string()),
-    status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("personal"))),
-  }), v.null()),
+  returns: v.union(v.any(), v.null()),
   handler: async (ctx, args) => {
     const question = await ctx.db.get(args.id);
     if (!question) return null;
@@ -381,7 +485,7 @@ export const saveAIQuestion = mutation({
   },
   handler: async (ctx, args) => {
     const { text, tags, style, tone } = args;
-    
+
     // Check if a question with the same text already exists
     const existingQuestion = await ctx.db
       .query("questions")
@@ -393,7 +497,7 @@ export const saveAIQuestion = mutation({
       // Optionally, you could return the existing question or null
       return null;
     }
-    
+
     const id = await ctx.db.insert("questions", {
       text,
       tags,
@@ -499,18 +603,18 @@ export const updateQuestion = mutation({
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
     const { id, text, tags, style, tone, status } = args;
-    
+
     // Build update object with only provided fields
     const updateData: any = { text };
-    
+
     if (tags !== undefined) {
       updateData.tags = tags;
     }
-    
+
     if (style !== undefined) {
       updateData.style = style;
     }
-    
+
     if (tone !== undefined) {
       updateData.tone = tone;
     }
@@ -518,7 +622,7 @@ export const updateQuestion = mutation({
     if (status !== undefined) {
       updateData.status = status;
     }
-    
+
     await ctx.db.patch(id, updateData);
   },
 });
@@ -567,46 +671,6 @@ export const getQuestionsToEmbed = internalQuery({
       .filter((q) => q.eq(q.field("embedding"), undefined))
       .take(10);
     return questions;
-  },
-});
-
-export const backfillQuestionEmbeddings = internalAction({
-  args: {
-    questionId: v.optional(v.id("questions")),
-  },
-  handler: async (ctx, args) => {
-    const startQuestion = args.questionId
-      ? await ctx.runQuery(api.questions.getQuestion, { id: args.questionId })
-      : null;
-    const questions = await ctx.runQuery(
-      internal.questions.getQuestionsToEmbed,
-      {
-        startQuestionId: startQuestion?._id,
-        startCreationTime: startQuestion?._creationTime,
-      }
-    );
-    if (questions.length === 0) {
-      console.log("No more questions to embed");
-      return;
-    }
-    for (const question of questions) {
-      const text = question.text ?? question.customText ?? "";
-      if (text.trim().length === 0) {
-        continue;
-      }
-      const embedding = await embed(text);
-      await ctx.runMutation(internal.questions.addEmbedding, {
-        questionId: question._id,
-        embedding,
-      });
-    }
-    if (questions.length < 10) {
-      console.log("Done");
-      return;
-    }
-    await ctx.runAction(internal.questions.backfillQuestionEmbeddings, {
-      questionId: questions[questions.length - 1]._id,
-    });
   },
 });
 
@@ -671,7 +735,7 @@ export const getAllQuestionsForDuplicateDetection = internalQuery({
   returns: v.array(v.object({
     _id: v.id("questions"),
     text: v.optional(v.string()),
-    style: v.string(),  
+    style: v.string(),
   })),
   handler: async (ctx) => {
     const questions = await ctx.db.query("questions").collect();
@@ -679,9 +743,9 @@ export const getAllQuestionsForDuplicateDetection = internalQuery({
     const duplicateDetections = await ctx.db.query("duplicateDetections").collect();
     const duplicateQuestionIds = duplicateDetections.flatMap(d => d.questionIds);
     const filteredQuestions = questions.filter(q => !duplicateQuestionIds.includes(q._id));
-    
+
     // Explicitly create new objects with only the required fields to avoid returning full documents
-    const result: Array<{_id: Id<"questions">, text: string, style: string}> = [];
+    const result: Array<{ _id: Id<"questions">, text: string, style: string }> = [];
     for (const q of filteredQuestions) {
       if (q._id && q.text) {
         result.push({
@@ -740,7 +804,7 @@ export const getPendingDuplicateDetections = query({
   })),
   handler: async (ctx): Promise<any> => {
     await ensureAdmin(ctx);
-    
+
     const detections = await ctx.db
       .query("duplicateDetections")
       .withIndex("by_status_and_confidence", (q) => q.eq("status", "pending"))
@@ -764,7 +828,7 @@ export const getPendingDuplicateDetections = query({
             };
           })
         );
-        
+
         return {
           ...detection,
           questions: questions.filter((q): q is NonNullable<typeof q> => q !== null),
@@ -815,13 +879,7 @@ export const getCompletedDuplicateDetections = query({
       .order("desc")
       .collect();
 
-    const deletedDetections = await ctx.db
-      .query("duplicateDetections")
-      .withIndex("by_status_and_confidence", (q) => q.eq("status", "deleted"))
-      .order("desc")
-      .collect();
-
-    const detections = [...approvedDetections, ...rejectedDetections, ...deletedDetections].sort((a, b) => (b.reviewedAt ?? 0) - (a.reviewedAt ?? 0));
+    const detections = [...approvedDetections, ...rejectedDetections].sort((a, b) => (b.reviewedAt ?? 0) - (a.reviewedAt ?? 0));
 
     const detectionsWithDetails = await Promise.all(
       detections.map(async (detection) => {
@@ -862,7 +920,7 @@ export const updateDuplicateDetectionStatus = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    
+
     const reviewerId = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", args.reviewerEmail)).unique();
     await ctx.db.patch(args.detectionId, {
       status: args.status,
@@ -870,7 +928,7 @@ export const updateDuplicateDetectionStatus = mutation({
       reviewedBy: reviewerId?._id ?? "system" as Id<"users">,
       rejectReason: args.rejectReason,
     });
-    
+
     return null;
   },
 });
@@ -885,7 +943,7 @@ export const deleteDuplicateQuestions = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    
+
     // Delete the specified questions
     for (const questionId of args.questionIdsToDelete) {
       if (args.keepQuestionId && questionId === args.keepQuestionId) {
@@ -893,16 +951,17 @@ export const deleteDuplicateQuestions = mutation({
       }
       await ctx.db.delete(questionId);
     }
-    
+
     // Update the detection status
     await ctx.db.patch(args.detectionId, {
-      status: args.keepQuestionId ? "approved" : "deleted",
+      status: args.keepQuestionId ? "rejected" : "approved",
       reviewedAt: Date.now(),
     });
-    
+
     return null;
   },
 });
+
 
 // Internal query to get question counts by style and tone combination
 export const getQuestionCountsByStyleAndTone = internalQuery({
@@ -924,7 +983,7 @@ export const getQuestionCountsByStyleAndTone = internalQuery({
 
     // Count by style and tone combination
     const counts = new Map<string, number>();
-    
+
     for (const question of questions) {
       if (question.style && question.tone) {
         const key = `${question.style}|${question.tone}`;
@@ -950,7 +1009,7 @@ export const getQuestionCountsByStyleAndTonePublic = query({
   })),
   handler: async (ctx) => {
     await ensureAdmin(ctx);
-    
+
     // Get all questions with style and tone
     const questions = await ctx.db
       .query("questions")
@@ -962,7 +1021,7 @@ export const getQuestionCountsByStyleAndTonePublic = query({
 
     // Count by style and tone combination
     const counts = new Map<string, number>();
-    
+
     for (const question of questions) {
       if (question.style && question.tone) {
         const key = `${question.style}|${question.tone}`;
@@ -1015,180 +1074,79 @@ export const getQuestionEmbedding = internalQuery({
   },
 });
 
-
-// Public query for admin to preview stale questions
-export const getStaleQuestionsPreview = query({
+export const getNearestQuestionsByEmbedding = action({
   args: {
-    maxQuestions: v.optional(v.number()),
-  },
-  returns: v.array(v.object({
-    _id: v.id("questions"),
-    _creationTime: v.number(),
-    averageViewDuration: v.number(),
-    lastShownAt: v.optional(v.number()),
-    text: v.optional(v.string()),
-    totalLikes: v.number(),
-    totalThumbsDown: v.optional(v.number()),
-    totalShows: v.number(),
-    isAIGenerated: v.optional(v.boolean()),
-    tags: v.optional(v.array(v.string())),
+    embedding: v.array(v.number()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
-    authorId: v.optional(v.string()),
-    customText: v.optional(v.string()),
-    status: v.optional(
-      v.union(
-        v.literal("pending"),
-        v.literal("approved"),
-        v.literal("personal")
-      )
-    ),
-  })),
+    count: v.optional(v.number()),
+  },
+  returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    await ensureAdmin(ctx);
-    // pull questions that are a week old 
-    // and totalLikes is zero
-    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const questions = await ctx.db.query("questions")
-      .filter((q) => q.and(
-        q.lt(q.field("lastShownAt"), oneWeekAgo),
-        q.gt(q.field("totalShows"), 0),
-        q.eq(q.field("totalLikes"), 0),
-        q.eq(q.field("prunedAt"), undefined)
-      ))
-      .order("desc")
-      .take(args.maxQuestions ?? 50);
-    
-    return questions.map((q) => {
-      const { embedding: _embedding, prunedAt: _prunedAt, ...questionData } = q;
-      return questionData;
+    const { embedding, style, tone, count } = args;
+    const requestedCount = count ?? 10;
+    const limit = requestedCount * 10; // Fetch more candidates for post-filtering
+
+    // Use simple vector search without complex filters
+    // We rely on post-filtering for strict style/tone/status matching
+    const results = await ctx.vectorSearch("questions", "by_embedding", {
+      vector: embedding,
+      limit,
     });
-  },
-});
 
-export const getStaleQuestions = internalQuery({
-  args: {
-    maxQuestions: v.optional(v.number()),
-  },
-  returns: v.array(v.object({
-    _id: v.id("questions")
-  })),
-  handler: async (ctx, args) => {
-    // pull questions that are a week old 
-    // and totalLikes is zero
-    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const questions = await ctx.db.query("questions")
-      .filter((q) => q.and(
-        q.lt(q.field("lastShownAt"), oneWeekAgo),
-        q.gt(q.field("totalShows"), 0),
-        q.eq(q.field("totalLikes"), 0),
-        q.eq(q.field("prunedAt"), undefined)
-      )).take(args.maxQuestions ?? 50);
-    return [...questions].map((q) => ({ _id: q._id }));
-  }
-});
+    const ids = results.map((r) => r._id);
+    if (ids.length === 0) return [];
 
-export const deleteQuestions = internalMutation({
-  args: {
-    ids: v.array(v.id("questions")),
-  },
-  handler: async (ctx, args) => {
-    for (const id of args.ids) {
-      await ctx.db.patch(id, {
-        prunedAt: Date.now(),
-      });
-    }
-  }
-});
+    const questions = (await ctx.runQuery(api.questions.getQuestionsByIds, { ids })) as any[];
 
-export const pruneStaleQuestions = internalAction({
-  args: {
-    maxQuestions: v.optional(v.number()),
-  },
-  returns: v.object({
-    questionsDeleted: v.number(),
-    errors: v.array(v.string()),
-  }),
-  handler: async (ctx, args) => {
-    const errors: string[] = [];
-    let questionsDeleted = 0;
-    try {
-      const staleQuestions: { _id: Id<"questions"> }[] = await ctx.runQuery(internal.questions.getStaleQuestions, { maxQuestions: args.maxQuestions ?? 50 });
-      await ctx.runMutation(internal.questions.deleteQuestions, { ids: staleQuestions.map((q) => q._id) });
-      questionsDeleted = staleQuestions.length;
-    } catch (error) {
-      errors.push(`Error deleting questions: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    return {
-      questionsDeleted,
-      errors,
-    };
-  },
-});
+    // Apply strict filtering
+    const filtered = questions.filter((q) => {
+      // Basic validity
+      if (q.prunedAt !== undefined) return false;
+      if (q.text === undefined) return false;
+      if (q.status !== "approved" && q.status !== undefined) return false;
 
-export const pruneStaleQuestionsAndEmail = internalAction({
-  args: {
-    maxQuestions: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const result: { questionsDeleted: number, errors: string[] } = await ctx.runAction(internal.questions.pruneStaleQuestions, { maxQuestions: args.maxQuestions ?? 50 });
-    const { subject, html } = createPrunedStaleQuestionsEmail(result);
-    await ctx.runAction(internal.email.sendEmail, { subject, html });
-  },
-});
+      // Style/Tone filtering
+      if (style && q.style !== style) return false;
+      if (tone && q.tone !== tone) return false;
 
-// Query to check if current user is admin (for use in actions)
-export const checkIsAdmin = query({
-  args: {},
-  returns: v.boolean(),
-  handler: async (ctx) => {
-    try {
-      await ensureAdmin(ctx);
       return true;
-    } catch {
-      return false;
-    }
+    });
+
+    // Return only the requested count
+    return filtered.slice(0, requestedCount);
   },
 });
 
-// Public action for admin to manually trigger prune process
-export const pruneStaleQuestionsAdmin = action({
+export const getNextQuestionsByEmbedding = action({
   args: {
-    maxQuestions: v.optional(v.number()),
-    sendEmail: v.optional(v.boolean()),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    count: v.optional(v.number()),
+    userId: v.optional(v.id("users")),
   },
-  returns: v.object({
-    questionsDeleted: v.number(),
-    errors: v.array(v.string()),
-  }),
+  returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    // Check admin status via query
-    const isAdmin: boolean = await ctx.runQuery(api.questions.checkIsAdmin, {});
-    if (!isAdmin) {
-      throw new Error("Not authorized: Admin access required");
+    const { style, tone, count, userId } = args;
+    if (!userId) {
+      return [];
     }
-    
-    const result: { questionsDeleted: number, errors: string[] } = await ctx.runAction(internal.questions.pruneStaleQuestions, { 
-      maxQuestions: args.maxQuestions ?? 50 
+    const user: Doc<"users"> | null = await ctx.runQuery(internal.users.getUser, {
+      userId: userId,
     });
-    
-    if (args.sendEmail) {
-      const { subject, html } = createPrunedStaleQuestionsEmail(result);
-      await ctx.runAction(internal.email.sendEmail, { subject, html });
+    if (!user) {
+      return [];
     }
-    
-    return result;
-  },
-});
+    const embedding = await embed(style + " " + tone);
+    if (!embedding) {
+      return [];
+    }
+    const averageEmbedding = calculateAverageEmbedding([embedding, user.questionPreferenceEmbedding ?? []] as number[][]);
+    const results: Array<Doc<"questions">> = await ctx.runAction(api.questions.getNearestQuestionsByEmbedding, {
+      embedding: averageEmbedding,
+      count: count,
+    });
 
-export const doNotPruneQuestion = mutation({
-  args: {
-    questionId: v.id("questions"),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.questionId, {
-      totalShows: 0,
-      prunedAt: undefined,
-    });
+    return results;
   },
 });

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 
 export const getStyle = query({
   args: { id: v.string() },
@@ -21,35 +21,15 @@ export const getStyle = query({
     if (!style) {
       throw new Error("Style not found");
     }
-    return style;
+    const { embedding, ...rest } = style;
+    return rest;
   },
 });
 
 // Get all available styles
 export const getStyles = query({
-  args: {},
-  returns: v.array(v.object({
-    _id: v.id("styles"),
-    _creationTime: v.number(),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    structure: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    example: v.optional(v.string()),
-    promptGuidanceForAI: v.optional(v.string()),
-    order: v.optional(v.float64()),
-  })),
-  handler: async (ctx) => {
-    return await ctx.db.query("styles").withIndex("by_order").order("asc").collect();
-  },
-});
-
-// Get all available styles
-export const getFilteredStyles = query({
   args: {
-    excluded: v.array(v.string()),
+    organizationId: v.optional(v.id("organizations")),
   },
   returns: v.array(v.object({
     _id: v.id("styles"),
@@ -65,11 +45,43 @@ export const getFilteredStyles = query({
     order: v.optional(v.float64()),
   })),
   handler: async (ctx, args) => {
-      return await ctx.db.query("styles")
+    const styles = await ctx.db
+      .query("styles")
       .withIndex("by_order")
       .order("asc")
-      .filter((q) => q.and(... args.excluded.map(styleId => q.neq(q.field("id"), styleId))))
-      .collect();    
+      .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+      .collect();
+    return styles.map(({ embedding, ...rest }) => rest);
+  },
+});
+
+// Get all available styles
+export const getFilteredStyles = query({
+  args: {
+    excluded: v.array(v.string()),
+    organizationId: v.optional(v.id("organizations")),
+  },
+  returns: v.array(v.object({
+    _id: v.id("styles"),
+    _creationTime: v.number(),
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    structure: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    example: v.optional(v.string()),
+    promptGuidanceForAI: v.optional(v.string()),
+    order: v.optional(v.float64()),
+  })),
+  handler: async (ctx, args) => {
+    const styles = await ctx.db.query("styles")
+      .withIndex("by_order")
+      .order("asc")
+      .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+      .filter((q) => q.and(...args.excluded.map(styleId => q.neq(q.field("id"), styleId))))
+      .collect();
+    return styles.map(({ embedding, ...rest }) => rest);
   },
 });
 
@@ -157,3 +169,53 @@ export const deleteStyle = mutation({
     await ctx.db.delete(args.id);
   },
 });
+
+export const getStylesWithMissingEmbeddings = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const styles = await ctx.db.query("styles").collect();
+    return styles.filter((s) => !s.embedding);
+  },
+});
+
+export const getStyleBySystemId = internalQuery({
+  args: { id: v.id("styles") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const addStyleEmbedding = internalMutation({
+  args: {
+    styleId: v.id("styles"),
+    embedding: v.array(v.float64()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.styleId, {
+      embedding: args.embedding,
+    });
+  },
+});
+
+export const getRandomStyle = query({
+  args: {},
+  returns: v.object({
+    _id: v.id("styles"),
+    _creationTime: v.number(),
+    id: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    structure: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    example: v.optional(v.string()),
+    promptGuidanceForAI: v.optional(v.string()),
+    order: v.optional(v.float64()),
+  }),
+  handler: async (ctx) => {
+    const styles = await ctx.db.query("styles").withIndex("by_order").order("asc").collect();
+    const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+    const { embedding, ...rest } = randomStyle;
+    return rest;
+  },
+}); 
