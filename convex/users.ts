@@ -1,4 +1,6 @@
-import { ActionCtx, MutationCtx, QueryCtx, action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { Doc } from "./_generated/dataModel";
+import { MutationCtx, QueryCtx, action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 // Helper to ensure user exists
