@@ -1,7 +1,30 @@
-import { api, internal } from "./_generated/api";
-import { Doc } from "./_generated/dataModel";
-import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { ActionCtx, MutationCtx, QueryCtx, action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+
+// Helper to ensure user exists
+async function getUserOrCreate(ctx: MutationCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("Not authenticated");
+  }
+
+  const user = await ctx.db
+    .query("users")
+    .withIndex("email", (q) => q.eq("email", identity.email))
+    .unique();
+
+  if (user) {
+    return user;
+  }
+
+  const userId = await ctx.db.insert("users", {
+    name: identity.name!,
+    email: identity.email,
+    image: identity.pictureUrl,
+  });
+
+  return (await ctx.db.get(userId))!;
+}
 
 export const getCurrentUser = query({
   args: {},
@@ -175,19 +198,7 @@ export const updateUserSettings = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email))
-      .unique();
-
-    if (!user) {
-      throw new Error("User not found");
-    }
+    const user = await getUserOrCreate(ctx);
 
     await ctx.db.patch(user._id, {
       defaultStyle: args.defaultStyle,
@@ -204,19 +215,7 @@ export const updateLikedQuestions = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email))
-      .unique();
-
-    if (!user) {
-      throw new Error("User not found");
-    }
+    const user = await getUserOrCreate(ctx);
 
     // Delete existing liked questions for this user
     const existingLikedQuestions = await ctx.db
@@ -251,19 +250,7 @@ export const updateHiddenQuestions = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email))
-      .unique();
-
-    if (!user) {
-      throw new Error("User not found");
-    }
+    const user = await getUserOrCreate(ctx);
 
     // Delete existing hidden questions for this user
     const existingHiddenQuestions = await ctx.db
@@ -301,19 +288,7 @@ export const updateHiddenStyles = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email))
-      .unique();
-
-    if (!user) {
-      throw new Error("User not found");
-    }
+    const user = await getUserOrCreate(ctx);
 
     // Delete existing hidden styles for this user
     const existingHiddenStyles = await ctx.db
@@ -346,19 +321,7 @@ export const updateHiddenTones = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email))
-      .unique();
-
-    if (!user) {
-      throw new Error("User not found");
-    }
+    const user = await getUserOrCreate(ctx);
 
     // Delete existing hidden tones for this user
     const existingHiddenTones = await ctx.db

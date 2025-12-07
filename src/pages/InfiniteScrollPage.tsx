@@ -36,6 +36,7 @@ export default function InfiniteScrollPage() {
     addHiddenTone,
     defaultStyle,
     defaultTone,
+    addQuestionToHistory,
   } = useStorageContext();
 
   const [questions, setQuestions] = useState<Doc<"questions">[]>([]);
@@ -142,10 +143,15 @@ export default function InfiniteScrollPage() {
             viewDuration: duration,
             sessionId: user.sessionId ?? undefined,
           }); // No catch here as it might run during unmount
+
+          addQuestionToHistory({
+            question: activeQuestionRef.current,
+            viewedAt: Date.now(),
+          });
         }
       }
     };
-  }, [activeQuestion, recordAnalytics]);
+  }, [activeQuestion, recordAnalytics, addQuestionToHistory]);
 
   const style = useQuery(api.styles.getStyle, { id: activeQuestion?.style || defaultStyle || "would-you-rather" });
   const tone = useQuery(api.tones.getTone, { id: activeQuestion?.tone || defaultTone || "fun-silly" });
