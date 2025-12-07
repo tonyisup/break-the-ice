@@ -134,7 +134,7 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
           messages: [
             {
               role: "system",
-              content: `You are an ice-breaker generator that creates engaging ice-breaker questions for conversations. 
+              content: `You are clever, well travelled, emotionally and socially intelligent. You will provide guidance and suggestions to help people break the ice in social settings. You will be providing unique questions that would be perfect for starting conversations. You will be able to combine a provided STYLE (question structure) with a TONE (vibe/color).
     
     CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of objects.
     - Do not include any text before or after the JSON.
@@ -225,30 +225,52 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
       .replace(/^```\s*/, "")
       .replace(/\s*```$/, "");
 
+    let parsedContent: { text: string; style: string; tone: string }[] = [];
+
     try {
-      const parsedContent: { text: string; style: string; tone: string }[] = JSON.parse(cleanedContent);
-      const newQuestions: (Doc<"questions"> | null)[] = [];
-      for (const question of parsedContent) {
-        try {
-          const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
-            text: question.text,
-            style: question.style,
-            tone: question.tone,
-            tags: [],
+      parsedContent = JSON.parse(cleanedContent);
+    } catch (error) {
+      console.log("Failed to parse JSON, attempting fallback parsing for numbered list...");
+      // Fallback parsing for numbered lists (e.g., "1. Question\n2. Question")
+      const lines = cleanedContent.split('\n');
+      const regex = /^\d+\.\s*(.+)/;
+
+      for (const line of lines) {
+        const match = line.match(regex);
+        if (match) {
+          // We don't have style/tone in this format, so we use the requested ones or empty strings
+          parsedContent.push({
+            text: match[1].trim(),
+            style: style || styles[0]?.id || "",
+            tone: tone || tones[0]?.id || ""
           });
-          newQuestions.push(newQuestion);
-        } catch (error) {
-          console.error(`Failed to save question: "${question.text}"`, error);
-          // Continue with other questions even if one fails
         }
       }
-      return newQuestions;
-    } catch (error) {
-      console.error("Failed to parse AI response. Content was:", generatedContent);
-      console.error("Cleaned content was:", cleanedContent);
-      console.error("Parse error:", error);
-      throw error;
+
+      if (parsedContent.length === 0) {
+        console.error("Failed to parse AI response. Content was:", generatedContent);
+        console.error("Cleaned content was:", cleanedContent);
+        console.error("Parse error:", error);
+        throw error;
+      }
     }
+
+    const newQuestions: (Doc<"questions"> | null)[] = [];
+    for (const question of parsedContent) {
+      try {
+        const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
+          text: question.text,
+          style: question.style,
+          tone: question.tone,
+          tags: [],
+        });
+        newQuestions.push(newQuestion);
+      } catch (error) {
+        console.error(`Failed to save question: "${question.text}"`, error);
+        // Continue with other questions even if one fails
+      }
+    }
+    return newQuestions;
   }
 });
 
