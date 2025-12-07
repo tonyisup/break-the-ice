@@ -29,33 +29,19 @@ function LikedQuestionsPageContent() {
   const [isAddPersonalQuestionDialogOpen, setIsAddPersonalQuestionDialogOpen] = useState(false);
 
   const [isPersonalOpen, setIsPersonalOpen] = useState(true);
-  const [isPendingOpen, setIsPendingOpen] = useState(true);
   const [isLikedOpen, setIsLikedOpen] = useState(true);
 
   // Filter out invalid question IDs to prevent errors
-  const customQuestions = useQuery(api.questions.getCustomQuestions);
+  const myQuestions = useQuery(api.questions.getCustomQuestions, {});
 
-  const pendingQuestions = useMemo(() => {
-    return customQuestions?.filter((q) => q.status === "pending") ?? [];
-  }, [customQuestions]);
-
-  const personalQuestions = useMemo(() => {
-    return customQuestions?.filter((q) => q.status === "personal") ?? [];
-  }, [customQuestions]);
-
-  const otherCustomQuestionIds = useMemo(() => {
-    return customQuestions
-      ?.filter((q) => q.status === "approved")
-      .map((q) => q._id) ?? [];
-  }, [customQuestions]);
 
   const validLikedQuestions = useMemo(() => {
-    const combined = [...likedQuestions, ...otherCustomQuestionIds];
+    const combined = [...likedQuestions];
     const uniqueIds = Array.from(new Set(combined));
     return uniqueIds.filter(id => {
       return typeof id === 'string' && id.length > 0;
     });
-  }, [likedQuestions, otherCustomQuestionIds]);
+  }, [likedQuestions]);
 
   const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions as Id<"questions">[] });
   const styles = useQuery(api.styles.getStyles, {});
@@ -149,19 +135,18 @@ function LikedQuestionsPageContent() {
         {/* Personal Questions Section */}
         <div>
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-white sr-only">My Personal Questions</h2>
             <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add Question</Button>
           </div>
 
-          {personalQuestions.length > 0 && (
+          {myQuestions && myQuestions.length > 0 && (
             <CollapsibleSection
-              title="My Personal Questions"
-              count={personalQuestions.length}
+              title="My Submitted Questions"
+              count={myQuestions.length}
               isOpen={isPersonalOpen}
               onOpenChange={setIsPersonalOpen}
             >
               <QuestionGrid
-                questions={personalQuestions as Doc<"questions">[]}
+                questions={myQuestions as Doc<"questions">[]}
                 styles={styles || []}
                 tones={tones || []}
                 likedQuestions={likedQuestions}
@@ -172,26 +157,6 @@ function LikedQuestionsPageContent() {
             </CollapsibleSection>
           )}
         </div>
-
-        {/* Pending Questions Section */}
-        {pendingQuestions.length > 0 && (
-          <CollapsibleSection
-            title="My Submitted Questions"
-            count={pendingQuestions.length}
-            isOpen={isPendingOpen}
-            onOpenChange={setIsPendingOpen}
-          >
-            <QuestionGrid
-              questions={pendingQuestions as Doc<"questions">[]}
-              styles={styles || []}
-              tones={tones || []}
-              likedQuestions={likedQuestions}
-              onToggleLike={handleRemoveFavorite}
-              onRemoveItem={handleRemoveFavorite}
-              variant="condensed"
-            />
-          </CollapsibleSection>
-        )}
 
         {/* Liked Questions Section */}
         {questions && questions.length === 0 ? (

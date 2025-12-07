@@ -21,7 +21,7 @@ import { Icon } from "@/components/ui/icons/icon";
 import { Plus } from "@/components/ui/icons/icons";
 import { Button } from "@/components/ui/button";
 
-export default function MainPage() {
+export default function SingleQuestionPage() {
   const { isSignedIn } = useAuth();
   const { effectiveTheme } = useTheme();
 
@@ -61,7 +61,7 @@ export default function MainPage() {
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
   const callGenerateAIQuestionRef = useRef<((count: number, isShuffleGeneration?: boolean) => Promise<void>) | undefined>(undefined);
-  const generateAIQuestion = useAction(api.ai.generateAIQuestion);
+  const generateAIQuestion = useAction(api.ai.generateAIQuestions);
   const discardQuestion = useMutation(api.questions.discardQuestion);
   const nextQuestions = useQuery(api.questions.getNextQuestions,
     (selectedStyle === "" || selectedTone === "") ? "skip" : {
@@ -78,7 +78,7 @@ export default function MainPage() {
   const [isHighlighting, setIsHighlighting] = useState(false);
   const [highlightedStyle, setHighlightedStyle] = useState<Doc<"styles"> | null>(null);
   const [highlightedTone, setHighlightedTone] = useState<Doc<"tones"> | null>(null);
-    
+
   useEffect(() => {
     if (styles && styles.length > 0 && !selectedStyle) {
       setSelectedStyle(defaultStyle ?? styles[0].id);
@@ -109,13 +109,13 @@ export default function MainPage() {
     }
   }, [styleSelectorRef, toneSelectorRef, selectedStyle, selectedTone]);
 
-  useEffect(() => {    
+  useEffect(() => {
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set("style", selectedStyle);
     newSearchParams.set("tone", selectedTone);
     setSearchParams(newSearchParams);
   }, [searchParams, selectedStyle, selectedTone, setSearchParams]);
-    
+
   const callGenerateAIQuestion = useCallback(async (count: number, isShuffleGeneration = false) => {
     try {
       const newQuestions = await generateAIQuestion({
@@ -186,7 +186,7 @@ export default function MainPage() {
       //   isShufflingRef: isShufflingRef.current, 
       //   isGenerating 
       // });
-      
+
       if (nextQuestions && nextQuestions.length > 1) {
         // console.log("Second useEffect: returning early - nextQuestions.length > 1");
         return;
@@ -258,7 +258,7 @@ export default function MainPage() {
     try {
       setCurrentQuestions(prev => {
         const newQuestions = prev.filter(q => q._id !== questionId);
-        
+
         // If we're about to remove the last question and no generation is in progress, start generating
         if (newQuestions.length === 0 && !isGenerating) {
           setIsGenerating(true);
@@ -269,7 +269,7 @@ export default function MainPage() {
           }, 0);
           timeoutRefs.current.push(timeout);
         }
-        
+
         return newQuestions;
       });
 
@@ -304,7 +304,7 @@ export default function MainPage() {
       } else {
         await recordAnalytics({
           questionId,
-          event: "like",
+          event: "liked",
           viewDuration,
         });
         toast.success("Added to favorites!");
@@ -366,7 +366,7 @@ export default function MainPage() {
           const randomStyle = styles[Math.floor(Math.random() * styles.length)];
           setSelectedStyle(randomStyle.id);
         }
-        
+
         if (tones && tones.length > 0) {
           const randomTone = tones[Math.floor(Math.random() * tones.length)];
           setSelectedTone(randomTone.id);
@@ -379,12 +379,12 @@ export default function MainPage() {
       if (toneSelectorRef.current && styleSelectorRef.current) {
         toneSelectorRef.current.randomizeTone();
         styleSelectorRef.current.randomizeStyle();
-      } else {                  
+      } else {
         if (styles && styles.length > 0) {
           const randomStyle = styles[Math.floor(Math.random() * styles.length)];
           setSelectedStyle(randomStyle.id);
         }
-        
+
         if (tones && tones.length > 0) {
           const randomTone = tones[Math.floor(Math.random() * tones.length)];
           setSelectedTone(randomTone.id);
@@ -396,7 +396,7 @@ export default function MainPage() {
     // Reset shuffle ref when user cancels
     isShufflingRef.current = false;
     setIsShuffling(false);
-    
+
     // If components are mounted, use their methods
     if (toneSelectorRef.current && styleSelectorRef.current) {
       toneSelectorRef.current.cancelRandomizingTone();
@@ -407,12 +407,12 @@ export default function MainPage() {
     setCurrentQuestions([]);
     setIsShuffling(false);
     isShufflingRef.current = true;
-    
+
     // If components are mounted, use their methods
     if (toneSelectorRef.current && styleSelectorRef.current) {
       toneSelectorRef.current.confirmRandomizedTone();
       styleSelectorRef.current.confirmRandomizedStyle();
-    } 
+    }
 
     closeCustomizeStyleAndTone();
   }
@@ -453,9 +453,9 @@ export default function MainPage() {
             gradient={gradient}
             style={questionStyle}
             tone={questionTone}
-            toggleLike={currentQuestion ? () => toggleLike(currentQuestion._id) : () => {}}
+            toggleLike={currentQuestion ? () => toggleLike(currentQuestion._id) : () => { }}
             onSwipe={getNextQuestion}
-            toggleHide={currentQuestion ? () => toggleHide(currentQuestion._id) : () => {}}
+            toggleHide={currentQuestion ? () => toggleHide(currentQuestion._id) : () => { }}
             onHideStyle={handleHideStyle}
             onHideTone={handleHideTone}
           />
@@ -512,8 +512,8 @@ export default function MainPage() {
             className="fixed bottom-4 right-4"
             title="Add a custom question"
           >
-            <Button variant="opaque"> 
-              <Plus className="w-6 h-6" /> 
+            <Button variant="opaque">
+              <Plus className="w-6 h-6" />
             </Button>
           </Link>
         )}

@@ -82,7 +82,7 @@ export const addPersonalQuestion = mutation({
     return await ctx.db.insert("questions", {
       authorId: userId,
       customText,
-      status: "personal",
+      status: "pending",
       totalLikes: 0,
       totalThumbsDown: 0,
       totalShows: 0,
