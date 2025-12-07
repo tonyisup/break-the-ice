@@ -15,6 +15,7 @@ import type {
 } from "convex/server";
 import type * as ai from "../ai.js";
 import type * as auth from "../auth.js";
+import type * as collections from "../collections.js";
 import type * as crons from "../crons.js";
 import type * as duplicates from "../duplicates.js";
 import type * as email from "../email.js";
@@ -22,6 +23,7 @@ import type * as functions from "../functions.js";
 import type * as http from "../http.js";
 import type * as lib_emails from "../lib/emails.js";
 import type * as lib_retriever from "../lib/retriever.js";
+import type * as organizations from "../organizations.js";
 import type * as questions from "../questions.js";
 import type * as router from "../router.js";
 import type * as styles from "../styles.js";
@@ -40,6 +42,7 @@ import type * as users from "../users.js";
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   auth: typeof auth;
+  collections: typeof collections;
   crons: typeof crons;
   duplicates: typeof duplicates;
   email: typeof email;
@@ -47,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/emails": typeof lib_emails;
   "lib/retriever": typeof lib_retriever;
+  organizations: typeof organizations;
   questions: typeof questions;
   router: typeof router;
   styles: typeof styles;

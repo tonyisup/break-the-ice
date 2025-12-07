@@ -47,10 +47,10 @@ export default function InfiniteScrollPage() {
 
   // Fetch all styles and tones for card rendering
   const allStyles = useQuery(api.styles.getStyles, {
-    organizationId: activeWorkspace,
+    organizationId: activeWorkspace ?? undefined,
   });
   const allTones = useQuery(api.tones.getTones, {
-    organizationId: activeWorkspace,
+    organizationId: activeWorkspace ?? undefined,
   });
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
@@ -173,7 +173,7 @@ export default function InfiniteScrollPage() {
         count: BATCH_SIZE,
         seen: Array.from(seenIds), // Pass currently seen IDs to avoid duplicates
         hidden: hiddenQuestions,
-        organizationId: activeWorkspace,
+        organizationId: activeWorkspace ?? undefined,
       });
 
       // Check for staleness after await
@@ -213,7 +213,12 @@ export default function InfiniteScrollPage() {
       }
 
       if (combinedQuestions.length > 0) {
-        setQuestions(prev => [...prev, ...combinedQuestions]);
+        setQuestions(prev => {
+          const existingIds = new Set(prev.map(q => q._id));
+          const uniqueNew = combinedQuestions.filter(q => !existingIds.has(q._id));
+          if (uniqueNew.length === 0) return prev;
+          return [...prev, ...uniqueNew];
+        });
         setSeenIds(prev => {
           const next = new Set(prev);
           combinedQuestions.forEach(q => next.add(q._id));

@@ -8,7 +8,7 @@ interface CollapsibleSectionProps {
   iconColors?: (string | undefined)[];
   children: ReactNode;
   isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
+  onOpenChange?: (isOpen: boolean) => void;
   count?: number;
 }
 
@@ -25,7 +25,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     <section>
       <div
         className="flex items-center justify-between cursor-pointer border-b p-2 mb-1 bg-white/30 dark:bg-black/30 backdrop-blur-sm rounded-lg"
-        onClick={() => onOpenChange(!isOpen)}
+        onClick={() => onOpenChange?.(!isOpen)}
       >
         <div className="flex items-center gap-2 font-semibold dark:text-white text-black">
           {title}
@@ -51,9 +51,8 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
             </span>
           )}
           <ChevronDown
-            className={`transform transition-transform duration-200 ${
-              isOpen ? "rotate-180" : ""
-            }`}
+            className={`transform transition-transform duration-200 ${isOpen ? "rotate-180" : ""
+              }`}
             size={24}
           />
         </div>

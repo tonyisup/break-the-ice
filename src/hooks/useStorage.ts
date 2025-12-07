@@ -54,34 +54,126 @@ export const useLocalStorageContext = (
     hasConsented,
   );
 
+  const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>(
+    "likedQuestions",
+    [],
+    hasConsented,
+  );
+
+  const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<Id<"questions">[]>(
+    "hiddenQuestions",
+    [],
+    hasConsented,
+  );
+
+  const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>(
+    "hiddenStyles",
+    [],
+    hasConsented,
+  );
+
+  const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>(
+    "hiddenTones",
+    [],
+    hasConsented,
+  );
+
+  const [defaultStyle, setDefaultStyle] = useLocalStorage<string | undefined>(
+    "defaultStyle",
+    undefined,
+    hasConsented
+  );
+
+  const [defaultTone, setDefaultTone] = useLocalStorage<string | undefined>(
+    "defaultTone",
+    undefined,
+    hasConsented
+  );
+
+  const addLikedQuestion = useCallback(
+    (id: Id<"questions">) => {
+      setLikedQuestions((prev) => [...prev, id]);
+    },
+    [setLikedQuestions],
+  );
+
+  const removeLikedQuestion = useCallback(
+    (id: Id<"questions">) => {
+      setLikedQuestions((prev) => prev.filter((qId) => qId !== id));
+    },
+    [setLikedQuestions],
+  );
+
+  const addHiddenQuestion = useCallback(
+    (id: Id<"questions">) => {
+      setHiddenQuestions((prev) => [...prev, id]);
+    },
+    [setHiddenQuestions],
+  );
+
+  const removeHiddenQuestion = useCallback(
+    (id: Id<"questions">) => {
+      setHiddenQuestions((prev) => prev.filter((qId) => qId !== id));
+    },
+    [setHiddenQuestions],
+  );
+
+  const addHiddenStyle = useCallback(
+    (id: string) => {
+      setHiddenStyles((prev) => [...prev, id]);
+    },
+    [setHiddenStyles],
+  );
+
+  const removeHiddenStyle = useCallback(
+    (id: string) => {
+      setHiddenStyles((prev) => prev.filter((sId) => sId !== id));
+    },
+    [setHiddenStyles],
+  );
+
+  const addHiddenTone = useCallback(
+    (id: string) => {
+      setHiddenTones((prev) => [...prev, id]);
+    },
+    [setHiddenTones],
+  );
+
+  const removeHiddenTone = useCallback(
+    (id: string) => {
+      setHiddenTones((prev) => prev.filter((tId) => tId !== id));
+    },
+    [setHiddenTones],
+  );
+
   return {
     theme,
     setTheme,
-    likedQuestions: [],
-    setLikedQuestions: () => {},
-    addLikedQuestion: () => {},
-    removeLikedQuestion: () => {},
+    likedQuestions,
+    setLikedQuestions,
+    addLikedQuestion,
+    removeLikedQuestion,
     questionHistory: [],
-    setQuestionHistory: () => {},
-    addQuestionToHistory: () => {},
-    removeQuestionFromHistory: () => {},
-    hiddenQuestions: [],
-    setHiddenQuestions: () => {},
-    addHiddenQuestion: () => {},
-    removeHiddenQuestion: () => {},
-    hiddenStyles: [],
-    setHiddenStyles: () => {},
-    addHiddenStyle: () => {},
-    removeHiddenStyle: () => {},
-    hiddenTones: [],
-    setHiddenTones: () => {},
-    addHiddenTone: () => {},
-    removeHiddenTone: () => {},
-    clearLikedQuestions: () => {},
-    clearQuestionHistory: () => {},
-    clearHiddenQuestions: () => {},
-    clearHiddenStyles: () => {},
-    clearHiddenTones: () => {},
+    setQuestionHistory: () => { },
+    addQuestionToHistory: () => { },
+    removeQuestionFromHistory: () => { },
+    hiddenQuestions,
+    setHiddenQuestions,
+    addHiddenQuestion,
+    removeHiddenQuestion,
+    hiddenStyles,
+    setHiddenStyles,
+    addHiddenStyle,
+    removeHiddenStyle,
+    hiddenTones,
+    setHiddenTones,
+    addHiddenTone,
+    removeHiddenTone,
+    clearLikedQuestions: () => setLikedQuestions([]),
+    clearQuestionHistory: () => { },
+    clearHiddenQuestions: () => setHiddenQuestions([]),
+    clearHiddenStyles: () => setHiddenStyles([]),
+    clearHiddenTones: () => setHiddenTones([]),
     hasConsented,
     setHasConsented: (consent: boolean) => {
       // This is a bit of a hack, but it's the easiest way to get the
@@ -91,10 +183,10 @@ export const useLocalStorageContext = (
       const expires = "expires=" + d.toUTCString();
       document.cookie = "cookieConsent=" + consent + ";" + expires + ";path=/";
     },
-    defaultStyle: undefined,
-    setDefaultStyle: () => {},
-    defaultTone: undefined,
-    setDefaultTone: () => {},
+    defaultStyle,
+    setDefaultStyle,
+    defaultTone,
+    setDefaultTone,
   };
 };
 
@@ -176,10 +268,10 @@ export const useConvexStorageContext = (
   );
 
   // History is now managed by the backend analytics
-  const setQuestionHistory = useCallback(() => {}, []);
-  const addQuestionToHistory = useCallback(() => {}, []);
-  const removeQuestionFromHistory = useCallback(() => {}, []);
-  const clearQuestionHistory = useCallback(() => {}, []);
+  const setQuestionHistory = useCallback(() => { }, []);
+  const addQuestionToHistory = useCallback(() => { }, []);
+  const removeQuestionFromHistory = useCallback(() => { }, []);
+  const clearQuestionHistory = useCallback(() => { }, []);
 
   const clearLikedQuestions = useCallback(() => {
     setLikedQuestions([]);
@@ -235,8 +327,8 @@ export const useConvexStorageContext = (
     clearLikedQuestions,
     clearQuestionHistory,
     clearHiddenQuestions,
-    clearHiddenStyles: () => {},
-    clearHiddenTones: () => {},
+    clearHiddenStyles: () => { },
+    clearHiddenTones: () => { },
     hasConsented,
     setHasConsented: (consent: boolean) => {
       // This is a bit of a hack, but it's the easiest way to get the

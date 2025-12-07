@@ -117,42 +117,46 @@ export const generateAIQuestions = action({
             {
               role: "system",
               content: `You are an ice-breaker generator that creates engaging ice-breaker questions for conversations. 
-
-CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of objects. Do not include any text before or after the JSON. Do not use markdown formatting. Do not include explanations or comments.
-
-Example format: ["What's your favorite childhood memory?", "If you could have dinner with anyone, who would it be?"]
-
-Requirements:
-- Return exactly ${count} question(s)
-- Each question should be a string in the JSON array
-- Avoid questions too similar to existing ones
-- Make questions engaging and conversation-starting`
+    
+    CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of objects.
+    - Do not include any text before or after the JSON.
+    - Do not use markdown formatting (no \`\`\`json wrappers).
+    - Do not include explanations or comments.
+    - Do not number the items in the array (e.g. no "1. {...}").
+    
+    Example format: [{"text": "Question 1", "style": "s1", "tone": "t1"}, {"text": "Question 2", "style": "s2", "tone": "t2"}]
+    
+    Requirements:
+    - Return exactly ${count} question(s)
+    - Each question should be a string in the JSON array
+    - Avoid questions too similar to existing ones
+    - Make questions engaging and conversation-starting`
             },
             {
               role: "user",
               content: `Generate ${count} ice-breaker question(s) with these parameters:
-${prompt}
-
-${userContext}
-
-Response with a JSON array of objects, each containing the following properties:
-- text: The question text
-- style: The style of the question from one of the following; ${styles.map(s => s.id).join(", ")}
-- tone: The tone of the question from one of the following; ${tones.map(t => t.id).join(", ")}
-
-For example:
-[
-  {
-    "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?",
-    "style": "would-you-rather",
-    "tone": "fun-silly"
-  },
-  {
-    "text": "You're stranded on a desert island; you can only have one luxury item. What would it be and why?",
-    "style": "desert-island",
-    "tone": "deep-thoughtful"
-  }
-]`
+    ${prompt}
+    
+    ${userContext}
+    
+    Response with a JSON array of objects, each containing the following properties:
+    - text: The question text
+    - style: The style of the question from one of the following; ${styles.map(s => s.id).join(", ")}
+    - tone: The tone of the question from one of the following; ${tones.map(t => t.id).join(", ")}
+    
+    For example:
+    [
+      {
+        "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?",
+        "style": "would-you-rather",
+        "tone": "fun-silly"
+      },
+      {
+        "text": "You're stranded on a desert island; you can only have one luxury item. What would it be and why?",
+        "style": "desert-island",
+        "tone": "deep-thoughtful"
+      }
+    ]`
             }
           ],
           max_tokens: 500 * count,
@@ -197,8 +201,14 @@ For example:
     }
 
     // Try to clean and parse the response
+    // Remove markdown code blocks if present
+    const cleanedContent = generatedContent
+      .replace(/^```json\s*/, "")
+      .replace(/^```\s*/, "")
+      .replace(/\s*```$/, "");
+
     try {
-      const parsedContent: { text: string; style: string; tone: string }[] = JSON.parse(generatedContent);
+      const parsedContent: { text: string; style: string; tone: string }[] = JSON.parse(cleanedContent);
       const newQuestions: (Doc<"questions"> | null)[] = [];
       for (const question of parsedContent) {
         try {
@@ -216,11 +226,13 @@ For example:
       }
       return newQuestions;
     } catch (error) {
-      console.error("Failed to parse AI response:", error);
+      console.error("Failed to parse AI response. Content was:", generatedContent);
+      console.error("Cleaned content was:", cleanedContent);
+      console.error("Parse error:", error);
       throw error;
     }
   }
-})
+});
 
 export const populateMissingEmbeddings = internalAction({
   args: {
