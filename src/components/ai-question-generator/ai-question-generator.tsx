@@ -17,24 +17,21 @@ type GeneratedQuestion = {
 
 export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestionGeneratorProps) => {
 
-  const models = useQuery(api.models.getModels);
-  const styles = useQuery(api.styles.getStyles);
-  const tones = useQuery(api.tones.getTones);
+  const styles = useQuery(api.styles.getStyles, {});
+  const tones = useQuery(api.tones.getTones, {});
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [customTag, setCustomTag] = useState<string>("");
   const [selectedStyle, setSelectedStyle] = useState<string>(styles?.[0]?.id || "random");
   const [selectedTone, setSelectedTone] = useState<string>(tones?.[0]?.id || "random");
-  const [selectedModel, setSelectedModel] = useState<string>("mistralai/mistral-nemo");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [expandedTagGroupings, setExpandedTagGroupings] = useState<Set<string>>(new Set());
   const [previewQuestion, setPreviewQuestion] = useState<Doc<"questions"> | null>(null);
 
   const tags = useQuery(api.tags.getTags);
-  const generateAIQuestion = useAction(api.ai.generateAIQuestion);
+  const generateAIQuestion = useAction(api.ai.generateAIQuestions);
   const saveAIQuestion = useMutation(api.questions.saveAIQuestion);
   const initializeTags = useMutation(api.tags.initializeTags);
-  const initializeModels = useMutation(api.models.initializeModels);
 
   useEffect(() => {
     if (styles && styles.length > 0 && (selectedStyle === "random" || !styles.find(s => s.id === selectedStyle))) {
@@ -102,7 +99,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
         currentQuestion: previewQuestion ? previewQuestion.text : undefined,
         style: selectedStyle,
         tone: selectedTone,
-        model: selectedModel,
+        count: 1,
       });
       setPreviewQuestion(generatedQuestion[0] as Doc<"questions">);
       toast.success("Preview generated. Review and accept or try another.");
@@ -116,6 +113,7 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
 
   const handleAcceptQuestion = async () => {
     if (!previewQuestion) return;
+    if (!previewQuestion.text) return;
     setIsSaving(true);
     try {
       // Determine grouping based on selected tags
@@ -179,8 +177,8 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                   key={style.id}
                   onClick={() => setSelectedStyle(style.id)}
                   className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${selectedStyle === style.id
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
                     }`}
                 >
                   {style.name}
@@ -199,8 +197,8 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                   key={tone.id}
                   onClick={() => setSelectedTone(tone.id)}
                   className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${selectedTone === tone.id
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
                     }`}
                 >
                   {tone.name}
@@ -315,8 +313,8 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                                   key={tag._id}
                                   onClick={() => handleTagToggle(tag.name)}
                                   className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${selectedTags.includes(tag.name)
-                                      ? "bg-blue-500 text-white"
-                                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                                    ? "bg-blue-500 text-white"
+                                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
                                     }`}
                                 >
                                   {tag.name}
@@ -356,27 +354,6 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
                   </p>
                 </div>
               )}
-
-
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
-                  Select a model:
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {models?.map(model => (
-                    <button
-                      key={model.id}
-                      onClick={() => setSelectedModel(model.id)}
-                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${selectedModel === model.id
-                          ? "bg-blue-500 text-white"
-                          : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                        }`}
-                    >
-                      {model.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               <div className="flex gap-3">
                 {previewQuestion ? (

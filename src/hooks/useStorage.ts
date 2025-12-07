@@ -146,6 +146,29 @@ export const useLocalStorageContext = (
     [setHiddenTones],
   );
 
+  const [questionHistory, setQuestionHistory] = useLocalStorage<HistoryEntry[]>(
+    "questionHistory",
+    [],
+    hasConsented,
+  );
+
+  const addQuestionToHistory = useCallback(
+    (entry: HistoryEntry) => {
+      setQuestionHistory((prev) => {
+        const newHistory = [entry, ...prev.filter((e) => e.question._id !== entry.question._id)];
+        return newHistory.slice(0, MAX_ITEMS);
+      });
+    },
+    [setQuestionHistory],
+  );
+
+  const removeQuestionFromHistory = useCallback(
+    (id: Id<"questions">) => {
+      setQuestionHistory((prev) => prev.filter((e) => e.question._id !== id));
+    },
+    [setQuestionHistory],
+  );
+
   return {
     theme,
     setTheme,
@@ -153,10 +176,10 @@ export const useLocalStorageContext = (
     setLikedQuestions,
     addLikedQuestion,
     removeLikedQuestion,
-    questionHistory: [],
-    setQuestionHistory: () => { },
-    addQuestionToHistory: () => { },
-    removeQuestionFromHistory: () => { },
+    questionHistory,
+    setQuestionHistory,
+    addQuestionToHistory,
+    removeQuestionFromHistory,
     hiddenQuestions,
     setHiddenQuestions,
     addHiddenQuestion,
@@ -170,7 +193,7 @@ export const useLocalStorageContext = (
     addHiddenTone,
     removeHiddenTone,
     clearLikedQuestions: () => setLikedQuestions([]),
-    clearQuestionHistory: () => { },
+    clearQuestionHistory: () => setQuestionHistory([]),
     clearHiddenQuestions: () => setHiddenQuestions([]),
     clearHiddenStyles: () => setHiddenStyles([]),
     clearHiddenTones: () => setHiddenTones([]),

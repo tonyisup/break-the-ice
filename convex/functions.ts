@@ -37,7 +37,7 @@ triggers.register("users", async (ctx, change) => {
 		// Delete questions authored by user
 		const personalQuestions = await ctx.db
 			.query("questions")
-			.withIndex("by_author", (q) => q.eq("authorId", userId).eq("status", "personal"))
+			.withIndex("by_author", (q) => q.eq("authorId", userId).eq("status", "private"))
 			.collect();
 		for (const q of personalQuestions) {
 			await ctx.db.delete(q._id);
@@ -52,7 +52,7 @@ triggers.register("users", async (ctx, change) => {
 		}
 		const approvedQuestions = await ctx.db
 			.query("questions")
-			.withIndex("by_author", (q) => q.eq("authorId", userId).eq("status", "approved"))
+			.withIndex("by_author", (q) => q.eq("authorId", userId).eq("status", "public"))
 			.collect();
 		for (const q of approvedQuestions) {
 			await ctx.db.patch(q._id, {

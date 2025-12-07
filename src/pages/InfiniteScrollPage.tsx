@@ -36,6 +36,7 @@ export default function InfiniteScrollPage() {
     addHiddenTone,
     defaultStyle,
     defaultTone,
+    addQuestionToHistory,
   } = useStorageContext();
 
   const [questions, setQuestions] = useState<Doc<"questions">[]>([]);
@@ -44,7 +45,8 @@ export default function InfiniteScrollPage() {
   const [hasMore, setHasMore] = useState(true);
   const [showTopButton, setShowTopButton] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
-
+  const [prevQuestion, setPrevQuestion] = useState<Doc<"questions"> | null>(null);
+  const [nextQuestion, setNextQuestion] = useState<Doc<"questions"> | null>(null);
   // Fetch all styles and tones for card rendering
   const allStyles = useQuery(api.styles.getStyles, {
     organizationId: activeWorkspace ?? undefined,
@@ -95,13 +97,19 @@ export default function InfiniteScrollPage() {
     };
 
     const handleIntersect: IntersectionObserverCallback = (entries) => {
-      entries.forEach((entry) => {
+      entries.forEach((entry, index) => {
         if (entry.isIntersecting) {
           const questionId = entry.target.getAttribute('data-question-id');
           if (questionId) {
             const question = questionsRef.current.find(q => q._id === questionId);
             if (question) {
+              if (index === 0) {
+                setPrevQuestion(null);
+              } else {
+                setPrevQuestion(questionsRef.current[index - 1]);
+              }
               setActiveQuestion(question);
+              setNextQuestion(questionsRef.current[index + 1]);
             }
           }
         }
@@ -142,19 +150,28 @@ export default function InfiniteScrollPage() {
             viewDuration: duration,
             sessionId: user.sessionId ?? undefined,
           }); // No catch here as it might run during unmount
+
+          addQuestionToHistory({
+            question: activeQuestionRef.current,
+            viewedAt: Date.now(),
+          });
         }
       }
     };
-  }, [activeQuestion, recordAnalytics]);
+  }, [activeQuestion, recordAnalytics, addQuestionToHistory]);
 
   const style = useQuery(api.styles.getStyle, { id: activeQuestion?.style || defaultStyle || "would-you-rather" });
   const tone = useQuery(api.tones.getTone, { id: activeQuestion?.tone || defaultTone || "fun-silly" });
 
   // Used for styling and gradient
-  const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
   const gradientTarget = effectiveTheme === "dark" ? "#000" : "#bbb";
 
 
+  useEffect(() => {
+    if (style?.color && tone?.color) {
+      setBgGradient([style.color, tone.color]);
+    }
+  }, [style, tone]);
 
   // Function to load more questions
   const loadMoreQuestions = useCallback(async () => {
@@ -189,7 +206,7 @@ export default function InfiniteScrollPage() {
 
         try {
           const generated = await generateAIQuestions({
-            prompt: "",
+            prompt: "Generate random, engaging ice-breaker questions.",
             count: countToGenerate
           });
 
@@ -324,16 +341,120 @@ export default function InfiniteScrollPage() {
   // Mock highlighting states required by selectors but not used here
   const [isHighlighting, setIsHighlighting] = useState(false);
 
+  // Smooth gradient transition logic
+  const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
+
+  // Refs for data needed in scroll handler to avoid frequent re-attachments
+  const stylesMapRef = useRef(stylesMap);
+  const tonesMapRef = useRef(tonesMap);
+
+  useEffect(() => {
+    stylesMapRef.current = stylesMap;
+  }, [stylesMap]);
+
+  useEffect(() => {
+    tonesMapRef.current = tonesMap;
+  }, [tonesMap]);
+
+  useEffect(() => {
+    const handleScrollColor = () => {
+      const centerY = window.innerHeight / 2;
+      const range = window.innerHeight / 1.5; // Cards within this distance from center contribute to color
+
+      let totalWeight = 0;
+      let r1 = 0, g1 = 0, b1 = 0;
+      let r2 = 0, g2 = 0, b2 = 0;
+
+      // Helper to parse hex
+      const hexToRgb = (hex: string) => {
+        const clean = hex.replace('#', '');
+        let r = 0, g = 0, b = 0;
+        if (clean.length === 3) {
+          r = parseInt(clean[0] + clean[0], 16);
+          g = parseInt(clean[1] + clean[1], 16);
+          b = parseInt(clean[2] + clean[2], 16);
+        } else {
+          r = parseInt(clean.substring(0, 2), 16);
+          g = parseInt(clean.substring(2, 4), 16);
+          b = parseInt(clean.substring(4, 6), 16);
+        }
+        return [r, g, b];
+      };
+
+      questionsRef.current.forEach((q) => {
+        const el = cardRefs.current.get(q._id);
+        if (!el) return;
+
+        const rect = el.getBoundingClientRect();
+        const cardCenter = rect.top + rect.height / 2;
+        const dist = Math.abs(cardCenter - centerY);
+
+        if (dist < range) {
+          // Weight follows a cosine overlap or linear curve
+          // Using Math.max(0, 1 - dist/range) gives a linear falloff
+          // Squaring it makes the transition smoother at the extremes
+          const weight = Math.pow(Math.max(0, 1 - dist / range), 2);
+
+          if (weight > 0) {
+            const s = q.style ? stylesMapRef.current.get(q.style) : undefined;
+            const t = q.tone ? tonesMapRef.current.get(q.tone) : undefined;
+            const colors = (s?.color && t?.color) ? [s.color, t.color] : ['#667EEA', '#764BA2'];
+
+            const rgb1 = hexToRgb(colors[0]);
+            const rgb2 = hexToRgb(colors[1]);
+
+            r1 += rgb1[0] * weight;
+            g1 += rgb1[1] * weight;
+            b1 += rgb1[2] * weight;
+
+            r2 += rgb2[0] * weight;
+            g2 += rgb2[1] * weight;
+            b2 += rgb2[2] * weight;
+
+            totalWeight += weight;
+          }
+        }
+      });
+
+      if (totalWeight > 0) {
+        const final1 = `rgb(${Math.round(r1 / totalWeight)}, ${Math.round(g1 / totalWeight)}, ${Math.round(b1 / totalWeight)})`;
+        const final2 = `rgb(${Math.round(r2 / totalWeight)}, ${Math.round(g2 / totalWeight)}, ${Math.round(b2 / totalWeight)})`;
+        setBgGradient([final1, final2]);
+      }
+    };
+
+    // Throttle or use RAF
+    let rafId: number;
+    const onScroll = () => {
+      rafId = requestAnimationFrame(handleScrollColor);
+    };
+
+    window.addEventListener('scroll', onScroll);
+    window.addEventListener('resize', onScroll);
+    // Initial calculation
+    handleScrollColor();
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      cancelAnimationFrame(rafId);
+    };
+  }, []); // Empty dependency array as we use refs
   return (
     <div
-      className="min-h-screen transition-colors overflow-hidden flex flex-col"
-      style={{
-        background: `linear-gradient(135deg, ${gradient[0]}, ${gradientTarget}, ${gradient[1]})`
-      }}
+      className="min-h-screen overflow-hidden flex flex-col"
     >
+      <div
+        className="h-screen fixed top-0 left-0 right-0 z-0"
+        style={{
+          background: `linear-gradient(135deg, ${bgGradient[0]}, ${gradientTarget}, ${bgGradient[1]})`,
+          transition: "background 0.2s ease-out"
+        }}
+      >
+      </div>
       <Header />
 
-      <main className="flex-1 flex flex-col pb-20">
+      <main className="z-10 flex-1 flex flex-col pb-20">
         <div className="flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full">
           {questions.map((question) => {
             // Derive specific style/tone/gradient for this card
@@ -386,15 +507,14 @@ export default function InfiniteScrollPage() {
         </div>
       </main>
 
-      {showTopButton && (
-        <Button
-          onClick={scrollToTop}
-          className="fixed bottom-6 left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50"
-          variant="default"
-        >
-          <ArrowUp className="w-6 h-6" />
-        </Button>
-      )}
+      <Button
+        onClick={scrollToTop}
+        className="fixed bottom-6 left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50"
+        variant="default"
+      >
+        <ArrowUp className="w-6 h-6" />
+      </Button>
+
     </div>
   );
 }

@@ -80,11 +80,29 @@ export const generateFallbackQuestion = action({
 
 export const generateAIQuestions = action({
   args: {
-    prompt: v.string(),
-    count: v.number()
+    prompt: v.optional(v.string()),
+    count: v.number(),
+    style: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    selectedTags: v.optional(v.array(v.string())),
+    model: v.optional(v.string()),
+    currentQuestion: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
-    const { prompt, count } = args;
+    let { prompt, count, style, tone } = args;
+
+    if (!prompt && style && tone) {
+      const styleDoc = await ctx.runQuery(api.styles.getStyle, { id: style });
+      const toneDoc = await ctx.runQuery(api.tones.getTone, { id: tone });
+
+      prompt = `Generate questions with the following characteristics:
+Style: ${styleDoc.name} (${styleDoc.description}). ${styleDoc.promptGuidanceForAI || ""}
+Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI || ""}`;
+    }
+
+    if (!prompt) {
+      throw new Error("Prompt or Style/Tone must be provided");
+    }
 
     // Retry logic for AI generation
     let attempts = 0;

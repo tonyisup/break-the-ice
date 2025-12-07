@@ -13,6 +13,32 @@ interface QuestionGridProps {
   variant?: "card" | "condensed";
 }
 
+// Helper to render status badge
+const getStatusBadge = (status?: string) => {
+  if (status === 'public') {
+    return (
+      <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5 py-0.5 rounded font-medium border border-blue-200 dark:border-blue-800 shrink-0">
+        Public
+      </span>
+    );
+  }
+  if (status === 'pending') {
+    return (
+      <span className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 text-[10px] px-1.5 py-0.5 rounded font-medium border border-yellow-200 dark:border-yellow-800 shrink-0">
+        Pending
+      </span>
+    );
+  }
+  if (status === 'private') {
+    return (
+      <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 text-[10px] px-1.5 py-0.5 rounded font-medium border border-green-200 dark:border-green-800 shrink-0">
+        Private
+      </span>
+    );
+  }
+  return null;
+};
+
 export function QuestionGrid({
   questions,
   styles,
@@ -37,7 +63,7 @@ export function QuestionGrid({
         const isFavorite = likedQuestions.includes(question._id);
 
         if (isCondensed) {
-           return (
+          return (
             <div
               key={question._id}
               className="flex flex-col p-3 bg-white dark:bg-gray-950 rounded-md border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-all relative group h-full"
@@ -49,40 +75,41 @@ export function QuestionGrid({
               </div>
 
               <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100 dark:border-gray-900/50">
-                 <div className="flex items-center gap-1.5">
-                    {style && (
-                      <div title={`Style: ${style.name}`}>
-                        <IconComponent icon={style.icon as Icon} size={14} color={style.color} />
-                      </div>
-                    )}
-                    {tone && (
-                      <div title={`Tone: ${tone.name}`}>
-                        <IconComponent icon={tone.icon as Icon} size={14} color={tone.color} />
-                      </div>
-                    )}
-                 </div>
+                <div className="flex items-center gap-1.5 overflow-hidden">
+                  {getStatusBadge(question.status)}
+                  {style && (
+                    <div title={`Style: ${style.name}`} className="shrink-0">
+                      <IconComponent icon={style.icon as Icon} size={14} color={style.color} />
+                    </div>
+                  )}
+                  {tone && (
+                    <div title={`Tone: ${tone.name}`} className="shrink-0">
+                      <IconComponent icon={tone.icon as Icon} size={14} color={tone.color} />
+                    </div>
+                  )}
+                </div>
 
-                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                   <button
-                     onClick={(e) => { e.stopPropagation(); onToggleLike(question._id); }}
-                     className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-red-500"
-                     title={isFavorite ? "Unlike" : "Like"}
-                   >
-                     <Heart
-                       size={14}
-                       className={isFavorite ? 'text-red-500 fill-red-500' : ''}
-                     />
-                   </button>
-                   <button
-                     onClick={(e) => { e.stopPropagation(); onRemoveItem(question._id); }}
-                     className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-                     title="Hide"
-                   >
-                     <ThumbsDown
-                       size={14}
-                     />
-                   </button>
-                 </div>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onToggleLike(question._id); }}
+                    className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-red-500"
+                    title={isFavorite ? "Unlike" : "Like"}
+                  >
+                    <Heart
+                      size={14}
+                      className={isFavorite ? 'text-red-500 fill-red-500' : ''}
+                    />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRemoveItem(question._id); }}
+                    className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+                    title="Hide"
+                  >
+                    <ThumbsDown
+                      size={14}
+                    />
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -119,26 +146,31 @@ export function QuestionGrid({
             </div>
 
             {/* Footer with Actions */}
-            <div className="flex items-center justify-end gap-1 mt-auto pt-2 border-t border-gray-100 dark:border-gray-900">
-               <button
-                 onClick={() => onToggleLike(question._id)}
-                 className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-red-500"
-                 title={isFavorite ? "Unlike" : "Like"}
-               >
-                 <Heart
-                   size={16}
-                   className={isFavorite ? 'text-red-500 fill-red-500' : ''}
-                 />
-               </button>
-               <button
-                 onClick={() => onRemoveItem(question._id)}
-                 className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-                 title="Hide"
-               >
-                 <ThumbsDown
-                   size={16}
-                 />
-               </button>
+            <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100 dark:border-gray-900">
+              <div className="flex items-center gap-2">
+                {getStatusBadge(question.status)}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => onToggleLike(question._id)}
+                  className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-red-500"
+                  title={isFavorite ? "Unlike" : "Like"}
+                >
+                  <Heart
+                    size={16}
+                    className={isFavorite ? 'text-red-500 fill-red-500' : ''}
+                  />
+                </button>
+                <button
+                  onClick={() => onRemoveItem(question._id)}
+                  className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+                  title="Hide"
+                >
+                  <ThumbsDown
+                    size={16}
+                  />
+                </button>
+              </div>
             </div>
           </div>
         );

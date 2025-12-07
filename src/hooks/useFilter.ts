@@ -3,7 +3,7 @@ import { Doc } from "../../convex/_generated/dataModel";
 import { HistoryEntry } from "./useQuestionHistory";
 
 function isHistoryEntry(item: any): item is HistoryEntry {
-    return (item as HistoryEntry).question !== undefined;
+  return (item as HistoryEntry).question !== undefined;
 }
 
 export const useFilter = (
@@ -17,9 +17,11 @@ export const useFilter = (
     return items.filter(
       (item) => {
         const question = isHistoryEntry(item) ? item.question : item;
+        if (!question) return false;
+        if (!question.text) return false;
         return question.text.toLowerCase().includes(searchText.toLowerCase()) &&
-        (selectedStyles.length === 0 || selectedStyles.includes(question.style!)) &&
-        (selectedTones.length === 0 || selectedTones.includes(question.tone!))
+          (selectedStyles.length === 0 || selectedStyles.includes(question.style!)) &&
+          (selectedTones.length === 0 || selectedTones.includes(question.tone!))
       }
     );
   }, [items, searchText, selectedStyles, selectedTones]);
