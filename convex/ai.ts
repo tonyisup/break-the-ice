@@ -180,7 +180,7 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
     - text: The question text
     - style: The style of the question from one of the following; ${styles.map(s => s.id).join(", ")}
     - tone: The tone of the question from one of the following; ${tones.map(t => t.id).join(", ")}
-    
+    - Note that style and tone MUST be one of the identifiers provided exactly as-is.
     For example:
     [
       {
@@ -260,8 +260,8 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
           // We don't have style/tone in this format, so we use the requested ones or empty strings
           parsedContent.push({
             text: match[1].trim(),
-            style: style || styles[0]?.id || "",
-            tone: tone || tones[0]?.id || ""
+            style: style || styles[0]?.id || "would-you-rather",
+            tone: tone || tones[0]?.id || "fun-silly"
           });
         }
       }
@@ -277,6 +277,14 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
     const newQuestions: (Doc<"questions"> | null)[] = [];
     for (const question of parsedContent) {
       try {
+        if (!styles.find(s => s.id === question.style)) {
+          console.log(`Invalid style ${question.style} for question ${question.text}`);
+          continue;
+        }
+        if (!tones.find(t => t.id === question.tone)) {
+          console.log(`Invalid tone ${question.tone} for question ${question.text}`);
+          continue;
+        }
         const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
           text: question.text,
           style: question.style,
