@@ -17,9 +17,12 @@ import { cn, isColorDark } from "@/lib/utils";
 import { Header } from "@/components/header";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useAuth, useClerk } from "@clerk/clerk-react";
 
 
 function LikedQuestionsPageContent() {
+  const { isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
   const { effectiveTheme } = useTheme();
   const [searchText, setSearchText] = useState("");
   const { likedQuestions, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, addHiddenStyle, addHiddenTone } = useStorageContext();
@@ -135,7 +138,13 @@ function LikedQuestionsPageContent() {
         {/* Personal Questions Section */}
         <div>
           <div className="flex justify-between items-center mb-4">
-            <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add Question</Button>
+            {isSignedIn ? (
+              <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add Question</Button>
+            ) : (
+              <Button onClick={() => openSignIn({ mode: "modal" })}>
+                Sign up to add questions and remove liked limit
+              </Button>
+            )}
           </div>
 
           {myQuestions && myQuestions.length > 0 && (
