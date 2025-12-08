@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowUp } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { useAuth, SignInButton } from "@clerk/clerk-react";
+import { SignInCTA } from "@/components/SignInCTA";
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
@@ -499,23 +500,15 @@ export default function InfiniteScrollPage() {
           )}
 
           {showAuthCTA && (
-            <div className="w-full max-w-md mx-auto p-1 rounded-[30px]" style={{ background: `linear-gradient(135deg, ${bgGradient[1]}, ${bgGradient[0]})` }}>
-              <div className="w-full h-full bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col gap-6 items-center text-center">
-                <div className="flex flex-col gap-2">
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Want more questions?
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-lg leading-relaxed">
-                    Sign in to get <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-600">10 free AI generations</span> every month!
-                  </p>
-                </div>
-                <SignInButton mode="modal">
-                  <Button className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-full py-6 text-lg font-bold shadow-lg transition-all hover:scale-105 hover:shadow-xl">
-                    Sign In for Free
-                  </Button>
-                </SignInButton>
-              </div>
-            </div>
+            <SignInCTA
+              bgGradient={bgGradient}
+              title="Want more questions?"
+              featureHighlight={{
+                pre: "Sign in to get",
+                highlight: "10 free AI generations",
+                post: "every month!"
+              }}
+            />
           )}
 
           {!hasMore && !showAuthCTA && questions.length > 0 && (

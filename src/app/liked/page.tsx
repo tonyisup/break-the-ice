@@ -16,9 +16,9 @@ import { cn, isColorDark } from "@/lib/utils";
 
 import { Header } from "@/components/header";
 import { toast } from "sonner";
+import { SignInCTA } from "@/components/SignInCTA";
 import { Button } from "@/components/ui/button";
 import { useAuth, useClerk } from "@clerk/clerk-react";
-
 
 function LikedQuestionsPageContent() {
   const { isSignedIn } = useAuth();
@@ -120,6 +120,8 @@ function LikedQuestionsPageContent() {
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradient = ["#3B2554", "#262D54"];
+  const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
+
   return (
     <div
       className="min-h-screen overflow-hidden"
@@ -141,9 +143,15 @@ function LikedQuestionsPageContent() {
             {isSignedIn ? (
               <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add Question</Button>
             ) : (
-              <Button onClick={() => openSignIn()}>
-                Sign up to add questions and remove liked limit
-              </Button>
+              <SignInCTA
+                bgGradient={currentGradient}
+                title=""
+                featureHighlight={{
+                  pre: "Sign in to",
+                  highlight: "add your own questions",
+                  post: "and remove the limit on likes",
+                }}
+              />
             )}
           </div>
 
