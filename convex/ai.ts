@@ -46,7 +46,7 @@ export const generateFallbackQuestion = action({
       messages: [
         {
           role: "system",
-          content: "Generate a single engaging ice-breaker question. Respond with ONLY the question text, no quotes or formatting."
+          content: "Generate a single engaging ice-breaker question. Respond with ONLY the ONE question text, no quotes or formatting."
         },
         {
           role: "user",
@@ -92,8 +92,18 @@ export const generateAIQuestions = action({
     let { prompt, count, style, tone } = args;
 
     if (!prompt && style && tone) {
-      const styleDoc = await ctx.runQuery(api.styles.getStyle, { id: style });
-      const toneDoc = await ctx.runQuery(api.tones.getTone, { id: tone });
+      const styleDoc = await ctx.runQuery(api.styles.getStyle, { id: style })
+        || {
+        name: "Would You Rather",
+        description: "Forces a binary choice, sparks instant debate and reveals priorities.",
+        promptGuidanceForAI: "Present two equally tempting or equally awful options to create playful tension.",
+      };
+      const toneDoc = await ctx.runQuery(api.tones.getTone, { id: tone })
+        || {
+        name: "Fun & Silly",
+        description: "Light-hearted, whimsical, and designed to spark laughter without deep introspection.",
+        promptGuidanceForAI: "Use playful language, absurd scenarios, and pop-culture references; keep stakes ultra-low.",
+      };
 
       prompt = `Generate questions with the following characteristics:
 Style: ${styleDoc.name} (${styleDoc.description}). ${styleDoc.promptGuidanceForAI || ""}
@@ -114,6 +124,14 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 
     let userContext = "";
     const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    if (!user) {
+      throw new Error("You must be logged in to generate AI questions.");
+    }
+
+    await ctx.runMutation(internal.users.checkAndIncrementAIUsage, {
+      userId: user._id,
+      count: count
+    });
     if (user?.questionPreferenceEmbedding) {
       const nearestQuestions = await ctx.runAction(api.questions.getNearestQuestionsByEmbedding, {
         embedding: user.questionPreferenceEmbedding,
@@ -148,7 +166,8 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
     - Return exactly ${count} question(s)
     - Each question should be a string in the JSON array
     - Avoid questions too similar to existing ones
-    - Make questions engaging and conversation-starting`
+    - Make questions engaging and conversation-starting
+    - Only ONE question per text. There should only be one question mark at the end of the text.`
             },
             {
               role: "user",

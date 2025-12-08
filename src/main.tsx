@@ -23,7 +23,6 @@ import IndividualQuestionPage from "./app/admin/questions/[id]/page";
 import DuplicateDetectionCompletedPage from "./app/admin/duplicates/completed/page";
 import AdminPage from "./app/admin/page";
 import AddQuestionPage from "./app/add-question/page";
-import PrunePage from "./app/admin/prune/page";
 import SingleQuestionPage from "./pages/SingleQuestionPage";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
@@ -53,7 +52,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/admin/duplicates" element={<DuplicatesPage />} />
                 <Route path="/admin/duplicates/completed" element={<DuplicateDetectionCompletedPage />} />
                 <Route path="/admin/questions/:id" element={<IndividualQuestionPage />} />
-                <Route path="/admin/prune" element={<PrunePage />} />
+                {/* <Route path="/admin/prune" element={<PrunePage />} /> */}
               </Routes>
             </BrowserRouter>
           </WorkspaceProvider>

@@ -15,7 +15,7 @@ import { Icon } from "@/components/ui/icons/icon";
 import { Button } from "@/components/ui/button";
 import { ArrowUp } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth, SignInButton } from "@clerk/clerk-react";
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
@@ -44,6 +44,7 @@ export default function InfiniteScrollPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [showTopButton, setShowTopButton] = useState(false);
+  const [showAuthCTA, setShowAuthCTA] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
   const [prevQuestion, setPrevQuestion] = useState<Doc<"questions"> | null>(null);
   const [nextQuestion, setNextQuestion] = useState<Doc<"questions"> | null>(null);
@@ -176,7 +177,7 @@ export default function InfiniteScrollPage() {
   // Function to load more questions
   const loadMoreQuestions = useCallback(async () => {
     // Check if we are already loading or missing params
-    if (isLoading) return;
+    if (isLoading || !hasMore || showAuthCTA) return;
 
     // Capture current request ID
     const currentRequestId = requestIdRef.current;
@@ -225,6 +226,10 @@ export default function InfiniteScrollPage() {
           // Check for staleness in error case too
           if (currentRequestId !== requestIdRef.current) return;
 
+          if (err instanceof Error && err.message.includes("logged in")) {
+            setShowAuthCTA(true);
+            setHasMore(false);
+          }
           // If generation fails, we just use what we have.
         }
       }
@@ -257,7 +262,7 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, isLoading, seenIds, hiddenQuestions, generateAIQuestions]);
+  }, [convex, isLoading, seenIds, hiddenQuestions, generateAIQuestions, hasMore, showAuthCTA]);
 
   // Initial load
   useEffect(() => {
@@ -493,13 +498,33 @@ export default function InfiniteScrollPage() {
             </div>
           )}
 
-          {!hasMore && questions.length > 0 && (
+          {showAuthCTA && (
+            <div className="w-full max-w-md mx-auto p-1 rounded-[30px]" style={{ background: `linear-gradient(135deg, ${bgGradient[1]}, ${bgGradient[0]})` }}>
+              <div className="w-full h-full bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col gap-6 items-center text-center">
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    Want more questions?
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 text-lg leading-relaxed">
+                    Sign in to get <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-600">10 free AI generations</span> every month!
+                  </p>
+                </div>
+                <SignInButton mode="modal">
+                  <Button className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-full py-6 text-lg font-bold shadow-lg transition-all hover:scale-105 hover:shadow-xl">
+                    Sign In for Free
+                  </Button>
+                </SignInButton>
+              </div>
+            </div>
+          )}
+
+          {!hasMore && !showAuthCTA && questions.length > 0 && (
             <div className="text-center py-8 text-white/70">
               No more questions found for this style and tone.
             </div>
           )}
 
-          {!hasMore && questions.length === 0 && !isLoading && (
+          {!hasMore && !showAuthCTA && questions.length === 0 && !isLoading && (
             <div className="text-center py-8 text-white/70">
               No questions found. Try changing the style or tone.
             </div>

@@ -15,6 +15,7 @@ import type {
 } from "convex/server";
 import type * as ai from "../ai.js";
 import type * as auth from "../auth.js";
+import type * as clerk from "../clerk.js";
 import type * as collections from "../collections.js";
 import type * as crons from "../crons.js";
 import type * as duplicates from "../duplicates.js";
@@ -42,6 +43,7 @@ import type * as users from "../users.js";
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   auth: typeof auth;
+  clerk: typeof clerk;
   collections: typeof collections;
   crons: typeof crons;
   duplicates: typeof duplicates;

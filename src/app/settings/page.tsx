@@ -91,6 +91,19 @@ const SettingsPage = () => {
   };
   const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions });
 
+  // prevent flickering when unhiding questions
+  const [lastKnownHiddenQuestions, setLastKnownHiddenQuestions] = useState<Doc<"questions">[] | undefined>(undefined);
+
+  useEffect(() => {
+    if (hiddenQuestionObjects !== undefined) {
+      setLastKnownHiddenQuestions(hiddenQuestionObjects);
+    }
+  }, [hiddenQuestionObjects]);
+
+  const questionsToDisplay = (hiddenQuestionObjects ?? lastKnownHiddenQuestions)?.filter((q) =>
+    hiddenQuestions.includes(q._id)
+  );
+
   // Sync with backend IDs (filtering out invalid ones)
   useEffect(() => {
     if (allStyles) {
@@ -98,7 +111,7 @@ const SettingsPage = () => {
       const localIds = hiddenStyles;
       const filteredIds = localIds.filter(id => serverIds.includes(id));
       if (filteredIds.length !== localIds.length) {
-            setHiddenStyles(filteredIds);
+        setHiddenStyles(filteredIds);
       }
     }
   }, [allStyles, hiddenStyles, setHiddenStyles]);
@@ -158,7 +171,7 @@ const SettingsPage = () => {
                   selectedStyle={defaultStyle ?? ""}
                   onSelectStyle={setDefaultStyle}
                   isHighlighting={false}
-                  setIsHighlighting={() => {}}
+                  setIsHighlighting={() => { }}
                 />
               </div>
               <div>
@@ -168,7 +181,7 @@ const SettingsPage = () => {
                   selectedTone={defaultTone ?? ""}
                   onSelectTone={setDefaultTone}
                   isHighlighting={false}
-                  setIsHighlighting={() => {}}
+                  setIsHighlighting={() => { }}
                 />
               </div>
             </div>
@@ -236,7 +249,7 @@ const SettingsPage = () => {
             onOpenChange={() => toggleSection('manage-tones')}
             count={allTones?.length}
           >
-             {allTones && allTones.length > 0 ? (
+            {allTones && allTones.length > 0 ? (
               <>
                 <div className="flex space-x-2 mb-4">
                   <button
@@ -290,9 +303,9 @@ const SettingsPage = () => {
             title="Hidden Questions"
             isOpen={!!openSections['hidden-questions']}
             onOpenChange={() => toggleSection('hidden-questions')}
-            count={hiddenQuestionObjects?.length}
+            count={questionsToDisplay?.length}
           >
-            {hiddenQuestionObjects && hiddenQuestionObjects.length > 0 ? (
+            {questionsToDisplay && questionsToDisplay.length > 0 ? (
               <>
                 <button
                   onClick={clearHiddenQuestions}
@@ -301,7 +314,7 @@ const SettingsPage = () => {
                   Clear All
                 </button>
                 <ul className="space-y-2">
-                  {hiddenQuestionObjects.map(question => (
+                  {questionsToDisplay.map(question => (
                     question && <li key={question._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
                       <span className="dark:text-white text-black">{question.text}</span>
                       <button

@@ -4,10 +4,26 @@ import { useQuery } from "convex/react";
 import { api } from "@/../convex/_generated/api";
 import { Id } from "@/../convex/_generated/dataModel";
 import { useWorkspace } from "@/hooks/useWorkspace.tsx";
+import { useAuth } from "@clerk/clerk-react";
 
 const WorkspaceSwitcher = () => {
+  const { has, isSignedIn, isLoaded } = useAuth();
+
+  if (!isLoaded) {
+    return null;
+  }
+
+  if (!isSignedIn) {
+    return null;
+  }
+
+  if (!has({ permission: "workspace" })) {
+    return null;
+  }
+
   const organizations = useQuery(api.organizations.getOrganizations);
   const { activeWorkspace, setActiveWorkspace } = useWorkspace();
+
 
   return (
     <div className="mb-8">

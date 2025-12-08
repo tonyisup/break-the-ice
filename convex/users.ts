@@ -46,6 +46,74 @@ export const getCurrentUser = query({
   },
 });
 
+export const updateUserFromClerk = internalMutation({
+  args: {
+    clerkId: v.string(),
+    email: v.optional(v.string()),
+    name: v.string(),
+    image: v.optional(v.string()),
+    subscriptionTier: v.union(v.literal("free"), v.literal("casual")),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", args.email))
+      .unique();
+
+    if (user) {
+      await ctx.db.patch(user._id, {
+        name: args.name,
+        image: args.image,
+        subscriptionTier: args.subscriptionTier,
+      });
+    } else if (args.email) {
+      await ctx.db.insert("users", {
+        name: args.name,
+        email: args.email,
+        image: args.image,
+        subscriptionTier: args.subscriptionTier,
+        aiUsage: { count: 0, cycleStart: Date.now() },
+      });
+    }
+  },
+});
+
+export const checkAndIncrementAIUsage = internalMutation({
+  args: {
+    userId: v.id("users"),
+    count: v.number(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    const now = Date.now();
+    const cycleLength = 30 * 24 * 60 * 60 * 1000; // 30 days
+    let aiUsage = user.aiUsage || { count: 0, cycleStart: now };
+
+    // Reset cycle if needed
+    if (now - aiUsage.cycleStart > cycleLength) {
+      aiUsage = { count: 0, cycleStart: now };
+    }
+
+    const limit = user.subscriptionTier === "casual" ? 100 : 10;
+
+    if (aiUsage.count + args.count > limit) {
+      throw new Error(`AI generation limit reached. You have used ${aiUsage.count}/${limit} generations this cycle.`);
+    }
+
+    await ctx.db.patch(user._id, {
+      aiUsage: {
+        count: aiUsage.count + args.count,
+        cycleStart: aiUsage.cycleStart,
+      },
+    });
+
+    return true;
+  },
+});
+
 export const store = mutation({
   args: {},
   returns: v.id("users"),
@@ -169,6 +237,8 @@ export const getQuestionHistory = query({
     }
 
     const limit = args.limit ?? 50;
+    // Enforce free tier limit
+    const effectiveLimit = user.subscriptionTier === "casual" ? limit : Math.min(limit, 100);
 
     const history = await ctx.db
       .query("analytics")
@@ -176,7 +246,7 @@ export const getQuestionHistory = query({
         q.eq("userId", user._id).eq("event", "seen")
       )
       .order("desc")
-      .take(limit);
+      .take(effectiveLimit);
 
     const questions = await Promise.all(
       history.map(async (h) => {
@@ -219,6 +289,11 @@ export const updateLikedQuestions = mutation({
   handler: async (ctx, args) => {
     const user = await getUserOrCreate(ctx);
 
+    // Enforce limits for Free tier
+    if (user.subscriptionTier !== "casual" && args.likedQuestions.length > 100) {
+      throw new Error("Free plan limit: You can only like up to 100 questions. Upgrade to Casual for unlimited.");
+    }
+
     // Delete existing liked questions for this user
     const existingLikedQuestions = await ctx.db
       .query("userQuestions")
@@ -253,6 +328,11 @@ export const updateHiddenQuestions = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const user = await getUserOrCreate(ctx);
+
+    // Enforce limits for Free tier
+    if (user.subscriptionTier !== "casual" && args.hiddenQuestions.length > 100) {
+      throw new Error("Free plan limit: You can only hide up to 100 questions. Upgrade to Casual for unlimited.");
+    }
 
     // Delete existing hidden questions for this user
     const existingHiddenQuestions = await ctx.db

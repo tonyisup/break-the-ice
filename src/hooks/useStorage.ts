@@ -5,8 +5,6 @@ import { useLocalStorage } from "./useLocalStorage";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
-const MAX_ITEMS = 100;
-
 export type Theme = "light" | "dark" | "system";
 
 export interface StorageContextType {
@@ -90,9 +88,17 @@ export const useLocalStorageContext = (
     hasConsented
   );
 
+  const MAX_ANON_LIKED = Number(import.meta.env.VITE_MAX_ANON_LIKED) || 5;
+
   const addLikedQuestion = useCallback(
     (id: Id<"questions">) => {
-      setLikedQuestions((prev) => [...prev, id]);
+      setLikedQuestions((prev) => {
+        const newState = [...prev, id];
+        if (newState.length > MAX_ANON_LIKED) {
+          return newState.slice(newState.length - MAX_ANON_LIKED);
+        }
+        return newState;
+      });
     },
     [setLikedQuestions],
   );
@@ -104,9 +110,17 @@ export const useLocalStorageContext = (
     [setLikedQuestions],
   );
 
+  const MAX_ANON_BLOCKED = Number(import.meta.env.VITE_MAX_ANON_BLOCKED) || 5;
+
   const addHiddenQuestion = useCallback(
     (id: Id<"questions">) => {
-      setHiddenQuestions((prev) => [...prev, id]);
+      setHiddenQuestions((prev) => {
+        const newState = [...prev, id];
+        if (newState.length > MAX_ANON_BLOCKED) {
+          return newState.slice(newState.length - MAX_ANON_BLOCKED);
+        }
+        return newState;
+      });
     },
     [setHiddenQuestions],
   );
@@ -152,11 +166,16 @@ export const useLocalStorageContext = (
     hasConsented,
   );
 
+  const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) || 100;
+
   const addQuestionToHistory = useCallback(
     (entry: HistoryEntry) => {
       setQuestionHistory((prev) => {
-        const newHistory = [entry, ...prev.filter((e) => e.question._id !== entry.question._id)];
-        return newHistory.slice(0, MAX_ITEMS);
+        const newState = [...prev, entry];
+        if (newState.length > MAX_ANON_HISTORY) {
+          return newState.slice(newState.length - MAX_ANON_HISTORY);
+        }
+        return newState;
       });
     },
     [setQuestionHistory],
@@ -222,7 +241,7 @@ export const useConvexStorageContext = (
     hasConsented,
   );
 
-  const questionHistory = useQuery(api.users.getQuestionHistory) ?? [];
+  const questionHistory = useQuery(api.users.getQuestionHistory, {}) ?? [];
 
   const settings = useQuery(api.users.getSettings);
   const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
