@@ -137,11 +137,11 @@ function LikedQuestionsPageContent() {
       <div className="container mx-auto p-4 space-y-8">
         {/* Personal Questions Section */}
         <div>
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-center items-center mb-4">
             {isSignedIn ? (
               <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add Question</Button>
             ) : (
-              <Button onClick={() => openSignIn({ mode: "modal" })}>
+              <Button onClick={() => openSignIn()}>
                 Sign up to add questions and remove liked limit
               </Button>
             )}

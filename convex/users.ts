@@ -294,7 +294,7 @@ export const updateLikedQuestions = mutation({
       throw new Error("Free plan limit: You can only like up to 100 questions. Upgrade to Casual for unlimited.");
     }
 
-    // Delete existing liked questions for this user
+    // 1. Handle removals: un-like questions that are no longer in the list
     const existingLikedQuestions = await ctx.db
       .query("userQuestions")
       .withIndex("by_userIdAndStatus", (q) =>
@@ -302,20 +302,42 @@ export const updateLikedQuestions = mutation({
       )
       .collect();
 
+    const newLikedSet = new Set(args.likedQuestions);
     for (const uq of existingLikedQuestions) {
-      await ctx.db.delete(uq._id);
+      if (!newLikedSet.has(uq.questionId)) {
+        await ctx.db.delete(uq._id);
+      }
     }
 
-    // Insert new liked questions
+    // 2. Handle additions/updates: ensure we don't create duplicates if question exists as "seen"
     const now = Date.now();
-    for (const questionId of args.likedQuestions) {
-      await ctx.db.insert("userQuestions", {
-        userId: user._id,
-        questionId,
-        status: "liked",
-        updatedAt: now,
-      });
-    }
+    await Promise.all(
+      Array.from(newLikedSet).map(async (questionId) => {
+        const existing = await ctx.db
+          .query("userQuestions")
+          .withIndex("by_userIdAndQuestionId", (q) =>
+            q.eq("userId", user._id).eq("questionId", questionId)
+          )
+          .first();
+
+        if (existing) {
+          if (existing.status !== "liked") {
+            await ctx.db.patch(existing._id, {
+              status: "liked",
+              updatedAt: now,
+            });
+          }
+        } else {
+          await ctx.db.insert("userQuestions", {
+            userId: user._id,
+            questionId,
+            status: "liked",
+            updatedAt: now,
+            seenCount: 1,
+          });
+        }
+      })
+    );
 
     return null;
   },
@@ -334,7 +356,7 @@ export const updateHiddenQuestions = mutation({
       throw new Error("Free plan limit: You can only hide up to 100 questions. Upgrade to Casual for unlimited.");
     }
 
-    // Delete existing hidden questions for this user
+    // 1. Handle removals: un-hide questions that are no longer in the list
     const existingHiddenQuestions = await ctx.db
       .query("userQuestions")
       .withIndex("by_userIdAndStatus", (q) =>
@@ -342,20 +364,42 @@ export const updateHiddenQuestions = mutation({
       )
       .collect();
 
+    const newHiddenSet = new Set(args.hiddenQuestions);
     for (const uq of existingHiddenQuestions) {
-      await ctx.db.delete(uq._id);
+      if (!newHiddenSet.has(uq.questionId)) {
+        await ctx.db.delete(uq._id);
+      }
     }
 
-    // Insert new hidden questions
+    // 2. Handle additions/updates
     const now = Date.now();
-    for (const questionId of args.hiddenQuestions) {
-      await ctx.db.insert("userQuestions", {
-        userId: user._id,
-        questionId,
-        status: "hidden",
-        updatedAt: now,
-      });
-    }
+    await Promise.all(
+      Array.from(newHiddenSet).map(async (questionId) => {
+        const existing = await ctx.db
+          .query("userQuestions")
+          .withIndex("by_userIdAndQuestionId", (q) =>
+            q.eq("userId", user._id).eq("questionId", questionId)
+          )
+          .first();
+
+        if (existing) {
+          if (existing.status !== "hidden") {
+            await ctx.db.patch(existing._id, {
+              status: "hidden",
+              updatedAt: now,
+            });
+          }
+        } else {
+          await ctx.db.insert("userQuestions", {
+            userId: user._id,
+            questionId,
+            status: "hidden",
+            updatedAt: now,
+            seenCount: 1,
+          });
+        }
+      })
+    );
 
     await ctx.scheduler.runAfter(0, internal.users.updateUserPreferenceEmbeddingAction, {
       userId: user._id,
@@ -372,26 +416,48 @@ export const updateHiddenStyles = mutation({
   handler: async (ctx, args) => {
     const user = await getUserOrCreate(ctx);
 
-    // Delete existing hidden styles for this user
+    // 1. Handle removals
     const existingHiddenStyles = await ctx.db
       .query("userStyles")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .filter((q) => q.eq(q.field("status"), "hidden"))
       .collect();
 
+    const newHiddenSet = new Set(args.hiddenStyles);
     for (const us of existingHiddenStyles) {
-      await ctx.db.delete(us._id);
+      if (!newHiddenSet.has(us.styleId)) {
+        await ctx.db.delete(us._id);
+      }
     }
 
-    // Insert new hidden styles
+    // 2. Handle additions/updates
     const now = Date.now();
-    for (const styleId of args.hiddenStyles) {
-      await ctx.db.insert("userStyles", {
-        userId: user._id,
-        styleId,
-        updatedAt: now,
-        status: "hidden",
-      });
-    }
+    await Promise.all(
+      Array.from(newHiddenSet).map(async (styleId) => {
+        const existing = await ctx.db
+          .query("userStyles")
+          .withIndex("by_userIdAndStyleId", (q) =>
+            q.eq("userId", user._id).eq("styleId", styleId)
+          )
+          .first();
+
+        if (existing) {
+          if (existing.status !== "hidden") {
+            await ctx.db.patch(existing._id, {
+              status: "hidden",
+              updatedAt: now,
+            });
+          }
+        } else {
+          await ctx.db.insert("userStyles", {
+            userId: user._id,
+            styleId,
+            status: "hidden",
+            updatedAt: now,
+          });
+        }
+      })
+    );
 
     return null;
   },
@@ -405,26 +471,48 @@ export const updateHiddenTones = mutation({
   handler: async (ctx, args) => {
     const user = await getUserOrCreate(ctx);
 
-    // Delete existing hidden tones for this user
+    // 1. Handle removals
     const existingHiddenTones = await ctx.db
       .query("userTones")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .filter((q) => q.eq(q.field("status"), "hidden"))
       .collect();
 
+    const newHiddenSet = new Set(args.hiddenTones);
     for (const ut of existingHiddenTones) {
-      await ctx.db.delete(ut._id);
+      if (!newHiddenSet.has(ut.toneId)) {
+        await ctx.db.delete(ut._id);
+      }
     }
 
-    // Insert new hidden tones
+    // 2. Handle additions/updates
     const now = Date.now();
-    for (const toneId of args.hiddenTones) {
-      await ctx.db.insert("userTones", {
-        userId: user._id,
-        toneId,
-        updatedAt: now,
-        status: "hidden",
-      });
-    }
+    await Promise.all(
+      Array.from(newHiddenSet).map(async (toneId) => {
+        const existing = await ctx.db
+          .query("userTones")
+          .withIndex("by_userIdAndToneId", (q) =>
+            q.eq("userId", user._id).eq("toneId", toneId)
+          )
+          .first();
+
+        if (existing) {
+          if (existing.status !== "hidden") {
+            await ctx.db.patch(existing._id, {
+              status: "hidden",
+              updatedAt: now,
+            });
+          }
+        } else {
+          await ctx.db.insert("userTones", {
+            userId: user._id,
+            toneId,
+            status: "hidden",
+            updatedAt: now,
+          });
+        }
+      })
+    );
 
     return null;
   },

@@ -309,7 +309,7 @@ export const recordAnalytics = mutation({
         .withIndex("by_userIdAndQuestionId", (q) =>
           q.eq("userId", userId!).eq("questionId", questionId)
         )
-        .unique();
+        .first();
 
       if (userQuestion) {
         await ctx.db.patch(userQuestion._id, {
