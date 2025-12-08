@@ -665,3 +665,169 @@ export const updateUsersWithMissingEmbeddingsAction = internalAction({
     }
   },
 });
+
+export const mergeKnownLikedQuestions = mutation({
+  args: {
+    likedQuestions: v.array(v.id("questions")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await getUserOrCreate(ctx);
+
+    const now = Date.now();
+    const newLikedSet = new Set(args.likedQuestions);
+
+    // Efficiently check existing relations for the input questions
+    const existingRelations = await Promise.all(
+      Array.from(newLikedSet).map(async (questionId) => {
+        const relation = await ctx.db
+          .query("userQuestions")
+          .withIndex("by_userIdAndQuestionId", (q) =>
+            q.eq("userId", user._id).eq("questionId", questionId)
+          )
+          .first();
+        return { questionId, relation };
+      })
+    );
+
+    for (const { questionId, relation } of existingRelations) {
+      if (relation) {
+        // If it exists but is not liked (e.g. seen), update it
+        if (relation.status !== "liked") {
+          await ctx.db.patch(relation._id, {
+            status: "liked",
+            updatedAt: now,
+          });
+        }
+        // If already liked, do nothing
+      } else {
+        // If it doesn't exist, insert it
+        await ctx.db.insert("userQuestions", {
+          userId: user._id,
+          questionId,
+          status: "liked",
+          updatedAt: now,
+          seenCount: 1,
+        });
+      }
+    }
+
+    return null;
+  },
+});
+
+export const mergeKnownHiddenQuestions = mutation({
+  args: {
+    hiddenQuestions: v.array(v.id("questions")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await getUserOrCreate(ctx);
+
+    const now = Date.now();
+    const newHiddenSet = new Set(args.hiddenQuestions);
+
+    const existingRelations = await Promise.all(
+      Array.from(newHiddenSet).map(async (questionId) => {
+        const relation = await ctx.db
+          .query("userQuestions")
+          .withIndex("by_userIdAndQuestionId", (q) =>
+            q.eq("userId", user._id).eq("questionId", questionId)
+          )
+          .first();
+        return { questionId, relation };
+      })
+    );
+
+    for (const { questionId, relation } of existingRelations) {
+      if (relation) {
+        // If it exists but is not hidden (e.g. seen or liked), update it to hidden?
+        // Usually explicit 'hidden' overrides others.
+        if (relation.status !== "hidden") {
+          await ctx.db.patch(relation._id, {
+            status: "hidden",
+            updatedAt: now,
+          });
+        }
+      } else {
+        await ctx.db.insert("userQuestions", {
+          userId: user._id,
+          questionId,
+          status: "hidden",
+          updatedAt: now,
+          seenCount: 1,
+        });
+      }
+    }
+
+    await ctx.scheduler.runAfter(0, internal.users.updateUserPreferenceEmbeddingAction, {
+      userId: user._id,
+    });
+    return null;
+  },
+});
+
+export const mergeQuestionHistory = mutation({
+  args: {
+    history: v.array(
+      v.object({
+        questionId: v.id("questions"),
+        viewedAt: v.number(),
+      })
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await getUserOrCreate(ctx);
+
+    // 1. Insert into analytics
+    // avoiding duplicate analytics entries for the exact same timestamp might be overkill but good practice
+    // For simplicity, we'll just insert.
+    for (const entry of args.history) {
+      await ctx.db.insert("analytics", {
+        userId: user._id,
+        questionId: entry.questionId,
+        event: "seen",
+        timestamp: entry.viewedAt,
+        viewDuration: 0, // Default since we don't have it in local history
+      });
+    }
+
+    // 2. Ensure they are marked as seen in userQuestions if not already there
+    const uniqueQuestionIds = new Set(args.history.map((h) => h.questionId));
+
+    const existingRelations = await Promise.all(
+      Array.from(uniqueQuestionIds).map(async (questionId) => {
+        const relation = await ctx.db
+          .query("userQuestions")
+          .withIndex("by_userIdAndQuestionId", (q) =>
+            q.eq("userId", user._id).eq("questionId", questionId)
+          )
+          .first();
+        return { questionId, relation };
+      })
+    );
+
+    const now = Date.now();
+    for (const { questionId, relation } of existingRelations) {
+      if (relation) {
+        // If it exists, we increment seenCount
+        await ctx.db.patch(relation._id, {
+          seenCount: (relation.seenCount || 0) + 1,
+          // We DO NOT change status if it is liked or hidden. 
+          // If it is 'seen', it stays 'seen'.
+        });
+      } else {
+        await ctx.db.insert("userQuestions", {
+          userId: user._id,
+          questionId,
+          status: "seen",
+          seenCount: 1,
+          updatedAt: now,
+        });
+      }
+    }
+
+    return null;
+  },
+});

@@ -257,6 +257,57 @@ export const useConvexStorageContext = (
   const updateHiddenStyles = useMutation(api.users.updateHiddenStyles);
   const updateHiddenTones = useMutation(api.users.updateHiddenTones);
   const updateUserSettings = useMutation(api.users.updateUserSettings);
+  const mergeKnownLikedQuestions = useMutation(api.users.mergeKnownLikedQuestions);
+  const mergeKnownHiddenQuestions = useMutation(api.users.mergeKnownHiddenQuestions);
+  const mergeQuestionHistory = useMutation(api.users.mergeQuestionHistory);
+
+  useEffect(() => {
+    // Merge local likes if they exist
+    const rawLocalLikes = localStorage.getItem("likedQuestions");
+    if (rawLocalLikes) {
+      try {
+        const localLikes = JSON.parse(rawLocalLikes);
+        if (Array.isArray(localLikes) && localLikes.length > 0) {
+          void mergeKnownLikedQuestions({ likedQuestions: localLikes });
+          localStorage.removeItem("likedQuestions");
+        }
+      } catch (e) {
+        console.error("Failed to parse local liked questions for merging", e);
+      }
+    }
+
+    // Merge local hidden questions if they exist
+    const rawLocalHidden = localStorage.getItem("hiddenQuestions");
+    if (rawLocalHidden) {
+      try {
+        const localHidden = JSON.parse(rawLocalHidden);
+        if (Array.isArray(localHidden) && localHidden.length > 0) {
+          void mergeKnownHiddenQuestions({ hiddenQuestions: localHidden });
+          localStorage.removeItem("hiddenQuestions");
+        }
+      } catch (e) {
+        console.error("Failed to parse local hidden questions for merging", e);
+      }
+    }
+
+    // Merge local question history if it exists
+    const rawLocalHistory = localStorage.getItem("questionHistory");
+    if (rawLocalHistory) {
+      try {
+        const localHistory = JSON.parse(rawLocalHistory);
+        if (Array.isArray(localHistory) && localHistory.length > 0) {
+          const historyToMerge = localHistory.map((entry: any) => ({
+            questionId: entry.question._id, // Extracting ID from the nested question object
+            viewedAt: entry.viewedAt,
+          }));
+          void mergeQuestionHistory({ history: historyToMerge });
+          localStorage.removeItem("questionHistory");
+        }
+      } catch (e) {
+        console.error("Failed to parse local question history for merging", e);
+      }
+    }
+  }, [mergeKnownLikedQuestions, mergeKnownHiddenQuestions, mergeQuestionHistory]);
 
   useEffect(() => {
     if (settings) {
