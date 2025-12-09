@@ -17,8 +17,12 @@ import OrganizationSettings from "@/app/settings/organization/page";
 import WorkspaceSwitcher from "@/app/settings/organization/WorkspaceSwitcher";
 import CollectionsSettings from "@/app/settings/collections/page";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useAuth } from "@clerk/clerk-react";
+import { MAX_ANON_BLOCKED } from "../../hooks/useStorage";
+import { SignInCTA } from "@/components/SignInCTA";
 
 const SettingsPage = () => {
+  const { isSignedIn } = useAuth();
   const { effectiveTheme } = useTheme();
   const { activeWorkspace } = useWorkspace();
 
@@ -305,6 +309,19 @@ const SettingsPage = () => {
             onOpenChange={() => toggleSection('hidden-questions')}
             count={questionsToDisplay?.length}
           >
+            {!isSignedIn && hiddenQuestions.length >= MAX_ANON_BLOCKED && (
+              <div className="mb-6">
+                <SignInCTA
+                  bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
+                  title="Limit Reached"
+                  featureHighlight={{
+                    pre: "Sign in to hide",
+                    highlight: "unlimited",
+                    post: "questions."
+                  }}
+                />
+              </div>
+            )}
             {questionsToDisplay && questionsToDisplay.length > 0 ? (
               <>
                 <button
