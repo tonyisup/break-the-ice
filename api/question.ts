@@ -39,7 +39,7 @@ export default async function handler(
 
     const ogDescription = document.createElement("meta");
     ogDescription.setAttribute("property", "og:description");
-    ogDescription.setAttribute("content", question.text);
+    ogDescription.setAttribute("content", question.text ?? "");
     head.appendChild(ogDescription);
 
     const ogUrl = document.createElement("meta");
@@ -61,9 +61,9 @@ export default async function handler(
     return response.status(200).send(dom.serialize());
   } catch (error) {
     console.error(error);
-    if (error.code === 'ENOENT') {
-      return response.status(500).send("index.html not found. Please run 'npm run build'.");
-    }
+    // if (error.code === 'ENOENT') {
+    //   return response.status(500).send("index.html not found. Please run 'npm run build'.");
+    // }
     return response.status(500).send("Internal Server Error");
   }
 }

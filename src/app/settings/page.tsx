@@ -17,8 +17,12 @@ import OrganizationSettings from "@/app/settings/organization/page";
 import WorkspaceSwitcher from "@/app/settings/organization/WorkspaceSwitcher";
 import CollectionsSettings from "@/app/settings/collections/page";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useAuth } from "@clerk/clerk-react";
+import { MAX_ANON_BLOCKED } from "../../hooks/useStorage";
+import { SignInCTA } from "@/components/SignInCTA";
 
 const SettingsPage = () => {
+  const { isSignedIn } = useAuth();
   const { effectiveTheme } = useTheme();
   const { activeWorkspace } = useWorkspace();
 
@@ -91,6 +95,19 @@ const SettingsPage = () => {
   };
   const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions });
 
+  // prevent flickering when unhiding questions
+  const [lastKnownHiddenQuestions, setLastKnownHiddenQuestions] = useState<Doc<"questions">[] | undefined>(undefined);
+
+  useEffect(() => {
+    if (hiddenQuestionObjects !== undefined) {
+      setLastKnownHiddenQuestions(hiddenQuestionObjects);
+    }
+  }, [hiddenQuestionObjects]);
+
+  const questionsToDisplay = (hiddenQuestionObjects ?? lastKnownHiddenQuestions)?.filter((q) =>
+    hiddenQuestions.includes(q._id)
+  );
+
   // Sync with backend IDs (filtering out invalid ones)
   useEffect(() => {
     if (allStyles) {
@@ -98,7 +115,7 @@ const SettingsPage = () => {
       const localIds = hiddenStyles;
       const filteredIds = localIds.filter(id => serverIds.includes(id));
       if (filteredIds.length !== localIds.length) {
-            setHiddenStyles(filteredIds);
+        setHiddenStyles(filteredIds);
       }
     }
   }, [allStyles, hiddenStyles, setHiddenStyles]);
@@ -158,7 +175,7 @@ const SettingsPage = () => {
                   selectedStyle={defaultStyle ?? ""}
                   onSelectStyle={setDefaultStyle}
                   isHighlighting={false}
-                  setIsHighlighting={() => {}}
+                  setIsHighlighting={() => { }}
                 />
               </div>
               <div>
@@ -168,7 +185,7 @@ const SettingsPage = () => {
                   selectedTone={defaultTone ?? ""}
                   onSelectTone={setDefaultTone}
                   isHighlighting={false}
-                  setIsHighlighting={() => {}}
+                  setIsHighlighting={() => { }}
                 />
               </div>
             </div>
@@ -236,7 +253,7 @@ const SettingsPage = () => {
             onOpenChange={() => toggleSection('manage-tones')}
             count={allTones?.length}
           >
-             {allTones && allTones.length > 0 ? (
+            {allTones && allTones.length > 0 ? (
               <>
                 <div className="flex space-x-2 mb-4">
                   <button
@@ -290,9 +307,22 @@ const SettingsPage = () => {
             title="Hidden Questions"
             isOpen={!!openSections['hidden-questions']}
             onOpenChange={() => toggleSection('hidden-questions')}
-            count={hiddenQuestionObjects?.length}
+            count={questionsToDisplay?.length}
           >
-            {hiddenQuestionObjects && hiddenQuestionObjects.length > 0 ? (
+            {!isSignedIn && hiddenQuestions.length >= MAX_ANON_BLOCKED && (
+              <div className="mb-6">
+                <SignInCTA
+                  bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
+                  title="Limit Reached"
+                  featureHighlight={{
+                    pre: "Sign in to hide",
+                    highlight: "unlimited",
+                    post: "questions."
+                  }}
+                />
+              </div>
+            )}
+            {questionsToDisplay && questionsToDisplay.length > 0 ? (
               <>
                 <button
                   onClick={clearHiddenQuestions}
@@ -301,7 +331,7 @@ const SettingsPage = () => {
                   Clear All
                 </button>
                 <ul className="space-y-2">
-                  {hiddenQuestionObjects.map(question => (
+                  {questionsToDisplay.map(question => (
                     question && <li key={question._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
                       <span className="dark:text-white text-black">{question.text}</span>
                       <button

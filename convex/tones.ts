@@ -3,21 +3,28 @@ import { query, mutation, internalQuery, internalMutation } from "./_generated/s
 
 export const getTone = query({
   args: { id: v.string() },
-  returns: v.object({
-    _id: v.id("tones"),
-    _creationTime: v.number(),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    promptGuidanceForAI: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    order: v.optional(v.float64()),
-  }),
+  returns: v.union(
+    v.object({
+      _id: v.id("tones"),
+      _creationTime: v.number(),
+      id: v.string(),
+      name: v.string(),
+      description: v.optional(v.string()),
+      promptGuidanceForAI: v.string(),
+      color: v.string(),
+      icon: v.string(),
+      order: v.optional(v.float64()),
+    }),
+    v.null(),
+  ),
   handler: async (ctx, args) => {
-    const tone = await ctx.db.query("tones").filter((q) => q.eq(q.field("id"), args.id)).first();
+    const toneResults = await ctx.db.query("tones").filter((q) => q.eq(q.field("id"), args.id))
+    if (!toneResults) {
+      return null;
+    }
+    const tone = await toneResults.first();
     if (!tone) {
-      throw new Error("Tone not found");
+      return null;
     }
     const { embedding, ...rest } = tone;
     return rest;

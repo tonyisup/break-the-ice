@@ -107,6 +107,11 @@ export default defineSchema({
     questionPreferenceEmbedding: v.optional(v.array(v.number())),
     defaultStyle: v.optional(v.string()),
     defaultTone: v.optional(v.string()),
+    subscriptionTier: v.optional(v.union(v.literal("free"), v.literal("casual"))),
+    aiUsage: v.optional(v.object({
+      count: v.number(),
+      cycleStart: v.number(),
+    })),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),

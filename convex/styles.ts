@@ -3,23 +3,26 @@ import { query, mutation, internalQuery, internalMutation } from "./_generated/s
 
 export const getStyle = query({
   args: { id: v.string() },
-  returns: v.object({
-    _id: v.id("styles"),
-    _creationTime: v.number(),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    structure: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    example: v.optional(v.string()),
-    promptGuidanceForAI: v.optional(v.string()),
-    order: v.optional(v.float64()),
-  }),
+  returns: v.union(
+    v.object({
+      _id: v.id("styles"),
+      _creationTime: v.number(),
+      id: v.string(),
+      name: v.string(),
+      description: v.optional(v.string()),
+      structure: v.string(),
+      color: v.string(),
+      icon: v.string(),
+      example: v.optional(v.string()),
+      promptGuidanceForAI: v.optional(v.string()),
+      order: v.optional(v.float64()),
+    }),
+    v.null(),
+  ),
   handler: async (ctx, args) => {
     const style = await ctx.db.query("styles").filter((q) => q.eq(q.field("id"), args.id)).first();
     if (!style) {
-      throw new Error("Style not found");
+      return null;
     }
     const { embedding, ...rest } = style;
     return rest;

@@ -4,19 +4,34 @@ import { Doc, Id } from "./_generated/dataModel";
 import { ensureAdmin } from "./auth";
 import { embed } from "./lib/retriever";
 import { api, internal } from "./_generated/api";
-import { createPrunedStaleQuestionsEmail } from "./lib/emails";
 
 export const calculateAverageEmbedding = (embeddings: number[][]) => {
-  if (embeddings.length === 0) {
+  const validEmbeddings = embeddings.filter((e) => e && e.length > 0);
+
+  if (validEmbeddings.length === 0) {
     return [];
   }
-  if (embeddings[0].length === 0) {
+
+  const embeddingLength = validEmbeddings[0].length;
+  const sumEmbedding = new Array(embeddingLength).fill(0);
+
+  let validCount = 0;
+  for (const embedding of validEmbeddings) {
+    if (embedding.length !== embeddingLength) {
+      console.warn("Embedding length mismatch ignoring:", embedding.length);
+      continue;
+    }
+    for (let i = 0; i < embeddingLength; i++) {
+      sumEmbedding[i] += embedding[i];
+    }
+    validCount++;
+  }
+
+  if (validCount === 0) {
     return [];
   }
-  const averageEmbedding = embeddings.reduce((acc, embedding) => {
-    return acc.map((value, index) => value + embedding[index]);
-  }, Array(embeddings[0].length).fill(0));
-  return averageEmbedding.map((value) => value / embeddings.length);
+
+  return sumEmbedding.map((value) => value / validCount);
 };
 
 export const discardQuestion = mutation({
@@ -294,7 +309,7 @@ export const recordAnalytics = mutation({
         .withIndex("by_userIdAndQuestionId", (q) =>
           q.eq("userId", userId!).eq("questionId", questionId)
         )
-        .unique();
+        .first();
 
       if (userQuestion) {
         await ctx.db.patch(userQuestion._id, {
@@ -1083,6 +1098,9 @@ export const getNearestQuestionsByEmbedding = action({
   returns: v.array(v.any()),
   handler: async (ctx, args) => {
     const { embedding, style, tone, count } = args;
+    if (!embedding || embedding.length === 0) {
+      return [];
+    }
     const requestedCount = count ?? 10;
     const limit = requestedCount * 10; // Fetch more candidates for post-filtering
 

@@ -15,7 +15,8 @@ import { Icon } from "@/components/ui/icons/icon";
 import { Button } from "@/components/ui/button";
 import { ArrowUp } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth, SignInButton } from "@clerk/clerk-react";
+import { SignInCTA } from "@/components/SignInCTA";
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
@@ -44,6 +45,7 @@ export default function InfiniteScrollPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [showTopButton, setShowTopButton] = useState(false);
+  const [showAuthCTA, setShowAuthCTA] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
   const [prevQuestion, setPrevQuestion] = useState<Doc<"questions"> | null>(null);
   const [nextQuestion, setNextQuestion] = useState<Doc<"questions"> | null>(null);
@@ -176,7 +178,7 @@ export default function InfiniteScrollPage() {
   // Function to load more questions
   const loadMoreQuestions = useCallback(async () => {
     // Check if we are already loading or missing params
-    if (isLoading) return;
+    if (isLoading || !hasMore || showAuthCTA) return;
 
     // Capture current request ID
     const currentRequestId = requestIdRef.current;
@@ -225,6 +227,10 @@ export default function InfiniteScrollPage() {
           // Check for staleness in error case too
           if (currentRequestId !== requestIdRef.current) return;
 
+          if (err instanceof Error && err.message.includes("logged in")) {
+            setShowAuthCTA(true);
+            setHasMore(false);
+          }
           // If generation fails, we just use what we have.
         }
       }
@@ -257,7 +263,7 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, isLoading, seenIds, hiddenQuestions, generateAIQuestions]);
+  }, [convex, isLoading, seenIds, hiddenQuestions, generateAIQuestions, hasMore, showAuthCTA]);
 
   // Initial load
   useEffect(() => {
@@ -493,13 +499,25 @@ export default function InfiniteScrollPage() {
             </div>
           )}
 
-          {!hasMore && questions.length > 0 && (
+          {showAuthCTA && (
+            <SignInCTA
+              bgGradient={bgGradient}
+              title="Want more questions?"
+              featureHighlight={{
+                pre: "Sign in to get",
+                highlight: "10 free AI generations",
+                post: "every month!"
+              }}
+            />
+          )}
+
+          {!hasMore && !showAuthCTA && questions.length > 0 && (
             <div className="text-center py-8 text-white/70">
               No more questions found for this style and tone.
             </div>
           )}
 
-          {!hasMore && questions.length === 0 && !isLoading && (
+          {!hasMore && !showAuthCTA && questions.length === 0 && !isLoading && (
             <div className="text-center py-8 text-white/70">
               No questions found. Try changing the style or tone.
             </div>

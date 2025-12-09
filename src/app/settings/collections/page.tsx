@@ -4,10 +4,23 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/../convex/_generated/api";
 import { useState } from "react";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
-import { Id } from "@/../convex/_generated/dataModel";
 import { useWorkspace } from "@/hooks/useWorkspace.tsx";
+import { useAuth } from "@clerk/clerk-react";
 
 const CollectionsSettings = () => {
+  const { has, isSignedIn, isLoaded } = useAuth();
+
+  if (!isLoaded) {
+    return null;
+  }
+
+  if (!isSignedIn) {
+    return null;
+  }
+
+  if (!has({ permission: "collections" })) {
+    return null;
+  }
   const { activeWorkspace } = useWorkspace();
   const collections = useQuery(
     api.collections.getCollectionsByOrganization,

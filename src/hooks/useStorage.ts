@@ -5,8 +5,6 @@ import { useLocalStorage } from "./useLocalStorage";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
-const MAX_ITEMS = 100;
-
 export type Theme = "light" | "dark" | "system";
 
 export interface StorageContextType {
@@ -44,6 +42,10 @@ export interface StorageContextType {
   defaultTone?: string;
   setDefaultTone: (tone: string) => void;
 }
+
+export const MAX_ANON_LIKED = Number(import.meta.env.VITE_MAX_ANON_LIKED) || 5;
+export const MAX_ANON_BLOCKED = Number(import.meta.env.VITE_MAX_ANON_BLOCKED) || 5;
+export const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) || 100;
 
 export const useLocalStorageContext = (
   hasConsented: boolean,
@@ -92,7 +94,13 @@ export const useLocalStorageContext = (
 
   const addLikedQuestion = useCallback(
     (id: Id<"questions">) => {
-      setLikedQuestions((prev) => [...prev, id]);
+      setLikedQuestions((prev) => {
+        const newState = [...prev, id];
+        if (newState.length > MAX_ANON_LIKED) {
+          return newState.slice(newState.length - MAX_ANON_LIKED);
+        }
+        return newState;
+      });
     },
     [setLikedQuestions],
   );
@@ -106,7 +114,13 @@ export const useLocalStorageContext = (
 
   const addHiddenQuestion = useCallback(
     (id: Id<"questions">) => {
-      setHiddenQuestions((prev) => [...prev, id]);
+      setHiddenQuestions((prev) => {
+        const newState = [...prev, id];
+        if (newState.length > MAX_ANON_BLOCKED) {
+          return newState.slice(newState.length - MAX_ANON_BLOCKED);
+        }
+        return newState;
+      });
     },
     [setHiddenQuestions],
   );
@@ -155,8 +169,11 @@ export const useLocalStorageContext = (
   const addQuestionToHistory = useCallback(
     (entry: HistoryEntry) => {
       setQuestionHistory((prev) => {
-        const newHistory = [entry, ...prev.filter((e) => e.question._id !== entry.question._id)];
-        return newHistory.slice(0, MAX_ITEMS);
+        const newState = [...prev, entry];
+        if (newState.length > MAX_ANON_HISTORY) {
+          return newState.slice(newState.length - MAX_ANON_HISTORY);
+        }
+        return newState;
       });
     },
     [setQuestionHistory],
@@ -222,7 +239,7 @@ export const useConvexStorageContext = (
     hasConsented,
   );
 
-  const questionHistory = useQuery(api.users.getQuestionHistory) ?? [];
+  const questionHistory = useQuery(api.users.getQuestionHistory, {}) ?? [];
 
   const settings = useQuery(api.users.getSettings);
   const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
@@ -238,6 +255,57 @@ export const useConvexStorageContext = (
   const updateHiddenStyles = useMutation(api.users.updateHiddenStyles);
   const updateHiddenTones = useMutation(api.users.updateHiddenTones);
   const updateUserSettings = useMutation(api.users.updateUserSettings);
+  const mergeKnownLikedQuestions = useMutation(api.users.mergeKnownLikedQuestions);
+  const mergeKnownHiddenQuestions = useMutation(api.users.mergeKnownHiddenQuestions);
+  const mergeQuestionHistory = useMutation(api.users.mergeQuestionHistory);
+
+  useEffect(() => {
+    // Merge local likes if they exist
+    const rawLocalLikes = localStorage.getItem("likedQuestions");
+    if (rawLocalLikes) {
+      try {
+        const localLikes = JSON.parse(rawLocalLikes);
+        if (Array.isArray(localLikes) && localLikes.length > 0) {
+          void mergeKnownLikedQuestions({ likedQuestions: localLikes });
+          localStorage.removeItem("likedQuestions");
+        }
+      } catch (e) {
+        console.error("Failed to parse local liked questions for merging", e);
+      }
+    }
+
+    // Merge local hidden questions if they exist
+    const rawLocalHidden = localStorage.getItem("hiddenQuestions");
+    if (rawLocalHidden) {
+      try {
+        const localHidden = JSON.parse(rawLocalHidden);
+        if (Array.isArray(localHidden) && localHidden.length > 0) {
+          void mergeKnownHiddenQuestions({ hiddenQuestions: localHidden });
+          localStorage.removeItem("hiddenQuestions");
+        }
+      } catch (e) {
+        console.error("Failed to parse local hidden questions for merging", e);
+      }
+    }
+
+    // Merge local question history if it exists
+    const rawLocalHistory = localStorage.getItem("questionHistory");
+    if (rawLocalHistory) {
+      try {
+        const localHistory = JSON.parse(rawLocalHistory);
+        if (Array.isArray(localHistory) && localHistory.length > 0) {
+          const historyToMerge = localHistory.map((entry: any) => ({
+            questionId: entry.question._id, // Extracting ID from the nested question object
+            viewedAt: entry.viewedAt,
+          }));
+          void mergeQuestionHistory({ history: historyToMerge });
+          localStorage.removeItem("questionHistory");
+        }
+      } catch (e) {
+        console.error("Failed to parse local question history for merging", e);
+      }
+    }
+  }, [mergeKnownLikedQuestions, mergeKnownHiddenQuestions, mergeQuestionHistory]);
 
   useEffect(() => {
     if (settings) {

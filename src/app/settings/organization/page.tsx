@@ -5,8 +5,22 @@ import { api } from "@/../convex/_generated/api";
 import { useState } from "react";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
 import { Id } from "@/../convex/_generated/dataModel";
+import { useAuth } from "@clerk/clerk-react";
 
 const OrganizationSettings = () => {
+  const { has, isSignedIn, isLoaded } = useAuth();
+
+  if (!isLoaded) {
+    return null;
+  }
+
+  if (!isSignedIn) {
+    return null;
+  }
+
+  if (!has({ permission: "organization" })) {
+    return null;
+  }
   const organizations = useQuery(api.organizations.getOrganizations);
   const invitations = useQuery(api.organizations.getInvitations);
 

@@ -14,8 +14,13 @@ import { QuestionList } from "@/components/question-list/QuestionList";
 import { FilterControls } from "@/components/filter-controls/filter-controls";
 import { useFilter } from "@/hooks/useFilter";
 
+import { SignInCTA } from "@/components/SignInCTA";
+import { useAuth } from "@clerk/clerk-react";
+
 function HistoryPageContent() {
+  const { isSignedIn } = useAuth();
   const { history, removeQuestionHistoryEntry, clearHistoryEntries } = useQuestionHistory();
+  // ... (keep existing storage context destructuring)
   const {
     likedQuestions,
     addLikedQuestion,
@@ -33,9 +38,14 @@ function HistoryPageContent() {
   const tones = useQuery(api.tones.getTones, {});
   const { effectiveTheme } = useTheme();
 
+  const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) || 100;
+  const showLimitCTA = !isSignedIn && history.length >= MAX_ANON_HISTORY;
+
   const questions = useMemo(() => history.map(entry => entry.question), [history]);
+  // ... (keep existing useFilter)
   const filteredHistory = useFilter(history, searchText, selectedStyles, selectedTones) as HistoryEntry[];
 
+  // ... (keep existing color memoization)
   const styleColors = useMemo(() => {
     if (!styles) return {};
     return styles.reduce((acc, style) => {
@@ -52,6 +62,7 @@ function HistoryPageContent() {
     }, {} as { [key: string]: string });
   }, [tones]);
 
+  // ... (keep existing handlers)
   const toggleLike = async (questionId: Id<"questions">) => {
     const isLiked = likedQuestions.includes(questionId);
 
@@ -62,7 +73,7 @@ function HistoryPageContent() {
       addLikedQuestion(questionId);
       await recordAnalytics({
         questionId,
-        event: "like",
+        event: "liked",
         viewDuration: 0, // Not applicable in history page
       });
       toast.success("Added to favorites!");
@@ -90,6 +101,7 @@ function HistoryPageContent() {
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradient = ["#3B2554", "#262D54"];
+  const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
@@ -98,21 +110,33 @@ function HistoryPageContent() {
       }}
     >
       <Header
-        gradient={gradient}
         homeLinkSlot="history" />
       <main className="p-4">
         {history.length === 0 ? (
-        <div className="flex flex-col items-center justify-center">
-          <p className="text-center text-gray-500 dark:text-gray-400">No questions viewed yet.</p>
-          <Link
-            to="/"
-            className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "inline-block mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
-          >
-            Start Exploring
-          </Link>
-        </div>
+          <div className="flex flex-col items-center justify-center">
+            <p className="text-center text-gray-500 dark:text-gray-400">No questions viewed yet.</p>
+            <Link
+              to="/"
+              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "inline-block mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
+            >
+              Start Exploring
+            </Link>
+          </div>
         ) : (
           <div className="container mx-auto flex flex-col gap-4">
+            {showLimitCTA && (
+              <div className="mb-4">
+                <SignInCTA
+                  bgGradient={currentGradient}
+                  title="History Limit Reached"
+                  featureHighlight={{
+                    pre: "Sign in to",
+                    highlight: "view unlimited history",
+                    post: "and save your progress",
+                  }}
+                />
+              </div>
+            )}
             <div className="flex justify-between gap-2 w-full">
               <input
                 type="text"
@@ -123,8 +147,8 @@ function HistoryPageContent() {
               />
               <div className="flex gap-2">
                 <button
-                 onClick={handleClearHistory}
-                 className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
+                  onClick={handleClearHistory}
+                  className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
                 >
                   Clear history
                 </button>

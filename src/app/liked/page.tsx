@@ -16,10 +16,13 @@ import { cn, isColorDark } from "@/lib/utils";
 
 import { Header } from "@/components/header";
 import { toast } from "sonner";
+import { SignInCTA } from "@/components/SignInCTA";
 import { Button } from "@/components/ui/button";
-
+import { useAuth, useClerk } from "@clerk/clerk-react";
 
 function LikedQuestionsPageContent() {
+  const { isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
   const { effectiveTheme } = useTheme();
   const [searchText, setSearchText] = useState("");
   const { likedQuestions, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, addHiddenStyle, addHiddenTone } = useStorageContext();
@@ -117,6 +120,8 @@ function LikedQuestionsPageContent() {
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradient = ["#3B2554", "#262D54"];
+  const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
+
   return (
     <div
       className="min-h-screen overflow-hidden"
@@ -134,8 +139,20 @@ function LikedQuestionsPageContent() {
       <div className="container mx-auto p-4 space-y-8">
         {/* Personal Questions Section */}
         <div>
-          <div className="flex justify-between items-center mb-4">
-            <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add Question</Button>
+          <div className="flex justify-center items-center mb-4">
+            {isSignedIn ? (
+              <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add Question</Button>
+            ) : (
+              <SignInCTA
+                bgGradient={currentGradient}
+                title=""
+                featureHighlight={{
+                  pre: "Sign in to",
+                  highlight: "add your own questions",
+                  post: "and remove the limit on likes",
+                }}
+              />
+            )}
           </div>
 
           {myQuestions && myQuestions.length > 0 && (
