@@ -72,6 +72,8 @@ const SettingsPage = () => {
     setDefaultStyle,
     defaultTone,
     setDefaultTone,
+    storageLimitBehavior,
+    setStorageLimitBehavior,
   } = useStorageContext();
 
   const handleToggleStyle = (styleId: string) => {
@@ -161,6 +163,54 @@ const SettingsPage = () => {
           <OrganizationSettings />
 
           <CollectionsSettings />
+
+          {!isSignedIn && (
+            <CollapsibleSection
+              title="Storage Limit Behavior"
+              isOpen={!!openSections['storage-limit']}
+              onOpenChange={() => toggleSection('storage-limit')}
+            >
+              <div className="space-y-4">
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm dark:text-white/70 text-black/70 mb-2">
+                    Choose what happens when you reach the limit of liked or hidden items as a guest.
+                  </p>
+                  <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-white/10 dark:hover:bg-white/5 transition-colors">
+                    <input
+                      type="radio"
+                      name="storageLimitBehavior"
+                      value="block"
+                      checked={storageLimitBehavior === "block"}
+                      onChange={() => setStorageLimitBehavior("block")}
+                      className="form-radio h-5 w-5 text-blue-600 transition duration-150 ease-in-out"
+                    />
+                    <div>
+                      <span className="block font-medium dark:text-white text-black">Block when full</span>
+                      <span className="block text-sm dark:text-white/60 text-black/60">
+                        Prevent adding new items until you remove some.
+                      </span>
+                    </div>
+                  </label>
+                  <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-white/10 dark:hover:bg-white/5 transition-colors">
+                    <input
+                      type="radio"
+                      name="storageLimitBehavior"
+                      value="replace"
+                      checked={storageLimitBehavior === "replace"}
+                      onChange={() => setStorageLimitBehavior("replace")}
+                      className="form-radio h-5 w-5 text-blue-600 transition duration-150 ease-in-out"
+                    />
+                    <div>
+                      <span className="block font-medium dark:text-white text-black">Auto-replace old items</span>
+                      <span className="block text-sm dark:text-white/60 text-black/60">
+                        Automatically remove the oldest item to make space.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </CollapsibleSection>
+          )}
 
           <CollapsibleSection
             title="Default Style & Tone"

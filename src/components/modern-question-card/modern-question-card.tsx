@@ -6,6 +6,7 @@ import { useQuery } from 'convex/react';
 import { Icon, IconComponent } from '../ui/icons/icon';
 import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer/item-detail-drawer';
 import { useStorageContext } from '@/hooks/useStorageContext';
+import { cn } from '@/lib/utils';
 
 interface ModernQuestionCardProps {
   question: Doc<"questions"> | null;
@@ -199,11 +200,41 @@ const LoadingSpinner = ({ gradient }: { gradient: string[] }) => {
 };
 
 const QuestionContent = ({ question, style, tone, gradient, isFavorite, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone }: { question: Doc<"questions">, style?: Doc<"styles">, tone?: Doc<"tones">, gradient: string[], isFavorite: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void }) => {
+  const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
+  const [shakeHeart, setShakeHeart] = useState(false);
+  const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
+
   const handleClickStyle = () => {
     onClickStyle?.();
   };
   const handleClickTone = () => {
     onClickTone?.();
+  };
+
+  const handleLike = () => {
+    if (!isFavorite && likedQuestions.length >= likedLimit) {
+      setShakeHeart(true);
+      setTimeout(() => setShakeHeart(false), 500);
+
+      if (storageLimitBehavior === 'block') {
+        return;
+      }
+    }
+    onToggleFavorite();
+  };
+
+  const handleHide = () => {
+    // Check if current question is already hidden (unlikely in this context, but good to be safe)
+    const isHidden = hiddenQuestions.includes(question._id);
+    if (!isHidden && hiddenQuestions.length >= hiddenLimit) {
+      setShakeThumbsDown(true);
+      setTimeout(() => setShakeThumbsDown(false), 500);
+
+      if (storageLimitBehavior === 'block') {
+        return;
+      }
+    }
+    onToggleHidden();
   };
 
   return (
@@ -259,9 +290,12 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, onToggle
       {/* Action Buttons */}
       <div className="flex justify-center items-center gap-3">
         <button
-          onClick={onToggleFavorite}
+          onClick={handleLike}
           disabled={disabled}
-          className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+          className={cn(
+            "bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50",
+            shakeHeart && "animate-shake"
+          )}
           title="Toggle favorite"
         >
           <Heart
@@ -271,9 +305,12 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, onToggle
         </button>
 
         <button
-          onClick={onToggleHidden}
+          onClick={handleHide}
           disabled={disabled}
-          className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+          className={cn(
+            "bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50",
+            shakeThumbsDown && "animate-shake"
+          )}
           title="Hide question"
         >
           <ThumbsDown
