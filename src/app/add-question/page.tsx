@@ -27,7 +27,7 @@ export default function AddQuestionPage() {
   };
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="container mx-auto p-4 pt-24">
       <Toaster />
       <Header />
       <h1 className="text-2xl font-bold mb-4">Add a Custom Question</h1>

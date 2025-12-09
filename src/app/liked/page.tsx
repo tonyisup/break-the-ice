@@ -136,7 +136,7 @@ function LikedQuestionsPageContent() {
         onOpenChange={setIsAddPersonalQuestionDialogOpen}
       />
 
-      <div className="container mx-auto p-4 space-y-8">
+      <div className="container mx-auto p-4 pt-24 space-y-8">
         {/* Personal Questions Section */}
         <div>
           <div className="flex justify-center items-center mb-4">

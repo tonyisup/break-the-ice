@@ -111,7 +111,7 @@ function HistoryPageContent() {
     >
       <Header
         homeLinkSlot="history" />
-      <main className="p-4">
+      <main className="p-4 pt-24">
         {history.length === 0 ? (
           <div className="flex flex-col items-center justify-center">
             <p className="text-center text-gray-500 dark:text-gray-400">No questions viewed yet.</p>

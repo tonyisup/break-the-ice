@@ -153,7 +153,7 @@ const SettingsPage = () => {
     >
       <Header homeLinkSlot="settings" />
 
-      <div className="container mx-auto p-4 md:p-8">
+      <div className="container mx-auto p-4 md:p-8 pt-24">
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <WorkspaceSwitcher />
@@ -353,25 +353,26 @@ const SettingsPage = () => {
             )}
           </CollapsibleSection>
 
+          {!isSignedIn && hiddenQuestions.length >= MAX_ANON_BLOCKED && (
+            <div className="mb-6">
+              <SignInCTA
+                bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
+                title="Hidden Question Limit Reached"
+                featureHighlight={{
+                  pre: "Sign in to hide",
+                  highlight: "unlimited",
+                  post: "questions."
+                }}
+              />
+            </div>
+          )}
+
           <CollapsibleSection
             title="Hidden Questions"
             isOpen={!!openSections['hidden-questions']}
             onOpenChange={() => toggleSection('hidden-questions')}
             count={questionsToDisplay?.length}
           >
-            {!isSignedIn && hiddenQuestions.length >= MAX_ANON_BLOCKED && (
-              <div className="mb-6">
-                <SignInCTA
-                  bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
-                  title="Limit Reached"
-                  featureHighlight={{
-                    pre: "Sign in to hide",
-                    highlight: "unlimited",
-                    post: "questions."
-                  }}
-                />
-              </div>
-            )}
             {questionsToDisplay && questionsToDisplay.length > 0 ? (
               <>
                 <button

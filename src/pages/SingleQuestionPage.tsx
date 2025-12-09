@@ -443,7 +443,7 @@ export default function SingleQuestionPage() {
     >
       <Header />
 
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col pt-20">
         <AnimatePresence mode="wait">
           <QuestionDisplay
             key={cardId}
