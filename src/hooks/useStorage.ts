@@ -43,6 +43,10 @@ export interface StorageContextType {
   setDefaultTone: (tone: string) => void;
 }
 
+export const MAX_ANON_LIKED = Number(import.meta.env.VITE_MAX_ANON_LIKED) || 5;
+export const MAX_ANON_BLOCKED = Number(import.meta.env.VITE_MAX_ANON_BLOCKED) || 5;
+export const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) || 100;
+
 export const useLocalStorageContext = (
   hasConsented: boolean,
 ): StorageContextType => {
@@ -88,8 +92,6 @@ export const useLocalStorageContext = (
     hasConsented
   );
 
-  const MAX_ANON_LIKED = Number(import.meta.env.VITE_MAX_ANON_LIKED) || 5;
-
   const addLikedQuestion = useCallback(
     (id: Id<"questions">) => {
       setLikedQuestions((prev) => {
@@ -109,8 +111,6 @@ export const useLocalStorageContext = (
     },
     [setLikedQuestions],
   );
-
-  const MAX_ANON_BLOCKED = Number(import.meta.env.VITE_MAX_ANON_BLOCKED) || 5;
 
   const addHiddenQuestion = useCallback(
     (id: Id<"questions">) => {
@@ -165,8 +165,6 @@ export const useLocalStorageContext = (
     [],
     hasConsented,
   );
-
-  const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) || 100;
 
   const addQuestionToHistory = useCallback(
     (entry: HistoryEntry) => {
