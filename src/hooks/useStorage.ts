@@ -48,8 +48,8 @@ export interface StorageContextType {
   hiddenLimit: number;
 }
 
-export const MAX_ANON_LIKED = Number(import.meta.env.VITE_MAX_ANON_LIKED) || 5;
-export const MAX_ANON_BLOCKED = Number(import.meta.env.VITE_MAX_ANON_BLOCKED) || 5;
+export const MAX_ANON_LIKED = Number(import.meta.env.VITE_MAX_ANON_LIKED) || 100;
+export const MAX_ANON_BLOCKED = Number(import.meta.env.VITE_MAX_ANON_BLOCKED) || 100;
 export const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) || 100;
 
 export const useLocalStorageContext = (

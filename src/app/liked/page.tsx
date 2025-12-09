@@ -145,7 +145,7 @@ function LikedQuestionsPageContent() {
             ) : (
               <SignInCTA
                 bgGradient={currentGradient}
-                title=""
+                title={likedQuestions.length >= (Number(import.meta.env.VITE_MAX_ANON_LIKED) || 20) ? "Liked limit reached" : "Want more features?"}
                 featureHighlight={{
                   pre: "Sign in to",
                   highlight: "add your own questions",
