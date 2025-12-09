@@ -136,7 +136,7 @@ function LikedQuestionsPageContent() {
         onOpenChange={setIsAddPersonalQuestionDialogOpen}
       />
 
-      <div className="container mx-auto p-4 space-y-8">
+      <div className="container mx-auto p-4 pt-24 space-y-8">
         {/* Personal Questions Section */}
         <div>
           <div className="flex justify-center items-center mb-4">
@@ -145,7 +145,7 @@ function LikedQuestionsPageContent() {
             ) : (
               <SignInCTA
                 bgGradient={currentGradient}
-                title=""
+                title={likedQuestions.length >= (Number(import.meta.env.VITE_MAX_ANON_LIKED) || 20) ? "Liked limit reached" : "Want more features?"}
                 featureHighlight={{
                   pre: "Sign in to",
                   highlight: "add your own questions",

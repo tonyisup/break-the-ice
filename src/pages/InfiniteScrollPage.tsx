@@ -460,7 +460,7 @@ export default function InfiniteScrollPage() {
       </div>
       <Header />
 
-      <main className="z-10 flex-1 flex flex-col pb-20">
+      <main className="z-10 flex-1 flex flex-col pb-20 pt-20">
         <div className="flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full">
           {questions.map((question) => {
             // Derive specific style/tone/gradient for this card

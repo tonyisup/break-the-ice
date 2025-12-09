@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
 export type Theme = "light" | "dark" | "system";
+export type StorageLimitBehavior = "block" | "replace";
 
 export interface StorageContextType {
   theme: Theme;
@@ -41,10 +42,14 @@ export interface StorageContextType {
   setDefaultStyle: (style: string) => void;
   defaultTone?: string;
   setDefaultTone: (tone: string) => void;
+  storageLimitBehavior: StorageLimitBehavior;
+  setStorageLimitBehavior: (behavior: StorageLimitBehavior) => void;
+  likedLimit: number;
+  hiddenLimit: number;
 }
 
-export const MAX_ANON_LIKED = Number(import.meta.env.VITE_MAX_ANON_LIKED) || 5;
-export const MAX_ANON_BLOCKED = Number(import.meta.env.VITE_MAX_ANON_BLOCKED) || 5;
+export const MAX_ANON_LIKED = Number(import.meta.env.VITE_MAX_ANON_LIKED) || 100;
+export const MAX_ANON_BLOCKED = Number(import.meta.env.VITE_MAX_ANON_BLOCKED) || 100;
 export const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) || 100;
 
 export const useLocalStorageContext = (
@@ -92,17 +97,30 @@ export const useLocalStorageContext = (
     hasConsented
   );
 
+  const [storageLimitBehavior, setStorageLimitBehavior] = useLocalStorage<StorageLimitBehavior>(
+    "storageLimitBehavior",
+    "block",
+    hasConsented
+  );
+
   const addLikedQuestion = useCallback(
     (id: Id<"questions">) => {
       setLikedQuestions((prev) => {
+        // If already in list, don't do anything (or move to top? Assume append)
+        // If behavior is block and we are at limit:
+        if (storageLimitBehavior === 'block' && prev.length >= MAX_ANON_LIKED) {
+            return prev;
+        }
+
         const newState = [...prev, id];
         if (newState.length > MAX_ANON_LIKED) {
+          // If behavior is replace (implied if we got here and length > MAX), slice
           return newState.slice(newState.length - MAX_ANON_LIKED);
         }
         return newState;
       });
     },
-    [setLikedQuestions],
+    [setLikedQuestions, storageLimitBehavior],
   );
 
   const removeLikedQuestion = useCallback(
@@ -115,6 +133,9 @@ export const useLocalStorageContext = (
   const addHiddenQuestion = useCallback(
     (id: Id<"questions">) => {
       setHiddenQuestions((prev) => {
+        if (storageLimitBehavior === 'block' && prev.length >= MAX_ANON_BLOCKED) {
+            return prev;
+        }
         const newState = [...prev, id];
         if (newState.length > MAX_ANON_BLOCKED) {
           return newState.slice(newState.length - MAX_ANON_BLOCKED);
@@ -122,7 +143,7 @@ export const useLocalStorageContext = (
         return newState;
       });
     },
-    [setHiddenQuestions],
+    [setHiddenQuestions, storageLimitBehavior],
   );
 
   const removeHiddenQuestion = useCallback(
@@ -216,8 +237,6 @@ export const useLocalStorageContext = (
     clearHiddenTones: () => setHiddenTones([]),
     hasConsented,
     setHasConsented: (consent: boolean) => {
-      // This is a bit of a hack, but it's the easiest way to get the
-      // cookie to update.
       const d = new Date();
       d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
       const expires = "expires=" + d.toUTCString();
@@ -227,6 +246,10 @@ export const useLocalStorageContext = (
     setDefaultStyle,
     defaultTone,
     setDefaultTone,
+    storageLimitBehavior,
+    setStorageLimitBehavior,
+    likedLimit: MAX_ANON_LIKED,
+    hiddenLimit: MAX_ANON_BLOCKED,
   };
 };
 
@@ -295,7 +318,7 @@ export const useConvexStorageContext = (
         const localHistory = JSON.parse(rawLocalHistory);
         if (Array.isArray(localHistory) && localHistory.length > 0) {
           const historyToMerge = localHistory.map((entry: any) => ({
-            questionId: entry.question._id, // Extracting ID from the nested question object
+            questionId: entry.question._id,
             viewedAt: entry.viewedAt,
           }));
           void mergeQuestionHistory({ history: historyToMerge });
@@ -422,8 +445,6 @@ export const useConvexStorageContext = (
     clearHiddenTones: () => { },
     hasConsented,
     setHasConsented: (consent: boolean) => {
-      // This is a bit of a hack, but it's the easiest way to get the
-      // cookie to update.
       const d = new Date();
       d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
       const expires = "expires=" + d.toUTCString();
@@ -439,5 +460,9 @@ export const useConvexStorageContext = (
       setDefaultTone(tone);
       void updateUserSettings({ defaultTone: tone });
     },
+    storageLimitBehavior: "replace",
+    setStorageLimitBehavior: () => { }, // No-op for authenticated users
+    likedLimit: Infinity,
+    hiddenLimit: Infinity,
   };
 };

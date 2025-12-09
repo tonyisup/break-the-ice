@@ -72,6 +72,8 @@ const SettingsPage = () => {
     setDefaultStyle,
     defaultTone,
     setDefaultTone,
+    storageLimitBehavior,
+    setStorageLimitBehavior,
   } = useStorageContext();
 
   const handleToggleStyle = (styleId: string) => {
@@ -151,7 +153,7 @@ const SettingsPage = () => {
     >
       <Header homeLinkSlot="settings" />
 
-      <div className="container mx-auto p-4 md:p-8">
+      <div className="container mx-auto p-4 md:p-8 pt-24">
         <h1 className="text-3xl font-bold mb-6 dark:text-white text-black">Settings</h1>
 
         <WorkspaceSwitcher />
@@ -161,6 +163,54 @@ const SettingsPage = () => {
           <OrganizationSettings />
 
           <CollectionsSettings />
+
+          {!isSignedIn && (
+            <CollapsibleSection
+              title="Storage Limit Behavior"
+              isOpen={!!openSections['storage-limit']}
+              onOpenChange={() => toggleSection('storage-limit')}
+            >
+              <div className="space-y-4">
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm dark:text-white/70 text-black/70 mb-2">
+                    Choose what happens when you reach the limit of liked or hidden items as a guest.
+                  </p>
+                  <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-white/10 dark:hover:bg-white/5 transition-colors">
+                    <input
+                      type="radio"
+                      name="storageLimitBehavior"
+                      value="block"
+                      checked={storageLimitBehavior === "block"}
+                      onChange={() => setStorageLimitBehavior("block")}
+                      className="form-radio h-5 w-5 text-blue-600 transition duration-150 ease-in-out"
+                    />
+                    <div>
+                      <span className="block font-medium dark:text-white text-black">Block when full</span>
+                      <span className="block text-sm dark:text-white/60 text-black/60">
+                        Prevent adding new items until you remove some.
+                      </span>
+                    </div>
+                  </label>
+                  <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-white/10 dark:hover:bg-white/5 transition-colors">
+                    <input
+                      type="radio"
+                      name="storageLimitBehavior"
+                      value="replace"
+                      checked={storageLimitBehavior === "replace"}
+                      onChange={() => setStorageLimitBehavior("replace")}
+                      className="form-radio h-5 w-5 text-blue-600 transition duration-150 ease-in-out"
+                    />
+                    <div>
+                      <span className="block font-medium dark:text-white text-black">Auto-replace old items</span>
+                      <span className="block text-sm dark:text-white/60 text-black/60">
+                        Automatically remove the oldest item to make space.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </CollapsibleSection>
+          )}
 
           <CollapsibleSection
             title="Default Style & Tone"
@@ -303,25 +353,26 @@ const SettingsPage = () => {
             )}
           </CollapsibleSection>
 
+          {!isSignedIn && hiddenQuestions.length >= MAX_ANON_BLOCKED && (
+            <div className="mb-6">
+              <SignInCTA
+                bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
+                title="Hidden Question Limit Reached"
+                featureHighlight={{
+                  pre: "Sign in to hide",
+                  highlight: "unlimited",
+                  post: "questions."
+                }}
+              />
+            </div>
+          )}
+
           <CollapsibleSection
             title="Hidden Questions"
             isOpen={!!openSections['hidden-questions']}
             onOpenChange={() => toggleSection('hidden-questions')}
             count={questionsToDisplay?.length}
           >
-            {!isSignedIn && hiddenQuestions.length >= MAX_ANON_BLOCKED && (
-              <div className="mb-6">
-                <SignInCTA
-                  bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
-                  title="Limit Reached"
-                  featureHighlight={{
-                    pre: "Sign in to hide",
-                    highlight: "unlimited",
-                    post: "questions."
-                  }}
-                />
-              </div>
-            )}
             {questionsToDisplay && questionsToDisplay.length > 0 ? (
               <>
                 <button
