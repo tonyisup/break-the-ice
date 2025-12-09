@@ -6,6 +6,8 @@ import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@clerk/clerk-react";
 import { Heart, History, Settings, Home } from "@/components/ui/icons/icons";
+import { useStorageContext } from "@/hooks/useStorageContext";
+
 interface HeaderProps {
   homeLinkSlot?: "liked" | "history" | "settings";
 }
@@ -14,6 +16,12 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
   const { isSignedIn } = useAuth();
   const customQuestions = useQuery(api.questions.getCustomQuestions);
   const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
+
+  const { likedQuestions, likedLimit } = useStorageContext();
+
+  // Show badge if we are within 3 of the limit
+  const showLimitBadge = !isSignedIn && (likedLimit - likedQuestions.length <= 3) && (likedQuestions.length < likedLimit);
+  const showFullBadge = !isSignedIn && (likedQuestions.length >= likedLimit);
 
   return (
     <header className="p-4 flex justify-between items-center">
@@ -32,6 +40,12 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
               <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">
                 {pendingCount}
               </div>
+            )}
+             {showLimitBadge && (
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-white dark:border-gray-900" title={`${likedLimit - likedQuestions.length} left`} />
+            )}
+             {showFullBadge && (
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" title="Limit reached" />
             )}
           </div>
         }
