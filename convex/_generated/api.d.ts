@@ -15,6 +15,7 @@ import type * as collections from "../collections.js";
 import type * as crons from "../crons.js";
 import type * as duplicates from "../duplicates.js";
 import type * as email from "../email.js";
+import type * as feedback from "../feedback.js";
 import type * as functions from "../functions.js";
 import type * as http from "../http.js";
 import type * as instagram from "../instagram.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   duplicates: typeof duplicates;
   email: typeof email;
+  feedback: typeof feedback;
   functions: typeof functions;
   http: typeof http;
   instagram: typeof instagram;

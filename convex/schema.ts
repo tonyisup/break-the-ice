@@ -249,4 +249,14 @@ export default defineSchema({
   })
     .index("by_questionId", ["questionId"])
     .index("by_collectionId", ["collectionId"]),
+  feedback: defineTable({
+    text: v.string(),
+    pageUrl: v.string(),
+    userId: v.id("users"),
+    createdAt: v.float64(),
+    status: v.union(v.literal("new"), v.literal("read"), v.literal("archived")),
+  })
+    .index("by_status", ["status"])
+    .index("by_userId", ["userId"])
+    .index("by_createdAt", ["createdAt"]),
 });
