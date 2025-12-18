@@ -43,7 +43,8 @@
     "vaul": "^1.1.2"
   },
   "overrides": {
-    "convex": "^1.21.1-alpha.1"
+    "convex": "^1.21.1-alpha.1",
+    "path-to-regexp": "6.3.0"
   },
   "devDependencies": {
     "@clerk/testing": "^1.13.16",
