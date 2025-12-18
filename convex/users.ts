@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { Doc } from "./_generated/dataModel";
-import { MutationCtx, QueryCtx, action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { MutationCtx, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 // Helper to ensure user exists
@@ -97,7 +97,7 @@ export const checkAndIncrementAIUsage = internalMutation({
       aiUsage = { count: 0, cycleStart: now };
     }
 
-    const limit = user.subscriptionTier === "casual" ? 100 : 10;
+    const limit = user.subscriptionTier === "casual" ? parseInt(process.env.MAX_CASUAL_AIGEN ?? "100") : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
 
     if (aiUsage.count + args.count > limit) {
       throw new Error(`AI generation limit reached. You have used ${aiUsage.count}/${limit} generations this cycle.`);

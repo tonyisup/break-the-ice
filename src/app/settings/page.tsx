@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useStorageContext } from "../../hooks/useStorageContext";
+import { toast } from "sonner";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
@@ -34,6 +35,7 @@ const SettingsPage = () => {
     api.tones.getTones,
     activeWorkspace ? { organizationId: activeWorkspace } : "skip"
   );
+  const currentUser = useQuery(api.users.getCurrentUser, {});
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -163,6 +165,58 @@ const SettingsPage = () => {
           <OrganizationSettings />
 
           <CollectionsSettings />
+
+          {isSignedIn && currentUser && (
+            <CollapsibleSection
+              title="Subscription & AI Usage"
+              isOpen={!!openSections['subscription']}
+              onOpenChange={() => toggleSection('subscription')}
+            >
+              <div className="space-y-6">
+                <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
+                  <div>
+                    <p className="text-sm text-gray-400">Current Plan</p>
+                    <p className="text-xl font-bold capitalize text-white">
+                      {currentUser.subscriptionTier || 'Free'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-400">Usage this cycle</p>
+                    <p className="text-xl font-bold text-white">
+                      {currentUser.aiUsage?.count ?? 0} / {currentUser.subscriptionTier === 'casual' ? '100' : '10'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-400">AI Generations Progress</span>
+                    <span className="text-white font-medium">
+                      {Math.round(((currentUser.aiUsage?.count ?? 0) / (currentUser.subscriptionTier === 'casual' ? 100 : 10)) * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, ((currentUser.aiUsage?.count ?? 0) / (currentUser.subscriptionTier === 'casual' ? 100 : 10)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {currentUser.subscriptionTier !== 'casual' && (
+                  <button
+                    onClick={() => {
+                      // Placeholder for actual upgrade flow
+                      toast.info("Upgrade flow coming soon!");
+                    }}
+                    className="w-full bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105"
+                  >
+                    Upgrade to Casual Plan
+                  </button>
+                )}
+              </div>
+            </CollapsibleSection>
+          )}
 
           {!isSignedIn && (
             <CollapsibleSection

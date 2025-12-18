@@ -1,5 +1,5 @@
 import { cronJobs } from "convex/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 const crons = cronJobs();
 
@@ -55,5 +55,11 @@ crons.interval(
 //   internal.questions.pruneStaleQuestionsAndEmail,
 //   { maxQuestions: 50 }
 // );
+
+crons.daily(
+  "Post to Instagram",
+  { hourUTC: 17, minuteUTC: 0 }, // 5:00 PM UTC (e.g. 9 AM PST / 12 PM EST)
+  api.instagram.postToInstagram
+);
 
 export default crons

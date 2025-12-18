@@ -105,7 +105,21 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
       toast.success("Preview generated. Review and accept or try another.");
     } catch (error) {
       console.error("Error generating question:", error);
-      toast.error("Failed to generate AI question. Please try again.");
+      if (error instanceof Error && error.message.includes("limit reached")) {
+        toast.error(
+          <div className="flex flex-col gap-2">
+            <span>AI generation limit reached for this month.</span>
+            <button
+              onClick={() => window.location.href = "/settings"}
+              className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 w-fit"
+            >
+              Upgrade Plan
+            </button>
+          </div>
+        );
+      } else {
+        toast.error("Failed to generate AI question. Please try again.");
+      }
     } finally {
       setIsGenerating(false);
     }

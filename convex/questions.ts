@@ -166,7 +166,7 @@ export const getSimilarQuestions = query({
       .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
       .filter((q: any) => q.and(
         q.neq(q.field("text"), undefined),
-        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
         ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
         ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id)),
         ...likedQuestionIds.map((id: any) => q.neq(q.field("_id"), id))
@@ -196,7 +196,7 @@ export const getNextRandomQuestions = query({
       .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
       .filter((q: any) => q.and(
         q.neq(q.field("text"), undefined),
-        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
         ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
         ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id))
       ))
@@ -229,7 +229,7 @@ export const getNextQuestions = query({
       .filter((q) => q.eq(q.field("prunedAt"), undefined))
       .filter((q) => q.and(
         q.neq(q.field("text"), undefined),
-        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined))
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined))
       ))
       .filter((q) => q.and(... (hidden ?? []).map(hiddenId => q.neq(q.field("_id"), hiddenId))))
       .filter((q) => q.and(... (seen ?? []).map(seenId => q.neq(q.field("_id"), seenId))))
@@ -517,6 +517,7 @@ export const saveAIQuestion = mutation({
       tags,
       style,
       tone,
+      status: "public",
       isAIGenerated: true,
       lastShownAt: 0,
       totalLikes: 0,
