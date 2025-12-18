@@ -20,6 +20,8 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@clerk/clerk-react";
 import { MAX_ANON_BLOCKED } from "../../hooks/useStorage";
 import { SignInCTA } from "@/components/SignInCTA";
+import { Link } from "react-router-dom";
+import { Link as LinkIcon, ExternalLink } from "lucide-react";
 
 const SettingsPage = () => {
   const { isSignedIn } = useAuth();
@@ -398,6 +400,57 @@ const SettingsPage = () => {
             ) : (
               <p className="dark:text-white/70 text-black/70">You have no hidden questions.</p>
             )}
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Legal & Support"
+            isOpen={!!openSections['legal']}
+            onOpenChange={() => toggleSection('legal')}
+          >
+             <div className="flex flex-col gap-2">
+                <Link to="/about" className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg hover:bg-white/20 transition-colors dark:text-white text-black">
+                   <div className="flex items-center gap-2">
+                      <ExternalLink className="w-4 h-4" />
+                      About Us
+                   </div>
+                   <LinkIcon className="w-4 h-4 opacity-50" />
+                </Link>
+                <Link to="/contact" className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg hover:bg-white/20 transition-colors dark:text-white text-black">
+                   <div className="flex items-center gap-2">
+                      <ExternalLink className="w-4 h-4" />
+                      Contact Us
+                   </div>
+                   <LinkIcon className="w-4 h-4 opacity-50" />
+                </Link>
+                <Link to="/privacy" className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg hover:bg-white/20 transition-colors dark:text-white text-black">
+                   <div className="flex items-center gap-2">
+                      <ExternalLink className="w-4 h-4" />
+                      Privacy Policy
+                   </div>
+                   <LinkIcon className="w-4 h-4 opacity-50" />
+                </Link>
+                 <Link to="/terms" className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg hover:bg-white/20 transition-colors dark:text-white text-black">
+                   <div className="flex items-center gap-2">
+                      <ExternalLink className="w-4 h-4" />
+                      Terms of Service
+                   </div>
+                   <LinkIcon className="w-4 h-4 opacity-50" />
+                </Link>
+                <Link to="/cookies" className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg hover:bg-white/20 transition-colors dark:text-white text-black">
+                   <div className="flex items-center gap-2">
+                      <ExternalLink className="w-4 h-4" />
+                      Cookie Policy
+                   </div>
+                   <LinkIcon className="w-4 h-4 opacity-50" />
+                </Link>
+                 <Link to="/data-retention" className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg hover:bg-white/20 transition-colors dark:text-white text-black">
+                   <div className="flex items-center gap-2">
+                      <ExternalLink className="w-4 h-4" />
+                      Data Retention Policy
+                   </div>
+                   <LinkIcon className="w-4 h-4 opacity-50" />
+                </Link>
+             </div>
           </CollapsibleSection>
         </div>
       </div>
