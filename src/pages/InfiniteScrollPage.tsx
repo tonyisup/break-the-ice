@@ -17,6 +17,7 @@ import { ArrowUp } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { useAuth, SignInButton } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
+import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
@@ -350,6 +351,10 @@ export default function InfiniteScrollPage() {
   // Smooth gradient transition logic
   const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
 
+  // Determine variant for A/B testing (randomized on mount)
+  // We use a ref to keep it consistent across re-renders
+  const newsletterVariantRef = useRef(Math.random() > 0.5 ? 'blend' as const : 'standout' as const);
+
   // Refs for data needed in scroll handler to avoid frequent re-attachments
   const stylesMapRef = useRef(stylesMap);
   const tonesMapRef = useRef(tonesMap);
@@ -462,7 +467,7 @@ export default function InfiniteScrollPage() {
 
       <main className="z-10 flex-1 flex flex-col pb-20 pt-20">
         <div className="flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full">
-          {questions.map((question) => {
+          {questions.map((question, index) => {
             // Derive specific style/tone/gradient for this card
             const cardStyle = question.style ? stylesMap.get(question.style) : undefined;
             const cardTone = question.tone ? tonesMap.get(question.tone) : undefined;
@@ -471,24 +476,31 @@ export default function InfiniteScrollPage() {
               : ['#667EEA', '#764BA2'];
 
             return (
-              <div
-                key={question._id}
-                ref={(el) => setQuestionRef(el, question._id)}
-                data-question-id={question._id}
-                className="w-full"
-              >
-                <ModernQuestionCard
-                  isGenerating={false}
-                  question={question}
-                  isFavorite={likedQuestions.includes(question._id)}
-                  gradient={cardGradient}
-                  style={cardStyle}
-                  tone={cardTone}
-                  onToggleFavorite={() => toggleLike(question._id)}
-                  onToggleHidden={() => toggleHide(question._id)}
-                  onHideStyle={handleHideStyle}
-                  onHideTone={handleHideTone}
-                />
+              <div key={`container-${question._id}`} className="flex flex-col gap-6 w-full">
+                <div
+                  key={question._id}
+                  ref={(el) => setQuestionRef(el, question._id)}
+                  data-question-id={question._id}
+                  className="w-full"
+                >
+                  <ModernQuestionCard
+                    isGenerating={false}
+                    question={question}
+                    isFavorite={likedQuestions.includes(question._id)}
+                    gradient={cardGradient}
+                    style={cardStyle}
+                    tone={cardTone}
+                    onToggleFavorite={() => toggleLike(question._id)}
+                    onToggleHidden={() => toggleHide(question._id)}
+                    onHideStyle={handleHideStyle}
+                    onHideTone={handleHideTone}
+                  />
+                </div>
+
+                {/* Insert Newsletter Card after the 5th question (index 4) */}
+                {index === 4 && !user.isSignedIn && (
+                  <NewsletterCard variant={newsletterVariantRef.current} />
+                )}
               </div>
             );
           })}
