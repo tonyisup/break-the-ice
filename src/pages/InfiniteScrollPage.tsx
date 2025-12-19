@@ -17,6 +17,7 @@ import { ArrowUp } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { useAuth, SignInButton } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
+import { UpgradeCTA } from "@/components/UpgradeCTA";
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
@@ -46,6 +47,7 @@ export default function InfiniteScrollPage() {
   const [hasMore, setHasMore] = useState(true);
   const [showTopButton, setShowTopButton] = useState(false);
   const [showAuthCTA, setShowAuthCTA] = useState(false);
+  const [showUpgradeCTA, setShowUpgradeCTA] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
   const [prevQuestion, setPrevQuestion] = useState<Doc<"questions"> | null>(null);
   const [nextQuestion, setNextQuestion] = useState<Doc<"questions"> | null>(null);
@@ -56,6 +58,7 @@ export default function InfiniteScrollPage() {
   const allTones = useQuery(api.tones.getTones, {
     organizationId: activeWorkspace ?? undefined,
   });
+  const currentUser = useQuery(api.users.getCurrentUser, {});
   const recordAnalytics = useMutation(api.questions.recordAnalytics);
 
   const stylesMap = useMemo(() => {
@@ -178,9 +181,10 @@ export default function InfiniteScrollPage() {
   // Function to load more questions
   const loadMoreQuestions = useCallback(async () => {
     // Check if we are already loading or missing params
-    if (isLoading || !hasMore || showAuthCTA) return;
+    if (isLoading || !hasMore || showAuthCTA || showUpgradeCTA) return;
 
     // Capture current request ID
+    requestIdRef.current++;
     const currentRequestId = requestIdRef.current;
     setIsLoading(true);
 
@@ -200,6 +204,21 @@ export default function InfiniteScrollPage() {
 
       let combinedQuestions = [...dbQuestions];
 
+      // Update state with DB questions immediately
+      if (dbQuestions.length > 0) {
+        setQuestions(prev => {
+          const existingIds = new Set(prev.map(q => q._id));
+          const uniqueNew = dbQuestions.filter(q => !existingIds.has(q._id));
+          if (uniqueNew.length === 0) return prev;
+          return [...prev, ...uniqueNew];
+        });
+        setSeenIds(prev => {
+          const next = new Set(prev);
+          dbQuestions.forEach(q => next.add(q._id));
+          return next;
+        });
+      }
+
       // 2. If not enough, generate more
       if (combinedQuestions.length < BATCH_SIZE) {
         const needed = BATCH_SIZE - combinedQuestions.length;
@@ -216,9 +235,22 @@ export default function InfiniteScrollPage() {
           if (currentRequestId !== requestIdRef.current) return;
 
           const validGenerated = generated.filter((q): q is Doc<"questions"> => q !== null);
-          combinedQuestions = [...combinedQuestions, ...validGenerated];
 
-          if (combinedQuestions.length === 0 && generated.length === 0) {
+          if (validGenerated.length > 0) {
+            setQuestions(prev => {
+              const existingIds = new Set(prev.map(q => q._id));
+              const uniqueNew = validGenerated.filter(q => !existingIds.has(q._id));
+              if (uniqueNew.length === 0) return prev;
+              return [...prev, ...uniqueNew];
+            });
+            setSeenIds(prev => {
+              const next = new Set(prev);
+              validGenerated.forEach(q => next.add(q._id));
+              return next;
+            });
+          }
+
+          if (dbQuestions.length === 0 && validGenerated.length === 0) {
             // If we still have 0 questions after generating, then truly no more
             setHasMore(false);
           }
@@ -230,25 +262,12 @@ export default function InfiniteScrollPage() {
           if (err instanceof Error && err.message.includes("logged in")) {
             setShowAuthCTA(true);
             setHasMore(false);
+          } else if (err instanceof Error && err.message.includes("limit reached")) {
+            setShowUpgradeCTA(true);
+            setHasMore(false);
           }
-          // If generation fails, we just use what we have.
+          // If generation fails, we just use what we have from DB.
         }
-      }
-
-      if (combinedQuestions.length > 0) {
-        setQuestions(prev => {
-          const existingIds = new Set(prev.map(q => q._id));
-          const uniqueNew = combinedQuestions.filter(q => !existingIds.has(q._id));
-          if (uniqueNew.length === 0) return prev;
-          return [...prev, ...uniqueNew];
-        });
-        setSeenIds(prev => {
-          const next = new Set(prev);
-          combinedQuestions.forEach(q => next.add(q._id));
-          return next;
-        });
-        // Ensure hasMore is true if we successfully loaded content
-        setHasMore(true);
       }
 
     } catch (error) {
@@ -263,7 +282,7 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, isLoading, seenIds, hiddenQuestions, generateAIQuestions, hasMore, showAuthCTA]);
+  }, [convex, isLoading, seenIds, hiddenQuestions, generateAIQuestions, hasMore, showAuthCTA, showUpgradeCTA, activeWorkspace]);
 
   // Initial load
   useEffect(() => {
@@ -334,6 +353,8 @@ export default function InfiniteScrollPage() {
     setQuestions([]);
     setSeenIds(new Set());
     setHasMore(true);
+    setShowAuthCTA(false);
+    setShowUpgradeCTA(false);
     // We don't manually trigger load here, the useEffect for question.length=0 or style change will handle it
   }
 
@@ -342,6 +363,8 @@ export default function InfiniteScrollPage() {
     setQuestions([]);
     setSeenIds(new Set());
     setHasMore(true);
+    setShowAuthCTA(false);
+    setShowUpgradeCTA(false);
   }
 
   // Mock highlighting states required by selectors but not used here
@@ -511,13 +534,28 @@ export default function InfiniteScrollPage() {
             />
           )}
 
-          {!hasMore && !showAuthCTA && questions.length > 0 && (
+          {showUpgradeCTA && (
+            <UpgradeCTA
+              bgGradient={bgGradient}
+              title="Generation Limit Reached"
+              description={currentUser?.subscriptionTier === 'casual'
+                ? "You've reached your monthly limit for the Casual plan. Contact support if you need more!"
+                : "You've used all your free AI generations for this month."
+              }
+              onUpgrade={() => {
+                // Link to upgrade flow or settings
+                window.location.href = "/settings";
+              }}
+            />
+          )}
+
+          {!hasMore && !showAuthCTA && !showUpgradeCTA && questions.length > 0 && (
             <div className="text-center py-8 text-white/70">
               No more questions found for this style and tone.
             </div>
           )}
 
-          {!hasMore && !showAuthCTA && questions.length === 0 && !isLoading && (
+          {!hasMore && !showAuthCTA && !showUpgradeCTA && questions.length === 0 && !isLoading && (
             <div className="text-center py-8 text-white/70">
               No questions found. Try changing the style or tone.
             </div>

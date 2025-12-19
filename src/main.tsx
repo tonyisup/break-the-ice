@@ -24,6 +24,13 @@ import DuplicateDetectionCompletedPage from "./app/admin/duplicates/completed/pa
 import AdminPage from "./app/admin/page";
 import AddQuestionPage from "./app/add-question/page";
 import SingleQuestionPage from "./pages/SingleQuestionPage";
+import PrivacyPolicyPage from "./app/privacy/page";
+import TermsOfServicePage from "./app/terms/page";
+import DataRetentionPage from "./app/data-retention/page";
+import CookiePolicyPage from "./app/cookies/page";
+import AboutPage from "./app/about/page";
+import ContactPage from "./app/contact/page";
+import FeedbackButton from "./components/FeedbackButton";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -53,7 +60,14 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/admin/duplicates/completed" element={<DuplicateDetectionCompletedPage />} />
                 <Route path="/admin/questions/:id" element={<IndividualQuestionPage />} />
                 {/* <Route path="/admin/prune" element={<PrunePage />} /> */}
+                <Route path="/privacy" element={<PrivacyPolicyPage />} />
+                <Route path="/terms" element={<TermsOfServicePage />} />
+                <Route path="/data-retention" element={<DataRetentionPage />} />
+                <Route path="/cookies" element={<CookiePolicyPage />} />
+                <Route path="/about" element={<AboutPage />} />
+                <Route path="/contact" element={<ContactPage />} />
               </Routes>
+              <FeedbackButton />
             </BrowserRouter>
           </WorkspaceProvider>
         </StorageProvider>

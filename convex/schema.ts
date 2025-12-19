@@ -30,7 +30,8 @@ export default defineSchema({
     order: v.optional(v.number()),
     embedding: v.optional(v.array(v.number())),
     organizationId: v.optional(v.id("organizations")),
-  }).index("by_name", ["name"])
+  }).index("by_my_id", ["id"])
+    .index("by_name", ["name"])
     .index("by_order", ["order"]),
   tones: defineTable({
     id: v.string(),
@@ -42,7 +43,8 @@ export default defineSchema({
     order: v.optional(v.number()),
     embedding: v.optional(v.array(v.number())),
     organizationId: v.optional(v.id("organizations")),
-  }).index("by_name", ["name"])
+  }).index("by_my_id", ["id"])
+    .index("by_name", ["name"])
     .index("by_order", ["order"]),
   questions: defineTable({
     organizationId: v.optional(v.id("organizations")),
@@ -69,7 +71,10 @@ export default defineSchema({
       )
     ),
     prunedAt: v.optional(v.number()),
+    lastPostedAt: v.optional(v.number()),
   })
+    .index("by_last_posted_at", ["lastPostedAt"])
+    .index("by_status_and_last_posted", ["status", "lastPostedAt"])
     .index("by_average_view_duration", [
       "averageViewDuration",
     ])
@@ -244,4 +249,14 @@ export default defineSchema({
   })
     .index("by_questionId", ["questionId"])
     .index("by_collectionId", ["collectionId"]),
+  feedback: defineTable({
+    text: v.string(),
+    pageUrl: v.string(),
+    userId: v.id("users"),
+    createdAt: v.float64(),
+    status: v.union(v.literal("new"), v.literal("read"), v.literal("archived")),
+  })
+    .index("by_status", ["status"])
+    .index("by_userId", ["userId"])
+    .index("by_createdAt", ["createdAt"]),
 });
