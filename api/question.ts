@@ -1,5 +1,5 @@
 import { ConvexHttpClient } from "convex/browser";
-import { api } from "../convex/_generated/api";
+import { api } from "@convex/_generated/api.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { JSDOM } from "jsdom";
 import fs from "fs";

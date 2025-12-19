@@ -77,7 +77,7 @@ export default async function handler(request: Request) {
                   width: '100%',
                 }}
               >
-                 {/* Style Badge */}
+                {/* Style Badge */}
                 <div
                   style={{
                     display: 'flex',
@@ -91,9 +91,9 @@ export default async function handler(request: Request) {
                     gap: '8px',
                   }}
                 >
-                   {/* Icon placeholder (circle) */}
-                   <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: styleColor }} />
-                   <span style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937' }}>{styleName}</span>
+                  {/* Icon placeholder (circle) */}
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: styleColor }} />
+                  <span style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937' }}>{styleName}</span>
                 </div>
 
                 {/* Tone Badge */}
@@ -110,9 +110,9 @@ export default async function handler(request: Request) {
                     gap: '8px',
                   }}
                 >
-                   {/* Icon placeholder (circle) */}
-                   <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: toneColor }} />
-                   <span style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937' }}>{toneName}</span>
+                  {/* Icon placeholder (circle) */}
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: toneColor }} />
+                  <span style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937' }}>{toneName}</span>
                 </div>
               </div>
 
@@ -150,7 +150,7 @@ export default async function handler(request: Request) {
                   opacity: 0.5,
                 }}
               >
-                  <span style={{ fontSize: '16px', color: '#4b5563' }}>@IcebergBreaker</span>
+                <span style={{ fontSize: '16px', color: '#4b5563' }}>@IcebergBreaker</span>
               </div>
             </div>
           </div>
