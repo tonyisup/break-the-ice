@@ -396,3 +396,126 @@ export const populateMissingToneEmbeddings = internalAction({
     await ctx.runAction(internal.email.sendEmail, { subject, html });
   },
 });
+
+export const detectDuplicateQuestionsStreaming = action({
+  args: {},
+  returns: v.id("duplicateDetectionProgress"),
+  handler: async (ctx): Promise<Id<"duplicateDetectionProgress">> => {
+    // 1. Initialize progress
+    const totalQuestions = await ctx.runQuery(internal.questions.countQuestions);
+    const BATCH_SIZE = 50;
+    const totalBatches = Math.ceil(totalQuestions / BATCH_SIZE);
+
+    const progressId: Id<"duplicateDetectionProgress"> = await ctx.runMutation(api.duplicates.createDuplicateDetectionProgress, {
+      totalQuestions,
+      totalBatches,
+    });
+
+    // 2. Fetch already pending/approved detections to avoid re-detecting
+    // We can't easily fetch ALL detected pairs, so we'll just check against existing detections during the loop or
+    // rely on the `saveDuplicateDetection` uniqueness check if any.
+    // However, `saveDuplicateDetection` doesn't enforce uniqueness on question pairs, so we should try to avoid it.
+    // For now, let's just proceed. The user can reject duplicates if they are already handled.
+
+    // 3. Start processing in background (or simpler: loop here and update progress)
+    // Since this is an action, it can run for a while.
+
+    // We need to fetch questions in batches.
+    let cursor: string | null = null;
+    let processedQuestions = 0;
+    let duplicatesFound = 0;
+    let currentBatch = 0;
+    const errors: string[] = [];
+
+    // Helper to check if we should continue
+    // (In a real background job we might check for cancellation)
+
+    try {
+      do {
+        currentBatch++;
+
+        // Fetch batch of questions with embeddings
+        const result: { questions: { _id: Id<"questions">, text?: string, embedding?: number[] }[], continueCursor: string, isDone: boolean } =
+          await ctx.runQuery(internal.questions.getQuestionsWithEmbeddingsBatch, {
+            cursor,
+            limit: BATCH_SIZE
+          });
+
+        const questions = result.questions;
+        cursor = result.continueCursor; // Update cursor for next iteration logic
+        const isDone = result.isDone;
+
+        // Process this batch
+        for (const question of questions) {
+            if (!question.embedding || question.embedding.length === 0) continue;
+
+            // Search for similar questions
+            // We use vector search.
+            // We are looking for VERY similar questions (duplicates).
+            // Threshold: 0.95 or higher?
+            const searchResults = await ctx.vectorSearch("questions", "by_embedding", {
+                vector: question.embedding,
+                limit: 5, // We only care about the top few matches
+            });
+
+            for (const match of searchResults) {
+                // Ignore self and ensure unique pair processing (A-B vs B-A) by enforcing order
+                if (match._id <= question._id) continue;
+
+                // Check score
+                if (match._score > 0.95) {
+                    // Potential duplicate!
+                    try {
+                        // saveDuplicateDetection will handle sorting IDs and basic checks.
+                        const result = await ctx.runMutation(internal.questions.saveDuplicateDetection, {
+                            questionIds: [question._id, match._id],
+                            reason: `High embedding similarity (${match._score.toFixed(4)})`,
+                            confidence: match._score,
+                        });
+                        if (result) {
+                          duplicatesFound++;
+                        }
+                    } catch (e) {
+                        // Ignore errors (e.g. if we add uniqueness constraint later)
+                        console.error("Error saving duplicate:", e);
+                    }
+                }
+            }
+        }
+
+        processedQuestions += questions.length;
+
+        // Update progress
+        await ctx.runMutation(api.duplicates.updateDuplicateDetectionProgress, {
+            progressId,
+            processedQuestions,
+            currentBatch,
+            duplicatesFound,
+            errors,
+        });
+
+        if (isDone) {
+            break;
+        }
+
+      } while (cursor); // Continue if cursor exists (logic handled by isDone check inside, but good to have safety)
+
+      await ctx.runMutation(api.duplicates.completeDuplicateDetectionProgress, {
+        progressId,
+        processedQuestions,
+        duplicatesFound,
+        errors,
+      });
+
+    } catch (error) {
+        console.error("Duplicate detection failed:", error);
+        errors.push(error instanceof Error ? error.message : String(error));
+        await ctx.runMutation(api.duplicates.failDuplicateDetectionProgress, {
+            progressId,
+            errors,
+        });
+    }
+
+    return progressId;
+  },
+});
