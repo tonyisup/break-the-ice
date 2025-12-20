@@ -390,13 +390,13 @@ export const populateMissingToneEmbeddings = internalAction({
 export const detectDuplicateQuestionsStreaming = action({
   args: {},
   returns: v.id("duplicateDetectionProgress"),
-  handler: async (ctx: any) => {
+  handler: async (ctx): Promise<Id<"duplicateDetectionProgress">> => {
     // 1. Initialize progress
     const totalQuestions = await ctx.runQuery(internal.questions.countQuestions);
     const BATCH_SIZE = 50;
     const totalBatches = Math.ceil(totalQuestions / BATCH_SIZE);
 
-    const progressId = await ctx.runMutation(api.duplicates.createDuplicateDetectionProgress, {
+    const progressId: Id<"duplicateDetectionProgress"> = await ctx.runMutation(api.duplicates.createDuplicateDetectionProgress, {
       totalQuestions,
       totalBatches,
     });
@@ -425,7 +425,7 @@ export const detectDuplicateQuestionsStreaming = action({
         currentBatch++;
 
         // Fetch batch of questions with embeddings
-        const result: { questions: { _id: Id<"questions">, text: string, embedding: number[] }[], continueCursor: string, isDone: boolean } =
+        const result: { questions: { _id: Id<"questions">, text?: string, embedding?: number[] }[], continueCursor: string, isDone: boolean } =
           await ctx.runQuery(internal.questions.getQuestionsWithEmbeddingsBatch, {
             cursor,
             limit: BATCH_SIZE
