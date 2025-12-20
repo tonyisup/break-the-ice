@@ -27,6 +27,7 @@ import type * as router from "../router.js";
 import type * as styles from "../styles.js";
 import type * as tags from "../tags.js";
 import type * as tones from "../tones.js";
+import type * as topics from "../topics.js";
 import type * as users from "../users.js";
 
 import type {
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   styles: typeof styles;
   tags: typeof tags;
   tones: typeof tones;
+  topics: typeof topics;
   users: typeof users;
 }>;
 

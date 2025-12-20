@@ -84,12 +84,13 @@ export const generateAIQuestions = action({
     count: v.number(),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    topic: v.optional(v.string()),
     selectedTags: v.optional(v.array(v.string())),
     model: v.optional(v.string()),
     currentQuestion: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
-    let { prompt, count, style, tone } = args;
+    let { prompt, count, style, tone, topic } = args;
 
     if (!prompt && style && tone) {
       const styleDoc = await ctx.runQuery(api.styles.getStyle, { id: style })
@@ -105,9 +106,17 @@ export const generateAIQuestions = action({
         promptGuidanceForAI: "Use playful language, absurd scenarios, and pop-culture references; keep stakes ultra-low.",
       };
 
+      let topicPrompt = "";
+      if (topic) {
+        const topicDoc = await ctx.runQuery(api.topics.getTopic, { id: topic });
+        if (topicDoc) {
+          topicPrompt = `\nTopic: ${topicDoc.name} (${topicDoc.description || ""}). ${topicDoc.promptGuidanceForAI || ""}`;
+        }
+      }
+
       prompt = `Generate questions with the following characteristics:
 Style: ${styleDoc.name} (${styleDoc.description}). ${styleDoc.promptGuidanceForAI || ""}
-Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI || ""}`;
+Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI || ""}${topicPrompt}`;
     }
 
     if (!prompt) {
@@ -289,6 +298,7 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
           text: question.text,
           style: question.style,
           tone: question.tone,
+          topic: topic, // Pass the explicit topic ID from the arguments
           tags: [],
         });
         newQuestions.push(newQuestion);
