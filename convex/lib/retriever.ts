@@ -62,6 +62,33 @@ export const embedQuestion = internalAction({
     });
   },
 });
+
+export const embedTopic = internalAction({
+  args: {
+    topicId: v.id("topics"),
+  },
+  handler: async (ctx, args) => {
+    const topic = await ctx.runQuery(api.topics.getTopicBySystemId, {
+      id: args.topicId,
+    });
+    if (!topic) {
+      return;
+    }
+
+    // Construct text to embed: name + description + promptGuidanceForAI
+    const textParts = [topic.name];
+    if (topic.description) textParts.push(topic.description);
+    if (topic.promptGuidanceForAI) textParts.push(topic.promptGuidanceForAI);
+
+    const textToEmbed = textParts.join(". ");
+
+    const vector = await embed(textToEmbed);
+    await ctx.runMutation(api.topics.addTopicEmbedding, {
+      topicId: args.topicId,
+      embedding: vector,
+    });
+  },
+});
 export const embedStyle = internalAction({
   args: {
     styleId: v.id("styles"),

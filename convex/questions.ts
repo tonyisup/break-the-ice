@@ -496,9 +496,10 @@ export const saveAIQuestion = mutation({
     tags: v.array(v.string()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    topic: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { text, tags, style, tone } = args;
+    const { text, tags, style, tone, topic } = args;
 
     // Check if a question with the same text already exists
     const existingQuestion = await ctx.db
@@ -517,6 +518,7 @@ export const saveAIQuestion = mutation({
       tags,
       style,
       tone,
+      topic,
       status: "public",
       isAIGenerated: true,
       lastShownAt: 0,
