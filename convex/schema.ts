@@ -171,6 +171,7 @@ export default defineSchema({
     .index("by_userIdAndToneId", ["userId", "toneId"]),
   duplicateDetections: defineTable({
     questionIds: v.array(v.id("questions")),
+    uniqueKey: v.optional(v.string()), // Combined ID of the questions (sorted) to prevent duplicate entries
     reason: v.string(),
     confidence: v.number(),
     status: v.union(
@@ -185,7 +186,8 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_detected_at", ["detectedAt"])
-    .index("by_status_and_confidence", ["status", "confidence"]),
+    .index("by_status_and_confidence", ["status", "confidence"])
+    .index("by_uniqueKey", ["uniqueKey"]),
   duplicateDetectionProgress: defineTable({
     status: v.union(
       v.literal("running"),

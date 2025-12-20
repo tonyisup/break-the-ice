@@ -781,10 +781,74 @@ export const saveDuplicateDetection = internalMutation({
     reason: v.string(),
     confidence: v.number(),
   },
-  returns: v.id("duplicateDetections"),
+  returns: v.union(v.id("duplicateDetections"), v.null()),
   handler: async (ctx, args) => {
+    // Sort question IDs to ensure consistent ordering for duplicate checking
+    const sortedIds = [...args.questionIds].sort();
+
+    // Ideally we would have a unique index on questionIds, but Array indices are tricky in Convex.
+    // Instead, we can check if there's any pending/approved detection containing these exact IDs.
+    // However, searching for exact array match is also tricky without an index.
+    // Since we are detecting duplicates, we can query by one of the IDs and filter.
+    // But this mutation might be called many times.
+
+    // Let's assume the caller handles some filtering, but we do a best-effort check here.
+    // We'll query duplicateDetections that contain the first question ID.
+    // Note: This might be slow if there are many detections for the same question.
+
+    // Check if this pair is already detected (pending, approved, or rejected)
+    // We can't easily query "contains exact array", so we fetch potentially relevant ones.
+    // Since we sorted IDs, we know order.
+    // However, `duplicateDetections` does not have an index on `questionIds`.
+    // We will scan all detections? No, that's too slow.
+
+    // Ideally we would add an index on `questionIds`.
+    // Since we can't easily modify schema/indexes in this flow without `schema.ts` change,
+    // and `schema.ts` edits are tricky (need to match existing), we will do a scan but optimize if possible.
+
+    // Actually, `convex/schema.ts` is available. We could check if we can add index.
+    // But for this task, let's just use `filter` which might be slow but safe for now given the volume.
+    // Or better: Use `getAllQuestionsForDuplicateDetection` approach - fetch all detections and check in memory?
+    // No, mutation shouldn't load everything.
+
+    // Let's check for duplicate detection by querying *one* of the question IDs if we can.
+    // We can't query array fields efficiently without an index.
+    // But `filter` on array `includes`?
+    /*
+    const existing = await ctx.db
+      .query("duplicateDetections")
+      .filter(q =>
+         // Check if questionIds array contains BOTH ids.
+         // q.field("questionIds") is an array.
+         // We can't do logic easily in filter builder.
+         true
+      )
+      .collect();
+    */
+
+    // Fallback: Just insert. The action does A < B check so within one run it's unique.
+    // Across runs, we might get duplicates.
+    // To fix this properly, we need to check existence.
+    // Let's load all `duplicateDetections`? If table is small ok.
+    // If table is large, this is bad.
+
+    // Better approach:
+    // We use uniqueKey index to check for duplicates efficiently.
+    const uniqueKey = sortedIds.join("_");
+    const existing = await ctx.db
+      .query("duplicateDetections")
+      .withIndex("by_uniqueKey", (q) => q.eq("uniqueKey", uniqueKey))
+      .first();
+
+    if (existing) {
+      // Already detected
+      return null;
+    }
+
+    // Proceed with insert.
     return await ctx.db.insert("duplicateDetections", {
-      questionIds: args.questionIds,
+      questionIds: sortedIds,
+      uniqueKey,
       reason: args.reason,
       confidence: args.confidence,
       status: "pending",
@@ -1166,5 +1230,47 @@ export const getNextQuestionsByEmbedding = action({
     });
 
     return results;
+  },
+});
+export const getQuestionsWithEmbeddingsBatch = internalQuery({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { cursor, limit } = args;
+    const paginationResult = await ctx.db
+      .query("questions")
+      .filter((q) => q.neq(q.field("embedding"), undefined))
+      .paginate({ cursor, numItems: limit });
+
+    // Explicitly create new objects with only the required fields to avoid returning full documents
+    // But we need embeddings for vector search
+    // Since this is internalQuery called from action, we can return full objects or subsets.
+    // Let's return only what we need: _id, text, embedding.
+
+    // Actually, vectorSearch needs the vector.
+    // Note: returning embedding array might be large.
+    // But we need it in the action to perform search.
+
+    return {
+      questions: paginationResult.page.map(q => ({
+        _id: q._id,
+        text: q.text,
+        embedding: q.embedding,
+      })),
+      continueCursor: paginationResult.continueCursor,
+      isDone: paginationResult.isDone,
+    };
+  },
+});
+
+export const countQuestions = internalQuery({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    // TODO: This is not scalable for very large datasets.
+    // Consider using an aggregate table or approximate count if this becomes a bottleneck.
+    return (await ctx.db.query("questions").collect()).length;
   },
 });
