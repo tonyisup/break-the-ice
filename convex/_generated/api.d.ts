@@ -21,6 +21,7 @@ import type * as http from "../http.js";
 import type * as instagram from "../instagram.js";
 import type * as lib_emails from "../lib/emails.js";
 import type * as lib_retriever from "../lib/retriever.js";
+import type * as newsletter from "../newsletter.js";
 import type * as organizations from "../organizations.js";
 import type * as questions from "../questions.js";
 import type * as router from "../router.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   instagram: typeof instagram;
   "lib/emails": typeof lib_emails;
   "lib/retriever": typeof lib_retriever;
+  newsletter: typeof newsletter;
   organizations: typeof organizations;
   questions: typeof questions;
   router: typeof router;
