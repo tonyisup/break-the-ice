@@ -81,7 +81,6 @@ export const updateUserFromClerk = internalMutation({
 export const checkAndIncrementAIUsage = internalMutation({
 	args: {
 		userId: v.id("users"),
-		count: v.number(),
 	},
 	returns: v.number(),
 	handler: async (ctx, args) => {
@@ -96,7 +95,6 @@ export const checkAndIncrementAIUsage = internalMutation({
 		if (now - aiUsage.cycleStart > cycleLength) {
 			aiUsage = { count: 0, cycleStart: now };
 		}
-
 		const limit = user.subscriptionTier === "casual" ? parseInt(process.env.MAX_CASUAL_AIGEN ?? "100") : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
 
 		const remaining = limit - aiUsage.count;
@@ -104,7 +102,7 @@ export const checkAndIncrementAIUsage = internalMutation({
 			throw new Error(`AI generation limit reached. You have used ${aiUsage.count}/${limit} generations this cycle.`);
 		}
 
-		const actualCount = Math.min(args.count, remaining);
+		const actualCount = Math.min(1, remaining);
 
 		await ctx.db.patch(user._id, {
 			aiUsage: {
@@ -834,3 +832,30 @@ export const mergeQuestionHistory = mutation({
 		return null;
 	},
 });
+
+export const getRecentlySeenQuestions = query({
+	args: {
+		userId: v.id("users"),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, args) => {
+		const seen = await ctx.db.query("userQuestions")
+			.withIndex("by_userIdAndStatus", (q) =>
+				q.eq("userId", args.userId).eq("status", "seen")
+			)
+			.order("desc")
+			.take(args.limit ?? 3);
+
+		const seenQuestions = await Promise.all(
+			seen.map(async (relation) => {
+				const question = await ctx.db.query("questions")
+					.withIndex("by_id", (q) => q.eq("_id", relation.questionId))
+					.first();
+				return question;
+			})
+		);
+		return seenQuestions
+			.filter((q) => q !== null)
+			.map((q) => q.text);
+	},
+})

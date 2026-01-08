@@ -23,6 +23,7 @@ import type * as lib_emails from "../lib/emails.js";
 import type * as lib_retriever from "../lib/retriever.js";
 import type * as newsletter from "../newsletter.js";
 import type * as organizations from "../organizations.js";
+import type * as qa from "../qa.js";
 import type * as questions from "../questions.js";
 import type * as router from "../router.js";
 import type * as styles from "../styles.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   "lib/retriever": typeof lib_retriever;
   newsletter: typeof newsletter;
   organizations: typeof organizations;
+  qa: typeof qa;
   questions: typeof questions;
   router: typeof router;
   styles: typeof styles;

@@ -192,7 +192,7 @@ export const addToneEmbedding = internalMutation({
 });
 
 export const getRandomTone = query({
-  args: {},
+  args: { seed: v.optional(v.number()) },
   returns: v.object({
     _id: v.id("tones"),
     _creationTime: v.number(),
@@ -204,9 +204,13 @@ export const getRandomTone = query({
     icon: v.string(),
     order: v.optional(v.float64()),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const tones = await ctx.db.query("tones").withIndex("by_order").order("asc").collect();
-    const randomTone = tones[Math.floor(Math.random() * tones.length)];
+    if (tones.length === 0) {
+      throw new Error("No tones found in the database");
+    }
+    const index = Math.floor(Math.random() * tones.length);
+    const randomTone = tones[index];
     const { embedding, ...rest } = randomTone;
     return rest;
   },

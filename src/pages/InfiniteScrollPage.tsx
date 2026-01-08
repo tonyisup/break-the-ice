@@ -222,15 +222,8 @@ export default function InfiniteScrollPage() {
 
 			// 2. If not enough, generate more
 			if (combinedQuestions.length < BATCH_SIZE) {
-				const needed = BATCH_SIZE - combinedQuestions.length;
-				// Limit generation to avoid long waits, max 3 at a time
-				const countToGenerate = Math.min(needed, 3);
-
 				try {
-					const generated = await generateAIQuestions({
-						prompt: "Generate random, engaging ice-breaker questions.",
-						count: countToGenerate
-					});
+					const generated = await generateAIQuestions({});
 
 					// Check for staleness after generation await
 					if (currentRequestId !== requestIdRef.current) return;
@@ -562,14 +555,28 @@ export default function InfiniteScrollPage() {
 					)}
 
 					{!hasMore && !showAuthCTA && !showUpgradeCTA && questions.length > 0 && (
-						<div className="text-center py-8 text-white/70">
-							No more questions found for this style and tone.
+						<div className="flex justify-center py-8">
+							<Button
+								variant="default"
+								onClick={() => {
+									loadMoreQuestions();
+								}}
+							>
+								Load More
+							</Button>
 						</div>
 					)}
 
 					{!hasMore && !showAuthCTA && !showUpgradeCTA && questions.length === 0 && !isLoading && (
-						<div className="text-center py-8 text-white/70">
-							No questions found. Try changing the style or tone.
+						<div className="flex justify-center py-8">
+							<Button
+								variant="default"
+								onClick={() => {
+									loadMoreQuestions();
+								}}
+							>
+								Load More
+							</Button>
 						</div>
 					)}
 				</div>

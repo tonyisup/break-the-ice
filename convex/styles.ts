@@ -29,6 +29,54 @@ export const getStyle = query({
   },
 });
 
+export const getStylesWithExamples = query({
+  args: { id: v.string(), seed: v.optional(v.number()) },
+  returns: v.union(
+    v.object({
+      _id: v.id("styles"),
+      _creationTime: v.number(),
+      id: v.string(),
+      name: v.string(),
+      description: v.optional(v.string()),
+      structure: v.string(),
+      color: v.string(),
+      icon: v.string(),
+      example: v.optional(v.string()),
+      examples: v.optional(v.array(v.string())),
+      promptGuidanceForAI: v.optional(v.string()),
+      order: v.optional(v.float64()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const style = await ctx.db.query("styles").filter((q) => q.eq(q.field("id"), args.id)).first();
+    if (!style) {
+      return null;
+    }
+
+    const { embedding, ...rest } = style;
+
+    const exampleQuestions = await ctx.db.query("questions").filter((q) => q.eq(q.field("style"), args.id)).collect();
+
+    if (!exampleQuestions) {
+      return { ...rest, examples: undefined };
+    }
+    const examples = exampleQuestions.map((q) => q.text).filter((q) => q !== undefined);
+
+    if (!examples || examples.length === 0) {
+      return { ...rest, examples: undefined };
+    }
+
+    const maxExamples = process.env.MAX_EXAMPLES_PER_STYLE ? parseInt(process.env.MAX_EXAMPLES_PER_STYLE) : 3;
+    const sampledExamples = [...examples].sort(() => 0.5 - Math.random()).slice(0, maxExamples);
+
+    return {
+      ...rest,
+      examples: sampledExamples,
+    };
+  },
+});
+
 // Get all available styles
 export const getStyles = query({
   args: {
@@ -201,7 +249,7 @@ export const addStyleEmbedding = internalMutation({
 });
 
 export const getRandomStyle = query({
-  args: {},
+  args: { seed: v.optional(v.number()) },
   returns: v.object({
     _id: v.id("styles"),
     _creationTime: v.number(),
@@ -212,13 +260,19 @@ export const getRandomStyle = query({
     color: v.string(),
     icon: v.string(),
     example: v.optional(v.string()),
+    examples: v.optional(v.array(v.string())),
     promptGuidanceForAI: v.optional(v.string()),
     order: v.optional(v.float64()),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const styles = await ctx.db.query("styles").withIndex("by_order").order("asc").collect();
-    const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+    if (styles.length === 0) {
+      throw new Error("No styles found in the database");
+    }
+    // Convex seeds Math.random() automatically based on args.seed
+    const index = Math.floor(Math.random() * styles.length);
+    const randomStyle = styles[index];
     const { embedding, ...rest } = randomStyle;
     return rest;
   },
-}); 
+});

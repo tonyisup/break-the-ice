@@ -49,7 +49,7 @@ function StyleManager() {
   const [newStyleStructure, setNewStyleStructure] = useState('');
   const [newStyleColor, setNewStyleColor] = useState('');
   const [newStyleIcon, setNewStyleIcon] = useState('');
-  const [newStyleExample, setNewStyleExample] = useState('');
+  const [newStyleExamples, setNewStyleExamples] = useState<string[]>(['']);
   const [newStylePromptGuidance, setNewStylePromptGuidance] = useState('');
   const [newStyleOrder, setNewStyleOrder] = useState('');
   const [editingStyle, setEditingStyle] = useState<Doc<"styles"> | null>(null);
@@ -64,7 +64,7 @@ function StyleManager() {
         structure: newStyleStructure,
         color: newStyleColor,
         icon: newStyleIcon,
-        example: newStyleExample,
+        examples: newStyleExamples.filter(ex => ex.trim() !== ''),
         promptGuidanceForAI: newStylePromptGuidance,
         order: newStyleOrder ? parseFloat(newStyleOrder) : undefined,
       });
@@ -73,7 +73,7 @@ function StyleManager() {
       setNewStyleStructure('');
       setNewStyleColor('');
       setNewStyleIcon('');
-      setNewStyleExample('');
+      setNewStyleExamples(['']);
       setNewStylePromptGuidance('');
       setNewStyleOrder('');
     }
@@ -89,7 +89,7 @@ function StyleManager() {
         structure: editingStyle.structure,
         color: editingStyle.color,
         icon: editingStyle.icon,
-        example: editingStyle.example,
+        examples: editingStyle.examples?.filter(ex => ex.trim() !== ''),
         promptGuidanceForAI: editingStyle.promptGuidanceForAI,
         order: editingStyle.order,
       });
@@ -205,14 +205,44 @@ function StyleManager() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Example</label>
-              <textarea
-                value={newStyleExample}
-                onChange={(e) => setNewStyleExample(e.target.value)}
-                rows={3}
-                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter style example"
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Examples</label>
+              <div className="space-y-2">
+                {newStyleExamples.map((example, index) => (
+                  <div key={index} className="flex gap-2">
+                    <textarea
+                      value={example}
+                      onChange={(e) => {
+                        const updated = [...newStyleExamples];
+                        updated[index] = e.target.value;
+                        setNewStyleExamples(updated);
+                      }}
+                      rows={2}
+                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder={`Enter example ${index + 1}`}
+                    />
+                    <button
+                      onClick={() => {
+                        const updated = newStyleExamples.filter((_, i) => i !== index);
+                        setNewStyleExamples(updated.length > 0 ? updated : ['']);
+                      }}
+                      className="p-2 text-red-500 hover:text-red-600 self-start"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => setNewStyleExamples([...newStyleExamples, ''])}
+                  className="text-sm text-blue-500 hover:text-blue-600 font-medium flex items-center gap-1"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Add Example
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prompt Guidance</label>
@@ -259,7 +289,7 @@ function StyleManager() {
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Structure</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Color</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Icon</th>
-                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Example</th>
+                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Examples</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Prompt Guidance</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Order</th>
                 <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Actions</th>
@@ -337,14 +367,47 @@ function StyleManager() {
                   </td>
                   <td className="p-4 align-top">
                     {editingStyle?._id === style._id ? (
-                      <textarea
-                        rows={3}
-                        value={editingStyle.example ?? ''}
-                        onChange={(e) => setEditingStyle({ ...editingStyle, example: e.target.value })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      <div className="space-y-2 max-w-xs">
+                        {(editingStyle.examples || ['']).map((example, index) => (
+                          <div key={index} className="flex gap-1">
+                            <textarea
+                              rows={2}
+                              value={example}
+                              onChange={(e) => {
+                                const updated = [...(editingStyle.examples || [''])];
+                                updated[index] = e.target.value;
+                                setEditingStyle({ ...editingStyle, examples: updated });
+                              }}
+                              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            <button
+                              onClick={() => {
+                                const updated = (editingStyle.examples || []).filter((_, i) => i !== index);
+                                setEditingStyle({ ...editingStyle, examples: updated.length > 0 ? updated : [''] });
+                              }}
+                              className="text-red-500 p-1"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => setEditingStyle({ ...editingStyle, examples: [...(editingStyle.examples || []), ''] })}
+                          className="text-[10px] text-blue-500 hover:text-blue-600 font-medium"
+                        >
+                          + Add Example
+                        </button>
+                      </div>
                     ) : (
-                      <span className="text-gray-600 dark:text-gray-400">{style.example}</span>
+                      <div className="max-w-xs overflow-hidden">
+                        <ul className="list-disc list-inside text-xs text-gray-600 dark:text-gray-400">
+                          {(style.examples || (style.example ? [style.example] : [])).map((ex, i) => (
+                            <li key={i} className="truncate">{ex}</li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </td>
                   <td className="p-4 align-top">
@@ -477,18 +540,49 @@ function StyleManager() {
                   )}
                 </div>
 
-                {/* Example */}
+                {/* Examples */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Example</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Examples</label>
                   {editingStyle?._id === style._id ? (
-                    <textarea
-                      rows={3}
-                      value={editingStyle.example ?? ''}
-                      onChange={(e) => setEditingStyle({ ...editingStyle, example: e.target.value })}
-                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
+                    <div className="space-y-2">
+                      {(editingStyle.examples || ['']).map((example, index) => (
+                        <div key={index} className="flex gap-2">
+                          <textarea
+                            rows={2}
+                            value={example}
+                            onChange={(e) => {
+                              const updated = [...(editingStyle.examples || [''])];
+                              updated[index] = e.target.value;
+                              setEditingStyle({ ...editingStyle, examples: updated });
+                            }}
+                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                          <button
+                            onClick={() => {
+                              const updated = (editingStyle.examples || []).filter((_, i) => i !== index);
+                              setEditingStyle({ ...editingStyle, examples: updated.length > 0 ? updated : [''] });
+                            }}
+                            className="p-2 text-red-500"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => setEditingStyle({ ...editingStyle, examples: [...(editingStyle.examples || []), ''] })}
+                        className="text-sm text-blue-500 font-medium"
+                      >
+                        + Add Example
+                      </button>
+                    </div>
                   ) : (
-                    <span className="text-gray-600 dark:text-gray-400 text-sm">{style.example}</span>
+                    <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400">
+                      {(style.examples || (style.example ? [style.example] : [])).map((ex, i) => (
+                        <li key={i}>{ex}</li>
+                      ))}
+                    </ul>
                   )}
                 </div>
 
@@ -527,29 +621,29 @@ function StyleManager() {
                   <div className="flex flex-col sm:flex-row gap-3">
                     {editingStyle?._id === style._id ? (
                       <>
-                        <button 
-                          onClick={handleUpdateStyle} 
+                        <button
+                          onClick={handleUpdateStyle}
                           className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-lg font-medium transition-colors text-base"
                         >
                           Save Changes
                         </button>
-                        <button 
-                          onClick={() => setEditingStyle(null)} 
+                        <button
+                          onClick={() => setEditingStyle(null)}
                           className="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-4 py-3 rounded-lg font-medium transition-colors text-base"
                         >
                           Cancel
                         </button>
                       </>
                     ) : (
-                      <button 
-                        onClick={() => setEditingStyle(style)} 
+                      <button
+                        onClick={() => setEditingStyle(style)}
                         className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-3 rounded-lg font-medium transition-colors text-base"
                       >
                         Edit Style
                       </button>
                     )}
-                    <button 
-                      onClick={() => handleDeleteStyle(style._id)} 
+                    <button
+                      onClick={() => handleDeleteStyle(style._id)}
                       className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-lg font-medium transition-colors text-base"
                     >
                       Delete

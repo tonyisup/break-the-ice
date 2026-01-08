@@ -45,10 +45,10 @@ import {
   SquareArrowRight,
   Plus,
   LogIn,
-  Check as CheckIcon, 
-  X as XIcon, 
-  Trash2 as TrashIcon, 
-  Edit as EditIcon, 
+  Check as CheckIcon,
+  X as XIcon,
+  Trash2 as TrashIcon,
+  Edit as EditIcon,
   Save as SaveIcon,
   Copy as CopyIcon,
   Clipboard as ClipboardIcon,
@@ -66,6 +66,7 @@ import {
   CheckCircleIcon,
   type LucideIcon,
   ThumbsUpIcon,
+  Users
 } from 'lucide-react';
 
 // Export all icons for direct use
@@ -116,10 +117,10 @@ export {
   SquareArrowRight,
   Plus,
   LogIn,
-  CheckIcon, 
-  XIcon, 
-  TrashIcon, 
-  EditIcon, 
+  CheckIcon,
+  XIcon,
+  TrashIcon,
+  EditIcon,
   SaveIcon,
   CopyIcon,
   ClipboardIcon,
@@ -136,6 +137,7 @@ export {
   AlertCircleIcon,
   CheckCircleIcon,
   ThumbsUpIcon,
+  Users,
 };
 
 // Create a mapping of icon names to icon components for dynamic access
@@ -214,6 +216,7 @@ export const iconMap: Record<string, LucideIcon> = {
   Computer,
   AlertCircleIcon,
   CheckCircleIcon,
-  ThumbsUpIcon
+  ThumbsUpIcon,
+  Users,
 };
 

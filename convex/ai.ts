@@ -36,8 +36,8 @@ export const generateFallbackQuestion = action({
 	args: {},
 	returns: v.union(v.any(), v.null()),
 	handler: async (ctx): Promise<Doc<"questions"> | null> => {
-		const randomStyle: Doc<"styles"> = await ctx.runQuery(api.styles.getRandomStyle, {});
-		const randomTone: Doc<"tones"> = await ctx.runQuery(api.tones.getRandomTone, {});
+		const randomStyle: Doc<"styles"> = await ctx.runQuery(api.styles.getRandomStyle, { seed: Math.random() });
+		const randomTone: Doc<"tones"> = await ctx.runQuery(api.tones.getRandomTone, { seed: Math.random() });
 
 		const stylePrompt = randomStyle.name + " " + randomStyle.description + " " + randomStyle.promptGuidanceForAI;
 		const tonePrompt = randomTone.name + " " + randomTone.description + " " + randomTone.promptGuidanceForAI;
@@ -81,7 +81,6 @@ export const generateFallbackQuestion = action({
 export const generateAIQuestions = action({
 	args: {
 		prompt: v.optional(v.string()),
-		count: v.number(),
 		style: v.optional(v.string()),
 		tone: v.optional(v.string()),
 		topic: v.optional(v.string()),
@@ -90,14 +89,30 @@ export const generateAIQuestions = action({
 		currentQuestion: v.optional(v.string()),
 	},
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
-		let { prompt, count, style, tone, topic } = args;
+		const user = await ctx.runQuery(api.users.getCurrentUser, {});
+		if (!user) {
+			throw new Error("You must be logged in to generate AI questions.");
+		}
+		let { prompt, style, tone, topic, selectedTags } = args;
+
+		const count = 1;
+
+		if (!style) {
+			style = (await ctx.runQuery(api.styles.getRandomStyle, { seed: Math.random() })).id;
+		}
+		if (!tone) {
+			tone = (await ctx.runQuery(api.tones.getRandomTone, { seed: Math.random() })).id;
+		}
 
 		if (!prompt && style && tone) {
-			const styleDoc = await ctx.runQuery(api.styles.getStyle, { id: style })
+			const styleDoc = await ctx.runQuery(api.styles.getStylesWithExamples, { id: style, seed: Math.random() })
 				|| {
 				name: "Would You Rather",
 				description: "Forces a binary choice, sparks instant debate and reveals priorities.",
 				promptGuidanceForAI: "Present two equally tempting or equally awful options to create playful tension.",
+				structure: "Would you rather [Option A] or [Option B]?",
+				example: "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?",
+				examples: ["Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?"]
 			};
 			const toneDoc = await ctx.runQuery(api.tones.getTone, { id: tone })
 				|| {
@@ -114,9 +129,22 @@ export const generateAIQuestions = action({
 				}
 			}
 
+			// Few-shot sampling
+			const examples = styleDoc.examples || (styleDoc.example ? [styleDoc.example] : []);
+			const sampledExamples = examples.sort(() => 0.5 - Math.random()).slice(0, 3);
+			const fewShotPrompt = sampledExamples.length > 0
+				? `\nFollow this structure: "${styleDoc.structure}"\nExamples of this style:\n- ${sampledExamples.join('\n- ')}`
+				: `\nFollow this structure: "${styleDoc.structure}"`;
+
 			prompt = `Generate questions with the following characteristics:
-Style: ${styleDoc.name} (${styleDoc.description}). ${styleDoc.promptGuidanceForAI || ""}
+Style: ${styleDoc.name} (${styleDoc.description}). ${styleDoc.promptGuidanceForAI || ""}${fewShotPrompt}
 Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI || ""}${topicPrompt}`;
+		}
+
+		const recentlySeenQuestions = await ctx.runQuery(api.users.getRecentlySeenQuestions, { userId: user._id });
+		const recentlySeen = recentlySeenQuestions.filter((q) => q !== undefined);
+		if (recentlySeen.length > 0) {
+			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
 		}
 
 		if (!prompt) {
@@ -128,20 +156,14 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 		const maxAttempts = 3;
 		let generatedContent = "";
 
-		const styles: Doc<"styles">[] = await ctx.runQuery(api.styles.getStyles, {});
-		const tones: Doc<"tones">[] = await ctx.runQuery(api.tones.getTones, {});
-
 		let userContext = "";
-		const user = await ctx.runQuery(api.users.getCurrentUser, {});
-		if (!user) {
-			throw new Error("You must be logged in to generate AI questions.");
-		}
 
 		const allowedCount = await ctx.runMutation(internal.users.checkAndIncrementAIUsage, {
 			userId: user._id,
-			count: count
 		});
-		count = allowedCount;
+		if (allowedCount < 0) {
+			throw new Error("You have reached your AI question limit. Please upgrade your plan.");
+		}
 		if (user?.questionPreferenceEmbedding) {
 			const nearestQuestions = await ctx.runAction(api.questions.getNearestQuestionsByEmbedding, {
 				embedding: user.questionPreferenceEmbedding,
@@ -173,7 +195,7 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
     Example format: [{"text": "Question 1", "style": "s1", "tone": "t1"}, {"text": "Question 2", "style": "s2", "tone": "t2"}]
     
     Requirements:
-    - Return exactly ${count} question(s)
+    - Return exactly 1 question
     - Each question should be a string in the JSON array
     - Avoid questions too similar to existing ones
     - Make questions engaging and conversation-starting
@@ -181,32 +203,25 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 						},
 						{
 							role: "user",
-							content: `Generate ${count} ice-breaker question(s) with these parameters:
+							content: `Generate 1 ice-breaker question with these parameters:
     ${prompt}
     
     ${userContext}
     
     Response with a JSON array of objects, each containing the following properties:
     - text: The question text
-    - style: The style of the question from one of the following; ${styles.map(s => s.id).join(", ")}
-    - tone: The tone of the question from one of the following; ${tones.map(t => t.id).join(", ")}
-    - Note that style and tone MUST be one of the identifiers provided exactly as-is.
     For example:
     [
       {
-        "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?",
-        "style": "would-you-rather",
-        "tone": "fun-silly"
+        "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?"
       },
       {
-        "text": "You're stranded on a desert island; you can only have one luxury item. What would it be and why?",
-        "style": "desert-island",
-        "tone": "deep-thoughtful"
+        "text": "You're stranded on a desert island; you can only have one luxury item. What would it be and why?"
       }
     ]`
 						}
 					],
-					max_tokens: 500 * count,
+					max_tokens: 200,
 					temperature: 0.7,
 				});
 
@@ -254,7 +269,7 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 			.replace(/^```\s*/, "")
 			.replace(/\s*```$/, "");
 
-		let parsedContent: { text: string; style: string; tone: string }[] = [];
+		let parsedContent: { text: string; }[] = [];
 
 		try {
 			parsedContent = JSON.parse(cleanedContent);
@@ -267,11 +282,8 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 			for (const line of lines) {
 				const match = line.match(regex);
 				if (match) {
-					// We don't have style/tone in this format, so we use the requested ones or empty strings
 					parsedContent.push({
 						text: match[1].trim(),
-						style: style || styles[0]?.id || "would-you-rather",
-						tone: tone || tones[0]?.id || "fun-silly"
 					});
 				}
 			}
@@ -284,21 +296,27 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 			}
 		}
 
+		const normalize = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+		const normalizedRecentlySeen = recentlySeen.map((q) => normalize(q));
+
 		const newQuestions: (Doc<"questions"> | null)[] = [];
 		for (const question of parsedContent) {
 			try {
-				if (!styles.find(s => s.id === question.style)) {
-					console.log(`Invalid style ${question.style} for question ${question.text}`);
+				// Simple dedupe check
+				const normalizedText = normalize(question.text);
+				const isDuplicate = normalizedRecentlySeen.some(seen =>
+					normalizedText.includes(seen) || seen.includes(normalizedText)
+				);
+
+				if (isDuplicate) {
+					console.log(`Skipping duplicate/similar question: ${question.text}`);
 					continue;
 				}
-				if (!tones.find(t => t.id === question.tone)) {
-					console.log(`Invalid tone ${question.tone} for question ${question.text}`);
-					continue;
-				}
+
 				const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
 					text: question.text,
-					style: question.style,
-					tone: question.tone,
+					style: style,
+					tone: tone,
 					topic: topic, // Pass the explicit topic ID from the arguments
 					tags: [],
 				});
