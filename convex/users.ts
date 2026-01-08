@@ -859,3 +859,30 @@ export const getRecentlySeenQuestions = query({
 			.map((q) => q.text);
 	},
 })
+
+export const getBlockedQuestions = query({
+	args: {
+		userId: v.id("users"),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, args) => {
+		const hidden = await ctx.db.query("userQuestions")
+			.withIndex("by_userIdAndStatus", (q) =>
+				q.eq("userId", args.userId).eq("status", "hidden")
+			)
+			.order("desc")
+			.take(args.limit ?? 3);
+
+		const hiddenQuestions = await Promise.all(
+			hidden.map(async (relation) => {
+				const question = await ctx.db.query("questions")
+					.withIndex("by_id", (q) => q.eq("_id", relation.questionId))
+					.first();
+				return question;
+			})
+		);
+		return hiddenQuestions
+			.filter((q) => q !== null)
+			.map((q) => q.text);
+	},
+})

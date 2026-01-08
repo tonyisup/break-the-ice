@@ -66,7 +66,12 @@ import {
   CheckCircleIcon,
   type LucideIcon,
   ThumbsUpIcon,
-  Users
+  Users,
+  MessagesSquare,
+  UserMinus,
+  ArrowRightLeft,
+  Presentation,
+  Cloud
 } from 'lucide-react';
 
 // Export all icons for direct use
@@ -138,6 +143,11 @@ export {
   CheckCircleIcon,
   ThumbsUpIcon,
   Users,
+  MessagesSquare,
+  UserMinus,
+  ArrowRightLeft,
+  Presentation,
+  Cloud
 };
 
 // Create a mapping of icon names to icon components for dynamic access
@@ -218,5 +228,10 @@ export const iconMap: Record<string, LucideIcon> = {
   CheckCircleIcon,
   ThumbsUpIcon,
   Users,
+  MessagesSquare,
+  UserMinus,
+  ArrowRightLeft,
+  Presentation,
+  Cloud,
 };
 

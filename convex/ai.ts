@@ -41,37 +41,64 @@ export const generateFallbackQuestion = action({
 
 		const stylePrompt = randomStyle.name + " " + randomStyle.description + " " + randomStyle.promptGuidanceForAI;
 		const tonePrompt = randomTone.name + " " + randomTone.description + " " + randomTone.promptGuidanceForAI;
-		const fallbackCompletion = await openai.chat.completions.create({
-			model: "@preset/break-the-ice-berg-default",
-			messages: [
-				{
-					role: "system",
-					content: "Generate a single engaging ice-breaker question. Respond with ONLY the ONE question text, no quotes or formatting."
-				},
-				{
-					role: "user",
-					content: `Generate 1 ice-breaker question for style: ${stylePrompt}, tone: ${tonePrompt}`
-				}
-			],
-			max_tokens: 100,
-			temperature: 0.7,
-		});
 
-		const fallbackContent = fallbackCompletion.choices[0]?.message?.content?.trim();
-		if (fallbackContent) {
-			const cleanedFallback = fallbackContent.replace(/^["']|["']$/g, '').trim();
-			if (cleanedFallback.length > 0) {
-				try {
-					const fallbackQuestion: Doc<"questions"> | null = await ctx.runMutation(api.questions.saveAIQuestion, {
-						text: cleanedFallback,
-						style: randomStyle.id,
-						tone: randomTone.id,
-						tags: [],
-					});
-					return fallbackQuestion;
-				} catch (error) {
-					console.error("Failed to save fallback question:", error);
+		let attempts = 0;
+		const maxAttempts = 3;
+
+		while (attempts < maxAttempts) {
+			try {
+				attempts++;
+				const fallbackCompletion = await openai.chat.completions.create({
+					model: "@preset/break-the-ice-berg-default",
+					messages: [
+						{
+							role: "system",
+							content: "Generate a single engaging ice-breaker question. Respond with ONLY the ONE question text, no quotes or formatting."
+						},
+						{
+							role: "user",
+							content: `Generate 1 ice-breaker question for style: ${stylePrompt}, tone: ${tonePrompt}`
+						}
+					],
+					max_tokens: 100,
+					temperature: 0.7,
+				});
+
+				const fallbackContent = fallbackCompletion.choices[0]?.message?.content?.trim();
+				if (fallbackContent) {
+					const cleanedFallback = fallbackContent.replace(/^["']|["']$/g, '').trim();
+					if (cleanedFallback.length > 0) {
+						try {
+							const fallbackQuestion: Doc<"questions"> | null = await ctx.runMutation(api.questions.saveAIQuestion, {
+								text: cleanedFallback,
+								style: randomStyle.id,
+								tone: randomTone.id,
+								tags: [],
+							});
+							return fallbackQuestion;
+						} catch (error) {
+							console.error("Failed to save fallback question:", error);
+						}
+					}
 				}
+				break; // Success or unrecoverable empty response
+			} catch (error: any) {
+				const isRateLimit = error.status === 429 || error.message?.includes("429");
+				console.error(`Fallback Attempt ${attempts} failed (${isRateLimit ? "Rate Limit" : "Error"}):`, error);
+
+				if (attempts >= maxAttempts) {
+					break;
+				}
+
+				let waitTime = 1000 * Math.pow(2, attempts - 1);
+				if (error.status === 429) {
+					const retryAfter = error.headers?.['retry-after'];
+					if (retryAfter) {
+						const seconds = parseInt(retryAfter);
+						waitTime = !isNaN(seconds) ? seconds * 1000 : 1000;
+					}
+				}
+				await new Promise(resolve => setTimeout(resolve, waitTime));
 			}
 		}
 		return null;
@@ -147,6 +174,11 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
 		}
 
+		const blockedQuestions = await ctx.runQuery(api.users.getBlockedQuestions, { userId: user._id });
+		if (blockedQuestions.length > 0) {
+			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these blocked questions:\n- ${blockedQuestions.join('\n- ')}`;
+		}
+
 		if (!prompt) {
 			throw new Error("Prompt or Style/Tone must be provided");
 		}
@@ -191,6 +223,7 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
     - Do not use markdown formatting (no \`\`\`json wrappers).
     - Do not include explanations or comments.
     - Do not number the items in the array (e.g. no "1. {...}").
+		- DO NOTprovide your own examples of any generated content. No dashes, no lists.
     
     Example format: [{"text": "Question 1", "style": "s1", "tone": "t1"}, {"text": "Question 2", "style": "s2", "tone": "t2"}]
     
@@ -199,6 +232,7 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
     - Each question should be a string in the JSON array
     - Avoid questions too similar to existing ones
     - Make questions engaging and conversation-starting
+		- Avoid being verbose; keep it short and sweet.
     - Only ONE question per text. There should only be one question mark at the end of the text.`
 						},
 						{
@@ -230,7 +264,9 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 				if (!generatedContent) {
 					console.log(`Attempt ${attempts}: No content generated`);
 					if (attempts < maxAttempts) {
-						await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+						const waitTime = 1000 * Math.pow(2, attempts - 1);
+						console.log(`No content generated. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+						await new Promise(resolve => setTimeout(resolve, waitTime));
 						continue;
 					}
 					throw new Error("Failed to generate question after multiple attempts");
@@ -240,7 +276,9 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 				if (generatedContent.length < 10) {
 					console.log(`Attempt ${attempts}: Response too short (${generatedContent.length} chars):`, generatedContent);
 					if (attempts < maxAttempts) {
-						await new Promise(resolve => setTimeout(resolve, 1000));
+						const waitTime = 1000 * Math.pow(2, attempts - 1);
+						console.log(`Response too short. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+						await new Promise(resolve => setTimeout(resolve, waitTime));
 						continue;
 					}
 					throw new Error("AI response too short");
@@ -249,12 +287,33 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 				// If we get here, we have content, so break out of the retry loop
 				break;
 
-			} catch (error) {
-				console.error(`Attempt ${attempts} failed:`, error);
+			} catch (error: any) {
+				const isRateLimit = error.status === 429 || error.message?.includes("429");
+				console.error(`Attempt ${attempts} failed (${isRateLimit ? "Rate Limit" : "Error"}):`, error);
+
 				if (attempts >= maxAttempts) {
 					throw error;
 				}
-				await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+
+				let waitTime = 1000 * Math.pow(2, attempts - 1); // Exponential backoff by default
+				if (error.status === 429) {
+					const retryAfter = error.headers?.['retry-after'];
+					if (retryAfter) {
+						const seconds = parseInt(retryAfter);
+						if (!isNaN(seconds)) {
+							waitTime = seconds * 1000;
+						} else {
+							// Could be a date string
+							const retryDate = new Date(retryAfter).getTime();
+							if (!isNaN(retryDate)) {
+								waitTime = Math.max(1000, retryDate - Date.now());
+							}
+						}
+					}
+					console.log(`Respecting 429 Rate Limit. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+				}
+
+				await new Promise(resolve => setTimeout(resolve, waitTime));
 			}
 		}
 
