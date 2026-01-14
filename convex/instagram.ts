@@ -115,7 +115,7 @@ export const postToInstagram = action({
             return;
         }
 
-        console.log(`Sending question ${question._id} to n8n: ${imageUrl}`);
+        console.log(`Sending question ${question._id} to ${webhookUrl}: ${imageUrl}`);
 
         const response = await fetch(webhookUrl, {
             method: "POST",

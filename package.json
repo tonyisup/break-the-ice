@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.46.1",
-    "@convex-dev/auth": "^0.0.80",
     "@playwright/test": "^1.56.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
