@@ -37,7 +37,7 @@ function AdminComponentWrapper() {
 }
 
 function StyleManager() {
-  const styles = useQuery(api.styles.getStyles);
+  const styles = useQuery(api.styles.getStyles, {});
   const createStyle = useMutation(api.styles.createStyle);
   const updateStyle = useMutation(api.styles.updateStyle);
   const deleteStyle = useMutation(api.styles.deleteStyle);
@@ -64,7 +64,6 @@ function StyleManager() {
         structure: newStyleStructure,
         color: newStyleColor,
         icon: newStyleIcon,
-        examples: newStyleExamples.filter(ex => ex.trim() !== ''),
         promptGuidanceForAI: newStylePromptGuidance,
         order: newStyleOrder ? parseFloat(newStyleOrder) : undefined,
       });
@@ -89,7 +88,6 @@ function StyleManager() {
         structure: editingStyle.structure,
         color: editingStyle.color,
         icon: editingStyle.icon,
-        examples: editingStyle.examples?.filter(ex => ex.trim() !== ''),
         promptGuidanceForAI: editingStyle.promptGuidanceForAI,
         order: editingStyle.order,
       });
@@ -367,51 +365,6 @@ function StyleManager() {
                   </td>
                   <td className="p-4 align-top">
                     {editingStyle?._id === style._id ? (
-                      <div className="space-y-2 max-w-xs">
-                        {(editingStyle.examples || ['']).map((example, index) => (
-                          <div key={index} className="flex gap-1">
-                            <textarea
-                              rows={2}
-                              value={example}
-                              onChange={(e) => {
-                                const updated = [...(editingStyle.examples || [''])];
-                                updated[index] = e.target.value;
-                                setEditingStyle({ ...editingStyle, examples: updated });
-                              }}
-                              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                            <button
-                              onClick={() => {
-                                const updated = (editingStyle.examples || []).filter((_, i) => i !== index);
-                                setEditingStyle({ ...editingStyle, examples: updated.length > 0 ? updated : [''] });
-                              }}
-                              className="text-red-500 p-1"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                        ))}
-                        <button
-                          onClick={() => setEditingStyle({ ...editingStyle, examples: [...(editingStyle.examples || []), ''] })}
-                          className="text-[10px] text-blue-500 hover:text-blue-600 font-medium"
-                        >
-                          + Add Example
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="max-w-xs overflow-hidden">
-                        <ul className="list-disc list-inside text-xs text-gray-600 dark:text-gray-400">
-                          {(style.examples || (style.example ? [style.example] : [])).map((ex, i) => (
-                            <li key={i} className="truncate">{ex}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-4 align-top">
-                    {editingStyle?._id === style._id ? (
                       <textarea
                         rows={3}
                         value={editingStyle.promptGuidanceForAI ?? ''}
@@ -537,52 +490,6 @@ function StyleManager() {
                     />
                   ) : (
                     <span className="text-gray-600 dark:text-gray-400 text-sm">{style.structure}</span>
-                  )}
-                </div>
-
-                {/* Examples */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Examples</label>
-                  {editingStyle?._id === style._id ? (
-                    <div className="space-y-2">
-                      {(editingStyle.examples || ['']).map((example, index) => (
-                        <div key={index} className="flex gap-2">
-                          <textarea
-                            rows={2}
-                            value={example}
-                            onChange={(e) => {
-                              const updated = [...(editingStyle.examples || [''])];
-                              updated[index] = e.target.value;
-                              setEditingStyle({ ...editingStyle, examples: updated });
-                            }}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                          <button
-                            onClick={() => {
-                              const updated = (editingStyle.examples || []).filter((_, i) => i !== index);
-                              setEditingStyle({ ...editingStyle, examples: updated.length > 0 ? updated : [''] });
-                            }}
-                            className="p-2 text-red-500"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        onClick={() => setEditingStyle({ ...editingStyle, examples: [...(editingStyle.examples || []), ''] })}
-                        className="text-sm text-blue-500 font-medium"
-                      >
-                        + Add Example
-                      </button>
-                    </div>
-                  ) : (
-                    <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400">
-                      {(style.examples || (style.example ? [style.example] : [])).map((ex, i) => (
-                        <li key={i}>{ex}</li>
-                      ))}
-                    </ul>
                   )}
                 </div>
 

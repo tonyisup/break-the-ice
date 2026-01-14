@@ -27,6 +27,7 @@ import {
 	SidebarGroupContent,
 } from "@/components/ui/sidebar"
 import { UserButton } from "@clerk/clerk-react"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 const items = [
 	{
@@ -133,6 +134,12 @@ export function AdminSidebar() {
 								<span className="text-xs text-muted-foreground">Manage Account</span>
 							</div>
 						</div>
+					</SidebarMenuItem>
+					<SidebarMenuItem>
+						<ThemeToggle
+							className="w-full justify-start gap-3 h-9 border-none bg-transparent hover:bg-accent text-sidebar-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-0 px-2"
+							labelClassName="group-data-[collapsible=icon]:hidden"
+						/>
 					</SidebarMenuItem>
 					<Separator className="my-2 opacity-50" />
 					<SidebarMenuItem>
