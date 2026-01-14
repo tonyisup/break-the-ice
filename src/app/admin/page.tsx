@@ -1,127 +1,197 @@
-import React, { useState } from 'react';
-import { Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
-import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
-import { useTheme } from '../../hooks/useTheme';
-import { Link } from 'react-router-dom';
-import { HouseIcon } from '@/components/ui/icons/icons';
-import { AnimatePresence } from 'framer-motion';
-import { AIQuestionGenerator } from '../../components/ai-question-generator/ai-question-generator';
+"use client"
 
-const AdminPage: React.FC = () => {
-  return (
-    <main>
-      <Unauthenticated>
-        <SignInButton />
-      </Unauthenticated>
-      <Authenticated>
-        <AdminComponentWrapper />
-      </Authenticated>
-      <AuthLoading>
-        <p>Still loading</p>
-      </AuthLoading>
-    </main>
-  )
-};
+import * as React from "react"
+import { useQuery, useMutation } from "convex/react"
+import { api } from "../../../convex/_generated/api"
+import {
+  MessageSquare,
+  Users,
+  ShieldAlert,
+  Copy,
+  Trash2,
+  TrendingUp,
+  AlertCircle,
+  Plus,
+  RefreshCw,
+  ArrowRight
+} from "lucide-react"
 
-function AdminComponentWrapper() {
-  const { isSignedIn, user } = useUser();
-  if (!isSignedIn) {
-    return <div>You are not logged in</div>;
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Link } from "react-router-dom"
+import { AIQuestionGenerator } from "@/components/ai-question-generator/ai-question-generator"
+import { AnimatePresence } from "framer-motion"
+import { Badge } from "@/components/ui/badge"
+
+export default function AdminDashboard() {
+  const stats = useQuery(api.questions.getAdminStats)
+  const [showGenerator, setShowGenerator] = React.useState(false)
+
+  if (!stats) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 animate-pulse">
+        {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-muted rounded-2xl" />)}
+      </div>
+    )
   }
-  if (!user?.publicMetadata?.isAdmin) {
-    return <div>You are not an admin</div>;
-  }
-  return <AdminComponent />;
-}
-function AdminComponent() {
-  const { theme, setTheme } = useTheme();
-  const [showAIGenerator, setShowAIGenerator] = useState(false);
 
-  const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
-  };
+  const statCards = [
+    {
+      title: "Total Questions",
+      value: stats.questions.total,
+      description: `${stats.questions.public} Public, ${stats.questions.pending} Pending`,
+      icon: MessageSquare,
+      color: "text-blue-600",
+      bgBase: "bg-blue-500/10",
+      link: "/admin/questions"
+    },
+    {
+      title: "Active Users",
+      value: stats.users.total,
+      description: `${stats.users.casual} Casual Plan Users`,
+      icon: Users,
+      color: "text-purple-600",
+      bgBase: "bg-purple-500/10",
+      link: "/admin/users"
+    },
+    {
+      title: "Feedback",
+      value: stats.feedback.total,
+      description: `${stats.feedback.new} New entries to review`,
+      icon: ShieldAlert,
+      color: "text-amber-600",
+      bgBase: "bg-amber-500/10",
+      link: "/admin/feedback"
+    },
+    {
+      title: "Duplicates",
+      value: stats.duplicates.pending,
+      description: "Potential duplicates detected",
+      icon: Copy,
+      color: "text-red-600",
+      bgBase: "bg-red-500/10",
+      link: "/admin/duplicates"
+    }
+  ]
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <Link to="/" className="text-gray-500 flex items-center gap-2 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors text-sm sm:text-base">
-            <HouseIcon />
-            Home
-          </Link>
-          <button
-            onClick={() => setShowAIGenerator(true)}
-            className="p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors text-white"
-          >
-            🤖 AI Generator
-          </button>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-              title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-            >
-              {theme === 'light' ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              )}
-            </button>
-            <div className="p-2">
-              <UserButton />
-            </div>
-          </div>
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          <p className="text-muted-foreground">Overview of your ice-breaker ecosystem.</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Link to="/admin/questions" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Questions</h2>
-            <p className="text-gray-600 dark:text-gray-400">Create, edit, and delete questions.</p>
-          </Link>
-          <Link to="/admin/tags" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Tags</h2>
-            <p className="text-gray-600 dark:text-gray-400">Create, edit, and delete tags.</p>
-          </Link>
-          <Link to="/admin/models" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Models</h2>
-            <p className="text-gray-600 dark:text-gray-400">Create, edit, and delete models.</p>
-          </Link>
-          <Link to="/admin/styles" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Styles</h2>
-            <p className="text-gray-600 dark:text-gray-400">Create, edit, and delete styles.</p>
-          </Link>
-          <Link to="/admin/tones" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Tones</h2>
-            <p className="text-gray-600 dark:text-gray-400">Create, edit, and delete tones.</p>
-          </Link>
-          <Link to="/admin/duplicates" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Review Duplicates</h2>
-            <p className="text-gray-600 dark:text-gray-400">Review AI-detected duplicate questions.</p>
-          </Link>
-          <Link to="/admin/duplicates/completed" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Completed Duplicate Reviews</h2>
-            <p className="text-gray-600 dark:text-gray-400">View history of completed duplicate reviews.</p>
-          </Link>
-          <Link to="/admin/prune" className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Prune Stale Questions</h2>
-            <p className="text-gray-600 dark:text-gray-400">Prune stale questions from the database.</p>
-          </Link>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setShowGenerator(true)} className="gap-2 shadow-lg shadow-primary/20">
+            <Plus className="size-4" />
+            Generate Questions
+          </Button>
         </div>
       </div>
-      
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {statCards.map((card) => (
+          <Link key={card.title} to={card.link} className="block group">
+            <Card className="hover:shadow-md hover:border-primary/20 transition-all border-muted/60 rounded-2xl overflow-hidden">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between space-y-0 pb-2">
+                  <p className="text-sm font-medium text-muted-foreground">{card.title}</p>
+                  <div className={`p-2 rounded-lg ${card.bgBase} ${card.color}`}>
+                    <card.icon className="size-4" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="text-2xl font-bold">{card.value}</div>
+                  <p className="text-xs text-muted-foreground mt-1 group-hover:text-primary transition-colors flex items-center gap-1">
+                    {card.description}
+                    <ArrowRight className="size-3 opacity-0 group-hover:opacity-100 transition-all translate-x-[-4px] group-hover:translate-x-0" />
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="rounded-2xl border-muted/60 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <TrendingUp className="size-5 text-green-600" />
+              Quick Actions
+            </CardTitle>
+            <CardDescription>Perform common administrative maintenance.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="flex items-center justify-between p-4 rounded-xl border bg-muted/30 group hover:bg-muted/50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-red-100 text-red-600">
+                  <Trash2 className="size-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Stale Questions</p>
+                  <p className="text-xs text-muted-foreground">{stats.staleCount} questions candidates for pruning</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/admin/prune">Manage <ArrowRight className="size-3 ml-1" /></Link>
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between p-4 rounded-xl border bg-muted/30 group hover:bg-muted/50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
+                  <MessageSquare className="size-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Pending Review</p>
+                  <p className="text-xs text-muted-foreground">{stats.questions.pending} user-submitted questions</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/admin/questions">Review <ArrowRight className="size-3 ml-1" /></Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-muted/60 shadow-sm bg-primary/5 border-primary/10">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ShieldAlert className="size-5 text-primary" />
+              System Status
+            </CardTitle>
+            <CardDescription>AIGC and Infrastructure health.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm">Database Health</span>
+              <Badge variant="default" className="bg-green-500 hover:bg-green-500 h-2 w-2 rounded-full p-0" />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm">AI Generation Engine</span>
+              <Badge variant="default" className="bg-green-500 hover:bg-green-500 h-2 w-2 rounded-full p-0" />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Global Questions</span>
+              <span className="font-mono text-xs">{stats.questions.total}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Pruned Storage</span>
+              <span className="font-mono text-xs">{stats.questions.pruned} docs</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <AnimatePresence>
-        {showAIGenerator && (
+        {showGenerator && (
           <AIQuestionGenerator
-            onQuestionGenerated={() => setShowAIGenerator(false)}
-            onClose={() => setShowAIGenerator(false)}
+            onQuestionGenerated={() => setShowGenerator(false)}
+            onClose={() => setShowGenerator(false)}
           />
         )}
       </AnimatePresence>
     </div>
-  );
-};
-
-export default AdminPage;
+  )
+}

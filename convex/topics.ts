@@ -13,8 +13,10 @@ export const getTopics = query({
       .withIndex("by_order")
       .collect();
 
-    // Filter by organizationId
-    return topics.filter(t => t.organizationId === args.organizationId);
+    if (args.organizationId) {
+      return topics.filter(t => t.organizationId === args.organizationId);
+    }
+    return topics;
   },
 });
 

@@ -886,3 +886,13 @@ export const getBlockedQuestions = query({
 			.map((q) => q.text);
 	},
 })
+
+export const getUsers = query({
+	args: {},
+	handler: async (ctx) => {
+		return await ctx.db
+			.query("users")
+			.order("desc")
+			.collect();
+	},
+});

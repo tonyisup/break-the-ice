@@ -12,16 +12,18 @@ import Root from "./Root";
 import LikedQuestionsPage from "./app/liked/page";
 import QuestionsPage from "./app/admin/questions/page";
 import TagsPage from "./app/admin/tags/page";
-import ModelsPage from "./app/admin/models/page";
 import SettingsPage from "./app/settings/page";
 import StylesPage from "./app/admin/styles/page";
 import TonesPage from "./app/admin/tones/page";
+import FeedbackPage from "./app/admin/feedback/page";
+import UsersPage from "./app/admin/users/page";
+import TopicsPage from "./app/admin/topics/page";
 import HistoryPage from "./app/history/page";
 import QuestionPage from "./app/question/page";
 import DuplicatesPage from "./app/admin/duplicates/page";
-import IndividualQuestionPage from "./app/admin/questions/[id]/page";
-import DuplicateDetectionCompletedPage from "./app/admin/duplicates/completed/page";
+import PrunePage from "./app/admin/prune/page";
 import AdminPage from "./app/admin/page";
+import AdminLayout from "./app/admin/layout";
 import AddQuestionPage from "./app/add-question/page";
 import SingleQuestionPage from "./pages/SingleQuestionPage";
 import PrivacyPolicyPage from "./app/privacy/page";
@@ -33,6 +35,7 @@ import ContactPage from "./app/contact/page";
 import FeedbackButton from "./components/FeedbackButton";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -50,16 +53,20 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/history" element={<HistoryPage />} />
                 <Route path="/add-question" element={<AddQuestionPage />} />
-                <Route path="/admin" element={<AdminPage />} />
-                <Route path="/admin/questions" element={<QuestionsPage />} />
-                <Route path="/admin/tags" element={<TagsPage />} />
-                <Route path="/admin/models" element={<ModelsPage />} />
-                <Route path="/admin/styles" element={<StylesPage />} />
-                <Route path="/admin/tones" element={<TonesPage />} />
-                <Route path="/admin/duplicates" element={<DuplicatesPage />} />
-                <Route path="/admin/duplicates/completed" element={<DuplicateDetectionCompletedPage />} />
-                <Route path="/admin/questions/:id" element={<IndividualQuestionPage />} />
-                {/* <Route path="/admin/prune" element={<PrunePage />} /> */}
+                <Route element={<AdminLayout />}>
+                  <Route path="/admin" element={<AdminPage />} />
+                  <Route path="/admin/questions" element={<QuestionsPage />} />
+                  <Route path="/admin/tags" element={<TagsPage />} />
+                  <Route path="/admin/topics" element={<TopicsPage />} />
+                  <Route path="/admin/styles" element={<StylesPage />} />
+                  <Route path="/admin/tones" element={<TonesPage />} />
+                  <Route path="/admin/users" element={<UsersPage />} />
+                  <Route path="/admin/feedback" element={<FeedbackPage />} />
+                  <Route path="/admin/duplicates" element={<DuplicatesPage />} />
+                  <Route path="/admin/prune" element={<PrunePage />} />
+                </Route>
+
+
                 <Route path="/privacy" element={<PrivacyPolicyPage />} />
                 <Route path="/terms" element={<TermsOfServicePage />} />
                 <Route path="/data-retention" element={<DataRetentionPage />} />

@@ -1276,3 +1276,47 @@ export const countQuestions = internalQuery({
     return (await ctx.db.query("questions").collect()).length;
   },
 });
+
+export const getAdminStats = query({
+  args: {},
+  handler: async (ctx) => {
+    await ensureAdmin(ctx);
+
+    const questions = await ctx.db.query("questions").collect();
+    const users = await ctx.db.query("users").collect();
+    const feedback = await ctx.db.query("feedback").collect();
+    const duplicates = await ctx.db.query("duplicateDetections").filter(q => q.eq(q.field("status"), "pending")).collect();
+
+    // Simple stale count (mock logic similar to what prune looks for)
+    const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const staleCount = questions.filter(q =>
+      (q.lastShownAt ?? 0) < oneWeekAgo &&
+      q.totalLikes === 0 &&
+      q.totalShows > 0 &&
+      q.prunedAt === undefined
+    ).length;
+
+    return {
+      questions: {
+        total: questions.length,
+        public: questions.filter(q => q.status === "public" || !q.status).length,
+        pending: questions.filter(q => q.status === "pending").length,
+        pruned: questions.filter(q => q.prunedAt !== undefined).length,
+      },
+      users: {
+        total: users.length,
+        admins: users.filter(u => u.isAdmin).length,
+        casual: users.filter(u => u.subscriptionTier === "casual").length,
+      },
+      feedback: {
+        total: feedback.length,
+        new: feedback.filter(f => f.status === "new").length,
+      },
+      duplicates: {
+        pending: duplicates.length,
+      },
+      staleCount,
+    };
+  },
+});
+

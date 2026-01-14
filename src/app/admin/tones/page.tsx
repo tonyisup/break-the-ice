@@ -1,485 +1,413 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
-import { api } from '../../../../convex/_generated/api';
-import { Doc, Id } from '../../../../convex/_generated/dataModel';
-import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
-import { useTheme } from '../../../hooks/useTheme';
-import { Link } from 'react-router-dom';
-import { HouseIcon, iconMap } from '@/components/ui/icons/icons';
-import { ColorPicker } from '@/components/ui/color-picker';
-import { IconPicker, IconDisplay } from '@/components/ui/icon-picker';
+"use client"
 
-const TonesPage: React.FC = () => {
-  return (
-    <main>
-      <Unauthenticated>
-        <SignInButton />
-      </Unauthenticated>
-      <Authenticated>
-        <AdminComponentWrapper />
-      </Authenticated>
-      <AuthLoading>
-        <p>Still loading</p>
-      </AuthLoading>
-    </main>
-  )
-};
+import * as React from "react"
+import { useQuery, useMutation } from "convex/react"
+import { api } from "../../../../convex/_generated/api"
+import { Doc, Id } from "../../../../convex/_generated/dataModel"
+import {
+	Plus,
+	MoreHorizontal,
+	Pencil,
+	Trash2,
+	Check,
+	X,
+	Music,
+	Search,
+	LayoutGrid,
+	List
+} from "lucide-react"
 
-function AdminComponentWrapper() {
-  const user = useUser();
-  if (!user.isSignedIn) {
-    return <div>You are not logged in</div>;
-  }
-  if (!user.user?.publicMetadata.isAdmin) {
-    return <div>You are not an admin</div>;
-  }
-  return <ToneManager />;
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog"
+import { Icon, IconComponent } from "@/components/ui/icons/icon"
+import { Badge } from "@/components/ui/badge"
+import { ColorPicker } from "@/components/ui/color-picker"
+import { IconPicker } from "@/components/ui/icon-picker"
+import { toast } from "sonner"
+
+export default function TonesPage() {
+	const tones = useQuery(api.tones.getTones)
+	const createTone = useMutation(api.tones.createTone)
+	const updateTone = useMutation(api.tones.updateTone)
+	const deleteTone = useMutation(api.tones.deleteTone)
+
+	const [search, setSearch] = React.useState("")
+	const [editingTone, setEditingTone] = React.useState<Doc<"tones"> | null>(null)
+	const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
+	const [viewMode, setViewMode] = React.useState<"grid" | "list">("list")
+
+	const [newTone, setNewTone] = React.useState({
+		id: "",
+		name: "",
+		description: "",
+		color: "#10b981",
+		icon: "Music",
+		order: 0,
+		promptGuidanceForAI: ""
+	})
+
+	const filteredTones = tones?.filter(t =>
+		t.name.toLowerCase().includes(search.toLowerCase()) ||
+		t.description?.toLowerCase().includes(search.toLowerCase())
+	) ?? []
+
+	const handleCreate = async () => {
+		if (!newTone.name.trim() || !newTone.id.trim()) {
+			toast.error("Name and ID are required")
+			return
+		}
+		try {
+			await createTone({
+				...newTone
+			})
+			toast.success("Tone created successfully")
+			setIsCreateDialogOpen(false)
+			setNewTone({
+				id: "",
+				name: "",
+				description: "",
+				color: "#10b981",
+				icon: "Music",
+				order: (tones?.length ?? 0) + 1,
+				promptGuidanceForAI: ""
+			})
+		} catch (error) {
+			toast.error("Failed to create tone")
+		}
+	}
+
+	const handleUpdate = async (t: Doc<"tones">) => {
+		try {
+			await updateTone({
+				_id: t._id,
+				id: t.id,
+				name: t.name,
+				description: t.description,
+				color: t.color,
+				icon: t.icon,
+				promptGuidanceForAI: t.promptGuidanceForAI,
+				order: t.order
+			})
+			toast.success("Tone updated")
+			setEditingTone(null)
+		} catch (error) {
+			toast.error("Failed to update tone")
+		}
+	}
+
+	const handleDelete = async (id: Id<"tones">) => {
+		if (!confirm("Are you sure you want to delete this tone? This might affect existing questions.")) return
+		try {
+			await deleteTone({ id })
+			toast.success("Tone deleted")
+		} catch (error) {
+			toast.error("Failed to delete tone")
+		}
+	}
+
+	if (!tones) {
+		return (
+			<div className="flex flex-col gap-4 animate-pulse">
+				<div className="h-10 bg-muted rounded w-1/4" />
+				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+					{[1, 2, 3].map(i => <div key={i} className="h-48 bg-muted rounded" />)}
+				</div>
+			</div>
+		)
+	}
+
+	return (
+		<div className="space-y-8">
+			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+				<div>
+					<h2 className="text-3xl font-bold tracking-tight">Question Tones</h2>
+					<p className="text-muted-foreground">Define the emotional resonance and personality of questions.</p>
+				</div>
+				<div className="flex items-center gap-2">
+					<div className="flex items-center border rounded-md p-1 bg-muted/50 mr-2">
+						<Button
+							variant={viewMode === "grid" ? "secondary" : "ghost"}
+							size="icon"
+							className="size-8"
+							onClick={() => setViewMode("grid")}
+						>
+							<LayoutGrid className="size-4" />
+						</Button>
+						<Button
+							variant={viewMode === "list" ? "secondary" : "ghost"}
+							size="icon"
+							className="size-8"
+							onClick={() => setViewMode("list")}
+						>
+							<List className="size-4" />
+						</Button>
+					</div>
+					<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+						<DialogTrigger asChild>
+							<Button className="gap-2">
+								<Plus className="size-4" />
+								Add Tone
+							</Button>
+						</DialogTrigger>
+						<DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+							<DialogHeader>
+								<DialogTitle>Create New Tone</DialogTitle>
+								<DialogDescription>Define a new emotional tone for questions.</DialogDescription>
+							</DialogHeader>
+							<div className="grid gap-6 py-4">
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Tone ID (Slug)</label>
+										<Input
+											placeholder="e.g. funny"
+											value={newTone.id}
+											onChange={e => setNewTone({ ...newTone, id: e.target.value })}
+										/>
+									</div>
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Display Name</label>
+										<Input
+											placeholder="e.g. Funny & Silly"
+											value={newTone.name}
+											onChange={e => setNewTone({ ...newTone, name: e.target.value })}
+										/>
+									</div>
+								</div>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Visual Identity</label>
+										<div className="flex items-center gap-4">
+											<ColorPicker color={newTone.color} onChange={c => setNewTone({ ...newTone, color: c })} />
+											<IconPicker value={newTone.icon} onChange={i => setNewTone({ ...newTone, icon: i })} />
+										</div>
+									</div>
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Display Order</label>
+										<Input
+											type="number"
+											value={newTone.order}
+											onChange={e => setNewTone({ ...newTone, order: parseInt(e.target.value) })}
+										/>
+									</div>
+								</div>
+								<div className="grid gap-2">
+									<label className="text-sm font-medium">Description</label>
+									<Input
+										placeholder="Short summary of this tone"
+										value={newTone.description}
+										onChange={e => setNewTone({ ...newTone, description: e.target.value })}
+									/>
+								</div>
+								<div className="grid gap-2">
+									<label className="text-sm font-medium">AI Guidance</label>
+									<textarea
+										className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										placeholder="Provide specific instructions for the LLM on how to achieve this tone..."
+										value={newTone.promptGuidanceForAI}
+										onChange={e => setNewTone({ ...newTone, promptGuidanceForAI: e.target.value })}
+									/>
+								</div>
+							</div>
+							<DialogFooter>
+								<Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
+								<Button onClick={handleCreate}>Create Tone</Button>
+							</DialogFooter>
+						</DialogContent>
+					</Dialog>
+				</div>
+			</div>
+
+			<div className="flex items-center gap-2 max-w-md bg-white dark:bg-gray-800 rounded-lg px-3 border shadow-sm focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+				<Search className="size-4 text-muted-foreground" />
+				<Input
+					placeholder="Search tones..."
+					value={search}
+					onChange={(e) => setSearch(e.target.value)}
+					className="border-0 shadow-none focus-visible:ring-0 px-1 py-1"
+				/>
+				{search && <Button variant="ghost" size="icon" className="size-6" onClick={() => setSearch("")}><X className="size-3" /></Button>}
+			</div>
+
+			{viewMode === "grid" ? (
+				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+					{filteredTones.map((tone) => (
+						<div key={tone._id} className="group relative bg-card border rounded-2xl p-6 shadow-sm hover:shadow-md transition-all flex flex-col gap-4">
+							<div className="flex items-start justify-between">
+								<div className="flex items-center gap-3">
+									<div
+										className="p-3 rounded-xl shadow-inner border border-white/20"
+										style={{ backgroundColor: `${tone.color}20`, color: tone.color }}
+									>
+										<IconComponent icon={tone.icon as any} size={24} color={tone.color} />
+									</div>
+									<div>
+										<h3 className="font-bold text-lg">{tone.name}</h3>
+										<p className="text-xs text-muted-foreground font-mono">{tone.id}</p>
+									</div>
+								</div>
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<Button variant="ghost" size="icon" className="size-8">
+											<MoreHorizontal className="size-4" />
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="end">
+										<DropdownMenuItem className="gap-2" onClick={() => setEditingTone(tone)}>
+											<Pencil className="size-3.5" />
+											Edit Tone
+										</DropdownMenuItem>
+										<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={() => handleDelete(tone._id)}>
+											<Trash2 className="size-3.5" />
+											Delete
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							</div>
+
+							<div className="space-y-2 flex-1">
+								<p className="text-sm text-muted-foreground line-clamp-3">{tone.description || "No description provided."}</p>
+							</div>
+
+							<div className="flex items-center justify-between pt-4 border-t text-[10px]">
+								<Badge variant="outline" className="font-mono">ORDER: {tone.order ?? "N/A"}</Badge>
+								<span className="text-muted-foreground">ID: {tone._id.slice(0, 8)}...</span>
+							</div>
+						</div>
+					))}
+				</div>
+			) : (
+				<div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+					<table className="w-full text-sm text-left">
+						<thead className="bg-muted/50 border-b text-muted-foreground font-medium uppercase text-xs tracking-wider">
+							<tr>
+								<th className="px-6 py-4">Visual</th>
+								<th className="px-6 py-4">Name / ID</th>
+								<th className="px-6 py-4">Order</th>
+								<th className="px-6 py-4 text-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y">
+							{filteredTones.map((tone) => (
+								<tr key={tone._id} className="hover:bg-muted/30 transition-colors">
+									<td className="px-6 py-4">
+										<div
+											className="size-10 rounded-lg flex items-center justify-center border shadow-sm"
+											style={{ backgroundColor: `${tone.color}15`, borderColor: `${tone.color}30`, color: tone.color }}
+										>
+											<IconComponent icon={tone.icon as any} size={18} color={tone.color} />
+										</div>
+									</td>
+									<td className="px-6 py-4">
+										<div className="flex flex-col">
+											<span className="font-bold">{tone.name}</span>
+											<span className="text-[10px] text-muted-foreground font-mono">{tone.id}</span>
+										</div>
+									</td>
+									<td className="px-6 py-4">
+										<Badge variant="outline" className="font-mono text-[10px]">{tone.order ?? "—"}</Badge>
+									</td>
+									<td className="px-6 py-4 text-right">
+										<div className="flex items-center justify-end gap-1">
+											<Button variant="ghost" size="icon" className="size-8" onClick={() => setEditingTone(tone)}>
+												<Pencil className="size-3.5" />
+											</Button>
+											<Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(tone._id)}>
+												<Trash2 className="size-3.5" />
+											</Button>
+										</div>
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+			)}
+
+			{/* Edit Dialog */}
+			<Dialog open={!!editingTone} onOpenChange={(open) => !open && setEditingTone(null)}>
+				<DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+					{editingTone && (
+						<>
+							<DialogHeader>
+								<DialogTitle>Edit Tone: {editingTone.name}</DialogTitle>
+								<DialogDescription>Modify the properties for this emotional tone.</DialogDescription>
+							</DialogHeader>
+							<div className="grid gap-6 py-4">
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Tone ID (Slug)</label>
+										<Input
+											value={editingTone.id}
+											onChange={e => setEditingTone({ ...editingTone, id: e.target.value })}
+										/>
+									</div>
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Display Name</label>
+										<Input
+											value={editingTone.name}
+											onChange={e => setEditingTone({ ...editingTone, name: e.target.value })}
+										/>
+									</div>
+								</div>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Visual Identity</label>
+										<div className="flex items-center gap-4">
+											<ColorPicker color={editingTone.color} onChange={c => setEditingTone({ ...editingTone, color: c })} />
+											<IconPicker value={editingTone.icon} onChange={i => setEditingTone({ ...editingTone, icon: i })} />
+										</div>
+									</div>
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Display Order</label>
+										<Input
+											type="number"
+											value={editingTone.order}
+											onChange={e => setEditingTone({ ...editingTone, order: parseInt(e.target.value) })}
+										/>
+									</div>
+								</div>
+								<div className="grid gap-2">
+									<label className="text-sm font-medium">Description</label>
+									<textarea
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={editingTone.description}
+										onChange={e => setEditingTone({ ...editingTone, description: e.target.value })}
+									/>
+								</div>
+								<div className="grid gap-2">
+									<label className="text-sm font-medium">AI Guidance</label>
+									<textarea
+										className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={editingTone.promptGuidanceForAI}
+										onChange={e => setEditingTone({ ...editingTone, promptGuidanceForAI: e.target.value })}
+									/>
+								</div>
+							</div>
+							<DialogFooter>
+								<Button variant="outline" onClick={() => setEditingTone(null)}>Cancel</Button>
+								<Button onClick={() => handleUpdate(editingTone)}>Save Changes</Button>
+							</DialogFooter>
+						</>
+					)}
+				</DialogContent>
+			</Dialog>
+		</div>
+	)
 }
 
-function ToneManager() {
-  const tones = useQuery(api.tones.getTones);
-  const createTone = useMutation(api.tones.createTone);
-  const updateTone = useMutation(api.tones.updateTone);
-  const deleteTone = useMutation(api.tones.deleteTone);
-  const { theme, setTheme } = useTheme();
 
-  const [newToneId, setNewToneId] = useState('');
-  const [newToneName, setNewToneName] = useState('');
-  const [newToneDescription, setNewToneDescription] = useState('');
-  const [newTonePromptGuidance, setNewTonePromptGuidance] = useState('');
-  const [newToneColor, setNewToneColor] = useState('');
-  const [newToneIcon, setNewToneIcon] = useState('');
-  const [newToneOrder, setNewToneOrder] = useState('');
-  const [editingTone, setEditingTone] = useState<Doc<"tones"> | null>(null);
-  const [searchText, setSearchText] = useState('');
-
-  const handleCreateTone = () => {
-    if (newToneName.trim()) {
-      void createTone({
-        id: newToneId,
-        name: newToneName,
-        description: newToneDescription,
-        promptGuidanceForAI: newTonePromptGuidance,
-        color: newToneColor,
-        icon: newToneIcon,
-        order: newToneOrder ? parseFloat(newToneOrder) : undefined,
-      });
-      setNewToneId('');
-      setNewToneName('');
-      setNewToneDescription('');
-      setNewTonePromptGuidance('');
-      setNewToneColor('');
-      setNewToneIcon('');
-      setNewToneOrder('');
-    }
-  };
-
-  const handleUpdateTone = () => {
-    if (editingTone && editingTone.name.trim()) {
-      void updateTone({
-        _id: editingTone._id,
-        id: editingTone.id,
-        name: editingTone.name,
-        description: editingTone.description,
-        promptGuidanceForAI: editingTone.promptGuidanceForAI,
-        color: editingTone.color,
-        icon: editingTone.icon,
-        order: editingTone.order,
-      });
-      setEditingTone(null);
-    }
-  };
-
-  const handleDeleteTone = (id: Id<"tones">) => {
-    void deleteTone({ id });
-  };
-
-  const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-2 sm:p-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <Link to="/admin" className="text-gray-500 flex items-center gap-2 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors text-sm sm:text-base">
-            <HouseIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-            Admin
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <button
-              onClick={toggleTheme}
-              className="p-2 sm:p-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-              title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-            >
-              {theme === 'light' ? (
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              )}
-            </button>
-            <div className="p-1 sm:p-2">
-              <UserButton />
-            </div>
-          </div>
-        </div>
-        <div className="mb-6 sm:mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-4 sm:mb-6">Create New Tone</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tone ID</label>
-              <input
-                type="text"
-                value={newToneId}
-                onChange={(e) => setNewToneId(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter tone id"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tone Name</label>
-              <input
-                type="text"
-                value={newToneName}
-                onChange={(e) => setNewToneName(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter tone name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Color</label>
-              <ColorPicker
-                color={newToneColor}
-                onChange={setNewToneColor}
-                className="w-10"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Icon</label>
-              <IconPicker
-                value={newToneIcon}
-                onChange={setNewToneIcon}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Order</label>
-              <input
-                type="number"
-                value={newToneOrder}
-                onChange={(e) => setNewToneOrder(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter order"
-              />
-            </div>
-          </div>
-          <div className="space-y-4 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</label>
-              <textarea
-                value={newToneDescription}
-                onChange={(e) => setNewToneDescription(e.target.value)}
-                rows={3}
-                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter tone description"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prompt Guidance</label>
-              <textarea
-                value={newTonePromptGuidance}
-                onChange={(e) => setNewTonePromptGuidance(e.target.value)}
-                rows={3}
-                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter tone prompt guidance"
-              />
-            </div>
-          </div>
-          <button
-            onClick={handleCreateTone}
-            className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors text-base"
-          >
-            Create Tone
-          </button>
-        </div>
-        <div className="mb-6 sm:mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Search tones..."
-            />
-            <button
-              onClick={() => setSearchText('')}
-              className="w-full sm:w-auto bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-colors text-base"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-        {/* Desktop Table View */}
-        <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
-                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Name</th>
-                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Description</th>
-                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Prompt Guidance</th>
-                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Color</th>
-                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Icon</th>
-                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Order</th>
-                <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {tones?.filter(tone => {
-                const searchLower = searchText.toLowerCase();
-                return tone.name.toLowerCase().includes(searchLower) ||
-                  (tone.description && tone.description.toLowerCase().includes(searchLower))
-              }).map((tone) => (
-                <tr key={tone._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                  <td className="p-4 align-top">
-                    {editingTone?._id === tone._id ? (
-                      <input
-                        type="text"
-                        value={editingTone.name}
-                        onChange={(e) => setEditingTone({ ...editingTone, name: e.target.value })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    ) : (
-                      <span className="text-gray-900 dark:text-white">{tone.name}</span>
-                    )}
-                  </td>
-                  <td className="p-4 align-top">
-                    {editingTone?._id === tone._id ? (
-                      <textarea
-                        rows={3}
-                        value={editingTone.description ?? ''}
-                        onChange={(e) => setEditingTone({ ...editingTone, description: e.target.value })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    ) : (
-                      <span className="text-gray-600 dark:text-gray-400">{tone.description}</span>
-                    )}
-                  </td>
-                  <td className="p-4 align-top">
-                    {editingTone?._id === tone._id ? (
-                      <textarea
-                        rows={3}
-                        value={editingTone.promptGuidanceForAI}
-                        onChange={(e) => setEditingTone({ ...editingTone, promptGuidanceForAI: e.target.value })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    ) : (
-                      <span className="text-gray-600 dark:text-gray-400">{tone.promptGuidanceForAI}</span>
-                    )}
-                  </td>
-                  <td className="p-4 align-top">
-                    {editingTone?._id === tone._id ? (
-                      <ColorPicker
-                        color={editingTone.color}
-                        onChange={(color) => setEditingTone({ ...editingTone, color })}
-                        className="w-10"
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded border border-gray-200 dark:border-gray-700" style={{ backgroundColor: tone.color }}></div>
-                        <span className="text-gray-600 dark:text-gray-400">{tone.color}</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-4 align-top">
-                    {editingTone?._id === tone._id ? (
-                      <IconPicker
-                        value={editingTone.icon}
-                        onChange={(icon) => setEditingTone({ ...editingTone, icon })}
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <IconDisplay name={tone.icon} className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                        <span className="text-gray-600 dark:text-gray-400">{tone.icon}</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-4 align-top">
-                    {editingTone?._id === tone._id ? (
-                      <input
-                        type="number"
-                        value={editingTone.order ?? ''}
-                        onChange={(e) => setEditingTone({ ...editingTone, order: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    ) : (
-                      <span className="text-gray-600 dark:text-gray-400">{tone.order}</span>
-                    )}
-                  </td>
-                  <td className="p-4 align-top">
-                    <div className="flex gap-2">
-                      {editingTone?._id === tone._id ? (
-                        <div className="flex gap-2">
-                          <button onClick={handleUpdateTone} className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Save</button>
-                          <button onClick={() => setEditingTone(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Cancel</button>
-                        </div>
-                      ) : (
-                        <button onClick={() => setEditingTone(tone)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Edit</button>
-                      )}
-                      <button onClick={() => handleDeleteTone(tone._id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Card View */}
-        <div className="lg:hidden space-y-4">
-          {tones?.filter(tone => {
-            const searchLower = searchText.toLowerCase();
-            return tone.name.toLowerCase().includes(searchLower) ||
-              (tone.description && tone.description.toLowerCase().includes(searchLower))
-          }).map((tone) => (
-            <div key={tone._id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-              <div className="space-y-4">
-                {/* Name */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Name</label>
-                  {editingTone?._id === tone._id ? (
-                    <input
-                      type="text"
-                      value={editingTone.name}
-                      onChange={(e) => setEditingTone({ ...editingTone, name: e.target.value })}
-                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  ) : (
-                    <span className="text-gray-900 dark:text-white text-base">{tone.name}</span>
-                  )}
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</label>
-                  {editingTone?._id === tone._id ? (
-                    <textarea
-                      rows={3}
-                      value={editingTone.description ?? ''}
-                      onChange={(e) => setEditingTone({ ...editingTone, description: e.target.value })}
-                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  ) : (
-                    <span className="text-gray-600 dark:text-gray-400 text-sm">{tone.description}</span>
-                  )}
-                </div>
-
-                {/* Color and Icon */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Color</label>
-                    {editingTone?._id === tone._id ? (
-                      <ColorPicker
-                        color={editingTone.color}
-                        onChange={(color) => setEditingTone({ ...editingTone, color })}
-                        className="w-10"
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded border border-gray-200 dark:border-gray-700" style={{ backgroundColor: tone.color }}></div>
-                        <span className="text-gray-600 dark:text-gray-400 text-sm">{tone.color}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Icon</label>
-                    {editingTone?._id === tone._id ? (
-                      <IconPicker
-                        value={editingTone.icon}
-                        onChange={(icon) => setEditingTone({ ...editingTone, icon })}
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <IconDisplay name={tone.icon} className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                        <span className="text-gray-600 dark:text-gray-400 text-sm">{tone.icon}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Prompt Guidance */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prompt Guidance</label>
-                  {editingTone?._id === tone._id ? (
-                    <textarea
-                      rows={3}
-                      value={editingTone.promptGuidanceForAI}
-                      onChange={(e) => setEditingTone({ ...editingTone, promptGuidanceForAI: e.target.value })}
-                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  ) : (
-                    <span className="text-gray-600 dark:text-gray-400 text-sm">{tone.promptGuidanceForAI}</span>
-                  )}
-                </div>
-
-                {/* Order */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Order</label>
-                  {editingTone?._id === tone._id ? (
-                    <input
-                      type="number"
-                      value={editingTone.order ?? ''}
-                      onChange={(e) => setEditingTone({ ...editingTone, order: e.target.value ? parseFloat(e.target.value) : undefined })}
-                      className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  ) : (
-                    <span className="text-gray-600 dark:text-gray-400 text-sm">{tone.order}</span>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    {editingTone?._id === tone._id ? (
-                      <>
-                        <button 
-                          onClick={handleUpdateTone} 
-                          className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-lg font-medium transition-colors text-base"
-                        >
-                          Save Changes
-                        </button>
-                        <button 
-                          onClick={() => setEditingTone(null)} 
-                          className="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-4 py-3 rounded-lg font-medium transition-colors text-base"
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <button 
-                        onClick={() => setEditingTone(tone)} 
-                        className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-3 rounded-lg font-medium transition-colors text-base"
-                      >
-                        Edit Tone
-                      </button>
-                    )}
-                    <button 
-                      onClick={() => handleDeleteTone(tone._id)} 
-                      className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-lg font-medium transition-colors text-base"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default TonesPage;
