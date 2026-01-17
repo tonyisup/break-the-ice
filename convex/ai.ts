@@ -416,8 +416,10 @@ export const populateMissingEmbeddings = internalAction({
 			questionsMissingEmbeddings,
 			errors,
 		};
-		const { subject, html } = createPopulateMissingEmbeddingsEmail(results);
-		await ctx.runAction(internal.email.sendEmail, { subject, html });
+		if (questionsProcessed > 0 || errors.length > 0) {
+			const { subject, html } = createPopulateMissingEmbeddingsEmail(results);
+			await ctx.runAction(internal.email.sendEmail, { subject, html });
+		}
 	},
 });
 
@@ -443,8 +445,10 @@ export const populateMissingStyleEmbeddings = internalAction({
 			stylesMissingEmbeddings,
 			errors,
 		};
-		const { subject, html } = createPopulateMissingStyleEmbeddingsEmail(results);
-		await ctx.runAction(internal.email.sendEmail, { subject, html });
+		if (stylesProcessed > 0 || errors.length > 0) {
+			const { subject, html } = createPopulateMissingStyleEmbeddingsEmail(results);
+			await ctx.runAction(internal.email.sendEmail, { subject, html });
+		}
 	},
 });
 
@@ -470,8 +474,10 @@ export const populateMissingToneEmbeddings = internalAction({
 			tonesMissingEmbeddings,
 			errors,
 		};
-		const { subject, html } = createPopulateMissingToneEmbeddingsEmail(results);
-		await ctx.runAction(internal.email.sendEmail, { subject, html });
+		if (tonesProcessed > 0 || errors.length > 0) {
+			const { subject, html } = createPopulateMissingToneEmbeddingsEmail(results);
+			await ctx.runAction(internal.email.sendEmail, { subject, html });
+		}
 	},
 });
 
