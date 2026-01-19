@@ -259,10 +259,14 @@ export default function InfiniteScrollPage() {
           // Check for staleness in error case too
           if (currentRequestId !== requestIdRef.current) return;
 
-          if (err instanceof Error && err.message.includes("logged in")) {
+          const errorMessage = err instanceof Error
+            ? err.message
+            : (typeof err === "object" && err !== null && "message" in err ? String((err as any).message) : String(err));
+
+          if (errorMessage.includes("logged in")) {
             setShowAuthCTA(true);
             setHasMore(false);
-          } else if (err instanceof Error && err.message.includes("limit reached")) {
+          } else if (errorMessage.includes("limit reached")) {
             setShowUpgradeCTA(true);
             setHasMore(false);
           }

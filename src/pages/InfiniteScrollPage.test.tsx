@@ -57,6 +57,7 @@ vi.mock('../../convex/_generated/api', () => ({
     tones: { getTones: 'getTones', getTone: 'getTone' },
     questions: { getNextRandomQuestions: 'getNextRandomQuestions', recordAnalytics: 'recordAnalytics' },
     ai: { generateAIQuestions: 'generateAIQuestions' },
+    users: { getCurrentUser: 'getCurrentUser' },
   },
 }));
 
