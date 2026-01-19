@@ -5,6 +5,10 @@ import { useQuery, useConvex, useAction, useMutation } from 'convex/react';
 import { WorkspaceProvider } from '@/hooks/useWorkspace.tsx';
 import { ModernQuestionCard } from '@/components/modern-question-card';
 
+// Hoisted mocks for dynamic control
+const mockUseAuth = vi.fn();
+const mockUseUser = vi.fn();
+
 // Mocks
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(),
@@ -46,8 +50,13 @@ vi.mock('@/components/modern-question-card', () => ({
 }));
 
 vi.mock('@clerk/clerk-react', () => ({
-  useAuth: () => ({ isSignedIn: true, userId: 'user123' }),
-  useUser: () => ({ isSignedIn: true, user: { id: 'user123' } }),
+  useAuth: () => mockUseAuth(),
+  useUser: () => mockUseUser(),
+  SignInButton: ({ children }: any) => <div data-testid="sign-in-button">{children}</div>,
+}));
+
+vi.mock('@/components/SignInCTA', () => ({
+  SignInCTA: vi.fn(() => <div data-testid="sign-in-cta">Sign In CTA</div>),
 }));
 
 // Mock api object structure
@@ -77,6 +86,10 @@ describe('InfiniteScrollPage', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+
+    // Default auth state: Signed In
+    mockUseAuth.mockReturnValue({ isSignedIn: true, userId: 'user123' });
+    mockUseUser.mockReturnValue({ isSignedIn: true, user: { id: 'user123' } });
 
     // Mock IntersectionObserver
     global.IntersectionObserver = class IntersectionObserver {
@@ -131,5 +144,26 @@ describe('InfiniteScrollPage', () => {
     expect(q2Call[0].style).toEqual(mockStyles[1]);
     expect(q2Call[0].tone).toEqual(mockTones[1]);
     expect(q2Call[0].gradient).toEqual(['#222222', '#BBBBBB']);
+  });
+
+  it('shows SignInCTA when not signed in and needs questions', async () => {
+    // Override mock for this test
+    mockUseAuth.mockReturnValue({ isSignedIn: false, userId: null });
+    mockUseUser.mockReturnValue({ isSignedIn: false, user: null });
+
+    // Return empty questions to trigger generation
+    (useConvex as any).mockReturnValue({
+      query: vi.fn().mockResolvedValue([]),
+    });
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+        expect(screen.getByTestId('sign-in-cta')).toBeDefined();
+    });
   });
 });

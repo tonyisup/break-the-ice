@@ -221,6 +221,12 @@ export default function InfiniteScrollPage() {
 
       // 2. If not enough, generate more
       if (combinedQuestions.length < BATCH_SIZE) {
+        if (!user.isSignedIn) {
+          setShowAuthCTA(true);
+          setHasMore(false);
+          return;
+        }
+
         const needed = BATCH_SIZE - combinedQuestions.length;
         // Limit generation to avoid long waits, max 3 at a time
         const countToGenerate = Math.min(needed, 3);
