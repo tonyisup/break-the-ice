@@ -1,0 +1,252 @@
+{
+	"name": "Newsletter Subscription via Webhook (Global Contacts & Segments)",
+	"nodes": [
+		{
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "newsletter-subscribe",
+				"responseMode": "responseNode",
+				"options": {}
+			},
+			"id": "webhook-trigger",
+			"name": "Webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 1,
+			"position": [
+				240,
+				300
+			]
+		},
+		{
+			"parameters": {
+				"method": "POST",
+				"url": "https://api.resend.com/contacts",
+				"sendHeaders": true,
+				"headerParameters": {
+					"parameters": [
+						{
+							"name": "Authorization",
+							"value": "Bearer YOUR_RESEND_API_KEY_HERE"
+						},
+						{
+							"name": "Content-Type",
+							"value": "application/json"
+						}
+					]
+				},
+				"sendBody": true,
+				"specifyBody": "json",
+				"jsonBody": "={\n  \"email\": \"{{ $json.body.email }}\",\n  \"unsubscribed\": false\n}",
+				"options": {}
+			},
+			"id": "resend-create-contact",
+			"name": "Resend: Create Global Contact",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4.1,
+			"position": [
+				460,
+				300
+			],
+			"alwaysOutputData": true,
+			"onError": "continueErrorOutput"
+		},
+		{
+			"parameters": {
+				"method": "POST",
+				"url": "=https://api.resend.com/contacts/{{ $node[\"Webhook\"].json[\"body\"][\"email\"] }}/segments/YOUR_SEGMENT_ID_HERE",
+				"sendHeaders": true,
+				"headerParameters": {
+					"parameters": [
+						{
+							"name": "Authorization",
+							"value": "Bearer YOUR_RESEND_API_KEY_HERE"
+						},
+						{
+							"name": "Content-Type",
+							"value": "application/json"
+						}
+					]
+				},
+				"options": {}
+			},
+			"id": "resend-add-to-segment",
+			"name": "Resend: Add to Segment",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4.1,
+			"position": [
+				680,
+				300
+			],
+			"alwaysOutputData": true,
+			"onError": "continueErrorOutput"
+		},
+		{
+			"parameters": {
+				"conditions": {
+					"options": {
+						"caseSensitive": true,
+						"leftValue": "",
+						"typeValidation": "strict"
+					},
+					"conditions": [
+						{
+							"id": "error-check",
+							"leftValue": "={{$json.error}}",
+							"rightValue": "",
+							"operator": {
+								"type": "string",
+								"operation": "isEmpty"
+							}
+						}
+					],
+					"combinator": "and"
+				},
+				"options": {}
+			},
+			"id": "if-success",
+			"name": "Check Success",
+			"type": "n8n-nodes-base.if",
+			"typeVersion": 2,
+			"position": [
+				900,
+				300
+			]
+		},
+		{
+			"parameters": {
+				"method": "POST",
+				"url": "https://api.resend.com/emails",
+				"sendHeaders": true,
+				"headerParameters": {
+					"parameters": [
+						{
+							"name": "Authorization",
+							"value": "Bearer YOUR_RESEND_API_KEY_HERE"
+						},
+						{
+							"name": "Content-Type",
+							"value": "application/json"
+						}
+					]
+				},
+				"sendBody": true,
+				"specifyBody": "json",
+				"jsonBody": "={\"from\": \"Newsletter <newsletter@breaktheiceberg.com>\", \"to\": \"{{ $node[\"Webhook\"].json[\"body\"][\"email\"] }}\", \"subject\": \"Welcome to the Newsletter!\", \"html\": \"<h1>Welcome!</h1><p>Thanks for subscribing to our daily questions feed.</p>\"}",
+				"options": {}
+			},
+			"id": "resend-api-welcome-email",
+			"name": "Resend: Send Welcome Email",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4.1,
+			"position": [
+				1120,
+				200
+			]
+		},
+		{
+			"parameters": {
+				"respondWith": "json",
+				"responseBody": "={ { \"success\": true } }",
+				"options": {}
+			},
+			"id": "success-response",
+			"name": "Success Response",
+			"type": "n8n-nodes-base.respondToWebhook",
+			"typeVersion": 1,
+			"position": [
+				1340,
+				200
+			]
+		},
+		{
+			"parameters": {
+				"respondWith": "json",
+				"responseBody": "={ { \"success\": false, \"error\": $json.error || 'Subscription failed' } }",
+				"options": {
+					"responseCode": 400
+				}
+			},
+			"id": "error-response",
+			"name": "Error Response",
+			"type": "n8n-nodes-base.respondToWebhook",
+			"typeVersion": 1,
+			"position": [
+				1340,
+				400
+			]
+		}
+	],
+	"connections": {
+		"Webhook": {
+			"main": [
+				[
+					{
+						"node": "Resend: Create Global Contact",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Resend: Create Global Contact": {
+			"main": [
+				[
+					{
+						"node": "Resend: Add to Segment",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Resend: Add to Segment": {
+			"main": [
+				[
+					{
+						"node": "Check Success",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Check Success": {
+			"main": [
+				[
+					{
+						"node": "Resend: Send Welcome Email",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Error Response",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Resend: Send Welcome Email": {
+			"main": [
+				[
+					{
+						"node": "Success Response",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"settings": {
+		"executionOrder": "v1"
+	},
+	"staticData": null,
+	"meta": {
+		"instanceId": "newsletter-subscription-v3"
+	},
+	"pinData": {},
+	"versionId": "newsletter-v4"
+}

@@ -88,7 +88,7 @@ export const postToInstagram = action({
         const text = question.text || question.customText || "Unknown Question";
 
         // 2. Construct the URL
-        const baseUrl = "https://iceberg-breaker.vercel.app";
+        const baseUrl = process.env.OG_BASE_URL ?? "https://breaktheiceberg.com";
 
         // Pick a random gradient
         const gradient = DEFAULT_GRADIENTS[Math.floor(Math.random() * DEFAULT_GRADIENTS.length)];
