@@ -5,6 +5,8 @@ import { JSDOM } from "jsdom";
 import fs from "fs";
 import path from "path";
 
+let cachedIndexHtml: string | null = null;
+
 export default async function handler(
   request: VercelRequest,
   response: VercelResponse
@@ -29,9 +31,11 @@ export default async function handler(
       return response.status(404).send("Question not found");
     }
 
-    const indexPath = path.join(process.cwd(), "dist/index.html");
-    const indexHtml = fs.readFileSync(indexPath, "utf-8");
-    const dom = new JSDOM(indexHtml);
+    if (!cachedIndexHtml) {
+      const indexPath = path.join(process.cwd(), "dist/index.html");
+      cachedIndexHtml = fs.readFileSync(indexPath, "utf-8");
+    }
+    const dom = new JSDOM(cachedIndexHtml);
     const { document } = dom.window;
 
     const head = document.getElementsByTagName("head")[0];

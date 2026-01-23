@@ -73,8 +73,20 @@ export const getStylesWithExamples = query({
       return { ...rest, examples: undefined };
     }
 
+    const seed = args.seed ?? Math.random() * 0xFFFFFFFF;
+    const mulberry32 = (a: number) => {
+      return () => {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }
+    };
+    const rng = mulberry32(seed);
+
     const maxExamples = process.env.MAX_EXAMPLES_PER_STYLE ? parseInt(process.env.MAX_EXAMPLES_PER_STYLE) : 3;
-    const sampledExamples = [...examples].sort(() => 0.5 - Math.random()).slice(0, maxExamples);
+    const sortedExamples = [...examples].sort(() => 0.5 - rng());
+    const sampledExamples = sortedExamples.slice(0, maxExamples);
 
     return {
       ...rest,
@@ -275,8 +287,19 @@ export const getRandomStyle = query({
     if (styles.length === 0) {
       throw new Error("No styles found in the database");
     }
-    // Convex seeds Math.random() automatically based on args.seed
-    const index = Math.floor(Math.random() * styles.length);
+
+    const seed = args.seed ?? Math.random() * 0xFFFFFFFF;
+    const mulberry32 = (a: number) => {
+      return () => {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }
+    };
+    const rng = mulberry32(seed);
+
+    const index = Math.floor(rng() * styles.length);
     const randomStyle = styles[index];
     const { embedding, ...rest } = randomStyle;
     return rest;

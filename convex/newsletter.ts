@@ -1,6 +1,5 @@
 "use node"
 
-import { api } from "./_generated/api";
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -42,6 +41,10 @@ export const subscribe = action({
 
 export const sendDailyQuestions = action({
   args: {},
+  returns: v.object({
+    success: v.boolean(),
+    message: v.optional(v.string()),
+  }),
   handler: async (ctx, args) => {
     const webhookUrl = process.env.N8N_DAILY_QUESTIONS_WEBHOOK_URL;
 

@@ -36,13 +36,14 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog"
 import { Icon, IconComponent } from "@/components/ui/icons/icon"
+import { iconMap } from "@/components/ui/icons/icons"
 import { Badge } from "@/components/ui/badge"
 import { ColorPicker } from "@/components/ui/color-picker"
 import { IconPicker } from "@/components/ui/icon-picker"
 import { toast } from "sonner"
 
 export default function StylesPage() {
-	const styles = useQuery(api.styles.getStyles)
+	const styles = useQuery(api.styles.getStyles, {})
 	const createStyle = useMutation(api.styles.createStyle)
 	const updateStyle = useMutation(api.styles.updateStyle)
 	const deleteStyle = useMutation(api.styles.deleteStyle)
@@ -68,6 +69,10 @@ export default function StylesPage() {
 		s.name.toLowerCase().includes(search.toLowerCase()) ||
 		s.description?.toLowerCase().includes(search.toLowerCase())
 	) ?? []
+
+	const getSafeIcon = (iconName: string): Icon => {
+		return (iconName in iconMap ? iconName : "HelpCircle") as Icon
+	}
 
 	const handleCreate = async () => {
 		if (!newStyle.name.trim() || !newStyle.id.trim()) {
@@ -282,7 +287,7 @@ export default function StylesPage() {
 										className="p-3 rounded-xl shadow-inner border border-white/20"
 										style={{ backgroundColor: `${style.color}20`, color: style.color }}
 									>
-										<IconComponent icon={style.icon as any} size={24} color={style.color} />
+										<IconComponent icon={getSafeIcon(style.icon)} size={24} color={style.color} />
 									</div>
 									<div>
 										<h3 className="font-bold text-lg">{style.name}</h3>
@@ -343,7 +348,7 @@ export default function StylesPage() {
 											className="size-10 rounded-lg flex items-center justify-center border shadow-sm"
 											style={{ backgroundColor: `${style.color}15`, borderColor: `${style.color}30`, color: style.color }}
 										>
-											<IconComponent icon={style.icon as any} size={18} color={style.color} />
+											<IconComponent icon={getSafeIcon(style.icon)} size={18} color={style.color} />
 										</div>
 									</td>
 									<td className="px-6 py-4">
@@ -425,7 +430,7 @@ export default function StylesPage() {
 									<label className="text-sm font-medium">Description</label>
 									<textarea
 										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										value={editingStyle.description}
+										value={editingStyle.description ?? ""}
 										onChange={e => setEditingStyle({ ...editingStyle, description: e.target.value })}
 									/>
 								</div>
@@ -433,7 +438,7 @@ export default function StylesPage() {
 									<label className="text-sm font-medium">Structural Instruction</label>
 									<textarea
 										className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										value={editingStyle.structure}
+										value={editingStyle.structure ?? ""}
 										onChange={e => setEditingStyle({ ...editingStyle, structure: e.target.value })}
 									/>
 								</div>
@@ -441,7 +446,7 @@ export default function StylesPage() {
 									<label className="text-sm font-medium">AI Guidance</label>
 									<textarea
 										className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										value={editingStyle.promptGuidanceForAI}
+										value={editingStyle.promptGuidanceForAI ?? ""}
 										onChange={e => setEditingStyle({ ...editingStyle, promptGuidanceForAI: e.target.value })}
 									/>
 								</div>

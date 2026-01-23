@@ -207,7 +207,19 @@ export const getRandomTone = query({
     if (tones.length === 0) {
       throw new Error("No tones found in the database");
     }
-    const index = Math.floor(Math.random() * tones.length);
+
+    const seed = args.seed ?? Math.random() * 0xFFFFFFFF;
+    const mulberry32 = (a: number) => {
+      return () => {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }
+    };
+    const rng = mulberry32(seed);
+
+    const index = Math.floor(rng() * tones.length);
     const randomTone = tones[index];
     const { embedding, ...rest } = randomTone;
     return rest;

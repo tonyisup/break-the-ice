@@ -554,7 +554,7 @@ export default function InfiniteScrollPage() {
 						/>
 					)}
 
-					{!hasMore && !showAuthCTA && !showUpgradeCTA && (questions.length > 0 || !isLoading) && (
+					{hasMore && !showAuthCTA && !showUpgradeCTA && (questions.length > 0 || !isLoading) && (
 						<div className="flex justify-center py-8">
 							<Button
 								variant="default"

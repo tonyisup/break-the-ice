@@ -35,13 +35,14 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog"
 import { Icon, IconComponent } from "@/components/ui/icons/icon"
+import { iconMap } from "@/components/ui/icons/icons"
 import { Badge } from "@/components/ui/badge"
 import { ColorPicker } from "@/components/ui/color-picker"
 import { IconPicker } from "@/components/ui/icon-picker"
 import { toast } from "sonner"
 
 export default function TonesPage() {
-	const tones = useQuery(api.tones.getTones)
+	const tones = useQuery(api.tones.getTones, {})
 	const createTone = useMutation(api.tones.createTone)
 	const updateTone = useMutation(api.tones.updateTone)
 	const deleteTone = useMutation(api.tones.deleteTone)
@@ -65,6 +66,10 @@ export default function TonesPage() {
 		t.name.toLowerCase().includes(search.toLowerCase()) ||
 		t.description?.toLowerCase().includes(search.toLowerCase())
 	) ?? []
+
+	const getSafeIcon = (iconName: string): Icon => {
+		return (iconName in iconMap ? iconName : "HelpCircle") as Icon
+	}
 
 	const handleCreate = async () => {
 		if (!newTone.name.trim() || !newTone.id.trim()) {
@@ -253,7 +258,7 @@ export default function TonesPage() {
 										className="p-3 rounded-xl shadow-inner border border-white/20"
 										style={{ backgroundColor: `${tone.color}20`, color: tone.color }}
 									>
-										<IconComponent icon={tone.icon as any} size={24} color={tone.color} />
+										<IconComponent icon={getSafeIcon(tone.icon)} size={24} color={tone.color} />
 									</div>
 									<div>
 										<h3 className="font-bold text-lg">{tone.name}</h3>
@@ -309,7 +314,7 @@ export default function TonesPage() {
 											className="size-10 rounded-lg flex items-center justify-center border shadow-sm"
 											style={{ backgroundColor: `${tone.color}15`, borderColor: `${tone.color}30`, color: tone.color }}
 										>
-											<IconComponent icon={tone.icon as any} size={18} color={tone.color} />
+											<IconComponent icon={getSafeIcon(tone.icon)} size={18} color={tone.color} />
 										</div>
 									</td>
 									<td className="px-6 py-4">
@@ -385,7 +390,7 @@ export default function TonesPage() {
 									<label className="text-sm font-medium">Description</label>
 									<textarea
 										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										value={editingTone.description}
+										value={editingTone.description ?? ""}
 										onChange={e => setEditingTone({ ...editingTone, description: e.target.value })}
 									/>
 								</div>
@@ -393,7 +398,7 @@ export default function TonesPage() {
 									<label className="text-sm font-medium">AI Guidance</label>
 									<textarea
 										className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										value={editingTone.promptGuidanceForAI}
+										value={editingTone.promptGuidanceForAI ?? ""}
 										onChange={e => setEditingTone({ ...editingTone, promptGuidanceForAI: e.target.value })}
 									/>
 								</div>

@@ -23,6 +23,7 @@ export const preview = action({
 		style: v.string(),
 		tone: v.string(),
 	},
+	returns: v.array(v.any()),
 	handler: async (ctx, args): Promise<Doc<"questions">[]> => {
 		return await ctx.runQuery(api.questions.getSimilarQuestions, {
 			count: args.count ?? 5,
