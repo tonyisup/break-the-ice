@@ -151,7 +151,7 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_questionId", ["questionId"])
     .index("by_status", ["status"])
-    .index("by_userIdAndStatus", ["userId", "status", "updatedAt"])
+    .index("by_userId_status_updatedAt", ["userId", "status", "updatedAt"])
     .index("by_questionIdAndStatus", ["questionId", "status"])
     .index("by_userIdAndQuestionId", ["userId", "questionId"]),
   userStyles: defineTable({
@@ -167,7 +167,7 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_styleId", ["styleId"])
     .index("by_status", ["status"])
-    .index("by_userIdAndStatus", ["userId", "status"])
+    .index("by_userId_status", ["userId", "status"])
     .index("by_userIdAndStyleId", ["userId", "styleId"]),
 
   userTones: defineTable({
@@ -183,7 +183,7 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_toneId", ["toneId"])
     .index("by_status", ["status"])
-    .index("by_userIdAndStatus", ["userId", "status"])
+    .index("by_userId_status", ["userId", "status"])
     .index("by_userIdAndToneId", ["userId", "toneId"]),
   duplicateDetections: defineTable({
     questionIds: v.array(v.id("questions")),

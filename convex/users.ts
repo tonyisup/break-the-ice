@@ -2,6 +2,7 @@ import { internal } from "./_generated/api";
 import { Doc } from "./_generated/dataModel";
 import { MutationCtx, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { calculateAverageEmbedding } from "./questions";
 
 // Helper to ensure user exists
 async function getUserOrCreate(ctx: MutationCtx) {
@@ -27,6 +28,14 @@ async function getUserOrCreate(ctx: MutationCtx) {
 
 	return (await ctx.db.get(userId))!;
 }
+
+export const getUserById = internalQuery({
+	args: { id: v.id("users") },
+	returns: v.union(v.null(), v.any()),
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.id);
+	},
+});
 
 export const getCurrentUser = query({
 	args: {},
@@ -178,7 +187,7 @@ export const getSettings = query({
 		// Get liked questions from userQuestions table
 		const likedUserQuestions = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userIdAndStatus", (q) =>
+			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", user._id).eq("status", "liked")
 			)
 			.collect();
@@ -187,23 +196,27 @@ export const getSettings = query({
 		// Get hidden questions from userQuestions table
 		const hiddenUserQuestions = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userIdAndStatus", (q) =>
+			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", user._id).eq("status", "hidden")
 			)
 			.collect();
 		const hiddenQuestions = hiddenUserQuestions.map((uq) => uq.questionId);
 
-		// Get hidden styles from userHiddenStyles table
+		// Get hidden styles from userStyles table
 		const hiddenStylesDocs = await ctx.db
 			.query("userStyles")
-			.withIndex("by_userId", (q) => q.eq("userId", user._id))
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", user._id).eq("status", "hidden")
+			)
 			.collect();
 		const hiddenStyles = hiddenStylesDocs.map((us) => us.styleId);
 
-		// Get hidden tones from userHiddenTones table
+		// Get hidden tones from userTones table
 		const hiddenTonesDocs = await ctx.db
 			.query("userTones")
-			.withIndex("by_userId", (q) => q.eq("userId", user._id))
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", user._id).eq("status", "hidden")
+			)
 			.collect();
 		const hiddenTones = hiddenTonesDocs.map((ut) => ut.toneId);
 
@@ -298,7 +311,7 @@ export const updateLikedQuestions = mutation({
 		// 1. Handle removals: un-like questions that are no longer in the list
 		const existingLikedQuestions = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userIdAndStatus", (q) =>
+			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", user._id).eq("status", "liked")
 			)
 			.collect();
@@ -360,7 +373,7 @@ export const updateHiddenQuestions = mutation({
 		// 1. Handle removals: un-hide questions that are no longer in the list
 		const existingHiddenQuestions = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userIdAndStatus", (q) =>
+			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", user._id).eq("status", "hidden")
 			)
 			.collect();
@@ -420,8 +433,9 @@ export const updateHiddenStyles = mutation({
 		// 1. Handle removals
 		const existingHiddenStyles = await ctx.db
 			.query("userStyles")
-			.withIndex("by_userId", (q) => q.eq("userId", user._id))
-			.filter((q) => q.eq(q.field("status"), "hidden"))
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", user._id).eq("status", "hidden")
+			)
 			.collect();
 
 		const newHiddenSet = new Set(args.hiddenStyles);
@@ -475,8 +489,9 @@ export const updateHiddenTones = mutation({
 		// 1. Handle removals
 		const existingHiddenTones = await ctx.db
 			.query("userTones")
-			.withIndex("by_userId", (q) => q.eq("userId", user._id))
-			.filter((q) => q.eq(q.field("status"), "hidden"))
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", user._id).eq("status", "hidden")
+			)
 			.collect();
 
 		const newHiddenSet = new Set(args.hiddenTones);
@@ -567,7 +582,7 @@ export const getUserLikedQuestions = internalQuery({
 	},
 	handler: async (ctx, args) => {
 		return await ctx.db.query("userQuestions")
-			.withIndex("by_userIdAndStatus", (q) => q.eq("userId", args.userId).eq("status", "liked"))
+			.withIndex("by_userId_status_updatedAt", (q) => q.eq("userId", args.userId).eq("status", "liked"))
 			.collect();
 	},
 });
@@ -622,31 +637,7 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 });
 
 
-function calculateAverageEmbedding(embeddings: number[][]): number[] {
-	if (embeddings.length === 0) {
-		return []; // Return an empty array if no embeddings are provided
-	}
 
-	// Get the dimensionality of the embeddings (assuming all have the same length)
-	const embeddingDimension = embeddings[0].length;
-
-	// Initialize an array to store the sum of the embedding components
-	const sumEmbedding: number[] = new Array(embeddingDimension).fill(0);
-
-	// Sum the corresponding components of each embedding
-	for (const embedding of embeddings) {
-		for (let i = 0; i < embeddingDimension; i++) {
-			sumEmbedding[i] += embedding[i];
-		}
-	}
-
-	// Divide each component of the sum by the number of embeddings to get the average
-	const averageEmbedding: number[] = sumEmbedding.map(
-		(component) => component / embeddings.length
-	);
-
-	return averageEmbedding;
-}
 
 export const getUsersWithMissingEmbeddings = internalQuery({
 	args: {},
@@ -833,14 +824,15 @@ export const mergeQuestionHistory = mutation({
 	},
 });
 
-export const getRecentlySeenQuestions = query({
+export const getRecentlySeenQuestions = internalQuery({
 	args: {
 		userId: v.id("users"),
 		limit: v.optional(v.number()),
 	},
+	returns: v.array(v.string()),
 	handler: async (ctx, args) => {
 		const seen = await ctx.db.query("userQuestions")
-			.withIndex("by_userIdAndStatus", (q) =>
+			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", args.userId).eq("status", "seen")
 			)
 			.order("desc")
@@ -856,18 +848,19 @@ export const getRecentlySeenQuestions = query({
 		);
 		return seenQuestions
 			.filter((q) => q !== null)
-			.map((q) => q.text);
+			.map((q) => q.text!);
 	},
 })
 
-export const getBlockedQuestions = query({
+export const getBlockedQuestions = internalQuery({
 	args: {
 		userId: v.id("users"),
 		limit: v.optional(v.number()),
 	},
+	returns: v.array(v.string()),
 	handler: async (ctx, args) => {
 		const hidden = await ctx.db.query("userQuestions")
-			.withIndex("by_userIdAndStatus", (q) =>
+			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", args.userId).eq("status", "hidden")
 			)
 			.order("desc")
@@ -883,13 +876,28 @@ export const getBlockedQuestions = query({
 		);
 		return hiddenQuestions
 			.filter((q) => q !== null)
-			.map((q) => q.text);
+			.map((q) => q.text!);
 	},
 })
 
 export const getUsers = query({
 	args: {},
+	returns: v.array(v.any()),
 	handler: async (ctx) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			throw new Error("Not authenticated");
+		}
+
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email))
+			.unique();
+
+		if (!user || !user.isAdmin) {
+			throw new Error("Not authorized");
+		}
+
 		return await ctx.db
 			.query("users")
 			.order("desc")

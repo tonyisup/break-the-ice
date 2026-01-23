@@ -16,7 +16,7 @@ export function ThemeToggle({ className, showLabel = true, labelClassName }: { c
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button className={cn("gap-2", className)}>
+        <Button variant="outline" className={cn("gap-2", className)} aria-label={`Theme: ${theme}`}>
           {(theme != "system") && <>
             {(theme == "light") &&
               <>

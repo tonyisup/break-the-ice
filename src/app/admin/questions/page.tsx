@@ -116,14 +116,14 @@ export default function QuestionsPage() {
 		}
 	}
 
-	const handleApprove = async (q: Doc<"questions">, status: "approved" | "personal") => {
+	const handleApprove = async (q: Doc<"questions">, status: "public" | "personal") => {
 		try {
 			await updateQuestion({
 				id: q._id,
 				text: q.text || q.customText!,
 				style: q.style || undefined,
 				tone: q.tone || undefined,
-				status: status === "approved" ? "public" : "private", // Adjust based on schema literals if needed
+				status: status === "public" ? "public" : "private",
 			})
 			toast.success(`Question marked as ${status}`)
 		} catch (error) {
@@ -177,8 +177,9 @@ export default function QuestionsPage() {
 								</div>
 								<div className="grid grid-cols-2 gap-4">
 									<div className="grid gap-2">
-										<label className="text-sm font-medium">Style</label>
+										<label htmlFor="style-select" className="text-sm font-medium">Style</label>
 										<select
+											id="style-select"
 											value={newQuestion.style}
 											onChange={(e) => setNewQuestion({ ...newQuestion, style: e.target.value })}
 											className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -187,8 +188,9 @@ export default function QuestionsPage() {
 										</select>
 									</div>
 									<div className="grid gap-2">
-										<label className="text-sm font-medium">Tone</label>
+										<label htmlFor="tone-select" className="text-sm font-medium">Tone</label>
 										<select
+											id="tone-select"
 											value={newQuestion.tone}
 											onChange={(e) => setNewQuestion({ ...newQuestion, tone: e.target.value })}
 											className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

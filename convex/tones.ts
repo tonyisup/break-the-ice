@@ -18,11 +18,9 @@ export const getTone = query({
     v.null(),
   ),
   handler: async (ctx, args) => {
-    const toneResults = await ctx.db.query("tones").filter((q) => q.eq(q.field("id"), args.id))
-    if (!toneResults) {
-      return null;
-    }
-    const tone = await toneResults.first();
+    const tone = await ctx.db.query("tones")
+      .withIndex("by_my_id", (q) => q.eq("id", args.id))
+      .unique();
     if (!tone) {
       return null;
     }

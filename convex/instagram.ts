@@ -73,6 +73,16 @@ export const pickAndMarkQuestion = internalMutation({
     },
 });
 
+/*
+In `@scripts/n8n_workflow_instagram.json` around lines 5 - 8, The webhook
+definition for the route identified by parameters.path = "post-to-ig" currently
+has an empty options object and needs authentication; update the
+parameters.options for this webhook (the object under the parameters block where
+"path": "post-to-ig") to include an authentication property (e.g., add
+"authentication": { "type": "headerAuth", "headerName": "Authorization",
+"token": "<env or secret>" } or use "basicAuth" with credentials) so the webhook
+requires headerAuth or basicAuth instead of being publicly callable.
+*/
 export const postToInstagram = action({
     args: {},
     handler: async (ctx) => {

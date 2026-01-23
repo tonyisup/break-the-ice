@@ -39,11 +39,17 @@ export const sendEmail = internalAction({
         }),
       });
 
-      const result = await response.json();
+      let result: any;
+      try {
+        result = await response.json();
+      } catch (err) {
+        const rawBody = await response.text();
+        result = { body: rawBody, parseError: (err as Error).message };
+      }
 
       if (!response.ok) {
-        console.error("Resend API Error:", result);
-        return { success: false, error: result.message || "Failed to send email" };
+        console.error(`Resend API Error (Status: ${response.status}):`, result);
+        return { success: false, error: result.message || result.body || "Failed to send email" };
       }
 
       console.log("Email sent successfully:", result);

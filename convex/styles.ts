@@ -20,7 +20,9 @@ export const getStyle = query({
     v.null(),
   ),
   handler: async (ctx, args) => {
-    const style = await ctx.db.query("styles").filter((q) => q.eq(q.field("id"), args.id)).first();
+    const style = await ctx.db.query("styles")
+      .withIndex("by_my_id", (q) => q.eq("id", args.id))
+      .unique();
     if (!style) {
       return null;
     }
@@ -49,14 +51,18 @@ export const getStylesWithExamples = query({
     v.null(),
   ),
   handler: async (ctx, args) => {
-    const style = await ctx.db.query("styles").filter((q) => q.eq(q.field("id"), args.id)).first();
+    const style = await ctx.db.query("styles")
+      .withIndex("by_my_id", (q) => q.eq("id", args.id))
+      .unique();
     if (!style) {
       return null;
     }
 
     const { embedding, ...rest } = style;
 
-    const exampleQuestions = await ctx.db.query("questions").filter((q) => q.eq(q.field("style"), args.id)).collect();
+    const exampleQuestions = await ctx.db.query("questions")
+      .withIndex("by_style", (q) => q.eq("style", args.id))
+      .collect();
 
     if (!exampleQuestions) {
       return { ...rest, examples: undefined };

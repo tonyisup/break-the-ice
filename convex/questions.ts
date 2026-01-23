@@ -150,7 +150,7 @@ export const getSimilarQuestions = query({
     }
     const likedQuestionsDocs = await ctx.db
       .query("userQuestions")
-      .withIndex("by_userIdAndStatus", (q) =>
+      .withIndex("by_userId_status_updatedAt", (q) =>
         q.eq("userId", user._id).eq("status", "liked")
       )
       .collect();
@@ -379,7 +379,7 @@ export const getUserLikedAndPreferredEmbedding = query({
     }
     const likedQuestionIds = await ctx.db
       .query("userQuestions")
-      .withIndex("by_userIdAndStatus", (q) =>
+      .withIndex("by_userId_status_updatedAt", (q) =>
         q.eq("userId", user._id).eq("status", "liked")
       )
       .collect();
@@ -441,7 +441,7 @@ export const getLikedQuestions = query({
     // Get liked questions from userQuestions table
     const likedUserQuestions = await ctx.db
       .query("userQuestions")
-      .withIndex("by_userIdAndStatus", (q) =>
+      .withIndex("by_userId_status_updatedAt", (q) =>
         q.eq("userId", user._id).eq("status", "liked")
       )
       .collect();

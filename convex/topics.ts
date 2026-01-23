@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { ensureAdmin } from "./auth";
 import { internal } from "./_generated/api";
 
@@ -126,7 +126,7 @@ export const getTopicBySystemId = query({
   },
 });
 
-export const addTopicEmbedding = mutation({
+export const addTopicEmbedding = internalMutation({
   args: {
     topicId: v.id("topics"),
     embedding: v.array(v.float64()),

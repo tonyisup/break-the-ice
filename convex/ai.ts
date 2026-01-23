@@ -168,13 +168,13 @@ Style: ${styleDoc.name} (${styleDoc.description}). ${styleDoc.promptGuidanceForA
 Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI || ""}${topicPrompt}`;
 		}
 
-		const recentlySeenQuestions = await ctx.runQuery(api.users.getRecentlySeenQuestions, { userId: user._id });
+		const recentlySeenQuestions = await ctx.runQuery(internal.users.getRecentlySeenQuestions, { userId: user._id });
 		const recentlySeen = recentlySeenQuestions.filter((q) => q !== undefined);
 		if (recentlySeen.length > 0) {
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
 		}
 
-		const blockedQuestions = await ctx.runQuery(api.users.getBlockedQuestions, { userId: user._id });
+		const blockedQuestions = await ctx.runQuery(internal.users.getBlockedQuestions, { userId: user._id });
 		if (blockedQuestions.length > 0) {
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these blocked questions:\n- ${blockedQuestions.join('\n- ')}`;
 		}
@@ -223,7 +223,7 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
     - Do not use markdown formatting (no \`\`\`json wrappers).
     - Do not include explanations or comments.
     - Do not number the items in the array (e.g. no "1. {...}").
-		- DO NOTprovide your own examples of any generated content. No dashes, no lists.
+		- DO NOT provide your own examples of any generated content. No dashes, no lists.
     
     Example format: [{"text": "Question 1", "style": "s1", "tone": "t1"}, {"text": "Question 2", "style": "s2", "tone": "t2"}]
     
@@ -481,7 +481,7 @@ export const populateMissingToneEmbeddings = internalAction({
 	},
 });
 
-export const detectDuplicateQuestionsStreaming = action({
+export const detectDuplicateQuestionsStreaming = internalAction({
 	args: {},
 	returns: v.id("duplicateDetectionProgress"),
 	handler: async (ctx): Promise<Id<"duplicateDetectionProgress">> => {

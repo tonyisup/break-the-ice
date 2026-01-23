@@ -67,12 +67,13 @@ export const embedTopic = internalAction({
   args: {
     topicId: v.id("topics"),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const topic = await ctx.runQuery(api.topics.getTopicBySystemId, {
       id: args.topicId,
     });
     if (!topic) {
-      return;
+      return null;
     }
 
     // Construct text to embed: name + description + promptGuidanceForAI
@@ -83,10 +84,11 @@ export const embedTopic = internalAction({
     const textToEmbed = textParts.join(". ");
 
     const vector = await embed(textToEmbed);
-    await ctx.runMutation(api.topics.addTopicEmbedding, {
+    await ctx.runMutation(internal.topics.addTopicEmbedding, {
       topicId: args.topicId,
       embedding: vector,
     });
+    return null;
   },
 });
 export const embedStyle = internalAction({

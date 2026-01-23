@@ -77,7 +77,7 @@ export default function StylesPage() {
 		try {
 			await createStyle({
 				...newStyle,
-				examples: newStyle.example ? [newStyle.example] : []
+				example: newStyle.example || undefined
 			})
 			toast.success("Style created successfully")
 			setIsCreateDialogOpen(false)
@@ -109,7 +109,7 @@ export default function StylesPage() {
 				icon: s.icon,
 				promptGuidanceForAI: s.promptGuidanceForAI,
 				order: s.order,
-				examples: s.examples
+				example: s.example || undefined
 			})
 			toast.success("Style updated")
 			setEditingStyle(null)
@@ -209,7 +209,10 @@ export default function StylesPage() {
 										<Input
 											type="number"
 											value={newStyle.order}
-											onChange={e => setNewStyle({ ...newStyle, order: parseInt(e.target.value) })}
+											onChange={e => {
+												const parsed = Number(e.target.value);
+												setNewStyle({ ...newStyle, order: Number.isFinite(parsed) ? parsed : 0 });
+											}}
 										/>
 									</div>
 								</div>
@@ -411,7 +414,10 @@ export default function StylesPage() {
 										<Input
 											type="number"
 											value={editingStyle.order}
-											onChange={e => setEditingStyle({ ...editingStyle, order: parseInt(e.target.value) })}
+											onChange={e => {
+												const parsed = Number(e.target.value);
+												setEditingStyle({ ...editingStyle, order: Number.isFinite(parsed) ? parsed : 0 });
+											}}
 										/>
 									</div>
 								</div>

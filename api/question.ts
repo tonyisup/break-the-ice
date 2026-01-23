@@ -16,8 +16,12 @@ export default async function handler(
   }
 
   try {
+    const convexUrl = process.env.VITE_CONVEX_URL || process.env.CONVEX_URL;
+    if (!convexUrl) {
+      return response.status(500).send("CONVEX_URL or VITE_CONVEX_URL is not set in environment variables.");
+    }
     const convex = new ConvexHttpClient(
-      process.env.VITE_CONVEX_URL as string
+      convexUrl
     );
     const question = await convex.query(api.questions.getQuestionById, { id });
 

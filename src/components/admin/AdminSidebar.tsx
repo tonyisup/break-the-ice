@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/sidebar"
 import { UserButton } from "@clerk/clerk-react"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { Separator } from "@/components/ui/separator"
 
 const items = [
 	{
@@ -154,8 +155,4 @@ export function AdminSidebar() {
 			</SidebarFooter>
 		</Sidebar>
 	)
-}
-
-function Separator({ className }: { className?: string }) {
-	return <div className={`h-px bg-sidebar-border ${className}`} />
 }
