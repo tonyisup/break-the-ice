@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/question.ts": {
+      "includeFiles": "dist/index.html"
+    }
+  },
   "rewrites": [
     {
       "source": "/question/:id",

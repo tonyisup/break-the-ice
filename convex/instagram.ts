@@ -123,7 +123,7 @@ export const postToInstagram = action({
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                questionId: question._id,
+                questionUrl: `${baseUrl}/question/${question._id}`,
                 text,
                 imageUrl,
                 style: style?.name,

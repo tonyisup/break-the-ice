@@ -1,5 +1,5 @@
 import { ConvexHttpClient } from "convex/browser";
-import { api } from "@convex/_generated/api.js";
+import { api } from "../convex/_generated/api.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { JSDOM } from "jsdom";
 import fs from "fs";
@@ -25,7 +25,7 @@ export default async function handler(
       return response.status(404).send("Question not found");
     }
 
-    const indexPath = path.resolve("./dist/index.html");
+    const indexPath = path.join(process.cwd(), "dist/index.html");
     const indexHtml = fs.readFileSync(indexPath, "utf-8");
     const dom = new JSDOM(indexHtml);
     const { document } = dom.window;
@@ -59,11 +59,11 @@ export default async function handler(
     head.appendChild(ogImage);
 
     return response.status(200).send(dom.serialize());
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
-    // if (error.code === 'ENOENT') {
-    //   return response.status(500).send("index.html not found. Please run 'npm run build'.");
-    // }
-    return response.status(500).send("Internal Server Error");
+    if (error.code === 'ENOENT') {
+      return response.status(500).send(`index.html not found at ${error.path}. Please verify build output.`);
+    }
+    return response.status(500).send("Internal Server Error: " + (error instanceof Error ? error.message : String(error)));
   }
 }
