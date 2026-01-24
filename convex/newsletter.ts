@@ -18,36 +18,39 @@ export const getQuestionForUser = action({
     // 1. Get user and their preferences
     const user = await ctx.runQuery(internal.users.getUserByEmail, { email: args.email });
 
-    let style = "Fun"; // Defaults
-    let tone = "Casual";
-    let seenIds: any[] = [];
+    let question: any;
 
     if (user) {
-      style = user.defaultStyle || "Fun";
-      tone = user.defaultTone || "Casual";
+      const style = user.defaultStyle || "Fun";
+      const tone = user.defaultTone || "Casual";
 
       const userQuestions = await ctx.runQuery(internal.users.getUserLikedQuestions, { userId: user._id });
-      seenIds = userQuestions.map((uq: any) => uq.questionId);
-    }
+      const seenIds = userQuestions.map((uq: any) => uq.questionId);
 
-    // 2. Try to get an existing question they haven't seen
-    const questions: any[] = await ctx.runQuery(api.questions.getNextQuestions, {
-      count: 1,
-      style,
-      tone,
-      seen: seenIds,
-    });
-
-    let question: any = questions[0];
-
-    // 3. If no question found, generate a new one
-    if (!question && user) {
-      const generatedQuestions: any[] = await ctx.runAction(api.ai.generateAIQuestions, {
+      // 2. Try to get an existing question they haven't seen
+      const questions: any[] = await ctx.runQuery(api.questions.getNextQuestions, {
+        count: 1,
         style,
         tone,
-        userId: user._id,
+        seen: seenIds,
       });
-      question = generatedQuestions[0];
+      question = questions[0];
+
+      // 3. If no question found, generate a new one
+      if (!question) {
+        const generatedQuestions: any[] = await ctx.runAction(api.ai.generateAIQuestions, {
+          style,
+          tone,
+          userId: user._id,
+        });
+        question = generatedQuestions[0];
+      }
+    } else {
+      // 4. For non-registered subscribers, just get any random question
+      const randomQuestions: any[] = await ctx.runQuery(api.questions.getNextRandomQuestions, {
+        count: 1,
+      });
+      question = randomQuestions[0];
     }
 
     if (!question) {
