@@ -1,9 +1,10 @@
 import CookieConsent from "react-cookie-consent";
+import { Link } from "react-router-dom";
 import { useStorageContext } from "../hooks/useStorageContext";
 
 const CookieConsentBanner = () => {
   const { hasConsented, setHasConsented } = useStorageContext();
-  
+
   if (hasConsented) return null;
 
   return (
@@ -18,7 +19,7 @@ const CookieConsentBanner = () => {
         setHasConsented(true);
       }}
     >
-      This website uses local storage to enhance the user experience.
+      This website uses <Link to="/cookies" className="underline hover:text-gray-300">cookies and local storage</Link> to enhance the user experience and for analytics.
     </CookieConsent>
   );
 };
