@@ -1,9 +1,11 @@
 import { ConvexHttpClient } from "convex/browser";
-import { api } from "@convex/_generated/api.js";
+import { api } from "../convex/_generated/api.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { JSDOM } from "jsdom";
 import fs from "fs";
 import path from "path";
+
+let cachedIndexHtml: string | null = null;
 
 export default async function handler(
   request: VercelRequest,
@@ -16,8 +18,12 @@ export default async function handler(
   }
 
   try {
+    const convexUrl = process.env.VITE_CONVEX_URL || process.env.CONVEX_URL;
+    if (!convexUrl) {
+      return response.status(500).send("CONVEX_URL or VITE_CONVEX_URL is not set in environment variables.");
+    }
     const convex = new ConvexHttpClient(
-      process.env.VITE_CONVEX_URL as string
+      convexUrl
     );
     const question = await convex.query(api.questions.getQuestionById, { id });
 
@@ -25,9 +31,11 @@ export default async function handler(
       return response.status(404).send("Question not found");
     }
 
-    const indexPath = path.resolve("./dist/index.html");
-    const indexHtml = fs.readFileSync(indexPath, "utf-8");
-    const dom = new JSDOM(indexHtml);
+    if (!cachedIndexHtml) {
+      const indexPath = path.join(process.cwd(), "dist/index.html");
+      cachedIndexHtml = fs.readFileSync(indexPath, "utf-8");
+    }
+    const dom = new JSDOM(cachedIndexHtml);
     const { document } = dom.window;
 
     const head = document.getElementsByTagName("head")[0];
@@ -59,11 +67,11 @@ export default async function handler(
     head.appendChild(ogImage);
 
     return response.status(200).send(dom.serialize());
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
-    // if (error.code === 'ENOENT') {
-    //   return response.status(500).send("index.html not found. Please run 'npm run build'.");
-    // }
-    return response.status(500).send("Internal Server Error");
+    if (error.code === 'ENOENT') {
+      return response.status(500).send(`index.html not found at ${error.path}. Please verify build output.`);
+    }
+    return response.status(500).send("Internal Server Error: " + (error instanceof Error ? error.message : String(error)));
   }
 }

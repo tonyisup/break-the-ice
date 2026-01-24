@@ -150,7 +150,7 @@ export const getSimilarQuestions = query({
     }
     const likedQuestionsDocs = await ctx.db
       .query("userQuestions")
-      .withIndex("by_userIdAndStatus", (q) =>
+      .withIndex("by_userId_status_updatedAt", (q) =>
         q.eq("userId", user._id).eq("status", "liked")
       )
       .collect();
@@ -379,7 +379,7 @@ export const getUserLikedAndPreferredEmbedding = query({
     }
     const likedQuestionIds = await ctx.db
       .query("userQuestions")
-      .withIndex("by_userIdAndStatus", (q) =>
+      .withIndex("by_userId_status_updatedAt", (q) =>
         q.eq("userId", user._id).eq("status", "liked")
       )
       .collect();
@@ -441,7 +441,7 @@ export const getLikedQuestions = query({
     // Get liked questions from userQuestions table
     const likedUserQuestions = await ctx.db
       .query("userQuestions")
-      .withIndex("by_userIdAndStatus", (q) =>
+      .withIndex("by_userId_status_updatedAt", (q) =>
         q.eq("userId", user._id).eq("status", "liked")
       )
       .collect();
@@ -489,6 +489,37 @@ export const getQuestion = query({
   },
 });
 
+export const getQuestionForOgImage = query({
+  args: {
+    id: v.id("questions"),
+  },
+  handler: async (ctx, args) => {
+    const question = await ctx.db.get(args.id);
+    if (!question) return null;
+
+    let styleDoc = null;
+    if (question.style) {
+      styleDoc = await ctx.db.query("styles").withIndex("by_my_id", (q) => q.eq("id", question.style!)).unique();
+    }
+
+    let toneDoc = null;
+    if (question.tone) {
+      toneDoc = await ctx.db.query("tones").withIndex("by_my_id", (q) => q.eq("id", question.tone!)).unique();
+    }
+
+    return {
+      text: question.text || question.customText,
+      styleName: styleDoc?.name || "General",
+      styleColor: styleDoc?.color || "#000000",
+      toneName: toneDoc?.name || "Casual",
+      toneColor: toneDoc?.color || "#000000",
+      // Infer gradients from colors or use defaults
+      gradientStart: styleDoc?.color || "#f0f0f0",
+      gradientEnd: toneDoc?.color || "#d0d0d0",
+    };
+  },
+});
+
 // Save the generated AI question to the database
 export const saveAIQuestion = mutation({
   args: {
@@ -496,9 +527,10 @@ export const saveAIQuestion = mutation({
     tags: v.array(v.string()),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    topic: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { text, tags, style, tone } = args;
+    const { text, tags, style, tone, topic } = args;
 
     // Check if a question with the same text already exists
     const existingQuestion = await ctx.db
@@ -517,6 +549,7 @@ export const saveAIQuestion = mutation({
       tags,
       style,
       tone,
+      topic,
       status: "public",
       isAIGenerated: true,
       lastShownAt: 0,
@@ -781,10 +814,74 @@ export const saveDuplicateDetection = internalMutation({
     reason: v.string(),
     confidence: v.number(),
   },
-  returns: v.id("duplicateDetections"),
+  returns: v.union(v.id("duplicateDetections"), v.null()),
   handler: async (ctx, args) => {
+    // Sort question IDs to ensure consistent ordering for duplicate checking
+    const sortedIds = [...args.questionIds].sort();
+
+    // Ideally we would have a unique index on questionIds, but Array indices are tricky in Convex.
+    // Instead, we can check if there's any pending/approved detection containing these exact IDs.
+    // However, searching for exact array match is also tricky without an index.
+    // Since we are detecting duplicates, we can query by one of the IDs and filter.
+    // But this mutation might be called many times.
+
+    // Let's assume the caller handles some filtering, but we do a best-effort check here.
+    // We'll query duplicateDetections that contain the first question ID.
+    // Note: This might be slow if there are many detections for the same question.
+
+    // Check if this pair is already detected (pending, approved, or rejected)
+    // We can't easily query "contains exact array", so we fetch potentially relevant ones.
+    // Since we sorted IDs, we know order.
+    // However, `duplicateDetections` does not have an index on `questionIds`.
+    // We will scan all detections? No, that's too slow.
+
+    // Ideally we would add an index on `questionIds`.
+    // Since we can't easily modify schema/indexes in this flow without `schema.ts` change,
+    // and `schema.ts` edits are tricky (need to match existing), we will do a scan but optimize if possible.
+
+    // Actually, `convex/schema.ts` is available. We could check if we can add index.
+    // But for this task, let's just use `filter` which might be slow but safe for now given the volume.
+    // Or better: Use `getAllQuestionsForDuplicateDetection` approach - fetch all detections and check in memory?
+    // No, mutation shouldn't load everything.
+
+    // Let's check for duplicate detection by querying *one* of the question IDs if we can.
+    // We can't query array fields efficiently without an index.
+    // But `filter` on array `includes`?
+    /*
+    const existing = await ctx.db
+      .query("duplicateDetections")
+      .filter(q =>
+         // Check if questionIds array contains BOTH ids.
+         // q.field("questionIds") is an array.
+         // We can't do logic easily in filter builder.
+         true
+      )
+      .collect();
+    */
+
+    // Fallback: Just insert. The action does A < B check so within one run it's unique.
+    // Across runs, we might get duplicates.
+    // To fix this properly, we need to check existence.
+    // Let's load all `duplicateDetections`? If table is small ok.
+    // If table is large, this is bad.
+
+    // Better approach:
+    // We use uniqueKey index to check for duplicates efficiently.
+    const uniqueKey = sortedIds.join("_");
+    const existing = await ctx.db
+      .query("duplicateDetections")
+      .withIndex("by_uniqueKey", (q) => q.eq("uniqueKey", uniqueKey))
+      .first();
+
+    if (existing) {
+      // Already detected
+      return null;
+    }
+
+    // Proceed with insert.
     return await ctx.db.insert("duplicateDetections", {
-      questionIds: args.questionIds,
+      questionIds: sortedIds,
+      uniqueKey,
       reason: args.reason,
       confidence: args.confidence,
       status: "pending",
@@ -1168,3 +1265,89 @@ export const getNextQuestionsByEmbedding = action({
     return results;
   },
 });
+export const getQuestionsWithEmbeddingsBatch = internalQuery({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { cursor, limit } = args;
+    const paginationResult = await ctx.db
+      .query("questions")
+      .filter((q) => q.neq(q.field("embedding"), undefined))
+      .paginate({ cursor, numItems: limit });
+
+    // Explicitly create new objects with only the required fields to avoid returning full documents
+    // But we need embeddings for vector search
+    // Since this is internalQuery called from action, we can return full objects or subsets.
+    // Let's return only what we need: _id, text, embedding.
+
+    // Actually, vectorSearch needs the vector.
+    // Note: returning embedding array might be large.
+    // But we need it in the action to perform search.
+
+    return {
+      questions: paginationResult.page.map(q => ({
+        _id: q._id,
+        text: q.text,
+        embedding: q.embedding,
+      })),
+      continueCursor: paginationResult.continueCursor,
+      isDone: paginationResult.isDone,
+    };
+  },
+});
+
+export const countQuestions = internalQuery({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    // TODO: This is not scalable for very large datasets.
+    // Consider using an aggregate table or approximate count if this becomes a bottleneck.
+    return (await ctx.db.query("questions").collect()).length;
+  },
+});
+
+export const getAdminStats = query({
+  args: {},
+  handler: async (ctx) => {
+    await ensureAdmin(ctx);
+
+    const questions = await ctx.db.query("questions").collect();
+    const users = await ctx.db.query("users").collect();
+    const feedback = await ctx.db.query("feedback").collect();
+    const duplicates = await ctx.db.query("duplicateDetections").filter(q => q.eq(q.field("status"), "pending")).collect();
+
+    // Simple stale count (mock logic similar to what prune looks for)
+    const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const staleCount = questions.filter(q =>
+      (q.lastShownAt ?? 0) < oneWeekAgo &&
+      q.totalLikes === 0 &&
+      q.totalShows > 0 &&
+      q.prunedAt === undefined
+    ).length;
+
+    return {
+      questions: {
+        total: questions.length,
+        public: questions.filter(q => q.status === "public" || !q.status).length,
+        pending: questions.filter(q => q.status === "pending").length,
+        pruned: questions.filter(q => q.prunedAt !== undefined).length,
+      },
+      users: {
+        total: users.length,
+        admins: users.filter(u => u.isAdmin).length,
+        casual: users.filter(u => u.subscriptionTier === "casual").length,
+      },
+      feedback: {
+        total: feedback.length,
+        new: feedback.filter(f => f.status === "new").length,
+      },
+      duplicates: {
+        pending: duplicates.length,
+      },
+      staleCount,
+    };
+  },
+});
+

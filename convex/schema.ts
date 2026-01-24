@@ -46,6 +46,20 @@ export default defineSchema({
   }).index("by_my_id", ["id"])
     .index("by_name", ["name"])
     .index("by_order", ["order"]),
+  topics: defineTable({
+    id: v.string(), // slug
+    name: v.string(),
+    description: v.optional(v.string()),
+    example: v.optional(v.string()),
+    promptGuidanceForAI: v.optional(v.string()),
+    embedding: v.optional(v.array(v.number())),
+    order: v.optional(v.number()),
+    organizationId: v.optional(v.id("organizations")),
+    startDate: v.optional(v.number()),
+    endDate: v.optional(v.number()),
+  }).index("by_my_id", ["id"])
+    .index("by_name", ["name"])
+    .index("by_order", ["order"]),
   questions: defineTable({
     organizationId: v.optional(v.id("organizations")),
     averageViewDuration: v.number(),
@@ -58,6 +72,7 @@ export default defineSchema({
     tags: v.optional(v.array(v.string())),
     style: v.optional(v.string()),
     tone: v.optional(v.string()),
+    topic: v.optional(v.string()),
     embedding: v.optional(v.array(v.number())),
     authorId: v.optional(v.string()),
     customText: v.optional(v.string()),
@@ -83,6 +98,7 @@ export default defineSchema({
     .index("by_tags", ["tags"])
     .index("by_style", ["style"])
     .index("by_tone", ["tone"])
+    .index("by_topic", ["topic"])
     .index("by_style_and_last_shown", ["style", "lastShownAt"])
     .index("by_style_and_total_likes", ["style", "totalLikes"])
     .index("by_tone_and_last_shown", ["tone", "lastShownAt"])
@@ -135,7 +151,7 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_questionId", ["questionId"])
     .index("by_status", ["status"])
-    .index("by_userIdAndStatus", ["userId", "status"])
+    .index("by_userId_status_updatedAt", ["userId", "status", "updatedAt"])
     .index("by_questionIdAndStatus", ["questionId", "status"])
     .index("by_userIdAndQuestionId", ["userId", "questionId"]),
   userStyles: defineTable({
@@ -151,7 +167,7 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_styleId", ["styleId"])
     .index("by_status", ["status"])
-    .index("by_userIdAndStatus", ["userId", "status"])
+    .index("by_userId_status", ["userId", "status"])
     .index("by_userIdAndStyleId", ["userId", "styleId"]),
 
   userTones: defineTable({
@@ -167,10 +183,11 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_toneId", ["toneId"])
     .index("by_status", ["status"])
-    .index("by_userIdAndStatus", ["userId", "status"])
+    .index("by_userId_status", ["userId", "status"])
     .index("by_userIdAndToneId", ["userId", "toneId"]),
   duplicateDetections: defineTable({
     questionIds: v.array(v.id("questions")),
+    uniqueKey: v.optional(v.string()), // Combined ID of the questions (sorted) to prevent duplicate entries
     reason: v.string(),
     confidence: v.number(),
     status: v.union(
@@ -185,7 +202,8 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_detected_at", ["detectedAt"])
-    .index("by_status_and_confidence", ["status", "confidence"]),
+    .index("by_status_and_confidence", ["status", "confidence"])
+    .index("by_uniqueKey", ["uniqueKey"]),
   duplicateDetectionProgress: defineTable({
     status: v.union(
       v.literal("running"),

@@ -73,6 +73,16 @@ export const pickAndMarkQuestion = internalMutation({
     },
 });
 
+/*
+In `@scripts/n8n_workflow_instagram.json` around lines 5 - 8, The webhook
+definition for the route identified by parameters.path = "post-to-ig" currently
+has an empty options object and needs authentication; update the
+parameters.options for this webhook (the object under the parameters block where
+"path": "post-to-ig") to include an authentication property (e.g., add
+"authentication": { "type": "headerAuth", "headerName": "Authorization",
+"token": "<env or secret>" } or use "basicAuth" with credentials) so the webhook
+requires headerAuth or basicAuth instead of being publicly callable.
+*/
 export const postToInstagram = action({
     args: {},
     handler: async (ctx) => {
@@ -88,7 +98,7 @@ export const postToInstagram = action({
         const text = question.text || question.customText || "Unknown Question";
 
         // 2. Construct the URL
-        const baseUrl = "https://iceberg-breaker.vercel.app";
+        const baseUrl = process.env.OG_BASE_URL ?? "https://breaktheiceberg.com";
 
         // Pick a random gradient
         const gradient = DEFAULT_GRADIENTS[Math.floor(Math.random() * DEFAULT_GRADIENTS.length)];
@@ -115,7 +125,7 @@ export const postToInstagram = action({
             return;
         }
 
-        console.log(`Sending question ${question._id} to n8n: ${imageUrl}`);
+        console.log(`Sending question ${question._id} to ${webhookUrl}: ${imageUrl}`);
 
         const response = await fetch(webhookUrl, {
             method: "POST",
@@ -123,7 +133,7 @@ export const postToInstagram = action({
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                questionId: question._id,
+                questionUrl: `${baseUrl}/question/${question._id}`,
                 text,
                 imageUrl,
                 style: style?.name,

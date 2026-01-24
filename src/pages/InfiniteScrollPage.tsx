@@ -18,6 +18,7 @@ import { ModernQuestionCard } from "@/components/modern-question-card";
 import { useAuth, SignInButton } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
 import { UpgradeCTA } from "@/components/UpgradeCTA";
+import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
@@ -227,20 +228,15 @@ export default function InfiniteScrollPage() {
           return;
         }
 
-        const needed = BATCH_SIZE - combinedQuestions.length;
-        // Limit generation to avoid long waits, max 3 at a time
-        const countToGenerate = Math.min(needed, 3);
-
         try {
           const generated = await generateAIQuestions({
             prompt: "Generate random, engaging ice-breaker questions.",
-            count: countToGenerate
           });
 
           // Check for staleness after generation await
           if (currentRequestId !== requestIdRef.current) return;
 
-          const validGenerated = generated.filter((q): q is Doc<"questions"> => q !== null);
+          const validGenerated = (generated || []).filter((q): q is Doc<"questions"> => q !== null);
 
           if (validGenerated.length > 0) {
             setQuestions(prev => {
@@ -257,18 +253,13 @@ export default function InfiniteScrollPage() {
           }
 
           if (dbQuestions.length === 0 && validGenerated.length === 0) {
-            // If we still have 0 questions after generating, then truly no more
             setHasMore(false);
           }
         } catch (err) {
-          console.error("Generation failed", err);
-          // Check for staleness in error case too
+          console.error("AI Generation failed:", err);
           if (currentRequestId !== requestIdRef.current) return;
 
-          const errorMessage = err instanceof Error
-            ? err.message
-            : (typeof err === "object" && err !== null && "message" in err ? String((err as any).message) : String(err));
-
+          const errorMessage = err instanceof Error ? err.message : String(err);
           if (errorMessage.includes("logged in")) {
             setShowAuthCTA(true);
             setHasMore(false);
@@ -276,15 +267,11 @@ export default function InfiniteScrollPage() {
             setShowUpgradeCTA(true);
             setHasMore(false);
           }
-          // If generation fails, we just use what we have from DB.
         }
       }
-
     } catch (error) {
       console.error("Error fetching questions:", error);
-      // Check for staleness
       if (currentRequestId !== requestIdRef.current) return;
-
       toast.error("Failed to load more questions.");
     } finally {
       // Only reset loading if this request is still the active one
@@ -292,7 +279,7 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, isLoading, seenIds, hiddenQuestions, generateAIQuestions, hasMore, showAuthCTA, showUpgradeCTA, activeWorkspace]);
+  }, [convex, isLoading, seenIds, hiddenQuestions, generateAIQuestions, hasMore, showAuthCTA, showUpgradeCTA, activeWorkspace, user.isSignedIn]);
 
   // Initial load
   useEffect(() => {
@@ -382,6 +369,10 @@ export default function InfiniteScrollPage() {
 
   // Smooth gradient transition logic
   const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
+
+  // Determine variant for A/B testing (randomized on mount)
+  // We use a ref to keep it consistent across re-renders
+  const newsletterVariantRef = useRef(Math.random() > 0.5 ? 'blend' as const : 'standout' as const);
 
   // Refs for data needed in scroll handler to avoid frequent re-attachments
   const stylesMapRef = useRef(stylesMap);
@@ -495,7 +486,7 @@ export default function InfiniteScrollPage() {
 
       <main className="z-10 flex-1 flex flex-col pb-20 pt-20">
         <div className="flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full">
-          {questions.map((question) => {
+          {questions.map((question, index) => {
             // Derive specific style/tone/gradient for this card
             const cardStyle = question.style ? stylesMap.get(question.style) : undefined;
             const cardTone = question.tone ? tonesMap.get(question.tone) : undefined;
@@ -504,24 +495,31 @@ export default function InfiniteScrollPage() {
               : ['#667EEA', '#764BA2'];
 
             return (
-              <div
-                key={question._id}
-                ref={(el) => setQuestionRef(el, question._id)}
-                data-question-id={question._id}
-                className="w-full"
-              >
-                <ModernQuestionCard
-                  isGenerating={false}
-                  question={question}
-                  isFavorite={likedQuestions.includes(question._id)}
-                  gradient={cardGradient}
-                  style={cardStyle}
-                  tone={cardTone}
-                  onToggleFavorite={() => toggleLike(question._id)}
-                  onToggleHidden={() => toggleHide(question._id)}
-                  onHideStyle={handleHideStyle}
-                  onHideTone={handleHideTone}
-                />
+              <div key={`container-${question._id}`} className="flex flex-col gap-6 w-full">
+                <div
+                  key={question._id}
+                  ref={(el) => setQuestionRef(el, question._id)}
+                  data-question-id={question._id}
+                  className="w-full"
+                >
+                  <ModernQuestionCard
+                    isGenerating={false}
+                    question={question}
+                    isFavorite={likedQuestions.includes(question._id)}
+                    gradient={cardGradient}
+                    style={cardStyle}
+                    tone={cardTone}
+                    onToggleFavorite={() => toggleLike(question._id)}
+                    onToggleHidden={() => toggleHide(question._id)}
+                    onHideStyle={handleHideStyle}
+                    onHideTone={handleHideTone}
+                  />
+                </div>
+
+                {/* Insert Newsletter Card after the 5th question (index 4) */}
+                {index === 4 && user.isLoaded && !user.isSignedIn && (
+                  <NewsletterCard variant={newsletterVariantRef.current} />
+                )}
               </div>
             );
           })}
@@ -559,15 +557,16 @@ export default function InfiniteScrollPage() {
             />
           )}
 
-          {!hasMore && !showAuthCTA && !showUpgradeCTA && questions.length > 0 && (
-            <div className="text-center py-8 text-white/70">
-              No more questions found for this style and tone.
-            </div>
-          )}
-
-          {!hasMore && !showAuthCTA && !showUpgradeCTA && questions.length === 0 && !isLoading && (
-            <div className="text-center py-8 text-white/70">
-              No questions found. Try changing the style or tone.
+          {hasMore && !showAuthCTA && !showUpgradeCTA && (questions.length > 0 || !isLoading) && (
+            <div className="flex justify-center py-8">
+              <Button
+                variant="default"
+                onClick={() => {
+                  loadMoreQuestions();
+                }}
+              >
+                Load More
+              </Button>
             </div>
           )}
         </div>

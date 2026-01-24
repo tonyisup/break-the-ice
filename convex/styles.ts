@@ -20,12 +20,75 @@ export const getStyle = query({
     v.null(),
   ),
   handler: async (ctx, args) => {
-    const style = await ctx.db.query("styles").filter((q) => q.eq(q.field("id"), args.id)).first();
+    const style = await ctx.db.query("styles")
+      .withIndex("by_my_id", (q) => q.eq("id", args.id))
+      .unique();
     if (!style) {
       return null;
     }
     const { embedding, ...rest } = style;
     return rest;
+  },
+});
+
+export const getStylesWithExamples = query({
+  args: { id: v.string(), seed: v.optional(v.number()) },
+  returns: v.union(
+    v.object({
+      _id: v.id("styles"),
+      _creationTime: v.number(),
+      id: v.string(),
+      name: v.string(),
+      description: v.optional(v.string()),
+      structure: v.string(),
+      color: v.string(),
+      icon: v.string(),
+      example: v.optional(v.string()),
+      examples: v.optional(v.array(v.string())),
+      promptGuidanceForAI: v.optional(v.string()),
+      order: v.optional(v.float64()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const style = await ctx.db.query("styles")
+      .withIndex("by_my_id", (q) => q.eq("id", args.id))
+      .unique();
+    if (!style) {
+      return null;
+    }
+
+    const { embedding, ...rest } = style;
+
+    const exampleQuestions = await ctx.db.query("questions")
+      .withIndex("by_style", (q) => q.eq("style", args.id))
+      .collect();
+
+    const examples = exampleQuestions.map((q) => q.text).filter((q) => q !== undefined);
+
+    if (examples.length === 0) {
+      return { ...rest, examples: undefined };
+    }
+
+    const seed = args.seed ?? Math.random() * 0xFFFFFFFF;
+    const mulberry32 = (a: number) => {
+      return () => {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }
+    };
+    const rng = mulberry32(seed);
+
+    const maxExamples = process.env.MAX_EXAMPLES_PER_STYLE ? parseInt(process.env.MAX_EXAMPLES_PER_STYLE) : 3;
+    const sortedExamples = [...examples].sort(() => 0.5 - rng());
+    const sampledExamples = sortedExamples.slice(0, maxExamples);
+
+    return {
+      ...rest,
+      examples: sampledExamples,
+    };
   },
 });
 
@@ -201,7 +264,7 @@ export const addStyleEmbedding = internalMutation({
 });
 
 export const getRandomStyle = query({
-  args: {},
+  args: { seed: v.optional(v.number()) },
   returns: v.object({
     _id: v.id("styles"),
     _creationTime: v.number(),
@@ -212,13 +275,30 @@ export const getRandomStyle = query({
     color: v.string(),
     icon: v.string(),
     example: v.optional(v.string()),
+    examples: v.optional(v.array(v.string())),
     promptGuidanceForAI: v.optional(v.string()),
     order: v.optional(v.float64()),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const styles = await ctx.db.query("styles").withIndex("by_order").order("asc").collect();
-    const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+    if (styles.length === 0) {
+      throw new Error("No styles found in the database");
+    }
+
+    const seed = args.seed ?? Math.random() * 0xFFFFFFFF;
+    const mulberry32 = (a: number) => {
+      return () => {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }
+    };
+    const rng = mulberry32(seed);
+
+    const index = Math.floor(rng() * styles.length);
+    const randomStyle = styles[index];
     const { embedding, ...rest } = randomStyle;
     return rest;
   },
-}); 
+});

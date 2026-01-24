@@ -99,7 +99,6 @@ export const AIQuestionGenerator = ({ onQuestionGenerated, onClose }: AIQuestion
         currentQuestion: previewQuestion ? previewQuestion.text : undefined,
         style: selectedStyle,
         tone: selectedTone,
-        count: 1,
       });
       setPreviewQuestion(generatedQuestion[0] as Doc<"questions">);
       toast.success("Preview generated. Review and accept or try another.");

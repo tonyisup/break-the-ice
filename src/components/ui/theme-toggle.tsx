@@ -8,45 +8,46 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useTheme } from "@/hooks/useTheme"
+import { cn } from "@/lib/utils"
 
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({ className, showLabel = true, labelClassName }: { className?: string, showLabel?: boolean, labelClassName?: string }) {
   const { theme, setTheme } = useTheme()
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button className={className}>
-          {(theme != "system") && <>
-            {(theme == "light") && 
-              <span className="flex items-center gap-2">
+        <Button className={cn("gap-2", className)} aria-label={`Theme: ${theme}`}>
+          {(theme !== "system") && <>
+            {(theme === "light") &&
+              <>
                 <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <span className="hidden sm:inline">Light</span>
-              </span>
+                {showLabel && <span className={cn("hidden sm:inline", labelClassName)}>Light</span>}
+              </>
             }
-            {(theme == "dark") && 
-              <span className="flex items-center gap-2">
+            {(theme === "dark") &&
+              <>
                 <Moon className="h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                <span className="hidden sm:inline">Dark</span>
-              </span>
+                {showLabel && <span className={cn("hidden sm:inline", labelClassName)}>Dark</span>}
+              </>
             }
           </>}
-          {(theme == "system") && 
-            <span className="flex items-center gap-2">
+          {(theme === "system") &&
+            <>
               <Computer className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all" />
-              <span className="hidden sm:inline">System</span>
-            </span>
+              {showLabel && <span className={cn("hidden sm:inline", labelClassName)}>System</span>}
+            </>
           }
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem className="cursor-pointer hover:bg-black/10 dark:hover:bg-white/10" onClick={() => setTheme("light")}>
-          <span className="flex w-full justify-between">Light <Sun /></span>
+          <span className="flex w-full justify-between items-center gap-2">Light <Sun /></span>
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer hover:bg-black/10 dark:hover:bg-white/10" onClick={() => setTheme("dark")}>
-          <span className="flex w-full justify-between">Dark <Moon /></span>
+          <span className="flex w-full justify-between items-center gap-2">Dark <Moon /></span>
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer hover:bg-black/10 dark:hover:bg-white/10" onClick={() => setTheme("system")}>
-          <span className="flex w-full justify-between">System <Computer /></span>
+          <span className="flex w-full justify-between items-center gap-2">System <Computer /></span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

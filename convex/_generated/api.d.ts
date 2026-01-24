@@ -21,12 +21,16 @@ import type * as http from "../http.js";
 import type * as instagram from "../instagram.js";
 import type * as lib_emails from "../lib/emails.js";
 import type * as lib_retriever from "../lib/retriever.js";
+import type * as newsletter from "../newsletter.js";
 import type * as organizations from "../organizations.js";
+import type * as qa from "../qa.js";
 import type * as questions from "../questions.js";
+import type * as resend from "../resend.js";
 import type * as router from "../router.js";
 import type * as styles from "../styles.js";
 import type * as tags from "../tags.js";
 import type * as tones from "../tones.js";
+import type * as topics from "../topics.js";
 import type * as users from "../users.js";
 
 import type {
@@ -49,12 +53,16 @@ declare const fullApi: ApiFromModules<{
   instagram: typeof instagram;
   "lib/emails": typeof lib_emails;
   "lib/retriever": typeof lib_retriever;
+  newsletter: typeof newsletter;
   organizations: typeof organizations;
+  qa: typeof qa;
   questions: typeof questions;
+  resend: typeof resend;
   router: typeof router;
   styles: typeof styles;
   tags: typeof tags;
   tones: typeof tones;
+  topics: typeof topics;
   users: typeof users;
 }>;
 

@@ -1,582 +1,384 @@
-import React, { useRef, useState } from 'react';
-import { useQuery, useMutation, Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
-import { api } from '../../../../convex/_generated/api';
-import { Doc, Id } from '../../../../convex/_generated/dataModel';
-import { SignInButton, UserButton, useUser } from '@clerk/clerk-react';
-import { useTheme } from '../../../hooks/useTheme';
-import { Link } from 'react-router-dom';
-import { HouseIcon } from '@/components/ui/icons/icons';
-import { AnimatePresence } from 'framer-motion';
-import { AIQuestionGenerator } from '../../../components/ai-question-generator/ai-question-generator';
-import { Icon, IconComponent } from '@/components/ui/icons/icon';
+"use client"
 
-const QuestionsPage: React.FC = () => {
-    return (
-      <main>
-        <Unauthenticated>
-          <SignInButton />
-        </Unauthenticated>
-        <Authenticated>
-          <AdminComponentWrapper />
-        </Authenticated>
-        <AuthLoading>
-          <p>Still loading</p>
-        </AuthLoading>
-      </main>
-    )
-  };
+import * as React from "react"
+import { useQuery, useMutation } from "convex/react"
+import { api } from "../../../../convex/_generated/api"
+import { Doc, Id } from "../../../../convex/_generated/dataModel"
+import {
+	Search,
+	Plus,
+	MoreHorizontal,
+	Pencil,
+	Trash2,
+	Check,
+	X,
+	Sparkles,
+	CheckCircle2,
+	UserCircle
+} from "lucide-react"
 
-  function AdminComponentWrapper() {
-    
-    const user = useUser();
-    if (!user.isSignedIn) {
-      return <div>You are not logged in</div>;
-    }
-    if (!user.user?.publicMetadata.isAdmin) {
-      return <div>You are not an admin</div>;
-    }
-    return <QuestionManager />;
-  }
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuHeader,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog"
+import { Icon, IconComponent } from "@/components/ui/icons/icon"
+import { Badge } from "@/components/ui/badge"
+import { AIQuestionGenerator } from "@/components/ai-question-generator/ai-question-generator"
+import { AnimatePresence } from "framer-motion"
+import { toast } from "sonner"
 
-  function QuestionManager() {
-    const allQuestions = useQuery(api.questions.getQuestions);
-      const pendingQuestions = allQuestions?.filter(q => q.status === 'pending');
-      const questions = allQuestions?.filter(q => q.status !== 'pending');
-      const styles = useQuery(api.styles.getStyles);
-      const tones = useQuery(api.tones.getTones);
-      const createQuestion = useMutation(api.questions.createQuestion);
-      const updateQuestion = useMutation(api.questions.updateQuestion);
-      const deleteQuestion = useMutation(api.questions.deleteQuestion);
-      const { theme, setTheme } = useTheme();
-      const [newQuestionText, setNewQuestionText] = useState('');
-      const [newQuestionStyle, setNewQuestionStyle] = useState('open-ended');
-      const [newQuestionTone, setNewQuestionTone] = useState('fun-silly');
-      const [editingQuestion, setEditingQuestion] = useState<Doc<"questions"> | null>(null);
-      const [searchText, setSearchText] = useState('');
-      const [showAIGenerator, setShowAIGenerator] = useState(false);
-      const officialTextDraftsRef = useRef<Partial<Record<Id<"questions">, string>>>({});
-      const pendingQuestionOverridesRef = useRef<
-        Partial<Record<Id<"questions">, Partial<Doc<"questions">>>>
-      >({});
+export default function QuestionsPage() {
+	const allQuestions = useQuery(api.questions.getQuestions)
+	const styles = useQuery(api.styles.getStyles)
+	const tones = useQuery(api.tones.getTones)
 
-    const toggleTheme = () => {
-      setTheme(theme === 'light' ? 'dark' : 'light');
-    };
+	const createQuestion = useMutation(api.questions.createQuestion)
+	const updateQuestion = useMutation(api.questions.updateQuestion)
+	const deleteQuestion = useMutation(api.questions.deleteQuestion)
 
-    const handleCreateQuestion = () => {
-      if (newQuestionText.trim()) {
-        void createQuestion({
-          text: newQuestionText,
-          style: newQuestionStyle,
-          tone: newQuestionTone,
-        });
-        setNewQuestionText('');
-        setNewQuestionStyle('open-ended');
-        setNewQuestionTone('fun-silly');
-      }
-    };
+	const [search, setSearch] = React.useState("")
+	const [showAIGenerator, setShowAIGenerator] = React.useState(false)
+	const [editingQuestion, setEditingQuestion] = React.useState<Doc<"questions"> | null>(null)
+	const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
 
-    const getOfficialTextValue = (question: Doc<"questions">) => {
-      return officialTextDraftsRef.current[question._id] ?? question.customText ?? question.text ?? '';
-    };
+	// Create New Question State
+	const [newQuestion, setNewQuestion] = React.useState({
+		text: "",
+		style: "open-ended",
+		tone: "fun-silly",
+	})
 
-      const buildPendingQuestionDraft = (
-        question: Doc<"questions">,
-        overrides: Partial<Doc<"questions">> = {},
-      ) => {
-        const existingOverrides = pendingQuestionOverridesRef.current[question._id] ?? {};
-        const mergedOverrides = {
-          ...existingOverrides,
-          ...overrides,
-        };
+	// Pending Questions
+	const pendingQuestions = allQuestions?.filter(q => q.status === "pending") ?? []
+	const activeQuestions = allQuestions?.filter(q => q.status !== "pending") ?? []
 
-        pendingQuestionOverridesRef.current[question._id] = mergedOverrides;
+	const filteredQuestions = activeQuestions.filter(q => {
+		const text = q.text?.toLowerCase() || q.customText?.toLowerCase() || ""
+		const styleName = styles?.find(s => s.id === q.style)?.name.toLowerCase() || ""
+		const toneName = tones?.find(t => t.id === q.tone)?.name.toLowerCase() || ""
+		const searchLower = search.toLowerCase()
+		return text.includes(searchLower) || styleName.includes(searchLower) || toneName.includes(searchLower)
+	})
 
-        const baseText = getOfficialTextValue(question);
-        const hasTextOverride = Object.prototype.hasOwnProperty.call(mergedOverrides, 'text');
+	const handleCreate = async () => {
+		if (!newQuestion.text.trim()) return
+		try {
+			await createQuestion({
+				text: newQuestion.text,
+				style: newQuestion.style,
+				tone: newQuestion.tone,
+			})
+			toast.success("Question created successfully")
+			setNewQuestion({ text: "", style: "open-ended", tone: "fun-silly" })
+			setIsCreateDialogOpen(false)
+		} catch (error) {
+			toast.error("Failed to create question")
+		}
+	}
 
-        return {
-          ...question,
-          text: hasTextOverride ? mergedOverrides.text ?? '' : baseText,
-          ...mergedOverrides,
-        };
-      };
+	const handleUpdate = async (q: Doc<"questions">) => {
+		try {
+			await updateQuestion({
+				id: q._id,
+				text: q.text || q.customText!,
+				style: q.style || undefined,
+				tone: q.tone || undefined,
+				status: q.status === "pending" ? "public" : q.status,
+			})
+			toast.success("Question updated")
+			setEditingQuestion(null)
+		} catch (error) {
+			toast.error("Failed to update question")
+		}
+	}
 
-        const handleUpdateQuestion = (questionToUpdate: Doc<"questions"> | null) => {
-          if (questionToUpdate && (questionToUpdate.text?.trim() || questionToUpdate.customText?.trim())) {
-          const questionId = questionToUpdate._id;
-          void updateQuestion({
-            id: questionToUpdate._id,
-            text: questionToUpdate.text || questionToUpdate.customText!,
-            style: questionToUpdate.style || undefined,
-            tone: questionToUpdate.tone || undefined,
-            status: questionToUpdate.status === 'pending' ? 'approved' : questionToUpdate.status,
-          });
-          delete officialTextDraftsRef.current[questionId];
-          delete pendingQuestionOverridesRef.current[questionId];
+	const handleDelete = async (id: Id<"questions">) => {
+		if (!confirm("Are you sure you want to delete this question?")) return
+		try {
+			await deleteQuestion({ id })
+			toast.success("Question deleted")
+		} catch (error) {
+			toast.error("Failed to delete question")
+		}
+	}
 
-          if (editingQuestion?._id === questionId) {
-            setEditingQuestion(null);
-          }
-        }
-      };
+	const handleApprove = async (q: Doc<"questions">, status: "public" | "personal") => {
+		try {
+			await updateQuestion({
+				id: q._id,
+				text: q.text || q.customText!,
+				style: q.style || undefined,
+				tone: q.tone || undefined,
+				status: status === "public" ? "public" : "private",
+			})
+			toast.success(`Question marked as ${status}`)
+		} catch (error) {
+			toast.error("Failed to process question")
+		}
+	}
 
-    const handleDeleteQuestion = (id: Id<"questions">) => {
-      void deleteQuestion({ id });
-    };
+	if (!allQuestions || !styles || !tones) {
+		return (
+			<div className="flex flex-col gap-4 animate-pulse">
+				<div className="h-10 bg-muted rounded w-1/4" />
+				<div className="h-64 bg-muted rounded w-full" />
+			</div>
+		)
+	}
 
-    const clearSearchText = () => {
-      setSearchText('');
-    };
+	return (
+		<div className="space-y-8">
+			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+				<div>
+					<h2 className="text-3xl font-bold tracking-tight">Questions</h2>
+					<p className="text-muted-foreground">Manage and moderate questions in the database.</p>
+				</div>
+				<div className="flex items-center gap-2">
+					<Button onClick={() => setShowAIGenerator(true)} variant="outline" className="gap-2">
+						<Sparkles className="size-4 text-purple-500" />
+						AI Generator
+					</Button>
+					<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+						<DialogTrigger asChild>
+							<Button className="gap-2">
+								<Plus className="size-4" />
+								Add Question
+							</Button>
+						</DialogTrigger>
+						<DialogContent className="sm:max-w-[500px]">
+							<DialogHeader>
+								<DialogTitle>Create New Question</DialogTitle>
+								<DialogDescription>Add a new manually curated question to the pool.</DialogDescription>
+							</DialogHeader>
+							<div className="grid gap-4 py-4">
+								<div className="grid gap-2">
+									<label htmlFor="text" className="text-sm font-medium">Question Text</label>
+									<textarea
+										id="text"
+										value={newQuestion.text}
+										onChange={(e) => setNewQuestion({ ...newQuestion, text: e.target.value })}
+										className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+										placeholder="Enter your question here..."
+									/>
+								</div>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<label htmlFor="style-select" className="text-sm font-medium">Style</label>
+										<select
+											id="style-select"
+											value={newQuestion.style}
+											onChange={(e) => setNewQuestion({ ...newQuestion, style: e.target.value })}
+											className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										>
+											{styles.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+										</select>
+									</div>
+									<div className="grid gap-2">
+										<label htmlFor="tone-select" className="text-sm font-medium">Tone</label>
+										<select
+											id="tone-select"
+											value={newQuestion.tone}
+											onChange={(e) => setNewQuestion({ ...newQuestion, tone: e.target.value })}
+											className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										>
+											{tones.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+										</select>
+									</div>
+								</div>
+							</div>
+							<DialogFooter>
+								<Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
+								<Button onClick={handleCreate}>Create Question</Button>
+							</DialogFooter>
+						</DialogContent>
+					</Dialog>
+				</div>
+			</div>
 
-    const filteredQuestions = questions?.filter((q) => {
-        if (!q.text) {
-          return false;
-        }
-        const lowerCaseSearchText = searchText.toLowerCase();
-        const styleName = styles?.find((s) => s.id === q.style)?.name ?? "";
-        const toneName = tones?.find((t) => t.id === q.tone)?.name ?? "";
+			{pendingQuestions.length > 0 && (
+				<section className="space-y-4">
+					<div className="flex items-center gap-2">
+						<h3 className="text-xl font-semibold">Pending Review</h3>
+						<Badge variant="secondary" className="rounded-full">{pendingQuestions.length}</Badge>
+					</div>
+					<div className="grid gap-4">
+						{pendingQuestions.map((q) => (
+							<div key={q._id} className="p-6 bg-white dark:bg-gray-800 rounded-xl border-2 border-primary/20 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:border-primary/40">
+								<div className="space-y-2 flex-1">
+									<div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-widest">
+										<UserCircle className="size-3" />
+										User Submitted
+									</div>
+									<p className="text-lg font-medium">{q.customText}</p>
+								</div>
+								<div className="flex items-center gap-3">
+									<Button variant="outline" size="sm" className="text-blue-500 hover:text-blue-600 hover:bg-blue-50" onClick={() => handleApprove(q, "personal")}>
+										Mark Personal
+									</Button>
+									<Button size="sm" className="bg-green-600 hover:bg-green-700 text-white gap-2" onClick={() => handleApprove(q, "public")}>
+										<CheckCircle2 className="size-4" />
+										Approve Public
+									</Button>
+								</div>
+							</div>
+						))}
+					</div>
+				</section>
+			)}
 
-        return (
-          q.text.toLowerCase().includes(lowerCaseSearchText) ||
-          styleName.toLowerCase().includes(lowerCaseSearchText) ||
-          toneName.toLowerCase().includes(lowerCaseSearchText)
-        );
-      });
+			<div className="space-y-4">
+				<div className="flex items-center gap-2 max-w-md bg-white dark:bg-gray-800 rounded-lg px-3 border shadow-sm focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+					<Search className="size-4 text-muted-foreground" />
+					<Input
+						placeholder="Search questions, styles, or tones..."
+						value={search}
+						onChange={(e) => setSearch(e.target.value)}
+						className="border-0 shadow-none focus-visible:ring-0 px-1 py-1"
+					/>
+					{search && <Button variant="ghost" size="icon" className="size-6" onClick={() => setSearch("")}><X className="size-3" /></Button>}
+				</div>
 
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <Link to="/admin" className="text-gray-500 flex items-center gap-2 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors text-sm sm:text-base">
-              <HouseIcon />
-              Admin
-            </Link>
-            <button
-              onClick={() => setShowAIGenerator(true)}
-              className="p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors text-white"
-            >
-              🤖 AI Generator
-            </button>
-            <div className="flex items-center gap-4">
-              <button
-                onClick={toggleTheme}
-                className="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-              >
-                {theme === 'light' ? (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                )}
-              </button>
-              <div className="p-2">
-                <UserButton />
-              </div>
-            </div>
-          </div>
+				<div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+					<table className="w-full text-sm text-left">
+						<thead className="bg-muted/50 border-b text-muted-foreground font-medium uppercase text-xs tracking-wider">
+							<tr>
+								<th className="px-6 py-4">Question</th>
+								<th className="px-6 py-4 w-40">Style</th>
+								<th className="px-6 py-4 w-40">Tone</th>
+								<th className="px-6 py-4 w-20 text-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y">
+							{filteredQuestions.map((q) => {
+								const style = styles.find(s => s.id === q.style);
+								const tone = tones.find(t => t.id === q.tone);
+								const isEditing = editingQuestion?._id === q._id;
 
-          {pendingQuestions && pendingQuestions.length > 0 && (
-            <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-              <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Review Pending Questions</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Submitted Question</th>
-                      <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Official Text</th>
-                      <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Style</th>
-                      <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Tone</th>
-                      <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {pendingQuestions.map((q) => (
-                      <tr key={q._id}>
-                        <td className="p-4 text-gray-900 dark:text-white">{q.customText}</td>
-                          <td className="p-4">
-                              <input
-                                type="text"
-                                defaultValue={q.customText}
-                                onBlur={(e) => {
-                                  const value = e.target.value;
-                                  officialTextDraftsRef.current[q._id] = value;
-                                  setEditingQuestion(buildPendingQuestionDraft(q, { text: value }));
-                                }}
-                                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
-                              />
-                          </td>
-                          <td className="p-4">
-                              <select
-                                defaultValue={q.style ?? ''}
-                                onBlur={(e) =>
-                                  setEditingQuestion(
-                                    buildPendingQuestionDraft(q, {
-                                      style: e.target.value || undefined,
-                                    }),
-                                  )
-                                }
-                                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
-                              >
-                              <option value="">Select a style</option>
-                              {styles?.map((style) => (
-                                <option key={style.id} value={style.id}>{style.name}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="p-4">
-                              <select
-                                defaultValue={q.tone ?? ''}
-                                onBlur={(e) =>
-                                  setEditingQuestion(
-                                    buildPendingQuestionDraft(q, {
-                                      tone: e.target.value || undefined,
-                                    }),
-                                  )
-                                }
-                                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full"
-                              >
-                              <option value="">Select a tone</option>
-                              {tones?.map((tone) => (
-                                <option key={tone.id} value={tone.id}>{tone.name}</option>
-                              ))}
-                            </select>
-                          </td>
-                        <td className="p-4">
-                          <div className="flex gap-2">
-                                <button
-                                  onClick={() => {
-                                    const pendingDraft = buildPendingQuestionDraft(q);
-                                    handleUpdateQuestion(pendingDraft);
-                                  }}
-                                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm"
-                              >
-                                Approve
-                              </button>
-                                <button
-                                  onClick={() => {
-                                    const personalDraft = buildPendingQuestionDraft(q, { status: 'personal' });
-                                    handleUpdateQuestion(personalDraft);
-                                  }}
-                                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-sm"
-                              >
-                                Personal
-                              </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+								return (
+									<tr key={q._id} className="hover:bg-muted/30 transition-colors group">
+										<td className="px-6 py-4">
+											{isEditing ? (
+												<textarea
+													className="w-full min-h-[60px] p-2 rounded-md border bg-background text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+													value={editingQuestion.text || editingQuestion.customText || ""}
+													onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
+												/>
+											) : (
+												<span className="font-medium">{q.text || q.customText}</span>
+											)}
+										</td>
+										<td className="px-6 py-4">
+											{isEditing ? (
+												<select
+													className="w-full h-8 rounded-md border bg-background px-2 text-xs focus:ring-2 focus:ring-primary/20 outline-none"
+													value={editingQuestion.style || ""}
+													onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
+												>
+													<option value="">No Style</option>
+													{styles.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+												</select>
+											) : style ? (
+												<Badge
+													variant="outline"
+													className="gap-1.5 font-medium py-1"
+													style={{ borderColor: `${style.color}40`, backgroundColor: `${style.color}10`, color: style.color }}
+												>
+													<IconComponent icon={style.icon as Icon} size={14} color={style.color} />
+													{style.name}
+												</Badge>
+											) : <span className="text-muted-foreground italic text-xs">None</span>}
+										</td>
+										<td className="px-6 py-4">
+											{isEditing ? (
+												<select
+													className="w-full h-8 rounded-md border bg-background px-2 text-xs focus:ring-2 focus:ring-primary/20 outline-none"
+													value={editingQuestion.tone || ""}
+													onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
+												>
+													<option value="">No Tone</option>
+													{tones.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+												</select>
+											) : tone ? (
+												<Badge
+													variant="outline"
+													className="gap-1.5 font-medium py-1"
+													style={{ borderColor: `${tone.color}40`, backgroundColor: `${tone.color}10`, color: tone.color }}
+												>
+													<IconComponent icon={tone.icon as Icon} size={14} color={tone.color} />
+													{tone.name}
+												</Badge>
+											) : <span className="text-muted-foreground italic text-xs">None</span>}
+										</td>
+										<td className="px-6 py-4 text-right">
+											<div className="flex items-center justify-end gap-1 opacity-100 group-hover:opacity-100 transition-opacity">
+												{isEditing ? (
+													<>
+														<Button variant="ghost" size="icon" className="size-8 text-green-600" onClick={() => handleUpdate(editingQuestion)}>
+															<Check className="size-4" />
+														</Button>
+														<Button variant="ghost" size="icon" className="size-8 text-red-600" onClick={() => setEditingQuestion(null)}>
+															<X className="size-4" />
+														</Button>
+													</>
+												) : (
+													<DropdownMenu>
+														<DropdownMenuTrigger asChild>
+															<Button variant="ghost" size="icon" className="size-8">
+																<MoreHorizontal className="size-4" />
+															</Button>
+														</DropdownMenuTrigger>
+														<DropdownMenuContent align="end" className="w-40">
+															<DropdownMenuItem className="gap-2" onClick={() => setEditingQuestion(q)}>
+																<Pencil className="size-3.5" />
+																Edit Question
+															</DropdownMenuItem>
+															<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={() => handleDelete(q._id)}>
+																<Trash2 className="size-3.5" />
+																Delete
+															</DropdownMenuItem>
+														</DropdownMenuContent>
+													</DropdownMenu>
+												)}
+											</div>
+										</td>
+									</tr>
+								)
+							})}
+						</tbody>
+					</table>
+					{filteredQuestions.length === 0 && (
+						<div className="py-20 text-center space-y-2">
+							<p className="text-lg font-medium">No questions found</p>
+							<p className="text-muted-foreground">Try adjusting your search terms or add a new question.</p>
+						</div>
+					)}
+				</div>
+			</div>
 
-          <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Create New Question</h2>
-            <div className="space-y-4">
-              <input
-                type="text"
-                value={newQuestionText}
-                onChange={(e) => setNewQuestionText(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter new question text"
-              />
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Style
-                </label>
-                <select
-                  value={newQuestionStyle}
-                  onChange={(e) => setNewQuestionStyle(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  {styles?.map((style) => (
-                    <option key={style.id} value={style.id}>
-                      {style.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Tone
-                </label>
-                <select
-                  value={newQuestionTone}
-                  onChange={(e) => setNewQuestionTone(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  {tones?.map((tone) => (
-                    <option key={tone.id} value={tone.id}>
-                      {tone.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  onClick={handleCreateQuestion}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-                >
-                  Create
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex gap-3">
-            <input
-              type="text"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-3 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Search questions by text, style, or tone..."
-            />
-            <button
-              onClick={clearSearchText}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              Clear
-            </button>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Questions</h2>
-            </div>
-            {/* Mobile View */}
-            <div className="lg:hidden">
-              <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredQuestions?.map((q) => {
-                  const style = styles?.find((s) => s.id === q.style);
-                  const tone = tones?.find((t) => t.id === q.tone);
-                  return (
-                    <div key={q._id} className="p-4 space-y-3">
-                      {editingQuestion?._id === q._id ? (
-                        <div className="space-y-3">
-                          <textarea
-                            value={editingQuestion.text}
-                            onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            rows={3}
-                          />
-                          <select
-                            value={editingQuestion.style ?? ''}
-                            onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="">Select a style</option>
-                            {styles?.map((style) => (
-                              <option key={style.id} value={style.id}>
-                                {style.name}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            value={editingQuestion.tone ?? ''}
-                            onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="">Select a tone</option>
-                            {tones?.map((tone) => (
-                              <option key={tone.id} value={tone.id}>
-                                {tone.name}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="flex gap-2">
-                              <button
-                                onClick={() => handleUpdateQuestion(editingQuestion)}
-                                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1"
-                              >
-                                Save
-                              </button>
-                            <button onClick={() => setEditingQuestion(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1">Cancel</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <p className="text-gray-900 dark:text-white">{q.text}</p>
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Style:</span>
-                              {style ? (
-                                <span
-                                  className="flex items-center gap-1.5 text-sm font-medium px-2 py-0.5 rounded-full"
-                                  style={{
-                                    backgroundColor: `${style.color}20`,
-                                    color: style.color,
-                                  }}
-                                >
-                                  <IconComponent icon={style.icon as Icon} size={24} color={style.color} />
-                                  {style.name}
-                                </span>
-                              ) : (
-                                <span className="text-sm text-gray-500">No style</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Tone:</span>
-                              {tone ? (
-                                <span
-                                  className="flex items-center gap-1.5 text-sm font-medium px-2 py-0.5 rounded-full"
-                                  style={{
-                                    backgroundColor: `${tone.color}20`,
-                                    color: tone.color,
-                                  }}
-                                >
-                                  <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />
-                                  {tone.name}
-                                </span>
-                              ) : (
-                                <span className="text-sm text-gray-500">No tone</span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2 pt-2">
-                            <button onClick={() => setEditingQuestion(q)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Edit</button>
-                            <button onClick={() => handleDeleteQuestion(q._id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Delete</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            {/* Desktop View */}
-            <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                  <tr>
-                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/3">Question</th>
-                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/6">Style</th>
-                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/6">Tone</th>
-                    <th className="text-left p-4 text-sm font-medium text-gray-900 dark:text-white w-1/6">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredQuestions?.map((q) => (
-                    <tr key={q._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                      <td className="p-4 align-top">
-                        {editingQuestion?._id === q._id ? (
-                          <textarea
-                            value={editingQuestion.text}
-                            onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            rows={2}
-                          />
-                        ) : (
-                          <span className="text-gray-900 dark:text-white">{q.text}</span>
-                        )}
-                      </td>
-                      <td className="p-4 align-top">
-                        {editingQuestion?._id === q._id ? (
-                          <select
-                            value={editingQuestion.style ?? ''}
-                            onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="">Select a style</option>
-                            {styles?.map((style) => (
-                              <option key={style.id} value={style.id}>
-                                {style.name}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          (() => {
-                            const style = styles?.find(s => s.id === q.style);
-                            if (!style) return <em className="text-gray-500 dark:text-gray-400">No style</em>;
-                            return (
-                              <span
-                                className="flex items-center gap-1.5 text-sm font-medium px-2 py-0.5 rounded-full"
-                                style={{
-                                  backgroundColor: `${style.color}20`,
-                                  color: style.color,
-                                }}
-                              >
-                                <IconComponent icon={style.icon as Icon} size={24} color={style.color} />
-                                {style.name}
-                              </span>
-                            );
-                          })()
-                        )}
-                      </td>
-                      <td className="p-4 align-top">
-                        {editingQuestion?._id === q._id ? (
-                          <select
-                            value={editingQuestion.tone ?? ''}
-                            onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
-                            className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="">Select a tone</option>
-                            {tones?.map((tone) => (
-                              <option key={tone.id} value={tone.id}>
-                                {tone.name}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          (() => {
-                            const tone = tones?.find(t => t.id === q.tone);
-                            if (!tone) return <em className="text-gray-500 dark:text-gray-400">No tone</em>;
-                            return (
-                              <span
-                                className="flex items-center gap-1.5 text-sm font-medium px-2 py-0.5 rounded-full"
-                                style={{
-                                  backgroundColor: `${tone.color}20`,
-                                  color: tone.color,
-                                }}
-                              >
-                                <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />
-                                {tone.name}
-                              </span>
-                            );
-                          })()
-                        )}
-                      </td>
-                      <td className="p-4 align-top">
-                        <div className="flex gap-2">
-                          {editingQuestion?._id === q._id ? (
-                            <div className="flex gap-2">
-                                <button
-                                  onClick={() => handleUpdateQuestion(editingQuestion)}
-                                  className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors"
-                                >
-                                  Save
-                                </button>
-                              <button onClick={() => setEditingQuestion(null)} className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Cancel</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => setEditingQuestion(q)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Edit</button>
-                          )}
-                          <button onClick={() => handleDeleteQuestion(q._id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">Delete</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <AnimatePresence>
-          {showAIGenerator && (
-            <AIQuestionGenerator
-              onQuestionGenerated={() => setShowAIGenerator(false)}
-              onClose={() => setShowAIGenerator(false)}
-            />
-          )}
-        </AnimatePresence>
-      </div>
-    );
+			<AnimatePresence>
+				{showAIGenerator && (
+					<AIQuestionGenerator
+						onQuestionGenerated={() => setShowAIGenerator(false)}
+						onClose={() => setShowAIGenerator(false)}
+					/>
+				)}
+			</AnimatePresence>
+		</div>
+	)
 }
 
-export default QuestionsPage;
+

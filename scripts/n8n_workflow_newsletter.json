@@ -1,0 +1,404 @@
+{
+	"name": "Newsletter Subscription via Webhook (Global Contacts & Segments)",
+	"nodes": [
+		{
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "newsletter-subscribe",
+				"responseMode": "responseNode",
+				"options": {}
+			},
+			"id": "e7132f18-3908-4f09-a73d-55617ecd37c9",
+			"name": "Webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 1,
+			"position": [
+				112,
+				1104
+			],
+			"webhookId": "41bb8144-0f1c-499f-a5a9-802ea385b954"
+		},
+		{
+			"parameters": {
+				"conditions": {
+					"options": {
+						"caseSensitive": true,
+						"leftValue": "",
+						"typeValidation": "strict",
+						"version": 1
+					},
+					"conditions": [
+						{
+							"id": "email-validation",
+							"leftValue": "={{ $json.body.email }}",
+							"rightValue": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+							"operator": {
+								"type": "string",
+								"operation": "regex"
+							}
+						}
+					],
+					"combinator": "and"
+				},
+				"options": {}
+			},
+			"id": "834c77f0-0d3a-4e2b-8a1a-4d3c3f3e3d3c",
+			"name": "Validate Email",
+			"type": "n8n-nodes-base.if",
+			"typeVersion": 2,
+			"position": [
+				336,
+				1104
+			]
+		},
+		{
+			"parameters": {
+				"respondWith": "json",
+				"responseBody": "={ { \"success\": false, \"error\": \"Invalid email format\" } }",
+				"options": {
+					"responseCode": 400
+				}
+			},
+			"id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+			"name": "Invalid Email Response",
+			"type": "n8n-nodes-base.respondToWebhook",
+			"typeVersion": 1,
+			"position": [
+				336,
+				1300
+			]
+		},
+		{
+			"parameters": {
+				"method": "POST",
+				"url": "https://api.resend.com/contacts",
+				"authentication": "predefinedCredentialType",
+				"nodeCredentialType": "httpBearerAuth",
+				"sendHeaders": true,
+				"headerParameters": {
+					"parameters": [
+						{
+							"name": "Content-Type",
+							"value": "application/json"
+						}
+					]
+				},
+				"sendBody": true,
+				"specifyBody": "json",
+				"jsonBody": "={\n  \"email\": \"{{ $json.body.email }}\",\n  \"unsubscribed\": false\n}",
+				"options": {}
+			},
+			"id": "66c9f6ee-bbb1-40bc-b028-c7cf0ce1746a",
+			"name": "Resend: Create Global Contact",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4.1,
+			"position": [
+				560,
+				1104
+			],
+			"alwaysOutputData": true,
+			"credentials": {
+				"httpBearerAuth": {
+					"id": "ZV5v5w5ANeW1wAu0",
+					"name": "Resend - Bearer Auth account"
+				}
+			},
+			"onError": "continueErrorOutput"
+		},
+		{
+			"parameters": {
+				"method": "POST",
+				"url": "=https://api.resend.com/contacts/{{ encodeURIComponent($node[\"Webhook\"].json[\"body\"][\"email\"]) }}/segments/7c132839-8e29-4e94-a1d1-61c9f3c3d299",
+				"authentication": "predefinedCredentialType",
+				"nodeCredentialType": "httpBearerAuth",
+				"sendHeaders": true,
+				"headerParameters": {
+					"parameters": [
+						{
+							"name": "Content-Type",
+							"value": "application/json"
+						}
+					]
+				},
+				"options": {}
+			},
+			"id": "1eca118f-a579-436f-baec-c6e6eeb54e09",
+			"name": "Resend: Add to Segment",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4.1,
+			"position": [
+				784,
+				1104
+			],
+			"alwaysOutputData": true,
+			"credentials": {
+				"httpBearerAuth": {
+					"id": "ZV5v5w5ANeW1wAu0",
+					"name": "Resend - Bearer Auth account"
+				}
+			},
+			"onError": "continueErrorOutput"
+		},
+		{
+			"parameters": {
+				"conditions": {
+					"options": {
+						"caseSensitive": true,
+						"leftValue": "",
+						"typeValidation": "strict",
+						"version": 1
+					},
+					"conditions": [
+						{
+							"id": "error-check",
+							"leftValue": "={{$json.error}}",
+							"rightValue": "",
+							"operator": {
+								"type": "string",
+								"operation": "isEmpty"
+							}
+						},
+						{
+							"id": "6a094f2a-6f4c-41e5-b2cf-75c895e4b687",
+							"leftValue": "={{ $json.id }}",
+							"rightValue": "",
+							"operator": {
+								"type": "string",
+								"operation": "notEmpty",
+								"singleValue": true
+							}
+						}
+					],
+					"combinator": "or"
+				},
+				"options": {}
+			},
+			"id": "e947948f-b753-4c78-960c-93db9e74709e",
+			"name": "Check Success",
+			"type": "n8n-nodes-base.if",
+			"typeVersion": 2,
+			"position": [
+				1008,
+				1104
+			]
+		},
+		{
+			"parameters": {
+				"method": "POST",
+				"url": "https://api.resend.com/emails",
+				"authentication": "predefinedCredentialType",
+				"nodeCredentialType": "httpBearerAuth",
+				"sendHeaders": true,
+				"headerParameters": {
+					"parameters": [
+						{
+							"name": "Content-Type",
+							"value": "application/json"
+						}
+					]
+				},
+				"sendBody": true,
+				"specifyBody": "json",
+				"jsonBody": "={\"from\": \"Newsletter <newsletter@breaktheiceberg.com>\", \"to\": \"{{ $node[\"Webhook\"].json[\"body\"][\"email\"] }}\", \"subject\": \"Welcome to the Newsletter!\", \"html\": \"<h1>Welcome!</h1><p>Thanks for subscribing to our daily questions feed.</p>\"}",
+				"options": {}
+			},
+			"id": "44face03-b386-4062-a09a-a244bb3f5416",
+			"name": "Resend: Send Welcome Email",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4.1,
+			"position": [
+				1440,
+				992
+			],
+			"credentials": {
+				"httpBearerAuth": {
+					"id": "ZV5v5w5ANeW1wAu0",
+					"name": "Resend - Bearer Auth account"
+				}
+			}
+		},
+		{
+			"parameters": {
+				"respondWith": "allIncomingItems",
+				"options": {}
+			},
+			"id": "ae6a6afd-5df3-4f74-a0ee-f91f5d7843b6",
+			"name": "Success Response",
+			"type": "n8n-nodes-base.respondToWebhook",
+			"typeVersion": 1,
+			"position": [
+				1648,
+				992
+			]
+		},
+		{
+			"parameters": {
+				"respondWith": "json",
+				"responseBody": "={ { \"success\": false, \"error\": $json.error || 'Subscription failed' } }",
+				"options": {
+					"responseCode": 400
+				}
+			},
+			"id": "d81c76bb-429d-462b-a48a-f2f771c7c400",
+			"name": "Error Response",
+			"type": "n8n-nodes-base.respondToWebhook",
+			"typeVersion": 1,
+			"position": [
+				1440,
+				1200
+			]
+		},
+		{
+			"parameters": {},
+			"type": "n8n-nodes-base.manualTrigger",
+			"typeVersion": 1,
+			"position": [
+				1392,
+				816
+			],
+			"id": "621db2bf-7154-4cb0-b3f9-4b9f4ca4cfd6",
+			"name": "When clicking ‘Execute workflow’"
+		},
+		{
+			"parameters": {
+				"amount": 1
+			},
+			"type": "n8n-nodes-base.wait",
+			"typeVersion": 1.1,
+			"position": [
+				1216,
+				992
+			],
+			"id": "258a5c7f-3f36-4e5f-b3be-ee4b549fabe2",
+			"name": "Wait",
+			"webhookId": "529469f1-ed66-4ff4-a6ad-dc8805b46d9a"
+		}
+	],
+	"pinData": {
+		"When clicking ‘Execute workflow’": [
+			{
+				"json": {
+					"id": "b1bb6e60-4a45-4502-aacf-94f85e2c2a5f"
+				}
+			}
+		]
+	},
+	"connections": {
+		"Webhook": {
+			"main": [
+				[
+					{
+						"node": "Validate Email",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Validate Email": {
+			"main": [
+				[
+					{
+						"node": "Resend: Create Global Contact",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Invalid Email Response",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Resend: Create Global Contact": {
+			"main": [
+				[
+					{
+						"node": "Resend: Add to Segment",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Resend: Add to Segment": {
+			"main": [
+				[
+					{
+						"node": "Check Success",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Check Success": {
+			"main": [
+				[
+					{
+						"node": "Wait",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Error Response",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Resend: Send Welcome Email": {
+			"main": [
+				[
+					{
+						"node": "Success Response",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"When clicking ‘Execute workflow’": {
+			"main": [
+				[
+					{
+						"node": "Success Response",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Wait": {
+			"main": [
+				[
+					{
+						"node": "Resend: Send Welcome Email",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"active": true,
+	"settings": {
+		"executionOrder": "v1",
+		"availableInMCP": false,
+		"timeSavedMode": "fixed",
+		"callerPolicy": "workflowsFromSameOwner",
+		"errorWorkflow": "2GGn7n3rUEscGZ5aYo8md"
+	},
+	"versionId": "7c7da6f1-aa9d-4878-8147-b96bd12ae981",
+	"meta": {
+		"instanceId": "44c05803cfc8816bf8e09ed2f305ee3a1936f3f51f62e8b6dcd0395b2e0d86ba"
+	},
+	"id": "qxqdBScZJBWEf0BRmCdym",
+	"tags": []
+}

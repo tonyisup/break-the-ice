@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { ImageResponse } from '@vercel/og';
 import React from 'react';
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '../convex/_generated/api.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -8,16 +10,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const searchParams = url.searchParams;
 
     // Extract params
-    const text = searchParams.get('text');
-    const styleName = searchParams.get('styleName') || 'General';
-    const styleColor = searchParams.get('styleColor') || '#000000';
-    const gradientStart = searchParams.get('gradientStart') || '#f0f0f0';
-    const gradientEnd = searchParams.get('gradientEnd') || '#d0d0d0';
-    const toneName = searchParams.get('toneName') || 'Casual';
-    const toneColor = searchParams.get('toneColor') || '#000000';
+    const id = searchParams.get('id');
+    let text = searchParams.get('text');
+    let styleName = searchParams.get('styleName') || 'General';
+    let styleColor = searchParams.get('styleColor') || '#000000';
+    let gradientStart = searchParams.get('gradientStart') || '#f0f0f0';
+    let gradientEnd = searchParams.get('gradientEnd') || '#d0d0d0';
+    let toneName = searchParams.get('toneName') || 'Casual';
+    let toneColor = searchParams.get('toneColor') || '#000000';
+
+    if (id) {
+      const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+      if (!convexUrl) {
+        throw new Error('NEXT_PUBLIC_CONVEX_URL is not set');
+      }
+      const convex = new ConvexHttpClient(convexUrl);
+      const questionInfo: any = await convex.query(api.questions.getQuestionForOgImage, { id: id as any });
+      if (questionInfo) {
+        text = questionInfo.text;
+        styleName = questionInfo.styleName;
+        styleColor = questionInfo.styleColor;
+        toneName = questionInfo.toneName;
+        toneColor = questionInfo.toneColor;
+        gradientStart = questionInfo.gradientStart;
+        gradientEnd = questionInfo.gradientEnd;
+      }
+    }
 
     if (!text) {
-      res.status(400).send('Missing text parameter');
+      res.status(400).send('Missing text or id parameter');
       return;
     }
 
@@ -87,8 +108,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   backgroundColor: 'rgba(0,0,0,0.1)',
                   padding: '8px 16px',
                   borderRadius: '999px',
-                  borderTop: `2px solid ${gradientStart}`,
-                  borderLeft: `2px solid ${gradientStart}`,
+                  borderTopWidth: '2px',
+                  borderTopStyle: 'solid',
+                  borderTopColor: gradientStart,
+                  borderLeftWidth: '2px',
+                  borderLeftStyle: 'solid',
+                  borderLeftColor: gradientStart,
                   gap: '8px',
                 },
               },
@@ -113,8 +138,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   backgroundColor: 'rgba(0,0,0,0.1)',
                   padding: '8px 16px',
                   borderRadius: '999px',
-                  borderBottom: `2px solid ${gradientEnd}`,
-                  borderRight: `2px solid ${gradientEnd}`,
+                  borderBottomWidth: '2px',
+                  borderBottomStyle: 'solid',
+                  borderBottomColor: gradientEnd,
+                  borderRightWidth: '2px',
+                  borderRightStyle: 'solid',
+                  borderRightColor: gradientEnd,
                   gap: '8px',
                 },
               },
