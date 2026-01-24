@@ -64,12 +64,9 @@ export const getStylesWithExamples = query({
       .withIndex("by_style", (q) => q.eq("style", args.id))
       .collect();
 
-    if (!exampleQuestions) {
-      return { ...rest, examples: undefined };
-    }
     const examples = exampleQuestions.map((q) => q.text).filter((q) => q !== undefined);
 
-    if (!examples || examples.length === 0) {
+    if (examples.length === 0) {
       return { ...rest, examples: undefined };
     }
 

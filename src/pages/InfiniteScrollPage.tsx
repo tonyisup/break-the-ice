@@ -514,7 +514,7 @@ export default function InfiniteScrollPage() {
 								</div>
 
 								{/* Insert Newsletter Card after the 5th question (index 4) */}
-								{index === 4 && !user.isSignedIn && (
+								{index === 4 && user.isLoaded && !user.isSignedIn && (
 									<NewsletterCard variant={newsletterVariantRef.current} />
 								)}
 							</div>

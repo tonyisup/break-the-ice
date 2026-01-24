@@ -37,6 +37,16 @@ export const getUserById = internalQuery({
 	},
 });
 
+export const getUserByEmail = internalQuery({
+	args: { email: v.string() },
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", args.email))
+			.unique();
+	},
+});
+
 export const getCurrentUser = query({
 	args: {},
 	returns: v.union(v.null(), v.any()),

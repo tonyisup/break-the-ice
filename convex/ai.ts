@@ -115,11 +115,18 @@ export const generateAIQuestions = action({
 		selectedTags: v.optional(v.array(v.string())),
 		model: v.optional(v.string()),
 		currentQuestion: v.optional(v.string()),
+		userId: v.optional(v.id("users")),
 	},
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
-		const user = await ctx.runQuery(api.users.getCurrentUser, {});
+		let user;
+		if (args.userId) {
+			user = await ctx.runQuery(internal.users.getUser, { userId: args.userId });
+		} else {
+			user = await ctx.runQuery(api.users.getCurrentUser, {});
+		}
+
 		if (!user) {
-			throw new Error("You must be logged in to generate AI questions.");
+			throw new Error("You must be logged in or provide a valid user ID to generate AI questions.");
 		}
 		let { prompt, style, tone, topic, selectedTags } = args;
 

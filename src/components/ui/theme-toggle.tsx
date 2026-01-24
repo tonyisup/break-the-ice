@@ -17,21 +17,21 @@ export function ThemeToggle({ className, showLabel = true, labelClassName }: { c
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button className={cn("gap-2", className)} aria-label={`Theme: ${theme}`}>
-          {(theme != "system") && <>
-            {(theme == "light") &&
+          {(theme !== "system") && <>
+            {(theme === "light") &&
               <>
                 <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
                 {showLabel && <span className={cn("hidden sm:inline", labelClassName)}>Light</span>}
               </>
             }
-            {(theme == "dark") &&
+            {(theme === "dark") &&
               <>
                 <Moon className="h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                 {showLabel && <span className={cn("hidden sm:inline", labelClassName)}>Dark</span>}
               </>
             }
           </>}
-          {(theme == "system") &&
+          {(theme === "system") &&
             <>
               <Computer className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all" />
               {showLabel && <span className={cn("hidden sm:inline", labelClassName)}>System</span>}

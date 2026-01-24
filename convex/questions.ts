@@ -489,6 +489,37 @@ export const getQuestion = query({
   },
 });
 
+export const getQuestionForOgImage = query({
+  args: {
+    id: v.id("questions"),
+  },
+  handler: async (ctx, args) => {
+    const question = await ctx.db.get(args.id);
+    if (!question) return null;
+
+    let styleDoc = null;
+    if (question.style) {
+      styleDoc = await ctx.db.query("styles").withIndex("by_my_id", (q) => q.eq("id", question.style!)).unique();
+    }
+
+    let toneDoc = null;
+    if (question.tone) {
+      toneDoc = await ctx.db.query("tones").withIndex("by_my_id", (q) => q.eq("id", question.tone!)).unique();
+    }
+
+    return {
+      text: question.text || question.customText,
+      styleName: styleDoc?.name || "General",
+      styleColor: styleDoc?.color || "#000000",
+      toneName: toneDoc?.name || "Casual",
+      toneColor: toneDoc?.color || "#000000",
+      // Infer gradients from colors or use defaults
+      gradientStart: styleDoc?.color || "#f0f0f0",
+      gradientEnd: toneDoc?.color || "#d0d0d0",
+    };
+  },
+});
+
 // Save the generated AI question to the database
 export const saveAIQuestion = mutation({
   args: {

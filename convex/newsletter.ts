@@ -1,7 +1,70 @@
 "use node"
 
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
+import { api, internal } from "./_generated/api";
+
+export const getQuestionForUser = action({
+  args: { email: v.string() },
+  returns: v.object({
+    success: v.boolean(),
+    question: v.string(),
+    questionUrl: v.string(),
+    imageUrl: v.string(),
+    email: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    // 1. Get user and their preferences
+    const user = await ctx.runQuery(internal.users.getUserByEmail, { email: args.email });
+
+    let style = "Fun"; // Defaults
+    let tone = "Casual";
+    let seenIds: any[] = [];
+
+    if (user) {
+      style = user.defaultStyle || "Fun";
+      tone = user.defaultTone || "Casual";
+
+      const userQuestions = await ctx.runQuery(internal.users.getUserLikedQuestions, { userId: user._id });
+      seenIds = userQuestions.map((uq: any) => uq.questionId);
+    }
+
+    // 2. Try to get an existing question they haven't seen
+    const questions: any[] = await ctx.runQuery(api.questions.getNextQuestions, {
+      count: 1,
+      style,
+      tone,
+      seen: seenIds,
+    });
+
+    let question: any = questions[0];
+
+    // 3. If no question found, generate a new one
+    if (!question && user) {
+      const generatedQuestions: any[] = await ctx.runAction(api.ai.generateAIQuestions, {
+        style,
+        tone,
+        userId: user._id,
+      });
+      question = generatedQuestions[0];
+    }
+
+    if (!question) {
+      throw new Error("Could not find or generate a question.");
+    }
+
+    // 4. Return the question details
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://breaktheiceberg.com";
+    const questionText: string = question.text || question.customText || "";
+    return {
+      success: true,
+      question: questionText,
+      questionUrl: `${baseUrl}/question/${question._id}`,
+      imageUrl: `${baseUrl}/api/og?id=${question._id}`,
+      email: args.email,
+    };
+  },
+});
 
 export const subscribe = action({
   args: { email: v.string() },
@@ -51,7 +114,7 @@ export const sendDailyQuestions = action({
     if (!webhookUrl) {
       console.warn("N8N_DAILY_QUESTIONS_WEBHOOK_URL is not set. Simulating success.");
       // For development, we simulate success if the env var isn't set.
-      return { success: true, message: "Simulated subscription" };
+      return { success: true, message: "Simulated sending" };
     }
 
     try {
