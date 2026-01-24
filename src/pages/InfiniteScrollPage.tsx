@@ -572,13 +572,16 @@ export default function InfiniteScrollPage() {
         </div>
       </main>
 
-      <Button
-        onClick={scrollToTop}
-        className="fixed bottom-6 left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50"
-        variant="default"
-      >
-        <ArrowUp className="w-6 h-6" />
-      </Button>
+      {showTopButton && (
+        <Button
+          onClick={scrollToTop}
+          data-testid="scroll-to-top-button"
+          className="fixed bottom-6 left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50"
+          variant="default"
+        >
+          <ArrowUp className="w-6 h-6" />
+        </Button>
+      )}
 
     </div>
   );
