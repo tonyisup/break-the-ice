@@ -12,8 +12,7 @@ import { Id } from "../../../convex/_generated/dataModel";
 import DynamicIcon from "@/components/ui/dynamic-icon";
 import { ItemDetailDrawer, ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Doc } from "../../../convex/_generated/dataModel";
-import { StyleSelector } from "@/components/styles-selector";
-import { ToneSelector } from "@/components/tone-selector";
+import { SettingsItemSelector, SelectorItem } from "@/components/settings-item-selector";
 import OrganizationSettings from "@/app/settings/organization/page";
 import WorkspaceSwitcher from "@/app/settings/organization/WorkspaceSwitcher";
 import CollectionsSettings from "@/app/settings/collections/page";
@@ -31,11 +30,11 @@ const SettingsPage = () => {
 
   const allStyles = useQuery(
     api.styles.getStyles,
-    activeWorkspace ? { organizationId: activeWorkspace } : "skip"
+    { organizationId: activeWorkspace ?? undefined }
   );
   const allTones = useQuery(
     api.tones.getTones,
-    activeWorkspace ? { organizationId: activeWorkspace } : "skip"
+    { organizationId: activeWorkspace ?? undefined }
   );
   const currentUser = useQuery(api.users.getCurrentUser, {});
 
@@ -300,22 +299,30 @@ const SettingsPage = () => {
             <div className="space-y-4">
               <div>
                 <h3 className="text-lg font-semibold dark:text-white text-black mb-2">Default Style</h3>
-                <StyleSelector
-                  styles={allStyles ?? []}
-                  selectedStyle={defaultStyle ?? ""}
-                  onSelectStyle={setDefaultStyle}
-                  isHighlighting={false}
-                  setIsHighlighting={() => { }}
+                <SettingsItemSelector
+                  items={(allStyles ?? []).map((s): SelectorItem => ({
+                    id: s.id,
+                    name: s.name,
+                    icon: s.icon,
+                    color: s.color
+                  }))}
+                  selectedItemId={defaultStyle ?? ""}
+                  onSelect={setDefaultStyle}
+                  placeholder="Select a style"
                 />
               </div>
               <div>
                 <h3 className="text-lg font-semibold dark:text-white text-black mb-2">Default Tone</h3>
-                <ToneSelector
-                  tones={allTones ?? []}
-                  selectedTone={defaultTone ?? ""}
-                  onSelectTone={setDefaultTone}
-                  isHighlighting={false}
-                  setIsHighlighting={() => { }}
+                <SettingsItemSelector
+                  items={(allTones ?? []).map((t): SelectorItem => ({
+                    id: t.id,
+                    name: t.name,
+                    icon: t.icon,
+                    color: t.color
+                  }))}
+                  selectedItemId={defaultTone ?? ""}
+                  onSelect={setDefaultTone}
+                  placeholder="Select a tone"
                 />
               </div>
             </div>
