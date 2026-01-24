@@ -166,4 +166,14 @@ describe('InfiniteScrollPage', () => {
         expect(screen.getByTestId('sign-in-cta')).toBeDefined();
     });
   });
+
+  it('does not show scroll-to-top button initially', async () => {
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    expect(screen.queryByTestId('scroll-to-top-button')).toBeNull();
+  });
 });
