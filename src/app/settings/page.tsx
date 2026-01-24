@@ -140,6 +140,12 @@ const SettingsPage = () => {
     }
   }, [hiddenQuestionObjects, hiddenQuestions, setHiddenQuestions]);
 
+  const visibleStyleCount = allStyles?.filter(s => !hiddenStyles.includes(s.id)).length;
+  const hiddenStyleCount = allStyles?.filter(s => hiddenStyles.includes(s.id)).length;
+
+  const visibleToneCount = allTones?.filter(t => !hiddenTones.includes(t.id)).length;
+  const hiddenToneCount = allTones?.filter(t => hiddenTones.includes(t.id)).length;
+
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradientDark = ["#3B2554", "#262D54"];
   return (
@@ -290,7 +296,8 @@ const SettingsPage = () => {
             title="Manage Styles"
             isOpen={!!openSections['manage-styles']}
             onOpenChange={() => toggleSection('manage-styles')}
-            count={allStyles?.length}
+            visibleCount={visibleStyleCount}
+            hiddenCount={hiddenStyleCount}
           >
             {allStyles && allStyles.length > 0 ? (
               <>
@@ -346,7 +353,8 @@ const SettingsPage = () => {
             title="Manage Tones"
             isOpen={!!openSections['manage-tones']}
             onOpenChange={() => toggleSection('manage-tones')}
-            count={allTones?.length}
+            visibleCount={visibleToneCount}
+            hiddenCount={hiddenToneCount}
           >
             {allTones && allTones.length > 0 ? (
               <>

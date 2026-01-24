@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { ChevronDown } from '@/components/ui/icons/icons';
+import { ChevronDown, Eye, EyeOff } from '@/components/ui/icons/icons';
 import { Icon, IconComponent } from '../ui/icons/icon';
 
 interface CollapsibleSectionProps {
@@ -10,6 +10,8 @@ interface CollapsibleSectionProps {
   isOpen: boolean;
   onOpenChange?: (isOpen: boolean) => void;
   count?: number;
+  visibleCount?: number;
+  hiddenCount?: number;
 }
 
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
@@ -20,6 +22,8 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   isOpen,
   onOpenChange,
   count,
+  visibleCount,
+  hiddenCount,
 }) => {
   return (
     <section>
@@ -45,7 +49,20 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {count !== undefined && (
+          {visibleCount !== undefined && hiddenCount !== undefined ? (
+            <div className="flex gap-2">
+              <span className="flex items-center gap-1.5 bg-gray-500/20 text-gray-700 dark:text-gray-400 text-sm font-semibold px-2 py-1 rounded-full">
+                <span>{hiddenCount}</span>
+                <span className="hidden md:inline">Hidden</span>
+                <EyeOff className="md:hidden w-4 h-4" />
+              </span>
+              <span className="flex items-center gap-1.5 bg-green-500/20 text-green-700 dark:text-green-400 text-sm font-semibold px-2 py-1 rounded-full">
+                <span>{visibleCount}</span>
+                <span className="hidden md:inline">Visible</span>
+                <Eye className="md:hidden w-4 h-4" />
+              </span>
+            </div>
+          ) : count !== undefined && (
             <span className="bg-white/20 dark:bg-black/20 text-sm font-semibold px-2 py-1 rounded-full">
               {count}
             </span>
