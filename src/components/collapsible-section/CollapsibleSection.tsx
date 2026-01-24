@@ -51,15 +51,15 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         <div className="flex items-center gap-2">
           {visibleCount !== undefined && hiddenCount !== undefined ? (
             <div className="flex gap-2">
-              <span className="flex items-center gap-1.5 bg-green-500/20 text-green-700 dark:text-green-400 text-sm font-semibold px-2 py-1 rounded-full">
-                <span>{visibleCount}</span>
-                <span className="hidden md:inline">Visible</span>
-                <Eye className="md:hidden w-4 h-4" />
-              </span>
               <span className="flex items-center gap-1.5 bg-gray-500/20 text-gray-700 dark:text-gray-400 text-sm font-semibold px-2 py-1 rounded-full">
                 <span>{hiddenCount}</span>
                 <span className="hidden md:inline">Hidden</span>
                 <EyeOff className="md:hidden w-4 h-4" />
+              </span>
+              <span className="flex items-center gap-1.5 bg-green-500/20 text-green-700 dark:text-green-400 text-sm font-semibold px-2 py-1 rounded-full">
+                <span>{visibleCount}</span>
+                <span className="hidden md:inline">Visible</span>
+                <Eye className="md:hidden w-4 h-4" />
               </span>
             </div>
           ) : count !== undefined && (
