@@ -18,7 +18,7 @@ const CookieConsentBanner = () => {
         setHasConsented(true);
       }}
     >
-      This website uses local storage to enhance the user experience.
+      This website uses cookies and local storage to enhance the user experience and for analytics.
     </CookieConsent>
   );
 };

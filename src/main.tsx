@@ -34,6 +34,7 @@ import CookiePolicyPage from "./app/cookies/page";
 import AboutPage from "./app/about/page";
 import ContactPage from "./app/contact/page";
 import FeedbackButton from "./components/FeedbackButton";
+import { AnalyticsManager } from "./components/AnalyticsManager";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -43,6 +44,7 @@ createRoot(document.getElementById("root")!).render(
     <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <StorageProvider>
+          <AnalyticsManager />
           <WorkspaceProvider>
             <BrowserRouter>
               <Routes>
