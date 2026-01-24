@@ -517,9 +517,15 @@ export default function InfiniteScrollPage() {
                 </div>
 
                 {/* Insert Newsletter Card after the 5th question (index 4) */}
-                {index === 4 && user.isLoaded && !user.isSignedIn && (
-                  <NewsletterCard variant={newsletterVariantRef.current} />
-                )}
+                {index === 4 && user.isLoaded && (
+                  !user.isSignedIn ||
+                  (currentUser && !currentUser.newsletterSubscriptionStatus)
+                ) && (
+                    <NewsletterCard
+                      variant={newsletterVariantRef.current}
+                      prefilledEmail={user.isSignedIn ? currentUser?.email : undefined}
+                    />
+                  )}
               </div>
             );
           })}

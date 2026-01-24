@@ -79,6 +79,10 @@ export const subscribe = action({
     if (!webhookUrl) {
       console.warn("N8N_SUBSCRIBE_WEBHOOK_URL is not set. Simulating success.");
       // For development, we simulate success if the env var isn't set.
+      await ctx.runMutation(internal.users.setNewsletterStatus, {
+        email: args.email,
+        status: "subscribed",
+      });
       return { success: true, message: "Simulated subscription" };
     }
 
@@ -98,6 +102,11 @@ export const subscribe = action({
       if (!response.ok) {
         throw new Error(`Webhook failed with status: ${response.status}`);
       }
+
+      await ctx.runMutation(internal.users.setNewsletterStatus, {
+        email: args.email,
+        status: "subscribed",
+      });
 
       return { success: true };
     } catch (error) {

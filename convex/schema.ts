@@ -133,6 +133,7 @@ export default defineSchema({
       count: v.number(),
       cycleStart: v.number(),
     })),
+    newsletterSubscriptionStatus: v.optional(v.union(v.literal("subscribed"), v.literal("unsubscribed"))),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),

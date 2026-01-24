@@ -97,6 +97,25 @@ export const updateUserFromClerk = internalMutation({
 	},
 });
 
+export const setNewsletterStatus = internalMutation({
+	args: {
+		email: v.string(),
+		status: v.union(v.literal("subscribed"), v.literal("unsubscribed")),
+	},
+	handler: async (ctx, args) => {
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", args.email))
+			.unique();
+
+		if (user) {
+			await ctx.db.patch(user._id, {
+				newsletterSubscriptionStatus: args.status,
+			});
+		}
+	},
+});
+
 export const checkAndIncrementAIUsage = internalMutation({
 	args: {
 		userId: v.id("users"),
