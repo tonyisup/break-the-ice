@@ -11,6 +11,7 @@ export const getQuestionForUser = action({
     question: v.string(),
     questionUrl: v.string(),
     imageUrl: v.string(),
+    unsubscribeUrl: v.string(),
     email: v.string(),
   }),
   handler: async (ctx, args) => {
