@@ -25,6 +25,7 @@ import PrunePage from "./app/admin/prune/page";
 import AdminPage from "./app/admin/page";
 import AdminLayout from "./app/admin/layout";
 import AddQuestionPage from "./app/add-question/page";
+import UnsubscribePage from "./app/unsubscribe/page";
 import SingleQuestionPage from "./pages/SingleQuestionPage";
 import PrivacyPolicyPage from "./app/privacy/page";
 import TermsOfServicePage from "./app/terms/page";
@@ -52,6 +53,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/liked" element={<LikedQuestionsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/history" element={<HistoryPage />} />
+                <Route path="/unsubscribe" element={<UnsubscribePage />} />
                 <Route path="/add-question" element={<AddQuestionPage />} />
                 <Route element={<AdminLayout />}>
                   <Route path="/admin" element={<AdminPage />} />

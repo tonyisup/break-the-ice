@@ -61,6 +61,7 @@ export const getQuestionForUser = action({
       question: questionText,
       questionUrl: `${baseUrl}/question/${question._id}`,
       imageUrl: `${baseUrl}/api/og?id=${question._id}`,
+      unsubscribeUrl: `${baseUrl}/unsubscribe?email=${encodeURIComponent(args.email)}`,
       email: args.email,
     };
   },
