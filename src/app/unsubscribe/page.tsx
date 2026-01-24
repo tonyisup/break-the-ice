@@ -8,7 +8,7 @@ import { useAuth } from "@clerk/clerk-react";
 import { Header } from "@/components/header";
 import { useTheme } from "../../hooks/useTheme";
 import { toast } from "sonner";
-import { Loader2, Mail, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, Mail, CheckCircle2, XCircle, ArrowRight } from "lucide-react";
 
 const UnsubscribePage = () => {
 	const [searchParams] = useSearchParams();
@@ -18,33 +18,38 @@ const UnsubscribePage = () => {
 	const currentUser = useQuery(api.users.getCurrentUser, {});
 	const unsubscribeAction = useAction(api.resend.unsubscribeContact);
 	const getStatusAction = useAction(api.resend.getContactStatus);
+	const subscribeAction = useAction(api.newsletter.subscribe);
 
 	const [email, setEmail] = useState<string | null>(null);
-	const [status, setStatus] = useState<"loading" | "subscribed" | "unsubscribed" | "error">("loading");
+	const [formEmail, setFormEmail] = useState("");
+	const [status, setStatus] = useState<"loading" | "subscribed" | "unsubscribed" | "error" | "success_subscribed">("loading");
 	const [isProcessing, setIsProcessing] = useState(false);
 
 	useEffect(() => {
+		// Determine the initial email to check
+		let initialEmail: string | null = null;
 		const emailParam = searchParams.get("email");
+
 		if (emailParam) {
-			setEmail(emailParam);
+			initialEmail = emailParam;
 		} else if (isLoaded && isSignedIn && currentUser?.email) {
-			setEmail(currentUser.email);
-		} else if (isLoaded && !isSignedIn && !emailParam) {
+			initialEmail = currentUser.email;
+		}
+
+		if (initialEmail) {
+			setEmail(initialEmail);
+			setFormEmail(initialEmail);
+			checkStatus(initialEmail);
+		} else if (isLoaded) {
+			// Only set error if we're sure we're loaded and found nothing
 			setStatus("error");
 		}
 	}, [searchParams, isLoaded, isSignedIn, currentUser]);
 
-	useEffect(() => {
-		if (email) {
-			checkStatus();
-		}
-	}, [email]);
-
-	const checkStatus = async () => {
-		if (!email) return;
+	const checkStatus = async (emailToCheck: string) => {
 		setStatus("loading");
 		try {
-			const result = await getStatusAction({ email });
+			const result = await getStatusAction({ email: emailToCheck });
 			if (result.subscribed) {
 				setStatus("subscribed");
 			} else {
@@ -66,6 +71,30 @@ const UnsubscribePage = () => {
 		} catch (error) {
 			console.error(error);
 			toast.error("Failed to unsubscribe. Please try again later.");
+		} finally {
+			setIsProcessing(false);
+		}
+	};
+
+	const handleSubscribe = async (e?: React.FormEvent) => {
+		if (e) e.preventDefault();
+
+		// Determine which email to use
+		const targetEmail = isSignedIn && currentUser?.email ? currentUser.email : formEmail || email;
+
+		if (!targetEmail) {
+			toast.error("Please enter a valid email address.");
+			return;
+		}
+
+		setIsProcessing(true);
+		try {
+			await subscribeAction({ email: targetEmail });
+			setStatus("success_subscribed");
+			toast.success("Successfully subscribed!");
+		} catch (error) {
+			console.error(error);
+			toast.error("Failed to subscribe. Please try again.");
 		} finally {
 			setIsProcessing(false);
 		}
@@ -127,11 +156,38 @@ const UnsubscribePage = () => {
 								You have been unsubscribed. <br />
 								We're sorry to see you go!
 							</p>
+
+							<button
+								onClick={() => handleSubscribe()}
+								disabled={isProcessing}
+								className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-full py-3 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2 mb-4"
+							>
+								{isProcessing ? <Loader2 className="animate-spin" /> : "Mistake? Re-subscribe"}
+							</button>
+
 							<a
 								href="/app"
-								className="inline-block px-8 py-3 bg-white/20 hover:bg-white/30 rounded-full text-white font-medium transition-colors"
+								className="inline-block px-8 py-3 bg-white/10 hover:bg-white/20 rounded-full text-white/80 font-medium transition-colors text-sm"
 							>
 								Return Home
+							</a>
+						</div>
+					)}
+
+					{status === "success_subscribed" && (
+						<div className="space-y-6 py-4 animate-in fade-in zoom-in duration-500">
+							<div className="flex justify-center">
+								<CheckCircle2 className="w-16 h-16 text-green-400" />
+							</div>
+							<p className="dark:text-white/80 text-black/80 text-lg">
+								You're in! <br />
+								Welcome to the Daily Questions.
+							</p>
+							<a
+								href="/app"
+								className="inline-block w-full bg-blue-500 hover:bg-blue-600 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105"
+							>
+								Go to App
 							</a>
 						</div>
 					)}
@@ -144,14 +200,46 @@ const UnsubscribePage = () => {
 							<p className="dark:text-white/80 text-black/80 text-lg">
 								We couldn't find your subscription details.
 							</p>
-							<p className="text-sm dark:text-white/50 text-black/50">
-								Please make sure you clicked the link correctly from your email or log in.
-							</p>
+
+							<div className="bg-white/5 rounded-2xl p-6 border border-white/10">
+								<p className="text-sm dark:text-white/70 text-black/70 mb-4">
+									Would you like to subscribe instead?
+								</p>
+
+								{isSignedIn && currentUser?.email ? (
+									<button
+										onClick={() => handleSubscribe()}
+										disabled={isProcessing}
+										className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-full py-3 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2"
+									>
+										{isProcessing ? <Loader2 className="animate-spin" /> : `Subscribe as ${currentUser.email}`}
+									</button>
+								) : (
+									<form onSubmit={handleSubscribe} className="space-y-3">
+										<input
+											type="email"
+											placeholder="Enter your email"
+											value={formEmail}
+											onChange={(e) => setFormEmail(e.target.value)}
+											className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+											required
+										/>
+										<button
+											type="submit"
+											disabled={isProcessing}
+											className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-full py-3 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2"
+										>
+											{isProcessing ? <Loader2 className="animate-spin" /> : "Subscribe"}
+										</button>
+									</form>
+								)}
+							</div>
+
 							<a
 								href="/app"
-								className="inline-block px-8 py-3 bg-white/20 hover:bg-white/30 rounded-full text-white font-medium transition-colors"
+								className="inline-flex items-center gap-2 text-sm text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white transition-colors"
 							>
-								Go to App
+								Go to App <ArrowRight size={14} />
 							</a>
 						</div>
 					)}
