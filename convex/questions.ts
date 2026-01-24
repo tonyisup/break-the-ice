@@ -182,11 +182,13 @@ export const getNextRandomQuestions = query({
     count: v.number(),
     seen: v.optional(v.array(v.id("questions"))),
     hidden: v.optional(v.array(v.id("questions"))),
+    hiddenStyles: v.optional(v.array(v.string())),
+    hiddenTones: v.optional(v.array(v.string())),
     organizationId: v.optional(v.id("organizations")),
   },
   returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    const { count, seen, hidden, organizationId } = args;
+    const { count, seen, hidden, hiddenStyles, hiddenTones, organizationId } = args;
     const seenIds = new Set(seen ?? []);
 
     // Get all questions first, and filter out seen ones.
@@ -198,7 +200,9 @@ export const getNextRandomQuestions = query({
         q.neq(q.field("text"), undefined),
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
         ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
-        ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id))
+        ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id)),
+        ...(hiddenStyles ?? []).map((style: string) => q.neq(q.field("style"), style)),
+        ...(hiddenTones ?? []).map((tone: string) => q.neq(q.field("tone"), tone))
       ))
       .take(count * 4);
 
