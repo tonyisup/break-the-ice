@@ -12,7 +12,6 @@ import { Id } from "../../../convex/_generated/dataModel";
 import DynamicIcon from "@/components/ui/dynamic-icon";
 import { ItemDetailDrawer, ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Doc } from "../../../convex/_generated/dataModel";
-import { SettingsItemSelector, SelectorItem } from "@/components/settings-item-selector";
 import OrganizationSettings from "@/app/settings/organization/page";
 import WorkspaceSwitcher from "@/app/settings/organization/WorkspaceSwitcher";
 import CollectionsSettings from "@/app/settings/collections/page";
@@ -71,10 +70,6 @@ const SettingsPage = () => {
     setHiddenQuestions,
     removeHiddenQuestion,
     clearHiddenQuestions,
-    defaultStyle,
-    setDefaultStyle,
-    defaultTone,
-    setDefaultTone,
     storageLimitBehavior,
     setStorageLimitBehavior,
   } = useStorageContext();
@@ -290,43 +285,6 @@ const SettingsPage = () => {
               </div>
             </CollapsibleSection>
           )}
-
-          <CollapsibleSection
-            title="Default Style & Tone"
-            isOpen={!!openSections['default-style-tone']}
-            onOpenChange={() => toggleSection('default-style-tone')}
-          >
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-lg font-semibold dark:text-white text-black mb-2">Default Style</h3>
-                <SettingsItemSelector
-                  items={(allStyles ?? []).map((s): SelectorItem => ({
-                    id: s.id,
-                    name: s.name,
-                    icon: s.icon,
-                    color: s.color
-                  }))}
-                  selectedItemId={defaultStyle ?? ""}
-                  onSelect={setDefaultStyle}
-                  placeholder="Select a style"
-                />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold dark:text-white text-black mb-2">Default Tone</h3>
-                <SettingsItemSelector
-                  items={(allTones ?? []).map((t): SelectorItem => ({
-                    id: t.id,
-                    name: t.name,
-                    icon: t.icon,
-                    color: t.color
-                  }))}
-                  selectedItemId={defaultTone ?? ""}
-                  onSelect={setDefaultTone}
-                  placeholder="Select a tone"
-                />
-              </div>
-            </div>
-          </CollapsibleSection>
 
           <CollapsibleSection
             title="Manage Styles"
