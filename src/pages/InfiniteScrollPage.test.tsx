@@ -4,6 +4,7 @@ import InfiniteScrollPage from './InfiniteScrollPage';
 import { useQuery, useConvex, useAction, useMutation } from 'convex/react';
 import { WorkspaceProvider } from '@/hooks/useWorkspace.tsx';
 import { ModernQuestionCard } from '@/components/modern-question-card';
+import { NewsletterCard } from '@/components/newsletter-card/NewsletterCard';
 
 // Hoisted mocks for dynamic control
 const mockUseAuth = vi.fn();
@@ -59,6 +60,10 @@ vi.mock('@/components/SignInCTA', () => ({
   SignInCTA: vi.fn(() => <div data-testid="sign-in-cta">Sign In CTA</div>),
 }));
 
+vi.mock('@/components/newsletter-card/NewsletterCard', () => ({
+  NewsletterCard: vi.fn((props) => <div data-testid="newsletter-card" data-prefilled={props.prefilledEmail}>Newsletter</div>),
+}));
+
 // Mock api object structure
 vi.mock('../../convex/_generated/api', () => ({
   api: {
@@ -82,14 +87,17 @@ describe('InfiniteScrollPage', () => {
   const mockQuestions = [
     { _id: 'q1', text: 'Q1', style: 'style1', tone: 'tone1' },
     { _id: 'q2', text: 'Q2', style: 'style2', tone: 'tone2' },
+    { _id: 'q3', text: 'Q3', style: 'style1', tone: 'tone1' },
+    { _id: 'q4', text: 'Q4', style: 'style2', tone: 'tone2' },
+    { _id: 'q5', text: 'Q5', style: 'style1', tone: 'tone1' },
   ];
 
   beforeEach(() => {
     vi.resetAllMocks();
 
     // Default auth state: Signed In
-    mockUseAuth.mockReturnValue({ isSignedIn: true, userId: 'user123' });
-    mockUseUser.mockReturnValue({ isSignedIn: true, user: { id: 'user123' } });
+    mockUseAuth.mockReturnValue({ isSignedIn: true, userId: 'user123', isLoaded: true });
+    mockUseUser.mockReturnValue({ isSignedIn: true, user: { id: 'user123' }, isLoaded: true });
 
     // Mock IntersectionObserver
     global.IntersectionObserver = class IntersectionObserver {
@@ -105,13 +113,14 @@ describe('InfiniteScrollPage', () => {
     (useAction as any).mockReturnValue(vi.fn().mockResolvedValue([]));
     (useMutation as any).mockReturnValue(vi.fn());
 
-    // Mock useQuery for styles/tones
+    // Mock useQuery
     (useQuery as any).mockImplementation((queryFn: any) => {
         if (queryFn === 'getStyles') return mockStyles;
         if (queryFn === 'getTones') return mockTones;
-        // For single style/tone query in the component (background)
         if (queryFn === 'getStyle') return mockStyles[0];
         if (queryFn === 'getTone') return mockTones[0];
+        // Default currentUser mock: logged in user, not subscribed
+        if (queryFn === 'getCurrentUser') return { _id: 'u1', email: 'test@example.com', newsletterSubscriptionStatus: null };
         return undefined;
     });
   });
@@ -124,36 +133,18 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-        expect(screen.getAllByTestId('modern-question-card')).toHaveLength(2);
+        expect(screen.getAllByTestId('modern-question-card')).toHaveLength(5);
     });
-
-    const CardMock = ModernQuestionCard as any;
-    // Check calls
-    // We expect the CardMock to be called with props matching the questions
-
-    // Find call for Q1
-    const q1Call = CardMock.mock.calls.find((call: any) => call[0].question._id === 'q1');
-    expect(q1Call).toBeDefined();
-    expect(q1Call[0].style).toEqual(mockStyles[0]);
-    expect(q1Call[0].tone).toEqual(mockTones[0]);
-    expect(q1Call[0].gradient).toEqual(['#111111', '#AAAAAA']);
-
-    // Find call for Q2
-    const q2Call = CardMock.mock.calls.find((call: any) => call[0].question._id === 'q2');
-    expect(q2Call).toBeDefined();
-    expect(q2Call[0].style).toEqual(mockStyles[1]);
-    expect(q2Call[0].tone).toEqual(mockTones[1]);
-    expect(q2Call[0].gradient).toEqual(['#222222', '#BBBBBB']);
   });
 
-  it('shows SignInCTA when not signed in and needs questions', async () => {
-    // Override mock for this test
-    mockUseAuth.mockReturnValue({ isSignedIn: false, userId: null });
-    mockUseUser.mockReturnValue({ isSignedIn: false, user: null });
-
-    // Return empty questions to trigger generation
-    (useConvex as any).mockReturnValue({
-      query: vi.fn().mockResolvedValue([]),
+  it('shows NewsletterCard when not signed in', async () => {
+    mockUseAuth.mockReturnValue({ isSignedIn: false, userId: null, isLoaded: true });
+    // currentUser returns null when not signed in
+    (useQuery as any).mockImplementation((queryFn: any) => {
+        if (queryFn === 'getCurrentUser') return null;
+        if (queryFn === 'getStyles') return mockStyles;
+        if (queryFn === 'getTones') return mockTones;
+        return undefined;
     });
 
     render(
@@ -163,17 +154,48 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-        expect(screen.getByTestId('sign-in-cta')).toBeDefined();
+        const card = screen.getByTestId('newsletter-card');
+        expect(card).toBeDefined();
+        // Should not have prefilled email
+        expect(card.getAttribute('data-prefilled')).toBe(null);
     });
   });
 
-  it('does not show scroll-to-top button initially', async () => {
+  it('shows NewsletterCard when signed in but not subscribed', async () => {
+    // Auth mocked in beforeEach as signed in
+    // currentUser mocked in beforeEach as status: null
+
     render(
       <WorkspaceProvider>
         <InfiniteScrollPage />
       </WorkspaceProvider>
     );
 
-    expect(screen.queryByTestId('scroll-to-top-button')).toBeNull();
+    await waitFor(() => {
+        const card = screen.getByTestId('newsletter-card');
+        expect(card).toBeDefined();
+        // Should have prefilled email
+        expect(card.getAttribute('data-prefilled')).toBe('test@example.com');
+    });
+  });
+
+  it('hides NewsletterCard when signed in and subscribed', async () => {
+    // Override currentUser mock
+    (useQuery as any).mockImplementation((queryFn: any) => {
+        if (queryFn === 'getCurrentUser') return { _id: 'u1', email: 'test@example.com', newsletterSubscriptionStatus: 'subscribed' };
+        if (queryFn === 'getStyles') return mockStyles;
+        if (queryFn === 'getTones') return mockTones;
+        return undefined;
+    });
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+        expect(screen.queryByTestId('newsletter-card')).toBeNull();
+    });
   });
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAction } from "convex/react";
 import { api } from '../../../convex/_generated/api';
 import { toast } from 'sonner';
@@ -7,12 +7,19 @@ import { Mail, Loader2, Check } from 'lucide-react';
 
 interface NewsletterCardProps {
   variant: 'blend' | 'standout';
+  prefilledEmail?: string;
 }
 
-export function NewsletterCard({ variant }: NewsletterCardProps) {
-  const [email, setEmail] = useState('');
+export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps) {
+  const [email, setEmail] = useState(prefilledEmail || '');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
   const subscribe = useAction(api.newsletter.subscribe);
+
+  useEffect(() => {
+    if (prefilledEmail) {
+      setEmail(prefilledEmail);
+    }
+  }, [prefilledEmail]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,15 +106,17 @@ export function NewsletterCard({ variant }: NewsletterCardProps) {
             </p>
 
             <form onSubmit={handleSubmit} className="w-full space-y-4">
-              <input
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={status === 'submitting'}
-                className={inputClass}
-              />
+              {!prefilledEmail && (
+                <input
+                  type="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={status === 'submitting'}
+                  className={inputClass}
+                />
+              )}
               <button
                 type="submit"
                 disabled={status === 'submitting'}
@@ -119,7 +128,7 @@ export function NewsletterCard({ variant }: NewsletterCardProps) {
                     Subscribing...
                   </>
                 ) : (
-                  "Subscribe Now"
+                  prefilledEmail ? "Subscribe" : "Subscribe Now"
                 )}
               </button>
             </form>
