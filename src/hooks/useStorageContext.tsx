@@ -50,8 +50,8 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
         .split("; ")
         .find((row) => row.startsWith("cookieConsent="))
         ?.split("=")[1];
-      if (currentConsent === "true" && !hasConsented) {
-        setHasConsented(true);
+      if ((currentConsent === "true") !== hasConsented) {
+        setHasConsented(currentConsent === "true");
       }
     };
     checkCookieConsent();

@@ -11,6 +11,11 @@ export const AnalyticsManager = () => {
         api_host: "https://us.i.posthog.com",
         person_profiles: "identified_only",
       });
+    } else {
+      if (posthog.has_opted_in_capturing()) {
+        posthog.opt_out_capturing();
+        posthog.reset();
+      }
     }
   }, [hasConsented]);
 

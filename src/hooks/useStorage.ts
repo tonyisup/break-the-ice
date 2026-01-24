@@ -5,6 +5,18 @@ import { useLocalStorage } from "./useLocalStorage";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
+export const NON_ESSENTIAL_STORAGE_KEYS = [
+  "likedQuestions",
+  "hiddenQuestions",
+  "hiddenStyles",
+  "hiddenTones",
+  "defaultStyle",
+  "defaultTone",
+  "storageLimitBehavior",
+  "questionHistory",
+  "theme",
+];
+
 export type Theme = "light" | "dark" | "system";
 export type StorageLimitBehavior = "block" | "replace";
 
@@ -38,6 +50,7 @@ export interface StorageContextType {
   clearHiddenTones: () => void;
   hasConsented: boolean;
   setHasConsented: (consent: boolean) => void;
+  revokeConsent: () => void;
   defaultStyle?: string;
   setDefaultStyle: (style: string) => void;
   defaultTone?: string;
@@ -241,6 +254,15 @@ export const useLocalStorageContext = (
       d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
       const expires = "expires=" + d.toUTCString();
       document.cookie = "cookieConsent=" + consent + ";" + expires + ";path=/";
+    },
+    revokeConsent: () => {
+      const d = new Date();
+      d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
+      const expires = "expires=" + d.toUTCString();
+      document.cookie = "cookieConsent=false;" + expires + ";path=/";
+      NON_ESSENTIAL_STORAGE_KEYS.forEach((key) => {
+        localStorage.removeItem(key);
+      });
     },
     defaultStyle,
     setDefaultStyle,
@@ -449,6 +471,15 @@ export const useConvexStorageContext = (
       d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
       const expires = "expires=" + d.toUTCString();
       document.cookie = "cookieConsent=" + consent + ";" + expires + ";path=/";
+    },
+    revokeConsent: () => {
+      const d = new Date();
+      d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
+      const expires = "expires=" + d.toUTCString();
+      document.cookie = "cookieConsent=false;" + expires + ";path=/";
+      NON_ESSENTIAL_STORAGE_KEYS.forEach((key) => {
+        localStorage.removeItem(key);
+      });
     },
     defaultStyle,
     setDefaultStyle: (style: string) => {
