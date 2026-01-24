@@ -30,11 +30,11 @@ const SettingsPage = () => {
 
   const allStyles = useQuery(
     api.styles.getStyles,
-    activeWorkspace ? { organizationId: activeWorkspace } : "skip"
+    { organizationId: activeWorkspace ?? undefined }
   );
   const allTones = useQuery(
     api.tones.getTones,
-    activeWorkspace ? { organizationId: activeWorkspace } : "skip"
+    { organizationId: activeWorkspace ?? undefined }
   );
   const currentUser = useQuery(api.users.getCurrentUser, {});
 
