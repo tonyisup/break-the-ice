@@ -278,4 +278,9 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_userId", ["userId"])
     .index("by_createdAt", ["createdAt"]),
+  pendingSubscriptions: defineTable({
+    email: v.string(),
+    token: v.string(),
+    createdAt: v.number(),
+  }).index("by_token", ["token"]),
 });

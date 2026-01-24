@@ -176,8 +176,8 @@ Style: ${styleDoc.name} (${styleDoc.description}). ${styleDoc.promptGuidanceForA
 Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI || ""}${topicPrompt}`;
 		}
 
-		const recentlySeenQuestions = await ctx.runQuery(internal.users.getRecentlySeenQuestions, { userId: user._id });
-		const recentlySeen = recentlySeenQuestions.filter((q) => q !== undefined);
+		const recentlySeenQuestions: string[] = await ctx.runQuery(internal.users.getRecentlySeenQuestions, { userId: user._id });
+		const recentlySeen = recentlySeenQuestions.filter((q: string) => q !== undefined);
 		if (recentlySeen.length > 0) {
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
 		}
@@ -364,14 +364,14 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 		}
 
 		const normalize = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
-		const normalizedRecentlySeen = recentlySeen.map((q) => normalize(q));
+		const normalizedRecentlySeen = recentlySeen.map((q: string) => normalize(q));
 
 		const newQuestions: (Doc<"questions"> | null)[] = [];
 		for (const question of parsedContent) {
 			try {
 				// Simple dedupe check
 				const normalizedText = normalize(question.text);
-				const isDuplicate = normalizedRecentlySeen.some(seen =>
+				const isDuplicate = normalizedRecentlySeen.some((seen: string) =>
 					normalizedText.includes(seen) || seen.includes(normalizedText)
 				);
 
