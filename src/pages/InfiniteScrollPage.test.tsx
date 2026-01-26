@@ -9,6 +9,7 @@ import { NewsletterCard } from '@/components/newsletter-card/NewsletterCard';
 // Hoisted mocks for dynamic control
 const mockUseAuth = vi.fn();
 const mockUseUser = vi.fn();
+const mockUseStorageContext = vi.fn();
 
 // Mocks
 vi.mock('convex/react', () => ({
@@ -23,19 +24,7 @@ vi.mock('@/hooks/useTheme', () => ({
 }));
 
 vi.mock('@/hooks/useStorageContext', () => ({
-  useStorageContext: () => ({
-    likedQuestions: [],
-    hiddenQuestions: [],
-    hiddenStyles: [],
-    hiddenTones: [],
-    addHiddenStyle: vi.fn(),
-    addHiddenTone: vi.fn(),
-    addLikedQuestion: vi.fn(),
-    removeLikedQuestion: vi.fn(),
-    addHiddenQuestion: vi.fn(),
-    defaultStyle: 'style1',
-    defaultTone: 'tone1',
-  }),
+  useStorageContext: () => mockUseStorageContext(),
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -98,6 +87,22 @@ describe('InfiniteScrollPage', () => {
     // Default auth state: Signed In
     mockUseAuth.mockReturnValue({ isSignedIn: true, userId: 'user123', isLoaded: true });
     mockUseUser.mockReturnValue({ isSignedIn: true, user: { id: 'user123' }, isLoaded: true });
+
+    // Default storage context
+    mockUseStorageContext.mockReturnValue({
+      likedQuestions: [],
+      hiddenQuestions: [],
+      hiddenStyles: [],
+      hiddenTones: [],
+      addHiddenStyle: vi.fn(),
+      addHiddenTone: vi.fn(),
+      addLikedQuestion: vi.fn(),
+      removeLikedQuestion: vi.fn(),
+      addHiddenQuestion: vi.fn(),
+      addQuestionToHistory: vi.fn(),
+      defaultStyle: 'style1',
+      defaultTone: 'tone1',
+    });
 
     // Mock IntersectionObserver
     global.IntersectionObserver = class IntersectionObserver {
@@ -196,6 +201,60 @@ describe('InfiniteScrollPage', () => {
 
     await waitFor(() => {
         expect(screen.queryByTestId('newsletter-card')).toBeNull();
+    });
+  });
+
+  it('displays blocked message when all styles are hidden', async () => {
+    mockUseStorageContext.mockReturnValue({
+      likedQuestions: [],
+      hiddenQuestions: [],
+      hiddenStyles: ['style1', 'style2'],
+      hiddenTones: [],
+      addHiddenStyle: vi.fn(),
+      addHiddenTone: vi.fn(),
+      addLikedQuestion: vi.fn(),
+      removeLikedQuestion: vi.fn(),
+      addHiddenQuestion: vi.fn(),
+      addQuestionToHistory: vi.fn(),
+      defaultStyle: 'style1',
+      defaultTone: 'tone1',
+    });
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+        expect(screen.getByText('All Styles Hidden')).toBeDefined();
+    });
+  });
+
+  it('displays blocked message when all tones are hidden', async () => {
+    mockUseStorageContext.mockReturnValue({
+      likedQuestions: [],
+      hiddenQuestions: [],
+      hiddenStyles: [],
+      hiddenTones: ['tone1', 'tone2'],
+      addHiddenStyle: vi.fn(),
+      addHiddenTone: vi.fn(),
+      addLikedQuestion: vi.fn(),
+      removeLikedQuestion: vi.fn(),
+      addHiddenQuestion: vi.fn(),
+      addQuestionToHistory: vi.fn(),
+      defaultStyle: 'style1',
+      defaultTone: 'tone1',
+    });
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+        expect(screen.getByText('All Tones Hidden')).toBeDefined();
     });
   });
 });

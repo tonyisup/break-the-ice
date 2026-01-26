@@ -13,7 +13,7 @@ import { Header } from "@/components/header";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
 import { Icon } from "@/components/ui/icons/icon";
 import { Button } from "@/components/ui/button";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, SearchX } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { useAuth, SignInButton } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
@@ -169,6 +169,17 @@ export default function InfiniteScrollPage() {
   const style = useQuery(api.styles.getStyle, { id: activeQuestion?.style || defaultStyle || "would-you-rather" });
   const tone = useQuery(api.tones.getTone, { id: activeQuestion?.tone || defaultTone || "fun-silly" });
 
+  // Check if all styles or tones are blocked
+  const allStylesBlocked = useMemo(() => {
+    if (!allStyles || allStyles.length === 0) return false;
+    return allStyles.every(s => hiddenStyles.includes(s.id));
+  }, [allStyles, hiddenStyles]);
+
+  const allTonesBlocked = useMemo(() => {
+    if (!allTones || allTones.length === 0) return false;
+    return allTones.every(t => hiddenTones.includes(t.id));
+  }, [allTones, hiddenTones]);
+
   // Used for styling and gradient
   const gradientTarget = effectiveTheme === "dark" ? "#000" : "#bbb";
 
@@ -182,7 +193,7 @@ export default function InfiniteScrollPage() {
   // Function to load more questions
   const loadMoreQuestions = useCallback(async () => {
     // Check if we are already loading or missing params
-    if (isLoading || !hasMore || showAuthCTA || showUpgradeCTA) return;
+    if (isLoading || !hasMore || showAuthCTA || showUpgradeCTA || allStylesBlocked || allTonesBlocked) return;
 
     // Capture current request ID
     requestIdRef.current++;
@@ -197,6 +208,8 @@ export default function InfiniteScrollPage() {
         count: BATCH_SIZE,
         seen: Array.from(seenIds), // Pass currently seen IDs to avoid duplicates
         hidden: hiddenQuestions,
+        hiddenStyles,
+        hiddenTones,
         organizationId: activeWorkspace ?? undefined,
       });
 
@@ -279,14 +292,21 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, isLoading, seenIds, hiddenQuestions, generateAIQuestions, hasMore, showAuthCTA, showUpgradeCTA, activeWorkspace, user.isSignedIn]);
+  }, [convex, isLoading, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, hasMore, showAuthCTA, showUpgradeCTA, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked]);
 
   // Initial load
   useEffect(() => {
     if (questions.length === 0 && hasMore) {
       loadMoreQuestions();
     }
-  }, [questions.length, hasMore]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [questions.length, hasMore, loadMoreQuestions]);
+
+  useEffect(() => {
+    if (allStylesBlocked || allTonesBlocked) {
+      setQuestions([]);
+      setSeenIds(new Set());
+    }
+  }, [allStylesBlocked, allTonesBlocked]);
 
   // Infinite scroll handler
   useEffect(() => {
@@ -486,7 +506,36 @@ export default function InfiniteScrollPage() {
 
       <main className="z-10 flex-1 flex flex-col pb-20 pt-20">
         <div className="flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full">
-          {questions.map((question, index) => {
+          {(allStylesBlocked || allTonesBlocked) && (
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-4 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20">
+              <SearchX className="w-12 h-12 text-white/80" />
+              <div className="space-y-2">
+                <h3 className="text-xl font-semibold text-white">
+                  {allStylesBlocked ? "All Styles Hidden" : "All Tones Hidden"}
+                </h3>
+                <p className="text-white/70 max-w-md">
+                  {allStylesBlocked
+                    ? "You have hidden all available question styles. Please unhide some styles in the settings to see more questions."
+                    : "You have hidden all available tones. Please unhide some tones in the settings to see more questions."}
+                </p>
+              </div>
+              <Button
+                variant="default"
+                onClick={() => {
+                  // Direct user to settings or open the selector
+                  // Since specific selectors are in the header, maybe just generic guidance or reload?
+                  // For now, reload might reset if persistence isn't perfect, but better to just let them know.
+                  // Actually, opening the header selectors would be ideal but hard from here.
+                  // We can link to settings page if it exists and has these controls.
+                  window.location.href = "/settings";
+                }}
+              >
+                Manage Preferences
+              </Button>
+            </div>
+          )}
+
+          {!allStylesBlocked && !allTonesBlocked && questions.map((question, index) => {
             // Derive specific style/tone/gradient for this card
             const cardStyle = question.style ? stylesMap.get(question.style) : undefined;
             const cardTone = question.tone ? tonesMap.get(question.tone) : undefined;
