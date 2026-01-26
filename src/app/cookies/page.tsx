@@ -1,6 +1,17 @@
 import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { useStorageContext } from "@/hooks/useStorageContext";
 
 export default function CookiePolicyPage() {
+  const { hasConsented, setHasConsented, revokeConsent } = useStorageContext();
+
+  const handleAccept = () => {
+    setHasConsented(true);
+  };
+
+  const handleDecline = () => {
+    revokeConsent();
+  };
+
   return (
     <PlaceholderPage title="Cookie Policy">
       <div className="space-y-4 text-sm">
@@ -21,6 +32,29 @@ export default function CookiePolicyPage() {
         <ul className="list-disc list-inside ml-4 space-y-1">
           <li><strong>ph_phc_yvPURPmuOmgD7fy6Y854zBLP9sVU71T9ddHQJWVywqZ_posthog</strong>: Used by PostHog to identify unique users and track sessions.</li>
         </ul>
+
+        <div className="mt-8 border-t pt-6">
+          <h3 className="text-lg font-semibold mb-4">Manage Consent</h3>
+          <div className="bg-gray-50 p-4 rounded-lg border">
+            <p className="mb-4">
+              Current status: <span className="font-semibold">{hasConsented ? "Consented" : "Necessary only / Denied"}</span>
+            </p>
+            <div className="flex gap-4">
+              <button
+                onClick={handleAccept}
+                className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 text-sm font-medium"
+              >
+                Accept All
+              </button>
+              <button
+                onClick={handleDecline}
+                className="px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded hover:bg-gray-50 text-sm font-medium"
+              >
+                Necessary Only
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </PlaceholderPage>
   );
