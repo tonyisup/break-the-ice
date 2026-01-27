@@ -73,7 +73,9 @@ export const generateFallbackQuestion = action({
 							const fallbackQuestion: Doc<"questions"> | null = await ctx.runMutation(api.questions.saveAIQuestion, {
 								text: cleanedFallback,
 								style: randomStyle.id,
+								styleId: randomStyle._id,
 								tone: randomTone.id,
+								toneId: randomTone._id,
 								tags: [],
 							});
 							return fallbackQuestion;
@@ -130,13 +132,11 @@ export const generateAIQuestionForFeed = action({
 		const recentlySeenQuestions = await ctx.runQuery(internal.users.getRecentlySeenQuestions, { userId: user._id });
 		const recentlySeen = recentlySeenQuestions.filter((q) => q !== undefined);
 		if (recentlySeen.length > 0) {
-			console.log("Recently seen questions:", recentlySeen);
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
 		}
 
 		const blockedQuestions = await ctx.runQuery(internal.users.getBlockedQuestions, { userId: user._id });
 		if (blockedQuestions.length > 0) {
-			console.log("Blocked questions:", blockedQuestions);
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these blocked questions:\n- ${blockedQuestions.join('\n- ')}`;
 		}
 
@@ -333,7 +333,9 @@ export const generateAIQuestionForFeed = action({
 				const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
 					text: question.text,
 					style: style.id,
+					styleId: style._id,
 					tone: tone.id,
+					toneId: tone._id,
 					tags: [],
 				});
 				newQuestions.push(newQuestion);

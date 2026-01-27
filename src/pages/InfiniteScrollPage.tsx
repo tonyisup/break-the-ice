@@ -260,9 +260,9 @@ export default function InfiniteScrollPage() {
             });
           }
 
-          if (dbQuestions.length === 0 && validGenerated.length === 0) {
-            setHasMore(false);
-          }
+          // If we are signed in, we theoretically always have "more" (via AI generation)
+          // unless we hit a limit or specific error.
+          // So we don't set hasMore(false) just because one batch came back empty.
         } catch (err) {
           console.error("AI Generation failed:", err);
           if (currentRequestId !== requestIdRef.current) return;

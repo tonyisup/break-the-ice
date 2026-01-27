@@ -35,11 +35,11 @@ export interface StorageContextType {
   setHiddenQuestions: (ids: Id<"questions">[]) => void;
   addHiddenQuestion: (id: Id<"questions">) => void;
   removeHiddenQuestion: (id: Id<"questions">) => void;
-  hiddenStyles: Id<"styles">[];
+  hiddenStyles: Id<"styles">[] | undefined;
   setHiddenStyles: (ids: Id<"styles">[]) => void;
   addHiddenStyle: (id: Id<"styles">) => void;
   removeHiddenStyle: (id: Id<"styles">) => void;
-  hiddenTones: Id<"tones">[];
+  hiddenTones: Id<"tones">[] | undefined;
   setHiddenTones: (ids: Id<"tones">[]) => void;
   addHiddenTone: (id: Id<"tones">) => void;
   removeHiddenTone: (id: Id<"tones">) => void;
@@ -440,7 +440,7 @@ export const useConvexStorageContext = (
     setHiddenQuestions,
     addHiddenQuestion,
     removeHiddenQuestion,
-    hiddenStyles: (hiddenStylesQuery ?? []) as Id<"styles">[],
+    hiddenStyles: hiddenStylesQuery === null ? [] : hiddenStylesQuery,
     setHiddenStyles: (ids: Id<"styles">[]) => {
       setLocalHiddenStyles(ids);
       void updateHiddenStyles({ hiddenStyles: ids });
@@ -451,7 +451,7 @@ export const useConvexStorageContext = (
     removeHiddenStyle: (id: Id<"styles">) => {
       removeHiddenStyleId({ styleId: id });
     },
-    hiddenTones: (hiddenTonesQuery ?? []) as Id<"tones">[],
+    hiddenTones: hiddenTonesQuery === null ? [] : hiddenTonesQuery,
     setHiddenTones: (ids: Id<"tones">[]) => {
       setLocalHiddenTones(ids);
       void updateHiddenTones({ hiddenTones: ids });

@@ -62,10 +62,16 @@ export const StorageProvider = ({ children }: { children: ReactNode }) => {
   }, [hasConsented]);
 
   if (isSignedIn) {
-    return <AuthProvider hasConsented={hasConsented}>{children}</AuthProvider>;
+    return (
+      <AuthProvider key="auth-provider" hasConsented={hasConsented}>
+        {children}
+      </AuthProvider>
+    );
   }
   return (
-    <NonAuthProvider hasConsented={hasConsented}>{children}</NonAuthProvider>
+    <NonAuthProvider key="non-auth-provider" hasConsented={hasConsented}>
+      {children}
+    </NonAuthProvider>
   );
 };
 

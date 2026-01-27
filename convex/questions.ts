@@ -191,6 +191,7 @@ export const getNextRandomQuestions = query({
     const seenIds = new Set(seen);
 
     // Get all questions first, and filter out seen ones.
+
     const filteredQuestions = await ctx.db
       .query("questions")
       .filter((q: any) => q.eq(q.field("organizationId"), organizationId))
@@ -200,8 +201,8 @@ export const getNextRandomQuestions = query({
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
         ...hidden.map((id: Id<"questions">) => q.neq(q.field("_id"), id)),
         ...seen.map((id: Id<"questions">) => q.neq(q.field("_id"), id)),
-        ...hiddenStyles.map((style: Id<"styles">) => q.neq(q.field("styleId"), style)),
-        ...hiddenTones.map((tone: Id<"tones">) => q.neq(q.field("toneId"), tone))
+        ...hiddenStyles.map((styleId: Id<"styles">) => q.neq(q.field("styleId"), styleId)),
+        ...hiddenTones.map((toneId: Id<"tones">) => q.neq(q.field("toneId"), toneId))
       ))
       .take(count * 4);
 
@@ -582,7 +583,9 @@ export const saveAIQuestion = mutation({
     text: v.string(),
     tags: v.array(v.string()),
     style: v.optional(v.string()),
+    styleId: v.id("styles"),
     tone: v.optional(v.string()),
+    toneId: v.id("tones"),
     topic: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -604,7 +607,9 @@ export const saveAIQuestion = mutation({
       text,
       tags,
       style,
+      styleId: args.styleId,
       tone,
+      toneId: args.toneId,
       topic,
       status: "public",
       isAIGenerated: true,
