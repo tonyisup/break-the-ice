@@ -94,12 +94,12 @@ const UnsubscribePage = () => {
 		try {
 			const result = (await subscribeAction({ email: targetEmail })) as NewsletterSubscribeResponse;
 
-			if (result.status === "error" || result.success === false) {
-				setStatus("error");
-				toast.error(result.message || "Subscription failed");
-			} else if (result.status === "verification_required") {
+			if (result.status === "verification_required") {
 				setStatus("verification_sent");
 				toast.success("Verification email sent!");
+			} else if (result.status === "error" || result.success === false) {
+				setStatus("error");
+				toast.error(result.message || "Subscription failed");
 			} else {
 				setStatus("success_subscribed");
 				toast.success("Successfully subscribed!");

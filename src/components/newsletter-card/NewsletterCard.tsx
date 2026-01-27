@@ -30,12 +30,12 @@ export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps)
     try {
       const result = (await subscribe({ email })) as NewsletterSubscribeResponse;
 
-      if (result.status === "error" || result.success === false) {
-        setStatus('error');
-        toast.error(result.message || "Subscription failed");
-      } else if (result.status === "verification_required") {
+      if (result.status === "verification_required") {
         setStatus('verification_required');
         toast.success("Verification email sent!");
+      } else if (result.status === "error" || result.success === false) {
+        setStatus('error');
+        toast.error(result.message || "Subscription failed");
       } else {
         setStatus('success');
         toast.success("Successfully subscribed!");
@@ -72,10 +72,6 @@ export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps)
 
   return (
     <div className="w-full max-w-md mx-auto relative group">
-      {/* Developer Note */}
-      <div className="absolute -top-6 left-0 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
-        Variant: {variant}
-      </div>
 
       <div className={containerClass}>
         <div className={cn(innerContentClass, cardBgClass)}>
