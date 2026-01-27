@@ -74,7 +74,7 @@ const SettingsPage = () => {
     setStorageLimitBehavior,
   } = useStorageContext();
 
-  const handleToggleStyle = (styleId: string) => {
+  const handleToggleStyle = (styleId: Id<"styles">) => {
     if (hiddenStyles.includes(styleId)) {
       removeHiddenStyle(styleId);
     } else {
@@ -82,7 +82,7 @@ const SettingsPage = () => {
     }
   };
 
-  const handleToggleTone = (toneId: string) => {
+  const handleToggleTone = (toneId: Id<"tones">) => {
     if (hiddenTones.includes(toneId)) {
       removeHiddenTone(toneId);
     } else {
@@ -111,7 +111,7 @@ const SettingsPage = () => {
   // Sync with backend IDs (filtering out invalid ones)
   useEffect(() => {
     if (allStyles) {
-      const serverIds = allStyles.map(s => s.id);
+      const serverIds = allStyles.map(s => s._id);
       const localIds = hiddenStyles;
       const filteredIds = localIds.filter(id => serverIds.includes(id));
       if (filteredIds.length !== localIds.length) {
@@ -122,7 +122,7 @@ const SettingsPage = () => {
 
   useEffect(() => {
     if (allTones) {
-      const serverIds = allTones.map(t => t.id);
+      const serverIds = allTones.map(t => t._id);
       const localIds = hiddenTones;
       const filteredIds = localIds.filter(id => serverIds.includes(id));
       if (filteredIds.length !== localIds.length) {
@@ -140,11 +140,11 @@ const SettingsPage = () => {
     }
   }, [hiddenQuestionObjects, hiddenQuestions, setHiddenQuestions]);
 
-  const visibleStyleCount = allStyles?.filter(s => !hiddenStyles.includes(s.id)).length;
-  const hiddenStyleCount = allStyles?.filter(s => hiddenStyles.includes(s.id)).length;
+  const visibleStyleCount = allStyles?.filter(s => !hiddenStyles.includes(s._id)).length;
+  const hiddenStyleCount = allStyles?.filter(s => hiddenStyles.includes(s._id)).length;
 
-  const visibleToneCount = allTones?.filter(t => !hiddenTones.includes(t.id)).length;
-  const hiddenToneCount = allTones?.filter(t => hiddenTones.includes(t.id)).length;
+  const visibleToneCount = allTones?.filter(t => !hiddenTones.includes(t._id)).length;
+  const hiddenToneCount = allTones?.filter(t => hiddenTones.includes(t._id)).length;
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradientDark = ["#3B2554", "#262D54"];
@@ -309,7 +309,7 @@ const SettingsPage = () => {
                     Include All
                   </button>
                   <button
-                    onClick={() => setHiddenStyles(allStyles.map(s => s.id))}
+                    onClick={() => setHiddenStyles(allStyles.map(s => s._id))}
                     className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
                   >
                     Hide All
@@ -317,9 +317,9 @@ const SettingsPage = () => {
                 </div>
                 <ul className="space-y-2">
                   {allStyles.map(style => {
-                    const isIncluded = !hiddenStyles.includes(style.id);
+                    const isIncluded = !hiddenStyles.includes(style._id);
                     return (
-                      <li key={style.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                      <li key={style._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
                         <div className="flex items-center">
                           <DynamicIcon name={style.icon} color={style.color} size={24} className="mr-2" />
                           <span className="dark:text-white text-black">{style.name}</span>
@@ -329,7 +329,7 @@ const SettingsPage = () => {
                             <DynamicIcon name="info" size={18} />
                           </button>
                           <button
-                            onClick={() => handleToggleStyle(style.id)}
+                            onClick={() => handleToggleStyle(style._id)}
                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
                             aria-pressed={isIncluded}
                             aria-label={`Toggle style ${style.name}`}
@@ -366,7 +366,7 @@ const SettingsPage = () => {
                     Include All
                   </button>
                   <button
-                    onClick={() => setHiddenTones(allTones.map(t => t.id))}
+                    onClick={() => setHiddenTones(allTones.map(t => t._id))}
                     className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
                   >
                     Hide All
@@ -374,9 +374,9 @@ const SettingsPage = () => {
                 </div>
                 <ul className="space-y-2">
                   {allTones.map(tone => {
-                    const isIncluded = !hiddenTones.includes(tone.id);
+                    const isIncluded = !hiddenTones.includes(tone._id);
                     return (
-                      <li key={tone.id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                      <li key={tone._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
                         <div className="flex items-center">
                           <DynamicIcon name={tone.icon} color={tone.color} size={24} className="mr-2" />
                           <span className="dark:text-white text-black">{tone.name}</span>
@@ -386,7 +386,7 @@ const SettingsPage = () => {
                             <DynamicIcon name="info" size={18} />
                           </button>
                           <button
-                            onClick={() => handleToggleTone(tone.id)}
+                            onClick={() => handleToggleTone(tone._id)}
                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
                             aria-pressed={isIncluded}
                             aria-label={`Toggle tone ${tone.name}`}

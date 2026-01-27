@@ -106,84 +106,37 @@ export const generateFallbackQuestion = action({
 	},
 });
 
-export const generateAIQuestions = action({
+export const generateAIQuestionForFeed = action({
 	args: {
-		prompt: v.optional(v.string()),
-		style: v.optional(v.string()),
-		tone: v.optional(v.string()),
-		topic: v.optional(v.string()),
-		selectedTags: v.optional(v.array(v.string())),
-		model: v.optional(v.string()),
-		currentQuestion: v.optional(v.string()),
-		userId: v.optional(v.id("users")),
+		userId: v.optional(v.string()),
 	},
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
-		let user;
-		if (args.userId) {
-			user = await ctx.runQuery(internal.users.getUser, { userId: args.userId });
-		} else {
-			user = await ctx.runQuery(api.users.getCurrentUser, {});
-		}
+		const user = await ctx.runQuery(api.users.getCurrentUser, {});
 
 		if (!user) {
 			throw new Error("You must be logged in or provide a valid user ID to generate AI questions.");
 		}
-		let { prompt, style, tone, topic, selectedTags } = args;
-
 		const count = 1;
 
-		if (!style) {
-			style = (await ctx.runQuery(api.styles.getRandomStyle, { seed: Math.random() })).id;
+		const style = (await ctx.runQuery(api.styles.getRandomStyleForUser, { userId: user._id }));
+		const tone = (await ctx.runQuery(api.tones.getRandomToneForUser, { userId: user._id }));
+
+		if (!style || !tone) {
+			throw new Error("Failed to generate AI question: No style or tone found for user");
 		}
-		if (!tone) {
-			tone = (await ctx.runQuery(api.tones.getRandomTone, { seed: Math.random() })).id;
-		}
 
-		if (!prompt && style && tone) {
-			const styleDoc = await ctx.runQuery(api.styles.getStylesWithExamples, { id: style, seed: Math.random() })
-				|| {
-				name: "Would You Rather",
-				description: "Forces a binary choice, sparks instant debate and reveals priorities.",
-				promptGuidanceForAI: "Present two equally tempting or equally awful options to create playful tension.",
-				structure: "Would you rather [Option A] or [Option B]?",
-				example: "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?",
-				examples: ["Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?"]
-			};
-			const toneDoc = await ctx.runQuery(api.tones.getTone, { id: tone })
-				|| {
-				name: "Fun & Silly",
-				description: "Light-hearted, whimsical, and designed to spark laughter without deep introspection.",
-				promptGuidanceForAI: "Use playful language, absurd scenarios, and pop-culture references; keep stakes ultra-low.",
-			};
-
-			let topicPrompt = "";
-			if (topic) {
-				const topicDoc = await ctx.runQuery(api.topics.getTopic, { id: topic });
-				if (topicDoc) {
-					topicPrompt = `\nTopic: ${topicDoc.name} (${topicDoc.description || ""}). ${topicDoc.promptGuidanceForAI || ""}`;
-				}
-			}
-
-			// Few-shot sampling
-			const examples = styleDoc.examples || (styleDoc.example ? [styleDoc.example] : []);
-			const sampledExamples = examples.sort(() => 0.5 - Math.random()).slice(0, 3);
-			const fewShotPrompt = sampledExamples.length > 0
-				? `\nFollow this structure: "${styleDoc.structure}"\nExamples of this style:\n- ${sampledExamples.join('\n- ')}`
-				: `\nFollow this structure: "${styleDoc.structure}"`;
-
-			prompt = `Generate questions with the following characteristics:
-Style: ${styleDoc.name} (${styleDoc.description}). ${styleDoc.promptGuidanceForAI || ""}${fewShotPrompt}
-Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI || ""}${topicPrompt}`;
-		}
+		let prompt = '';
 
 		const recentlySeenQuestions = await ctx.runQuery(internal.users.getRecentlySeenQuestions, { userId: user._id });
 		const recentlySeen = recentlySeenQuestions.filter((q) => q !== undefined);
 		if (recentlySeen.length > 0) {
+			console.log("Recently seen questions:", recentlySeen);
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
 		}
 
 		const blockedQuestions = await ctx.runQuery(internal.users.getBlockedQuestions, { userId: user._id });
 		if (blockedQuestions.length > 0) {
+			console.log("Blocked questions:", blockedQuestions);
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these blocked questions:\n- ${blockedQuestions.join('\n- ')}`;
 		}
 
@@ -233,7 +186,7 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
     - Do not number the items in the array (e.g. no "1. {...}").
 		- DO NOT provide your own examples of any generated content. No dashes, no lists.
     
-    Example format: [{"text": "Question 1", "style": "s1", "tone": "t1"}, {"text": "Question 2", "style": "s2", "tone": "t2"}]
+    Example format: {"text": "Question 1"}
     
     Requirements:
     - Return exactly 1 question
@@ -253,14 +206,11 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
     Response with a JSON array of objects, each containing the following properties:
     - text: The question text
     For example:
-    [
+    {
       {
         "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?"
-      },
-      {
-        "text": "You're stranded on a desert island; you can only have one luxury item. What would it be and why?"
       }
-    ]`
+    }`
 						}
 					],
 					max_tokens: 200,
@@ -382,9 +332,8 @@ Tone: ${toneDoc.name} (${toneDoc.description}). ${toneDoc.promptGuidanceForAI ||
 
 				const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
 					text: question.text,
-					style: style,
-					tone: tone,
-					topic: topic, // Pass the explicit topic ID from the arguments
+					style: style.id,
+					tone: tone.id,
 					tags: [],
 				});
 				newQuestions.push(newQuestion);

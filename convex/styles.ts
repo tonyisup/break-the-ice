@@ -1,24 +1,23 @@
 import { v } from "convex/values";
 import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 
+const publicStyleFields = {
+  _id: v.id("styles"),
+  _creationTime: v.number(),
+  id: v.string(),
+  name: v.string(),
+  description: v.optional(v.string()),
+  structure: v.string(),
+  color: v.string(),
+  icon: v.string(),
+  example: v.optional(v.string()),
+  promptGuidanceForAI: v.optional(v.string()),
+  order: v.optional(v.float64()),
+};
+
 export const getStyle = query({
   args: { id: v.string() },
-  returns: v.union(
-    v.object({
-      _id: v.id("styles"),
-      _creationTime: v.number(),
-      id: v.string(),
-      name: v.string(),
-      description: v.optional(v.string()),
-      structure: v.string(),
-      color: v.string(),
-      icon: v.string(),
-      example: v.optional(v.string()),
-      promptGuidanceForAI: v.optional(v.string()),
-      order: v.optional(v.float64()),
-    }),
-    v.null(),
-  ),
+  returns: v.union(v.object(publicStyleFields), v.null()),
   handler: async (ctx, args) => {
     const style = await ctx.db.query("styles")
       .withIndex("by_my_id", (q) => q.eq("id", args.id))
@@ -61,7 +60,7 @@ export const getStylesWithExamples = query({
     const { embedding, ...rest } = style;
 
     const exampleQuestions = await ctx.db.query("questions")
-      .withIndex("by_style", (q) => q.eq("style", args.id))
+      .withIndex("by_style", (q) => q.eq("styleId", style._id))
       .collect();
 
     const examples = exampleQuestions.map((q) => q.text).filter((q) => q !== undefined);
@@ -97,19 +96,7 @@ export const getStyles = query({
   args: {
     organizationId: v.optional(v.id("organizations")),
   },
-  returns: v.array(v.object({
-    _id: v.id("styles"),
-    _creationTime: v.number(),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    structure: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    example: v.optional(v.string()),
-    promptGuidanceForAI: v.optional(v.string()),
-    order: v.optional(v.float64()),
-  })),
+  returns: v.array(v.object(publicStyleFields)),
   handler: async (ctx, args) => {
     const styles = await ctx.db
       .query("styles")
@@ -127,19 +114,7 @@ export const getFilteredStyles = query({
     excluded: v.array(v.string()),
     organizationId: v.optional(v.id("organizations")),
   },
-  returns: v.array(v.object({
-    _id: v.id("styles"),
-    _creationTime: v.number(),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    structure: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    example: v.optional(v.string()),
-    promptGuidanceForAI: v.optional(v.string()),
-    order: v.optional(v.float64()),
-  })),
+  returns: v.array(v.object(publicStyleFields)),
   handler: async (ctx, args) => {
     const styles = await ctx.db.query("styles")
       .withIndex("by_order")
@@ -227,7 +202,7 @@ export const deleteStyle = mutation({
 
     const questionsToDelete = await ctx.db
       .query("questions")
-      .withIndex("by_style", (q) => q.eq("style", styleToDelete.id))
+      .withIndex("by_style", (q) => q.eq("styleId", styleToDelete._id))
       .collect();
 
     await Promise.all(questionsToDelete.map((q) => ctx.db.delete(q._id)));
@@ -265,20 +240,7 @@ export const addStyleEmbedding = internalMutation({
 
 export const getRandomStyle = query({
   args: { seed: v.optional(v.number()) },
-  returns: v.object({
-    _id: v.id("styles"),
-    _creationTime: v.number(),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    structure: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    example: v.optional(v.string()),
-    examples: v.optional(v.array(v.string())),
-    promptGuidanceForAI: v.optional(v.string()),
-    order: v.optional(v.float64()),
-  }),
+  returns: v.object(publicStyleFields),
   handler: async (ctx, args) => {
     const styles = await ctx.db.query("styles").withIndex("by_order").order("asc").collect();
     if (styles.length === 0) {
@@ -300,5 +262,61 @@ export const getRandomStyle = query({
     const randomStyle = styles[index];
     const { embedding, ...rest } = randomStyle;
     return rest;
+  },
+});
+
+export const getRandomStyleForUser = query({
+  args: { userId: v.id("users") },
+  returns: v.object(publicStyleFields),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const allStyles = await ctx.db.query("styles").withIndex("by_order").order("asc").collect();
+
+    const userHiddenStyles = await ctx.db.query("userStyles")
+      .withIndex("by_userId_status", (q) => q
+        .eq("userId", args.userId)
+        .eq("status", "hidden"))
+      .collect();
+
+    const hiddenIds = new Set(userHiddenStyles.map(s => s.styleId));
+    const styles = allStyles.filter(s => !hiddenIds.has(s._id));
+
+    if (styles.length === 0) {
+      throw new Error("No styles available for user");
+    }
+
+    const seed = Math.random() * 0xFFFFFFFF;
+    const mulberry32 = (a: number) => {
+      return () => {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }
+    };
+    const rng = mulberry32(seed);
+
+    const index = Math.floor(rng() * styles.length);
+    const randomStyle = styles[index];
+    const { embedding, ...rest } = randomStyle;
+    return rest;
+  },
+});
+
+export const updateQuestionsWithMissingStyleIds = internalMutation({
+  handler: async (ctx) => {
+    const questions = await ctx.db.query("questions").collect();
+    await Promise.all(questions.map(async (q) => {
+      if (!q.styleId) {
+        const style = await ctx.db.query("styles").filter((s) => s.eq(s.field("id"), q.style)).first();
+        if (style) {
+          await ctx.db.patch(q._id, { styleId: style._id });
+        }
+      }
+    }));
   },
 });

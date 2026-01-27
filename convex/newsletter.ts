@@ -21,29 +21,17 @@ export const getQuestionForUser = action({
     let question: any;
 
     if (user) {
-      const style = user.defaultStyle || "Fun";
-      const tone = user.defaultTone || "Casual";
-
-      const userQuestions = await ctx.runQuery(internal.users.getUserLikedQuestions, { userId: user._id });
-      const seenIds = userQuestions.map((uq: any) => uq.questionId);
-
       // 2. Try to get an existing question they haven't seen
-      const questions: any[] = await ctx.runQuery(api.questions.getNextQuestions, {
-        count: 1,
-        style,
-        tone,
-        seen: seenIds,
+      question = await ctx.runQuery(api.questions.getQuestionForNewsletter, {
+        userId: user._id
       });
-      question = questions[0];
 
       // 3. If no question found, generate a new one
       if (!question) {
-        const generatedQuestions: any[] = await ctx.runAction(api.ai.generateAIQuestions, {
-          style,
-          tone,
+        const generatedQuestion = await ctx.runAction(api.ai.generateAIQuestionForFeed, {
           userId: user._id,
         });
-        question = generatedQuestions[0];
+        question = generatedQuestion;
       }
     } else {
       // 4. For non-registered subscribers, just get any random question

@@ -38,6 +38,8 @@ const NonAuthProvider = ({
 
 export const StorageProvider = ({ children }: { children: ReactNode }) => {
   const { isSignedIn } = useAuth();
+
+
   const cookieConsent = document.cookie
     .split("; ")
     .find((row) => row.startsWith("cookieConsent="))

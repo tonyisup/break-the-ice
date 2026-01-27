@@ -1,21 +1,16 @@
 import { useQuery, useConvex, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Doc, Id } from "../../convex/_generated/dataModel";
 import { useTheme } from "@/hooks/useTheme";
 import { useStorageContext } from "@/hooks/useStorageContext";
 import { useWorkspace } from "@/hooks/useWorkspace.tsx";
-import { StyleSelector, StyleSelectorRef } from "@/components/styles-selector";
-import { ToneSelector, ToneSelectorRef } from "@/components/tone-selector";
 import { Header } from "@/components/header";
-import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
-import { Icon } from "@/components/ui/icons/icon";
 import { Button } from "@/components/ui/button";
 import { ArrowUp, SearchX } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
-import { useAuth, SignInButton } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
 import { UpgradeCTA } from "@/components/UpgradeCTA";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
@@ -25,7 +20,7 @@ export default function InfiniteScrollPage() {
   const convex = useConvex();
   const user = useAuth();
   const { activeWorkspace } = useWorkspace();
-  const generateAIQuestions = useAction(api.ai.generateAIQuestions);
+  const generateAIQuestions = useAction(api.ai.generateAIQuestionForFeed);
 
   const {
     likedQuestions,
@@ -37,8 +32,6 @@ export default function InfiniteScrollPage() {
     hiddenTones,
     addHiddenStyle,
     addHiddenTone,
-    defaultStyle,
-    defaultTone,
     addQuestionToHistory,
   } = useStorageContext();
 
@@ -95,6 +88,7 @@ export default function InfiniteScrollPage() {
     }
   }, []);
 
+  // Track the cards for the background gradients
   useEffect(() => {
     const options = {
       root: null,
@@ -166,18 +160,18 @@ export default function InfiniteScrollPage() {
     };
   }, [activeQuestion, recordAnalytics, addQuestionToHistory]);
 
-  const style = useQuery(api.styles.getStyle, { id: activeQuestion?.style || defaultStyle || "would-you-rather" });
-  const tone = useQuery(api.tones.getTone, { id: activeQuestion?.tone || defaultTone || "fun-silly" });
+  const style = useQuery(api.styles.getStyle, { id: activeQuestion?.style || "would-you-rather" });
+  const tone = useQuery(api.tones.getTone, { id: activeQuestion?.tone || "fun-silly" });
 
   // Check if all styles or tones are blocked
   const allStylesBlocked = useMemo(() => {
-    if (!allStyles || allStyles.length === 0) return false;
-    return allStyles.every(s => hiddenStyles.includes(s.id));
+    if (!allStyles || allStyles.length === 0 || !hiddenStyles) return false;
+    return allStyles.every(s => hiddenStyles.includes(s._id));
   }, [allStyles, hiddenStyles]);
 
   const allTonesBlocked = useMemo(() => {
-    if (!allTones || allTones.length === 0) return false;
-    return allTones.every(t => hiddenTones.includes(t.id));
+    if (!allTones || allTones.length === 0 || !hiddenTones) return false;
+    return allTones.every(t => hiddenTones.includes(t._id));
   }, [allTones, hiddenTones]);
 
   // Used for styling and gradient
@@ -193,7 +187,10 @@ export default function InfiniteScrollPage() {
   // Function to load more questions
   const loadMoreQuestions = useCallback(async () => {
     // Check if we are already loading or missing params
-    if (isLoading || !hasMore || showAuthCTA || showUpgradeCTA || allStylesBlocked || allTonesBlocked) return;
+    const isStorageLoaded = hiddenStyles !== undefined && hiddenTones !== undefined &&
+      (!user.isSignedIn || (hiddenStyles !== null && hiddenTones !== null));
+
+    if (!user.isLoaded || isLoading || !hasMore || showAuthCTA || showUpgradeCTA || allStylesBlocked || allTonesBlocked || !isStorageLoaded) return;
 
     // Capture current request ID
     requestIdRef.current++;
@@ -208,8 +205,8 @@ export default function InfiniteScrollPage() {
         count: BATCH_SIZE,
         seen: Array.from(seenIds), // Pass currently seen IDs to avoid duplicates
         hidden: hiddenQuestions,
-        hiddenStyles,
-        hiddenTones,
+        hiddenStyles: hiddenStyles ?? [],
+        hiddenTones: hiddenTones ?? [],
         organizationId: activeWorkspace ?? undefined,
       });
 
@@ -242,9 +239,7 @@ export default function InfiniteScrollPage() {
         }
 
         try {
-          const generated = await generateAIQuestions({
-            prompt: "Generate random, engaging ice-breaker questions.",
-          });
+          const generated = await generateAIQuestions({});
 
           // Check for staleness after generation await
           if (currentRequestId !== requestIdRef.current) return;
@@ -364,7 +359,7 @@ export default function InfiniteScrollPage() {
     }
   }
 
-  const handleHideStyle = (styleId: string) => {
+  const handleHideStyle = (styleId: Id<"styles">) => {
     addHiddenStyle(styleId);
     // Reset list as style might change or be hidden
     setQuestions([]);
@@ -375,7 +370,7 @@ export default function InfiniteScrollPage() {
     // We don't manually trigger load here, the useEffect for question.length=0 or style change will handle it
   }
 
-  const handleHideTone = (toneId: string) => {
+  const handleHideTone = (toneId: Id<"tones">) => {
     addHiddenTone(toneId);
     setQuestions([]);
     setSeenIds(new Set());
@@ -615,7 +610,6 @@ export default function InfiniteScrollPage() {
           {hasMore && !showAuthCTA && !showUpgradeCTA && (questions.length > 0 || !isLoading) && (
             <div className="flex justify-center py-8">
               <Button
-                variant="default"
                 onClick={() => {
                   loadMoreQuestions();
                 }}
@@ -632,7 +626,6 @@ export default function InfiniteScrollPage() {
           onClick={scrollToTop}
           data-testid="scroll-to-top-button"
           className="fixed bottom-6 left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50"
-          variant="default"
         >
           <ArrowUp className="w-6 h-6" />
         </Button>

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Heart, Share2, ThumbsDown } from '@/components/ui/icons/icons';
-import { Doc } from '../../../convex/_generated/dataModel';
+import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
 import { useQuery } from 'convex/react';
 import { Icon, IconComponent } from '../ui/icons/icon';
@@ -18,12 +18,12 @@ interface ModernQuestionCardProps {
   onToggleFavorite: () => void;
   onToggleHidden: () => void;
   onShare?: () => void;
-  onHideStyle: (styleId: string) => void;
-  onHideTone: (toneId: string) => void;
-  onSelectedStylesChange?: (styles: string[]) => void;
-  onSelectedTonesChange?: (tones: string[]) => void;
-  selectedStyles?: string[];
-  selectedTones?: string[];
+  onHideStyle: (styleId: Id<"styles">) => void;
+  onHideTone: (toneId: Id<"tones">) => void;
+  onSelectedStylesChange?: (styles: Id<"styles">[]) => void;
+  onSelectedTonesChange?: (tones: Id<"tones">[]) => void;
+  selectedStyles?: Id<"styles">[];
+  selectedTones?: Id<"tones">[];
   disabled?: boolean;
 }
 
@@ -47,52 +47,52 @@ export function ModernQuestionCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
- 
-  const handleHideStyle = (itemId: string) => {
+
+  const handleHideStyle = (itemId: Id<"styles">) => {
     if (!style) return;
     if (!itemId) return;
-    if (itemId !== style.id) {
-      console.log("Item ID does not match style ID", itemId, style.id);
+    if (itemId !== style._id) {
+      console.log("Item ID does not match style ID", itemId, style._id);
       return;
     }
-    onHideStyle(style.id);
+    onHideStyle(style._id);
     setIsDrawerOpen(false);
   };
-  const handleHideTone = (itemId: string) => {
+  const handleHideTone = (itemId: Id<"tones">) => {
     if (!tone) return;
     if (!itemId) return;
-    if (itemId !== tone.id) {
-      console.log("Item ID does not match tone ID", itemId, tone.id);
+    if (itemId !== tone._id) {
+      console.log("Item ID does not match tone ID", itemId, tone._id);
       return;
     }
     if (!tone) return;
-    onHideTone(tone.id);
+    onHideTone(tone._id);
     setIsDrawerOpen(false);
   };
   const handleHideItem = (item: ItemDetails) => {
     if (!item) return;
     if (item.type === "Style") {
-      handleHideStyle(item.id);
+      handleHideStyle(item.id as Id<"styles">);
     } else {
-      handleHideTone(item.id);
+      handleHideTone(item.id as Id<"tones">);
     }
   };
 
   const onAddFilter = (item: ItemDetails) => {
     if (item.type === "Style") {
       if (onSelectedStylesChange && selectedStyles) {
-        onSelectedStylesChange([...selectedStyles, item.id]);
+        onSelectedStylesChange([...selectedStyles, item.id as Id<"styles">]);
       }
     } else {
       if (onSelectedTonesChange && selectedTones) {
-        onSelectedTonesChange([...selectedTones, item.id]);
+        onSelectedTonesChange([...selectedTones, item.id as Id<"tones">]);
       }
     }
   };
   const handleOpenStyleDrawer = () => {
     if (!style) return;
     setSelectedItemForDrawer({
-      id: style.id,
+      id: style._id,
       name: style.name,
       type: "Style",
       description: style.description || "",
@@ -104,7 +104,7 @@ export function ModernQuestionCard({
   const handleOpenToneDrawer = () => {
     if (!tone) return;
     setSelectedItemForDrawer({
-      id: tone.id,
+      id: tone._id,
       name: tone.name,
       type: "Tone",
       description: tone.description || "",
@@ -150,19 +150,19 @@ export function ModernQuestionCard({
             <LoadingSpinner gradient={gradient} />
           ) : (
             // Full Card Content
-            question && 
+            question &&
             <>
-              <QuestionContent 
-                question={question} 
-                style={style} 
-                tone={tone} 
-                gradient={gradient} 
-                isFavorite={isFavorite} 
-                onToggleFavorite={onToggleFavorite} 
-                onToggleHidden={onToggleHidden} 
-                disabled={disabled} 
-                handleShare={() => void handleShare()} 
-                onClickStyle={handleOpenStyleDrawer} 
+              <QuestionContent
+                question={question}
+                style={style}
+                tone={tone}
+                gradient={gradient}
+                isFavorite={isFavorite}
+                onToggleFavorite={onToggleFavorite}
+                onToggleHidden={onToggleHidden}
+                disabled={disabled}
+                handleShare={() => void handleShare()}
+                onClickStyle={handleOpenStyleDrawer}
                 onClickTone={handleOpenToneDrawer}
               />
               <ItemDetailDrawer
@@ -247,7 +247,7 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, onToggle
             borderLeftColor: gradient[0]
           }}
         >
-          <div 
+          <div
             title={style && style.name}
             className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
             onClick={handleClickStyle}

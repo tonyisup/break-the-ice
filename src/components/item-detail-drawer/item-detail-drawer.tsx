@@ -7,13 +7,14 @@ import {
   DrawerFooter,
   DrawerClose,
 } from '@/components/ui/drawer';
-import { Button } from '@/components/ui/button'; 
+import { Button } from '@/components/ui/button';
 import { cn, isColorDark } from '@/lib/utils';
 import { Icon, IconComponent } from '@/components/ui/icons/icon';
+import { Id } from '../../../convex/_generated/dataModel';
 
 export interface ItemDetails {
-  id: string;
-  name: string; 
+  id: Id<"styles"> | Id<"tones">;
+  name: string;
   type: "Style" | "Tone";
   description: string;
   icon: Icon;
@@ -66,7 +67,7 @@ export function ItemDetailDrawer({
               <IconComponent icon={item.icon} size={24} color={item.color} />
               {item.name}
             </span>
-            <span 
+            <span
               style={{ borderColor: item.color }}
               className={cn(
                 "text-sm text-muted-foreground p-2 rounded-2xl",
@@ -77,13 +78,13 @@ export function ItemDetailDrawer({
           <DrawerDescription className="pt-4 text-sm text-muted-foreground">{item.description}</DrawerDescription>
         </DrawerHeader>
         <DrawerFooter>
-          {onSelectItem && <Button 
-            onClick={handleSelect} 
+          {onSelectItem && <Button
+            onClick={handleSelect}
             className={isColorDark(item.color) ? "text-white" : "text-black"}
             style={{ backgroundColor: item.color }}
           >Select</Button>}
-          {onAddFilter && <Button 
-            variant="secondary" 
+          {onAddFilter && <Button
+            variant="secondary"
             onClick={handleAddFilter}
             style={{ borderColor: item.color, borderWidth: '4px' }}
           >Add to filter</Button>}

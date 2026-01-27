@@ -35,14 +35,14 @@ export interface StorageContextType {
   setHiddenQuestions: (ids: Id<"questions">[]) => void;
   addHiddenQuestion: (id: Id<"questions">) => void;
   removeHiddenQuestion: (id: Id<"questions">) => void;
-  hiddenStyles: string[];
-  setHiddenStyles: (ids: string[]) => void;
-  addHiddenStyle: (id: string) => void;
-  removeHiddenStyle: (id: string) => void;
-  hiddenTones: string[];
-  setHiddenTones: (ids: string[]) => void;
-  addHiddenTone: (id: string) => void;
-  removeHiddenTone: (id: string) => void;
+  hiddenStyles: Id<"styles">[];
+  setHiddenStyles: (ids: Id<"styles">[]) => void;
+  addHiddenStyle: (id: Id<"styles">) => void;
+  removeHiddenStyle: (id: Id<"styles">) => void;
+  hiddenTones: Id<"tones">[];
+  setHiddenTones: (ids: Id<"tones">[]) => void;
+  addHiddenTone: (id: Id<"tones">) => void;
+  removeHiddenTone: (id: Id<"tones">) => void;
   clearLikedQuestions: () => void;
   clearQuestionHistory: () => void;
   clearHiddenQuestions: () => void;
@@ -86,13 +86,13 @@ export const useLocalStorageContext = (
     hasConsented,
   );
 
-  const [hiddenStyles, setHiddenStyles] = useLocalStorage<string[]>(
+  const [hiddenStyles, setHiddenStyles] = useLocalStorage<Id<"styles">[]>(
     "hiddenStyles",
     [],
     hasConsented,
   );
 
-  const [hiddenTones, setHiddenTones] = useLocalStorage<string[]>(
+  const [hiddenTones, setHiddenTones] = useLocalStorage<Id<"tones">[]>(
     "hiddenTones",
     [],
     hasConsented,
@@ -122,7 +122,7 @@ export const useLocalStorageContext = (
         // If already in list, don't do anything (or move to top? Assume append)
         // If behavior is block and we are at limit:
         if (storageLimitBehavior === 'block' && prev.length >= MAX_ANON_LIKED) {
-            return prev;
+          return prev;
         }
 
         const newState = [...prev, id];
@@ -147,7 +147,7 @@ export const useLocalStorageContext = (
     (id: Id<"questions">) => {
       setHiddenQuestions((prev) => {
         if (storageLimitBehavior === 'block' && prev.length >= MAX_ANON_BLOCKED) {
-            return prev;
+          return prev;
         }
         const newState = [...prev, id];
         if (newState.length > MAX_ANON_BLOCKED) {
@@ -167,28 +167,28 @@ export const useLocalStorageContext = (
   );
 
   const addHiddenStyle = useCallback(
-    (id: string) => {
+    (id: Id<"styles">) => {
       setHiddenStyles((prev) => [...prev, id]);
     },
     [setHiddenStyles],
   );
 
   const removeHiddenStyle = useCallback(
-    (id: string) => {
+    (id: Id<"styles">) => {
       setHiddenStyles((prev) => prev.filter((sId) => sId !== id));
     },
     [setHiddenStyles],
   );
 
   const addHiddenTone = useCallback(
-    (id: string) => {
+    (id: Id<"tones">) => {
       setHiddenTones((prev) => [...prev, id]);
     },
     [setHiddenTones],
   );
 
   const removeHiddenTone = useCallback(
-    (id: string) => {
+    (id: Id<"tones">) => {
       setHiddenTones((prev) => prev.filter((tId) => tId !== id));
     },
     [setHiddenTones],
@@ -289,20 +289,26 @@ export const useConvexStorageContext = (
   const settings = useQuery(api.users.getSettings);
   const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
   const [hiddenQuestions, setHiddenQuestions] = useState<Id<"questions">[]>([]);
-  const [hiddenStyles, setHiddenStyles] = useState<string[]>([]);
-  const [hiddenTones, setHiddenTones] = useState<string[]>([]);
+  const [localHiddenStyles, setLocalHiddenStyles] = useState<Id<"styles">[]>([]);
+  const [localHiddenTones, setLocalHiddenTones] = useState<Id<"tones">[]>([]);
   const [defaultStyle, setDefaultStyle] = useState<string | undefined>(
     undefined,
   );
   const [defaultTone, setDefaultTone] = useState<string | undefined>(undefined);
   const updateLikedQuestions = useMutation(api.users.updateLikedQuestions);
   const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
-  const updateHiddenStyles = useMutation(api.users.updateHiddenStyles);
-  const updateHiddenTones = useMutation(api.users.updateHiddenTones);
   const updateUserSettings = useMutation(api.users.updateUserSettings);
   const mergeKnownLikedQuestions = useMutation(api.users.mergeKnownLikedQuestions);
   const mergeKnownHiddenQuestions = useMutation(api.users.mergeKnownHiddenQuestions);
   const mergeQuestionHistory = useMutation(api.users.mergeQuestionHistory);
+  const hiddenStylesQuery = useQuery(api.users.getHiddenStyleIds);
+  const hiddenTonesQuery = useQuery(api.users.getHiddenToneIds);
+  const updateHiddenStyles = useMutation(api.users.updateHiddenStyles);
+  const updateHiddenTones = useMutation(api.users.updateHiddenTones);
+  const addHiddenStyleId = useMutation(api.users.addHiddenStyleId);
+  const removeHiddenStyleId = useMutation(api.users.removeHiddenStyleId);
+  const addHiddenToneId = useMutation(api.users.addHiddenToneId);
+  const removeHiddenToneId = useMutation(api.users.removeHiddenToneId);
 
   useEffect(() => {
     // Merge local likes if they exist
@@ -356,8 +362,8 @@ export const useConvexStorageContext = (
     if (settings) {
       setLikedQuestions(settings.likedQuestions ?? []);
       setHiddenQuestions(settings.hiddenQuestions ?? []);
-      setHiddenStyles(settings.hiddenStyles ?? []);
-      setHiddenTones(settings.hiddenTones ?? []);
+      setLocalHiddenStyles(settings.hiddenStyles as Id<"styles">[] ?? []);
+      setLocalHiddenTones(settings.hiddenTones as Id<"tones">[] ?? []);
       setDefaultStyle(settings.defaultStyle);
       setDefaultTone(settings.defaultTone);
     }
@@ -434,31 +440,27 @@ export const useConvexStorageContext = (
     setHiddenQuestions,
     addHiddenQuestion,
     removeHiddenQuestion,
-    hiddenStyles,
-    setHiddenStyles,
-    addHiddenStyle: (id: string) => {
-      const newHiddenStyles = [...hiddenStyles, id];
-      setHiddenStyles(newHiddenStyles);
-      void updateHiddenStyles({ hiddenStyles: newHiddenStyles });
+    hiddenStyles: (hiddenStylesQuery ?? []) as Id<"styles">[],
+    setHiddenStyles: (ids: Id<"styles">[]) => {
+      setLocalHiddenStyles(ids);
+      void updateHiddenStyles({ hiddenStyles: ids });
     },
-    removeHiddenStyle: (id: string) => {
-      const newHiddenStyles = hiddenStyles.filter(
-        (styleId) => styleId !== id,
-      );
-      setHiddenStyles(newHiddenStyles);
-      void updateHiddenStyles({ hiddenStyles: newHiddenStyles });
+    addHiddenStyle: (id: Id<"styles">) => {
+      addHiddenStyleId({ styleId: id });
     },
-    hiddenTones,
-    setHiddenTones,
-    addHiddenTone: (id: string) => {
-      const newHiddenTones = [...hiddenTones, id];
-      setHiddenTones(newHiddenTones);
-      void updateHiddenTones({ hiddenTones: newHiddenTones });
+    removeHiddenStyle: (id: Id<"styles">) => {
+      removeHiddenStyleId({ styleId: id });
     },
-    removeHiddenTone: (id: string) => {
-      const newHiddenTones = hiddenTones.filter((toneId) => toneId !== id);
-      setHiddenTones(newHiddenTones);
-      void updateHiddenTones({ hiddenTones: newHiddenTones });
+    hiddenTones: (hiddenTonesQuery ?? []) as Id<"tones">[],
+    setHiddenTones: (ids: Id<"tones">[]) => {
+      setLocalHiddenTones(ids);
+      void updateHiddenTones({ hiddenTones: ids });
+    },
+    addHiddenTone: (id: Id<"tones">) => {
+      addHiddenToneId({ toneId: id });
+    },
+    removeHiddenTone: (id: Id<"tones">) => {
+      removeHiddenToneId({ toneId: id });
     },
     clearLikedQuestions,
     clearQuestionHistory,

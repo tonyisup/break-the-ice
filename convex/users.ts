@@ -453,7 +453,7 @@ export const updateHiddenQuestions = mutation({
 
 export const updateHiddenStyles = mutation({
 	args: {
-		hiddenStyles: v.array(v.string()),
+		hiddenStyles: v.array(v.id("styles")),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
@@ -509,7 +509,7 @@ export const updateHiddenStyles = mutation({
 
 export const updateHiddenTones = mutation({
 	args: {
-		hiddenTones: v.array(v.string()),
+		hiddenTones: v.array(v.id("tones")),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
@@ -664,9 +664,6 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 		return null;
 	},
 });
-
-
-
 
 export const getUsersWithMissingEmbeddings = internalQuery({
 	args: {},
@@ -933,3 +930,228 @@ export const getUsers = query({
 			.collect();
 	},
 });
+
+export const getHiddenStyleIds = query({
+	args: {},
+	handler: async (ctx) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			return null;
+		}
+
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email))
+			.unique();
+
+		if (!user) {
+			return null;
+		}
+
+		// Get hidden styles from userStyles table
+		const hiddenStylesDocs = await ctx.db
+			.query("userStyles")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", user._id).eq("status", "hidden")
+			)
+			.collect();
+		const hiddenStyles = hiddenStylesDocs.map((us) => us.styleId);
+
+		return hiddenStyles;
+	}
+})
+
+export const addHiddenStyleId = mutation({
+	args: { styleId: v.string() },
+	handler: async (ctx, args) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) return null;
+
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email))
+			.unique();
+		if (!user) return null;
+
+		const styleId = ctx.db.normalizeId("styles", args.styleId);
+		if (!styleId) return null;
+
+		const existing = await ctx.db
+			.query("userStyles")
+			.withIndex("by_userIdAndStyleId", (q) =>
+				q.eq("userId", user._id).eq("styleId", styleId)
+			)
+			.first();
+
+		if (!existing) {
+			await ctx.db.insert("userStyles", {
+				userId: user._id,
+				styleId,
+				status: "hidden",
+				updatedAt: Date.now(),
+			});
+		} else if (existing.status !== "hidden") {
+			await ctx.db.patch(existing._id, {
+				status: "hidden",
+				updatedAt: Date.now(),
+			});
+		}
+
+		const hiddenStylesDocs = await ctx.db
+			.query("userStyles")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", user._id).eq("status", "hidden")
+			)
+			.collect();
+		return hiddenStylesDocs.map((us) => us.styleId);
+	}
+})
+
+export const removeHiddenStyleId = mutation({
+	args: { styleId: v.string() },
+	handler: async (ctx, args) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) return null;
+
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email))
+			.unique();
+		if (!user) return null;
+
+		const styleId = ctx.db.normalizeId("styles", args.styleId);
+		if (!styleId) return null;
+
+		const existing = await ctx.db
+			.query("userStyles")
+			.withIndex("by_userIdAndStyleId", (q) =>
+				q.eq("userId", user._id).eq("styleId", styleId)
+			)
+			.first();
+
+		if (existing) {
+			await ctx.db.delete(existing._id);
+		}
+
+		const hiddenStylesDocs = await ctx.db
+			.query("userStyles")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", user._id).eq("status", "hidden")
+			)
+			.collect();
+		return hiddenStylesDocs.map((us) => us.styleId);
+	}
+})
+
+export const getHiddenToneIds = query({
+	args: {},
+	handler: async (ctx) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			return null;
+		}
+
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email))
+			.unique();
+
+		if (!user) {
+			return null;
+		}
+
+		// Get hidden tones from userTones table
+		const hiddenTonesDocs = await ctx.db
+			.query("userTones")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", user._id).eq("status", "hidden")
+			)
+			.collect();
+
+		const hiddenTones = hiddenTonesDocs.map((ut) => ut.toneId);
+
+		return hiddenTones;
+	}
+})
+
+export const addHiddenToneId = mutation({
+	args: { toneId: v.string() },
+	handler: async (ctx, args) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) return null;
+
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email))
+			.unique();
+		if (!user) return null;
+
+		const toneId = ctx.db.normalizeId("tones", args.toneId);
+		if (!toneId) return null;
+
+		const existing = await ctx.db
+			.query("userTones")
+			.withIndex("by_userIdAndToneId", (q) =>
+				q.eq("userId", user._id).eq("toneId", toneId)
+			)
+			.first();
+
+		if (!existing) {
+			await ctx.db.insert("userTones", {
+				userId: user._id,
+				toneId,
+				status: "hidden",
+				updatedAt: Date.now(),
+			});
+		} else if (existing.status !== "hidden") {
+			await ctx.db.patch(existing._id, {
+				status: "hidden",
+				updatedAt: Date.now(),
+			});
+		}
+
+		const hiddenTonesDocs = await ctx.db
+			.query("userTones")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", user._id).eq("status", "hidden")
+			)
+			.collect();
+		return hiddenTonesDocs.map((ut) => ut.toneId);
+	}
+})
+
+export const removeHiddenToneId = mutation({
+	args: { toneId: v.string() },
+	handler: async (ctx, args) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) return null;
+
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email))
+			.unique();
+		if (!user) return null;
+
+		const toneId = ctx.db.normalizeId("tones", args.toneId);
+		if (!toneId) return null;
+
+		const existing = await ctx.db
+			.query("userTones")
+			.withIndex("by_userIdAndToneId", (q) =>
+				q.eq("userId", user._id).eq("toneId", toneId)
+			)
+			.first();
+
+		if (existing) {
+			await ctx.db.delete(existing._id);
+		}
+
+		const hiddenTonesDocs = await ctx.db
+			.query("userTones")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", user._id).eq("status", "hidden")
+			)
+			.collect();
+		return hiddenTonesDocs.map((ut) => ut.toneId);
+	}
+})

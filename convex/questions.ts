@@ -182,14 +182,13 @@ export const getNextRandomQuestions = query({
     count: v.number(),
     seen: v.optional(v.array(v.id("questions"))),
     hidden: v.optional(v.array(v.id("questions"))),
-    hiddenStyles: v.optional(v.array(v.string())),
-    hiddenTones: v.optional(v.array(v.string())),
+    hiddenStyles: v.optional(v.array(v.id("styles"))),
+    hiddenTones: v.optional(v.array(v.id("tones"))),
     organizationId: v.optional(v.id("organizations")),
   },
-  returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    const { count, seen, hidden, hiddenStyles, hiddenTones, organizationId } = args;
-    const seenIds = new Set(seen ?? []);
+    const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId } = args;
+    const seenIds = new Set(seen);
 
     // Get all questions first, and filter out seen ones.
     const filteredQuestions = await ctx.db
@@ -199,10 +198,10 @@ export const getNextRandomQuestions = query({
       .filter((q: any) => q.and(
         q.neq(q.field("text"), undefined),
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
-        ...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
-        ...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id)),
-        ...(hiddenStyles ?? []).map((style: string) => q.neq(q.field("style"), style)),
-        ...(hiddenTones ?? []).map((tone: string) => q.neq(q.field("tone"), tone))
+        ...hidden.map((id: Id<"questions">) => q.neq(q.field("_id"), id)),
+        ...seen.map((id: Id<"questions">) => q.neq(q.field("_id"), id)),
+        ...hiddenStyles.map((style: Id<"styles">) => q.neq(q.field("styleId"), style)),
+        ...hiddenTones.map((tone: Id<"tones">) => q.neq(q.field("toneId"), tone))
       ))
       .take(count * 4);
 
@@ -211,11 +210,64 @@ export const getNextRandomQuestions = query({
   },
 });
 
+export const getQuestionForNewsletter = query({
+  args: { userId: v.id("users") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const { userId } = args;
+    const user = await ctx.db.query("users").filter((q: any) => q.eq(q.field("_id"), userId)).unique();
+    if (!user) {
+      return null;
+    }
+
+    const userHiddenStyles = await ctx.db.query("userStyles")
+      .withIndex("by_userId_status", (q) => q
+        .eq("userId", args.userId)
+        .eq("status", "hidden")
+      )
+      .collect();
+    const styles = (userHiddenStyles.length === 0)
+      ? await ctx.db.query("styles").withIndex("by_order").order("asc").collect()
+      : await Promise.all(
+        userHiddenStyles.map((s) => ctx.db.get("styles", s.styleId))
+      );
+    if (styles.length === 0) {
+      throw new Error("No styles found in the database");
+    }
+
+    const userHiddenTones = await ctx.db.query("userTones")
+      .withIndex("by_userId_status", (q) => q
+        .eq("userId", args.userId)
+        .eq("status", "hidden")
+      )
+      .collect();
+    const tones = (userHiddenTones.length === 0)
+      ? await ctx.db.query("tones").withIndex("by_order").order("asc").collect()
+      : await Promise.all(
+        userHiddenTones.map((t) => ctx.db.get("tones", t.toneId))
+      );
+
+    if (tones.length === 0) {
+      throw new Error("No tones found in the database");
+    }
+
+    const question = await ctx.db
+      .query("questions")
+      .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
+      .filter((q: any) => q.and(
+        q.neq(q.field("text"), undefined),
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
+      ))
+      .take(1);
+    return question;
+  },
+})
+
 export const getNextQuestions = query({
   args: {
     count: v.number(),
-    style: v.string(),
-    tone: v.string(),
+    style: v.id("styles"),
+    tone: v.id("tones"),
     seen: v.optional(v.array(v.id("questions"))),
     hidden: v.optional(v.array(v.id("questions"))),
     organizationId: v.optional(v.id("organizations")),
@@ -228,7 +280,7 @@ export const getNextQuestions = query({
     // Get all questions first, and filter out seen ones.
     const filteredQuestions = await ctx.db
       .query("questions")
-      .withIndex("by_style_and_tone", (q) => q.eq("style", style).eq("tone", tone))
+      .withIndex("by_style_and_tone", (q) => q.eq("styleId", style).eq("toneId", tone))
       .filter((q) => q.eq(q.field("organizationId"), organizationId))
       .filter((q) => q.eq(q.field("prunedAt"), undefined))
       .filter((q) => q.and(

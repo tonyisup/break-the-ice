@@ -71,8 +71,11 @@ export default defineSchema({
     isAIGenerated: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
     style: v.optional(v.string()),
+    styleId: v.optional(v.id("styles")),
     tone: v.optional(v.string()),
+    toneId: v.optional(v.id("tones")),
     topic: v.optional(v.string()),
+    topicId: v.optional(v.id("topics")),
     embedding: v.optional(v.array(v.number())),
     authorId: v.optional(v.string()),
     customText: v.optional(v.string()),
@@ -96,19 +99,19 @@ export default defineSchema({
     .index("by_last_shown_at", ["lastShownAt"])
     .index("by_total_likes", ["totalLikes"])
     .index("by_tags", ["tags"])
-    .index("by_style", ["style"])
-    .index("by_tone", ["tone"])
-    .index("by_topic", ["topic"])
-    .index("by_style_and_last_shown", ["style", "lastShownAt"])
-    .index("by_style_and_total_likes", ["style", "totalLikes"])
-    .index("by_tone_and_last_shown", ["tone", "lastShownAt"])
-    .index("by_tone_and_total_likes", ["tone", "totalLikes"])
-    .index("by_style_and_tone", ["style", "tone"])
+    .index("by_style", ["styleId"])
+    .index("by_tone", ["toneId"])
+    .index("by_topic", ["topicId"])
+    .index("by_style_and_last_shown", ["styleId", "lastShownAt"])
+    .index("by_style_and_total_likes", ["styleId", "totalLikes"])
+    .index("by_tone_and_last_shown", ["toneId", "lastShownAt"])
+    .index("by_tone_and_total_likes", ["toneId", "totalLikes"])
+    .index("by_style_and_tone", ["styleId", "toneId"])
     .index("by_text", ["text"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 384,
-      filterFields: ["style", "tone"],
+      filterFields: ["styleId", "toneId"],
     })
     .index("by_author", ["authorId", "status"]),
   tags: defineTable({
@@ -157,9 +160,8 @@ export default defineSchema({
     .index("by_userIdAndQuestionId", ["userId", "questionId"]),
   userStyles: defineTable({
     userId: v.id("users"),
-    styleId: v.string(),
+    styleId: v.id("styles"),
     status: v.union(
-      v.literal("default"),
       v.literal("preferred"),
       v.literal("hidden")
     ),
@@ -173,9 +175,8 @@ export default defineSchema({
 
   userTones: defineTable({
     userId: v.id("users"),
-    toneId: v.string(),
+    toneId: v.id("tones"),
     status: v.union(
-      v.literal("default"),
       v.literal("preferred"),
       v.literal("hidden")
     ),

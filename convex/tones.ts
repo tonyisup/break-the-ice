@@ -1,22 +1,22 @@
 import { v } from "convex/values";
 import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
+import { api } from "./_generated/api";
+
+const publicToneFields = {
+  _id: v.id("tones"),
+  _creationTime: v.number(),
+  id: v.string(),
+  name: v.string(),
+  description: v.optional(v.string()),
+  promptGuidanceForAI: v.string(),
+  color: v.string(),
+  icon: v.string(),
+  order: v.optional(v.float64()),
+};
 
 export const getTone = query({
   args: { id: v.string() },
-  returns: v.union(
-    v.object({
-      _id: v.id("tones"),
-      _creationTime: v.number(),
-      id: v.string(),
-      name: v.string(),
-      description: v.optional(v.string()),
-      promptGuidanceForAI: v.string(),
-      color: v.string(),
-      icon: v.string(),
-      order: v.optional(v.float64()),
-    }),
-    v.null(),
-  ),
+  returns: v.union(v.object(publicToneFields), v.null()),
   handler: async (ctx, args) => {
     const tone = await ctx.db.query("tones")
       .withIndex("by_my_id", (q) => q.eq("id", args.id))
@@ -33,17 +33,7 @@ export const getTones = query({
   args: {
     organizationId: v.optional(v.id("organizations")),
   },
-  returns: v.array(v.object({
-    _id: v.id("tones"),
-    _creationTime: v.number(),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    promptGuidanceForAI: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    order: v.optional(v.float64()),
-  })),
+  returns: v.array(v.object(publicToneFields)),
   handler: async (ctx, args) => {
     const tones = await ctx.db
       .query("tones")
@@ -60,17 +50,7 @@ export const getFilteredTones = query({
     excluded: v.array(v.string()),
     organizationId: v.optional(v.id("organizations")),
   },
-  returns: v.array(v.object({
-    _id: v.id("tones"),
-    _creationTime: v.number(),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    promptGuidanceForAI: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    order: v.optional(v.float64()),
-  })),
+  returns: v.array(v.object(publicToneFields)),
   handler: async (ctx, args) => {
     const tones = await ctx.db.query("tones")
       .withIndex("by_order")
@@ -150,7 +130,7 @@ export const deleteTone = mutation({
 
     const questionsToDelete = await ctx.db
       .query("questions")
-      .withIndex("by_tone", (q) => q.eq("tone", toneToDelete.id))
+      .withIndex("by_tone", (q) => q.eq("toneId", toneToDelete._id))
       .collect();
 
     await Promise.all(questionsToDelete.map((q) => ctx.db.delete(q._id)));
@@ -161,16 +141,7 @@ export const deleteTone = mutation({
 
 export const getTonesWithMissingEmbeddings = internalQuery({
   args: {},
-  returns: v.array(v.object({
-    _id: v.id("tones"),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    promptGuidanceForAI: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    order: v.optional(v.float64()),
-  })),
+  returns: v.array(v.object(publicToneFields)),
   handler: async (ctx) => {
     const tones = await ctx.db.query("tones").filter((q) => q.eq(q.field("embedding"), undefined)).collect();
     return tones.map(({ embedding, ...rest }) => rest);
@@ -191,17 +162,7 @@ export const addToneEmbedding = internalMutation({
 
 export const getRandomTone = query({
   args: { seed: v.optional(v.number()) },
-  returns: v.object({
-    _id: v.id("tones"),
-    _creationTime: v.number(),
-    id: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    promptGuidanceForAI: v.string(),
-    color: v.string(),
-    icon: v.string(),
-    order: v.optional(v.float64()),
-  }),
+  returns: v.object(publicToneFields),
   handler: async (ctx, args) => {
     const tones = await ctx.db.query("tones").withIndex("by_order").order("asc").collect();
     if (tones.length === 0) {
@@ -223,5 +184,62 @@ export const getRandomTone = query({
     const randomTone = tones[index];
     const { embedding, ...rest } = randomTone;
     return rest;
+  },
+});
+
+export const getRandomToneForUser = query({
+  args: { userId: v.id("users") },
+  returns: v.object(publicToneFields),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const allTones = await ctx.db.query("tones").withIndex("by_order").order("asc").collect();
+
+    const userHiddenTones = await ctx.db.query("userTones")
+      .withIndex("by_userId_status", (q) => q
+        .eq("userId", args.userId)
+        .eq("status", "hidden")
+      )
+      .collect();
+
+    const hiddenIds = new Set(userHiddenTones.map(t => t.toneId));
+    const tones = allTones.filter(t => !hiddenIds.has(t._id));
+
+    if (tones.length === 0) {
+      throw new Error("No tones available for user");
+    }
+
+    const seed = Math.random() * 0xFFFFFFFF;
+    const mulberry32 = (a: number) => {
+      return () => {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      }
+    };
+    const rng = mulberry32(seed);
+
+    const index = Math.floor(rng() * tones.length);
+    const randomTone = tones[index];
+    const { embedding, ...rest } = randomTone;
+    return rest;
+  },
+});
+
+export const updateQuestionsWithMissingToneIds = internalMutation({
+  handler: async (ctx) => {
+    const questions = await ctx.db.query("questions").collect();
+    await Promise.all(questions.map(async (q) => {
+      if (!q.toneId) {
+        const tone = await ctx.db.query("tones").filter((t) => t.eq(t.field("id"), q.tone)).first();
+        if (tone) {
+          await ctx.db.patch(q._id, { toneId: tone._id });
+        }
+      }
+    }));
   },
 });
