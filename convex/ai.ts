@@ -314,14 +314,14 @@ export const generateAIQuestionForFeed = action({
 		}
 
 		const normalize = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
-		const normalizedRecentlySeen = recentlySeen.map((q) => normalize(q));
+		const normalizedRecentlySeen = recentlySeen.map((q: string) => normalize(q));
 
 		const newQuestions: (Doc<"questions"> | null)[] = [];
 		for (const question of parsedContent) {
 			try {
 				// Simple dedupe check
 				const normalizedText = normalize(question.text);
-				const isDuplicate = normalizedRecentlySeen.some(seen =>
+				const isDuplicate = normalizedRecentlySeen.some((seen: string) =>
 					normalizedText.includes(seen) || seen.includes(normalizedText)
 				);
 

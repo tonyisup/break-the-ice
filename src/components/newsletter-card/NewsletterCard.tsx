@@ -4,6 +4,7 @@ import { api } from '../../../convex/_generated/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Mail, Loader2, Check } from 'lucide-react';
+import { NewsletterSubscribeResponse } from '@/types/newsletter';
 
 interface NewsletterCardProps {
   variant: 'blend' | 'standout';
@@ -12,7 +13,7 @@ interface NewsletterCardProps {
 
 export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps) {
   const [email, setEmail] = useState(prefilledEmail || '');
-  const [status, setStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'verification_required'>('idle');
   const subscribe = useAction(api.newsletter.subscribe);
 
   useEffect(() => {
@@ -27,9 +28,18 @@ export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps)
 
     setStatus('submitting');
     try {
-      await subscribe({ email });
-      setStatus('success');
-      toast.success("Successfully subscribed!");
+      const result = (await subscribe({ email })) as NewsletterSubscribeResponse;
+
+      if (result.status === "verification_required") {
+        setStatus('verification_required');
+        toast.success("Verification email sent!");
+      } else if (result.status === "error" || result.success === false) {
+        setStatus('idle');
+        toast.error(result.message || "Subscription failed");
+      } else {
+        setStatus('success');
+        toast.success("Successfully subscribed!");
+      }
     } catch (error) {
       console.error(error);
       toast.error("Failed to subscribe. Please try again.");
@@ -62,27 +72,27 @@ export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps)
 
   return (
     <div className="w-full max-w-md mx-auto relative group">
-       {/* Developer Note */}
-       <div className="absolute -top-6 left-0 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
-        Variant: {variant}
-      </div>
 
       <div className={containerClass}>
         <div className={cn(innerContentClass, cardBgClass)}>
 
-          {/* Success State Overlay */}
+          {/* Success/Verification State Overlay */}
           <div
             className={cn(
-              "absolute inset-0 flex flex-col items-center justify-center transition-all duration-500",
-              status === 'success' ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+              "absolute inset-0 flex flex-col items-center justify-center transition-all duration-500 px-6",
+              (status === 'success' || status === 'verification_required') ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
             )}
           >
             <div className={cn("w-16 h-16 rounded-full flex items-center justify-center mb-4", variant === 'blend' ? "bg-green-100 text-green-600" : "bg-white/20 text-white")}>
-              <Check className="w-8 h-8" />
+              {status === 'verification_required' ? <Mail className="w-8 h-8" /> : <Check className="w-8 h-8" />}
             </div>
-            <h3 className={cn("text-2xl font-bold mb-2", textColor)}>You're in!</h3>
+            <h3 className={cn("text-2xl font-bold mb-2 text-center", textColor)}>
+              {status === 'verification_required' ? "Check your email" : "You're in!"}
+            </h3>
             <p className={cn("text-center", subTextColor)}>
-              Check your inbox for a welcome email coming soon.
+              {status === 'verification_required'
+                ? "We've sent you a link to confirm your subscription."
+                : "Check your inbox for a welcome email coming soon."}
             </p>
           </div>
 
@@ -90,7 +100,7 @@ export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps)
           <div
             className={cn(
               "w-full flex flex-col items-center transition-all duration-500",
-              status === 'success' ? "opacity-0 translate-y-4 pointer-events-none" : "opacity-100 translate-y-0"
+              (status === 'success' || status === 'verification_required') ? "opacity-0 translate-y-4 pointer-events-none" : "opacity-100 translate-y-0"
             )}
           >
             <div className={cn("mb-6 p-4 rounded-full", variant === 'blend' ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500" : "bg-white/20 text-white")}>
