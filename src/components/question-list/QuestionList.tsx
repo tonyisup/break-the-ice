@@ -14,8 +14,8 @@ interface QuestionListProps {
   onToggleLike: (questionId: Id<"questions">) => void;
   onRemoveItem: (questionId: Id<"questions">) => void;
   isHistory?: boolean;
-  onHideStyle?: (styleId: string) => void;
-  onHideTone?: (toneId: string) => void;
+  onHideStyle?: (styleId: Id<"styles">) => void;
+  onHideTone?: (toneId: Id<"tones">) => void;
   onSelectedStylesChange?: (styles: string[]) => void;
   onSelectedTonesChange?: (tones: string[]) => void;
   selectedStyles?: string[];
@@ -37,8 +37,8 @@ export function QuestionList({
   onToggleLike,
   onRemoveItem,
   isHistory = false,
-  onHideStyle = () => {},
-  onHideTone = () => {},
+  onHideStyle = () => { },
+  onHideTone = () => { },
   onSelectedStylesChange,
   onSelectedTonesChange,
   selectedStyles,

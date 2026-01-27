@@ -3,6 +3,7 @@
 import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
+import * as crypto from "crypto";
 
 export const getQuestionForUser = action({
   args: { email: v.string() },
@@ -62,13 +63,80 @@ export const getQuestionForUser = action({
 export const subscribe = action({
   args: { email: v.string() },
   handler: async (ctx, args) => {
+    // Check if user is logged in
+    const identity = await ctx.auth.getUserIdentity();
+
+    // If authenticated, proceed with direct subscription (Legacy/Auth Flow)
+    if (identity) {
+      return await subscribeUser(ctx, args.email);
+    }
+
+    // If unauthenticated, initiate Double Opt-In
+    const token = crypto.randomUUID();
+    await ctx.runMutation(internal.subscriptions.createPendingSubscription, {
+      email: args.email,
+      token,
+    });
+
+    const webhookUrl = process.env.N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://breaktheiceberg.com";
+    const verificationUrl = `${baseUrl}/verify-subscription?token=${token}`;
+
+    if (!webhookUrl) {
+      console.warn("N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL is not set. Simulating verification email sent.");
+      return { success: false, status: "verification_required", debugUrl: verificationUrl };
+    }
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: args.email,
+          verificationUrl,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        console.error(`Verification webhook failed: ${response.status}`);
+        // Fallback or throw? If webhook fails, user can't verify.
+        throw new Error("Failed to send verification email.");
+      }
+
+      return { success: false, status: "verification_required" };
+    } catch (error) {
+       console.error("Failed to send verification email:", error);
+       throw new Error("Failed to initiate subscription. Please try again later.");
+    }
+  },
+});
+
+export const confirmSubscription = action({
+  args: { token: v.string() },
+  handler: async (ctx, args): Promise<{ success: boolean; message?: string }> => {
+    const result = await ctx.runMutation(internal.subscriptions.consumePendingSubscription, {
+      token: args.token,
+    });
+
+    if (!result) {
+       throw new Error("Invalid or expired verification link.");
+    }
+
+    // Now actually subscribe them
+    return await subscribeUser(ctx, result.email);
+  }
+});
+
+// Helper function to reuse the logic
+async function subscribeUser(ctx: any, email: string): Promise<{ success: boolean; message?: string }> {
     const webhookUrl = process.env.N8N_SUBSCRIBE_WEBHOOK_URL;
 
     if (!webhookUrl) {
       console.warn("N8N_SUBSCRIBE_WEBHOOK_URL is not set. Simulating success.");
       // For development, we simulate success if the env var isn't set.
       await ctx.runMutation(internal.users.setNewsletterStatus, {
-        email: args.email,
+        email: email,
         status: "subscribed",
       });
       return { success: true, message: "Simulated subscription" };
@@ -81,7 +149,7 @@ export const subscribe = action({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: args.email,
+          email: email,
           source: "daily_questions_feed",
           timestamp: new Date().toISOString(),
         }),
@@ -92,7 +160,7 @@ export const subscribe = action({
       }
 
       await ctx.runMutation(internal.users.setNewsletterStatus, {
-        email: args.email,
+        email: email,
         status: "subscribed",
       });
 
@@ -101,8 +169,7 @@ export const subscribe = action({
       console.error("Failed to subscribe to newsletter:", error);
       throw new Error("Failed to subscribe. Please try again later.");
     }
-  },
-});
+}
 
 export const sendDailyQuestions = action({
   args: {},

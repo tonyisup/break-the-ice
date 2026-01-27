@@ -22,7 +22,7 @@ const UnsubscribePage = () => {
 
 	const [email, setEmail] = useState<string | null>(null);
 	const [formEmail, setFormEmail] = useState("");
-	const [status, setStatus] = useState<"loading" | "subscribed" | "unsubscribed" | "unset" | "error" | "success_subscribed">("loading");
+	const [status, setStatus] = useState<"loading" | "subscribed" | "unsubscribed" | "unset" | "error" | "success_subscribed" | "verification_sent">("loading");
 	const [isProcessing, setIsProcessing] = useState(false);
 
 	useEffect(() => {
@@ -91,9 +91,16 @@ const UnsubscribePage = () => {
 
 		setIsProcessing(true);
 		try {
-			await subscribeAction({ email: targetEmail });
-			setStatus("success_subscribed");
-			toast.success("Successfully subscribed!");
+			const result = await subscribeAction({ email: targetEmail });
+			const res = result as any;
+
+			if (res?.status === "verification_required") {
+				setStatus("verification_sent");
+				toast.success("Verification email sent!");
+			} else {
+				setStatus("success_subscribed");
+				toast.success("Successfully subscribed!");
+			}
 		} catch (error) {
 			console.error(error);
 			toast.error("Failed to subscribe. Please try again.");
@@ -184,6 +191,42 @@ const UnsubscribePage = () => {
 							<p className="dark:text-white/80 text-black/80 text-lg">
 								You're in! <br />
 								Welcome to the Daily Questions.
+							</p>
+							<a
+								href="/app"
+								className="inline-block w-full bg-blue-500 hover:bg-blue-600 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105"
+							>
+								Go to App
+							</a>
+						</div>
+					)}
+
+					{status === "verification_sent" && (
+						<div className="space-y-6 py-4 animate-in fade-in zoom-in duration-500">
+							<div className="flex justify-center">
+								<Mail className="w-16 h-16 text-blue-400" />
+							</div>
+							<p className="dark:text-white/80 text-black/80 text-lg">
+								Please check your email. <br />
+								We sent a confirmation link to <b>{formEmail || email}</b>.
+							</p>
+							<a
+								href="/app"
+								className="inline-block w-full bg-blue-500 hover:bg-blue-600 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105"
+							>
+								Go to App
+							</a>
+						</div>
+					)}
+
+					{status === "verification_sent" && (
+						<div className="space-y-6 py-4 animate-in fade-in zoom-in duration-500">
+							<div className="flex justify-center">
+								<Mail className="w-16 h-16 text-blue-400" />
+							</div>
+							<p className="dark:text-white/80 text-black/80 text-lg">
+								Please check your email. <br />
+								We sent a confirmation link to <b>{formEmail || email}</b>.
 							</p>
 							<a
 								href="/app"

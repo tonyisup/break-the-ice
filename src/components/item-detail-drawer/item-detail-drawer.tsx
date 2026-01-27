@@ -14,6 +14,7 @@ import { Id } from '../../../convex/_generated/dataModel';
 
 export interface ItemDetails {
   id: Id<"styles"> | Id<"tones">;
+  slug: string;
   name: string;
   type: "Style" | "Tone";
   description: string;

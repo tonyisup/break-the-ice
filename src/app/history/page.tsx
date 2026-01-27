@@ -83,12 +83,12 @@ function HistoryPageContent() {
     void toggleLike(questionId);
   };
 
-  const handleHideStyle = (styleId: string) => {
+  const handleHideStyle = (styleId: Id<"styles">) => {
     addHiddenStyle(styleId);
     toast.success("Style hidden. It will not appear on the main page.");
   };
 
-  const handleHideTone = (toneId: string) => {
+  const handleHideTone = (toneId: Id<"tones">) => {
     addHiddenTone(toneId);
     toast.success("Tone hidden. It will not appear on the main page.");
   };

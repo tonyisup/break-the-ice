@@ -20,10 +20,10 @@ interface ModernQuestionCardProps {
   onShare?: () => void;
   onHideStyle: (styleId: Id<"styles">) => void;
   onHideTone: (toneId: Id<"tones">) => void;
-  onSelectedStylesChange?: (styles: Id<"styles">[]) => void;
-  onSelectedTonesChange?: (tones: Id<"tones">[]) => void;
-  selectedStyles?: Id<"styles">[];
-  selectedTones?: Id<"tones">[];
+  onSelectedStylesChange?: (styles: string[]) => void;
+  onSelectedTonesChange?: (tones: string[]) => void;
+  selectedStyles?: string[];
+  selectedTones?: string[];
   disabled?: boolean;
 }
 
@@ -81,11 +81,11 @@ export function ModernQuestionCard({
   const onAddFilter = (item: ItemDetails) => {
     if (item.type === "Style") {
       if (onSelectedStylesChange && selectedStyles) {
-        onSelectedStylesChange([...selectedStyles, item.id as Id<"styles">]);
+        onSelectedStylesChange([...selectedStyles, item.slug]);
       }
     } else {
       if (onSelectedTonesChange && selectedTones) {
-        onSelectedTonesChange([...selectedTones, item.id as Id<"tones">]);
+        onSelectedTonesChange([...selectedTones, item.slug]);
       }
     }
   };
@@ -93,6 +93,7 @@ export function ModernQuestionCard({
     if (!style) return;
     setSelectedItemForDrawer({
       id: style._id,
+      slug: style.id,
       name: style.name,
       type: "Style",
       description: style.description || "",
@@ -105,6 +106,7 @@ export function ModernQuestionCard({
     if (!tone) return;
     setSelectedItemForDrawer({
       id: tone._id,
+      slug: tone.id,
       name: tone.name,
       type: "Tone",
       description: tone.description || "",

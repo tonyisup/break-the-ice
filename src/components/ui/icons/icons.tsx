@@ -71,7 +71,8 @@ import {
   UserMinus,
   ArrowRightLeft,
   Presentation,
-  Cloud
+  Cloud,
+  Info
 } from 'lucide-react';
 
 // Export all icons for direct use
@@ -147,7 +148,8 @@ export {
   UserMinus,
   ArrowRightLeft,
   Presentation,
-  Cloud
+  Cloud,
+  Info
 };
 
 // Create a mapping of icon names to icon components for dynamic access
@@ -233,5 +235,6 @@ export const iconMap: Record<string, LucideIcon> = {
   ArrowRightLeft,
   Presentation,
   Cloud,
+  Info
 };
 
