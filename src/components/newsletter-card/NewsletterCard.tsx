@@ -13,7 +13,7 @@ interface NewsletterCardProps {
 
 export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps) {
   const [email, setEmail] = useState(prefilledEmail || '');
-  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'verification_required' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'verification_required'>('idle');
   const subscribe = useAction(api.newsletter.subscribe);
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps)
         setStatus('verification_required');
         toast.success("Verification email sent!");
       } else if (result.status === "error" || result.success === false) {
-        setStatus('error');
+        setStatus('idle');
         toast.error(result.message || "Subscription failed");
       } else {
         setStatus('success');
