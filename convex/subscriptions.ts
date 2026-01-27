@@ -6,12 +6,14 @@ export const createPendingSubscription = internalMutation({
     email: v.string(),
     token: v.string(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.db.insert("pendingSubscriptions", {
       email: args.email,
       token: args.token,
       createdAt: Date.now(),
     });
+    return null;
   },
 });
 

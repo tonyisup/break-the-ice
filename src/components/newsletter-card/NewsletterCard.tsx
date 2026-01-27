@@ -4,6 +4,7 @@ import { api } from '../../../convex/_generated/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Mail, Loader2, Check } from 'lucide-react';
+import { NewsletterSubscribeResponse } from '@/types/newsletter';
 
 interface NewsletterCardProps {
   variant: 'blend' | 'standout';
@@ -27,10 +28,9 @@ export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps)
 
     setStatus('submitting');
     try {
-      const result = await subscribe({ email });
-      // Helper to handle response type
-      const res = result as any;
-      if (res?.status === "verification_required") {
+      const result = (await subscribe({ email })) as NewsletterSubscribeResponse;
+
+      if (result.status === "verification_required") {
         setStatus('verification_required');
         toast.success("Verification email sent!");
       } else {
@@ -69,8 +69,8 @@ export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps)
 
   return (
     <div className="w-full max-w-md mx-auto relative group">
-       {/* Developer Note */}
-       <div className="absolute -top-6 left-0 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Developer Note */}
+      <div className="absolute -top-6 left-0 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
         Variant: {variant}
       </div>
 

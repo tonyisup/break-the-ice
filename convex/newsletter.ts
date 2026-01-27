@@ -1,6 +1,6 @@
 "use node"
 
-import { action, internalAction } from "./_generated/server";
+import { action, ActionCtx, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import * as crypto from "crypto";
@@ -62,32 +62,43 @@ export const getQuestionForUser = action({
 
 export const subscribe = action({
   args: { email: v.string() },
+  returns: v.object({
+    success: v.boolean(),
+    status: v.optional(v.string()),
+    message: v.optional(v.string()),
+    debugUrl: v.optional(v.string()),
+  }),
   handler: async (ctx, args) => {
-    // Check if user is logged in
-    const identity = await ctx.auth.getUserIdentity();
-
-    // If authenticated, proceed with direct subscription (Legacy/Auth Flow)
-    if (identity) {
-      return await subscribeUser(ctx, args.email);
-    }
-
-    // If unauthenticated, initiate Double Opt-In
-    const token = crypto.randomUUID();
-    await ctx.runMutation(internal.subscriptions.createPendingSubscription, {
-      email: args.email,
-      token,
-    });
-
-    const webhookUrl = process.env.N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL;
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://breaktheiceberg.com";
-    const verificationUrl = `${baseUrl}/verify-subscription?token=${token}`;
-
-    if (!webhookUrl) {
-      console.warn("N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL is not set. Simulating verification email sent.");
-      return { success: false, status: "verification_required", debugUrl: verificationUrl };
-    }
-
     try {
+      // Check if user is logged in
+      const identity = await ctx.auth.getUserIdentity();
+
+      // If authenticated, proceed with direct subscription (Legacy/Auth Flow)
+      if (identity) {
+        const result = await subscribeUser(ctx, args.email);
+        return {
+          success: result.success,
+          status: result.success ? "subscribed" : "error",
+          message: result.message,
+        };
+      }
+
+      // If unauthenticated, initiate Double Opt-In
+      const token = crypto.randomUUID();
+      await ctx.runMutation(internal.subscriptions.createPendingSubscription, {
+        email: args.email,
+        token,
+      });
+
+      const webhookUrl = process.env.N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL;
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://breaktheiceberg.com";
+      const verificationUrl = `${baseUrl}/verify-subscription?token=${token}`;
+
+      if (!webhookUrl) {
+        console.warn("N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL is not set. Simulating verification email sent.");
+        return { success: false, status: "verification_required", debugUrl: verificationUrl };
+      }
+
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -100,27 +111,31 @@ export const subscribe = action({
 
       if (!response.ok) {
         console.error(`Verification webhook failed: ${response.status}`);
-        // Fallback or throw? If webhook fails, user can't verify.
-        throw new Error("Failed to send verification email.");
+        return { success: false, status: "error", message: "Failed to send verification email." };
       }
 
       return { success: false, status: "verification_required" };
     } catch (error) {
-       console.error("Failed to send verification email:", error);
-       throw new Error("Failed to initiate subscription. Please try again later.");
+      console.error("Failed to initiate subscription:", error);
+      return {
+        success: false,
+        status: "error",
+        message: error instanceof Error ? error.message : "Failed to initiate subscription. Please try again later.",
+      };
     }
   },
 });
 
 export const confirmSubscription = action({
   args: { token: v.string() },
+  returns: v.object({ success: v.boolean(), message: v.optional(v.string()) }),
   handler: async (ctx, args): Promise<{ success: boolean; message?: string }> => {
     const result = await ctx.runMutation(internal.subscriptions.consumePendingSubscription, {
       token: args.token,
     });
 
     if (!result) {
-       throw new Error("Invalid or expired verification link.");
+      throw new Error("Invalid or expired verification link.");
     }
 
     // Now actually subscribe them
@@ -129,46 +144,46 @@ export const confirmSubscription = action({
 });
 
 // Helper function to reuse the logic
-async function subscribeUser(ctx: any, email: string): Promise<{ success: boolean; message?: string }> {
-    const webhookUrl = process.env.N8N_SUBSCRIBE_WEBHOOK_URL;
+async function subscribeUser(ctx: ActionCtx, email: string): Promise<{ success: boolean; message?: string }> {
+  const webhookUrl = process.env.N8N_SUBSCRIBE_WEBHOOK_URL;
 
-    if (!webhookUrl) {
-      console.warn("N8N_SUBSCRIBE_WEBHOOK_URL is not set. Simulating success.");
-      // For development, we simulate success if the env var isn't set.
-      await ctx.runMutation(internal.users.setNewsletterStatus, {
+  if (!webhookUrl) {
+    console.warn("N8N_SUBSCRIBE_WEBHOOK_URL is not set. Simulating success.");
+    // For development, we simulate success if the env var isn't set.
+    await ctx.runMutation(internal.users.setNewsletterStatus, {
+      email: email,
+      status: "subscribed",
+    });
+    return { success: true, message: "Simulated subscription" };
+  }
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
         email: email,
-        status: "subscribed",
-      });
-      return { success: true, message: "Simulated subscription" };
+        source: "daily_questions_feed",
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Webhook failed with status: ${response.status}`);
     }
 
-    try {
-      const response = await fetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: email,
-          source: "daily_questions_feed",
-          timestamp: new Date().toISOString(),
-        }),
-      });
+    await ctx.runMutation(internal.users.setNewsletterStatus, {
+      email: email,
+      status: "subscribed",
+    });
 
-      if (!response.ok) {
-        throw new Error(`Webhook failed with status: ${response.status}`);
-      }
-
-      await ctx.runMutation(internal.users.setNewsletterStatus, {
-        email: email,
-        status: "subscribed",
-      });
-
-      return { success: true };
-    } catch (error) {
-      console.error("Failed to subscribe to newsletter:", error);
-      throw new Error("Failed to subscribe. Please try again later.");
-    }
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to subscribe to newsletter:", error);
+    throw new Error("Failed to subscribe. Please try again later.");
+  }
 }
 
 export const sendDailyQuestions = action({
