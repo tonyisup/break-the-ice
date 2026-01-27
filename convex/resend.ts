@@ -30,17 +30,17 @@ export const getContactStatus = action({
 			const contact = data.data.find((c: any) => c.email.toLowerCase() === args.email.toLowerCase());
 
 			if (!contact) {
-				return { subscribed: false, message: "Contact not found" };
+				return { subscribed: null, message: "Contact not found" };
 			}
 
 			// If unsubscribed is true in Resend, return subscribed: false
 			return {
-				subscribed: !contact.unsubscribed,
+				subscribed: contact.unsubscribed ? false : true,
 				contactId: contact.id
 			};
 		} catch (error) {
 			console.error("Error fetching contact from Resend:", error);
-			return { subscribed: false, error: "Failed to fetch status" };
+			return { subscribed: null, error: "Failed to fetch status" };
 		}
 	},
 });

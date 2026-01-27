@@ -186,7 +186,7 @@ const SettingsPage = () => {
                     <div className="text-right">
                       <p className="text-sm text-gray-400">Usage this cycle</p>
                       <p className="text-xl font-bold text-white">
-                        {currentUser.aiUsage?.count ?? 0} / {currentUser.subscriptionTier === 'casual' ? '100' : '10'}
+                        {currentUser.aiUsage?.count ?? 0} / {currentUser.subscriptionTier === 'casual' ? process.env.MAX_CASUAL_AIGEN : process.env.MAX_FREE_AIGEN}
                       </p>
                     </div>
                   </div>
@@ -195,13 +195,13 @@ const SettingsPage = () => {
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-400">AI Generations Progress</span>
                       <span className="text-white font-medium">
-                        {Math.round(((currentUser.aiUsage?.count ?? 0) / (currentUser.subscriptionTier === 'casual' ? 100 : 10)) * 100)}%
+                        {Math.round(((currentUser.aiUsage?.count ?? 0) / (currentUser.subscriptionTier === 'casual' ? Number(process.env.MAX_CASUAL_AIGEN) : Number(process.env.MAX_FREE_AIGEN))) * 100)}%
                       </span>
                     </div>
                     <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
                       <div
                         className="bg-gradient-to-r from-blue-500 to-purple-600 h-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, ((currentUser.aiUsage?.count ?? 0) / (currentUser.subscriptionTier === 'casual' ? 100 : 10)) * 100)}%` }}
+                        style={{ width: `${Math.min(100, ((currentUser.aiUsage?.count ?? 0) / (currentUser.subscriptionTier === 'casual' ? Number(process.env.MAX_CASUAL_AIGEN) : Number(process.env.MAX_FREE_AIGEN))) * 100)}%` }}
                       />
                     </div>
                   </div>

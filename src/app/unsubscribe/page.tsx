@@ -22,7 +22,7 @@ const UnsubscribePage = () => {
 
 	const [email, setEmail] = useState<string | null>(null);
 	const [formEmail, setFormEmail] = useState("");
-	const [status, setStatus] = useState<"loading" | "subscribed" | "unsubscribed" | "error" | "success_subscribed">("loading");
+	const [status, setStatus] = useState<"loading" | "subscribed" | "unsubscribed" | "unset" | "error" | "success_subscribed">("loading");
 	const [isProcessing, setIsProcessing] = useState(false);
 
 	useEffect(() => {
@@ -50,10 +50,12 @@ const UnsubscribePage = () => {
 		setStatus("loading");
 		try {
 			const result = await getStatusAction({ email: emailToCheck });
-			if (result.subscribed) {
+			if (result.subscribed === true) {
 				setStatus("subscribed");
-			} else {
+			} else if (result.subscribed === false) {
 				setStatus("unsubscribed");
+			} else {
+				setStatus("unset");
 			}
 		} catch (error) {
 			console.error(error);
@@ -192,11 +194,11 @@ const UnsubscribePage = () => {
 						</div>
 					)}
 
-					{status === "error" && (
+					{(status === "error" || status === "unset") && (
 						<div className="space-y-6 py-4">
-							<div className="flex justify-center">
+							{(status === "error" && <div className="flex justify-center">
 								<XCircle className="w-16 h-16 text-red-400" />
-							</div>
+							</div>)}
 							<p className="dark:text-white/80 text-black/80 text-lg">
 								We couldn't find your subscription details.
 							</p>
