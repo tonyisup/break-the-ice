@@ -208,6 +208,7 @@ export default function InfiniteScrollPage() {
         hiddenStyles: hiddenStyles ?? [],
         hiddenTones: hiddenTones ?? [],
         organizationId: activeWorkspace ?? undefined,
+        randomSeed: Math.random(),
       });
 
       // Check for staleness after await
