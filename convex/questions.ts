@@ -259,7 +259,7 @@ export const getQuestionForNewsletter = query({
         q.neq(q.field("text"), undefined),
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
       ))
-      .take(1);
+      .first();
     return question;
   },
 })

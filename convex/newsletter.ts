@@ -32,7 +32,7 @@ export const getQuestionForUser = action({
         const generatedQuestion = await ctx.runAction(api.ai.generateAIQuestionForFeed, {
           userId: user._id,
         });
-        question = generatedQuestion;
+        question = Array.isArray(generatedQuestion) ? (generatedQuestion[0] || null) : generatedQuestion;
       }
     } else {
       // 4. For non-registered subscribers, just get any random question
