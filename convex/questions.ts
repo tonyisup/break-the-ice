@@ -181,6 +181,51 @@ export const getSimilarQuestions = query({
   },
 });
 
+const shouldIncludeQuestion = (
+  q: any,
+  filters: {
+    hidden: Set<string>;
+    seen: Set<string>;
+    hiddenStyles: Set<string>;
+    hiddenTones: Set<string>;
+  }
+) => {
+  if (q.prunedAt !== undefined) return false;
+  if (q.text === undefined) return false;
+  if (q.status !== "approved" && q.status !== "public" && q.status !== undefined) return false;
+
+  if (filters.hidden.has(q._id)) return false;
+  if (filters.seen.has(q._id)) return false;
+  if (q.styleId && filters.hiddenStyles.has(q.styleId)) return false;
+  if (q.toneId && filters.hiddenTones.has(q.toneId)) return false;
+
+  return true;
+};
+
+const fetchCandidates = async (
+  ctx: QueryCtx,
+  organizationId: Id<"organizations"> | undefined,
+  startTime: number,
+  limit: number
+) => {
+  const statuses = ["approved", "public", undefined] as const;
+  const results = await Promise.all(
+    statuses.map((status) =>
+      ctx.db
+        .query("questions")
+        .withIndex("by_feed_order", (q) =>
+          q
+            .eq("organizationId", organizationId)
+            .eq("prunedAt", undefined)
+            .eq("status", status as any)
+            .gt("_creationTime", startTime)
+        )
+        .take(limit)
+    )
+  );
+  return results.flat();
+};
+
 export const getNextRandomQuestions = query({
   args: {
     count: v.number(),
@@ -193,19 +238,42 @@ export const getNextRandomQuestions = query({
   },
   handler: async (ctx, args) => {
     const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed } = args;
-    const seenIds = new Set(seen);
+    const filters = {
+      seen: new Set(seen),
+      hidden: new Set(hidden),
+      hiddenStyles: new Set(hiddenStyles),
+      hiddenTones: new Set(hiddenTones),
+    };
 
     // To ensure randomness across refreshes (where seen is empty), we use randomSeed to pick a random starting point.
     // We scan by creation time.
     let startTime = 0;
 
     if (randomSeed !== undefined) {
-      const firstQ = await ctx.db.query("questions").withIndex("by_creation_time").order("asc").first();
-      const lastQ = await ctx.db.query("questions").withIndex("by_creation_time").order("desc").first();
+      const statuses = ["approved", "public", undefined] as const;
+      // Find min/max time across all valid statuses for this org
+      const [firstQs, lastQs] = await Promise.all([
+        Promise.all(statuses.map(s =>
+          ctx.db.query("questions")
+            .withIndex("by_feed_order", q => q.eq("organizationId", organizationId).eq("prunedAt", undefined).eq("status", s as any))
+            .order("asc")
+            .first()
+        )),
+        Promise.all(statuses.map(s =>
+          ctx.db.query("questions")
+            .withIndex("by_feed_order", q => q.eq("organizationId", organizationId).eq("prunedAt", undefined).eq("status", s as any))
+            .order("desc")
+            .first()
+        ))
+      ]);
 
-      if (firstQ && lastQ) {
-        const minTime = firstQ._creationTime;
-        const maxTime = lastQ._creationTime;
+      const validFirstTimes = firstQs.filter(q => q).map(q => q!._creationTime);
+      const validLastTimes = lastQs.filter(q => q).map(q => q!._creationTime);
+
+      if (validFirstTimes.length > 0 && validLastTimes.length > 0) {
+        const minTime = Math.min(...validFirstTimes);
+        const maxTime = Math.max(...validLastTimes);
+
         if (maxTime > minTime) {
           // Seed the start time based on the random seed [0, 1)
           const normalizedSeed = randomSeed - Math.floor(randomSeed);
@@ -214,33 +282,14 @@ export const getNextRandomQuestions = query({
       }
     }
 
-    const applyFilters = (q: any) => {
-      return q.and(
-        q.eq(q.field("organizationId"), organizationId),
-        q.eq(q.field("prunedAt"), undefined),
-        q.neq(q.field("text"), undefined),
-        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
-        ...hidden.map((id: Id<"questions">) => q.neq(q.field("_id"), id)),
-        ...seen.map((id: Id<"questions">) => q.neq(q.field("_id"), id)),
-        ...hiddenStyles.map((styleId: Id<"styles">) => q.neq(q.field("styleId"), styleId)),
-        ...hiddenTones.map((toneId: Id<"tones">) => q.neq(q.field("toneId"), toneId))
-      );
-    };
-
     // 1. Try fetching from random start point
-    const candidates = await ctx.db
-      .query("questions")
-      .withIndex("by_creation_time", (q) => q.gt("_creationTime", startTime))
-      .filter((q) => applyFilters(q))
-      .take(count * 4);
+    let candidates = (await fetchCandidates(ctx, organizationId, startTime, count * 4))
+      .filter(q => shouldIncludeQuestion(q, filters));
 
     // 2. If not enough, wrap around and fetch from beginning
     if (candidates.length < count * 4) {
-      const moreCandidates = await ctx.db
-        .query("questions")
-        .withIndex("by_creation_time") // start from 0
-        .filter((q) => applyFilters(q))
-        .take(count * 4 - candidates.length);
+      const moreCandidates = (await fetchCandidates(ctx, organizationId, 0, count * 4 - candidates.length))
+        .filter(q => shouldIncludeQuestion(q, filters));
 
       // Merge and deduplicate (by ID) just in case overlap occurred
       const existingIds = new Set(candidates.map((q) => q._id));
@@ -683,7 +732,7 @@ export const getQuestions = query({
   handler: async (ctx) => {
     await ensureAdmin(ctx);
     return await ctx.db.query("questions")
-      .withIndex("by_creation_time").order("desc")
+      .order("desc")
       .filter((q) => q.eq(q.field("prunedAt"), undefined))
       .collect();
   },
@@ -824,7 +873,6 @@ export const getQuestionsToEmbed = internalQuery({
   handler: async (ctx, args) => {
     const questions = await ctx.db
       .query("questions")
-      .withIndex("by_creation_time")
       .order("desc")
       .filter((q) => q.eq(q.field("embedding"), undefined))
       .take(10);

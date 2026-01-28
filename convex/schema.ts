@@ -113,7 +113,8 @@ export default defineSchema({
       dimensions: 384,
       filterFields: ["styleId", "toneId"],
     })
-    .index("by_author", ["authorId", "status"]),
+    .index("by_author", ["authorId", "status"])
+    .index("by_feed_order", ["organizationId", "prunedAt", "status", "_creationTime"]),
   tags: defineTable({
     name: v.string(),
     grouping: v.string(),
