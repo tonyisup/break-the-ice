@@ -221,46 +221,53 @@ export const getQuestionForNewsletter = query({
       return null;
     }
 
+    // Get seen question IDs
+    const userQuestions = await ctx.db.query("userQuestions")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    const seenIds = new Set(userQuestions.map((uq) => uq.questionId));
+
+    // Get hidden styles
     const userHiddenStyles = await ctx.db.query("userStyles")
       .withIndex("by_userId_status", (q) => q
         .eq("userId", args.userId)
         .eq("status", "hidden")
       )
       .collect();
-    const styles = (userHiddenStyles.length === 0)
-      ? await ctx.db.query("styles").withIndex("by_order").order("asc").collect()
-      : await Promise.all(
-        userHiddenStyles.map((s) => ctx.db.get("styles", s.styleId))
-      );
-    if (styles.length === 0) {
-      throw new Error("No styles found in the database");
-    }
+    const hiddenStyleIds = new Set(userHiddenStyles.map((s) => s.styleId));
 
+    // Get hidden tones
     const userHiddenTones = await ctx.db.query("userTones")
       .withIndex("by_userId_status", (q) => q
         .eq("userId", args.userId)
         .eq("status", "hidden")
       )
       .collect();
-    const tones = (userHiddenTones.length === 0)
-      ? await ctx.db.query("tones").withIndex("by_order").order("asc").collect()
-      : await Promise.all(
-        userHiddenTones.map((t) => ctx.db.get("tones", t.toneId))
-      );
+    const hiddenToneIds = new Set(userHiddenTones.map((t) => t.toneId));
 
-    if (tones.length === 0) {
-      throw new Error("No tones found in the database");
-    }
-
-    const question = await ctx.db
+    // Get candidates - fetch a batch and pick one randomly
+    // We filter out hidden styles/tones and seen questions
+    const candidates = await ctx.db
       .query("questions")
       .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
       .filter((q: any) => q.and(
         q.neq(q.field("text"), undefined),
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
+        ...Array.from(hiddenStyleIds).map(id => q.neq(q.field("styleId"), id)),
+        ...Array.from(hiddenToneIds).map(id => q.neq(q.field("toneId"), id)),
+        ...Array.from(seenIds).map(id => q.neq(q.field("_id"), id))
       ))
-      .take(1);
-    return question;
+      .take(50);
+
+    if (candidates.length === 0) {
+      // If we exhausted all questions (or found none matching filters), return null.
+      // The caller will handle this (e.g. by generating a new AI question).
+      return null;
+    }
+
+    // Pick a random question from candidates
+    const randomIndex = Math.floor(Math.random() * candidates.length);
+    return candidates[randomIndex];
   },
 })
 
