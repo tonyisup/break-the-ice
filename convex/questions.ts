@@ -261,10 +261,13 @@ export const getNextRandomQuestions = query({
 });
 
 export const getQuestionForNewsletter = query({
-  args: { userId: v.id("users") },
+  args: {
+    userId: v.id("users"),
+    randomSeed: v.optional(v.number()),
+  },
   returns: v.any(),
   handler: async (ctx, args) => {
-    const { userId } = args;
+    const { userId, randomSeed } = args;
     const user = await ctx.db.query("users").filter((q: any) => q.eq(q.field("_id"), userId)).unique();
     if (!user) {
       return null;
@@ -276,14 +279,6 @@ export const getQuestionForNewsletter = query({
         .eq("status", "hidden")
       )
       .collect();
-    const styles = (userHiddenStyles.length === 0)
-      ? await ctx.db.query("styles").withIndex("by_order").order("asc").collect()
-      : await Promise.all(
-        userHiddenStyles.map((s) => ctx.db.get("styles", s.styleId))
-      );
-    if (styles.length === 0) {
-      throw new Error("No styles found in the database");
-    }
 
     const userHiddenTones = await ctx.db.query("userTones")
       .withIndex("by_userId_status", (q) => q
@@ -291,25 +286,76 @@ export const getQuestionForNewsletter = query({
         .eq("status", "hidden")
       )
       .collect();
-    const tones = (userHiddenTones.length === 0)
-      ? await ctx.db.query("tones").withIndex("by_order").order("asc").collect()
-      : await Promise.all(
-        userHiddenTones.map((t) => ctx.db.get("tones", t.toneId))
-      );
 
-    if (tones.length === 0) {
-      throw new Error("No tones found in the database");
+    // Get seen questions
+    const seenQuestions = await ctx.db.query("userQuestions")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+
+    const seenIds = new Set(seenQuestions.map(q => q.questionId));
+    const hiddenStyleIds = userHiddenStyles.map(s => s.styleId);
+    const hiddenToneIds = userHiddenTones.map(t => t.toneId);
+
+    // Random seek logic
+    let startTime = 0;
+
+    if (randomSeed !== undefined) {
+      const firstQ = await ctx.db.query("questions").withIndex("by_creation_time").order("asc").first();
+      const lastQ = await ctx.db.query("questions").withIndex("by_creation_time").order("desc").first();
+
+      if (firstQ && lastQ) {
+        const minTime = firstQ._creationTime;
+        const maxTime = lastQ._creationTime;
+        if (maxTime > minTime) {
+          const normalizedSeed = randomSeed - Math.floor(randomSeed);
+          startTime = minTime + normalizedSeed * (maxTime - minTime);
+        }
+      }
     }
 
-    const question = await ctx.db
-      .query("questions")
-      .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
-      .filter((q: any) => q.and(
+    const applyFilters = (q: any) => {
+      return q.and(
+        q.eq(q.field("prunedAt"), undefined),
         q.neq(q.field("text"), undefined),
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
-      ))
-      .first();
-    return question;
+        ...Array.from(seenIds).map((id) => q.neq(q.field("_id"), id)),
+        ...hiddenStyleIds.map((id) => q.neq(q.field("styleId"), id)),
+        ...hiddenToneIds.map((id) => q.neq(q.field("toneId"), id))
+      );
+    };
+
+    const count = 1;
+
+    // 1. Try fetching from random start point
+    const candidates = await ctx.db
+      .query("questions")
+      .withIndex("by_creation_time", (q) => q.gt("_creationTime", startTime))
+      .filter((q) => applyFilters(q))
+      .take(count * 5);
+
+    // 2. Wrap around
+    if (candidates.length < count * 5) {
+      const moreCandidates = await ctx.db
+        .query("questions")
+        .withIndex("by_creation_time")
+        .filter((q) => applyFilters(q))
+        .take(count * 5 - candidates.length);
+
+      const existingIds = new Set(candidates.map((q) => q._id));
+      for (const q of moreCandidates) {
+        if (!existingIds.has(q._id)) {
+          candidates.push(q);
+          existingIds.add(q._id);
+        }
+      }
+    }
+
+    if (candidates.length === 0) return null;
+
+    const seedForShuffle = randomSeed !== undefined ? randomSeed : Date.now();
+    shuffleArray(candidates, seedForShuffle);
+
+    return candidates[0];
   },
 })
 
