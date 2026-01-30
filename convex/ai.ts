@@ -562,3 +562,156 @@ export const detectDuplicateQuestionsStreaming = internalAction({
 		return progressId;
 	},
 });
+
+// Nightly question pool generation - creates a batch of AI questions for daily distribution
+export const generateNightlyQuestionPool = internalAction({
+	args: {
+		targetCount: v.number(),        // Questions per style/tone combo
+		maxCombinations: v.number(),    // Max combos to process (avoid timeout)
+	},
+	returns: v.object({
+		questionsGenerated: v.number(),
+		combinationsProcessed: v.number(),
+		errors: v.array(v.string()),
+	}),
+	handler: async (ctx, args) => {
+		const { targetCount, maxCombinations } = args;
+		const today = new Date().toISOString().split('T')[0]; // "2026-01-30"
+
+		let questionsGenerated = 0;
+		let combinationsProcessed = 0;
+		const errors: string[] = [];
+
+		// Get all styles and tones
+		const styles: Doc<"styles">[] = await ctx.runQuery(api.styles.getStyles, {});
+		const tones: Doc<"tones">[] = await ctx.runQuery(api.tones.getTones, {});
+
+		// Create all combinations
+		const combinations: { style: Doc<"styles">, tone: Doc<"tones"> }[] = [];
+		for (const style of styles) {
+			for (const tone of tones) {
+				combinations.push({ style, tone });
+			}
+		}
+
+		// Shuffle to ensure variety across runs
+		for (let i = combinations.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[combinations[i], combinations[j]] = [combinations[j], combinations[i]];
+		}
+
+		// Process limited combinations to avoid timeout
+		const toProcess = combinations.slice(0, maxCombinations);
+
+		for (const { style, tone } of toProcess) {
+			combinationsProcessed++;
+
+			try {
+				// Generate questions for this combo
+				const stylePrompt = `${style.name} - ${style.description || ''} ${style.promptGuidanceForAI || ''}`;
+				const tonePrompt = `${tone.name} - ${tone.description || ''} ${tone.promptGuidanceForAI || ''}`;
+
+				// Generate targetCount questions
+				for (let i = 0; i < targetCount; i++) {
+					try {
+						// Rate limit delay
+						if (questionsGenerated > 0) {
+							await new Promise(resolve => setTimeout(resolve, 1000));
+						}
+
+						const completion = await openai.chat.completions.create({
+							model: "@preset/break-the-ice-berg-default",
+							messages: [
+								{
+									role: "system",
+									content: `You are a creative ice-breaker question generator. Generate a single unique, engaging ice-breaker question.
+									
+RESPOND WITH ONLY THE QUESTION TEXT. No quotes, no formatting, no explanations.
+
+Requirements:
+- Keep it short and conversational
+- Make it thought-provoking but accessible
+- Only ONE question mark at the end`
+								},
+								{
+									role: "user",
+									content: `Generate 1 ice-breaker question.
+Style: ${stylePrompt}
+Tone: ${tonePrompt}`
+								}
+							],
+							max_tokens: 100,
+							temperature: 0.9, // Higher for variety
+						});
+
+						const questionText = completion.choices[0]?.message?.content?.trim();
+						if (!questionText || questionText.length < 10) {
+							continue;
+						}
+
+						// Clean the question text
+						const cleanedText = questionText.replace(/^["']|["']$/g, '').trim();
+
+						// Check for exact duplicate via text index
+						const existingExact = await ctx.runQuery(internal.questions.checkExactDuplicate, {
+							text: cleanedText,
+						});
+						if (existingExact) {
+							console.log(`Skipping exact duplicate: ${cleanedText.substring(0, 50)}...`);
+							continue;
+						}
+
+						// Save the question with pool metadata
+						const savedQuestion = await ctx.runMutation(internal.questions.savePoolQuestion, {
+							text: cleanedText,
+							styleId: style._id,
+							style: style.id,
+							toneId: tone._id,
+							tone: tone.id,
+							poolDate: today,
+						});
+
+						if (savedQuestion) {
+							questionsGenerated++;
+							// Trigger embedding generation asynchronously
+							await ctx.scheduler.runAfter(0, internal.lib.retriever.embedQuestion, {
+								questionId: savedQuestion,
+							});
+						}
+
+					} catch (error: any) {
+						const isRateLimit = error.status === 429;
+						if (isRateLimit) {
+							// Wait and retry
+							const retryAfter = error.headers?.['retry-after'];
+							const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
+							console.log(`Rate limited, waiting ${waitTime}ms...`);
+							await new Promise(resolve => setTimeout(resolve, waitTime));
+							i--; // Retry this iteration
+						} else {
+							errors.push(`Error generating question for ${style.name}/${tone.name}: ${error.message}`);
+						}
+					}
+				}
+
+			} catch (error: any) {
+				errors.push(`Error processing combo ${style.name}/${tone.name}: ${error.message}`);
+			}
+		}
+
+		// Send summary email if anything happened
+		if (questionsGenerated > 0 || errors.length > 0) {
+			const subject = `🌙 Nightly Pool Generated: ${questionsGenerated} questions`;
+			const html = `
+				<h2>Nightly Question Pool Summary</h2>
+				<p><strong>Date:</strong> ${today}</p>
+				<p><strong>Questions Generated:</strong> ${questionsGenerated}</p>
+				<p><strong>Combinations Processed:</strong> ${combinationsProcessed}/${combinations.length}</p>
+				${errors.length > 0 ? `<h3>Errors (${errors.length})</h3><ul>${errors.map(e => `<li>${e}</li>`).join('')}</ul>` : ''}
+			`;
+			await ctx.runAction(internal.email.sendEmail, { subject, html });
+		}
+
+		return { questionsGenerated, combinationsProcessed, errors };
+	},
+});

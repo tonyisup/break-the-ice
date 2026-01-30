@@ -273,6 +273,24 @@ export const getQuestionForNewsletter = query({
       return null;
     }
 
+    // PRIORITY 1: Check for unseen pool questions first
+    const unseenUserQuestion = await ctx.db
+      .query("userQuestions")
+      .withIndex("by_userId_status_updatedAt", (q) =>
+        q.eq("userId", userId).eq("status", "unseen")
+      )
+      .order("asc") // Oldest unseen first
+      .first();
+
+    if (unseenUserQuestion) {
+      const unseenQuestion = await ctx.db.get(unseenUserQuestion.questionId);
+      if (unseenQuestion && !unseenQuestion.prunedAt && unseenQuestion.text) {
+        // Return the unseen question - status will be updated via recordAnalytics when viewed
+        return unseenQuestion;
+      }
+    }
+
+    // FALLBACK: Random selection from pool
     // Get seen question IDs
     const userQuestions = await ctx.db.query("userQuestions")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -1476,3 +1494,260 @@ export const getAdminStats = query({
   },
 });
 
+// Helper: Check if exact question text already exists
+export const checkExactDuplicate = internalQuery({
+  args: {
+    text: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("questions")
+      .withIndex("by_text", (q) => q.eq("text", args.text))
+      .first();
+    return existing !== null;
+  },
+});
+
+// Helper: Save a pool question with proper metadata
+export const savePoolQuestion = internalMutation({
+  args: {
+    text: v.string(),
+    styleId: v.id("styles"),
+    style: v.string(),
+    toneId: v.id("tones"),
+    tone: v.string(),
+    poolDate: v.string(),
+  },
+  returns: v.union(v.id("questions"), v.null()),
+  handler: async (ctx, args) => {
+    // Double-check for duplicate (race condition protection)
+    const existing = await ctx.db
+      .query("questions")
+      .withIndex("by_text", (q) => q.eq("text", args.text))
+      .first();
+
+    if (existing) {
+      return null;
+    }
+
+    return await ctx.db.insert("questions", {
+      text: args.text,
+      styleId: args.styleId,
+      style: args.style,
+      toneId: args.toneId,
+      tone: args.tone,
+      poolDate: args.poolDate,
+      poolStatus: "available",
+      status: "public",
+      isAIGenerated: true,
+      totalLikes: 0,
+      totalThumbsDown: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+  },
+});
+
+// Get available pool questions for a specific date
+export const getAvailablePoolQuestions = internalQuery({
+  args: {
+    poolDate: v.string(),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 100;
+    return await ctx.db
+      .query("questions")
+      .withIndex("by_poolDate_status", (q) =>
+        q.eq("poolDate", args.poolDate).eq("poolStatus", "available")
+      )
+      .take(limit);
+  },
+});
+
+// Mark pool questions as distributed
+export const markPoolQuestionsDistributed = internalMutation({
+  args: {
+    questionIds: v.array(v.id("questions")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    for (const id of args.questionIds) {
+      await ctx.db.patch(id, { poolStatus: "distributed" });
+    }
+    return null;
+  },
+});
+
+// Assign pool questions to a single user as unseen
+export const assignPoolQuestionsToUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    questionIds: v.array(v.id("questions")),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const { userId, questionIds } = args;
+    let assigned = 0;
+
+    for (const questionId of questionIds) {
+      // Check if user already has this question
+      const existing = await ctx.db
+        .query("userQuestions")
+        .withIndex("by_userIdAndQuestionId", (q) =>
+          q.eq("userId", userId).eq("questionId", questionId)
+        )
+        .first();
+
+      if (!existing) {
+        await ctx.db.insert("userQuestions", {
+          userId,
+          questionId,
+          status: "unseen",
+          updatedAt: Date.now(),
+        });
+        assigned++;
+      }
+    }
+
+    return assigned;
+  },
+});
+
+// Internal action: Assign pool questions to all newsletter subscribers
+export const assignPoolQuestionsToUsers = internalAction({
+  args: {
+    questionsPerUser: v.number(),
+  },
+  returns: v.object({
+    usersProcessed: v.number(),
+    totalAssigned: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const { questionsPerUser } = args;
+    const today = new Date().toISOString().split('T')[0];
+
+    let usersProcessed = 0;
+    let totalAssigned = 0;
+    const errors: string[] = [];
+
+    // Get available pool questions for today
+    const poolQuestions: Doc<"questions">[] = await ctx.runQuery(
+      internal.questions.getAvailablePoolQuestions,
+      { poolDate: today, limit: 200 }
+    );
+
+    if (poolQuestions.length === 0) {
+      console.log("No pool questions available for today");
+      return { usersProcessed: 0, totalAssigned: 0, errors: ["No pool questions available"] };
+    }
+
+    // Get all users with newsletter subscription
+    const subscribers: Doc<"users">[] = await ctx.runQuery(
+      internal.users.getNewsletterSubscribers
+    );
+
+    for (const user of subscribers) {
+      try {
+        usersProcessed++;
+
+        // Get user's hidden styles and tones
+        const hiddenStyles: Doc<"userStyles">[] = await ctx.runQuery(
+          internal.users.getUserHiddenStyles,
+          { userId: user._id }
+        );
+        const hiddenTones: Doc<"userTones">[] = await ctx.runQuery(
+          internal.users.getUserHiddenTones,
+          { userId: user._id }
+        );
+
+        const hiddenStyleIds = new Set(hiddenStyles.map(s => s.styleId));
+        const hiddenToneIds = new Set(hiddenTones.map(t => t.toneId));
+
+        // Filter pool questions by user preferences
+        let userQuestions = poolQuestions.filter(q => {
+          if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
+          if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
+          return true;
+        });
+
+        // If user has preference embedding, sort by similarity
+        if (user.questionPreferenceEmbedding && user.questionPreferenceEmbedding.length > 0) {
+          // Simple cosine similarity sorting (approximate, for performance)
+          userQuestions.sort((a, b) => {
+            if (!a.embedding || !b.embedding) return 0;
+            const simA = cosineSimilarity(user.questionPreferenceEmbedding!, a.embedding);
+            const simB = cosineSimilarity(user.questionPreferenceEmbedding!, b.embedding);
+            return simB - simA; // Descending
+          });
+        } else {
+          // Shuffle for randomness
+          for (let i = userQuestions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [userQuestions[i], userQuestions[j]] = [userQuestions[j], userQuestions[i]];
+          }
+        }
+
+        // Take top N questions
+        const toAssign = userQuestions.slice(0, questionsPerUser);
+        const questionIds = toAssign.map(q => q._id);
+
+        if (questionIds.length > 0) {
+          const assigned = await ctx.runMutation(
+            internal.questions.assignPoolQuestionsToUser,
+            { userId: user._id, questionIds }
+          );
+          totalAssigned += assigned;
+        }
+
+      } catch (error: any) {
+        errors.push(`Error assigning to user ${user._id}: ${error.message}`);
+      }
+    }
+
+    // Mark assigned questions as distributed
+    const assignedQuestionIds = [...new Set(
+      poolQuestions.slice(0, Math.min(questionsPerUser * subscribers.length, poolQuestions.length))
+        .map(q => q._id)
+    )];
+    if (assignedQuestionIds.length > 0) {
+      await ctx.runMutation(internal.questions.markPoolQuestionsDistributed, {
+        questionIds: assignedQuestionIds,
+      });
+    }
+
+    // Send summary email
+    if (usersProcessed > 0) {
+      const subject = `📬 Pool Questions Assigned: ${totalAssigned} to ${usersProcessed} users`;
+      const html = `
+        <h2>Pool Question Assignment Summary</h2>
+        <p><strong>Date:</strong> ${today}</p>
+        <p><strong>Users Processed:</strong> ${usersProcessed}</p>
+        <p><strong>Total Questions Assigned:</strong> ${totalAssigned}</p>
+        <p><strong>Questions Per User Target:</strong> ${questionsPerUser}</p>
+        ${errors.length > 0 ? `<h3>Errors (${errors.length})</h3><ul>${errors.map(e => `<li>${e}</li>`).join('')}</ul>` : ''}
+      `;
+      await ctx.runAction(internal.email.sendEmail, { subject, html });
+    }
+
+    return { usersProcessed, totalAssigned, errors };
+  },
+});
+
+// Helper: Simple cosine similarity for preference matching
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}

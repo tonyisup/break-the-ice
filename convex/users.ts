@@ -1155,3 +1155,48 @@ export const removeHiddenToneId = mutation({
 		return hiddenTonesDocs.map((ut) => ut.toneId);
 	}
 })
+
+// Get all users with newsletter subscription
+export const getNewsletterSubscribers = internalQuery({
+	args: {},
+	returns: v.array(v.any()),
+	handler: async (ctx) => {
+		return await ctx.db
+			.query("users")
+			.filter((q) => q.eq(q.field("newsletterSubscriptionStatus"), "subscribed"))
+			.collect();
+	},
+});
+
+// Get hidden styles for a user
+export const getUserHiddenStyles = internalQuery({
+	args: {
+		userId: v.id("users"),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query("userStyles")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", args.userId).eq("status", "hidden")
+			)
+			.collect();
+	},
+});
+
+// Get hidden tones for a user
+export const getUserHiddenTones = internalQuery({
+	args: {
+		userId: v.id("users"),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query("userTones")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", args.userId).eq("status", "hidden")
+			)
+			.collect();
+	},
+});
+
