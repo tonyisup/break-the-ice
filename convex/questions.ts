@@ -114,8 +114,12 @@ function mulberry32(a: number) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   }
 }
-const shuffleArray = (array: any[]) => {
-  const random = mulberry32(Date.now());
+const shuffleArray = (array: any[], seed?: number) => {
+  let s = seed ?? Date.now();
+  if (seed !== undefined && seed < 1) {
+    s = seed * 4294967296;
+  }
+  const random = mulberry32(s);
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     const temp = array[i];
@@ -126,7 +130,7 @@ const shuffleArray = (array: any[]) => {
 
 export const getSimilarQuestions = query({
   args: {
-    count: v.number(),
+    count: v.float64(),
     style: v.string(),
     tone: v.string(),
     seen: v.optional(v.array(v.id("questions"))),
@@ -179,43 +183,91 @@ export const getSimilarQuestions = query({
 
 export const getNextRandomQuestions = query({
   args: {
-    count: v.number(),
+    count: v.float64(),
     seen: v.optional(v.array(v.id("questions"))),
     hidden: v.optional(v.array(v.id("questions"))),
     hiddenStyles: v.optional(v.array(v.id("styles"))),
     hiddenTones: v.optional(v.array(v.id("tones"))),
     organizationId: v.optional(v.id("organizations")),
+    randomSeed: v.optional(v.float64()),
   },
   handler: async (ctx, args) => {
-    const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId } = args;
+    const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed } = args;
     const seenIds = new Set(seen);
 
-    // Get all questions first, and filter out seen ones.
+    // To ensure randomness across refreshes (where seen is empty), we use randomSeed to pick a random starting point.
+    // We scan by creation time.
+    let startTime = 0;
 
-    const filteredQuestions = await ctx.db
-      .query("questions")
-      .filter((q: any) => q.eq(q.field("organizationId"), organizationId))
-      .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
-      .filter((q: any) => q.and(
+    if (randomSeed !== undefined) {
+      const firstQ = await ctx.db.query("questions").withIndex("by_creation_time").order("asc").first();
+      const lastQ = await ctx.db.query("questions").withIndex("by_creation_time").order("desc").first();
+
+      if (firstQ && lastQ) {
+        const minTime = firstQ._creationTime;
+        const maxTime = lastQ._creationTime;
+        if (maxTime > minTime) {
+          // Seed the start time based on the random seed [0, 1)
+          const normalizedSeed = randomSeed - Math.floor(randomSeed);
+          startTime = minTime + normalizedSeed * (maxTime - minTime);
+        }
+      }
+    }
+
+    const applyFilters = (q: any) => {
+      return q.and(
+        q.eq(q.field("organizationId"), organizationId),
+        q.eq(q.field("prunedAt"), undefined),
         q.neq(q.field("text"), undefined),
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
         ...hidden.map((id: Id<"questions">) => q.neq(q.field("_id"), id)),
         ...seen.map((id: Id<"questions">) => q.neq(q.field("_id"), id)),
         ...hiddenStyles.map((styleId: Id<"styles">) => q.neq(q.field("styleId"), styleId)),
         ...hiddenTones.map((toneId: Id<"tones">) => q.neq(q.field("toneId"), toneId))
-      ))
+      );
+    };
+
+    // 1. Try fetching from random start point
+    const candidates = await ctx.db
+      .query("questions")
+      .withIndex("by_creation_time", (q) => q.gt("_creationTime", startTime))
+      .filter((q) => applyFilters(q))
       .take(count * 4);
 
-    shuffleArray(filteredQuestions);
-    return filteredQuestions.slice(0, count);
+    // 2. If not enough, wrap around and fetch from beginning
+    if (candidates.length < count * 4) {
+      const moreCandidates = await ctx.db
+        .query("questions")
+        .withIndex("by_creation_time") // start from 0
+        .filter((q) => applyFilters(q))
+        .take(count * 4 - candidates.length);
+
+      // Merge and deduplicate (by ID) just in case overlap occurred
+      const existingIds = new Set(candidates.map((q) => q._id));
+      for (const q of moreCandidates) {
+        if (!existingIds.has(q._id)) {
+          candidates.push(q);
+          existingIds.add(q._id);
+        }
+      }
+    }
+
+    // Shuffle using the seed to ensure deterministic results for the same request
+    const seedForShuffle = randomSeed !== undefined ? randomSeed : Date.now();
+    shuffleArray(candidates, seedForShuffle);
+
+    return candidates.slice(0, count);
   },
 });
 
 export const getQuestionForNewsletter = query({
-  args: { userId: v.id("users") },
+  args: {
+    userId: v.id("users"),
+    randomSeed: v.optional(v.float64()),
+  },
   returns: v.any(),
   handler: async (ctx, args) => {
-    const { userId } = args;
+    const { userId, randomSeed } = args;
     const user = await ctx.db.query("users").filter((q: any) => q.eq(q.field("_id"), userId)).unique();
     if (!user) {
       return null;
@@ -266,14 +318,14 @@ export const getQuestionForNewsletter = query({
     }
 
     // Pick a random question from candidates
-    const randomIndex = Math.floor(Math.random() * candidates.length);
+    const randomIndex = Math.floor((randomSeed ?? Math.random()) * candidates.length);
     return candidates[randomIndex];
   },
 })
 
 export const getNextQuestions = query({
   args: {
-    count: v.number(),
+    count: v.float64(),
     style: v.id("styles"),
     tone: v.id("tones"),
     seen: v.optional(v.array(v.id("questions"))),
@@ -319,7 +371,7 @@ export const recordAnalytics = mutation({
       v.literal("shared"),
       v.literal("hidden"),
     ),
-    viewDuration: v.number(),
+    viewDuration: v.float64(),
     sessionId: v.optional(v.string()),
   },
   returns: v.null(),

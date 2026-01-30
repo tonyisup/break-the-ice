@@ -24,7 +24,8 @@ export const getQuestionForUser = action({
     if (user) {
       // 2. Try to get an existing question they haven't seen
       question = await ctx.runQuery(api.questions.getQuestionForNewsletter, {
-        userId: user._id
+        userId: user._id,
+        randomSeed: Math.random(),
       });
 
       // 3. If no question found, generate a new one
@@ -32,7 +33,7 @@ export const getQuestionForUser = action({
         const generatedQuestion = await ctx.runAction(api.ai.generateAIQuestionForFeed, {
           userId: user._id,
         });
-        question = generatedQuestion;
+        question = Array.isArray(generatedQuestion) ? (generatedQuestion[0] || null) : generatedQuestion;
       }
     } else {
       // 4. For non-registered subscribers, just get any random question

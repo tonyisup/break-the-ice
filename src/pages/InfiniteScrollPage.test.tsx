@@ -66,12 +66,12 @@ vi.mock('../../convex/_generated/api', () => ({
 
 describe('InfiniteScrollPage', () => {
   const mockStyles = [
-    { id: 'style1', color: '#111111', name: 'Style One' },
-    { id: 'style2', color: '#222222', name: 'Style Two' },
+    { _id: 'style1', id: 'style1', color: '#111111', name: 'Style One' },
+    { _id: 'style2', id: 'style2', color: '#222222', name: 'Style Two' },
   ];
   const mockTones = [
-    { id: 'tone1', color: '#AAAAAA', name: 'Tone One' },
-    { id: 'tone2', color: '#BBBBBB', name: 'Tone Two' },
+    { _id: 'tone1', id: 'tone1', color: '#AAAAAA', name: 'Tone One' },
+    { _id: 'tone2', id: 'tone2', color: '#BBBBBB', name: 'Tone Two' },
   ];
   const mockQuestions = [
     { _id: 'q1', text: 'Q1', style: 'style1', tone: 'tone1' },
@@ -255,6 +255,28 @@ describe('InfiniteScrollPage', () => {
 
     await waitFor(() => {
         expect(screen.getByText('All Tones Hidden')).toBeDefined();
+    });
+  });
+
+  it('calls getNextRandomQuestions with randomSeed', async () => {
+    const queryMock = vi.fn().mockResolvedValue([]);
+    (useConvex as any).mockReturnValue({
+      query: queryMock,
+    });
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+      expect(queryMock).toHaveBeenCalledWith(
+        'getNextRandomQuestions',
+        expect.objectContaining({
+          randomSeed: expect.any(Number),
+        })
+      );
     });
   });
 });
