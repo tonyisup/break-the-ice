@@ -268,7 +268,7 @@ export const getQuestionForNewsletter = query({
   returns: v.any(),
   handler: async (ctx, args) => {
     const { userId, randomSeed } = args;
-    const user = await ctx.db.get("users", userId);
+    const user = await ctx.db.get(userId);
     if (!user) {
       return null;
     }
@@ -301,7 +301,7 @@ export const getQuestionForNewsletter = query({
     // We filter out hidden styles/tones and seen questions
     const rawCandidates = await ctx.db
       .query("questions")
-      .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
+      .withIndex("by_prunedAt_status_text", (q) => q.eq("prunedAt", undefined))
       .filter((q: any) => q.and(
         q.neq(q.field("text"), undefined),
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
