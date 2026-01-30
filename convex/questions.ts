@@ -268,7 +268,7 @@ export const getQuestionForNewsletter = query({
   returns: v.any(),
   handler: async (ctx, args) => {
     const { userId, randomSeed } = args;
-    const user = await ctx.db.query("users").filter((q: any) => q.eq(q.field("_id"), userId)).unique();
+    const user = await ctx.db.get("users", userId);
     if (!user) {
       return null;
     }
@@ -299,17 +299,20 @@ export const getQuestionForNewsletter = query({
 
     // Get candidates - fetch a batch and pick one randomly
     // We filter out hidden styles/tones and seen questions
-    const candidates = await ctx.db
+    const rawCandidates = await ctx.db
       .query("questions")
       .filter((q: any) => q.eq(q.field("prunedAt"), undefined))
       .filter((q: any) => q.and(
         q.neq(q.field("text"), undefined),
         q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
-        ...Array.from(hiddenStyleIds).map(id => q.neq(q.field("styleId"), id)),
-        ...Array.from(hiddenToneIds).map(id => q.neq(q.field("toneId"), id)),
-        ...Array.from(seenIds).map(id => q.neq(q.field("_id"), id))
       ))
-      .take(50);
+      .take(1000);
+
+    const candidates = rawCandidates
+      .filter((q) => !seenIds.has(q._id))
+      .filter((q) => !q.styleId || !hiddenStyleIds.has(q.styleId))
+      .filter((q) => !q.toneId || !hiddenToneIds.has(q.toneId))
+      .slice(0, 50);
 
     if (candidates.length === 0) {
       // If we exhausted all questions (or found none matching filters), return null.
@@ -318,7 +321,9 @@ export const getQuestionForNewsletter = query({
     }
 
     // Pick a random question from candidates
-    const randomIndex = Math.floor((randomSeed ?? Math.random()) * candidates.length);
+    const seed = randomSeed ?? Math.random();
+    const normalizedSeed = seed - Math.floor(seed);
+    const randomIndex = Math.floor(normalizedSeed * candidates.length);
     return candidates[randomIndex];
   },
 })
