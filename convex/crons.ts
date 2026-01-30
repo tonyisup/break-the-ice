@@ -49,6 +49,17 @@ crons.interval(
   { hours: 24 },
   internal.ai.populateMissingToneEmbeddings
 );
+
+crons.interval(
+  "update questions with missing styles",
+  { hours: 24 },
+  internal.styles.updateQuestionsWithMissingStyleIds,
+);
+crons.interval(
+  "update questions with missing tones",
+  { hours: 24 },
+  internal.tones.updateQuestionsWithMissingToneIds
+);
 // crons.interval(
 //   "prune stale questions",
 //   { hours: 24 },

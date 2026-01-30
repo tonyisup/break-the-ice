@@ -24,7 +24,8 @@ export const getQuestionForUser = action({
     if (user) {
       // 2. Try to get an existing question they haven't seen
       question = await ctx.runQuery(api.questions.getQuestionForNewsletter, {
-        userId: user._id
+        userId: user._id,
+        randomSeed: Math.random(),
       });
 
       // 3. If no question found, generate a new one
