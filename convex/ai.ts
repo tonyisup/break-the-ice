@@ -612,6 +612,8 @@ export const generateNightlyQuestionPool = internalAction({
 				const tonePrompt = `${tone.name} - ${tone.description || ''} ${tone.promptGuidanceForAI || ''}`;
 
 				// Generate targetCount questions
+				const MAX_RATE_RETRIES = 3;
+				let rateLimitRetryCount = 0;
 				for (let i = 0; i < targetCount; i++) {
 					try {
 						// Rate limit delay
@@ -673,21 +675,36 @@ Tone: ${tonePrompt}`
 
 						if (savedQuestion) {
 							questionsGenerated++;
+							rateLimitRetryCount = 0; // Reset retry count on success
 							// Trigger embedding generation asynchronously
 							await ctx.scheduler.runAfter(0, internal.lib.retriever.embedQuestion, {
 								questionId: savedQuestion,
+							});
+						} else {
+							// Log when save returns null (duplicate/race condition)
+							console.warn(`Pool question save skipped (duplicate/race):`, {
+								text: cleanedText.substring(0, 50) + '...',
+								styleId: style.id,
+								toneId: tone.id,
+								poolDate: today,
 							});
 						}
 
 					} catch (error: any) {
 						const isRateLimit = error.status === 429;
 						if (isRateLimit) {
-							// Wait and retry
-							const retryAfter = error.headers?.['retry-after'];
-							const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
-							console.log(`Rate limited, waiting ${waitTime}ms...`);
-							await new Promise(resolve => setTimeout(resolve, waitTime));
-							i--; // Retry this iteration
+							rateLimitRetryCount++;
+							if (rateLimitRetryCount < MAX_RATE_RETRIES) {
+								// Wait and retry
+								const retryAfter = error.headers?.['retry-after'];
+								const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
+								console.log(`Rate limited (attempt ${rateLimitRetryCount}/${MAX_RATE_RETRIES}), waiting ${waitTime}ms...`);
+								await new Promise(resolve => setTimeout(resolve, waitTime));
+								i--; // Retry this iteration
+							} else {
+								errors.push(`Rate limit retries exhausted for ${style.name}/${tone.name} after ${MAX_RATE_RETRIES} attempts`);
+								rateLimitRetryCount = 0; // Reset for next iteration
+							}
 						} else {
 							errors.push(`Error generating question for ${style.name}/${tone.name}: ${error.message}`);
 						}

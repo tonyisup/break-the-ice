@@ -1163,7 +1163,9 @@ export const getNewsletterSubscribers = internalQuery({
 	handler: async (ctx) => {
 		return await ctx.db
 			.query("users")
-			.filter((q) => q.eq(q.field("newsletterSubscriptionStatus"), "subscribed"))
+			.withIndex("by_newsletterSubscriptionStatus", (q) =>
+				q.eq("newsletterSubscriptionStatus", "subscribed")
+			)
 			.collect();
 	},
 });
@@ -1200,3 +1202,46 @@ export const getUserHiddenTones = internalQuery({
 	},
 });
 
+// Bulk query: Get hidden styles and tones for multiple users at once
+// Returns a map-like structure keyed by userId for efficient lookup
+export const getHiddenPreferencesForUsers = internalQuery({
+	args: {
+		userIds: v.array(v.id("users")),
+	},
+	returns: v.object({
+		hiddenStyles: v.array(v.object({
+			userId: v.id("users"),
+			styleId: v.id("styles"),
+		})),
+		hiddenTones: v.array(v.object({
+			userId: v.id("users"),
+			toneId: v.id("tones"),
+		})),
+	}),
+	handler: async (ctx, args) => {
+		const userIdSet = new Set(args.userIds.map(id => id.toString()));
+
+		// Fetch all hidden styles for the given users
+		const allHiddenStyles = await ctx.db
+			.query("userStyles")
+			.withIndex("by_status", (q) => q.eq("status", "hidden"))
+			.collect();
+
+		// Fetch all hidden tones for the given users
+		const allHiddenTones = await ctx.db
+			.query("userTones")
+			.withIndex("by_status", (q) => q.eq("status", "hidden"))
+			.collect();
+
+		// Filter to only the requested users
+		const hiddenStyles = allHiddenStyles
+			.filter(s => userIdSet.has(s.userId.toString()))
+			.map(s => ({ userId: s.userId, styleId: s.styleId }));
+
+		const hiddenTones = allHiddenTones
+			.filter(t => userIdSet.has(t.userId.toString()))
+			.map(t => ({ userId: t.userId, toneId: t.toneId }));
+
+		return { hiddenStyles, hiddenTones };
+	},
+});

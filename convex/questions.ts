@@ -1545,6 +1545,7 @@ export const savePoolQuestion = internalMutation({
       totalThumbsDown: 0,
       totalShows: 0,
       averageViewDuration: 0,
+      lastShownAt: 0,
     });
   },
 });
@@ -1560,7 +1561,7 @@ export const getAvailablePoolQuestions = internalQuery({
     const limit = args.limit ?? 100;
     return await ctx.db
       .query("questions")
-      .withIndex("by_poolDate_status", (q) =>
+      .withIndex("by_poolDate_and_poolStatus", (q) =>
         q.eq("poolDate", args.poolDate).eq("poolStatus", "available")
       )
       .take(limit);
@@ -1650,27 +1651,48 @@ export const assignPoolQuestionsToUsers = internalAction({
       internal.users.getNewsletterSubscribers
     );
 
+    // Bulk fetch hidden preferences for all subscribers (2 queries instead of 2N)
+    const userIds = subscribers.map(s => s._id);
+    const { hiddenStyles: allHiddenStyles, hiddenTones: allHiddenTones } = await ctx.runQuery(
+      internal.users.getHiddenPreferencesForUsers,
+      { userIds }
+    );
+
+    // Build lookup maps by user ID
+    const hiddenStylesByUser = new Map<string, Set<string>>();
+    const hiddenTonesByUser = new Map<string, Set<string>>();
+
+    for (const hs of allHiddenStyles) {
+      const userId = hs.userId.toString();
+      if (!hiddenStylesByUser.has(userId)) {
+        hiddenStylesByUser.set(userId, new Set());
+      }
+      hiddenStylesByUser.get(userId)!.add(hs.styleId.toString());
+    }
+
+    for (const ht of allHiddenTones) {
+      const userId = ht.userId.toString();
+      if (!hiddenTonesByUser.has(userId)) {
+        hiddenTonesByUser.set(userId, new Set());
+      }
+      hiddenTonesByUser.get(userId)!.add(ht.toneId.toString());
+    }
+
+    // Track actually assigned question IDs
+    const assignedQuestionIds = new Set<Id<"questions">>();
+
     for (const user of subscribers) {
       try {
         usersProcessed++;
 
-        // Get user's hidden styles and tones
-        const hiddenStyles: Doc<"userStyles">[] = await ctx.runQuery(
-          internal.users.getUserHiddenStyles,
-          { userId: user._id }
-        );
-        const hiddenTones: Doc<"userTones">[] = await ctx.runQuery(
-          internal.users.getUserHiddenTones,
-          { userId: user._id }
-        );
-
-        const hiddenStyleIds = new Set(hiddenStyles.map(s => s.styleId));
-        const hiddenToneIds = new Set(hiddenTones.map(t => t.toneId));
+        // Look up user's hidden styles and tones from the pre-fetched maps
+        const hiddenStyleIds = hiddenStylesByUser.get(user._id.toString()) ?? new Set();
+        const hiddenToneIds = hiddenTonesByUser.get(user._id.toString()) ?? new Set();
 
         // Filter pool questions by user preferences
         let userQuestions = poolQuestions.filter(q => {
-          if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
-          if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
+          if (q.styleId && hiddenStyleIds.has(q.styleId.toString())) return false;
+          if (q.toneId && hiddenToneIds.has(q.toneId.toString())) return false;
           return true;
         });
 
@@ -1701,6 +1723,11 @@ export const assignPoolQuestionsToUsers = internalAction({
             { userId: user._id, questionIds }
           );
           totalAssigned += assigned;
+
+          // Track which questions were actually assigned
+          for (const qid of questionIds) {
+            assignedQuestionIds.add(qid);
+          }
         }
 
       } catch (error: any) {
@@ -1708,14 +1735,10 @@ export const assignPoolQuestionsToUsers = internalAction({
       }
     }
 
-    // Mark assigned questions as distributed
-    const assignedQuestionIds = [...new Set(
-      poolQuestions.slice(0, Math.min(questionsPerUser * subscribers.length, poolQuestions.length))
-        .map(q => q._id)
-    )];
-    if (assignedQuestionIds.length > 0) {
+    // Mark assigned questions as distributed (using actually assigned IDs)
+    if (assignedQuestionIds.size > 0) {
       await ctx.runMutation(internal.questions.markPoolQuestionsDistributed, {
-        questionIds: assignedQuestionIds,
+        questionIds: Array.from(assignedQuestionIds),
       });
     }
 

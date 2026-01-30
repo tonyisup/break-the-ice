@@ -121,7 +121,7 @@ export default defineSchema({
     })
     .index("by_author", ["authorId", "status"])
     .index("by_prunedAt_status_text", ["prunedAt", "status", "text"])
-    .index("by_poolDate_status", ["poolDate", "poolStatus"]),
+    .index("by_poolDate_and_poolStatus", ["poolDate", "poolStatus"]),
   tags: defineTable({
     name: v.string(),
     grouping: v.string(),
@@ -147,7 +147,8 @@ export default defineSchema({
     newsletterSubscriptionStatus: v.optional(v.union(v.literal("subscribed"), v.literal("unsubscribed"))),
   })
     .index("email", ["email"])
-    .index("phone", ["phone"]),
+    .index("phone", ["phone"])
+    .index("by_newsletterSubscriptionStatus", ["newsletterSubscriptionStatus"]),
   userQuestions: defineTable({
     userId: v.id("users"),
     questionId: v.id("questions"),
