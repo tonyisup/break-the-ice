@@ -455,11 +455,13 @@ export const recordAnalytics = mutation({
           viewDuration: userQuestion.viewDuration ? userQuestion.viewDuration + viewDuration : viewDuration,
           seenCount: userQuestion.seenCount ? userQuestion.seenCount + 1 : 1,
           updatedAt: Date.now(),
-          // Preserve "liked" status, or update to "liked" if event is "liked".
+          // Preserve "hidden" or "liked" status, or update to "liked" if event is "liked".
           // Otherwise, flip "unseen" -> "seen" on any view event.
-          status: (event === "liked" || userQuestion.status === "liked")
-            ? "liked"
-            : (userQuestion.status === "unseen" ? "seen" : userQuestion.status),
+          status: (event === "hidden" || userQuestion.status === "hidden")
+            ? "hidden"
+            : (event === "liked" || userQuestion.status === "liked")
+              ? "liked"
+              : (userQuestion.status === "unseen" ? "seen" : userQuestion.status),
         });
       } else {
         await ctx.db.insert("userQuestions", {
@@ -1711,10 +1713,10 @@ export const assignPoolQuestionsToUsers = internalAction({
 
     let usersProcessed = 0;
     let totalAssigned = 0;
-    const errors: string[] = [];
+    const errors: Array<string> = [];
 
     // Get available pool questions for today
-    const poolQuestions: Doc<"questions">[] = await ctx.runQuery(
+    const poolQuestions: Array<Doc<"questions">> = await ctx.runQuery(
       internal.questions.getAvailablePoolQuestions,
       { poolDate: today, limit: 200 }
     );
@@ -1725,13 +1727,14 @@ export const assignPoolQuestionsToUsers = internalAction({
     }
 
     // Get all users with newsletter subscription
-    const subscribers: Doc<"users">[] = await ctx.runQuery(
-      internal.users.getNewsletterSubscribers
+    const subscribers: Array<Doc<"users">> = await ctx.runQuery(
+      internal.users.getNewsletterSubscribers,
+      {}
     );
 
     // Bulk fetch hidden preferences for all subscribers (2 queries instead of 2N)
     const userIds = subscribers.map(s => s._id);
-    const { hiddenStyles: allHiddenStyles, hiddenTones: allHiddenTones } = await ctx.runQuery(
+    const { hiddenStyles: allHiddenStyles, hiddenTones: allHiddenTones }: { hiddenStyles: Array<any>, hiddenTones: Array<any> } = await ctx.runQuery(
       internal.users.getHiddenPreferencesForUsers,
       { userIds }
     );

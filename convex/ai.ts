@@ -597,14 +597,14 @@ export const generateNightlyQuestionPool = internalAction({
 
 		let questionsGenerated = 0;
 		let combinationsProcessed = 0;
-		const errors: string[] = [];
+		const errors: Array<string> = [];
 
 		// Get all styles and tones
-		const styles: Doc<"styles">[] = await ctx.runQuery(api.styles.getStyles, {});
-		const tones: Doc<"tones">[] = await ctx.runQuery(api.tones.getTones, {});
+		const styles: Array<Doc<"styles">> = await ctx.runQuery(api.styles.getStyles, {});
+		const tones: Array<Doc<"tones">> = await ctx.runQuery(api.tones.getTones, {});
 
 		// Create all combinations
-		const combinations: { style: Doc<"styles">, tone: Doc<"tones"> }[] = [];
+		const combinations: Array<{ style: Doc<"styles">, tone: Doc<"tones"> }> = [];
 		for (const style of styles) {
 			for (const tone of tones) {
 				combinations.push({ style, tone });

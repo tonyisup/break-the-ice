@@ -1,16 +1,16 @@
-import { MutationCtx, QueryCtx } from "./_generated/server";
+import { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 
 /**
  * Helper function to ensure the current user is an admin.
  * Works with Clerk authentication via ConvexProviderWithClerk.
  */
-export const ensureAdmin = async (ctx: { auth: any }) => {
+export const ensureAdmin = async (ctx: QueryCtx | MutationCtx | ActionCtx) => {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
     throw new Error("Not authenticated");
   }
-  if (!identity.metadata.isAdmin || identity.metadata.isAdmin !== "true") {
+  if ((identity.metadata as any)?.isAdmin !== "true") {
     throw new Error("Not an admin");
   }
   return identity;
