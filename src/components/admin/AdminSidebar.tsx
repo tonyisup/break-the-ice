@@ -11,6 +11,7 @@ import {
 	Trash2,
 	Settings,
 	ShieldCheck,
+	Box,
 } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
@@ -80,6 +81,11 @@ const items = [
 		title: "Pruning",
 		url: "/admin/prune",
 		icon: Trash2,
+	},
+	{
+		title: "Question Pool",
+		url: "/admin/pool",
+		icon: Box,
 	},
 ]
 

@@ -273,6 +273,24 @@ export const getQuestionForNewsletter = query({
       return null;
     }
 
+    // PRIORITY 1: Check for unseen pool questions first
+    const unseenUserQuestion = await ctx.db
+      .query("userQuestions")
+      .withIndex("by_userId_status_updatedAt", (q) =>
+        q.eq("userId", userId).eq("status", "unseen")
+      )
+      .order("asc") // Oldest unseen first
+      .first();
+
+    if (unseenUserQuestion) {
+      const unseenQuestion = await ctx.db.get(unseenUserQuestion.questionId);
+      if (unseenQuestion && !unseenQuestion.prunedAt && unseenQuestion.text) {
+        // Return the unseen question - status will be updated via recordAnalytics when viewed
+        return unseenQuestion;
+      }
+    }
+
+    // FALLBACK: Random selection from pool
     // Get seen question IDs
     const userQuestions = await ctx.db.query("userQuestions")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -437,8 +455,13 @@ export const recordAnalytics = mutation({
           viewDuration: userQuestion.viewDuration ? userQuestion.viewDuration + viewDuration : viewDuration,
           seenCount: userQuestion.seenCount ? userQuestion.seenCount + 1 : 1,
           updatedAt: Date.now(),
-          // Don't overwrite "liked" status with "seen"
-          status: userQuestion.status === "liked" ? "liked" : (event === "liked" ? "liked" : userQuestion.status),
+          // Preserve "hidden" or "liked" status, or update to "liked" if event is "liked".
+          // Otherwise, flip "unseen" -> "seen" on any view event.
+          status: (event === "hidden" || userQuestion.status === "hidden")
+            ? "hidden"
+            : (event === "liked" || userQuestion.status === "liked")
+              ? "liked"
+              : (userQuestion.status === "unseen" ? "seen" : userQuestion.status),
         });
       } else {
         await ctx.db.insert("userQuestions", {
@@ -1022,6 +1045,7 @@ export const getPendingDuplicateDetections = query({
     _id: v.id("duplicateDetections"),
     _creationTime: v.number(),
     questionIds: v.array(v.id("questions")),
+    uniqueKey: v.optional(v.string()),
     reason: v.string(),
     rejectReason: v.optional(v.string()),
     confidence: v.number(),
@@ -1033,8 +1057,18 @@ export const getPendingDuplicateDetections = query({
       _id: v.id("questions"),
       _creationTime: v.number(),
       text: v.string(),
-      style: v.optional(v.string()),
-      tone: v.optional(v.string()),
+      style: v.object({
+        _id: v.id("styles"),
+        icon: v.string(),
+        name: v.string(),
+        color: v.string(),
+      }),
+      tone: v.object({
+        _id: v.id("tones"),
+        icon: v.string(),
+        name: v.string(),
+        color: v.string(),
+      }),
       totalLikes: v.number(),
       totalShows: v.number(),
     })),
@@ -1054,26 +1088,50 @@ export const getPendingDuplicateDetections = query({
           detection.questionIds.map(async (id) => {
             const question = await ctx.db.get(id);
             if (!question) return null;
+            if (!question.styleId || !question.toneId) return null;
+
+            const [styleRaw, toneRaw] = await Promise.all([
+              ctx.db.get(question.styleId),
+              ctx.db.get(question.toneId),
+            ]);
+
+            if (!styleRaw || !toneRaw) return null;
+
             return {
               _id: question._id,
               _creationTime: question._creationTime,
               text: question.text,
-              style: question.style,
-              tone: question.tone,
+              style: {
+                _id: styleRaw._id,
+                icon: styleRaw.icon,
+                name: styleRaw.name,
+                color: styleRaw.color,
+              },
+              tone: {
+                _id: toneRaw._id,
+                icon: toneRaw.icon,
+                name: toneRaw.name,
+                color: toneRaw.color,
+              },
               totalLikes: question.totalLikes,
               totalShows: question.totalShows,
             };
           })
         );
 
+        const validQuestions = questions.filter((q): q is NonNullable<typeof q> => q !== null);
+
+        // Only return detections where we have at least 2 questions still existing
+        if (validQuestions.length < 2) return null;
+
         return {
           ...detection,
-          questions: questions.filter((q): q is NonNullable<typeof q> => q !== null),
+          questions: validQuestions,
         };
       })
     );
 
-    return detectionsWithQuestions;
+    return detectionsWithQuestions.filter((d): d is NonNullable<typeof d> => d !== null);
   },
 });
 
@@ -1084,6 +1142,7 @@ export const getCompletedDuplicateDetections = query({
     _id: v.id("duplicateDetections"),
     _creationTime: v.number(),
     questionIds: v.array(v.id("questions")),
+    uniqueKey: v.optional(v.string()),
     reason: v.string(),
     rejectReason: v.optional(v.string()),
     confidence: v.number(),
@@ -1095,8 +1154,18 @@ export const getCompletedDuplicateDetections = query({
       _id: v.id("questions"),
       _creationTime: v.number(),
       text: v.string(),
-      style: v.optional(v.string()),
-      tone: v.optional(v.string()),
+      style: v.union(v.null(), v.object({
+        _id: v.id("styles"),
+        icon: v.string(),
+        name: v.string(),
+        color: v.string(),
+      })),
+      tone: v.union(v.null(), v.object({
+        _id: v.id("tones"),
+        icon: v.string(),
+        name: v.string(),
+        color: v.string(),
+      })),
       totalLikes: v.number(),
       totalShows: v.number(),
     })),
@@ -1124,12 +1193,41 @@ export const getCompletedDuplicateDetections = query({
           detection.questionIds.map(async (id) => {
             const question = await ctx.db.get(id);
             if (!question) return null;
+
+            // For completed ones, style/tone might be missing if they were deleted, so we should be extra careful
+            let style = null;
+            let tone = null;
+
+            if (question.styleId) {
+              const styleRaw = await ctx.db.get(question.styleId);
+              if (styleRaw) {
+                style = {
+                  _id: styleRaw._id,
+                  icon: styleRaw.icon,
+                  name: styleRaw.name,
+                  color: styleRaw.color,
+                };
+              }
+            }
+
+            if (question.toneId) {
+              const toneRaw = await ctx.db.get(question.toneId);
+              if (toneRaw) {
+                tone = {
+                  _id: toneRaw._id,
+                  icon: toneRaw.icon,
+                  name: toneRaw.name,
+                  color: toneRaw.color,
+                };
+              }
+            }
+
             return {
               _id: question._id,
               _creationTime: question._creationTime,
               text: question.text,
-              style: question.style,
-              tone: question.tone,
+              style,
+              tone,
               totalLikes: question.totalLikes,
               totalShows: question.totalShows,
             };
@@ -1191,7 +1289,7 @@ export const deleteDuplicateQuestions = mutation({
 
     // Update the detection status
     await ctx.db.patch(args.detectionId, {
-      status: args.keepQuestionId ? "rejected" : "approved",
+      status: "approved",
       reviewedAt: Date.now(),
     });
 
@@ -1476,3 +1574,503 @@ export const getAdminStats = query({
   },
 });
 
+// Helper: Check if exact question text already exists
+export const checkExactDuplicate = internalQuery({
+  args: {
+    text: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("questions")
+      .withIndex("by_text", (q) => q.eq("text", args.text))
+      .first();
+    return existing !== null;
+  },
+});
+
+// Helper: Save a pool question with proper metadata
+export const savePoolQuestion = internalMutation({
+  args: {
+    text: v.string(),
+    styleId: v.id("styles"),
+    style: v.string(),
+    toneId: v.id("tones"),
+    tone: v.string(),
+    poolDate: v.string(),
+  },
+  returns: v.union(v.id("questions"), v.null()),
+  handler: async (ctx, args) => {
+    // Double-check for duplicate (race condition protection)
+    const existing = await ctx.db
+      .query("questions")
+      .withIndex("by_text", (q) => q.eq("text", args.text))
+      .first();
+
+    if (existing) {
+      return null;
+    }
+
+    return await ctx.db.insert("questions", {
+      text: args.text,
+      styleId: args.styleId,
+      style: args.style,
+      toneId: args.toneId,
+      tone: args.tone,
+      poolDate: args.poolDate,
+      poolStatus: "available",
+      status: "public",
+      isAIGenerated: true,
+      totalLikes: 0,
+      totalThumbsDown: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+      lastShownAt: 0,
+    });
+  },
+});
+
+// Get available pool questions for a specific date
+export const getAvailablePoolQuestions = internalQuery({
+  args: {
+    poolDate: v.string(),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 100;
+    return await ctx.db
+      .query("questions")
+      .withIndex("by_poolDate_and_poolStatus", (q) =>
+        q.eq("poolDate", args.poolDate).eq("poolStatus", "available")
+      )
+      .take(limit);
+  },
+});
+
+// Mark pool questions as distributed
+export const markPoolQuestionsDistributed = internalMutation({
+  args: {
+    questionIds: v.array(v.id("questions")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    for (const id of args.questionIds) {
+      await ctx.db.patch(id, { poolStatus: "distributed" });
+    }
+    return null;
+  },
+});
+
+// Assign pool questions to a single user as unseen
+export const assignPoolQuestionsToUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    questionIds: v.array(v.id("questions")),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const { userId, questionIds } = args;
+    let assigned = 0;
+
+    for (const questionId of questionIds) {
+      // Check if user already has this question
+      const existing = await ctx.db
+        .query("userQuestions")
+        .withIndex("by_userIdAndQuestionId", (q) =>
+          q.eq("userId", userId).eq("questionId", questionId)
+        )
+        .first();
+
+      if (!existing) {
+        await ctx.db.insert("userQuestions", {
+          userId,
+          questionId,
+          status: "unseen",
+          updatedAt: Date.now(),
+        });
+        assigned++;
+      }
+    }
+
+    return assigned;
+  },
+});
+
+// Internal action: Assign pool questions to all newsletter subscribers
+export const assignPoolQuestionsToUsers = internalAction({
+  args: {
+    questionsPerUser: v.number(),
+  },
+  returns: v.object({
+    usersProcessed: v.number(),
+    totalAssigned: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const { questionsPerUser } = args;
+    const today = new Date().toISOString().split('T')[0];
+
+    let usersProcessed = 0;
+    let totalAssigned = 0;
+    const errors: Array<string> = [];
+
+    // Get available pool questions for today
+    const poolQuestions: Array<Doc<"questions">> = await ctx.runQuery(
+      internal.questions.getAvailablePoolQuestions,
+      { poolDate: today, limit: 200 }
+    );
+
+    if (poolQuestions.length === 0) {
+      console.log("No pool questions available for today");
+      return { usersProcessed: 0, totalAssigned: 0, errors: ["No pool questions available"] };
+    }
+
+    // Get all users with newsletter subscription
+    const subscribers: Array<Doc<"users">> = await ctx.runQuery(
+      internal.users.getNewsletterSubscribers,
+      {}
+    );
+
+    // Bulk fetch hidden preferences for all subscribers (2 queries instead of 2N)
+    const userIds = subscribers.map(s => s._id);
+    const { hiddenStyles: allHiddenStyles, hiddenTones: allHiddenTones }: { hiddenStyles: Array<any>, hiddenTones: Array<any> } = await ctx.runQuery(
+      internal.users.getHiddenPreferencesForUsers,
+      { userIds }
+    );
+
+    // Build lookup maps by user ID
+    const hiddenStylesByUser = new Map<string, Set<string>>();
+    const hiddenTonesByUser = new Map<string, Set<string>>();
+
+    for (const hs of allHiddenStyles) {
+      const userId = hs.userId.toString();
+      if (!hiddenStylesByUser.has(userId)) {
+        hiddenStylesByUser.set(userId, new Set());
+      }
+      hiddenStylesByUser.get(userId)!.add(hs.styleId.toString());
+    }
+
+    for (const ht of allHiddenTones) {
+      const userId = ht.userId.toString();
+      if (!hiddenTonesByUser.has(userId)) {
+        hiddenTonesByUser.set(userId, new Set());
+      }
+      hiddenTonesByUser.get(userId)!.add(ht.toneId.toString());
+    }
+
+    // Track actually assigned question IDs
+    const assignedQuestionIds = new Set<Id<"questions">>();
+
+    for (const user of subscribers) {
+      try {
+        usersProcessed++;
+
+        // Look up user's hidden styles and tones from the pre-fetched maps
+        const hiddenStyleIds = hiddenStylesByUser.get(user._id.toString()) ?? new Set();
+        const hiddenToneIds = hiddenTonesByUser.get(user._id.toString()) ?? new Set();
+
+        // Filter pool questions by user preferences
+        let userQuestions = poolQuestions.filter(q => {
+          if (q.styleId && hiddenStyleIds.has(q.styleId.toString())) return false;
+          if (q.toneId && hiddenToneIds.has(q.toneId.toString())) return false;
+          return true;
+        });
+
+        // If user has preference embedding, sort by similarity
+        if (user.questionPreferenceEmbedding && user.questionPreferenceEmbedding.length > 0) {
+          // Simple cosine similarity sorting (approximate, for performance)
+          userQuestions.sort((a, b) => {
+            if (!a.embedding || !b.embedding) return 0;
+            const simA = cosineSimilarity(user.questionPreferenceEmbedding!, a.embedding);
+            const simB = cosineSimilarity(user.questionPreferenceEmbedding!, b.embedding);
+            return simB - simA; // Descending
+          });
+        } else {
+          // Shuffle for randomness
+          for (let i = userQuestions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [userQuestions[i], userQuestions[j]] = [userQuestions[j], userQuestions[i]];
+          }
+        }
+
+        // Take top N questions
+        const toAssign = userQuestions.slice(0, questionsPerUser);
+        const questionIds = toAssign.map(q => q._id);
+
+        if (questionIds.length > 0) {
+          const assigned: number = await ctx.runMutation(
+            internal.questions.assignPoolQuestionsToUser,
+            { userId: user._id, questionIds }
+          );
+          totalAssigned += assigned;
+
+          // Track which questions were actually assigned
+          for (const qid of questionIds) {
+            assignedQuestionIds.add(qid);
+          }
+        }
+
+      } catch (error: any) {
+        errors.push(`Error assigning to user ${user._id}: ${error.message}`);
+      }
+    }
+
+    // Mark assigned questions as distributed (using actually assigned IDs)
+    if (assignedQuestionIds.size > 0) {
+      const _: null = await ctx.runMutation(internal.questions.markPoolQuestionsDistributed, {
+        questionIds: Array.from(assignedQuestionIds),
+      });
+    }
+
+    // Send summary email
+    if (usersProcessed > 0) {
+      const subject = `📬 Pool Questions Assigned: ${totalAssigned} to ${usersProcessed} users`;
+      const html = `
+        <h2>Pool Question Assignment Summary</h2>
+        <p><strong>Date:</strong> ${today}</p>
+        <p><strong>Users Processed:</strong> ${usersProcessed}</p>
+        <p><strong>Total Questions Assigned:</strong> ${totalAssigned}</p>
+        <p><strong>Questions Per User Target:</strong> ${questionsPerUser}</p>
+        ${errors.length > 0 ? `<h3>Errors (${errors.length})</h3><ul>${errors.map(e => `<li>${e}</li>`).join('')}</ul>` : ''}
+      `;
+      await ctx.runAction(internal.email.sendEmail, { subject, html });
+    }
+
+    return { usersProcessed, totalAssigned, errors };
+  },
+});
+
+// Helper: Simple cosine similarity for preference matching
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+// ============================================================
+// Pool Management Admin Queries and Actions
+// ============================================================
+
+// Get pool statistics for a given date
+export const getPoolStats = query({
+  args: {
+    poolDate: v.string(), // ISO date string, e.g. "2026-01-30"
+  },
+  returns: v.object({
+    totalQuestions: v.number(),
+    availableQuestions: v.number(),
+    distributedQuestions: v.number(),
+    byStyleTone: v.array(v.object({
+      style: v.string(),
+      styleName: v.string(),
+      tone: v.string(),
+      toneName: v.string(),
+      count: v.number(),
+    })),
+  }),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+
+    // Get all pool questions for this date
+    const allQuestions = await ctx.db
+      .query("questions")
+      .withIndex("by_poolDate_and_poolStatus", (q) => q.eq("poolDate", args.poolDate))
+      .collect();
+
+    const available = allQuestions.filter(q => q.poolStatus === "available");
+    const distributed = allQuestions.filter(q => q.poolStatus === "distributed");
+
+    // Get style/tone breakdown
+    const styleToneCounts = new Map<string, { style: string; styleName: string; tone: string; toneName: string; count: number }>();
+
+    // Fetch all styles and tones for name lookup
+    const styles = await ctx.db.query("styles").collect();
+    const tones = await ctx.db.query("tones").collect();
+    const styleMap = new Map(styles.map(s => [s._id.toString(), s]));
+    const toneMap = new Map(tones.map(t => [t._id.toString(), t]));
+
+    for (const q of allQuestions) {
+      const styleDoc = q.styleId ? styleMap.get(q.styleId.toString()) : null;
+      const toneDoc = q.toneId ? toneMap.get(q.toneId.toString()) : null;
+      const styleId = q.style || "unknown";
+      const toneId = q.tone || "unknown";
+      const key = `${styleId}|${toneId}`;
+
+      if (!styleToneCounts.has(key)) {
+        styleToneCounts.set(key, {
+          style: styleId,
+          styleName: styleDoc?.name || styleId,
+          tone: toneId,
+          toneName: toneDoc?.name || toneId,
+          count: 0,
+        });
+      }
+      styleToneCounts.get(key)!.count++;
+    }
+
+    return {
+      totalQuestions: allQuestions.length,
+      availableQuestions: available.length,
+      distributedQuestions: distributed.length,
+      byStyleTone: Array.from(styleToneCounts.values()).sort((a, b) => b.count - a.count),
+    };
+  },
+});
+
+// Get pool questions for admin review
+export const getPoolQuestions = query({
+  args: {
+    poolDate: v.string(),
+    status: v.optional(v.union(v.literal("available"), v.literal("distributed"), v.literal("all"))),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(v.object({
+    _id: v.id("questions"),
+    _creationTime: v.number(),
+    text: v.optional(v.string()),
+    poolStatus: v.optional(v.union(v.literal("available"), v.literal("distributed"))),
+    style: v.optional(v.object({
+      _id: v.id("styles"),
+      name: v.string(),
+      icon: v.string(),
+      color: v.string(),
+    })),
+    tone: v.optional(v.object({
+      _id: v.id("tones"),
+      name: v.string(),
+      icon: v.string(),
+      color: v.string(),
+    })),
+  })),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+
+    const limit = args.limit ?? 100;
+    const statusFilter = args.status ?? "all";
+
+    let questions: Doc<"questions">[];
+
+    if (statusFilter === "all") {
+      questions = await ctx.db
+        .query("questions")
+        .withIndex("by_poolDate_and_poolStatus", (q) => q.eq("poolDate", args.poolDate))
+        .take(limit);
+    } else {
+      questions = await ctx.db
+        .query("questions")
+        .withIndex("by_poolDate_and_poolStatus", (q) =>
+          q.eq("poolDate", args.poolDate).eq("poolStatus", statusFilter)
+        )
+        .take(limit);
+    }
+
+    // Fetch styles and tones for enrichment
+    const styleIds = Array.from(new Set(questions.map(q => q.styleId).filter(Boolean))) as Id<"styles">[];
+    const toneIds = Array.from(new Set(questions.map(q => q.toneId).filter(Boolean))) as Id<"tones">[];
+
+    const [styles, tones] = await Promise.all([
+      Promise.all(styleIds.map(id => ctx.db.get(id))),
+      Promise.all(toneIds.map(id => ctx.db.get(id))),
+    ]);
+
+    const styleMap = new Map(styles.filter(Boolean).map(s => [s!._id.toString(), s!]));
+    const toneMap = new Map(tones.filter(Boolean).map(t => [t!._id.toString(), t!]));
+
+    return questions.map(q => {
+      const styleDoc = q.styleId ? styleMap.get(q.styleId.toString()) : null;
+      const toneDoc = q.toneId ? toneMap.get(q.toneId.toString()) : null;
+
+      return {
+        _id: q._id,
+        _creationTime: q._creationTime,
+        text: q.text,
+        poolStatus: q.poolStatus,
+        style: styleDoc ? {
+          _id: styleDoc._id,
+          name: styleDoc.name,
+          icon: styleDoc.icon,
+          color: styleDoc.color,
+        } : undefined,
+        tone: toneDoc ? {
+          _id: toneDoc._id,
+          name: toneDoc.name,
+          icon: toneDoc.icon,
+          color: toneDoc.color,
+        } : undefined,
+      };
+    });
+  },
+});
+
+// Manually trigger pool generation (admin action)
+export const triggerPoolGeneration = action({
+  args: {
+    targetCount: v.optional(v.number()),
+    maxCombinations: v.optional(v.number()),
+  },
+  returns: v.object({
+    questionsGenerated: v.number(),
+    combinationsProcessed: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args): Promise<{ questionsGenerated: number; combinationsProcessed: number; errors: string[] }> => {
+    await ensureAdmin(ctx);
+
+    const result: { questionsGenerated: number; combinationsProcessed: number; errors: string[] } = await ctx.runAction(internal.ai.generateNightlyQuestionPool, {
+      targetCount: args.targetCount ?? 5,
+      maxCombinations: args.maxCombinations ?? 10,
+    });
+    return result;
+  },
+});
+
+// Manually trigger pool assignment (admin action)
+export const triggerPoolAssignment = action({
+  args: {
+    questionsPerUser: v.optional(v.number()),
+  },
+  returns: v.object({
+    usersProcessed: v.number(),
+    totalAssigned: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args): Promise<{ usersProcessed: number; totalAssigned: number; errors: string[] }> => {
+    await ensureAdmin(ctx);
+
+    const result: { usersProcessed: number; totalAssigned: number; errors: string[] } = await ctx.runAction(internal.questions.assignPoolQuestionsToUsers, {
+      questionsPerUser: args.questionsPerUser ?? 6,
+    });
+    return result;
+  },
+});
+
+// Check for similarity using vector search (Action-only in Convex)
+export const checkSimilarity = internalAction({
+  args: {
+    text: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args): Promise<boolean> => {
+    const embedding = await embed(args.text);
+    if (embedding.length === 0) return false;
+
+    const results = await ctx.vectorSearch("questions", "by_embedding", {
+      vector: embedding,
+      limit: 1,
+    });
+
+    if (results.length === 0) return false;
+
+    const topScore = results[0]._score;
+    return topScore >= 0.9;
+  },
+});

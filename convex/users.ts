@@ -1155,3 +1155,96 @@ export const removeHiddenToneId = mutation({
 		return hiddenTonesDocs.map((ut) => ut.toneId);
 	}
 })
+
+// Get all users with newsletter subscription
+export const getNewsletterSubscribers = internalQuery({
+	args: {},
+	returns: v.array(v.any()),
+	handler: async (ctx) => {
+		return await ctx.db
+			.query("users")
+			.withIndex("by_newsletterSubscriptionStatus", (q) =>
+				q.eq("newsletterSubscriptionStatus", "subscribed")
+			)
+			.collect();
+	},
+});
+
+// Get hidden styles for a user
+export const getUserHiddenStyles = internalQuery({
+	args: {
+		userId: v.id("users"),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query("userStyles")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", args.userId).eq("status", "hidden")
+			)
+			.collect();
+	},
+});
+
+// Get hidden tones for a user
+export const getUserHiddenTones = internalQuery({
+	args: {
+		userId: v.id("users"),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query("userTones")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", args.userId).eq("status", "hidden")
+			)
+			.collect();
+	},
+});
+
+// Bulk query: Get hidden styles and tones for multiple users at once
+// Returns a map-like structure keyed by userId for efficient lookup
+export const getHiddenPreferencesForUsers = internalQuery({
+	args: {
+		userIds: v.array(v.id("users")),
+	},
+	returns: v.object({
+		hiddenStyles: v.array(v.object({
+			userId: v.id("users"),
+			styleId: v.id("styles"),
+		})),
+		hiddenTones: v.array(v.object({
+			userId: v.id("users"),
+			toneId: v.id("tones"),
+		})),
+	}),
+	handler: async (ctx, args) => {
+		if (args.userIds.length === 0) {
+			return { hiddenStyles: [], hiddenTones: [] };
+		}
+		const userIdSet = new Set(args.userIds.map(id => id.toString()));
+
+		// Fetch all hidden styles for the given users
+		const allHiddenStyles = await ctx.db
+			.query("userStyles")
+			.withIndex("by_status", (q) => q.eq("status", "hidden"))
+			.collect();
+
+		// Fetch all hidden tones for the given users
+		const allHiddenTones = await ctx.db
+			.query("userTones")
+			.withIndex("by_status", (q) => q.eq("status", "hidden"))
+			.collect();
+
+		// Filter to only the requested users
+		const hiddenStyles = allHiddenStyles
+			.filter(s => userIdSet.has(s.userId.toString()))
+			.map(s => ({ userId: s.userId, styleId: s.styleId }));
+
+		const hiddenTones = allHiddenTones
+			.filter(t => userIdSet.has(t.userId.toString()))
+			.map(t => ({ userId: t.userId, toneId: t.toneId }));
+
+		return { hiddenStyles, hiddenTones };
+	},
+});

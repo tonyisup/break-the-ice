@@ -90,6 +90,12 @@ export default defineSchema({
     ),
     prunedAt: v.optional(v.number()),
     lastPostedAt: v.optional(v.number()),
+    // Pool tracking for nightly AI generation
+    poolDate: v.optional(v.string()), // ISO date string, e.g. "2026-01-30"
+    poolStatus: v.optional(v.union(
+      v.literal("available"),   // Ready for assignment to users
+      v.literal("distributed")  // Already assigned to users
+    )),
   })
     .index("by_last_posted_at", ["lastPostedAt"])
     .index("by_status_and_last_posted", ["status", "lastPostedAt"])
@@ -114,7 +120,8 @@ export default defineSchema({
       filterFields: ["styleId", "toneId"],
     })
     .index("by_author", ["authorId", "status"])
-    .index("by_prunedAt_status_text", ["prunedAt", "status", "text"]),
+    .index("by_prunedAt_status_text", ["prunedAt", "status", "text"])
+    .index("by_poolDate_and_poolStatus", ["poolDate", "poolStatus"]),
   tags: defineTable({
     name: v.string(),
     grouping: v.string(),
@@ -140,11 +147,13 @@ export default defineSchema({
     newsletterSubscriptionStatus: v.optional(v.union(v.literal("subscribed"), v.literal("unsubscribed"))),
   })
     .index("email", ["email"])
-    .index("phone", ["phone"]),
+    .index("phone", ["phone"])
+    .index("by_newsletterSubscriptionStatus", ["newsletterSubscriptionStatus"]),
   userQuestions: defineTable({
     userId: v.id("users"),
     questionId: v.id("questions"),
     status: v.union(
+      v.literal("unseen"),
       v.literal("seen"),
       v.literal("liked"),
       v.literal("hidden")
