@@ -139,7 +139,7 @@ export default function DuplicatesPage() {
 					<h2 className="text-3xl font-bold tracking-tight">Duplicates</h2>
 					<p className="text-muted-foreground">Review and merge duplicate questions detected by AI.</p>
 				</div>
-				<div className="hidden sm:flex flex-col gap-2 min-w-[200px]">
+				<div className="flex flex-col gap-2 min-w-[200px]">
 					<div className="flex items-center justify-between">
 						<Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Similarity Cutoff</Label>
 						<span className="text-xs font-mono font-bold bg-muted px-1.5 py-0.5 rounded text-primary">{(threshold[0] * 100).toFixed(0)}%</span>
