@@ -440,7 +440,7 @@ export const populateMissingToneEmbeddings = internalAction({
 	},
 });
 
-export const detectDuplicateQuestionsStreaming = internalAction({
+export const detectDuplicateQuestionsStreaming = action({
 	args: {},
 	returns: v.id("duplicateDetectionProgress"),
 	handler: async (ctx): Promise<Id<"duplicateDetectionProgress">> => {

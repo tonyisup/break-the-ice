@@ -21,6 +21,7 @@ import TopicsPage from "./app/admin/topics/page";
 import HistoryPage from "./app/history/page";
 import QuestionPage from "./app/question/page";
 import DuplicatesPage from "./app/admin/duplicates/page";
+import DuplicateHistoryPage from "./app/admin/duplicates/completed/page";
 import PrunePage from "./app/admin/prune/page";
 import AdminPage from "./app/admin/page";
 import AdminLayout from "./app/admin/layout";
@@ -69,6 +70,7 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/admin/users" element={<UsersPage />} />
                   <Route path="/admin/feedback" element={<FeedbackPage />} />
                   <Route path="/admin/duplicates" element={<DuplicatesPage />} />
+                  <Route path="/admin/duplicates/completed" element={<DuplicateHistoryPage />} />
                   <Route path="/admin/prune" element={<PrunePage />} />
                 </Route>
 

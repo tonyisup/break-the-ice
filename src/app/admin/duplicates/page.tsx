@@ -31,6 +31,8 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"
 import { Link } from "react-router-dom"
+import { IconComponent } from "@/components/ui/icons/icon"
+import { cn } from "@/lib/utils"
 
 export default function DuplicatesPage() {
 	const duplicateDetections = useQuery(api.questions.getPendingDuplicateDetections)
@@ -45,7 +47,7 @@ export default function DuplicatesPage() {
 	const [keepQuestionId, setKeepQuestionId] = React.useState<Id<"questions"> | null>(null)
 	const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
 	const [editedText, setEditedText] = React.useState("")
-	const [rejectReason, setRejectReason] = React.useState("")
+	const [rejectReasons, setRejectReasons] = React.useState<Record<string, string>>({})
 	const [isDetecting, setIsDetecting] = React.useState(false)
 
 	const handleStartDetection = async () => {
@@ -94,10 +96,14 @@ export default function DuplicatesPage() {
 			await updateStatus({
 				detectionId,
 				status: "rejected",
-				rejectReason
+				rejectReason: rejectReasons[detectionId] || ""
 			})
 			toast.success("Detection rejected")
-			setRejectReason("")
+			setRejectReasons(prev => {
+				const next = { ...prev }
+				delete next[detectionId]
+				return next
+			})
 		} catch (error) {
 			toast.error("Failed to reject detection")
 		}
@@ -184,10 +190,10 @@ export default function DuplicatesPage() {
 										<div
 											key={q._id}
 											className={`group relative p-4 rounded-xl border-2 transition-all cursor-pointer ${keepQuestionId === q._id
-													? 'border-green-500 bg-green-500/5 ring-1 ring-green-500'
-													: selectedToDelete.has(q._id)
-														? 'border-red-200 bg-red-50/50 opacity-60'
-														: 'border-muted hover:border-primary/30'
+												? 'border-green-500 bg-green-500/5 ring-1 ring-green-500'
+												: selectedToDelete.has(q._id)
+													? 'border-red-200 bg-red-50/50 opacity-60'
+													: 'border-muted hover:border-primary/30'
 												}`}
 											onClick={() => handleSelectKeep(q._id, detection.questions.map((qu: any) => qu._id))}
 										>
@@ -224,7 +230,16 @@ export default function DuplicatesPage() {
 														</div>
 													)}
 													<div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-														<span className="flex items-center gap-1 font-mono uppercase"><Badge variant="outline" className="h-4 px-1 text-[8px]">{q.style}</Badge></span>
+														<span className="flex items-center gap-1 font-mono">
+															<Badge variant="outline" className="flex items-center gap-1">
+																<IconComponent icon={q.style.icon} color={q.style.color} />
+																{q.style.name}
+															</Badge>
+															<Badge variant="outline" className="flex items-center gap-1">
+																<IconComponent icon={q.tone.icon} color={q.tone.color} />
+																{q.tone.name}
+															</Badge>
+														</span>
 														<span className="flex items-center gap-1">Likes: <span className="text-foreground">{q.totalLikes}</span></span>
 														<span className="flex items-center gap-1">Created: <span className="text-foreground">{new Date(q._creationTime).toLocaleDateString()}</span></span>
 													</div>
@@ -257,8 +272,8 @@ export default function DuplicatesPage() {
 										<div className="flex-1 w-full">
 											<Input
 												placeholder="Reason for rejection (optional)..."
-												value={rejectReason}
-												onChange={e => setRejectReason(e.target.value)}
+												value={rejectReasons[detection._id] || ""}
+												onChange={e => setRejectReasons(prev => ({ ...prev, [detection._id]: e.target.value }))}
 												className="bg-muted/20 border-0 focus-visible:ring-1"
 											/>
 										</div>

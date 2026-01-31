@@ -1040,6 +1040,7 @@ export const getPendingDuplicateDetections = query({
     _id: v.id("duplicateDetections"),
     _creationTime: v.number(),
     questionIds: v.array(v.id("questions")),
+    uniqueKey: v.optional(v.string()),
     reason: v.string(),
     rejectReason: v.optional(v.string()),
     confidence: v.number(),
@@ -1051,8 +1052,18 @@ export const getPendingDuplicateDetections = query({
       _id: v.id("questions"),
       _creationTime: v.number(),
       text: v.string(),
-      style: v.optional(v.string()),
-      tone: v.optional(v.string()),
+      style: v.object({
+        _id: v.id("styles"),
+        icon: v.string(),
+        name: v.string(),
+        color: v.string(),
+      }),
+      tone: v.object({
+        _id: v.id("tones"),
+        icon: v.string(),
+        name: v.string(),
+        color: v.string(),
+      }),
       totalLikes: v.number(),
       totalShows: v.number(),
     })),
@@ -1072,26 +1083,50 @@ export const getPendingDuplicateDetections = query({
           detection.questionIds.map(async (id) => {
             const question = await ctx.db.get(id);
             if (!question) return null;
+            if (!question.styleId || !question.toneId) return null;
+
+            const [styleRaw, toneRaw] = await Promise.all([
+              ctx.db.get(question.styleId),
+              ctx.db.get(question.toneId),
+            ]);
+
+            if (!styleRaw || !toneRaw) return null;
+
             return {
               _id: question._id,
               _creationTime: question._creationTime,
               text: question.text,
-              style: question.style,
-              tone: question.tone,
+              style: {
+                _id: styleRaw._id,
+                icon: styleRaw.icon,
+                name: styleRaw.name,
+                color: styleRaw.color,
+              },
+              tone: {
+                _id: toneRaw._id,
+                icon: toneRaw.icon,
+                name: toneRaw.name,
+                color: toneRaw.color,
+              },
               totalLikes: question.totalLikes,
               totalShows: question.totalShows,
             };
           })
         );
 
+        const validQuestions = questions.filter((q): q is NonNullable<typeof q> => q !== null);
+
+        // Only return detections where we have at least 2 questions still existing
+        if (validQuestions.length < 2) return null;
+
         return {
           ...detection,
-          questions: questions.filter((q): q is NonNullable<typeof q> => q !== null),
+          questions: validQuestions,
         };
       })
     );
 
-    return detectionsWithQuestions;
+    return detectionsWithQuestions.filter((d): d is NonNullable<typeof d> => d !== null);
   },
 });
 
@@ -1102,6 +1137,7 @@ export const getCompletedDuplicateDetections = query({
     _id: v.id("duplicateDetections"),
     _creationTime: v.number(),
     questionIds: v.array(v.id("questions")),
+    uniqueKey: v.optional(v.string()),
     reason: v.string(),
     rejectReason: v.optional(v.string()),
     confidence: v.number(),
@@ -1113,8 +1149,18 @@ export const getCompletedDuplicateDetections = query({
       _id: v.id("questions"),
       _creationTime: v.number(),
       text: v.string(),
-      style: v.optional(v.string()),
-      tone: v.optional(v.string()),
+      style: v.union(v.null(), v.object({
+        _id: v.id("styles"),
+        icon: v.string(),
+        name: v.string(),
+        color: v.string(),
+      })),
+      tone: v.union(v.null(), v.object({
+        _id: v.id("tones"),
+        icon: v.string(),
+        name: v.string(),
+        color: v.string(),
+      })),
       totalLikes: v.number(),
       totalShows: v.number(),
     })),
@@ -1142,12 +1188,41 @@ export const getCompletedDuplicateDetections = query({
           detection.questionIds.map(async (id) => {
             const question = await ctx.db.get(id);
             if (!question) return null;
+
+            // For completed ones, style/tone might be missing if they were deleted, so we should be extra careful
+            let style = null;
+            let tone = null;
+
+            if (question.styleId) {
+              const styleRaw = await ctx.db.get(question.styleId);
+              if (styleRaw) {
+                style = {
+                  _id: styleRaw._id,
+                  icon: styleRaw.icon,
+                  name: styleRaw.name,
+                  color: styleRaw.color,
+                };
+              }
+            }
+
+            if (question.toneId) {
+              const toneRaw = await ctx.db.get(question.toneId);
+              if (toneRaw) {
+                tone = {
+                  _id: toneRaw._id,
+                  icon: toneRaw.icon,
+                  name: toneRaw.name,
+                  color: toneRaw.color,
+                };
+              }
+            }
+
             return {
               _id: question._id,
               _creationTime: question._creationTime,
               text: question.text,
-              style: question.style,
-              tone: question.tone,
+              style,
+              tone,
               totalLikes: question.totalLikes,
               totalShows: question.totalShows,
             };
@@ -1209,7 +1284,7 @@ export const deleteDuplicateQuestions = mutation({
 
     // Update the detection status
     await ctx.db.patch(args.detectionId, {
-      status: args.keepQuestionId ? "rejected" : "approved",
+      status: "approved",
       reviewedAt: Date.now(),
     });
 
