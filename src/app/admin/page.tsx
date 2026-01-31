@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useQuery, useMutation } from "convex/react"
+import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import {
   MessageSquare,
@@ -10,22 +10,16 @@ import {
   Copy,
   Trash2,
   TrendingUp,
-  AlertCircle,
-  Plus,
-  RefreshCw,
   ArrowRight
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Link } from "react-router-dom"
-import { AIQuestionGenerator } from "@/components/ai-question-generator/ai-question-generator"
-import { AnimatePresence } from "framer-motion"
 import { Badge } from "@/components/ui/badge"
 
 export default function AdminDashboard() {
   const stats = useQuery(api.questions.getAdminStats)
-  const [showGenerator, setShowGenerator] = React.useState(false)
 
   if (!stats) {
     return (
@@ -80,12 +74,6 @@ export default function AdminDashboard() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
           <p className="text-muted-foreground">Overview of your ice-breaker ecosystem.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={() => setShowGenerator(true)} className="gap-2 shadow-lg shadow-primary/20">
-            <Plus className="size-4" />
-            Generate Questions
-          </Button>
         </div>
       </div>
 
@@ -183,15 +171,6 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
-
-      <AnimatePresence>
-        {showGenerator && (
-          <AIQuestionGenerator
-            onQuestionGenerated={() => setShowGenerator(false)}
-            onClose={() => setShowGenerator(false)}
-          />
-        )}
-      </AnimatePresence>
     </div>
   )
 }

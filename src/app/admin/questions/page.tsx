@@ -12,7 +12,6 @@ import {
 	Trash2,
 	Check,
 	X,
-	Sparkles,
 	CheckCircle2,
 	UserCircle
 } from "lucide-react"
@@ -23,7 +22,6 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
-	DropdownMenuHeader,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -37,8 +35,6 @@ import {
 } from "@/components/ui/dialog"
 import { Icon, IconComponent } from "@/components/ui/icons/icon"
 import { Badge } from "@/components/ui/badge"
-import { AIQuestionGenerator } from "@/components/ai-question-generator/ai-question-generator"
-import { AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 
 export default function QuestionsPage() {
@@ -51,7 +47,6 @@ export default function QuestionsPage() {
 	const deleteQuestion = useMutation(api.questions.deleteQuestion)
 
 	const [search, setSearch] = React.useState("")
-	const [showAIGenerator, setShowAIGenerator] = React.useState(false)
 	const [editingQuestion, setEditingQuestion] = React.useState<Doc<"questions"> | null>(null)
 	const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
 
@@ -148,10 +143,6 @@ export default function QuestionsPage() {
 					<p className="text-muted-foreground">Manage and moderate questions in the database.</p>
 				</div>
 				<div className="flex items-center gap-2">
-					<Button onClick={() => setShowAIGenerator(true)} variant="outline" className="gap-2">
-						<Sparkles className="size-4 text-purple-500" />
-						AI Generator
-					</Button>
 					<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
 						<DialogTrigger asChild>
 							<Button className="gap-2">
@@ -368,17 +359,6 @@ export default function QuestionsPage() {
 					)}
 				</div>
 			</div>
-
-			<AnimatePresence>
-				{showAIGenerator && (
-					<AIQuestionGenerator
-						onQuestionGenerated={() => setShowAIGenerator(false)}
-						onClose={() => setShowAIGenerator(false)}
-					/>
-				)}
-			</AnimatePresence>
 		</div>
 	)
 }
-
-
