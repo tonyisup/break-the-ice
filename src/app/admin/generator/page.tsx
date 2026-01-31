@@ -130,12 +130,19 @@ export default function GeneratorPage() {
 
         setIsSaving(true)
         try {
-            await saveAIQuestion({
+            const result = await saveAIQuestion({
                 text: previewQuestion.text,
                 tags: previewQuestion.tags || [],
-                style: selectedStyle,
-                tone: selectedTone,
+                styleId: selectedStyle as any, // Cast to Id<"styles">
+                toneId: selectedTone as any,   // Cast to Id<"tones">
             })
+
+            if (result === null) {
+                toast.warning("This question already exists in the database")
+                // Do not clear preview so user can regenerate or modify
+                return
+            }
+
             toast.success("Question saved to database!")
             setPreviewQuestion(null) // Clear preview after saving
         } catch (error) {
