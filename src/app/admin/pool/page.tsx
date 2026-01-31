@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useQuery, useAction, useMutation } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
+import { Id } from "../../../../convex/_generated/dataModel"
 import {
     Calendar,
     RefreshCw,
@@ -78,9 +79,15 @@ export default function PoolPage() {
     }
 
     const navigateDate = (direction: "prev" | "next") => {
-        const date = new Date(selectedDate)
+        const [year, month, day] = selectedDate.split('-').map(Number)
+        const date = new Date(year, month - 1, day)
         date.setDate(date.getDate() + (direction === "next" ? 1 : -1))
-        setSelectedDate(date.toISOString().split('T')[0])
+
+        const newYear = date.getFullYear()
+        const newMonth = String(date.getMonth() + 1).padStart(2, '0')
+        const newDay = String(date.getDate()).padStart(2, '0')
+
+        setSelectedDate(`${newYear}-${newMonth}-${newDay}`)
     }
 
     const handleGenerate = async () => {
@@ -115,9 +122,9 @@ export default function PoolPage() {
         }
     }
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (id: Id<"questions">) => {
         try {
-            await deleteQuestion({ id: id as any })
+            await deleteQuestion({ id })
             toast.success("Question removed from pool")
         } catch (error) {
             toast.error("Failed to remove question")
@@ -142,7 +149,7 @@ export default function PoolPage() {
                 <div className="flex items-center gap-2">
                     <Button
                         onClick={handleGenerate}
-                        disabled={isGenerating}
+                        disabled={!isToday || isGenerating}
                         variant="outline"
                         className="gap-2"
                     >
@@ -155,7 +162,7 @@ export default function PoolPage() {
                     </Button>
                     <Button
                         onClick={handleAssign}
-                        disabled={isAssigning || (stats?.availableQuestions ?? 0) === 0}
+                        disabled={!isToday || isAssigning || (stats?.availableQuestions ?? 0) === 0}
                         className="gap-2"
                     >
                         {isAssigning ? (
@@ -357,7 +364,7 @@ export default function PoolPage() {
                                             variant="ghost"
                                             size="icon"
                                             className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                            onClick={() => handleDelete(question._id)}
+                                            onClick={() => handleDelete(question._id as Id<"questions">)}
                                         >
                                             <Trash2 className="size-4" />
                                         </Button>

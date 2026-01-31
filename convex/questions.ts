@@ -2058,6 +2058,7 @@ export const checkSimilarity = internalAction({
   args: {
     text: v.string(),
   },
+  returns: v.boolean(),
   handler: async (ctx, args): Promise<boolean> => {
     const embedding = await embed(args.text);
     if (embedding.length === 0) return false;
