@@ -33,6 +33,8 @@ import { toast } from "sonner"
 import { Link } from "react-router-dom"
 import { IconComponent } from "@/components/ui/icons/icon"
 import { cn } from "@/lib/utils"
+import { Slider } from "@/components/ui/slider"
+import { Label } from "@/components/ui/label"
 
 export default function DuplicatesPage() {
 	const duplicateDetections = useQuery(api.questions.getPendingDuplicateDetections)
@@ -41,7 +43,7 @@ export default function DuplicatesPage() {
 	const updateStatus = useMutation(api.questions.updateDuplicateDetectionStatus)
 	const deleteDuplicates = useMutation(api.questions.deleteDuplicateQuestions)
 	const updateQuestion = useMutation(api.questions.updateQuestion)
-	const detectDuplicatesAction = useAction(api.ai.detectDuplicateQuestionsStreaming)
+	const detectDuplicatesAction = useAction(api.ai.startDuplicateDetection)
 
 	const [selectedToDelete, setSelectedToDelete] = React.useState<Set<Id<"questions">>>(new Set())
 	const [keepQuestionId, setKeepQuestionId] = React.useState<Id<"questions"> | null>(null)
@@ -49,11 +51,13 @@ export default function DuplicatesPage() {
 	const [editedText, setEditedText] = React.useState("")
 	const [rejectReasons, setRejectReasons] = React.useState<Record<string, string>>({})
 	const [isDetecting, setIsDetecting] = React.useState(false)
+	const [threshold, setThreshold] = React.useState([0.95])
+
 
 	const handleStartDetection = async () => {
 		try {
 			setIsDetecting(true)
-			await detectDuplicatesAction()
+			await detectDuplicatesAction({ threshold: threshold[0] })
 			toast.success("Duplicate detection started")
 		} catch (error) {
 			toast.error("Failed to start detection")
@@ -130,22 +134,39 @@ export default function DuplicatesPage() {
 
 	return (
 		<div className="space-y-8">
-			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+			<div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
 				<div>
 					<h2 className="text-3xl font-bold tracking-tight">Duplicates</h2>
 					<p className="text-muted-foreground">Review and merge duplicate questions detected by AI.</p>
 				</div>
-				<div className="flex items-center gap-2">
-					<Button variant="outline" asChild>
-						<Link to="/admin/duplicates/completed" className="gap-2">
-							<History className="size-4" />
-							History
-						</Link>
-					</Button>
-					<Button onClick={handleStartDetection} disabled={isDetecting || progress?.status === 'running'} className="gap-2">
-						<RefreshCw className={`size-4 ${progress?.status === 'running' ? 'animate-spin' : ''}`} />
-						Scan for Duplicates
-					</Button>
+				<div className="hidden sm:flex flex-col gap-2 min-w-[200px]">
+					<div className="flex items-center justify-between">
+						<Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Similarity Cutoff</Label>
+						<span className="text-xs font-mono font-bold bg-muted px-1.5 py-0.5 rounded text-primary">{(threshold[0] * 100).toFixed(0)}%</span>
+					</div>
+					<Slider
+						value={threshold}
+						onValueChange={setThreshold}
+						max={1}
+						min={0.7}
+						step={0.01}
+						disabled={isDetecting || progress?.status === 'running'}
+						className="py-1"
+					/>
+				</div>
+				<div className="flex items-center gap-6">
+					<div className="flex items-center gap-2">
+						<Button variant="outline" asChild>
+							<Link to="/admin/duplicates/completed" className="gap-2">
+								<History className="size-4" />
+								History
+							</Link>
+						</Button>
+						<Button onClick={handleStartDetection} disabled={isDetecting || progress?.status === 'running'} className="gap-2">
+							<RefreshCw className={`size-4 ${progress?.status === 'running' ? 'animate-spin' : ''}`} />
+							Scan for Duplicates
+						</Button>
+					</div>
 				</div>
 			</div>
 

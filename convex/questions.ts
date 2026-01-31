@@ -455,8 +455,11 @@ export const recordAnalytics = mutation({
           viewDuration: userQuestion.viewDuration ? userQuestion.viewDuration + viewDuration : viewDuration,
           seenCount: userQuestion.seenCount ? userQuestion.seenCount + 1 : 1,
           updatedAt: Date.now(),
-          // Don't overwrite "liked" status with "seen"
-          status: userQuestion.status === "liked" ? "liked" : (event === "liked" ? "liked" : userQuestion.status),
+          // Preserve "liked" status, or update to "liked" if event is "liked".
+          // Otherwise, flip "unseen" -> "seen" on any view event.
+          status: (event === "liked" || userQuestion.status === "liked")
+            ? "liked"
+            : (userQuestion.status === "unseen" ? "seen" : userQuestion.status),
         });
       } else {
         await ctx.db.insert("userQuestions", {

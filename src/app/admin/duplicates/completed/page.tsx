@@ -79,7 +79,7 @@ export default function DuplicateHistoryPage() {
                             <div className="p-6">
                                 <div className="grid md:grid-cols-[1fr_auto_1fr] items-center gap-6">
                                     {/* Show the questions involved */}
-                                    {detection.questions.map((q: any, idx: number) => (
+                                    {detection.questions.slice(0, 2).map((q: any, idx: number) => (
                                         <React.Fragment key={q._id}>
                                             <div className="p-4 rounded-xl bg-muted/20 border space-y-3 relative overflow-hidden">
                                                 <p className="text-sm leading-relaxed relative z-10">{q.text}</p>
@@ -106,6 +106,13 @@ export default function DuplicateHistoryPage() {
                                             )}
                                         </React.Fragment>
                                     ))}
+                                    {detection.questions.length > 2 && (
+                                        <div className="md:col-start-3 flex justify-center md:justify-start -mt-4">
+                                            <Badge variant="secondary" className="text-[10px] opacity-70 px-2 py-0 h-5">
+                                                +{detection.questions.length - 2} more
+                                            </Badge>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

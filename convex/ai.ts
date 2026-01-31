@@ -2,6 +2,7 @@
 
 import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
+import { ensureAdmin } from "./auth";
 import OpenAI from "openai";
 import { api, internal } from "./_generated/api";
 import { Doc, Id } from "./_generated/dataModel";
@@ -440,10 +441,26 @@ export const populateMissingToneEmbeddings = internalAction({
 	},
 });
 
-export const detectDuplicateQuestionsStreaming = action({
-	args: {},
+export const startDuplicateDetection = action({
+	args: {
+		threshold: v.optional(v.number()),
+	},
 	returns: v.id("duplicateDetectionProgress"),
-	handler: async (ctx): Promise<Id<"duplicateDetectionProgress">> => {
+	handler: async (ctx, args): Promise<Id<"duplicateDetectionProgress">> => {
+		await ensureAdmin(ctx);
+		return await ctx.runAction(internal.ai.detectDuplicateQuestionsStreaming, {
+			threshold: args.threshold,
+		});
+	},
+});
+
+export const detectDuplicateQuestionsStreaming = internalAction({
+	args: {
+		threshold: v.optional(v.number()),
+	},
+	returns: v.id("duplicateDetectionProgress"),
+	handler: async (ctx, args): Promise<Id<"duplicateDetectionProgress">> => {
+		const threshold = args.threshold ?? 0.95;
 		// 1. Initialize progress
 		const totalQuestions = await ctx.runQuery(internal.questions.countQuestions);
 		const BATCH_SIZE = 50;
@@ -506,7 +523,7 @@ export const detectDuplicateQuestionsStreaming = action({
 						if (match._id <= question._id) continue;
 
 						// Check score
-						if (match._score > 0.95) {
+						if (match._score > threshold) {
 							// Potential duplicate!
 							try {
 								// saveDuplicateDetection will handle sorting IDs and basic checks.
@@ -697,7 +714,18 @@ Tone: ${tonePrompt}`
 							if (rateLimitRetryCount < MAX_RATE_RETRIES) {
 								// Wait and retry
 								const retryAfter = error.headers?.['retry-after'];
-								const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
+								let waitTime = 5000; // Default backoff
+								if (retryAfter) {
+									const parsed = parseInt(retryAfter);
+									if (Number.isFinite(parsed)) {
+										waitTime = parsed * 1000;
+									} else {
+										const retryDate = Date.parse(retryAfter);
+										if (Number.isFinite(retryDate)) {
+											waitTime = Math.max(0, retryDate - Date.now());
+										}
+									}
+								}
 								console.log(`Rate limited (attempt ${rateLimitRetryCount}/${MAX_RATE_RETRIES}), waiting ${waitTime}ms...`);
 								await new Promise(resolve => setTimeout(resolve, waitTime));
 								i--; // Retry this iteration
