@@ -1852,3 +1852,221 @@ function cosineSimilarity(a: number[], b: number[]): number {
   if (normA === 0 || normB === 0) return 0;
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
+
+// ============================================================
+// Pool Management Admin Queries and Actions
+// ============================================================
+
+// Get pool statistics for a given date
+export const getPoolStats = query({
+  args: {
+    poolDate: v.string(), // ISO date string, e.g. "2026-01-30"
+  },
+  returns: v.object({
+    totalQuestions: v.number(),
+    availableQuestions: v.number(),
+    distributedQuestions: v.number(),
+    byStyleTone: v.array(v.object({
+      style: v.string(),
+      styleName: v.string(),
+      tone: v.string(),
+      toneName: v.string(),
+      count: v.number(),
+    })),
+  }),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+
+    // Get all pool questions for this date
+    const allQuestions = await ctx.db
+      .query("questions")
+      .withIndex("by_poolDate_and_poolStatus", (q) => q.eq("poolDate", args.poolDate))
+      .collect();
+
+    const available = allQuestions.filter(q => q.poolStatus === "available");
+    const distributed = allQuestions.filter(q => q.poolStatus === "distributed");
+
+    // Get style/tone breakdown
+    const styleToneCounts = new Map<string, { style: string; styleName: string; tone: string; toneName: string; count: number }>();
+
+    // Fetch all styles and tones for name lookup
+    const styles = await ctx.db.query("styles").collect();
+    const tones = await ctx.db.query("tones").collect();
+    const styleMap = new Map(styles.map(s => [s._id.toString(), s]));
+    const toneMap = new Map(tones.map(t => [t._id.toString(), t]));
+
+    for (const q of allQuestions) {
+      const styleDoc = q.styleId ? styleMap.get(q.styleId.toString()) : null;
+      const toneDoc = q.toneId ? toneMap.get(q.toneId.toString()) : null;
+      const styleId = q.style || "unknown";
+      const toneId = q.tone || "unknown";
+      const key = `${styleId}|${toneId}`;
+
+      if (!styleToneCounts.has(key)) {
+        styleToneCounts.set(key, {
+          style: styleId,
+          styleName: styleDoc?.name || styleId,
+          tone: toneId,
+          toneName: toneDoc?.name || toneId,
+          count: 0,
+        });
+      }
+      styleToneCounts.get(key)!.count++;
+    }
+
+    return {
+      totalQuestions: allQuestions.length,
+      availableQuestions: available.length,
+      distributedQuestions: distributed.length,
+      byStyleTone: Array.from(styleToneCounts.values()).sort((a, b) => b.count - a.count),
+    };
+  },
+});
+
+// Get pool questions for admin review
+export const getPoolQuestions = query({
+  args: {
+    poolDate: v.string(),
+    status: v.optional(v.union(v.literal("available"), v.literal("distributed"), v.literal("all"))),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(v.object({
+    _id: v.id("questions"),
+    _creationTime: v.number(),
+    text: v.optional(v.string()),
+    poolStatus: v.optional(v.union(v.literal("available"), v.literal("distributed"))),
+    style: v.optional(v.object({
+      _id: v.id("styles"),
+      name: v.string(),
+      icon: v.string(),
+      color: v.string(),
+    })),
+    tone: v.optional(v.object({
+      _id: v.id("tones"),
+      name: v.string(),
+      icon: v.string(),
+      color: v.string(),
+    })),
+  })),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+
+    const limit = args.limit ?? 100;
+    const statusFilter = args.status ?? "all";
+
+    let questions: Doc<"questions">[];
+
+    if (statusFilter === "all") {
+      questions = await ctx.db
+        .query("questions")
+        .withIndex("by_poolDate_and_poolStatus", (q) => q.eq("poolDate", args.poolDate))
+        .take(limit);
+    } else {
+      questions = await ctx.db
+        .query("questions")
+        .withIndex("by_poolDate_and_poolStatus", (q) =>
+          q.eq("poolDate", args.poolDate).eq("poolStatus", statusFilter)
+        )
+        .take(limit);
+    }
+
+    // Fetch styles and tones for enrichment
+    const styleIds = Array.from(new Set(questions.map(q => q.styleId).filter(Boolean))) as Id<"styles">[];
+    const toneIds = Array.from(new Set(questions.map(q => q.toneId).filter(Boolean))) as Id<"tones">[];
+
+    const [styles, tones] = await Promise.all([
+      Promise.all(styleIds.map(id => ctx.db.get(id))),
+      Promise.all(toneIds.map(id => ctx.db.get(id))),
+    ]);
+
+    const styleMap = new Map(styles.filter(Boolean).map(s => [s!._id.toString(), s!]));
+    const toneMap = new Map(tones.filter(Boolean).map(t => [t!._id.toString(), t!]));
+
+    return questions.map(q => {
+      const styleDoc = q.styleId ? styleMap.get(q.styleId.toString()) : null;
+      const toneDoc = q.toneId ? toneMap.get(q.toneId.toString()) : null;
+
+      return {
+        _id: q._id,
+        _creationTime: q._creationTime,
+        text: q.text,
+        poolStatus: q.poolStatus,
+        style: styleDoc ? {
+          _id: styleDoc._id,
+          name: styleDoc.name,
+          icon: styleDoc.icon,
+          color: styleDoc.color,
+        } : undefined,
+        tone: toneDoc ? {
+          _id: toneDoc._id,
+          name: toneDoc.name,
+          icon: toneDoc.icon,
+          color: toneDoc.color,
+        } : undefined,
+      };
+    });
+  },
+});
+
+// Manually trigger pool generation (admin action)
+export const triggerPoolGeneration = action({
+  args: {
+    targetCount: v.optional(v.number()),
+    maxCombinations: v.optional(v.number()),
+  },
+  returns: v.object({
+    questionsGenerated: v.number(),
+    combinationsProcessed: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args): Promise<{ questionsGenerated: number; combinationsProcessed: number; errors: string[] }> => {
+    await ensureAdmin(ctx);
+
+    const result: { questionsGenerated: number; combinationsProcessed: number; errors: string[] } = await ctx.runAction(internal.ai.generateNightlyQuestionPool, {
+      targetCount: args.targetCount ?? 5,
+      maxCombinations: args.maxCombinations ?? 10,
+    });
+    return result;
+  },
+});
+
+// Manually trigger pool assignment (admin action)
+export const triggerPoolAssignment = action({
+  args: {
+    questionsPerUser: v.optional(v.number()),
+  },
+  returns: v.object({
+    usersProcessed: v.number(),
+    totalAssigned: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args): Promise<{ usersProcessed: number; totalAssigned: number; errors: string[] }> => {
+    await ensureAdmin(ctx);
+
+    const result: { usersProcessed: number; totalAssigned: number; errors: string[] } = await ctx.runAction(internal.questions.assignPoolQuestionsToUsers, {
+      questionsPerUser: args.questionsPerUser ?? 6,
+    });
+    return result;
+  },
+});
+
+// Check for similarity using vector search (Action-only in Convex)
+export const checkSimilarity = internalAction({
+  args: {
+    text: v.string(),
+  },
+  handler: async (ctx, args): Promise<boolean> => {
+    const embedding = await embed(args.text);
+    if (embedding.length === 0) return false;
+
+    const results = await ctx.vectorSearch("questions", "by_embedding", {
+      vector: embedding,
+      limit: 1,
+    });
+
+    if (results.length === 0) return false;
+
+    const topScore = results[0]._score;
+    return topScore >= 0.9;
+  },
+});

@@ -628,6 +628,9 @@ export const generateNightlyQuestionPool = internalAction({
 				const stylePrompt = `${style.name} - ${style.description || ''} ${style.promptGuidanceForAI || ''}`;
 				const tonePrompt = `${tone.name} - ${tone.description || ''} ${tone.promptGuidanceForAI || ''}`;
 
+				// Track generated questions for this specific combination to ensure variety
+				const questionsGeneratedInThisCombo: string[] = [];
+
 				// Generate targetCount questions
 				const MAX_RATE_RETRIES = 3;
 				let rateLimitRetryCount = 0;
@@ -637,6 +640,10 @@ export const generateNightlyQuestionPool = internalAction({
 						if (questionsGenerated > 0) {
 							await new Promise(resolve => setTimeout(resolve, 1000));
 						}
+
+						const alreadyGeneratedText = questionsGeneratedInThisCombo.length > 0
+							? `\n\nAlready generated for this style/tone (AVOID SIMILAR THEMES OR STRUCTURES):\n- ${questionsGeneratedInThisCombo.join('\n- ')}`
+							: "";
 
 						const completion = await openai.chat.completions.create({
 							model: "@preset/break-the-ice-berg-default",
@@ -650,17 +657,18 @@ RESPOND WITH ONLY THE QUESTION TEXT. No quotes, no formatting, no explanations.
 Requirements:
 - Keep it short and conversational
 - Make it thought-provoking but accessible
-- Only ONE question mark at the end`
+- Only ONE question mark at the end
+- BE CREATIVE and explore different angles of the requested style and tone. Do not settle on a single template.`
 								},
 								{
 									role: "user",
 									content: `Generate 1 ice-breaker question.
 Style: ${stylePrompt}
-Tone: ${tonePrompt}`
+Tone: ${tonePrompt}${alreadyGeneratedText}`
 								}
 							],
 							max_tokens: 100,
-							temperature: 0.9, // Higher for variety
+							temperature: 0.95, // Slightly higher for more variety
 						});
 
 						const questionText = completion.choices[0]?.message?.content?.trim();
@@ -680,6 +688,15 @@ Tone: ${tonePrompt}`
 							continue;
 						}
 
+						// Check for similarity via embedding (match score > 0.9)
+						const isSimilar: boolean = await ctx.runAction(internal.questions.checkSimilarity, {
+							text: cleanedText,
+						});
+						if (isSimilar) {
+							console.log(`Skipping similar question: ${cleanedText.substring(0, 50)}...`);
+							continue;
+						}
+
 						// Save the question with pool metadata
 						const savedQuestion = await ctx.runMutation(internal.questions.savePoolQuestion, {
 							text: cleanedText,
@@ -692,6 +709,7 @@ Tone: ${tonePrompt}`
 
 						if (savedQuestion) {
 							questionsGenerated++;
+							questionsGeneratedInThisCombo.push(cleanedText);
 							rateLimitRetryCount = 0; // Reset retry count on success
 							// Trigger embedding generation asynchronously
 							await ctx.scheduler.runAfter(0, internal.lib.retriever.embedQuestion, {
