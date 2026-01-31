@@ -14,6 +14,9 @@ import {
     ChevronLeft,
     ChevronRight,
     Trash2,
+    Pencil,
+    Save,
+    X,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -22,6 +25,7 @@ import { Badge } from "@/components/ui/badge"
 import { IconComponent, Icon } from "@/components/ui/icons/icon"
 import { iconMap } from "@/components/ui/icons/icons"
 import { toast } from "sonner"
+import { Textarea } from "@/components/ui/textarea"
 
 type PoolStats = {
     totalQuestions: number
@@ -37,7 +41,7 @@ type PoolStats = {
 }
 
 type PoolQuestion = {
-    _id: string
+    _id: Id<"questions">
     _creationTime: number
     text?: string
     poolStatus?: "available" | "distributed"
@@ -62,6 +66,8 @@ export default function PoolPage() {
     const [statusFilter, setStatusFilter] = React.useState<"all" | "available" | "distributed">("all")
     const [isGenerating, setIsGenerating] = React.useState(false)
     const [isAssigning, setIsAssigning] = React.useState(false)
+    const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
+    const [editedText, setEditedText] = React.useState("")
 
     const stats = useQuery(api.questions.getPoolStats, { poolDate: selectedDate }) as PoolStats | undefined
     const questions = useQuery(api.questions.getPoolQuestions, {
@@ -73,6 +79,7 @@ export default function PoolPage() {
     const triggerGeneration = useAction(api.questions.triggerPoolGeneration)
     const triggerAssignment = useAction(api.questions.triggerPoolAssignment)
     const deleteQuestion = useMutation(api.questions.deleteQuestion)
+    const updateQuestion = useMutation(api.questions.updateQuestion)
 
     const getSafeIcon = (iconName: string): Icon => {
         return (iconName in iconMap ? iconName : "HelpCircle") as Icon
@@ -128,6 +135,16 @@ export default function PoolPage() {
             toast.success("Question removed from pool")
         } catch (error) {
             toast.error("Failed to remove question")
+        }
+    }
+
+    const handleSaveEdit = async (id: Id<"questions">) => {
+        try {
+            await updateQuestion({ id, text: editedText })
+            toast.success("Question updated")
+            setEditingQuestionId(null)
+        } catch (error) {
+            toast.error("Failed to update question")
         }
     }
 
@@ -327,9 +344,40 @@ export default function PoolPage() {
                                     className="flex items-start gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors"
                                 >
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium leading-relaxed">
-                                            {question.text || <span className="italic text-muted-foreground">No text</span>}
-                                        </p>
+                                        {editingQuestionId === question._id ? (
+                                            <div className="flex gap-2 items-start w-full">
+                                                <Textarea
+                                                    value={editedText}
+                                                    onChange={(e) => setEditedText(e.target.value)}
+                                                    className="min-h-[60px]"
+                                                />
+                                                <div className="flex flex-col gap-1">
+                                                    <Button size="icon" className="size-8 bg-green-600 hover:bg-green-700" onClick={() => handleSaveEdit(question._id)}>
+                                                        <Save className="size-3.5" />
+                                                    </Button>
+                                                    <Button size="icon" variant="ghost" className="size-8" onClick={() => setEditingQuestionId(null)}>
+                                                        <X className="size-3.5" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-between group/text w-full">
+                                                <p className="text-sm font-medium leading-relaxed">
+                                                    {question.text || <span className="italic text-muted-foreground">No text</span>}
+                                                </p>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="size-6 opacity-0 group-hover/text:opacity-100 transition-opacity"
+                                                    onClick={() => {
+                                                        setEditingQuestionId(question._id);
+                                                        setEditedText(question.text || "");
+                                                    }}
+                                                >
+                                                    <Pencil className="size-3" />
+                                                </Button>
+                                            </div>
+                                        )}
                                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                                             {question.style && (
                                                 <Badge
