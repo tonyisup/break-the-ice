@@ -450,7 +450,7 @@ export const startDuplicateDetection = action({
 		await ensureAdmin(ctx);
 		return await ctx.runAction(internal.ai.detectDuplicateQuestionsStreaming, {
 			threshold: args.threshold,
-		});
+		}) as Id<"duplicateDetectionProgress">;
 	},
 });
 

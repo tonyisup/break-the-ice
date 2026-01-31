@@ -1796,7 +1796,7 @@ export const assignPoolQuestionsToUsers = internalAction({
         const questionIds = toAssign.map(q => q._id);
 
         if (questionIds.length > 0) {
-          const assigned = await ctx.runMutation(
+          const assigned: number = await ctx.runMutation(
             internal.questions.assignPoolQuestionsToUser,
             { userId: user._id, questionIds }
           );
@@ -1815,7 +1815,7 @@ export const assignPoolQuestionsToUsers = internalAction({
 
     // Mark assigned questions as distributed (using actually assigned IDs)
     if (assignedQuestionIds.size > 0) {
-      await ctx.runMutation(internal.questions.markPoolQuestionsDistributed, {
+      const _: null = await ctx.runMutation(internal.questions.markPoolQuestionsDistributed, {
         questionIds: Array.from(assignedQuestionIds),
       });
     }

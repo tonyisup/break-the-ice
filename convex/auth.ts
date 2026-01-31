@@ -1,4 +1,5 @@
-import { QueryCtx } from "./_generated/server";
+import { MutationCtx, QueryCtx } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 
 /**
  * Helper function to ensure the current user is an admin.
@@ -16,8 +17,8 @@ export const ensureAdmin = async (ctx: { auth: any }) => {
 }
 
 export const ensureOrgMember = async (
-  ctx: { auth: any; db: any },
-  organizationId: any,
+  ctx: QueryCtx | MutationCtx,
+  organizationId: Id<"organizations">,
   requiredRole?: "admin" | "manager" | "member" | ("admin" | "manager" | "member")[]
 ) => {
   const identity = await ctx.auth.getUserIdentity();
