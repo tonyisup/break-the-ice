@@ -655,8 +655,10 @@ export const getQuestionForOgImage = query({
       text: question.text || question.customText,
       styleName: styleDoc?.name || "General",
       styleColor: styleDoc?.color || "#000000",
+      styleIcon: styleDoc?.icon || "CircleQuestionMark",
       toneName: toneDoc?.name || "Casual",
       toneColor: toneDoc?.color || "#000000",
+      toneIcon: toneDoc?.icon || "CircleQuestionMark",
       // Infer gradients from colors or use defaults
       gradientStart: styleDoc?.color || "#f0f0f0",
       gradientEnd: toneDoc?.color || "#d0d0d0",
