@@ -208,19 +208,19 @@ export default function QuestionsPage() {
 					</div>
 					<div className="grid gap-4">
 						{pendingQuestions.map((q) => (
-							<div key={q._id} className="p-6 bg-white dark:bg-gray-800 rounded-xl border-2 border-primary/20 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:border-primary/40">
+							<div key={q._id} className="p-4 md:p-6 bg-white dark:bg-gray-800 rounded-xl border-2 border-primary/20 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 transition-all hover:border-primary/40">
 								<div className="space-y-2 flex-1">
 									<div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-widest">
 										<UserCircle className="size-3" />
 										User Submitted
 									</div>
-									<p className="text-lg font-medium">{q.customText}</p>
+									<p className="text-base md:text-lg font-medium">{q.customText}</p>
 								</div>
-								<div className="flex items-center gap-3">
-									<Button variant="outline" size="sm" className="text-blue-500 hover:text-blue-600 hover:bg-blue-50" onClick={() => handleApprove(q, "personal")}>
+								<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+									<Button variant="outline" size="sm" className="text-blue-500 hover:text-blue-600 hover:bg-blue-50 flex-1 sm:flex-none justify-center" onClick={() => handleApprove(q, "personal")}>
 										Mark Personal
 									</Button>
-									<Button size="sm" className="bg-green-600 hover:bg-green-700 text-white gap-2" onClick={() => handleApprove(q, "public")}>
+									<Button size="sm" className="bg-green-600 hover:bg-green-700 text-white gap-2 flex-1 sm:flex-none justify-center" onClick={() => handleApprove(q, "public")}>
 										<CheckCircle2 className="size-4" />
 										Approve Public
 									</Button>
@@ -232,7 +232,7 @@ export default function QuestionsPage() {
 			)}
 
 			<div className="space-y-4">
-				<div className="flex items-center gap-2 max-w-md bg-white dark:bg-gray-800 rounded-lg px-3 border shadow-sm focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+				<div className="flex items-center gap-2 w-full md:max-w-md bg-white dark:bg-gray-800 rounded-lg px-3 border shadow-sm focus-within:ring-2 focus-within:ring-primary/20 transition-all">
 					<Search className="size-4 text-muted-foreground" />
 					<Input
 						placeholder="Search questions, styles, or tones..."
@@ -244,8 +244,8 @@ export default function QuestionsPage() {
 				</div>
 
 				<div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-					<table className="w-full text-sm text-left">
-						<thead className="bg-muted/50 border-b text-muted-foreground font-medium uppercase text-xs tracking-wider">
+					<table className="w-full text-sm text-left block md:table">
+						<thead className="hidden md:table-header-group bg-muted/50 border-b text-muted-foreground font-medium uppercase text-xs tracking-wider">
 							<tr>
 								<th className="px-6 py-4">Question</th>
 								<th className="px-6 py-4 w-40">Style</th>
@@ -253,29 +253,31 @@ export default function QuestionsPage() {
 								<th className="px-6 py-4 w-20 text-right">Actions</th>
 							</tr>
 						</thead>
-						<tbody className="divide-y">
+						<tbody className="divide-y block md:table-row-group">
 							{filteredQuestions.map((q) => {
-								const style = styles.find(s => s._id === q.styleId);
-								const tone = tones.find(t => t._id === q.toneId);
+								const style = styles.find(s => s._id === q.styleId || s.id === q.style);
+								const tone = tones.find(t => t._id === q.toneId || t.id === q.tone);
 								const isEditing = editingQuestion?._id === q._id;
 
 								return (
-									<tr key={q._id} className="hover:bg-muted/30 transition-colors group">
-										<td className="px-6 py-4">
+									<tr key={q._id} className="block md:table-row hover:bg-muted/30 transition-colors group">
+										<td className="block md:table-cell px-4 md:px-6 py-3 md:py-4">
+											<div className="md:hidden text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Question</div>
 											{isEditing ? (
 												<textarea
-													className="w-full min-h-[60px] p-2 rounded-md border bg-background text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+													className="w-full min-h-[80px] p-2 rounded-md border bg-background text-sm focus:ring-2 focus:ring-primary/20 outline-none"
 													value={editingQuestion.text || editingQuestion.customText || ""}
 													onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
 												/>
 											) : (
-												<span className="font-medium">{q.text || q.customText}</span>
+												<span className="font-medium text-base md:text-sm leading-relaxed">{q.text || q.customText}</span>
 											)}
 										</td>
-										<td className="px-6 py-4">
+										<td className="block md:table-cell px-4 md:px-6 py-2 md:py-4">
+											<div className="md:hidden text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Style</div>
 											{isEditing ? (
 												<select
-													className="w-full h-8 rounded-md border bg-background px-2 text-xs focus:ring-2 focus:ring-primary/20 outline-none"
+													className="w-full h-9 rounded-md border bg-background px-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
 													value={editingQuestion.style || ""}
 													onChange={(e) => setEditingQuestion({ ...editingQuestion, style: e.target.value })}
 												>
@@ -293,10 +295,11 @@ export default function QuestionsPage() {
 												</Badge>
 											) : <span className="text-muted-foreground italic text-xs">None</span>}
 										</td>
-										<td className="px-6 py-4">
+										<td className="block md:table-cell px-4 md:px-6 py-2 md:py-4">
+											<div className="md:hidden text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Tone</div>
 											{isEditing ? (
 												<select
-													className="w-full h-8 rounded-md border bg-background px-2 text-xs focus:ring-2 focus:ring-primary/20 outline-none"
+													className="w-full h-9 rounded-md border bg-background px-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
 													value={editingQuestion.tone || ""}
 													onChange={(e) => setEditingQuestion({ ...editingQuestion, tone: e.target.value })}
 												>
@@ -314,35 +317,40 @@ export default function QuestionsPage() {
 												</Badge>
 											) : <span className="text-muted-foreground italic text-xs">None</span>}
 										</td>
-										<td className="px-6 py-4 text-right">
-											<div className="flex items-center justify-end gap-1 opacity-100 group-hover:opacity-100 transition-opacity">
+										<td className="block md:table-cell px-4 md:px-6 py-3 md:py-4 text-right">
+											<div className="flex items-center justify-start md:justify-end gap-2 transition-opacity">
 												{isEditing ? (
-													<>
-														<Button variant="ghost" size="icon" className="size-8 text-green-600" onClick={() => handleUpdate(editingQuestion)}>
+													<div className="flex gap-2 w-full md:w-auto">
+														<Button variant="outline" className="flex-1 md:flex-none gap-2 text-green-600 border-green-200 bg-green-50" onClick={() => handleUpdate(editingQuestion)}>
 															<Check className="size-4" />
+															<span className="md:hidden">Save</span>
 														</Button>
-														<Button variant="ghost" size="icon" className="size-8 text-red-600" onClick={() => setEditingQuestion(null)}>
+														<Button variant="outline" className="flex-1 md:flex-none gap-2 text-red-600 border-red-200 bg-red-50" onClick={() => setEditingQuestion(null)}>
 															<X className="size-4" />
+															<span className="md:hidden">Cancel</span>
 														</Button>
-													</>
+													</div>
 												) : (
-													<DropdownMenu>
-														<DropdownMenuTrigger asChild>
-															<Button variant="ghost" size="icon" className="size-8">
-																<MoreHorizontal className="size-4" />
-															</Button>
-														</DropdownMenuTrigger>
-														<DropdownMenuContent align="end" className="w-40">
-															<DropdownMenuItem className="gap-2" onClick={() => setEditingQuestion(q)}>
-																<Pencil className="size-3.5" />
-																Edit Question
-															</DropdownMenuItem>
-															<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={() => handleDelete(q._id)}>
-																<Trash2 className="size-3.5" />
-																Delete
-															</DropdownMenuItem>
-														</DropdownMenuContent>
-													</DropdownMenu>
+													<div className="flex items-center gap-2 w-full justify-between md:justify-end">
+														<span className="md:hidden text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Actions</span>
+														<DropdownMenu>
+															<DropdownMenuTrigger asChild>
+																<Button variant="ghost" size="icon" className="size-9 border md:border-0">
+																	<MoreHorizontal className="size-5" />
+																</Button>
+															</DropdownMenuTrigger>
+															<DropdownMenuContent align="end" className="w-48">
+																<DropdownMenuItem className="gap-2 py-2.5" onClick={() => setEditingQuestion(q)}>
+																	<Pencil className="size-4" />
+																	Edit Question
+																</DropdownMenuItem>
+																<DropdownMenuItem className="gap-2 py-2.5 text-destructive focus:text-destructive" onClick={() => handleDelete(q._id)}>
+																	<Trash2 className="size-4" />
+																	Delete
+																</DropdownMenuItem>
+															</DropdownMenuContent>
+														</DropdownMenu>
+													</div>
 												)}
 											</div>
 										</td>
