@@ -12,6 +12,7 @@ import {
 	Settings,
 	ShieldCheck,
 	Box,
+	Sparkles,
 } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
@@ -36,6 +37,11 @@ const items = [
 		title: "Dashboard",
 		url: "/admin",
 		icon: LayoutDashboard,
+	},
+	{
+		title: "AI Generator",
+		url: "/admin/generator",
+		icon: Sparkles,
 	},
 	{
 		title: "Questions",

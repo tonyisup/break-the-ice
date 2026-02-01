@@ -30,6 +30,19 @@ export const getStyle = query({
   },
 });
 
+export const getStyleById = query({
+  args: { id: v.id("styles") },
+  returns: v.union(v.object(publicStyleFields), v.null()),
+  handler: async (ctx, args) => {
+    const style = await ctx.db.get(args.id);
+    if (!style) {
+      return null;
+    }
+    const { embedding, ...rest } = style;
+    return rest;
+  },
+});
+
 export const getStylesWithExamples = query({
   args: { id: v.string(), seed: v.optional(v.number()) },
   returns: v.union(

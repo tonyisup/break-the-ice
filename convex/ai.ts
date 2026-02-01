@@ -109,6 +109,197 @@ export const generateFallbackQuestion = action({
 	},
 });
 
+
+export const generateAIQuestions = action({
+	args: {
+		count: v.number(),
+		selectedTags: v.array(v.string()),
+		currentQuestion: v.optional(v.string()),
+		styleId: v.id("styles"),
+		toneId: v.id("tones"),
+	},
+	handler: async (ctx, args) => {
+		const { count, selectedTags, currentQuestion, styleId, toneId } = args;
+
+		const style = (await ctx.runQuery(api.styles.getStyleById, { id: styleId }));
+		const tone = (await ctx.runQuery(api.tones.getToneById, { id: toneId }));
+
+		if (!style || !tone) {
+			throw new Error("Failed to generate AI question: No style or tone found.");
+		}
+
+		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
+		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
+
+		if (selectedTags.length > 0) {
+			prompt += `\nTopics: ${selectedTags.join(", ")}`;
+		}
+
+		if (currentQuestion && currentQuestion.length > 0) {
+			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${currentQuestion}`;
+		}
+
+		// Retry logic for AI generation
+		let attempts = 0;
+		const maxAttempts = 3;
+		let generatedContent = "";
+
+		while (attempts < maxAttempts && !generatedContent) {
+			try {
+				attempts++;
+				const completion = await openai.chat.completions.create({
+					model: "@preset/break-the-ice-berg-default",
+					messages: [
+						{
+							role: "system",
+							content: `You are clever, well travelled, emotionally and socially intelligent. You will provide guidance and suggestions to help people break the ice in social settings. You will be providing unique questions that would be perfect for starting conversations. You will be able to combine a provided STYLE (question structure) with a TONE (vibe/color).
+    
+    CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of objects.
+    - Do not include any text before or after the JSON.
+    - Do not use markdown formatting (no \`\`\`json wrappers).
+    - Do not include explanations or comments.
+    - Do not number the items in the array (e.g. no "1. {...}").
+		- DO NOT provide your own examples of any generated content. No dashes, no lists.
+    
+    Example format: {"text": "Question 1"}
+    
+    Requirements:
+    - Return exactly 1 question
+    - Each question should be a string in the JSON array
+    - Avoid questions too similar to existing ones
+    - Make questions engaging and conversation-starting
+		- Avoid being verbose; keep it short and sweet.
+    - Only ONE question per text. There should only be one question mark at the end of the text.`
+						},
+						{
+							role: "user",
+							content: `Generate 1 ice-breaker question with these parameters:
+    ${prompt}
+    
+    Response with a JSON array of objects, each containing the following properties:
+    - text: The question text
+    For example:
+    {
+      {
+        "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?"
+      }
+    }`
+						}
+					],
+					max_tokens: 200,
+					temperature: 0.7,
+				});
+
+				generatedContent = completion.choices[0]?.message?.content?.trim() || "";
+
+				if (!generatedContent) {
+					console.log(`Attempt ${attempts}: No content generated`);
+					if (attempts < maxAttempts) {
+						const waitTime = 1000 * Math.pow(2, attempts - 1);
+						console.log(`No content generated. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+						await new Promise(resolve => setTimeout(resolve, waitTime));
+						continue;
+					}
+					throw new Error("Failed to generate question after multiple attempts");
+				}
+
+				// Validate that we have a reasonable response length
+				if (generatedContent.length < 10) {
+					console.log(`Attempt ${attempts}: Response too short (${generatedContent.length} chars):`, generatedContent);
+					if (attempts < maxAttempts) {
+						const waitTime = 1000 * Math.pow(2, attempts - 1);
+						console.log(`Response too short. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+						await new Promise(resolve => setTimeout(resolve, waitTime));
+						continue;
+					}
+					throw new Error("AI response too short");
+				}
+
+				// If we get here, we have content, so break out of the retry loop
+				break;
+
+			} catch (error: any) {
+				const isRateLimit = error.status === 429 || error.message?.includes("429");
+				console.error(`Attempt ${attempts} failed (${isRateLimit ? "Rate Limit" : "Error"}):`, error);
+
+				if (attempts >= maxAttempts) {
+					throw error;
+				}
+
+				let waitTime = 1000 * Math.pow(2, attempts - 1); // Exponential backoff by default
+				if (error.status === 429) {
+					const retryAfter = error.headers?.['retry-after'];
+					if (retryAfter) {
+						const seconds = parseInt(retryAfter);
+						if (!isNaN(seconds)) {
+							waitTime = seconds * 1000;
+						} else {
+							// Could be a date string
+							const retryDate = new Date(retryAfter).getTime();
+							if (!isNaN(retryDate)) {
+								waitTime = Math.max(1000, retryDate - Date.now());
+							}
+						}
+					}
+					console.log(`Respecting 429 Rate Limit. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+				}
+
+				await new Promise(resolve => setTimeout(resolve, waitTime));
+			}
+		}
+
+		if (!generatedContent) {
+			throw new Error("Failed to generate question after all attempts");
+		}
+
+		// Try to clean and parse the response
+		// Remove markdown code blocks if present
+		const cleanedContent = generatedContent
+			.replace(/^```json\s*/, "")
+			.replace(/^```\s*/, "")
+			.replace(/\s*```$/, "");
+
+		let parsedContent: { text: string; }[] = [];
+
+		try {
+			parsedContent = JSON.parse(cleanedContent);
+		} catch (error) {
+			console.log("Failed to parse JSON, attempting fallback parsing for numbered list...");
+			// Fallback parsing for numbered lists (e.g., "1. Question\n2. Question")
+			const lines = cleanedContent.split('\n');
+			const regex = /^\d+\.\s*(.+)/;
+
+			for (const line of lines) {
+				const match = line.match(regex);
+				if (match) {
+					parsedContent.push({
+						text: match[1].trim(),
+					});
+				}
+			}
+
+			if (parsedContent.length === 0) {
+				console.error("Failed to parse AI response. Content was:", generatedContent);
+				console.error("Cleaned content was:", cleanedContent);
+				console.error("Parse error:", error);
+				throw error;
+			}
+		}
+
+		for (const question of parsedContent) {
+			try {
+				// Simple dedupe check
+				return question.text;
+
+			} catch (error) {
+				console.error(`Failed to save question: "${question.text}"`, error);
+				// Continue with other questions even if one fails
+			}
+		}
+		return "No questions generated";
+	}
+});
+
 export const generateAIQuestionForFeed = action({
 	args: {
 		userId: v.optional(v.string()),
@@ -128,7 +319,8 @@ export const generateAIQuestionForFeed = action({
 			throw new Error("Failed to generate AI question: No style or tone found for user");
 		}
 
-		let prompt = '';
+		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
+		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
 
 		const recentlySeenQuestions = await ctx.runQuery(internal.users.getRecentlySeenQuestions, { userId: user._id });
 		const recentlySeen = recentlySeenQuestions.filter((q) => q !== undefined);
@@ -139,10 +331,6 @@ export const generateAIQuestionForFeed = action({
 		const blockedQuestions = await ctx.runQuery(internal.users.getBlockedQuestions, { userId: user._id });
 		if (blockedQuestions.length > 0) {
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these blocked questions:\n- ${blockedQuestions.join('\n- ')}`;
-		}
-
-		if (!prompt) {
-			throw new Error("Prompt or Style/Tone must be provided");
 		}
 
 		// Retry logic for AI generation

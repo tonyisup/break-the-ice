@@ -28,6 +28,19 @@ export const getTone = query({
     return rest;
   },
 });
+
+export const getToneById = query({
+  args: { id: v.id("tones") },
+  returns: v.union(v.object(publicToneFields), v.null()),
+  handler: async (ctx, args) => {
+    const tone = await ctx.db.get(args.id);
+    if (!tone) {
+      return null;
+    }
+    const { embedding, ...rest } = tone;
+    return rest;
+  },
+});
 // Get all available tones
 export const getTones = query({
   args: {
