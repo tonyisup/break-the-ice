@@ -1697,6 +1697,44 @@ export const assignPoolQuestionsToUser = internalMutation({
   },
 });
 
+// Internal query: Check if any newsletter subscriber has fewer than N unseen questions
+export const hasUsersWithLowUnseenCount = internalQuery({
+  args: {
+    threshold: v.number(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    // Only check subscribers as they are the ones consuming the pool
+    const subscribers = await ctx.db
+      .query("users")
+      .withIndex("by_newsletterSubscriptionStatus", (q) =>
+        q.eq("newsletterSubscriptionStatus", "subscribed")
+      )
+      .collect();
+
+    // If no subscribers, we don't need to generate questions
+    if (subscribers.length === 0) {
+      return false;
+    }
+
+    for (const user of subscribers) {
+      // Check unseen count efficiently by taking only what we need
+      const unseenQuestions = await ctx.db
+        .query("userQuestions")
+        .withIndex("by_userId_status_updatedAt", (q) =>
+          q.eq("userId", user._id).eq("status", "unseen")
+        )
+        .take(args.threshold);
+
+      if (unseenQuestions.length < args.threshold) {
+        return true; // Found a user who needs more questions
+      }
+    }
+
+    return false; // All users have enough questions
+  },
+});
+
 // Internal action: Assign pool questions to all newsletter subscribers
 export const assignPoolQuestionsToUsers = internalAction({
   args: {
