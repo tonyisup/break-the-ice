@@ -3,6 +3,7 @@ import { ImageResponse } from '@vercel/og';
 import React from 'react';
 import { ConvexHttpClient } from 'convex/browser';
 import { api } from '../convex/_generated/api.js';
+import { iconMap } from '../src/components/ui/icons/icons';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -14,10 +15,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let text = searchParams.get('text');
     let styleName = searchParams.get('styleName') || 'General';
     let styleColor = searchParams.get('styleColor') || '#000000';
+    let styleIcon = searchParams.get('styleIcon') || 'CircleQuestionMark';
     let gradientStart = searchParams.get('gradientStart') || '#f0f0f0';
     let gradientEnd = searchParams.get('gradientEnd') || '#d0d0d0';
     let toneName = searchParams.get('toneName') || 'Casual';
     let toneColor = searchParams.get('toneColor') || '#000000';
+    let toneIcon = searchParams.get('toneIcon') || 'CircleQuestionMark';
 
     if (id) {
       const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -30,8 +33,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         text = questionInfo.text;
         styleName = questionInfo.styleName;
         styleColor = questionInfo.styleColor;
+        styleIcon = questionInfo.styleIcon || styleIcon;
         toneName = questionInfo.toneName;
         toneColor = questionInfo.toneColor;
+        toneIcon = questionInfo.toneIcon || toneIcon;
         gradientStart = questionInfo.gradientStart;
         gradientEnd = questionInfo.gradientEnd;
       }
@@ -42,7 +47,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Use React.createElement to avoid JSX compilation issues
+    const StyleIcon = iconMap[styleIcon] || iconMap['CircleQuestionMark'];
+    const ToneIcon = iconMap[toneIcon] || iconMap['CircleQuestionMark'];
+
     const element = React.createElement(
       'div',
       {
@@ -54,10 +61,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: 'white',
-          padding: '40px',
         },
       },
-      // Card Container
+      // Card Container (Full Bleed with gradient)
       React.createElement(
         'div',
         {
@@ -66,12 +72,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             flexDirection: 'column',
             width: '100%',
             height: '100%',
-            borderRadius: '30px',
-            padding: '3px',
-            background: `linear-gradient(135deg, ${gradientEnd}, ${gradientStart})`,
+            padding: '20px',
+            background: `linear-gradient(135deg, ${gradientEnd}, ${gradientStart})`, // Tone to Style
+            alignItems: 'center',
+            justifyContent: 'center',
           },
         },
-        // Inner Content
+        // Inner Content (White Card)
         React.createElement(
           'div',
           {
@@ -79,14 +86,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               display: 'flex',
               flexDirection: 'column',
               width: '100%',
-              height: '100%',
+              height: '100%', // Fill the container (minus padding)
               backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              borderRadius: '27px',
-              padding: '32px',
+              borderRadius: '40px',
+              padding: '60px',
               justifyContent: 'space-between',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
             },
           },
-          // Header / Badges
+          // Header / Badges Row
           React.createElement(
             'div',
             {
@@ -97,7 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 width: '100%',
               },
             },
-            // Style Badge
+            // Style Badge (Left)
             React.createElement(
               'div',
               {
@@ -105,29 +113,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   display: 'flex',
                   flexDirection: 'row',
                   alignItems: 'center',
-                  backgroundColor: 'rgba(0,0,0,0.1)',
-                  padding: '8px 16px',
+                  backgroundColor: 'rgba(0,0,0,0.05)',
+                  padding: '12px 24px',
                   borderRadius: '999px',
-                  borderTopWidth: '2px',
+                  borderTopWidth: '4px',
                   borderTopStyle: 'solid',
-                  borderTopColor: gradientStart,
-                  borderLeftWidth: '2px',
+                  borderTopColor: styleColor,
+                  borderLeftWidth: '4px',
                   borderLeftStyle: 'solid',
-                  borderLeftColor: gradientStart,
-                  gap: '8px',
+                  borderLeftColor: styleColor,
+                  gap: '12px',
                 },
               },
-              // Style icon placeholder
-              React.createElement('div', {
-                style: { width: '24px', height: '24px', borderRadius: '50%', backgroundColor: styleColor },
-              }),
+              React.createElement(StyleIcon, { size: 32, color: styleColor }),
               React.createElement(
                 'span',
-                { style: { fontSize: '18px', fontWeight: 600, color: '#1f2937' } },
+                { style: { fontSize: '24px', fontWeight: 700, color: '#374151' } },
                 styleName
               )
             ),
-            // Tone Badge
+            // Tone Badge (Right)
             React.createElement(
               'div',
               {
@@ -135,25 +140,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   display: 'flex',
                   flexDirection: 'row',
                   alignItems: 'center',
-                  backgroundColor: 'rgba(0,0,0,0.1)',
-                  padding: '8px 16px',
+                  backgroundColor: 'rgba(0,0,0,0.05)',
+                  padding: '12px 24px',
                   borderRadius: '999px',
-                  borderBottomWidth: '2px',
+                  borderBottomWidth: '4px',
                   borderBottomStyle: 'solid',
-                  borderBottomColor: gradientEnd,
-                  borderRightWidth: '2px',
+                  borderBottomColor: toneColor,
+                  borderRightWidth: '4px',
                   borderRightStyle: 'solid',
-                  borderRightColor: gradientEnd,
-                  gap: '8px',
+                  borderRightColor: toneColor,
+                  gap: '12px',
                 },
               },
-              // Tone icon placeholder
-              React.createElement('div', {
-                style: { width: '24px', height: '24px', borderRadius: '50%', backgroundColor: toneColor },
-              }),
+              React.createElement(ToneIcon, { size: 32, color: toneColor }),
               React.createElement(
                 'span',
-                { style: { fontSize: '18px', fontWeight: 600, color: '#1f2937' } },
+                { style: { fontSize: '24px', fontWeight: 700, color: '#374151' } },
                 toneName
               )
             )
@@ -167,7 +169,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 flex: 1,
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '20px',
+                padding: '40px',
                 textAlign: 'center',
               },
             },
@@ -175,41 +177,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               'h2',
               {
                 style: {
-                  fontSize: '48px',
-                  fontWeight: 'bold',
+                  fontSize: text.length > 100 ? '56px' : '72px', // Dynamic font size
+                  fontWeight: 800,
                   color: '#111827',
-                  lineHeight: 1.4,
+                  lineHeight: 1.3,
                   margin: 0,
+                  letterSpacing: '-0.02em',
                 },
               },
               text
             )
           ),
-          // Footer / Branding
-          React.createElement(
-            'div',
-            {
-              style: {
-                display: 'flex',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                alignItems: 'center',
-                opacity: 0.5,
-              },
-            },
-            React.createElement(
-              'span',
-              { style: { fontSize: '16px', color: '#4b5563' } },
-              '@IcebergBreaker'
-            )
-          )
+          // Empty footer spacer to balance layout (or could be removed if flex layout handles it well)
+          React.createElement('div', { style: { height: '60px' } })
         )
       )
     );
 
     const imageResponse = new ImageResponse(element, {
-      width: 1200,
-      height: 630,
+      width: 1080,
+      height: 1080,
     });
 
     // Convert the ImageResponse to a buffer and send it
