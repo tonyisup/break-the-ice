@@ -128,9 +128,14 @@ export default function QuestionsPage() {
 	}
 
 	const handleShare = async (q: Doc<"questions">) => {
-		const url = `${window.location.origin}/question/${q._id}`
-		await navigator.clipboard.writeText(url)
-		toast.success("Link copied to clipboard")
+		try {
+			const url = `${window.location.origin}/question/${q._id}`
+			await navigator.clipboard.writeText(url)
+			toast.success("Link copied to clipboard")
+		} catch (error) {
+			console.error("Failed to copy link:", error)
+			toast.error("Failed to copy link")
+		}
 	}
 
 	if (!allQuestions || !styles || !tones) {
