@@ -13,7 +13,8 @@ import {
 	Check,
 	X,
 	CheckCircle2,
-	UserCircle
+	UserCircle,
+	Share2
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -123,6 +124,17 @@ export default function QuestionsPage() {
 			toast.success(`Question marked as ${status}`)
 		} catch (error) {
 			toast.error("Failed to process question")
+		}
+	}
+
+	const handleShare = async (q: Doc<"questions">) => {
+		try {
+			const url = `${window.location.origin}/question/${q._id}`
+			await navigator.clipboard.writeText(url)
+			toast.success("Link copied to clipboard")
+		} catch (error) {
+			console.error("Failed to copy link:", error)
+			toast.error("Failed to copy link")
 		}
 	}
 
@@ -340,6 +352,10 @@ export default function QuestionsPage() {
 																</Button>
 															</DropdownMenuTrigger>
 															<DropdownMenuContent align="end" className="w-48">
+																<DropdownMenuItem className="gap-2 py-2.5" onClick={() => handleShare(q)}>
+																	<Share2 className="size-4" />
+																	Share Link
+																</DropdownMenuItem>
 																<DropdownMenuItem className="gap-2 py-2.5" onClick={() => setEditingQuestion(q)}>
 																	<Pencil className="size-4" />
 																	Edit Question
