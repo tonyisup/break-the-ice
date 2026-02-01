@@ -39,8 +39,8 @@ import { toast } from "sonner"
 
 export default function QuestionsPage() {
 	const allQuestions = useQuery(api.questions.getQuestions)
-	const styles = useQuery(api.styles.getStyles)
-	const tones = useQuery(api.tones.getTones)
+	const styles = useQuery(api.styles.getStyles, {})
+	const tones = useQuery(api.tones.getTones, {})
 
 	const createQuestion = useMutation(api.questions.createQuestion)
 	const updateQuestion = useMutation(api.questions.updateQuestion)
@@ -255,8 +255,8 @@ export default function QuestionsPage() {
 						</thead>
 						<tbody className="divide-y">
 							{filteredQuestions.map((q) => {
-								const style = styles.find(s => s.id === q.style);
-								const tone = tones.find(t => t.id === q.tone);
+								const style = styles.find(s => s._id === q.styleId);
+								const tone = tones.find(t => t._id === q.toneId);
 								const isEditing = editingQuestion?._id === q._id;
 
 								return (

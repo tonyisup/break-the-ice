@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useQuery, useAction, useMutation } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
-import { Doc } from "../../../../convex/_generated/dataModel"
+import { Doc, Id } from "../../../../convex/_generated/dataModel"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -23,35 +23,22 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 export default function GeneratorPage() {
-    const styles = useQuery(api.styles.getStyles)
-    const tones = useQuery(api.tones.getTones)
+    const styles = useQuery(api.styles.getStyles, {})
+    const tones = useQuery(api.tones.getTones, {})
     const tags = useQuery(api.tags.getTags)
 
-    const generateAIQuestion = useAction(api.ai.generateAIQuestions)
+    const generateAIQuestions = useAction(api.ai.generateAIQuestions)
     const saveAIQuestion = useMutation(api.questions.saveAIQuestion)
 
     const [selectedTags, setSelectedTags] = React.useState<string[]>([])
     const [customTag, setCustomTag] = React.useState("")
-    const [selectedStyle, setSelectedStyle] = React.useState<string>("random")
-    const [selectedTone, setSelectedTone] = React.useState<string>("random")
-
+    const [selectedStyleId, setSelectedStyleId] = React.useState<Id<"styles"> | null>(null)
+    const [selectedToneId, setSelectedToneId] = React.useState<Id<"tones"> | null>(null)
     const [isGenerating, setIsGenerating] = React.useState(false)
     const [isSaving, setIsSaving] = React.useState(false)
     const [expandedTagGroupings, setExpandedTagGroupings] = React.useState<Set<string>>(new Set())
-    const [previewQuestion, setPreviewQuestion] = React.useState<Doc<"questions"> | null>(null)
+    const [previewQuestion, setPreviewQuestion] = React.useState<string | null>(null)
 
-    // Set defaults when data loads
-    React.useEffect(() => {
-        if (styles && styles.length > 0 && selectedStyle === "random" && !styles.find(s => s.id === selectedStyle)) {
-            setSelectedStyle(styles[0].id)
-        }
-    }, [styles, selectedStyle])
-
-    React.useEffect(() => {
-        if (tones && tones.length > 0 && selectedTone === "random" && !tones.find(t => t.id === selectedTone)) {
-            setSelectedTone(tones[0].id)
-        }
-    }, [tones, selectedTone])
 
     const handleTagToggle = (tagName: string) => {
         setSelectedTags(prev =>
@@ -102,17 +89,19 @@ export default function GeneratorPage() {
 
         setIsGenerating(true)
         try {
-            const generatedQuestion = await generateAIQuestion({
+            if (!selectedStyleId || !selectedToneId) {
+                toast.error("Please select a style and tone")
+                return
+            }
+            const generatedQuestion = await generateAIQuestions({
+                count: 1,
                 selectedTags,
-                currentQuestion: previewQuestion ? previewQuestion.text : undefined,
-                style: selectedStyle,
-                tone: selectedTone,
+                currentQuestion: previewQuestion ? previewQuestion : undefined,
+                styleId: selectedStyleId,
+                toneId: selectedToneId,
             })
-            // The action returns an array, take the first one
-            const result = generatedQuestion[0]
-            if (result) {
-                // Cast to Doc<"questions"> as the action return type might be loose
-                setPreviewQuestion(result as Doc<"questions">)
+            if (generatedQuestion) {
+                setPreviewQuestion(generatedQuestion)
                 toast.success("Preview generated")
             } else {
                 toast.error("No question generated")
@@ -126,15 +115,19 @@ export default function GeneratorPage() {
     }
 
     const handleAccept = async () => {
-        if (!previewQuestion?.text) return
+        if (!previewQuestion) return
 
         setIsSaving(true)
         try {
+            if (!selectedStyleId || !selectedToneId) {
+                toast.error("Please select a style and tone")
+                return
+            }
             const result = await saveAIQuestion({
-                text: previewQuestion.text,
-                tags: previewQuestion.tags || [],
-                styleId: selectedStyle as any, // Cast to Id<"styles">
-                toneId: selectedTone as any,   // Cast to Id<"tones">
+                text: previewQuestion,
+                tags: selectedTags,
+                styleId: selectedStyleId,
+                toneId: selectedToneId,
             })
 
             if (result === null) {
@@ -186,10 +179,10 @@ export default function GeneratorPage() {
                                     {styles.map(style => (
                                         <div
                                             key={style.id}
-                                            onClick={() => setSelectedStyle(style.id)}
+                                            onClick={() => setSelectedStyleId(style._id)}
                                             className={`
                                                 cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
-                                                ${selectedStyle === style.id
+                                                ${selectedStyleId === style._id
                                                     ? "bg-primary text-primary-foreground border-primary"
                                                     : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
                                             `}
@@ -206,10 +199,10 @@ export default function GeneratorPage() {
                                     {tones.map(tone => (
                                         <div
                                             key={tone.id}
-                                            onClick={() => setSelectedTone(tone.id)}
+                                            onClick={() => setSelectedToneId(tone._id)}
                                             className={`
                                                 cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
-                                                ${selectedTone === tone.id
+                                                ${selectedToneId === tone._id
                                                     ? "bg-primary text-primary-foreground border-primary"
                                                     : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
                                             `}
@@ -231,8 +224,8 @@ export default function GeneratorPage() {
                                     <CardDescription>Select categories to guide the AI.</CardDescription>
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button variant="outline" size="xs" onClick={expandAllTagGroupings}>Expand All</Button>
-                                    <Button variant="outline" size="xs" onClick={collapseAllTagGroupings}>Collapse All</Button>
+                                    <Button variant="outline" onClick={expandAllTagGroupings}>Expand All</Button>
+                                    <Button variant="outline" onClick={collapseAllTagGroupings}>Collapse All</Button>
                                 </div>
                             </div>
                         </CardHeader>
@@ -321,9 +314,9 @@ export default function GeneratorPage() {
                             {previewQuestion ? (
                                 <div className="space-y-6 animate-in fade-in zoom-in duration-300">
                                     <div className="space-y-4">
-                                        <p className="text-xl font-medium leading-relaxed">{previewQuestion.text}</p>
+                                        <p className="text-xl font-medium leading-relaxed">{previewQuestion}</p>
                                         <div className="flex flex-wrap gap-2">
-                                            {previewQuestion.tags?.map(tag => (
+                                            {selectedTags.map(tag => (
                                                 <Badge key={tag} variant="secondary" className="text-xs">
                                                     {tag}
                                                 </Badge>
@@ -399,7 +392,6 @@ export default function GeneratorPage() {
                                     ))}
                                     <Button
                                         variant="ghost"
-                                        size="xs"
                                         className="h-5 text-xs text-muted-foreground hover:text-destructive"
                                         onClick={() => setSelectedTags([])}
                                     >
