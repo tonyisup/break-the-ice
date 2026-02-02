@@ -451,6 +451,21 @@ export const recordAnalytics = mutation({
         .first();
 
       if (userQuestion) {
+        // Determine the new status:
+        // - If the event is "liked", status becomes "liked"
+        // - Terminal statuses ("liked", "hidden") should not be overwritten by "seen"
+        // - "unseen" should transition to "seen" when viewed
+        let newStatus = userQuestion.status;
+        if (event === "liked") {
+          newStatus = "liked";
+        } else if (event === "hidden") {
+          newStatus = "hidden";
+        } else if (userQuestion.status === "unseen") {
+          // Transition unseen -> seen when the question is viewed
+          newStatus = "seen";
+        }
+        // Keep "liked" and "hidden" as terminal statuses (don't overwrite with "seen")
+
         await ctx.db.patch(userQuestion._id, {
           viewDuration: userQuestion.viewDuration ? userQuestion.viewDuration + viewDuration : viewDuration,
           seenCount: userQuestion.seenCount ? userQuestion.seenCount + 1 : 1,
@@ -467,7 +482,7 @@ export const recordAnalytics = mutation({
         await ctx.db.insert("userQuestions", {
           userId,
           questionId,
-          status: event === "liked" ? "liked" : "seen",
+          status: event === "liked" ? "liked" : (event === "hidden" ? "hidden" : "seen"),
           viewDuration,
           seenCount: 1,
           updatedAt: Date.now(),
@@ -1696,6 +1711,44 @@ export const assignPoolQuestionsToUser = internalMutation({
     }
 
     return assigned;
+  },
+});
+
+// Internal query: Check if any newsletter subscriber has fewer than N unseen questions
+export const hasUsersWithLowUnseenCount = internalQuery({
+  args: {
+    threshold: v.number(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    // Only check subscribers as they are the ones consuming the pool
+    const subscribers = await ctx.db
+      .query("users")
+      .withIndex("by_newsletterSubscriptionStatus", (q) =>
+        q.eq("newsletterSubscriptionStatus", "subscribed")
+      )
+      .collect();
+
+    // If no subscribers, we don't need to generate questions
+    if (subscribers.length === 0) {
+      return false;
+    }
+
+    for (const user of subscribers) {
+      // Check unseen count efficiently by taking only what we need
+      const unseenQuestions = await ctx.db
+        .query("userQuestions")
+        .withIndex("by_userId_status_updatedAt", (q) =>
+          q.eq("userId", user._id).eq("status", "unseen")
+        )
+        .take(args.threshold);
+
+      if (unseenQuestions.length < args.threshold) {
+        return true; // Found a user who needs more questions
+      }
+    }
+
+    return false; // All users have enough questions
   },
 });
 

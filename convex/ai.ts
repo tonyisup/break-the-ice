@@ -781,6 +781,18 @@ export const generateNightlyQuestionPool = internalAction({
 	}),
 	handler: async (ctx, args) => {
 		const { targetCount, maxCombinations } = args;
+
+		// Check if we need to generate questions (stop if all subscribers have >= 3 unseen questions)
+		const needsQuestions = await ctx.runQuery(internal.questions.hasUsersWithLowUnseenCount, { threshold: 3 });
+		if (!needsQuestions) {
+			console.log("Skipping nightly pool generation: All users have enough unseen questions.");
+			return {
+				questionsGenerated: 0,
+				combinationsProcessed: 0,
+				errors: [],
+			};
+		}
+
 		const today = new Date().toISOString().split('T')[0]; // "2026-01-30"
 
 		let questionsGenerated = 0;
