@@ -76,7 +76,7 @@ crons.interval(
 // Nightly question pool generation - generates fresh AI questions for daily use
 crons.cron(
   "generate nightly question pool",
-  "0 2 * * *", // 2:00 AM UTC
+  "0 10 * * *", // 2:00 AM PST
   internal.ai.generateNightlyQuestionPool,
   { targetCount: 5, maxCombinations: 10 } // ~50 questions per night
 );
@@ -84,7 +84,7 @@ crons.cron(
 // Assign pool questions to newsletter subscribers (runs after pool generation)
 crons.cron(
   "assign pool questions to users",
-  "0 3 * * *", // 3:00 AM UTC (1 hour after generation)
+  "0 11 * * *", // 3:00 AM PST (1 hour after generation)
   internal.questions.assignPoolQuestionsToUsers,
   { questionsPerUser: 6 }
 );
