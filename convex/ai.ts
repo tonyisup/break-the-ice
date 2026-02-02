@@ -2,6 +2,7 @@
 
 import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
+import { ensureAdmin } from "./auth";
 import OpenAI from "openai";
 import { api, internal } from "./_generated/api";
 import { Doc, Id } from "./_generated/dataModel";
@@ -108,6 +109,197 @@ export const generateFallbackQuestion = action({
 	},
 });
 
+
+export const generateAIQuestions = action({
+	args: {
+		count: v.number(),
+		selectedTags: v.array(v.string()),
+		currentQuestion: v.optional(v.string()),
+		styleId: v.id("styles"),
+		toneId: v.id("tones"),
+	},
+	handler: async (ctx, args) => {
+		const { count, selectedTags, currentQuestion, styleId, toneId } = args;
+
+		const style = (await ctx.runQuery(api.styles.getStyleById, { id: styleId }));
+		const tone = (await ctx.runQuery(api.tones.getToneById, { id: toneId }));
+
+		if (!style || !tone) {
+			throw new Error("Failed to generate AI question: No style or tone found.");
+		}
+
+		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
+		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
+
+		if (selectedTags.length > 0) {
+			prompt += `\nTopics: ${selectedTags.join(", ")}`;
+		}
+
+		if (currentQuestion && currentQuestion.length > 0) {
+			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${currentQuestion}`;
+		}
+
+		// Retry logic for AI generation
+		let attempts = 0;
+		const maxAttempts = 3;
+		let generatedContent = "";
+
+		while (attempts < maxAttempts && !generatedContent) {
+			try {
+				attempts++;
+				const completion = await openai.chat.completions.create({
+					model: "@preset/break-the-ice-berg-default",
+					messages: [
+						{
+							role: "system",
+							content: `You are clever, well travelled, emotionally and socially intelligent. You will provide guidance and suggestions to help people break the ice in social settings. You will be providing unique questions that would be perfect for starting conversations. You will be able to combine a provided STYLE (question structure) with a TONE (vibe/color).
+    
+    CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of objects.
+    - Do not include any text before or after the JSON.
+    - Do not use markdown formatting (no \`\`\`json wrappers).
+    - Do not include explanations or comments.
+    - Do not number the items in the array (e.g. no "1. {...}").
+		- DO NOT provide your own examples of any generated content. No dashes, no lists.
+    
+    Example format: {"text": "Question 1"}
+    
+    Requirements:
+    - Return exactly 1 question
+    - Each question should be a string in the JSON array
+    - Avoid questions too similar to existing ones
+    - Make questions engaging and conversation-starting
+		- Avoid being verbose; keep it short and sweet.
+    - Only ONE question per text. There should only be one question mark at the end of the text.`
+						},
+						{
+							role: "user",
+							content: `Generate 1 ice-breaker question with these parameters:
+    ${prompt}
+    
+    Response with a JSON array of objects, each containing the following properties:
+    - text: The question text
+    For example:
+    {
+      {
+        "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?"
+      }
+    }`
+						}
+					],
+					max_tokens: 200,
+					temperature: 0.7,
+				});
+
+				generatedContent = completion.choices[0]?.message?.content?.trim() || "";
+
+				if (!generatedContent) {
+					console.log(`Attempt ${attempts}: No content generated`);
+					if (attempts < maxAttempts) {
+						const waitTime = 1000 * Math.pow(2, attempts - 1);
+						console.log(`No content generated. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+						await new Promise(resolve => setTimeout(resolve, waitTime));
+						continue;
+					}
+					throw new Error("Failed to generate question after multiple attempts");
+				}
+
+				// Validate that we have a reasonable response length
+				if (generatedContent.length < 10) {
+					console.log(`Attempt ${attempts}: Response too short (${generatedContent.length} chars):`, generatedContent);
+					if (attempts < maxAttempts) {
+						const waitTime = 1000 * Math.pow(2, attempts - 1);
+						console.log(`Response too short. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+						await new Promise(resolve => setTimeout(resolve, waitTime));
+						continue;
+					}
+					throw new Error("AI response too short");
+				}
+
+				// If we get here, we have content, so break out of the retry loop
+				break;
+
+			} catch (error: any) {
+				const isRateLimit = error.status === 429 || error.message?.includes("429");
+				console.error(`Attempt ${attempts} failed (${isRateLimit ? "Rate Limit" : "Error"}):`, error);
+
+				if (attempts >= maxAttempts) {
+					throw error;
+				}
+
+				let waitTime = 1000 * Math.pow(2, attempts - 1); // Exponential backoff by default
+				if (error.status === 429) {
+					const retryAfter = error.headers?.['retry-after'];
+					if (retryAfter) {
+						const seconds = parseInt(retryAfter);
+						if (!isNaN(seconds)) {
+							waitTime = seconds * 1000;
+						} else {
+							// Could be a date string
+							const retryDate = new Date(retryAfter).getTime();
+							if (!isNaN(retryDate)) {
+								waitTime = Math.max(1000, retryDate - Date.now());
+							}
+						}
+					}
+					console.log(`Respecting 429 Rate Limit. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+				}
+
+				await new Promise(resolve => setTimeout(resolve, waitTime));
+			}
+		}
+
+		if (!generatedContent) {
+			throw new Error("Failed to generate question after all attempts");
+		}
+
+		// Try to clean and parse the response
+		// Remove markdown code blocks if present
+		const cleanedContent = generatedContent
+			.replace(/^```json\s*/, "")
+			.replace(/^```\s*/, "")
+			.replace(/\s*```$/, "");
+
+		let parsedContent: { text: string; }[] = [];
+
+		try {
+			parsedContent = JSON.parse(cleanedContent);
+		} catch (error) {
+			console.log("Failed to parse JSON, attempting fallback parsing for numbered list...");
+			// Fallback parsing for numbered lists (e.g., "1. Question\n2. Question")
+			const lines = cleanedContent.split('\n');
+			const regex = /^\d+\.\s*(.+)/;
+
+			for (const line of lines) {
+				const match = line.match(regex);
+				if (match) {
+					parsedContent.push({
+						text: match[1].trim(),
+					});
+				}
+			}
+
+			if (parsedContent.length === 0) {
+				console.error("Failed to parse AI response. Content was:", generatedContent);
+				console.error("Cleaned content was:", cleanedContent);
+				console.error("Parse error:", error);
+				throw error;
+			}
+		}
+
+		for (const question of parsedContent) {
+			try {
+				// Simple dedupe check
+				return question.text;
+
+			} catch (error) {
+				console.error(`Failed to save question: "${question.text}"`, error);
+				// Continue with other questions even if one fails
+			}
+		}
+		return "No questions generated";
+	}
+});
+
 export const generateAIQuestionForFeed = action({
 	args: {
 		userId: v.optional(v.string()),
@@ -127,7 +319,8 @@ export const generateAIQuestionForFeed = action({
 			throw new Error("Failed to generate AI question: No style or tone found for user");
 		}
 
-		let prompt = '';
+		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
+		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
 
 		const recentlySeenQuestions = await ctx.runQuery(internal.users.getRecentlySeenQuestions, { userId: user._id });
 		const recentlySeen = recentlySeenQuestions.filter((q) => q !== undefined);
@@ -138,10 +331,6 @@ export const generateAIQuestionForFeed = action({
 		const blockedQuestions = await ctx.runQuery(internal.users.getBlockedQuestions, { userId: user._id });
 		if (blockedQuestions.length > 0) {
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these blocked questions:\n- ${blockedQuestions.join('\n- ')}`;
-		}
-
-		if (!prompt) {
-			throw new Error("Prompt or Style/Tone must be provided");
 		}
 
 		// Retry logic for AI generation
@@ -440,10 +629,26 @@ export const populateMissingToneEmbeddings = internalAction({
 	},
 });
 
-export const detectDuplicateQuestionsStreaming = internalAction({
-	args: {},
+export const startDuplicateDetection = action({
+	args: {
+		threshold: v.optional(v.number()),
+	},
 	returns: v.id("duplicateDetectionProgress"),
-	handler: async (ctx): Promise<Id<"duplicateDetectionProgress">> => {
+	handler: async (ctx, args): Promise<Id<"duplicateDetectionProgress">> => {
+		await ensureAdmin(ctx);
+		return await ctx.runAction(internal.ai.detectDuplicateQuestionsStreaming, {
+			threshold: args.threshold,
+		}) as Id<"duplicateDetectionProgress">;
+	},
+});
+
+export const detectDuplicateQuestionsStreaming = internalAction({
+	args: {
+		threshold: v.optional(v.number()),
+	},
+	returns: v.id("duplicateDetectionProgress"),
+	handler: async (ctx, args): Promise<Id<"duplicateDetectionProgress">> => {
+		const threshold = args.threshold ?? 0.95;
 		// 1. Initialize progress
 		const totalQuestions = await ctx.runQuery(internal.questions.countQuestions);
 		const BATCH_SIZE = 50;
@@ -506,7 +711,7 @@ export const detectDuplicateQuestionsStreaming = internalAction({
 						if (match._id <= question._id) continue;
 
 						// Check score
-						if (match._score > 0.95) {
+						if (match._score > threshold) {
 							// Potential duplicate!
 							try {
 								// saveDuplicateDetection will handle sorting IDs and basic checks.
@@ -576,18 +781,30 @@ export const generateNightlyQuestionPool = internalAction({
 	}),
 	handler: async (ctx, args) => {
 		const { targetCount, maxCombinations } = args;
+
+		// Check if we need to generate questions (stop if all subscribers have >= 3 unseen questions)
+		const needsQuestions = await ctx.runQuery(internal.questions.hasUsersWithLowUnseenCount, { threshold: 3 });
+		if (!needsQuestions) {
+			console.log("Skipping nightly pool generation: All users have enough unseen questions.");
+			return {
+				questionsGenerated: 0,
+				combinationsProcessed: 0,
+				errors: [],
+			};
+		}
+
 		const today = new Date().toISOString().split('T')[0]; // "2026-01-30"
 
 		let questionsGenerated = 0;
 		let combinationsProcessed = 0;
-		const errors: string[] = [];
+		const errors: Array<string> = [];
 
 		// Get all styles and tones
-		const styles: Doc<"styles">[] = await ctx.runQuery(api.styles.getStyles, {});
-		const tones: Doc<"tones">[] = await ctx.runQuery(api.tones.getTones, {});
+		const styles: Array<Doc<"styles">> = await ctx.runQuery(api.styles.getStyles, {});
+		const tones: Array<Doc<"tones">> = await ctx.runQuery(api.tones.getTones, {});
 
 		// Create all combinations
-		const combinations: { style: Doc<"styles">, tone: Doc<"tones"> }[] = [];
+		const combinations: Array<{ style: Doc<"styles">, tone: Doc<"tones"> }> = [];
 		for (const style of styles) {
 			for (const tone of tones) {
 				combinations.push({ style, tone });
@@ -611,6 +828,9 @@ export const generateNightlyQuestionPool = internalAction({
 				const stylePrompt = `${style.name} - ${style.description || ''} ${style.promptGuidanceForAI || ''}`;
 				const tonePrompt = `${tone.name} - ${tone.description || ''} ${tone.promptGuidanceForAI || ''}`;
 
+				// Track generated questions for this specific combination to ensure variety
+				const questionsGeneratedInThisCombo: string[] = [];
+
 				// Generate targetCount questions
 				const MAX_RATE_RETRIES = 3;
 				let rateLimitRetryCount = 0;
@@ -620,6 +840,10 @@ export const generateNightlyQuestionPool = internalAction({
 						if (questionsGenerated > 0) {
 							await new Promise(resolve => setTimeout(resolve, 1000));
 						}
+
+						const alreadyGeneratedText = questionsGeneratedInThisCombo.length > 0
+							? `\n\nAlready generated for this style/tone (AVOID SIMILAR THEMES OR STRUCTURES):\n- ${questionsGeneratedInThisCombo.join('\n- ')}`
+							: "";
 
 						const completion = await openai.chat.completions.create({
 							model: "@preset/break-the-ice-berg-default",
@@ -633,17 +857,18 @@ RESPOND WITH ONLY THE QUESTION TEXT. No quotes, no formatting, no explanations.
 Requirements:
 - Keep it short and conversational
 - Make it thought-provoking but accessible
-- Only ONE question mark at the end`
+- Only ONE question mark at the end
+- BE CREATIVE and explore different angles of the requested style and tone. Do not settle on a single template.`
 								},
 								{
 									role: "user",
 									content: `Generate 1 ice-breaker question.
 Style: ${stylePrompt}
-Tone: ${tonePrompt}`
+Tone: ${tonePrompt}${alreadyGeneratedText}`
 								}
 							],
 							max_tokens: 100,
-							temperature: 0.9, // Higher for variety
+							temperature: 0.95, // Slightly higher for more variety
 						});
 
 						const questionText = completion.choices[0]?.message?.content?.trim();
@@ -663,6 +888,15 @@ Tone: ${tonePrompt}`
 							continue;
 						}
 
+						// Check for similarity via embedding (match score > 0.9)
+						const isSimilar: boolean = await ctx.runAction(internal.questions.checkSimilarity, {
+							text: cleanedText,
+						});
+						if (isSimilar) {
+							console.log(`Skipping similar question: ${cleanedText.substring(0, 50)}...`);
+							continue;
+						}
+
 						// Save the question with pool metadata
 						const savedQuestion = await ctx.runMutation(internal.questions.savePoolQuestion, {
 							text: cleanedText,
@@ -675,6 +909,7 @@ Tone: ${tonePrompt}`
 
 						if (savedQuestion) {
 							questionsGenerated++;
+							questionsGeneratedInThisCombo.push(cleanedText);
 							rateLimitRetryCount = 0; // Reset retry count on success
 							// Trigger embedding generation asynchronously
 							await ctx.scheduler.runAfter(0, internal.lib.retriever.embedQuestion, {
@@ -697,7 +932,18 @@ Tone: ${tonePrompt}`
 							if (rateLimitRetryCount < MAX_RATE_RETRIES) {
 								// Wait and retry
 								const retryAfter = error.headers?.['retry-after'];
-								const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
+								let waitTime = 5000; // Default backoff
+								if (retryAfter) {
+									const parsed = parseInt(retryAfter);
+									if (Number.isFinite(parsed)) {
+										waitTime = parsed * 1000;
+									} else {
+										const retryDate = Date.parse(retryAfter);
+										if (Number.isFinite(retryDate)) {
+											waitTime = Math.max(0, retryDate - Date.now());
+										}
+									}
+								}
 								console.log(`Rate limited (attempt ${rateLimitRetryCount}/${MAX_RATE_RETRIES}), waiting ${waitTime}ms...`);
 								await new Promise(resolve => setTimeout(resolve, waitTime));
 								i--; // Retry this iteration

@@ -21,7 +21,9 @@ import TopicsPage from "./app/admin/topics/page";
 import HistoryPage from "./app/history/page";
 import QuestionPage from "./app/question/page";
 import DuplicatesPage from "./app/admin/duplicates/page";
+import DuplicateHistoryPage from "./app/admin/duplicates/completed/page";
 import PrunePage from "./app/admin/prune/page";
+import PoolPage from "./app/admin/pool/page";
 import AdminPage from "./app/admin/page";
 import AdminLayout from "./app/admin/layout";
 import AddQuestionPage from "./app/add-question/page";
@@ -36,6 +38,7 @@ import AboutPage from "./app/about/page";
 import ContactPage from "./app/contact/page";
 import FeedbackButton from "./components/FeedbackButton";
 import { AnalyticsManager } from "./components/AnalyticsManager";
+import GeneratorPage from "./app/admin/generator/page.tsx";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -69,7 +72,10 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/admin/users" element={<UsersPage />} />
                   <Route path="/admin/feedback" element={<FeedbackPage />} />
                   <Route path="/admin/duplicates" element={<DuplicatesPage />} />
+                  <Route path="/admin/duplicates/completed" element={<DuplicateHistoryPage />} />
                   <Route path="/admin/prune" element={<PrunePage />} />
+                  <Route path="/admin/pool" element={<PoolPage />} />
+                  <Route path="/admin/generator" element={<GeneratorPage />} />
                 </Route>
 
 

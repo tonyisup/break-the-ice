@@ -65,10 +65,10 @@ export const completeDuplicateDetectionProgress = mutation({
       completedAt: now,
       lastUpdatedAt: now,
     });
-    
+
     // Cleanup old progress records
     await ctx.runMutation(api.duplicates.cleanupOldProgressRecords as any, {});
-    
+
     return null;
   },
 });
@@ -100,7 +100,7 @@ export const cleanupOldProgressRecords = mutation({
       .query("duplicateDetectionProgress")
       .order("desc")
       .collect();
-    
+
     // Keep only the latest 10 progress records
     if (allProgress.length > 10) {
       const toDelete = allProgress.slice(10);
@@ -108,7 +108,7 @@ export const cleanupOldProgressRecords = mutation({
         await ctx.db.delete(progress._id);
       }
     }
-    
+
     return null;
   },
 });
@@ -131,6 +131,7 @@ export const getDuplicateDetectionProgress = query({
       startedAt: v.number(),
       completedAt: v.optional(v.number()),
       lastUpdatedAt: v.number(),
+      _creationTime: v.number(),
     }),
     v.null()
   ),
@@ -155,6 +156,7 @@ export const getLatestDuplicateDetectionProgress = query({
       startedAt: v.number(),
       completedAt: v.optional(v.number()),
       lastUpdatedAt: v.number(),
+      _creationTime: v.number(),
     }),
     v.null()
   ),

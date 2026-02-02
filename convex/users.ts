@@ -1219,6 +1219,9 @@ export const getHiddenPreferencesForUsers = internalQuery({
 		})),
 	}),
 	handler: async (ctx, args) => {
+		if (args.userIds.length === 0) {
+			return { hiddenStyles: [], hiddenTones: [] };
+		}
 		const userIdSet = new Set(args.userIds.map(id => id.toString()));
 
 		// Fetch all hidden styles for the given users
