@@ -451,18 +451,32 @@ export const recordAnalytics = mutation({
         .first();
 
       if (userQuestion) {
+        // Determine the new status:
+        // - If the event is "liked", status becomes "liked"
+        // - Terminal statuses ("liked", "hidden") should not be overwritten by "seen"
+        // - "unseen" should transition to "seen" when viewed
+        let newStatus = userQuestion.status;
+        if (event === "liked") {
+          newStatus = "liked";
+        } else if (event === "hidden") {
+          newStatus = "hidden";
+        } else if (userQuestion.status === "unseen") {
+          // Transition unseen -> seen when the question is viewed
+          newStatus = "seen";
+        }
+        // Keep "liked" and "hidden" as terminal statuses (don't overwrite with "seen")
+
         await ctx.db.patch(userQuestion._id, {
           viewDuration: userQuestion.viewDuration ? userQuestion.viewDuration + viewDuration : viewDuration,
           seenCount: userQuestion.seenCount ? userQuestion.seenCount + 1 : 1,
           updatedAt: Date.now(),
-          // Don't overwrite "liked" status with "seen"
-          status: userQuestion.status === "liked" ? "liked" : (event === "liked" ? "liked" : userQuestion.status),
+          status: newStatus,
         });
       } else {
         await ctx.db.insert("userQuestions", {
           userId,
           questionId,
-          status: event === "liked" ? "liked" : "seen",
+          status: event === "liked" ? "liked" : (event === "hidden" ? "hidden" : "seen"),
           viewDuration,
           seenCount: 1,
           updatedAt: Date.now(),
