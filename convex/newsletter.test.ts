@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
@@ -57,14 +58,14 @@ describe("Daily newsletter", () => {
     });
 
     expect(result1).not.toBeNull();
-    const firstSeenId = result1._id;
+    const firstSeenId = result1!._id;
     expect([q1Id, q2Id]).toContain(firstSeenId);
 
     // 5. Call again without marking seen - should return same question (idempotency)
     const result1Again = await t.query(api.questions.getQuestionForNewsletter, {
         userId
     });
-    expect(result1Again._id).toBe(firstSeenId);
+    expect(result1Again!._id).toBe(firstSeenId);
 
     // 6. Mark as seen (WITH IDENTITY)
     await t.withIdentity({ email: "test@example.com" }).mutation(api.questions.recordAnalytics, {
@@ -87,12 +88,12 @@ describe("Daily newsletter", () => {
     });
 
     expect(result2).not.toBeNull();
-    expect(result2._id).not.toBe(firstSeenId);
-    expect([q1Id, q2Id]).toContain(result2._id);
+    expect(result2!._id).not.toBe(firstSeenId);
+    expect([q1Id, q2Id]).toContain(result2!._id);
 
     // 8. Mark second as seen (WITH IDENTITY)
     await t.withIdentity({ email: "test@example.com" }).mutation(api.questions.recordAnalytics, {
-        questionId: result2._id,
+        questionId: result2!._id,
         event: "seen",
         viewDuration: 1000
     });
@@ -113,6 +114,6 @@ describe("Daily newsletter", () => {
     });
 
     expect(result3).not.toBeNull();
-    expect(result3._id).toBe(q3Id);
+    expect(result3!._id).toBe(q3Id);
   });
 });
