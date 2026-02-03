@@ -35,7 +35,7 @@ export default function CookiePolicyPage() {
 
         <div className="mt-8 border-t pt-6">
           <h3 className="text-lg font-semibold mb-4">Manage Consent</h3>
-          <div className="bg-gray-50 p-4 rounded-lg border">
+          <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border">
             <p className="mb-4">
               Current status: <span className="font-semibold">{hasConsented ? "Consented" : "Necessary only / Denied"}</span>
             </p>
