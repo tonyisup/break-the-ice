@@ -291,7 +291,9 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_userId", ["userId"])
     .index("by_sessionId", ["sessionId"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_sessionId_createdAt", ["sessionId", "createdAt"]),
   pendingSubscriptions: defineTable({
     email: v.string(),
     token: v.string(),

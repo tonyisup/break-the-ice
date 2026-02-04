@@ -7,6 +7,7 @@ export const createCollection = mutation({
 		name: v.string(),
 		organizationId: v.id("organizations"),
 	},
+	returns: v.id("collections"),
 	handler: async (ctx, args) => {
 		await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
 
@@ -24,6 +25,7 @@ export const addQuestionToCollection = mutation({
 		questionId: v.id("questions"),
 		collectionId: v.id("collections"),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		const collection = await ctx.db.get(args.collectionId);
 		if (!collection) {
@@ -35,6 +37,8 @@ export const addQuestionToCollection = mutation({
 			questionId: args.questionId,
 			collectionId: args.collectionId,
 		});
+
+		return null;
 	},
 });
 
@@ -42,6 +46,12 @@ export const getCollectionsByOrganization = query({
 	args: {
 		organizationId: v.id("organizations"),
 	},
+	returns: v.array(v.object({
+		_id: v.id("collections"),
+		_creationTime: v.number(),
+		name: v.string(),
+		organizationId: v.id("organizations"),
+	})),
 	handler: async (ctx, args) => {
 		await ensureOrgMember(ctx, args.organizationId);
 

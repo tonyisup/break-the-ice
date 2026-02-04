@@ -15,6 +15,7 @@ export const createTopic = mutation({
 		startDate: v.optional(v.number()),
 		endDate: v.optional(v.number()),
 	},
+	returns: v.id("topics"),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 
@@ -61,6 +62,7 @@ export const updateTopic = mutation({
 		startDate: v.optional(v.number()),
 		endDate: v.optional(v.number()),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 
@@ -74,6 +76,8 @@ export const updateTopic = mutation({
 				topicId: _id,
 			});
 		}
+
+		return null;
 	},
 });
 
@@ -81,8 +85,10 @@ export const deleteTopic = mutation({
 	args: {
 		_id: v.id("topics"),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		await ctx.db.delete(args._id);
+		return null;
 	},
 });

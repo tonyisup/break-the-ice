@@ -1,7 +1,22 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { Id } from "../_generated/dataModel";
-import { api } from "../_generated/api";
+import { ensureAdmin } from "../auth";
+
+// Helper function to cleanup old progress records (shared logic)
+async function cleanupOldProgressRecordsHelper(ctx: any): Promise<void> {
+	const allProgress = await ctx.db
+		.query("duplicateDetectionProgress")
+		.order("desc")
+		.collect();
+
+	// Keep only the latest 10 progress records
+	if (allProgress.length > 10) {
+		const toDelete = allProgress.slice(10);
+		for (const progress of toDelete) {
+			await ctx.db.delete(progress._id);
+		}
+	}
+}
 
 // Mutations for progress tracking
 export const createDuplicateDetectionProgress = mutation({
@@ -11,6 +26,7 @@ export const createDuplicateDetectionProgress = mutation({
 	},
 	returns: v.id("duplicateDetectionProgress"),
 	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
 		const now = Date.now();
 		return await ctx.db.insert("duplicateDetectionProgress", {
 			status: "running",
@@ -36,6 +52,7 @@ export const updateDuplicateDetectionProgress = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
 		await ctx.db.patch(args.progressId, {
 			processedQuestions: args.processedQuestions,
 			currentBatch: args.currentBatch,
@@ -56,6 +73,7 @@ export const completeDuplicateDetectionProgress = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
 		const now = Date.now();
 		await ctx.db.patch(args.progressId, {
 			status: "completed",
@@ -66,8 +84,8 @@ export const completeDuplicateDetectionProgress = mutation({
 			lastUpdatedAt: now,
 		});
 
-		// Cleanup old progress records
-		await ctx.runMutation(api.admin.duplicates.cleanupOldProgressRecords as any, {});
+		// Cleanup old progress records using the shared helper
+		await cleanupOldProgressRecordsHelper(ctx);
 
 		return null;
 	},
@@ -80,6 +98,7 @@ export const failDuplicateDetectionProgress = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
 		const now = Date.now();
 		await ctx.db.patch(args.progressId, {
 			status: "failed",
@@ -96,19 +115,8 @@ export const cleanupOldProgressRecords = mutation({
 	args: {},
 	returns: v.null(),
 	handler: async (ctx) => {
-		const allProgress = await ctx.db
-			.query("duplicateDetectionProgress")
-			.order("desc")
-			.collect();
-
-		// Keep only the latest 10 progress records
-		if (allProgress.length > 10) {
-			const toDelete = allProgress.slice(10);
-			for (const progress of toDelete) {
-				await ctx.db.delete(progress._id);
-			}
-		}
-
+		await ensureAdmin(ctx);
+		await cleanupOldProgressRecordsHelper(ctx);
 		return null;
 	},
 });
@@ -136,6 +144,7 @@ export const getDuplicateDetectionProgress = query({
 		v.null()
 	),
 	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
 		return await ctx.db.get(args.progressId);
 	},
 });
@@ -161,6 +170,7 @@ export const getLatestDuplicateDetectionProgress = query({
 		v.null()
 	),
 	handler: async (ctx) => {
+		await ensureAdmin(ctx);
 		const progress = await ctx.db
 			.query("duplicateDetectionProgress")
 			.order("desc")

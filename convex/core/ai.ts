@@ -321,7 +321,7 @@ export const generateAIQuestionForFeed = action({
 		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
 
 		const recentlySeenQuestions = await ctx.runQuery(internal.internal.users.getRecentlySeenQuestions, { userId: user._id });
-		const recentlySeen = recentlySeenQuestions.filter((q) => q !== undefined);
+		const recentlySeen = recentlySeenQuestions.filter((q: string) => q !== undefined);
 		if (recentlySeen.length > 0) {
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
 		}

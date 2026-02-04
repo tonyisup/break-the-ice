@@ -7,6 +7,7 @@ export const submitFeedback = mutation({
 		pageUrl: v.string(),
 		sessionId: v.optional(v.string()),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		let userId;
@@ -26,16 +27,20 @@ export const submitFeedback = mutation({
 		let recentFeedback;
 
 		if (userId) {
+			// Use composite index for efficient rate-limiting query
 			recentFeedback = await ctx.db
 				.query("feedback")
-				.withIndex("by_userId", (q) => q.eq("userId", userId))
-				.filter((q) => q.gt(q.field("createdAt"), oneHourAgo))
+				.withIndex("by_userId_createdAt", (q) =>
+					q.eq("userId", userId).gt("createdAt", oneHourAgo)
+				)
 				.collect();
 		} else if (args.sessionId) {
+			// Use composite index for efficient rate-limiting query
 			recentFeedback = await ctx.db
 				.query("feedback")
-				.withIndex("by_sessionId", (q) => q.eq("sessionId", args.sessionId))
-				.filter((q) => q.gt(q.field("createdAt"), oneHourAgo))
+				.withIndex("by_sessionId_createdAt", (q) =>
+					q.eq("sessionId", args.sessionId).gt("createdAt", oneHourAgo)
+				)
 				.collect();
 		}
 
@@ -51,5 +56,7 @@ export const submitFeedback = mutation({
 			createdAt: Date.now(),
 			status: "new",
 		});
+
+		return null;
 	},
 });

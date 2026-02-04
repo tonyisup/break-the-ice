@@ -3,6 +3,7 @@
 import { action, ActionCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
+import { Doc } from "../_generated/dataModel";
 import * as crypto from "crypto";
 
 export const getQuestionForUser = action({
@@ -15,26 +16,25 @@ export const getQuestionForUser = action({
 		unsubscribeUrl: v.string(),
 		email: v.string(),
 	}),
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<{
+		success: boolean;
+		question: string;
+		questionUrl: string;
+		imageUrl: string;
+		unsubscribeUrl: string;
+		email: string;
+	}> => {
 		// 1. Get user and their preferences
-		const user = await ctx.runQuery(internal.internal.users.getUserByEmail, { email: args.email });
+		const user: Doc<"users"> | null = await ctx.runQuery(internal.internal.users.getUserByEmail, { email: args.email });
 
-		let question: any;
+		let question: Doc<"questions"> | null = null;
 
 		if (user) {
-			// 2. Try to get an existing question they haven't seen
-			question = await ctx.runQuery(api.core.questions.getQuestionForNewsletter, {
+			// 2 & 3. Try to get an existing question or generate one in a single call
+			question = await ctx.runAction(api.core.questions.getQuestionForNewsletterWithFallback, {
 				userId: user._id,
 				randomSeed: Math.random(),
 			});
-
-			// 3. If no question found, generate a new one
-			if (!question) {
-				const generatedQuestion = await ctx.runAction(api.core.ai.generateAIQuestionForFeed, {
-					userId: user._id,
-				});
-				question = Array.isArray(generatedQuestion) ? (generatedQuestion[0] || null) : generatedQuestion;
-			}
 		} else {
 			// 4. For non-registered subscribers, just get any random question
 			const randomQuestions: any[] = await ctx.runQuery(api.core.questions.getNextRandomQuestions, {
@@ -100,23 +100,34 @@ export const subscribe = action({
 				return { success: false, status: "verification_required", debugUrl: verificationUrl };
 			}
 
-			const response = await fetch(webhookUrl, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					email: args.email,
-					verificationUrl,
-					timestamp: new Date().toISOString(),
-				}),
-			});
+			const controller = new AbortController();
+			const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout for webhook
 
-			if (!response.ok) {
-				console.error(`Verification webhook failed: ${response.status}`);
-				return { success: false, status: "error", message: "Failed to send verification email." };
+			try {
+				const response = await fetch(webhookUrl, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						email: args.email,
+						verificationUrl,
+						timestamp: new Date().toISOString(),
+					}),
+					signal: controller.signal,
+				});
+
+				if (!response.ok) {
+					console.error(`Verification webhook failed: ${response.status}`);
+					return { success: false, status: "error", message: "Failed to send verification email." };
+				}
+
+				return { success: false, status: "verification_required" };
+			} finally {
+				clearTimeout(timeoutId);
 			}
-
-			return { success: false, status: "verification_required" };
-		} catch (error) {
+		} catch (error: any) {
+			if (error.name === "AbortError") {
+				return { success: false, status: "error", message: "Verification request timed out." };
+			}
 			console.error("Failed to initiate subscription:", error);
 			return {
 				success: false,
@@ -158,6 +169,9 @@ async function subscribeUser(ctx: ActionCtx, email: string): Promise<{ success: 
 		return { success: true, message: "Simulated subscription" };
 	}
 
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), 10000);
+
 	try {
 		const response = await fetch(webhookUrl, {
 			method: "POST",
@@ -169,6 +183,7 @@ async function subscribeUser(ctx: ActionCtx, email: string): Promise<{ success: 
 				source: "daily_questions_feed",
 				timestamp: new Date().toISOString(),
 			}),
+			signal: controller.signal,
 		});
 
 		if (!response.ok) {
@@ -181,9 +196,14 @@ async function subscribeUser(ctx: ActionCtx, email: string): Promise<{ success: 
 		});
 
 		return { success: true };
-	} catch (error) {
+	} catch (error: any) {
+		if (error.name === "AbortError") {
+			throw new Error("Subscription request timed out.");
+		}
 		console.error("Failed to subscribe to newsletter:", error);
 		throw new Error("Failed to subscribe. Please try again later.");
+	} finally {
+		clearTimeout(timeoutId);
 	}
 }
 
@@ -202,6 +222,9 @@ export const sendDailyQuestions = action({
 			return { success: true, message: "Simulated sending" };
 		}
 
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 60000); // 1 minute timeout for bulk send
+
 		try {
 			const response = await fetch(webhookUrl, {
 				method: "POST",
@@ -212,6 +235,7 @@ export const sendDailyQuestions = action({
 					source: "daily_questions_feed",
 					timestamp: new Date().toISOString(),
 				}),
+				signal: controller.signal,
 			});
 
 			if (!response.ok) {
@@ -219,9 +243,14 @@ export const sendDailyQuestions = action({
 			}
 
 			return { success: true };
-		} catch (error) {
+		} catch (error: any) {
+			if (error.name === "AbortError") {
+				throw new Error("Daily questions bulk send timed out.");
+			}
 			console.error("Failed to send daily questions:", error);
 			throw new Error("Failed to send daily questions. Please try again later.");
+		} finally {
+			clearTimeout(timeoutId);
 		}
 	},
 });

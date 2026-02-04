@@ -13,7 +13,10 @@ async function getOldestQuestion(ctx: any) {
 }
 
 export const getQuestions = query({
+	args: {},
+	returns: v.array(v.any()),
 	handler: async (ctx) => {
+		await ensureAdmin(ctx);
 		return await ctx.db
 			.query("questions")
 			.withIndex("by_creation_time")
@@ -39,6 +42,7 @@ export const createQuestion = mutation({
 		styleId: v.optional(v.id("styles")),
 		toneId: v.optional(v.id("tones")),
 	},
+	returns: v.id("questions"),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		return await ctx.db.insert("questions", {
@@ -72,6 +76,7 @@ export const updateQuestion = mutation({
 			v.literal("pruned")
 		)),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		const { id, text, tags, style, tone, status } = args;
@@ -95,6 +100,7 @@ export const updateQuestion = mutation({
 		}
 
 		await ctx.db.patch(id, updateData);
+		return null;
 	},
 });
 
@@ -102,16 +108,24 @@ export const deleteQuestion = mutation({
 	args: {
 		id: v.id("questions"),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		await ctx.db.delete(args.id);
+		return null;
 	},
 });
 
 
 // Function to fix existing questions by adding lastShownAt field
 export const fixExistingQuestions = mutation({
+	args: {},
+	returns: v.object({
+		totalQuestions: v.number(),
+		fixedCount: v.number(),
+	}),
 	handler: async (ctx) => {
+		await ensureAdmin(ctx);
 		const allQuestions = await ctx.db.query("questions").collect();
 		const now = Date.now();
 		let fixedCount = 0;
@@ -138,7 +152,13 @@ export const updateCategories = mutation({
 			tone: v.optional(v.string()),
 		})),
 	},
+	returns: v.array(v.object({
+		id: v.id("questions"),
+		success: v.boolean(),
+		error: v.optional(v.string()),
+	})),
 	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
 		const results = [];
 		for (const update of args.updates) {
 			try {
@@ -155,7 +175,10 @@ export const updateCategories = mutation({
 
 // to be executed on a daily schedule
 export const cleanDuplicateQuestions = mutation({
+	args: {},
+	returns: v.number(),
 	handler: async (ctx) => {
+		await ensureAdmin(ctx);
 		const allQuestions = await ctx.db.query("questions").collect();
 
 		let totalDeleted = 0;
@@ -387,13 +410,30 @@ export const updateDuplicateDetectionStatus = mutation({
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 
-		const reviewerId = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", args.reviewerEmail)).unique();
-		await ctx.db.patch(args.detectionId, {
+		const reviewer = args.reviewerEmail
+			? await ctx.db.query("users").withIndex("email", (q) => q.eq("email", args.reviewerEmail)).unique()
+			: null;
+
+		// Only include reviewedBy if a valid user was found
+		const patchData: {
+			status: "approved" | "rejected";
+			reviewedAt: number;
+			reviewedBy?: Id<"users">;
+			rejectReason?: string;
+		} = {
 			status: args.status,
 			reviewedAt: Date.now(),
-			reviewedBy: reviewerId?._id ?? "system" as Id<"users">,
-			rejectReason: args.rejectReason,
-		});
+		};
+
+		if (reviewer) {
+			patchData.reviewedBy = reviewer._id;
+		}
+
+		if (args.rejectReason) {
+			patchData.rejectReason = args.rejectReason;
+		}
+
+		await ctx.db.patch(args.detectionId, patchData);
 
 		return null;
 	},
@@ -437,13 +477,11 @@ export const getQuestionCountsByStyleAndTonePublic = query({
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
 
-		const questions = await ctx.db
-			.query("questions")
-			.filter((q) => q.and(
-				q.neq(q.field("style"), undefined),
-				q.neq(q.field("tone"), undefined)
-			))
-			.collect();
+		// Fetch all questions and filter in JS - more explicit about performance
+		const allQuestions = await ctx.db.query("questions").collect();
+
+		// Filter to only questions with both style and tone
+		const questions = allQuestions.filter(q => q.style && q.tone);
 
 		const counts = new Map<string, number>();
 
@@ -463,13 +501,37 @@ export const getQuestionCountsByStyleAndTonePublic = query({
 
 export const getAdminStats = query({
 	args: {},
+	returns: v.object({
+		questions: v.object({
+			total: v.number(),
+			public: v.number(),
+			pending: v.number(),
+			pruned: v.number(),
+		}),
+		users: v.object({
+			total: v.number(),
+			admins: v.number(),
+			casual: v.number(),
+		}),
+		feedback: v.object({
+			total: v.number(),
+			new: v.number(),
+		}),
+		duplicates: v.object({
+			pending: v.number(),
+		}),
+		staleCount: v.number(),
+	}),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
 
 		const questions = await ctx.db.query("questions").collect();
 		const users = await ctx.db.query("users").collect();
 		const feedback = await ctx.db.query("feedback").collect();
-		const duplicates = await ctx.db.query("duplicateDetections").filter(q => q.eq(q.field("status"), "pending")).collect();
+		// Use index for pending duplicates
+		const duplicates = await ctx.db.query("duplicateDetections")
+			.withIndex("by_status", q => q.eq("status", "pending"))
+			.collect();
 
 		const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
 		const staleCount = questions.filter(q =>

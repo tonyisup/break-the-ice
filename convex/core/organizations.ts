@@ -6,6 +6,7 @@ export const createOrganization = mutation({
 	args: {
 		name: v.string(),
 	},
+	returns: v.id("organizations"),
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
@@ -45,6 +46,7 @@ export const inviteMember = mutation({
 			v.literal("member")
 		),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureOrgMember(ctx, args.organizationId, "admin");
 
@@ -53,6 +55,8 @@ export const inviteMember = mutation({
 			organizationId: args.organizationId,
 			role: args.role,
 		});
+
+		return null;
 	},
 });
 
@@ -60,6 +64,7 @@ export const acceptInvitation = mutation({
 	args: {
 		invitationId: v.id("invitations"),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
@@ -80,6 +85,11 @@ export const acceptInvitation = mutation({
 			throw new Error("Invitation not found.");
 		}
 
+		// Validate that the invitation is for the accepting user's email
+		if (invitation.email.toLowerCase() !== identity.email?.toLowerCase()) {
+			throw new Error("This invitation is for a different email address.");
+		}
+
 		// check if user is already a member of an organization
 		const existingMembership = await ctx.db
 			.query("organization_members")
@@ -97,10 +107,14 @@ export const acceptInvitation = mutation({
 		});
 
 		await ctx.db.delete(args.invitationId);
+
+		return null;
 	},
 });
 
 export const getOrganizations = query({
+	args: {},
+	returns: v.array(v.any()),
 	handler: async (ctx) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
@@ -130,6 +144,8 @@ export const getOrganizations = query({
 });
 
 export const getInvitations = query({
+	args: {},
+	returns: v.array(v.any()),
 	handler: async (ctx) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity || !identity.email) {
@@ -147,6 +163,7 @@ export const getMembers = query({
 	args: {
 		organizationId: v.id("organizations"),
 	},
+	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
 		await ensureOrgMember(ctx, args.organizationId);
 

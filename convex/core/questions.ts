@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, QueryCtx, action } from "../_generated/server";
+import { mutation, query, QueryCtx, action, ActionCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
 import { embed } from "../lib/retriever";
@@ -69,6 +69,7 @@ export const addPersonalQuestion = mutation({
 		customText: v.string(),
 		authorId: v.optional(v.id("users")),
 	},
+	returns: v.union(v.id("questions"), v.null()),
 	handler: async (ctx, args) => {
 		let userId;
 		if (args.authorId) {
@@ -91,7 +92,7 @@ export const addPersonalQuestion = mutation({
 		const { customText } = args;
 		if (customText.trim().length === 0) {
 			// do not save empty questions
-			return;
+			return null;
 		}
 		return await ctx.db.insert("questions", {
 			authorId: userId,
@@ -328,7 +329,85 @@ export const getQuestionForNewsletter = query({
 		const randomIndex = Math.floor(normalizedSeed * candidates.length);
 		return candidates[randomIndex];
 	},
-})
+});
+
+/**
+ * Shared logic for finding nearest questions by embedding.
+ * Extracted into a helper to avoid action-to-action chaining.
+ */
+async function getNearestQuestionsByEmbeddingInternal(
+	ctx: ActionCtx,
+	args: {
+		embedding: number[];
+		style?: string;
+		tone?: string;
+		count?: number;
+	}
+) {
+	const { embedding, style, tone, count } = args;
+	if (!embedding || embedding.length === 0) {
+		return [];
+	}
+	const requestedCount = count ?? 10;
+	const limit = requestedCount * 10;
+
+	const results = await ctx.vectorSearch("questions", "by_embedding", {
+		vector: embedding,
+		limit,
+	});
+
+	const ids = results.map((r) => r._id);
+	if (ids.length === 0) return [];
+
+	const questions = (await ctx.runQuery(api.core.questions.getQuestionsByIds, { ids })) as any[];
+
+	const filtered = questions.filter((q) => {
+		if (q.prunedAt !== undefined) return false;
+		if (q.text === undefined) return false;
+		if (q.status !== "approved" && q.status !== undefined) return false;
+
+		if (style && q.style !== style) return false;
+		if (tone && q.tone !== tone) return false;
+
+		return true;
+	});
+
+	return filtered.slice(0, requestedCount);
+}
+
+export const getQuestionForNewsletterWithFallback = action({
+	args: {
+		userId: v.id("users"),
+		randomSeed: v.optional(v.float64()),
+	},
+	returns: v.union(v.any(), v.null()),
+	handler: async (ctx, args): Promise<Doc<"questions"> | null> => {
+		// 1. Try to get an existing question they haven't seen via query
+		const question: Doc<"questions"> | null = await ctx.runQuery(api.core.questions.getQuestionForNewsletter, {
+			userId: args.userId,
+			randomSeed: args.randomSeed ?? Math.random(),
+		});
+
+		if (question) {
+			return question;
+		}
+
+		// 2. If no question found, generate a new one via action
+		try {
+			const generatedQuestions: (Doc<"questions"> | null)[] = await ctx.runAction(api.core.ai.generateAIQuestionForFeed, {
+				userId: args.userId,
+			});
+
+			if (Array.isArray(generatedQuestions) && generatedQuestions.length > 0) {
+				return generatedQuestions[0];
+			}
+			return (generatedQuestions as any) || null;
+		} catch (error) {
+			console.error("Failed to generate question for newsletter fallback:", error);
+			return null;
+		}
+	},
+});
 
 export const getNextQuestions = query({
 	args: {
@@ -473,6 +552,7 @@ export const getQuestionsByIds = query({
 	args: {
 		ids: v.array(v.id("questions")),
 	},
+	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
 		const { ids } = args;
 
@@ -497,6 +577,7 @@ export const getQuestionsByIds = query({
 
 export const getUserLikedAndPreferredEmbedding = query({
 	args: {},
+	returns: v.array(v.number()),
 	handler: async (ctx) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
@@ -595,6 +676,7 @@ export const getQuestionById = query({
 	args: {
 		id: v.string(),
 	},
+	returns: v.union(v.any(), v.null()),
 	handler: async (ctx, args) => {
 		if (!args.id) return null;
 		try {
@@ -624,6 +706,20 @@ export const getQuestionForOgImage = query({
 	args: {
 		id: v.id("questions"),
 	},
+	returns: v.union(
+		v.object({
+			text: v.optional(v.string()),
+			styleName: v.string(),
+			styleColor: v.string(),
+			styleIcon: v.string(),
+			toneName: v.string(),
+			toneColor: v.string(),
+			toneIcon: v.string(),
+			gradientStart: v.string(),
+			gradientEnd: v.string(),
+		}),
+		v.null()
+	),
 	handler: async (ctx, args) => {
 		const question = await ctx.db.get(args.id);
 		if (!question) return null;
@@ -663,6 +759,7 @@ export const saveAIQuestion = mutation({
 		toneId: v.id("tones"),
 		topic: v.optional(v.string()),
 	},
+	returns: v.union(v.any(), v.null()),
 	handler: async (ctx, args) => {
 		const { text, tags, style, tone, topic } = args;
 
@@ -743,35 +840,7 @@ export const getNearestQuestionsByEmbedding = action({
 	},
 	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
-		const { embedding, style, tone, count } = args;
-		if (!embedding || embedding.length === 0) {
-			return [];
-		}
-		const requestedCount = count ?? 10;
-		const limit = requestedCount * 10;
-
-		const results = await ctx.vectorSearch("questions", "by_embedding", {
-			vector: embedding,
-			limit,
-		});
-
-		const ids = results.map((r) => r._id);
-		if (ids.length === 0) return [];
-
-		const questions = (await ctx.runQuery(api.core.questions.getQuestionsByIds, { ids })) as any[];
-
-		const filtered = questions.filter((q) => {
-			if (q.prunedAt !== undefined) return false;
-			if (q.text === undefined) return false;
-			if (q.status !== "approved" && q.status !== undefined) return false;
-
-			if (style && q.style !== style) return false;
-			if (tone && q.tone !== tone) return false;
-
-			return true;
-		});
-
-		return filtered.slice(0, requestedCount);
+		return await getNearestQuestionsByEmbeddingInternal(ctx, args);
 	},
 });
 
@@ -799,11 +868,11 @@ export const getNextQuestionsByEmbedding = action({
 			return [];
 		}
 		const averageEmbedding = calculateAverageEmbedding([embedding, user.questionPreferenceEmbedding ?? []] as number[][]);
-		const results: Array<Doc<"questions">> = await ctx.runAction(api.core.questions.getNearestQuestionsByEmbedding, {
+
+		// Use the helper instead of calling the action to avoid action-to-action chaining
+		return await getNearestQuestionsByEmbeddingInternal(ctx, {
 			embedding: averageEmbedding,
 			count: count,
 		});
-
-		return results;
 	},
 });
