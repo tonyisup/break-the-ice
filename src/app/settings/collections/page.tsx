@@ -23,11 +23,11 @@ const CollectionsSettings = () => {
   }
   const { activeWorkspace } = useWorkspace();
   const collections = useQuery(
-    api.collections.getCollectionsByOrganization,
+    api.core.collections.getCollectionsByOrganization,
     activeWorkspace ? { organizationId: activeWorkspace } : "skip"
   );
 
-  const createCollection = useMutation(api.collections.createCollection);
+  const createCollection = useMutation(api.core.collections.createCollection);
 
   const [newCollectionName, setNewCollectionName] = useState("");
 

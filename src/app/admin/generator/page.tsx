@@ -23,12 +23,12 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 export default function GeneratorPage() {
-    const styles = useQuery(api.styles.getStyles, {})
-    const tones = useQuery(api.tones.getTones, {})
-    const tags = useQuery(api.tags.getTags)
+    const styles = useQuery(api.core.styles.getStyles, {})
+    const tones = useQuery(api.core.tones.getTones, {})
+    const tags = useQuery(api.core.tags.getTags)
 
-    const generateAIQuestions = useAction(api.ai.generateAIQuestions)
-    const saveAIQuestion = useMutation(api.questions.saveAIQuestion)
+    const generateAIQuestions = useAction(api.core.ai.generateAIQuestions)
+    const saveAIQuestion = useMutation(api.core.questions.saveAIQuestion)
 
     const [selectedTags, setSelectedTags] = React.useState<string[]>([])
     const [customTag, setCustomTag] = React.useState("")

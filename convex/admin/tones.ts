@@ -1,0 +1,79 @@
+import { v } from "convex/values";
+import { mutation } from "../_generated/server";
+
+export const createTone = mutation({
+	args: {
+		id: v.string(),
+		name: v.string(),
+		description: v.optional(v.string()),
+		promptGuidanceForAI: v.string(),
+		color: v.string(),
+		icon: v.string(),
+		order: v.optional(v.float64()),
+	},
+	handler: async (ctx, args) => {
+		const existingTone = await ctx.db
+			.query("tones")
+			.filter((q) => q.eq(q.field("name"), args.name))
+			.first();
+		if (existingTone) {
+			throw new Error("Tone with this name already exists");
+		}
+		const toneId = await ctx.db.insert("tones", {
+			id: args.id,
+			name: args.name,
+			description: args.description,
+			promptGuidanceForAI: args.promptGuidanceForAI,
+			color: args.color,
+			icon: args.icon,
+			order: args.order,
+		});
+		return toneId;
+	},
+});
+
+export const updateTone = mutation({
+	args: {
+		_id: v.id("tones"),
+		id: v.string(),
+		name: v.string(),
+		description: v.optional(v.string()),
+		promptGuidanceForAI: v.string(),
+		color: v.string(),
+		icon: v.string(),
+		order: v.optional(v.float64()),
+	},
+	handler: async (ctx, args) => {
+		const { id, ...rest } = args;
+		const existingTone = await ctx.db.get(args._id);
+		if (existingTone) {
+			await ctx.db.patch(args._id, {
+				name: args.name,
+				description: args.description,
+				promptGuidanceForAI: args.promptGuidanceForAI,
+				color: args.color,
+				icon: args.icon,
+				order: args.order,
+			});
+		}
+	},
+});
+
+export const deleteTone = mutation({
+	args: { id: v.id("tones") },
+	handler: async (ctx, args) => {
+		const toneToDelete = await ctx.db.get(args.id);
+		if (!toneToDelete) {
+			throw new Error("Tone not found");
+		}
+
+		const questionsToDelete = await ctx.db
+			.query("questions")
+			.withIndex("by_tone", (q) => q.eq("toneId", toneToDelete._id))
+			.collect();
+
+		await Promise.all(questionsToDelete.map((q) => ctx.db.delete(q._id)));
+
+		await ctx.db.delete(args.id);
+	},
+});

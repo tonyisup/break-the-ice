@@ -69,17 +69,17 @@ export default function PoolPage() {
     const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
     const [editedText, setEditedText] = React.useState("")
 
-    const stats = useQuery(api.questions.getPoolStats, { poolDate: selectedDate }) as PoolStats | undefined
-    const questions = useQuery(api.questions.getPoolQuestions, {
+    const stats = useQuery(api.admin.questions.getPoolStats, { poolDate: selectedDate }) as PoolStats | undefined
+    const questions = useQuery(api.admin.questions.getPoolQuestions, {
         poolDate: selectedDate,
         status: statusFilter,
         limit: 100,
     }) as PoolQuestion[] | undefined
 
-    const triggerGeneration = useAction(api.questions.triggerPoolGeneration)
-    const triggerAssignment = useAction(api.questions.triggerPoolAssignment)
-    const deleteQuestion = useMutation(api.questions.deleteQuestion)
-    const updateQuestion = useMutation(api.questions.updateQuestion)
+    const triggerGeneration = useAction(api.admin.questions.triggerPoolGeneration)
+    const triggerAssignment = useAction(api.admin.questions.triggerPoolAssignment)
+    const deleteQuestion = useMutation(api.admin.questions.deleteQuestion)
+    const updateQuestion = useMutation(api.admin.questions.updateQuestion)
 
     const getSafeIcon = (iconName: string): Icon => {
         return (iconName in iconMap ? iconName : "HelpCircle") as Icon

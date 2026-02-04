@@ -16,10 +16,10 @@ const UnsubscribePage = () => {
 	const { isSignedIn, isLoaded } = useAuth();
 	const { effectiveTheme } = useTheme();
 
-	const currentUser = useQuery(api.users.getCurrentUser, {});
-	const unsubscribeAction = useAction(api.resend.unsubscribeContact);
-	const getStatusAction = useAction(api.resend.getContactStatus);
-	const subscribeAction = useAction(api.newsletter.subscribe);
+	const currentUser = useQuery(api.core.users.getCurrentUser, {});
+	const unsubscribeAction = useAction(api.core.resend.unsubscribeContact);
+	const getStatusAction = useAction(api.core.resend.getContactStatus);
+	const subscribeAction = useAction(api.core.newsletter.subscribe);
 
 	const [email, setEmail] = useState<string | null>(null);
 	const [formEmail, setFormEmail] = useState("");

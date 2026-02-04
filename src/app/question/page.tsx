@@ -17,11 +17,11 @@ export default function QuestionPage() {
   const { theme, setTheme } = useTheme();
   const { addQuestionHistoryEntry } = useQuestionHistory();
   const { likedQuestions, setLikedQuestions, addHiddenStyle, addHiddenTone } = useStorageContext();
-  const recordAnalytics = useMutation(api.questions.recordAnalytics);
+  const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
 
-  const question = useQuery(api.questions.getQuestionById, id ? { id } : "skip");
-  const style = useQuery(api.styles.getStyle, (question && question.style) ? { id: question.style } : "skip");
-  const tone = useQuery(api.tones.getTone, (question && question.tone) ? { id: question.tone } : "skip");
+  const question = useQuery(api.core.questions.getQuestionById, id ? { id } : "skip");
+  const style = useQuery(api.core.styles.getStyle, (question && question.style) ? { id: question.style } : "skip");
+  const tone = useQuery(api.core.tones.getTone, (question && question.tone) ? { id: question.tone } : "skip");
 
   useEffect(() => {
     if (question) {

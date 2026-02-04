@@ -21,7 +21,7 @@ const WorkspaceSwitcher = () => {
     return null;
   }
 
-  const organizations = useQuery(api.organizations.getOrganizations);
+  const organizations = useQuery(api.core.organizations.getOrganizations);
   const { activeWorkspace, setActiveWorkspace } = useWorkspace();
 
 

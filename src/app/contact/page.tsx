@@ -13,7 +13,7 @@ export default function ContactPage() {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { sessionId } = useStorageContext();
-  const submitFeedback = useMutation(api.feedback.submitFeedback);
+  const submitFeedback = useMutation(api.core.feedback.submitFeedback);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -41,8 +41,8 @@ export default function SingleQuestionPage() {
   } = useStorageContext();
 
 
-  const styles = useQuery(api.styles.getFilteredStyles, { excluded: hiddenStyles });
-  const tones = useQuery(api.tones.getFilteredTones, { excluded: hiddenTones });
+  const styles = useQuery(api.core.styles.getFilteredStyles, { excluded: hiddenStyles });
+  const tones = useQuery(api.core.tones.getFilteredTones, { excluded: hiddenTones });
 
   const [startTime, setStartTime] = useState(Date.now());
   const [isGenerating, setIsGenerating] = useState(false);
@@ -61,9 +61,9 @@ export default function SingleQuestionPage() {
   const styleSelectorRef = useRef<StyleSelectorRef>(null);
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
   const callGenerateAIQuestionRef = useRef<((count: number, isShuffleGeneration?: boolean) => Promise<void>) | undefined>(undefined);
-  const generateAIQuestion = useAction(api.ai.generateAIQuestions);
-  const discardQuestion = useMutation(api.questions.discardQuestion);
-  const nextQuestions = useQuery(api.questions.getNextQuestions,
+  const generateAIQuestion = useAction(api.core.ai.generateAIQuestions);
+  const discardQuestion = useMutation(api.core.questions.discardQuestion);
+  const nextQuestions = useQuery(api.core.questions.getNextQuestions,
     (selectedStyle === "" || selectedTone === "") ? "skip" : {
       count: 10,
       style: selectedStyle,
@@ -73,7 +73,7 @@ export default function SingleQuestionPage() {
     });
   const style = useMemo(() => styles?.find(s => s.id === selectedStyle), [styles, selectedStyle]);
   const tone = useMemo(() => tones?.find(t => t.id === selectedTone), [tones, selectedTone]);
-  const recordAnalytics = useMutation(api.questions.recordAnalytics);
+  const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
   const [currentQuestions, setCurrentQuestions] = useState<Doc<"questions">[]>([]);
   const [isHighlighting, setIsHighlighting] = useState(false);
   const [highlightedStyle, setHighlightedStyle] = useState<Doc<"styles"> | null>(null);

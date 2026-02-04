@@ -28,14 +28,14 @@ const SettingsPage = () => {
   const { activeWorkspace } = useWorkspace();
 
   const allStyles = useQuery(
-    api.styles.getStyles,
+    api.core.styles.getStyles,
     { organizationId: activeWorkspace ?? undefined }
   );
   const allTones = useQuery(
-    api.tones.getTones,
+    api.core.tones.getTones,
     { organizationId: activeWorkspace ?? undefined }
   );
-  const currentUser = useQuery(api.users.getCurrentUser, {});
+  const currentUser = useQuery(api.core.users.getCurrentUser, {});
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -76,7 +76,7 @@ const SettingsPage = () => {
   } = useStorageContext();
 
   const handleToggleStyle = (styleId: Id<"styles">) => {
-    if (hiddenStyles.includes(styleId)) {
+    if (hiddenStyles?.includes(styleId)) {
       removeHiddenStyle(styleId);
     } else {
       addHiddenStyle(styleId);
@@ -84,7 +84,7 @@ const SettingsPage = () => {
   };
 
   const handleToggleTone = (toneId: Id<"tones">) => {
-    if (hiddenTones.includes(toneId)) {
+    if (hiddenTones?.includes(toneId)) {
       removeHiddenTone(toneId);
     } else {
       addHiddenTone(toneId);
@@ -94,7 +94,7 @@ const SettingsPage = () => {
   const unhideQuestion = (questionId: Id<"questions">) => {
     removeHiddenQuestion(questionId);
   };
-  const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions });
+  const hiddenQuestionObjects = useQuery(api.core.questions.getQuestionsByIds, { ids: hiddenQuestions });
 
   // prevent flickering when unhiding questions
   const [lastKnownHiddenQuestions, setLastKnownHiddenQuestions] = useState<Doc<"questions">[] | undefined>(undefined);
@@ -114,8 +114,8 @@ const SettingsPage = () => {
     if (allStyles) {
       const serverIds = allStyles.map(s => s._id);
       const localIds = hiddenStyles;
-      const filteredIds = localIds.filter(id => serverIds.includes(id));
-      if (filteredIds.length !== localIds.length) {
+      const filteredIds = localIds?.filter(id => serverIds.includes(id));
+      if (filteredIds && localIds && filteredIds?.length !== localIds?.length) {
         setHiddenStyles(filteredIds);
       }
     }
@@ -125,8 +125,8 @@ const SettingsPage = () => {
     if (allTones) {
       const serverIds = allTones.map(t => t._id);
       const localIds = hiddenTones;
-      const filteredIds = localIds.filter(id => serverIds.includes(id));
-      if (filteredIds.length !== localIds.length) {
+      const filteredIds = localIds?.filter(id => serverIds.includes(id));
+      if (filteredIds && localIds && filteredIds?.length !== localIds?.length) {
         setHiddenTones(filteredIds);
       }
     }
@@ -141,11 +141,11 @@ const SettingsPage = () => {
     }
   }, [hiddenQuestionObjects, hiddenQuestions, setHiddenQuestions]);
 
-  const visibleStyleCount = allStyles?.filter(s => !hiddenStyles.includes(s._id)).length;
-  const hiddenStyleCount = allStyles?.filter(s => hiddenStyles.includes(s._id)).length;
+  const visibleStyleCount = allStyles?.filter(s => !hiddenStyles?.includes(s._id)).length;
+  const hiddenStyleCount = allStyles?.filter(s => hiddenStyles?.includes(s._id)).length;
 
-  const visibleToneCount = allTones?.filter(t => !hiddenTones.includes(t._id)).length;
-  const hiddenToneCount = allTones?.filter(t => hiddenTones.includes(t._id)).length;
+  const visibleToneCount = allTones?.filter(t => !hiddenTones?.includes(t._id)).length;
+  const hiddenToneCount = allTones?.filter(t => hiddenTones?.includes(t._id)).length;
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradientDark = ["#3B2554", "#262D54"];
@@ -319,7 +319,7 @@ const SettingsPage = () => {
                   </div>
                   <ul className="space-y-2">
                     {allStyles.map(style => {
-                      const isIncluded = !hiddenStyles.includes(style._id);
+                      const isIncluded = !hiddenStyles?.includes(style._id);
                       return (
                         <li key={style._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
                           <div className="flex items-center">
@@ -377,7 +377,7 @@ const SettingsPage = () => {
                   </div>
                   <ul className="space-y-2">
                     {allTones.map(tone => {
-                      const isIncluded = !hiddenTones.includes(tone._id);
+                      const isIncluded = !hiddenTones?.includes(tone._id);
                       return (
                         <li key={tone._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
                           <div className="flex items-center">

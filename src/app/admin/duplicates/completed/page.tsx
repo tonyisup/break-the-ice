@@ -15,7 +15,7 @@ import { Link } from "react-router-dom"
 import { IconComponent } from "@/components/ui/icons/icon"
 
 export default function DuplicateHistoryPage() {
-    const duplicateHistory = useQuery(api.questions.getCompletedDuplicateDetections)
+    const duplicateHistory = useQuery(api.admin.questions.getCompletedDuplicateDetections)
 
     if (!duplicateHistory) {
         return (

@@ -28,8 +28,8 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 
 export default function UsersPage() {
-	const users = useQuery(api.admin.getUsers)
-	const makeAdminMutation = useMutation(api.admin.makeAdmin)
+	const users = useQuery(api.admin.users.getUsers)
+	const makeAdminMutation = useMutation(api.admin.users.makeAdmin)
 
 	const [search, setSearch] = React.useState("")
 

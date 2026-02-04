@@ -12,7 +12,7 @@ export default function FeedbackButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [text, setText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const submitFeedback = useMutation(api.feedback.submitFeedback);
+  const submitFeedback = useMutation(api.core.feedback.submitFeedback);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

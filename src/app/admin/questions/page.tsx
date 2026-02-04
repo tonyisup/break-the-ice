@@ -42,13 +42,13 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 export default function QuestionsPage() {
-	const allQuestions = useQuery(api.questions.getQuestions)
-	const styles = useQuery(api.styles.getStyles, {})
-	const tones = useQuery(api.tones.getTones, {})
+	const allQuestions = useQuery(api.admin.questions.getQuestions)
+	const styles = useQuery(api.core.styles.getStyles, {})
+	const tones = useQuery(api.core.tones.getTones, {})
 
-	const createQuestion = useMutation(api.questions.createQuestion)
-	const updateQuestion = useMutation(api.questions.updateQuestion)
-	const deleteQuestion = useMutation(api.questions.deleteQuestion)
+	const createQuestion = useMutation(api.admin.questions.createQuestion)
+	const updateQuestion = useMutation(api.admin.questions.updateQuestion)
+	const deleteQuestion = useMutation(api.admin.questions.deleteQuestion)
 
 	const [search, setSearch] = React.useState("")
 	const [viewMode, setViewMode] = React.useState<"table" | "grid">("table")

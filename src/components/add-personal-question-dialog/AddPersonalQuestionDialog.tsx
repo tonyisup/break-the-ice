@@ -22,7 +22,7 @@ export function AddPersonalQuestionDialog({
   onOpenChange,
 }: AddPersonalQuestionDialogProps) {
   const [questionText, setQuestionText] = useState("");
-  const addPersonalQuestion = useMutation(api.questions.addPersonalQuestion);
+  const addPersonalQuestion = useMutation(api.core.questions.addPersonalQuestion);
 
   const handleSubmit = async () => {
     if (questionText.trim() === "") {

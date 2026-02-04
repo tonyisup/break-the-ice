@@ -13,7 +13,7 @@ interface HeaderProps {
 
 export const Header = ({ homeLinkSlot }: HeaderProps) => {
   const { isSignedIn } = useAuth();
-  const customQuestions = useQuery(api.questions.getCustomQuestions, {});
+  const customQuestions = useQuery(api.core.questions.getCustomQuestions, {});
   const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
 
   const { likedQuestions, likedLimit, hiddenQuestions, hiddenLimit } = useStorageContext();

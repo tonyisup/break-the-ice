@@ -18,12 +18,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
@@ -36,10 +30,10 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 
 export default function TagsPage() {
-	const tags = useQuery(api.tags.getTags)
-	const createTag = useMutation(api.tags.createTag)
-	const updateTag = useMutation(api.tags.updateTag)
-	const deleteTag = useMutation(api.tags.deleteTag)
+	const tags = useQuery(api.core.tags.getTags)
+	const createTag = useMutation(api.admin.tags.createTag)
+	const updateTag = useMutation(api.admin.tags.updateTag)
+	const deleteTag = useMutation(api.admin.tags.deleteTag)
 
 	const [search, setSearch] = React.useState("")
 	const [editingTag, setEditingTag] = React.useState<Doc<"tags"> | null>(null)
