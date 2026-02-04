@@ -15,12 +15,14 @@ export const NON_ESSENTIAL_STORAGE_KEYS = [
   "storageLimitBehavior",
   "questionHistory",
   "theme",
+  "sessionId",
 ];
 
 export type Theme = "light" | "dark" | "system";
 export type StorageLimitBehavior = "block" | "replace";
 
 export interface StorageContextType {
+  sessionId: string;
   theme: Theme;
   setTheme: (theme: Theme) => void;
   likedQuestions: Id<"questions">[];
@@ -68,6 +70,12 @@ export const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) ||
 export const useLocalStorageContext = (
   hasConsented: boolean,
 ): StorageContextType => {
+  const [sessionId] = useLocalStorage<string>(
+    "sessionId",
+    crypto.randomUUID?.() || Math.random().toString(36).substring(2),
+    hasConsented
+  );
+
   const [theme, setTheme] = useLocalStorage<Theme>(
     "theme",
     "system",
@@ -221,6 +229,7 @@ export const useLocalStorageContext = (
   );
 
   return {
+    sessionId,
     theme,
     setTheme,
     likedQuestions,
@@ -278,6 +287,12 @@ export const useLocalStorageContext = (
 export const useConvexStorageContext = (
   hasConsented: boolean,
 ): StorageContextType => {
+  const [sessionId] = useLocalStorage<string>(
+    "sessionId",
+    crypto.randomUUID?.() || Math.random().toString(36).substring(2),
+    hasConsented
+  );
+
   const [theme, setTheme] = useLocalStorage<Theme>(
     "theme",
     "system",
@@ -426,6 +441,7 @@ export const useConvexStorageContext = (
   }, [updateHiddenQuestions]);
 
   return {
+    sessionId,
     theme,
     setTheme,
     likedQuestions,

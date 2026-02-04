@@ -282,12 +282,14 @@ export default defineSchema({
   feedback: defineTable({
     text: v.string(),
     pageUrl: v.string(),
-    userId: v.id("users"),
+    userId: v.optional(v.id("users")),
+    sessionId: v.optional(v.string()),
     createdAt: v.float64(),
     status: v.union(v.literal("new"), v.literal("read"), v.literal("archived")),
   })
     .index("by_status", ["status"])
     .index("by_userId", ["userId"])
+    .index("by_sessionId", ["sessionId"])
     .index("by_createdAt", ["createdAt"]),
   pendingSubscriptions: defineTable({
     email: v.string(),
