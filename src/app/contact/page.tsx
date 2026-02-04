@@ -85,7 +85,7 @@ export default function ContactPage() {
           <div>
             <h2 className="text-lg font-semibold mb-2">Other ways to connect</h2>
             <p className="text-sm text-muted-foreground">
-              You can also reach out to us via the feedback button at the bottom right of the main screen.
+              When you are signed in, you can also reach out to us via the feedback button at the bottom right of any screen.
             </p>
           </div>
 
