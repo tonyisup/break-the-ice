@@ -23,7 +23,7 @@ export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
 	}
 
 	try {
-		const result = await ctx.runAction(api.newsletter.getQuestionForUser, { email });
+		const result = await ctx.runAction(api.core.newsletter.getQuestionForUser, { email });
 		return new Response(JSON.stringify(result), {
 			status: 200,
 			headers: { "Content-Type": "application/json" },

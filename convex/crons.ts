@@ -6,50 +6,50 @@ const crons = cronJobs();
 crons.interval(
   "populate missing question embeddings",
   { hours: 24 },
-  internal.ai.populateMissingEmbeddings,
+  internal.internal.ai.populateMissingEmbeddings,
   { maxBatchSize: 50 }
 );
 
 crons.interval(
   "populate missing style embeddings",
   { hours: 24 },
-  internal.ai.populateMissingStyleEmbeddings,
+  internal.internal.ai.populateMissingStyleEmbeddings,
 );
 
 crons.interval(
   "update users with missing embeddings",
   { hours: 24 },
-  internal.userInternal.updateUsersWithMissingEmbeddingsAction,
+  internal.internal.users.updateUsersWithMissingEmbeddingsAction,
 );
 
 crons.interval(
   "populate missing styles embeddings",
   { hours: 24 },
-  internal.ai.populateMissingStyleEmbeddings,
+  internal.internal.ai.populateMissingStyleEmbeddings,
 );
 
 crons.interval(
   "populate missing tones embeddings",
   { hours: 24 },
-  internal.ai.populateMissingToneEmbeddings
+  internal.internal.ai.populateMissingToneEmbeddings
 );
 
 crons.interval(
   "update questions with missing styles",
   { hours: 24 },
-  internal.styles.updateQuestionsWithMissingStyleIds,
+  internal.internal.styles.updateQuestionsWithMissingStyleIds,
 );
 crons.interval(
   "update questions with missing tones",
   { hours: 24 },
-  internal.tones.updateQuestionsWithMissingToneIds
+  internal.internal.tones.updateQuestionsWithMissingToneIds
 );
 
 // Nightly question pool generation - generates fresh AI questions for daily use
 crons.cron(
   "generate nightly question pool",
   "0 8 * * *", // 10:00 AM UTC (12:00 AM PST / 1:00 AM PDT)
-  internal.ai.generateNightlyQuestionPool,
+  internal.internal.ai.generateNightlyQuestionPool,
   { targetCount: 5, maxCombinations: 10 } // ~50 questions per night
 );
 
@@ -57,7 +57,7 @@ crons.cron(
 crons.cron(
   "assign pool questions to users",
   "0 9 * * *", // 11:00 AM UTC (1:00 AM PST / 2:00 AM PDT)
-  internal.questions.assignPoolQuestionsToUsers,
+  internal.internal.questions.assignPoolQuestionsToUsers,
   { questionsPerUser: 6 }
 );
 

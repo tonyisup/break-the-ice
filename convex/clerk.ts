@@ -41,7 +41,7 @@ export const usersWebhook = httpAction(async (ctx, request) => {
 			const name = `${first_name || ""} ${last_name || ""}`.trim();
 			const subscriptionTier = public_metadata?.subscriptionTier || "free";
 
-			await ctx.runMutation(internal.users.updateUserFromClerk, {
+			await ctx.runMutation(internal.internal.users.updateUserFromClerk, {
 				clerkId: id,
 				email,
 				name,
