@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as ai from "../ai.js";
 import type * as auth from "../auth.js";
 import type * as clerk from "../clerk.js";
@@ -32,6 +33,8 @@ import type * as subscriptions from "../subscriptions.js";
 import type * as tags from "../tags.js";
 import type * as tones from "../tones.js";
 import type * as topics from "../topics.js";
+import type * as userInternal from "../userInternal.js";
+import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
 
 import type {
@@ -41,6 +44,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   ai: typeof ai;
   auth: typeof auth;
   clerk: typeof clerk;
@@ -65,6 +69,8 @@ declare const fullApi: ApiFromModules<{
   tags: typeof tags;
   tones: typeof tones;
   topics: typeof topics;
+  userInternal: typeof userInternal;
+  userSettings: typeof userSettings;
   users: typeof users;
 }>;
 

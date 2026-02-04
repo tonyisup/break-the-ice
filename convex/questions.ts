@@ -1486,7 +1486,7 @@ export const getNextQuestionsByEmbedding = action({
     if (!userId) {
       return [];
     }
-    const user: Doc<"users"> | null = await ctx.runQuery(internal.users.getUser, {
+    const user: Doc<"users"> | null = await ctx.runQuery(internal.userInternal.getUser, {
       userId: userId,
     });
     if (!user) {
@@ -1783,15 +1783,15 @@ export const assignPoolQuestionsToUsers = internalAction({
 
     // Get all users with newsletter subscription
     const subscribers: Array<Doc<"users">> = await ctx.runQuery(
-      internal.users.getNewsletterSubscribers,
+      internal.userInternal.getNewsletterSubscribers,
       {}
     );
 
     // Bulk fetch hidden preferences for all subscribers (2 queries instead of 2N)
     const userIds = subscribers.map(s => s._id);
     const { hiddenStyles: allHiddenStyles, hiddenTones: allHiddenTones }: { hiddenStyles: Array<any>, hiddenTones: Array<any> } = await ctx.runQuery(
-      internal.users.getHiddenPreferencesForUsers,
-      { userIds }
+      internal.userInternal.getHiddenPreferencesForUsers,
+      { userIds: subscribers.map(u => u._id) }
     );
 
     // Build lookup maps by user ID

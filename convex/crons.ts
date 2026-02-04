@@ -35,7 +35,7 @@ crons.interval(
 crons.interval(
   "update users with missing embeddings",
   { hours: 24 },
-  internal.users.updateUsersWithMissingEmbeddingsAction,
+  internal.userInternal.updateUsersWithMissingEmbeddingsAction,
 );
 
 crons.interval(

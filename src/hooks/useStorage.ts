@@ -299,9 +299,9 @@ export const useConvexStorageContext = (
     hasConsented,
   );
 
-  const questionHistory = useQuery(api.users.getQuestionHistory, {}) ?? [];
+  const questionHistory = useQuery(api.userSettings.getQuestionHistory, {}) ?? [];
 
-  const settings = useQuery(api.users.getSettings);
+  const settings = useQuery(api.userSettings.getSettings);
   const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
   const [hiddenQuestions, setHiddenQuestions] = useState<Id<"questions">[]>([]);
   const [localHiddenStyles, setLocalHiddenStyles] = useState<Id<"styles">[]>([]);
@@ -310,20 +310,20 @@ export const useConvexStorageContext = (
     undefined,
   );
   const [defaultTone, setDefaultTone] = useState<string | undefined>(undefined);
-  const updateLikedQuestions = useMutation(api.users.updateLikedQuestions);
-  const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
-  const updateUserSettings = useMutation(api.users.updateUserSettings);
-  const mergeKnownLikedQuestions = useMutation(api.users.mergeKnownLikedQuestions);
-  const mergeKnownHiddenQuestions = useMutation(api.users.mergeKnownHiddenQuestions);
-  const mergeQuestionHistory = useMutation(api.users.mergeQuestionHistory);
-  const hiddenStylesQuery = useQuery(api.users.getHiddenStyleIds);
-  const hiddenTonesQuery = useQuery(api.users.getHiddenToneIds);
-  const updateHiddenStyles = useMutation(api.users.updateHiddenStyles);
-  const updateHiddenTones = useMutation(api.users.updateHiddenTones);
-  const addHiddenStyleId = useMutation(api.users.addHiddenStyleId);
-  const removeHiddenStyleId = useMutation(api.users.removeHiddenStyleId);
-  const addHiddenToneId = useMutation(api.users.addHiddenToneId);
-  const removeHiddenToneId = useMutation(api.users.removeHiddenToneId);
+  const updateLikedQuestions = useMutation(api.userSettings.updateLikedQuestions);
+  const updateHiddenQuestions = useMutation(api.userSettings.updateHiddenQuestions);
+  const updateUserSettings = useMutation(api.userSettings.updateUserSettings);
+  const mergeKnownLikedQuestions = useMutation(api.userSettings.mergeKnownLikedQuestions);
+  const mergeKnownHiddenQuestions = useMutation(api.userSettings.mergeKnownHiddenQuestions);
+  const mergeQuestionHistory = useMutation(api.userSettings.mergeQuestionHistory);
+  const hiddenStylesQuery = useQuery(api.userSettings.getHiddenStyleIds);
+  const hiddenTonesQuery = useQuery(api.userSettings.getHiddenToneIds);
+  const updateHiddenStyles = useMutation(api.userSettings.updateHiddenStyles);
+  const updateHiddenTones = useMutation(api.userSettings.updateHiddenTones);
+  const addHiddenStyleId = useMutation(api.userSettings.addHiddenStyleId);
+  const removeHiddenStyleId = useMutation(api.userSettings.removeHiddenStyleId);
+  const addHiddenToneId = useMutation(api.userSettings.addHiddenToneId);
+  const removeHiddenToneId = useMutation(api.userSettings.removeHiddenToneId);
 
   useEffect(() => {
     // Merge local likes if they exist
@@ -425,9 +425,9 @@ export const useConvexStorageContext = (
   );
 
   // History is now managed by the backend analytics
-  const setQuestionHistory = useCallback(() => { }, []);
-  const addQuestionToHistory = useCallback(() => { }, []);
-  const removeQuestionFromHistory = useCallback(() => { }, []);
+  const setQuestionHistory = useCallback((_entries: HistoryEntry[]) => { }, []);
+  const addQuestionToHistory = useCallback((_entry: HistoryEntry) => { }, []);
+  const removeQuestionFromHistory = useCallback((_id: Id<"questions">) => { }, []);
   const clearQuestionHistory = useCallback(() => { }, []);
 
   const clearLikedQuestions = useCallback(() => {

@@ -322,13 +322,13 @@ export const generateAIQuestionForFeed = action({
 		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
 		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
 
-		const recentlySeenQuestions = await ctx.runQuery(internal.users.getRecentlySeenQuestions, { userId: user._id });
+		const recentlySeenQuestions = await ctx.runQuery(internal.userInternal.getRecentlySeenQuestions, { userId: user._id });
 		const recentlySeen = recentlySeenQuestions.filter((q) => q !== undefined);
 		if (recentlySeen.length > 0) {
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
 		}
 
-		const blockedQuestions = await ctx.runQuery(internal.users.getBlockedQuestions, { userId: user._id });
+		const blockedQuestions = await ctx.runQuery(internal.userInternal.getBlockedQuestions, { userId: user._id });
 		if (blockedQuestions.length > 0) {
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these blocked questions:\n- ${blockedQuestions.join('\n- ')}`;
 		}
