@@ -201,7 +201,7 @@ export default function InfiniteScrollPage() {
       const BATCH_SIZE = 5;
 
       // 1. Try to get from DB
-      const dbQuestions = await convex.query(api.core.questions.getNextRandomQuestions, {
+      const dbQuestions = await convex.action(api.core.questions.getNextRandomQuestions, {
         count: BATCH_SIZE,
         seen: Array.from(seenIds), // Pass currently seen IDs to avoid duplicates
         hidden: hiddenQuestions,

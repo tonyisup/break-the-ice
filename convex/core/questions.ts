@@ -180,7 +180,7 @@ export const getSimilarQuestions = query({
 	},
 });
 
-export const getNextRandomQuestions = query({
+export const getNextRandomQuestions = action({
 	args: {
 		count: v.float64(),
 		seen: v.optional(v.array(v.id("questions"))),
@@ -191,66 +191,33 @@ export const getNextRandomQuestions = query({
 		randomSeed: v.optional(v.float64()),
 	},
 	handler: async (ctx, args) => {
-		const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed } = args;
-		const seenIds = new Set(seen);
+		const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed = Math.random() } = args;
+
+		// 1. Get time range for randomization
+		const { minTime, maxTime } = await ctx.runQuery(internal.internal.questions.getQuestionTimeRange);
 
 		let startTime = 0;
-
-		if (randomSeed !== undefined) {
-			const firstQ = await ctx.db.query("questions").withIndex("by_creation_time").order("asc").first();
-			const lastQ = await ctx.db.query("questions").withIndex("by_creation_time").order("desc").first();
-
-			if (firstQ && lastQ) {
-				const minTime = firstQ._creationTime;
-				const maxTime = lastQ._creationTime;
-				if (maxTime > minTime) {
-					const normalizedSeed = randomSeed - Math.floor(randomSeed);
-					startTime = minTime + normalizedSeed * (maxTime - minTime);
-				}
-			}
+		if (maxTime > minTime) {
+			const normalizedSeed = randomSeed - Math.floor(randomSeed);
+			startTime = minTime + normalizedSeed * (maxTime - minTime);
 		}
 
-		const applyFilters = (q: any) => {
-			return q.and(
-				q.eq(q.field("organizationId"), organizationId),
-				q.eq(q.field("prunedAt"), undefined),
-				q.neq(q.field("text"), undefined),
-				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
-				...hidden.map((id: Id<"questions">) => q.neq(q.field("_id"), id)),
-				...seen.map((id: Id<"questions">) => q.neq(q.field("_id"), id)),
-				...hiddenStyles.map((styleId: Id<"styles">) => q.neq(q.field("styleId"), styleId)),
-				...hiddenTones.map((toneId: Id<"tones">) => q.neq(q.field("toneId"), toneId))
-			);
-		};
+		// 2. Fetch candidates using internal query
+		const candidates = await ctx.runQuery(internal.internal.questions.getRandomQuestionsInternal, {
+			count,
+			startTime,
+			seen,
+			hidden,
+			hiddenStyles,
+			hiddenTones,
+			organizationId,
+		}) as any[];
 
-		// 1. Try fetching from random start point
-		const candidates = await ctx.db
-			.query("questions")
-			.withIndex("by_creation_time", (q) => q.gt("_creationTime", startTime))
-			.filter((q) => applyFilters(q))
-			.take(count * 4);
+		// 3. Shuffle results (deterministic based on seed)
+		const results = [...candidates];
+		shuffleArray(results, randomSeed);
 
-		// 2. If not enough, wrap around and fetch from beginning
-		if (candidates.length < count * 4) {
-			const moreCandidates = await ctx.db
-				.query("questions")
-				.withIndex("by_creation_time")
-				.filter((q) => applyFilters(q))
-				.take(count * 4 - candidates.length);
-
-			const existingIds = new Set(candidates.map((q) => q._id));
-			for (const q of moreCandidates) {
-				if (!existingIds.has(q._id)) {
-					candidates.push(q);
-					existingIds.add(q._id);
-				}
-			}
-		}
-
-		const seedForShuffle = randomSeed !== undefined ? randomSeed : Date.now();
-		shuffleArray(candidates, seedForShuffle);
-
-		return candidates.slice(0, count);
+		return results.slice(0, count);
 	},
 });
 

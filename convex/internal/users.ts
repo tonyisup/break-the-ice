@@ -133,9 +133,19 @@ export const getUserLikedQuestions = internalQuery({
 		userId: v.id("users"),
 	},
 	handler: async (ctx, args) => {
-		return await ctx.db.query("userQuestions")
+		const liked = await ctx.db.query("userQuestions")
 			.withIndex("by_userId_status_updatedAt", (q) => q.eq("userId", args.userId).eq("status", "liked"))
 			.collect();
+
+		if (liked.length > 0) {
+			return liked;
+		}
+
+		const seenAndLingered = await ctx.db.query("userQuestions")
+			.withIndex("by_userId_status_updatedAt", (q) => q.eq("userId", args.userId).eq("status", "seen").gt("updatedAt", Date.now() - 30 * 24 * 60 * 60 * 1000))
+			.collect();
+
+		return seenAndLingered;
 	},
 });
 
@@ -190,7 +200,15 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 export const getUsersWithMissingEmbeddings = internalQuery({
 	args: {},
 	handler: async (ctx) => {
-		return await ctx.db.query("users").filter((q) => q.eq(q.field("questionPreferenceEmbedding"), undefined)).collect();
+		return await ctx.db
+			.query("users")
+			.filter((q) =>
+				q.or(
+					q.eq(q.field("questionPreferenceEmbedding"), undefined),
+					q.eq(q.field("questionPreferenceEmbedding"), [])
+				)
+			)
+			.collect();
 	},
 });
 

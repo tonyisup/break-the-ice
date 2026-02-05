@@ -29,7 +29,7 @@ export const getQuestionForUser = action({
 
 		let question: Doc<"questions"> | null = null;
 
-		if (user) {
+		if (user && (user.questionPreferenceEmbedding?.length ?? 0) > 0) {
 			// 2 & 3. Try to get an existing question or generate one in a single call
 			question = await ctx.runAction(api.core.questions.getQuestionForNewsletterWithFallback, {
 				userId: user._id,
@@ -37,7 +37,7 @@ export const getQuestionForUser = action({
 			});
 		} else {
 			// 4. For non-registered subscribers, just get any random question
-			const randomQuestions: any[] = await ctx.runQuery(api.core.questions.getNextRandomQuestions, {
+			const randomQuestions: any[] = await ctx.runAction(api.core.questions.getNextRandomQuestions, {
 				count: 1,
 			});
 			question = randomQuestions[0];
