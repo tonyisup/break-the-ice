@@ -568,6 +568,22 @@ export const getRandomQuestionsInternal = internalQuery({
 		hiddenTones: v.array(v.id("tones")),
 		organizationId: v.optional(v.id("organizations")),
 	},
+	returns: v.array(v.object({
+		_id: v.id("questions"),
+		_creationTime: v.number(),
+		text: v.optional(v.string()),
+		styleId: v.optional(v.id("styles")),
+		toneId: v.optional(v.id("tones")),
+		organizationId: v.optional(v.id("organizations")),
+		status: v.optional(v.union(
+			v.literal("pending"),
+			v.literal("public"),
+			v.literal("private"),
+			v.literal("pruning"),
+			v.literal("pruned")
+		)),
+		prunedAt: v.optional(v.number()),
+	})),
 	handler: async (ctx, args) => {
 		const { count, startTime, seen, hidden, hiddenStyles, hiddenTones, organizationId } = args;
 		const seenIds = new Set(seen);
@@ -580,7 +596,7 @@ export const getRandomQuestionsInternal = internalQuery({
 				q.eq(q.field("organizationId"), organizationId),
 				q.eq(q.field("prunedAt"), undefined),
 				q.neq(q.field("text"), undefined),
-				q.or(q.eq(q.field("status"), "public"), q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
+				q.or(q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
 			];
 			return q.and(...conditions);
 		};
@@ -626,6 +642,10 @@ export const getRandomQuestionsInternal = internalQuery({
 // Get the time range of all questions for randomization
 export const getQuestionTimeRange = internalQuery({
 	args: {},
+	returns: v.object({
+		minTime: v.number(),
+		maxTime: v.number(),
+	}),
 	handler: async (ctx) => {
 		const firstQ = await ctx.db.query("questions").withIndex("by_creation_time").order("asc").first();
 		const lastQ = await ctx.db.query("questions").withIndex("by_creation_time").order("desc").first();

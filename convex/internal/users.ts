@@ -13,6 +13,27 @@ export function calculateAverageEmbedding(embeddings: number[][]): number[] {
 	return sum.map((val) => val / embeddings.length);
 }
 
+export const userValidator = v.object({
+	_id: v.id("users"),
+	_creationTime: v.number(),
+	email: v.optional(v.string()),
+	emailVerificationTime: v.optional(v.number()),
+	image: v.optional(v.string()),
+	name: v.optional(v.string()),
+	phone: v.optional(v.string()),
+	phoneVerificationTime: v.optional(v.number()),
+	isAdmin: v.optional(v.boolean()),
+	questionPreferenceEmbedding: v.optional(v.array(v.number())),
+	defaultStyle: v.optional(v.string()),
+	defaultTone: v.optional(v.string()),
+	subscriptionTier: v.optional(v.union(v.literal("free"), v.literal("casual"))),
+	aiUsage: v.optional(v.object({
+		count: v.number(),
+		cycleStart: v.number(),
+	})),
+	newsletterSubscriptionStatus: v.optional(v.union(v.literal("subscribed"), v.literal("unsubscribed"))),
+});
+
 export const getUserById = internalQuery({
 	args: { id: v.id("users") },
 	returns: v.union(v.null(), v.any()),
@@ -199,6 +220,7 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 
 export const getUsersWithMissingEmbeddings = internalQuery({
 	args: {},
+	returns: v.array(userValidator),
 	handler: async (ctx) => {
 		return await ctx.db
 			.query("users")
