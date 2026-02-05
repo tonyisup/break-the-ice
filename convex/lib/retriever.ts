@@ -69,7 +69,7 @@ export const embedTopic = internalAction({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const topic = await ctx.runQuery(api.core.topics.getTopicBySystemId, {
+    const topic = await ctx.runQuery(api.core.topics.getTopicById, {
       id: args.topicId,
     });
     if (!topic) {

@@ -35,7 +35,7 @@ export const getTopics = query({
 			? topics.filter(t => t.organizationId === args.organizationId)
 			: topics;
 
-		return filtered;
+		return filtered.map(mapToPublicTopic);
 	},
 });
 
@@ -59,6 +59,16 @@ export const getTopicBySystemId = query({
 		id: v.id("topics"),
 	},
 	returns: v.union(v.object(publicTopicFields), v.null()),
+	handler: async (ctx, args) => {
+		const topic = await ctx.db.get(args.id);
+		return topic ? mapToPublicTopic(topic) : null;
+	},
+});
+
+export const getTopicById = query({
+	args: {
+		id: v.id("topics"),
+	},
 	handler: async (ctx, args) => {
 		const topic = await ctx.db.get(args.id);
 		return topic;
