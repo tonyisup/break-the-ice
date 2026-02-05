@@ -30,16 +30,16 @@ export const submitFeedback = mutation({
 			// Use composite index for efficient rate-limiting query
 			recentFeedback = await ctx.db
 				.query("feedback")
-				.withIndex("by_userId_createdAt", (q) =>
-					q.eq("userId", userId).gt("createdAt", oneHourAgo)
+				.withIndex("by_userId", (q) =>
+					q.eq("userId", userId).gt("_creationTime", oneHourAgo)
 				)
 				.collect();
 		} else if (args.sessionId) {
 			// Use composite index for efficient rate-limiting query
 			recentFeedback = await ctx.db
 				.query("feedback")
-				.withIndex("by_sessionId_createdAt", (q) =>
-					q.eq("sessionId", args.sessionId).gt("createdAt", oneHourAgo)
+				.withIndex("by_sessionId", (q) =>
+					q.eq("sessionId", args.sessionId).gt("_creationTime", oneHourAgo)
 				)
 				.collect();
 		}
@@ -53,7 +53,6 @@ export const submitFeedback = mutation({
 			pageUrl: args.pageUrl,
 			userId: userId,
 			sessionId: args.sessionId,
-			createdAt: Date.now(),
 			status: "new",
 		});
 

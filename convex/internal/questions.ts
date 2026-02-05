@@ -101,7 +101,6 @@ export const saveDuplicateDetection = internalMutation({
 			reason: args.reason,
 			confidence: args.confidence,
 			status: "pending",
-			detectedAt: Date.now(),
 		});
 	},
 });

@@ -153,7 +153,7 @@ export default function FeedbackPage() {
 							</div>
 							<div className="flex items-center gap-1">
 								<Clock className="size-3" />
-								{new Date(item.createdAt).toLocaleString()}
+								{new Date(item._creationTime).toLocaleString()}
 							</div>
 						</div>
 					</div>

@@ -206,7 +206,6 @@ export const getPendingDuplicateDetections = query({
 		rejectReason: v.optional(v.string()),
 		confidence: v.number(),
 		status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
-		detectedAt: v.number(),
 		reviewedAt: v.optional(v.number()),
 		reviewedBy: v.optional(v.id("users")),
 		questions: v.array(v.object({
@@ -302,7 +301,6 @@ export const getCompletedDuplicateDetections = query({
 		rejectReason: v.optional(v.string()),
 		confidence: v.number(),
 		status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
-		detectedAt: v.number(),
 		reviewedAt: v.optional(v.number()),
 		reviewedBy: v.optional(v.id("users")),
 		questions: v.array(v.object({
