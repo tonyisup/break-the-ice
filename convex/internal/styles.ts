@@ -9,12 +9,15 @@ export const getStylesWithMissingEmbeddings = internalQuery({
 	},
 });
 
+
 export const getStyleBySystemId = internalQuery({
 	args: { id: v.id("styles") },
 	handler: async (ctx, args) => {
 		return await ctx.db.get(args.id);
 	},
 });
+
+export const getStyleById = getStyleBySystemId;
 
 export const addStyleEmbedding = internalMutation({
 	args: {

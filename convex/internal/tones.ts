@@ -47,3 +47,10 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
 		}));
 	},
 });
+
+export const getToneById = internalQuery({
+	args: { id: v.id("tones") },
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.id);
+	},
+});

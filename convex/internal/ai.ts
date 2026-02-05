@@ -222,7 +222,7 @@ export const generateNightlyQuestionPool = internalAction({
 		targetCount: v.number(),        // Questions per style/tone combo
 		maxCombinations: v.number(),    // Max combos to process
 	},
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<{ questionsGenerated: number; combinationsProcessed: number; errors: string[] }> => {
 		const { targetCount, maxCombinations } = args;
 
 		const usersWithLowUnseenCount = await ctx.runQuery(internal.internal.questions.getUsersWithLowUnseenCount, { threshold: 3 });
@@ -338,5 +338,58 @@ export const generateNightlyQuestionPool = internalAction({
 
 		// ... (Summary Email Logic)
 		return { questionsGenerated, combinationsProcessed, errors };
+	},
+});
+
+// Remix a single question - alters the words while keeping the same style, tone, and vibe
+export const remixQuestion = internalAction({
+	args: {
+		questionId: v.id("questions"),
+	},
+	returns: v.string(),
+	handler: async (ctx, args): Promise<string> => {
+		const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
+		if (!question || !question.text) {
+			throw new Error("Question not found or has no text");
+		}
+
+		const [style, tone, topic] = await Promise.all([
+			question.styleId ? ctx.runQuery(internal.internal.styles.getStyleById, { id: question.styleId }) : null,
+			question.toneId ? ctx.runQuery(internal.internal.tones.getToneById, { id: question.toneId }) : null,
+			ctx.runQuery(internal.internal.topics.getTopCurrentTopic, {}),
+		]);
+
+		const completion = await openai.chat.completions.create({
+			model: "@preset/break-the-ice-berg-default",
+			messages: [
+				{
+					role: "system",
+					content: `You are a world-class creative writer specializing in social psychology and ice-breakers.
+					
+					TASK: "Remix" the user's question. Change the words and phrasing completely, but keep the EXACT SAME style, tone, and topic vibe.
+					FORMAT: Return ONLY the new question text as a plain string. No quotes, no JSON, no prefixes.
+					
+					STYLE STRUCTURE: Use this as your base: "${style?.structure ?? "Direct and engaging"}"`
+				},
+				{
+					role: "user",
+					content: `Remix this question: "${question.text}"
+					
+					Context:
+					Style: ${style?.name ?? "General"} (${style?.description ?? ""})
+					Tone: ${tone?.name ?? "General"} (${tone?.description ?? ""})
+					Topic Focus: ${topic?.name ?? "General"} (${topic?.description ?? ""})`
+				}
+			],
+			temperature: 0.9,
+			max_tokens: 150,
+		});
+
+		const remixedText = completion.choices[0]?.message?.content?.trim() ?? "";
+		if (!remixedText) {
+			throw new Error("AI failed to generate a remix");
+		}
+
+		return remixedText.replace(/^["']|["']$/g, '').trim();
 	},
 });

@@ -755,3 +755,15 @@ export const triggerPoolAssignment = action({
 		return result;
 	},
 });
+
+// Remix a question (admin only)
+export const remixQuestion = action({
+	args: {
+		id: v.id("questions"),
+	},
+	returns: v.string(),
+	handler: async (ctx, args): Promise<string> => {
+		await ensureAdmin(ctx);
+		return await ctx.runAction(internal.internal.ai.remixQuestion, { questionId: args.id });
+	},
+});

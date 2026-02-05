@@ -17,6 +17,7 @@ import {
     Pencil,
     Save,
     X,
+    Sparkles,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -70,6 +71,7 @@ export default function PoolPage() {
     const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
     const [editedText, setEditedText] = React.useState("")
     const [targetCountPerStyleTone, setTargetCountPerStyleTone] = React.useState(5)
+    const [remixingId, setRemixingId] = React.useState<Id<"questions"> | null>(null)
 
     const stats = useQuery(api.admin.questions.getPoolStats, { poolDate: selectedDate }) as PoolStats | undefined
     const questions = useQuery(api.admin.questions.getPoolQuestions, {
@@ -82,6 +84,7 @@ export default function PoolPage() {
     const triggerAssignment = useAction(api.admin.questions.triggerPoolAssignment)
     const deleteQuestion = useMutation(api.admin.questions.deleteQuestion)
     const updateQuestion = useMutation(api.admin.questions.updateQuestion)
+    const remixQuestion = useAction(api.admin.questions.remixQuestion)
 
     const getSafeIcon = (iconName: string): Icon => {
         return (iconName in iconMap ? iconName : "HelpCircle") as Icon
@@ -147,6 +150,19 @@ export default function PoolPage() {
             setEditingQuestionId(null)
         } catch (error) {
             toast.error("Failed to update question")
+        }
+    }
+
+    const handleRemix = async (id: Id<"questions">) => {
+        setRemixingId(id)
+        try {
+            const newText = await remixQuestion({ id })
+            await updateQuestion({ id, text: newText })
+            toast.success("Question remixed!")
+        } catch (error: any) {
+            toast.error(`Remix failed: ${error.message}`)
+        } finally {
+            setRemixingId(null)
         }
     }
 
@@ -423,14 +439,29 @@ export default function PoolPage() {
                                         >
                                             {question.poolStatus === "distributed" ? "Distributed" : "Available"}
                                         </Badge>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                            onClick={() => handleDelete(question._id as Id<"questions">)}
-                                        >
-                                            <Trash2 className="size-4" />
-                                        </Button>
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                                                onClick={() => handleRemix(question._id)}
+                                                disabled={remixingId === question._id}
+                                            >
+                                                {remixingId === question._id ? (
+                                                    <Loader2 className="size-4 animate-spin" />
+                                                ) : (
+                                                    <Sparkles className="size-4" />
+                                                )}
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                onClick={() => handleDelete(question._id as Id<"questions">)}
+                                            >
+                                                <Trash2 className="size-4" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}

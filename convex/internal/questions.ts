@@ -19,6 +19,14 @@ function cosineSimilarity(a: number[], b: number[]): number {
 	return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+
+export const getQuestionById = internalQuery({
+	args: { id: v.id("questions") },
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.id);
+	},
+});
+
 export const getQuestionsToEmbed = internalQuery({
 	args: {
 		startCreationTime: v.optional(v.number()),
