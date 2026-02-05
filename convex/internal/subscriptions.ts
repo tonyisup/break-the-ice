@@ -11,7 +11,6 @@ export const createPendingSubscription = internalMutation({
 		await ctx.db.insert("pendingSubscriptions", {
 			email: args.email,
 			token: args.token,
-			createdAt: Date.now(),
 		});
 		return null;
 	},
@@ -35,7 +34,7 @@ export const consumePendingSubscription = internalMutation({
 		// Check expiry (24 hours)
 		const now = Date.now();
 		const expiry = 24 * 60 * 60 * 1000;
-		if (now - subscription.createdAt > expiry) {
+		if (now - subscription._creationTime > expiry) {
 			await ctx.db.delete(subscription._id);
 			throw new Error("Subscription link expired.");
 		}

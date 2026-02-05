@@ -11,7 +11,6 @@ export const getFeedback = query({
 		pageUrl: v.string(),
 		userId: v.optional(v.id("users")),
 		sessionId: v.optional(v.string()),
-		createdAt: v.number(),
 		status: v.union(v.literal("new"), v.literal("read"), v.literal("archived")),
 		user: v.union(
 			v.object({
@@ -26,7 +25,6 @@ export const getFeedback = query({
 		await ensureAdmin(ctx);
 		const feedback = await ctx.db
 			.query("feedback")
-			.withIndex("by_createdAt")
 			.order("desc")
 			.collect();
 

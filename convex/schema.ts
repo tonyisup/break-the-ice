@@ -59,7 +59,8 @@ export default defineSchema({
     endDate: v.optional(v.number()),
   }).index("by_my_id", ["id"])
     .index("by_name", ["name"])
-    .index("by_order", ["order"]),
+    .index("by_order", ["order"])
+    .index("by_startDate_endDate_order", ["startDate", "endDate", "order"]),
   questions: defineTable({
     organizationId: v.optional(v.id("organizations")),
     averageViewDuration: v.number(),
@@ -208,13 +209,11 @@ export default defineSchema({
       v.literal("rejected"),
       v.literal("approved")
     ),
-    detectedAt: v.number(),
     reviewedAt: v.optional(v.number()),
     reviewedBy: v.optional(v.string()),
     rejectReason: v.optional(v.string()),
   })
     .index("by_status", ["status"])
-    .index("by_detected_at", ["detectedAt"])
     .index("by_status_and_confidence", ["status", "confidence"])
     .index("by_uniqueKey", ["uniqueKey"]),
   duplicateDetectionProgress: defineTable({
@@ -229,12 +228,10 @@ export default defineSchema({
     currentBatch: v.number(),
     totalBatches: v.number(),
     errors: v.array(v.string()),
-    startedAt: v.number(),
     completedAt: v.optional(v.number()),
     lastUpdatedAt: v.number(),
   })
-    .index("by_status", ["status"])
-    .index("by_started_at", ["startedAt"]),
+    .index("by_status", ["status"]),
   pruning: defineTable({
     questionId: v.id("questions"),
     userId: v.id("users"),
@@ -285,18 +282,13 @@ export default defineSchema({
     pageUrl: v.string(),
     userId: v.optional(v.id("users")),
     sessionId: v.optional(v.string()),
-    createdAt: v.float64(),
     status: v.union(v.literal("new"), v.literal("read"), v.literal("archived")),
   })
     .index("by_status", ["status"])
     .index("by_userId", ["userId"])
-    .index("by_sessionId", ["sessionId"])
-    .index("by_createdAt", ["createdAt"])
-    .index("by_userId_createdAt", ["userId", "createdAt"])
-    .index("by_sessionId_createdAt", ["sessionId", "createdAt"]),
+    .index("by_sessionId", ["sessionId"]),
   pendingSubscriptions: defineTable({
     email: v.string(),
     token: v.string(),
-    createdAt: v.number(),
   }).index("by_token", ["token"]),
 });

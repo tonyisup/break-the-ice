@@ -241,7 +241,6 @@ export const getPendingDuplicateDetections = query({
 		rejectReason: v.optional(v.string()),
 		confidence: v.number(),
 		status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
-		detectedAt: v.number(),
 		reviewedAt: v.optional(v.number()),
 		reviewedBy: v.optional(v.id("users")),
 		questions: v.array(v.object({
@@ -337,7 +336,6 @@ export const getCompletedDuplicateDetections = query({
 		rejectReason: v.optional(v.string()),
 		confidence: v.number(),
 		status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
-		detectedAt: v.number(),
 		reviewedAt: v.optional(v.number()),
 		reviewedBy: v.optional(v.id("users")),
 		questions: v.array(v.object({
@@ -790,5 +788,17 @@ export const triggerPoolAssignment = action({
 			questionsPerUser: args.questionsPerUser ?? 6,
 		});
 		return result;
+	},
+});
+
+// Remix a question (admin only)
+export const remixQuestion = action({
+	args: {
+		id: v.id("questions"),
+	},
+	returns: v.string(),
+	handler: async (ctx, args): Promise<string> => {
+		await ensureAdmin(ctx);
+		return await ctx.runAction(internal.internal.ai.remixQuestion, { questionId: args.id });
 	},
 });

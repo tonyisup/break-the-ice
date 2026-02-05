@@ -19,6 +19,50 @@ function cosineSimilarity(a: number[], b: number[]): number {
 	return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+
+export const getQuestionById = internalQuery({
+	args: { id: v.id("questions") },
+	returns: v.nullable(v.object({
+		_id: v.id("questions"),
+		_creationTime: v.number(),
+		organizationId: v.optional(v.id("organizations")),
+		averageViewDuration: v.number(),
+		lastShownAt: v.optional(v.number()),
+		text: v.optional(v.string()),
+		totalLikes: v.number(),
+		totalThumbsDown: v.optional(v.number()),
+		totalShows: v.number(),
+		isAIGenerated: v.optional(v.boolean()),
+		tags: v.optional(v.array(v.string())),
+		style: v.optional(v.string()),
+		styleId: v.optional(v.id("styles")),
+		tone: v.optional(v.string()),
+		toneId: v.optional(v.id("tones")),
+		topic: v.optional(v.string()),
+		topicId: v.optional(v.id("topics")),
+		embedding: v.optional(v.array(v.number())),
+		authorId: v.optional(v.string()),
+		customText: v.optional(v.string()),
+		status: v.optional(v.union(
+			v.literal("pending"),
+			v.literal("public"),
+			v.literal("private"),
+			v.literal("pruning"),
+			v.literal("pruned")
+		)),
+		prunedAt: v.optional(v.number()),
+		lastPostedAt: v.optional(v.number()),
+		poolDate: v.optional(v.string()),
+		poolStatus: v.optional(v.union(
+			v.literal("available"),
+			v.literal("distributed")
+		)),
+	})),
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.id);
+	},
+});
+
 export const getQuestionsToEmbed = internalQuery({
 	args: {
 		startCreationTime: v.optional(v.number()),
@@ -101,7 +145,6 @@ export const saveDuplicateDetection = internalMutation({
 			reason: args.reason,
 			confidence: args.confidence,
 			status: "pending",
-			detectedAt: Date.now(),
 		});
 	},
 });
@@ -329,11 +372,11 @@ export const assignPoolQuestionsToUser = internalMutation({
 });
 
 // Internal query: Check if any newsletter subscriber has fewer than N unseen questions
-export const hasUsersWithLowUnseenCount = internalQuery({
+export const getUsersWithLowUnseenCount = internalQuery({
 	args: {
 		threshold: v.number(),
 	},
-	returns: v.boolean(),
+	returns: v.array(v.id("users")),
 	handler: async (ctx, args) => {
 		const subscribers = await ctx.db
 			.query("users")
@@ -343,7 +386,7 @@ export const hasUsersWithLowUnseenCount = internalQuery({
 			.collect();
 
 		if (subscribers.length === 0) {
-			return false;
+			return [];
 		}
 
 		for (const user of subscribers) {
@@ -355,11 +398,11 @@ export const hasUsersWithLowUnseenCount = internalQuery({
 				.take(args.threshold);
 
 			if (unseenQuestions.length < args.threshold) {
-				return true;
+				return subscribers.map(s => s._id);
 			}
 		}
 
-		return false;
+		return [];
 	},
 });
 

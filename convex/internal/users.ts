@@ -346,3 +346,41 @@ export const getHiddenPreferencesForUsers = internalQuery({
 		return { hiddenStyles, hiddenTones };
 	},
 });
+
+export const getUserVisibleStyles = internalQuery({
+	args: {
+		userId: v.id("users"),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args) => {
+		const hidden = await ctx.db
+			.query("userStyles")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", args.userId).eq("status", "hidden")
+			)
+			.collect();
+		const visible = await ctx.db
+			.query("styles")
+			.collect();
+		return visible.filter(s => !hidden.some(h => h.styleId === s._id));
+	},
+});
+
+export const getUserVisibleTones = internalQuery({
+	args: {
+		userId: v.id("users"),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args) => {
+		const hidden = await ctx.db
+			.query("userTones")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", args.userId).eq("status", "hidden")
+			)
+			.collect();
+		const visible = await ctx.db
+			.query("tones")
+			.collect();
+		return visible.filter(t => !hidden.some(h => h.toneId === t._id));
+	},
+});

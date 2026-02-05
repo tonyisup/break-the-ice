@@ -36,7 +36,6 @@ export const createDuplicateDetectionProgress = mutation({
 			currentBatch: 0,
 			totalBatches: args.totalBatches,
 			errors: [],
-			startedAt: now,
 			lastUpdatedAt: now,
 		});
 	},
@@ -136,7 +135,6 @@ export const getDuplicateDetectionProgress = query({
 			currentBatch: v.number(),
 			totalBatches: v.number(),
 			errors: v.array(v.string()),
-			startedAt: v.number(),
 			completedAt: v.optional(v.number()),
 			lastUpdatedAt: v.number(),
 			_creationTime: v.number(),
@@ -162,7 +160,6 @@ export const getLatestDuplicateDetectionProgress = query({
 			currentBatch: v.number(),
 			totalBatches: v.number(),
 			errors: v.array(v.string()),
-			startedAt: v.number(),
 			completedAt: v.optional(v.number()),
 			lastUpdatedAt: v.number(),
 			_creationTime: v.number(),

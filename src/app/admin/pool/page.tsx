@@ -17,6 +17,7 @@ import {
     Pencil,
     Save,
     X,
+    Sparkles,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -26,6 +27,7 @@ import { IconComponent, Icon } from "@/components/ui/icons/icon"
 import { iconMap } from "@/components/ui/icons/icons"
 import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
+import { Slider } from "@/components/ui/slider"
 
 type PoolStats = {
     totalQuestions: number
@@ -68,6 +70,8 @@ export default function PoolPage() {
     const [isAssigning, setIsAssigning] = React.useState(false)
     const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
     const [editedText, setEditedText] = React.useState("")
+    const [targetCountPerStyleTone, setTargetCountPerStyleTone] = React.useState(5)
+    const [remixingIds, setRemixingIds] = React.useState<Set<Id<"questions">>>(new Set())
 
     const stats = useQuery(api.admin.questions.getPoolStats, { poolDate: selectedDate }) as PoolStats | undefined
     const questions = useQuery(api.admin.questions.getPoolQuestions, {
@@ -80,6 +84,7 @@ export default function PoolPage() {
     const triggerAssignment = useAction(api.admin.questions.triggerPoolAssignment)
     const deleteQuestion = useMutation(api.admin.questions.deleteQuestion)
     const updateQuestion = useMutation(api.admin.questions.updateQuestion)
+    const remixQuestion = useAction(api.admin.questions.remixQuestion)
 
     const getSafeIcon = (iconName: string): Icon => {
         return (iconName in iconMap ? iconName : "HelpCircle") as Icon
@@ -100,7 +105,7 @@ export default function PoolPage() {
     const handleGenerate = async () => {
         setIsGenerating(true)
         try {
-            const result = await triggerGeneration({})
+            const result = await triggerGeneration({ targetCount: targetCountPerStyleTone })
             toast.success(`Generated ${result.questionsGenerated} questions across ${result.combinationsProcessed} style/tone combinations`)
             if (result.errors.length > 0) {
                 toast.warning(`${result.errors.length} errors occurred during generation`)
@@ -148,6 +153,27 @@ export default function PoolPage() {
         }
     }
 
+    const handleRemix = async (id: Id<"questions">) => {
+        setRemixingIds(prev => {
+            const next = new Set(prev)
+            next.add(id)
+            return next
+        })
+        try {
+            const newText = await remixQuestion({ id })
+            await updateQuestion({ id, text: newText })
+            toast.success("Question remixed!")
+        } catch (error: any) {
+            toast.error(`Remix failed: ${error.message}`)
+        } finally {
+            setRemixingIds(prev => {
+                const next = new Set(prev)
+                next.delete(id)
+                return next
+            })
+        }
+    }
+
     const isToday = selectedDate === new Date().toISOString().split('T')[0]
     const formattedDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
         weekday: 'long',
@@ -163,32 +189,45 @@ export default function PoolPage() {
                     <h2 className="text-3xl font-bold tracking-tight">Question Pool</h2>
                     <p className="text-muted-foreground">Manage nightly AI-generated questions for user distribution.</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <Button
-                        onClick={handleGenerate}
-                        disabled={!isToday || isGenerating}
-                        variant="outline"
-                        className="gap-2"
-                    >
-                        {isGenerating ? (
-                            <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                            <RefreshCw className="size-4" />
-                        )}
-                        Generate Pool
-                    </Button>
-                    <Button
-                        onClick={handleAssign}
-                        disabled={!isToday || isAssigning || (stats?.availableQuestions ?? 0) === 0}
-                        className="gap-2"
-                    >
-                        {isAssigning ? (
-                            <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                            <Send className="size-4" />
-                        )}
-                        Assign to Users
-                    </Button>
+                <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                        <p>Target Count: {targetCountPerStyleTone}</p>
+                        <Slider
+                            value={[targetCountPerStyleTone]}
+                            onValueChange={(value) => setTargetCountPerStyleTone(value[0])}
+                            min={1}
+                            max={10}
+                            step={1}
+                            disabled={!isToday || isGenerating}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            onClick={handleGenerate}
+                            disabled={!isToday || isGenerating}
+                            variant="outline"
+                            className="gap-2"
+                        >
+                            {isGenerating ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                                <RefreshCw className="size-4" />
+                            )}
+                            Generate Pool
+                        </Button>
+                        <Button
+                            onClick={handleAssign}
+                            disabled={!isToday || isAssigning || (stats?.availableQuestions ?? 0) === 0}
+                            className="gap-2"
+                        >
+                            {isAssigning ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                                <Send className="size-4" />
+                            )}
+                            Assign to Users
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -408,14 +447,29 @@ export default function PoolPage() {
                                         >
                                             {question.poolStatus === "distributed" ? "Distributed" : "Available"}
                                         </Badge>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                            onClick={() => handleDelete(question._id as Id<"questions">)}
-                                        >
-                                            <Trash2 className="size-4" />
-                                        </Button>
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                                                onClick={() => handleRemix(question._id)}
+                                                disabled={remixingIds.has(question._id)}
+                                            >
+                                                {remixingIds.has(question._id) ? (
+                                                    <Loader2 className="size-4 animate-spin" />
+                                                ) : (
+                                                    <Sparkles className="size-4" />
+                                                )}
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                onClick={() => handleDelete(question._id as Id<"questions">)}
+                                            >
+                                                <Trash2 className="size-4" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}

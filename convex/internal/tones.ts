@@ -47,3 +47,23 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
 		}));
 	},
 });
+
+export const getToneById = internalQuery({
+	args: { id: v.id("tones") },
+	returns: v.nullable(v.object({
+		_id: v.id("tones"),
+		_creationTime: v.number(),
+		id: v.string(),
+		name: v.string(),
+		description: v.optional(v.string()),
+		color: v.string(),
+		icon: v.string(),
+		promptGuidanceForAI: v.string(),
+		order: v.optional(v.number()),
+		embedding: v.optional(v.array(v.number())),
+		organizationId: v.optional(v.id("organizations")),
+	})),
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.id);
+	},
+});

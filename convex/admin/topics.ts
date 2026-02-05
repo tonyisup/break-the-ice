@@ -1,7 +1,33 @@
 import { v } from "convex/values";
-import { mutation } from "../_generated/server";
+import { mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
+
+export const getTopics = query({
+	args: {},
+	returns: v.array(v.object({
+		_id: v.id("topics"),
+		_creationTime: v.number(),
+		id: v.string(),
+		name: v.string(),
+		description: v.optional(v.string()),
+		example: v.optional(v.string()),
+		promptGuidanceForAI: v.optional(v.string()),
+		embedding: v.optional(v.array(v.number())),
+		order: v.optional(v.number()),
+		organizationId: v.optional(v.id("organizations")),
+		startDate: v.optional(v.number()),
+		endDate: v.optional(v.number()),
+	})),
+	handler: async (ctx) => {
+		await ensureAdmin(ctx);
+
+		return await ctx.db
+			.query("topics")
+			.withIndex("by_order")
+			.collect();
+	},
+});
 
 export const createTopic = mutation({
 	args: {
