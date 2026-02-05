@@ -328,11 +328,11 @@ export const assignPoolQuestionsToUser = internalMutation({
 });
 
 // Internal query: Check if any newsletter subscriber has fewer than N unseen questions
-export const hasUsersWithLowUnseenCount = internalQuery({
+export const getUsersWithLowUnseenCount = internalQuery({
 	args: {
 		threshold: v.number(),
 	},
-	returns: v.boolean(),
+	returns: v.array(v.id("users")),
 	handler: async (ctx, args) => {
 		const subscribers = await ctx.db
 			.query("users")
@@ -342,7 +342,7 @@ export const hasUsersWithLowUnseenCount = internalQuery({
 			.collect();
 
 		if (subscribers.length === 0) {
-			return false;
+			return [];
 		}
 
 		for (const user of subscribers) {
@@ -354,11 +354,11 @@ export const hasUsersWithLowUnseenCount = internalQuery({
 				.take(args.threshold);
 
 			if (unseenQuestions.length < args.threshold) {
-				return true;
+				return subscribers.map(s => s._id);
 			}
 		}
 
-		return false;
+		return [];
 	},
 });
 

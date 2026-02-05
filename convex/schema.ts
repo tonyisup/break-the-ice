@@ -59,7 +59,8 @@ export default defineSchema({
     endDate: v.optional(v.number()),
   }).index("by_my_id", ["id"])
     .index("by_name", ["name"])
-    .index("by_order", ["order"]),
+    .index("by_order", ["order"])
+    .index("by_startDate_endDate_order", ["startDate", "endDate", "order"]),
   questions: defineTable({
     organizationId: v.optional(v.id("organizations")),
     averageViewDuration: v.number(),

@@ -38,10 +38,10 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 
 export default function TopicsPage() {
-	const topics = useQuery(api.topics.getTopics)
-	const createTopic = useMutation(api.topics.createTopic)
-	const updateTopic = useMutation(api.topics.updateTopic)
-	const deleteTopic = useMutation(api.topics.deleteTopic)
+	const topics = useQuery(api.admin.topics.getTopics)
+	const createTopic = useMutation(api.admin.topics.createTopic)
+	const updateTopic = useMutation(api.admin.topics.updateTopic)
+	const deleteTopic = useMutation(api.admin.topics.deleteTopic)
 
 	const [search, setSearch] = React.useState("")
 	const [editingTopic, setEditingTopic] = React.useState<Doc<"topics"> | null>(null)

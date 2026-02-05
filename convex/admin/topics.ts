@@ -1,7 +1,18 @@
 import { v } from "convex/values";
-import { mutation } from "../_generated/server";
+import { mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
+
+export const getTopics = query({
+	handler: async (ctx) => {
+		await ensureAdmin(ctx);
+
+		return await ctx.db
+			.query("topics")
+			.withIndex("by_order")
+			.collect();
+	},
+});
 
 export const createTopic = mutation({
 	args: {

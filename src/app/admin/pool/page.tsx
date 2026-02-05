@@ -26,6 +26,7 @@ import { IconComponent, Icon } from "@/components/ui/icons/icon"
 import { iconMap } from "@/components/ui/icons/icons"
 import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
+import { Slider } from "@/components/ui/slider"
 
 type PoolStats = {
     totalQuestions: number
@@ -68,6 +69,7 @@ export default function PoolPage() {
     const [isAssigning, setIsAssigning] = React.useState(false)
     const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
     const [editedText, setEditedText] = React.useState("")
+    const [targetCountPerStyleTone, setTargetCountPerStyleTone] = React.useState(5)
 
     const stats = useQuery(api.admin.questions.getPoolStats, { poolDate: selectedDate }) as PoolStats | undefined
     const questions = useQuery(api.admin.questions.getPoolQuestions, {
@@ -100,7 +102,7 @@ export default function PoolPage() {
     const handleGenerate = async () => {
         setIsGenerating(true)
         try {
-            const result = await triggerGeneration({})
+            const result = await triggerGeneration({ targetCount: targetCountPerStyleTone })
             toast.success(`Generated ${result.questionsGenerated} questions across ${result.combinationsProcessed} style/tone combinations`)
             if (result.errors.length > 0) {
                 toast.warning(`${result.errors.length} errors occurred during generation`)
@@ -163,32 +165,45 @@ export default function PoolPage() {
                     <h2 className="text-3xl font-bold tracking-tight">Question Pool</h2>
                     <p className="text-muted-foreground">Manage nightly AI-generated questions for user distribution.</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <Button
-                        onClick={handleGenerate}
-                        disabled={!isToday || isGenerating}
-                        variant="outline"
-                        className="gap-2"
-                    >
-                        {isGenerating ? (
-                            <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                            <RefreshCw className="size-4" />
-                        )}
-                        Generate Pool
-                    </Button>
-                    <Button
-                        onClick={handleAssign}
-                        disabled={!isToday || isAssigning || (stats?.availableQuestions ?? 0) === 0}
-                        className="gap-2"
-                    >
-                        {isAssigning ? (
-                            <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                            <Send className="size-4" />
-                        )}
-                        Assign to Users
-                    </Button>
+                <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                        <p>Target Count: {targetCountPerStyleTone}</p>
+                        <Slider
+                            value={[targetCountPerStyleTone]}
+                            onValueChange={(value) => setTargetCountPerStyleTone(value[0])}
+                            min={1}
+                            max={10}
+                            step={1}
+                            disabled={!isToday || isGenerating}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            onClick={handleGenerate}
+                            disabled={!isToday || isGenerating}
+                            variant="outline"
+                            className="gap-2"
+                        >
+                            {isGenerating ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                                <RefreshCw className="size-4" />
+                            )}
+                            Generate Pool
+                        </Button>
+                        <Button
+                            onClick={handleAssign}
+                            disabled={!isToday || isAssigning || (stats?.availableQuestions ?? 0) === 0}
+                            className="gap-2"
+                        >
+                            {isAssigning ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                                <Send className="size-4" />
+                            )}
+                            Assign to Users
+                        </Button>
+                    </div>
                 </div>
             </div>
 
