@@ -556,3 +556,83 @@ export const checkSimilarity = internalAction({
 		return topScore >= 0.9;
 	},
 });
+
+// Internal query to get random questions with proper filtering
+export const getRandomQuestionsInternal = internalQuery({
+	args: {
+		count: v.number(),
+		startTime: v.number(),
+		seen: v.array(v.id("questions")),
+		hidden: v.array(v.id("questions")),
+		hiddenStyles: v.array(v.id("styles")),
+		hiddenTones: v.array(v.id("tones")),
+		organizationId: v.optional(v.id("organizations")),
+	},
+	handler: async (ctx, args) => {
+		const { count, startTime, seen, hidden, hiddenStyles, hiddenTones, organizationId } = args;
+		const seenIds = new Set(seen);
+		const hiddenIds = new Set(hidden);
+		const hiddenStyleIds = new Set(hiddenStyles);
+		const hiddenToneIds = new Set(hiddenTones);
+
+		const applyFilters = (q: any) => {
+			const conditions = [
+				q.eq(q.field("organizationId"), organizationId),
+				q.eq(q.field("prunedAt"), undefined),
+				q.neq(q.field("text"), undefined),
+				q.or(q.eq(q.field("status"), "public"), q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
+			];
+			return q.and(...conditions);
+		};
+
+		// 1. Fetch candidates from random start point
+		let candidates = await ctx.db
+			.query("questions")
+			.withIndex("by_creation_time", (q) => q.gt("_creationTime", startTime))
+			.filter((q) => applyFilters(q))
+			.take(count * 5);
+
+		// 2. Wrap around if needed
+		if (candidates.length < count * 2) {
+			const moreCandidates = await ctx.db
+				.query("questions")
+				.withIndex("by_creation_time")
+				.filter((q) => applyFilters(q))
+				.take(count * 5 - candidates.length);
+
+			const existingIds = new Set(candidates.map((q) => q._id));
+			for (const q of moreCandidates) {
+				if (!existingIds.has(q._id)) {
+					candidates.push(q);
+					existingIds.add(q._id);
+				}
+			}
+		}
+
+		// 3. Post-filter for seen, hidden, styles, and tones
+		const filtered = candidates.filter((q) => {
+			if (seenIds.has(q._id)) return false;
+			if (hiddenIds.has(q._id)) return false;
+			if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
+			if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
+			return true;
+		});
+
+
+		return filtered;
+	},
+});
+
+// Get the time range of all questions for randomization
+export const getQuestionTimeRange = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		const firstQ = await ctx.db.query("questions").withIndex("by_creation_time").order("asc").first();
+		const lastQ = await ctx.db.query("questions").withIndex("by_creation_time").order("desc").first();
+		return {
+			minTime: firstQ?._creationTime ?? 0,
+			maxTime: lastQ?._creationTime ?? 0,
+		};
+	},
+});
+

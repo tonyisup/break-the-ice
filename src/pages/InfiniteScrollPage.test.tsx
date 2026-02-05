@@ -106,27 +106,28 @@ describe('InfiniteScrollPage', () => {
 
     // Mock IntersectionObserver
     global.IntersectionObserver = class IntersectionObserver {
-      constructor(callback: any) {}
-      observe() {}
-      unobserve() {}
-      disconnect() {}
+      constructor(callback: any) { }
+      observe() { }
+      unobserve() { }
+      disconnect() { }
     } as any;
 
     (useConvex as any).mockReturnValue({
       query: vi.fn().mockResolvedValue(mockQuestions),
+      action: vi.fn().mockResolvedValue(mockQuestions),
     });
     (useAction as any).mockReturnValue(vi.fn().mockResolvedValue([]));
     (useMutation as any).mockReturnValue(vi.fn());
 
     // Mock useQuery
     (useQuery as any).mockImplementation((queryFn: any) => {
-        if (queryFn === 'getStyles') return mockStyles;
-        if (queryFn === 'getTones') return mockTones;
-        if (queryFn === 'getStyle') return mockStyles[0];
-        if (queryFn === 'getTone') return mockTones[0];
-        // Default currentUser mock: logged in user, not subscribed
-        if (queryFn === 'getCurrentUser') return { _id: 'u1', email: 'test@example.com', newsletterSubscriptionStatus: null };
-        return undefined;
+      if (queryFn === 'getStyles') return mockStyles;
+      if (queryFn === 'getTones') return mockTones;
+      if (queryFn === 'getStyle') return mockStyles[0];
+      if (queryFn === 'getTone') return mockTones[0];
+      // Default currentUser mock: logged in user, not subscribed
+      if (queryFn === 'getCurrentUser') return { _id: 'u1', email: 'test@example.com', newsletterSubscriptionStatus: null };
+      return undefined;
     });
   });
 
@@ -138,7 +139,7 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-        expect(screen.getAllByTestId('modern-question-card')).toHaveLength(5);
+      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(5);
     });
   });
 
@@ -146,10 +147,10 @@ describe('InfiniteScrollPage', () => {
     mockUseAuth.mockReturnValue({ isSignedIn: false, userId: null, isLoaded: true });
     // currentUser returns null when not signed in
     (useQuery as any).mockImplementation((queryFn: any) => {
-        if (queryFn === 'getCurrentUser') return null;
-        if (queryFn === 'getStyles') return mockStyles;
-        if (queryFn === 'getTones') return mockTones;
-        return undefined;
+      if (queryFn === 'getCurrentUser') return null;
+      if (queryFn === 'getStyles') return mockStyles;
+      if (queryFn === 'getTones') return mockTones;
+      return undefined;
     });
 
     render(
@@ -159,10 +160,10 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-        const card = screen.getByTestId('newsletter-card');
-        expect(card).toBeDefined();
-        // Should not have prefilled email
-        expect(card.getAttribute('data-prefilled')).toBe(null);
+      const card = screen.getByTestId('newsletter-card');
+      expect(card).toBeDefined();
+      // Should not have prefilled email
+      expect(card.getAttribute('data-prefilled')).toBe(null);
     });
   });
 
@@ -177,20 +178,20 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-        const card = screen.getByTestId('newsletter-card');
-        expect(card).toBeDefined();
-        // Should have prefilled email
-        expect(card.getAttribute('data-prefilled')).toBe('test@example.com');
+      const card = screen.getByTestId('newsletter-card');
+      expect(card).toBeDefined();
+      // Should have prefilled email
+      expect(card.getAttribute('data-prefilled')).toBe('test@example.com');
     });
   });
 
   it('hides NewsletterCard when signed in and subscribed', async () => {
     // Override currentUser mock
     (useQuery as any).mockImplementation((queryFn: any) => {
-        if (queryFn === 'getCurrentUser') return { _id: 'u1', email: 'test@example.com', newsletterSubscriptionStatus: 'subscribed' };
-        if (queryFn === 'getStyles') return mockStyles;
-        if (queryFn === 'getTones') return mockTones;
-        return undefined;
+      if (queryFn === 'getCurrentUser') return { _id: 'u1', email: 'test@example.com', newsletterSubscriptionStatus: 'subscribed' };
+      if (queryFn === 'getStyles') return mockStyles;
+      if (queryFn === 'getTones') return mockTones;
+      return undefined;
     });
 
     render(
@@ -200,7 +201,7 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-        expect(screen.queryByTestId('newsletter-card')).toBeNull();
+      expect(screen.queryByTestId('newsletter-card')).toBeNull();
     });
   });
 
@@ -227,7 +228,7 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-        expect(screen.getByText('All Styles Hidden')).toBeDefined();
+      expect(screen.getByText('All Styles Hidden')).toBeDefined();
     });
   });
 
@@ -254,14 +255,15 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-        expect(screen.getByText('All Tones Hidden')).toBeDefined();
+      expect(screen.getByText('All Tones Hidden')).toBeDefined();
     });
   });
 
   it('calls getNextRandomQuestions with randomSeed', async () => {
-    const queryMock = vi.fn().mockResolvedValue([]);
+    const actionMock = vi.fn().mockResolvedValue([]);
     (useConvex as any).mockReturnValue({
-      query: queryMock,
+      query: vi.fn().mockResolvedValue([]),
+      action: actionMock,
     });
 
     render(
@@ -271,7 +273,7 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-      expect(queryMock).toHaveBeenCalledWith(
+      expect(actionMock).toHaveBeenCalledWith(
         'getNextRandomQuestions',
         expect.objectContaining({
           randomSeed: expect.any(Number),
