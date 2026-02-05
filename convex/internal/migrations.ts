@@ -3,6 +3,7 @@ import { internalMutation } from "../_generated/server";
 
 export const removeOldTimestampFields = internalMutation({
 	args: {},
+	returns: v.null(),
 	handler: async (ctx) => {
 		// Clean up feedback
 		const feedbacks = await ctx.db.query("feedback").collect();
@@ -39,5 +40,7 @@ export const removeOldTimestampFields = internalMutation({
 				await ctx.db.replace(d._id, rest);
 			}
 		}
+
+		return null;
 	},
 });

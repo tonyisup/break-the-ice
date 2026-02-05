@@ -222,6 +222,11 @@ export const generateNightlyQuestionPool = internalAction({
 		targetCount: v.number(),        // Questions per style/tone combo
 		maxCombinations: v.number(),    // Max combos to process
 	},
+	returns: v.object({
+		questionsGenerated: v.number(),
+		combinationsProcessed: v.number(),
+		errors: v.array(v.string()),
+	}),
 	handler: async (ctx, args): Promise<{ questionsGenerated: number; combinationsProcessed: number; errors: string[] }> => {
 		const { targetCount, maxCombinations } = args;
 
@@ -262,10 +267,17 @@ export const generateNightlyQuestionPool = internalAction({
 		}
 		const topic = await ctx.runQuery(internal.internal.topics.getTopCurrentTopic, {});
 
-		let combinations = styles.flatMap(s => tones.map(t => ({ style: s, tone: t })));
-		combinations = combinations.sort(() => Math.random() - 0.5).slice(0, maxCombinations);
+		const combinations = styles.flatMap(s => tones.map(t => ({ style: s, tone: t })));
 
-		for (const { style, tone } of combinations) {
+		// Fisher-Yates shuffle
+		for (let i = combinations.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[combinations[i], combinations[j]] = [combinations[j], combinations[i]];
+		}
+
+		const selectedCombinations = combinations.slice(0, maxCombinations);
+
+		for (const { style, tone } of selectedCombinations) {
 			combinationsProcessed++;
 			try {
 				// We call the AI ONCE per combo to get a batch
@@ -300,8 +312,29 @@ export const generateNightlyQuestionPool = internalAction({
 				});
 
 				const content = completion.choices[0]?.message?.content ?? "{}";
-				const parsed = JSON.parse(content);
-				const batch: string[] = Array.isArray(parsed) ? parsed : Object.values(parsed)[0] as string[];
+				let parsed;
+				try {
+					parsed = JSON.parse(content);
+				} catch (e) {
+					console.error("Failed to parse AI response:", content);
+					throw new Error("Invalid JSON from AI");
+				}
+
+				let batch: string[] = [];
+				if (Array.isArray(parsed)) {
+					if (parsed.every(item => typeof item === "string")) {
+						batch = parsed;
+					}
+				} else if (typeof parsed === "object" && parsed !== null) {
+					const firstValue = Object.values(parsed)[0];
+					if (Array.isArray(firstValue) && firstValue.every(item => typeof item === "string")) {
+						batch = firstValue;
+					}
+				}
+
+				if (batch.length === 0) {
+					console.warn("AI returned an empty or invalid batch format:", parsed);
+				}
 
 				for (const text of batch) {
 					const cleanedText = text.replace(/^["']|["']$/g, '').trim();

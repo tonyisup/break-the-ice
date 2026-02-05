@@ -71,7 +71,7 @@ export default function PoolPage() {
     const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
     const [editedText, setEditedText] = React.useState("")
     const [targetCountPerStyleTone, setTargetCountPerStyleTone] = React.useState(5)
-    const [remixingId, setRemixingId] = React.useState<Id<"questions"> | null>(null)
+    const [remixingIds, setRemixingIds] = React.useState<Set<Id<"questions">>>(new Set())
 
     const stats = useQuery(api.admin.questions.getPoolStats, { poolDate: selectedDate }) as PoolStats | undefined
     const questions = useQuery(api.admin.questions.getPoolQuestions, {
@@ -154,7 +154,11 @@ export default function PoolPage() {
     }
 
     const handleRemix = async (id: Id<"questions">) => {
-        setRemixingId(id)
+        setRemixingIds(prev => {
+            const next = new Set(prev)
+            next.add(id)
+            return next
+        })
         try {
             const newText = await remixQuestion({ id })
             await updateQuestion({ id, text: newText })
@@ -162,7 +166,11 @@ export default function PoolPage() {
         } catch (error: any) {
             toast.error(`Remix failed: ${error.message}`)
         } finally {
-            setRemixingId(null)
+            setRemixingIds(prev => {
+                const next = new Set(prev)
+                next.delete(id)
+                return next
+            })
         }
     }
 
@@ -445,9 +453,9 @@ export default function PoolPage() {
                                                 size="icon"
                                                 className="size-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
                                                 onClick={() => handleRemix(question._id)}
-                                                disabled={remixingId === question._id}
+                                                disabled={remixingIds.has(question._id)}
                                             >
-                                                {remixingId === question._id ? (
+                                                {remixingIds.has(question._id) ? (
                                                     <Loader2 className="size-4 animate-spin" />
                                                 ) : (
                                                     <Sparkles className="size-4" />
