@@ -15,12 +15,14 @@ export const NON_ESSENTIAL_STORAGE_KEYS = [
   "storageLimitBehavior",
   "questionHistory",
   "theme",
+  "sessionId",
 ];
 
 export type Theme = "light" | "dark" | "system";
 export type StorageLimitBehavior = "block" | "replace";
 
 export interface StorageContextType {
+  sessionId: string;
   theme: Theme;
   setTheme: (theme: Theme) => void;
   likedQuestions: Id<"questions">[];
@@ -68,6 +70,12 @@ export const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) ||
 export const useLocalStorageContext = (
   hasConsented: boolean,
 ): StorageContextType => {
+  const [sessionId] = useLocalStorage<string>(
+    "sessionId",
+    crypto.randomUUID?.() || Math.random().toString(36).substring(2),
+    hasConsented
+  );
+
   const [theme, setTheme] = useLocalStorage<Theme>(
     "theme",
     "system",
@@ -221,6 +229,7 @@ export const useLocalStorageContext = (
   );
 
   return {
+    sessionId,
     theme,
     setTheme,
     likedQuestions,
@@ -278,15 +287,21 @@ export const useLocalStorageContext = (
 export const useConvexStorageContext = (
   hasConsented: boolean,
 ): StorageContextType => {
+  const [sessionId] = useLocalStorage<string>(
+    "sessionId",
+    crypto.randomUUID?.() || Math.random().toString(36).substring(2),
+    hasConsented
+  );
+
   const [theme, setTheme] = useLocalStorage<Theme>(
     "theme",
     "system",
     hasConsented,
   );
 
-  const questionHistory = useQuery(api.users.getQuestionHistory, {}) ?? [];
+  const questionHistory = useQuery(api.core.userSettings.getQuestionHistory, {}) ?? [];
 
-  const settings = useQuery(api.users.getSettings);
+  const settings = useQuery(api.core.userSettings.getSettings);
   const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
   const [hiddenQuestions, setHiddenQuestions] = useState<Id<"questions">[]>([]);
   const [localHiddenStyles, setLocalHiddenStyles] = useState<Id<"styles">[]>([]);
@@ -295,20 +310,20 @@ export const useConvexStorageContext = (
     undefined,
   );
   const [defaultTone, setDefaultTone] = useState<string | undefined>(undefined);
-  const updateLikedQuestions = useMutation(api.users.updateLikedQuestions);
-  const updateHiddenQuestions = useMutation(api.users.updateHiddenQuestions);
-  const updateUserSettings = useMutation(api.users.updateUserSettings);
-  const mergeKnownLikedQuestions = useMutation(api.users.mergeKnownLikedQuestions);
-  const mergeKnownHiddenQuestions = useMutation(api.users.mergeKnownHiddenQuestions);
-  const mergeQuestionHistory = useMutation(api.users.mergeQuestionHistory);
-  const hiddenStylesQuery = useQuery(api.users.getHiddenStyleIds);
-  const hiddenTonesQuery = useQuery(api.users.getHiddenToneIds);
-  const updateHiddenStyles = useMutation(api.users.updateHiddenStyles);
-  const updateHiddenTones = useMutation(api.users.updateHiddenTones);
-  const addHiddenStyleId = useMutation(api.users.addHiddenStyleId);
-  const removeHiddenStyleId = useMutation(api.users.removeHiddenStyleId);
-  const addHiddenToneId = useMutation(api.users.addHiddenToneId);
-  const removeHiddenToneId = useMutation(api.users.removeHiddenToneId);
+  const updateLikedQuestions = useMutation(api.core.userSettings.updateLikedQuestions);
+  const updateHiddenQuestions = useMutation(api.core.userSettings.updateHiddenQuestions);
+  const updateUserSettings = useMutation(api.core.userSettings.updateUserSettings);
+  const mergeKnownLikedQuestions = useMutation(api.core.userSettings.mergeKnownLikedQuestions);
+  const mergeKnownHiddenQuestions = useMutation(api.core.userSettings.mergeKnownHiddenQuestions);
+  const mergeQuestionHistory = useMutation(api.core.userSettings.mergeQuestionHistory);
+  const hiddenStylesQuery = useQuery(api.core.userSettings.getHiddenStyleIds);
+  const hiddenTonesQuery = useQuery(api.core.userSettings.getHiddenToneIds);
+  const updateHiddenStyles = useMutation(api.core.userSettings.updateHiddenStyles);
+  const updateHiddenTones = useMutation(api.core.userSettings.updateHiddenTones);
+  const addHiddenStyleId = useMutation(api.core.userSettings.addHiddenStyleId);
+  const removeHiddenStyleId = useMutation(api.core.userSettings.removeHiddenStyleId);
+  const addHiddenToneId = useMutation(api.core.userSettings.addHiddenToneId);
+  const removeHiddenToneId = useMutation(api.core.userSettings.removeHiddenToneId);
 
   useEffect(() => {
     // Merge local likes if they exist
@@ -410,9 +425,9 @@ export const useConvexStorageContext = (
   );
 
   // History is now managed by the backend analytics
-  const setQuestionHistory = useCallback(() => { }, []);
-  const addQuestionToHistory = useCallback(() => { }, []);
-  const removeQuestionFromHistory = useCallback(() => { }, []);
+  const setQuestionHistory = useCallback((_entries: HistoryEntry[]) => { }, []);
+  const addQuestionToHistory = useCallback((_entry: HistoryEntry) => { }, []);
+  const removeQuestionFromHistory = useCallback((_id: Id<"questions">) => { }, []);
   const clearQuestionHistory = useCallback(() => { }, []);
 
   const clearLikedQuestions = useCallback(() => {
@@ -426,6 +441,7 @@ export const useConvexStorageContext = (
   }, [updateHiddenQuestions]);
 
   return {
+    sessionId,
     theme,
     setTheme,
     likedQuestions,

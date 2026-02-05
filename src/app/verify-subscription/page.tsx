@@ -11,7 +11,7 @@ import { Loader2, CheckCircle2, XCircle, ArrowRight } from "lucide-react";
 export default function VerifySubscriptionPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
-  const confirmSubscription = useAction(api.newsletter.confirmSubscription);
+  const confirmSubscription = useAction(api.core.newsletter.confirmSubscription);
   const { effectiveTheme } = useTheme();
   const navigate = useNavigate();
 

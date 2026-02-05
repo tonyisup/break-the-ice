@@ -1,189 +1,7 @@
-import { internal } from "./_generated/api";
-import { Doc } from "./_generated/dataModel";
-import { MutationCtx, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { calculateAverageEmbedding } from "./questions";
-
-// Helper to ensure user exists
-async function getUserOrCreate(ctx: MutationCtx) {
-	const identity = await ctx.auth.getUserIdentity();
-	if (!identity) {
-		throw new Error("Not authenticated");
-	}
-
-	const user = await ctx.db
-		.query("users")
-		.withIndex("email", (q) => q.eq("email", identity.email))
-		.unique();
-
-	if (user) {
-		return user;
-	}
-
-	const userId = await ctx.db.insert("users", {
-		name: identity.name!,
-		email: identity.email,
-		image: identity.pictureUrl,
-	});
-
-	return (await ctx.db.get(userId))!;
-}
-
-export const getUserById = internalQuery({
-	args: { id: v.id("users") },
-	returns: v.union(v.null(), v.any()),
-	handler: async (ctx, args) => {
-		return await ctx.db.get(args.id);
-	},
-});
-
-export const getUserByEmail = internalQuery({
-	args: { email: v.string() },
-	handler: async (ctx, args) => {
-		return await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", args.email))
-			.unique();
-	},
-});
-
-export const getCurrentUser = query({
-	args: {},
-	returns: v.union(v.null(), v.any()),
-	handler: async (ctx): Promise<Doc<"users"> | null> => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) {
-			return null;
-		}
-
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
-
-		return user;
-	},
-});
-
-export const updateUserFromClerk = internalMutation({
-	args: {
-		clerkId: v.string(),
-		email: v.optional(v.string()),
-		name: v.string(),
-		image: v.optional(v.string()),
-		subscriptionTier: v.union(v.literal("free"), v.literal("casual")),
-	},
-	handler: async (ctx, args) => {
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", args.email))
-			.unique();
-
-		if (user) {
-			await ctx.db.patch(user._id, {
-				name: args.name,
-				image: args.image,
-				subscriptionTier: args.subscriptionTier,
-			});
-		} else if (args.email) {
-			await ctx.db.insert("users", {
-				name: args.name,
-				email: args.email,
-				image: args.image,
-				subscriptionTier: args.subscriptionTier,
-				aiUsage: { count: 0, cycleStart: Date.now() },
-			});
-		}
-	},
-});
-
-export const setNewsletterStatus = internalMutation({
-	args: {
-		email: v.string(),
-		status: v.union(v.literal("subscribed"), v.literal("unsubscribed")),
-	},
-	handler: async (ctx, args) => {
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", args.email))
-			.unique();
-
-		if (user) {
-			await ctx.db.patch(user._id, {
-				newsletterSubscriptionStatus: args.status,
-			});
-		}
-	},
-});
-
-export const checkAndIncrementAIUsage = internalMutation({
-	args: {
-		userId: v.id("users"),
-	},
-	returns: v.number(),
-	handler: async (ctx, args) => {
-		const user = await ctx.db.get(args.userId);
-		if (!user) throw new Error("User not found");
-
-		const now = Date.now();
-		const cycleLength = 30 * 24 * 60 * 60 * 1000; // 30 days
-		let aiUsage = user.aiUsage || { count: 0, cycleStart: now };
-
-		// Reset cycle if needed
-		if (now - aiUsage.cycleStart > cycleLength) {
-			aiUsage = { count: 0, cycleStart: now };
-		}
-		const limit = user.subscriptionTier === "casual" ? parseInt(process.env.MAX_CASUAL_AIGEN ?? "100") : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
-
-		const remaining = limit - aiUsage.count;
-		if (remaining <= 0) {
-			throw new Error(`AI generation limit reached. You have used ${aiUsage.count}/${limit} generations this cycle.`);
-		}
-
-		const actualCount = Math.min(1, remaining);
-
-		await ctx.db.patch(user._id, {
-			aiUsage: {
-				count: aiUsage.count + actualCount,
-				cycleStart: aiUsage.cycleStart,
-			},
-		});
-
-		return actualCount;
-	},
-});
-
-export const store = mutation({
-	args: {},
-	returns: v.id("users"),
-	handler: async (ctx) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) {
-			throw new Error("Called storeUser without authentication present");
-		}
-
-		// Check if we've already stored this identity before.
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
-
-		if (user !== null) {
-			// If we've seen this identity before but the name has changed, patch the value.
-			if (user.name !== identity.name) {
-				await ctx.db.patch(user._id, { name: identity.name });
-			}
-			return user._id;
-		}
-
-		// If it's a new identity, create a new user.
-		return await ctx.db.insert("users", {
-			name: identity.name!,
-			email: identity.email,
-			image: identity.pictureUrl,
-		});
-	},
-});
+import { mutation, query } from "../_generated/server";
+import { internal } from "../_generated/api";
+import { getUserOrCreate } from "./users";
 
 export const getSettings = query({
 	args: {},
@@ -213,47 +31,39 @@ export const getSettings = query({
 			return null;
 		}
 
-		// Get liked questions from userQuestions table
-		const likedUserQuestions = await ctx.db
+		const likedQuestionsDocs = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", user._id).eq("status", "liked")
 			)
 			.collect();
-		const likedQuestions = likedUserQuestions.map((uq) => uq.questionId);
 
-		// Get hidden questions from userQuestions table
-		const hiddenUserQuestions = await ctx.db
+		const hiddenQuestionsDocs = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", user._id).eq("status", "hidden")
 			)
 			.collect();
-		const hiddenQuestions = hiddenUserQuestions.map((uq) => uq.questionId);
 
-		// Get hidden styles from userStyles table
 		const hiddenStylesDocs = await ctx.db
 			.query("userStyles")
 			.withIndex("by_userId_status", (q) =>
 				q.eq("userId", user._id).eq("status", "hidden")
 			)
 			.collect();
-		const hiddenStyles = hiddenStylesDocs.map((us) => us.styleId);
 
-		// Get hidden tones from userTones table
 		const hiddenTonesDocs = await ctx.db
 			.query("userTones")
 			.withIndex("by_userId_status", (q) =>
 				q.eq("userId", user._id).eq("status", "hidden")
 			)
 			.collect();
-		const hiddenTones = hiddenTonesDocs.map((ut) => ut.toneId);
 
 		return {
-			likedQuestions: likedQuestions.length > 0 ? likedQuestions : undefined,
-			hiddenQuestions: hiddenQuestions.length > 0 ? hiddenQuestions : undefined,
-			hiddenStyles: hiddenStyles.length > 0 ? hiddenStyles : undefined,
-			hiddenTones: hiddenTones.length > 0 ? hiddenTones : undefined,
+			likedQuestions: likedQuestionsDocs.map((q) => q.questionId),
+			hiddenQuestions: hiddenQuestionsDocs.map((q) => q.questionId),
+			hiddenStyles: hiddenStylesDocs.map((us) => us.styleId),
+			hiddenTones: hiddenTonesDocs.map((ut) => ut.toneId),
 			defaultStyle: user.defaultStyle,
 			defaultTone: user.defaultTone,
 		};
@@ -279,30 +89,24 @@ export const getQuestionHistory = query({
 			return [];
 		}
 
-		const limit = args.limit ?? 50;
-		// Enforce free tier limit
-		const effectiveLimit = user.subscriptionTier === "casual" ? limit : Math.min(limit, 100);
-
 		const history = await ctx.db
-			.query("analytics")
-			.withIndex("by_userId_event_timestamp", (q) =>
-				q.eq("userId", user._id).eq("event", "seen")
-			)
+			.query("userQuestions")
+			.withIndex("by_userId_status_updatedAt", (q) => q.eq("userId", user._id))
 			.order("desc")
-			.take(effectiveLimit);
+			.take(args.limit ?? 50);
 
-		const questions = await Promise.all(
-			history.map(async (h) => {
-				const question = await ctx.db.get(h.questionId);
-				if (!question) return null;
-				return {
+		const results = [];
+		for (const h of history) {
+			const question = await ctx.db.get(h.questionId);
+			if (question) {
+				results.push({
 					question,
-					viewedAt: h.timestamp,
-				};
-			})
-		);
+					viewedAt: h.updatedAt,
+				});
+			}
+		}
 
-		return questions.filter((q): q is NonNullable<typeof q> => q !== null);
+		return results;
 	},
 });
 
@@ -314,12 +118,10 @@ export const updateUserSettings = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-
 		await ctx.db.patch(user._id, {
 			defaultStyle: args.defaultStyle,
 			defaultTone: args.defaultTone,
 		});
-
 		return null;
 	},
 });
@@ -332,27 +134,27 @@ export const updateLikedQuestions = mutation({
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
 
-		// Enforce limits for Free tier
-		if (user.subscriptionTier !== "casual" && args.likedQuestions.length > 100) {
-			throw new Error("Free plan limit: You can only like up to 100 questions. Upgrade to Casual for unlimited.");
-		}
-
-		// 1. Handle removals: un-like questions that are no longer in the list
-		const existingLikedQuestions = await ctx.db
+		// 1. Handle removals
+		const existingLiked = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q.eq("userId", user._id).eq("status", "liked")
 			)
 			.collect();
 
 		const newLikedSet = new Set(args.likedQuestions);
-		for (const uq of existingLikedQuestions) {
+		for (const uq of existingLiked) {
 			if (!newLikedSet.has(uq.questionId)) {
-				await ctx.db.delete(uq._id);
+				// We don't delete, we just change status back to 'seen' or similar?
+				// Actually, if it's no longer liked, we can just mark it as seen.
+				await ctx.db.patch(uq._id, {
+					status: "seen",
+					updatedAt: Date.now(),
+				});
 			}
 		}
 
-		// 2. Handle additions/updates: ensure we don't create duplicates if question exists as "seen"
+		// 2. Handle additions/updates
 		const now = Date.now();
 		await Promise.all(
 			Array.from(newLikedSet).map(async (questionId) => {
@@ -382,6 +184,9 @@ export const updateLikedQuestions = mutation({
 			})
 		);
 
+		await ctx.scheduler.runAfter(0, internal.internal.users.updateUserPreferenceEmbeddingAction, {
+			userId: user._id,
+		});
 		return null;
 	},
 });
@@ -394,23 +199,21 @@ export const updateHiddenQuestions = mutation({
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
 
-		// Enforce limits for Free tier
-		if (user.subscriptionTier !== "casual" && args.hiddenQuestions.length > 100) {
-			throw new Error("Free plan limit: You can only hide up to 100 questions. Upgrade to Casual for unlimited.");
-		}
-
-		// 1. Handle removals: un-hide questions that are no longer in the list
-		const existingHiddenQuestions = await ctx.db
+		// 1. Handle removals
+		const existingHidden = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q.eq("userId", user._id).eq("status", "hidden")
 			)
 			.collect();
 
 		const newHiddenSet = new Set(args.hiddenQuestions);
-		for (const uq of existingHiddenQuestions) {
+		for (const uq of existingHidden) {
 			if (!newHiddenSet.has(uq.questionId)) {
-				await ctx.db.delete(uq._id);
+				await ctx.db.patch(uq._id, {
+					status: "seen",
+					updatedAt: Date.now(),
+				});
 			}
 		}
 
@@ -444,7 +247,7 @@ export const updateHiddenQuestions = mutation({
 			})
 		);
 
-		await ctx.scheduler.runAfter(0, internal.users.updateUserPreferenceEmbeddingAction, {
+		await ctx.scheduler.runAfter(0, internal.internal.users.updateUserPreferenceEmbeddingAction, {
 			userId: user._id,
 		});
 		return null;
@@ -563,127 +366,6 @@ export const updateHiddenTones = mutation({
 	},
 });
 
-export const makeAdmin = mutation({
-	args: {
-		email: v.string(),
-	},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) {
-			throw new Error("Not authenticated");
-		}
-		const tempUser = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
-
-		if (!tempUser || !tempUser.isAdmin) {
-			throw new Error("Not authorized to make admins");
-		}
-
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", args.email))
-			.unique();
-
-		if (!user) {
-			throw new Error("User not found");
-		}
-
-		await ctx.db.patch(user._id, { isAdmin: true });
-		return null;
-	},
-});
-
-export const getUser = internalQuery({
-	args: {
-		userId: v.id("users"),
-	},
-	handler: async (ctx, args) => {
-		return await ctx.db.query("users").withIndex("by_id", (q) => q.eq("_id", args.userId)).unique();
-	},
-});
-
-export const getUserLikedQuestions = internalQuery({
-	args: {
-		userId: v.id("users"),
-	},
-	handler: async (ctx, args) => {
-		return await ctx.db.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) => q.eq("userId", args.userId).eq("status", "liked"))
-			.collect();
-	},
-});
-
-export const updateUserPreferenceEmbedding = internalMutation({
-	args: {
-		userId: v.id("users"),
-		questionPreferenceEmbedding: v.array(v.number()),
-	},
-	handler: async (ctx, args) => {
-		await ctx.db.patch(args.userId, { questionPreferenceEmbedding: args.questionPreferenceEmbedding });
-	},
-});
-
-export const updateUserPreferenceEmbeddingAction = internalAction({
-	args: {
-		userId: v.id("users"),
-	},
-	handler: async (ctx, args) => {
-
-		const user = await ctx.runQuery(internal.users.getUser, {
-			userId: args.userId,
-		});
-
-		if (!user) {
-			throw new Error("User not found");
-		}
-
-		const userQuestions = await ctx.runQuery(internal.users.getUserLikedQuestions, {
-			userId: args.userId,
-		});
-
-		const userQuestionEmbeddings = userQuestions.map(async (uq: any) => {
-			const embedding = await ctx.runQuery(internal.questions.getQuestionEmbedding, {
-				questionId: uq.questionId,
-			});
-			if (!embedding) {
-				return [];
-			}
-			return embedding;
-		});
-
-		const averageEmbedding = calculateAverageEmbedding(await Promise.all(userQuestionEmbeddings));
-
-		await ctx.runMutation(internal.users.updateUserPreferenceEmbedding, {
-			userId: args.userId,
-			questionPreferenceEmbedding: averageEmbedding,
-		});
-
-		return null;
-	},
-});
-
-export const getUsersWithMissingEmbeddings = internalQuery({
-	args: {},
-	handler: async (ctx) => {
-		return await ctx.db.query("users").filter((q) => q.eq(q.field("questionPreferenceEmbedding"), undefined)).collect();
-	},
-});
-
-export const updateUsersWithMissingEmbeddingsAction = internalAction({
-	args: {},
-	handler: async (ctx) => {
-		const users = await ctx.runQuery(internal.users.getUsersWithMissingEmbeddings);
-		for (const user of users) {
-			await ctx.runAction(internal.users.updateUserPreferenceEmbeddingAction, {
-				userId: user._id,
-			});
-		}
-	},
-});
-
 export const mergeKnownLikedQuestions = mutation({
 	args: {
 		likedQuestions: v.array(v.id("questions")),
@@ -778,7 +460,7 @@ export const mergeKnownHiddenQuestions = mutation({
 			}
 		}
 
-		await ctx.scheduler.runAfter(0, internal.users.updateUserPreferenceEmbeddingAction, {
+		await ctx.scheduler.runAfter(0, internal.internal.users.updateUserPreferenceEmbeddingAction, {
 			userId: user._id,
 		});
 		return null;
@@ -850,87 +532,6 @@ export const mergeQuestionHistory = mutation({
 	},
 });
 
-export const getRecentlySeenQuestions = internalQuery({
-	args: {
-		userId: v.id("users"),
-		limit: v.optional(v.number()),
-	},
-	returns: v.array(v.string()),
-	handler: async (ctx, args) => {
-		const seen = await ctx.db.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
-				q.eq("userId", args.userId).eq("status", "seen")
-			)
-			.order("desc")
-			.take(args.limit ?? 3);
-
-		const seenQuestions = await Promise.all(
-			seen.map(async (relation) => {
-				const question = await ctx.db.query("questions")
-					.withIndex("by_id", (q) => q.eq("_id", relation.questionId))
-					.first();
-				return question;
-			})
-		);
-		return seenQuestions
-			.filter((q) => q !== null)
-			.map((q) => q.text!);
-	},
-})
-
-export const getBlockedQuestions = internalQuery({
-	args: {
-		userId: v.id("users"),
-		limit: v.optional(v.number()),
-	},
-	returns: v.array(v.string()),
-	handler: async (ctx, args) => {
-		const hidden = await ctx.db.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
-				q.eq("userId", args.userId).eq("status", "hidden")
-			)
-			.order("desc")
-			.take(args.limit ?? 3);
-
-		const hiddenQuestions = await Promise.all(
-			hidden.map(async (relation) => {
-				const question = await ctx.db.query("questions")
-					.withIndex("by_id", (q) => q.eq("_id", relation.questionId))
-					.first();
-				return question;
-			})
-		);
-		return hiddenQuestions
-			.filter((q) => q !== null)
-			.map((q) => q.text!);
-	},
-})
-
-export const getUsers = query({
-	args: {},
-	returns: v.array(v.any()),
-	handler: async (ctx) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) {
-			throw new Error("Not authenticated");
-		}
-
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
-
-		if (!user || !user.isAdmin) {
-			throw new Error("Not authorized");
-		}
-
-		return await ctx.db
-			.query("users")
-			.order("desc")
-			.collect();
-	},
-});
-
 export const getHiddenStyleIds = query({
 	args: {},
 	handler: async (ctx) => {
@@ -959,7 +560,7 @@ export const getHiddenStyleIds = query({
 
 		return hiddenStyles;
 	}
-})
+});
 
 export const addHiddenStyleId = mutation({
 	args: { styleId: v.string() },
@@ -1005,7 +606,7 @@ export const addHiddenStyleId = mutation({
 			.collect();
 		return hiddenStylesDocs.map((us) => us.styleId);
 	}
-})
+});
 
 export const removeHiddenStyleId = mutation({
 	args: { styleId: v.string() },
@@ -1041,7 +642,7 @@ export const removeHiddenStyleId = mutation({
 			.collect();
 		return hiddenStylesDocs.map((us) => us.styleId);
 	}
-})
+});
 
 export const getHiddenToneIds = query({
 	args: {},
@@ -1072,7 +673,7 @@ export const getHiddenToneIds = query({
 
 		return hiddenTones;
 	}
-})
+});
 
 export const addHiddenToneId = mutation({
 	args: { toneId: v.string() },
@@ -1118,7 +719,7 @@ export const addHiddenToneId = mutation({
 			.collect();
 		return hiddenTonesDocs.map((ut) => ut.toneId);
 	}
-})
+});
 
 export const removeHiddenToneId = mutation({
 	args: { toneId: v.string() },
@@ -1154,97 +755,4 @@ export const removeHiddenToneId = mutation({
 			.collect();
 		return hiddenTonesDocs.map((ut) => ut.toneId);
 	}
-})
-
-// Get all users with newsletter subscription
-export const getNewsletterSubscribers = internalQuery({
-	args: {},
-	returns: v.array(v.any()),
-	handler: async (ctx) => {
-		return await ctx.db
-			.query("users")
-			.withIndex("by_newsletterSubscriptionStatus", (q) =>
-				q.eq("newsletterSubscriptionStatus", "subscribed")
-			)
-			.collect();
-	},
-});
-
-// Get hidden styles for a user
-export const getUserHiddenStyles = internalQuery({
-	args: {
-		userId: v.id("users"),
-	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args) => {
-		return await ctx.db
-			.query("userStyles")
-			.withIndex("by_userId_status", (q) =>
-				q.eq("userId", args.userId).eq("status", "hidden")
-			)
-			.collect();
-	},
-});
-
-// Get hidden tones for a user
-export const getUserHiddenTones = internalQuery({
-	args: {
-		userId: v.id("users"),
-	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args) => {
-		return await ctx.db
-			.query("userTones")
-			.withIndex("by_userId_status", (q) =>
-				q.eq("userId", args.userId).eq("status", "hidden")
-			)
-			.collect();
-	},
-});
-
-// Bulk query: Get hidden styles and tones for multiple users at once
-// Returns a map-like structure keyed by userId for efficient lookup
-export const getHiddenPreferencesForUsers = internalQuery({
-	args: {
-		userIds: v.array(v.id("users")),
-	},
-	returns: v.object({
-		hiddenStyles: v.array(v.object({
-			userId: v.id("users"),
-			styleId: v.id("styles"),
-		})),
-		hiddenTones: v.array(v.object({
-			userId: v.id("users"),
-			toneId: v.id("tones"),
-		})),
-	}),
-	handler: async (ctx, args) => {
-		if (args.userIds.length === 0) {
-			return { hiddenStyles: [], hiddenTones: [] };
-		}
-		const userIdSet = new Set(args.userIds.map(id => id.toString()));
-
-		// Fetch all hidden styles for the given users
-		const allHiddenStyles = await ctx.db
-			.query("userStyles")
-			.withIndex("by_status", (q) => q.eq("status", "hidden"))
-			.collect();
-
-		// Fetch all hidden tones for the given users
-		const allHiddenTones = await ctx.db
-			.query("userTones")
-			.withIndex("by_status", (q) => q.eq("status", "hidden"))
-			.collect();
-
-		// Filter to only the requested users
-		const hiddenStyles = allHiddenStyles
-			.filter(s => userIdSet.has(s.userId.toString()))
-			.map(s => ({ userId: s.userId, styleId: s.styleId }));
-
-		const hiddenTones = allHiddenTones
-			.filter(t => userIdSet.has(t.userId.toString()))
-			.map(t => ({ userId: t.userId, toneId: t.toneId }));
-
-		return { hiddenStyles, hiddenTones };
-	},
 });

@@ -1,12 +1,10 @@
 "use node";
 
 import { v } from "convex/values";
-import { action, internalAction } from "./_generated/server";
-import { ensureAdmin } from "./auth";
+import { action } from "../_generated/server";
 import OpenAI from "openai";
-import { api, internal } from "./_generated/api";
-import { Doc, Id } from "./_generated/dataModel";
-import { createDuplicateDetectionEmail, createMinimumQuestionsEmail, createPopulateMissingEmbeddingsEmail, createPopulateMissingStyleEmbeddingsEmail, createPopulateMissingToneEmbeddingsEmail } from "./lib/emails";
+import { api, internal } from "../_generated/api";
+import { Doc } from "../_generated/dataModel";
 
 const openai = new OpenAI({
 	baseURL: 'https://openrouter.ai/api/v1',
@@ -26,7 +24,7 @@ export const preview = action({
 	},
 	returns: v.array(v.any()),
 	handler: async (ctx, args): Promise<Doc<"questions">[]> => {
-		return await ctx.runQuery(api.questions.getSimilarQuestions, {
+		return await ctx.runQuery(api.core.questions.getSimilarQuestions, {
 			count: args.count ?? 5,
 			style: args.style,
 			tone: args.tone,
@@ -38,8 +36,8 @@ export const generateFallbackQuestion = action({
 	args: {},
 	returns: v.union(v.any(), v.null()),
 	handler: async (ctx): Promise<Doc<"questions"> | null> => {
-		const randomStyle: Doc<"styles"> = await ctx.runQuery(api.styles.getRandomStyle, { seed: Math.random() });
-		const randomTone: Doc<"tones"> = await ctx.runQuery(api.tones.getRandomTone, { seed: Math.random() });
+		const randomStyle: Doc<"styles"> = await ctx.runQuery(api.core.styles.getRandomStyle, { seed: Math.random() });
+		const randomTone: Doc<"tones"> = await ctx.runQuery(api.core.tones.getRandomTone, { seed: Math.random() });
 
 		const stylePrompt = randomStyle.name + " " + randomStyle.description + " " + randomStyle.promptGuidanceForAI;
 		const tonePrompt = randomTone.name + " " + randomTone.description + " " + randomTone.promptGuidanceForAI;
@@ -71,7 +69,7 @@ export const generateFallbackQuestion = action({
 					const cleanedFallback = fallbackContent.replace(/^["']|["']$/g, '').trim();
 					if (cleanedFallback.length > 0) {
 						try {
-							const fallbackQuestion: Doc<"questions"> | null = await ctx.runMutation(api.questions.saveAIQuestion, {
+							const fallbackQuestion: Doc<"questions"> | null = await ctx.runMutation(api.core.questions.saveAIQuestion, {
 								text: cleanedFallback,
 								style: randomStyle.id,
 								styleId: randomStyle._id,
@@ -121,8 +119,8 @@ export const generateAIQuestions = action({
 	handler: async (ctx, args) => {
 		const { count, selectedTags, currentQuestion, styleId, toneId } = args;
 
-		const style = (await ctx.runQuery(api.styles.getStyleById, { id: styleId }));
-		const tone = (await ctx.runQuery(api.tones.getToneById, { id: toneId }));
+		const style = (await ctx.runQuery(api.core.styles.getStyleById, { id: styleId }));
+		const tone = (await ctx.runQuery(api.core.tones.getToneById, { id: toneId }));
 
 		if (!style || !tone) {
 			throw new Error("Failed to generate AI question: No style or tone found.");
@@ -305,15 +303,15 @@ export const generateAIQuestionForFeed = action({
 		userId: v.optional(v.string()),
 	},
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
-		const user = await ctx.runQuery(api.users.getCurrentUser, {});
+		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
 
 		if (!user) {
 			throw new Error("You must be logged in or provide a valid user ID to generate AI questions.");
 		}
 		const count = 1;
 
-		const style = (await ctx.runQuery(api.styles.getRandomStyleForUser, { userId: user._id }));
-		const tone = (await ctx.runQuery(api.tones.getRandomToneForUser, { userId: user._id }));
+		const style = (await ctx.runQuery(api.core.styles.getRandomStyleForUser, { userId: user._id }));
+		const tone = (await ctx.runQuery(api.core.tones.getRandomToneForUser, { userId: user._id }));
 
 		if (!style || !tone) {
 			throw new Error("Failed to generate AI question: No style or tone found for user");
@@ -322,13 +320,13 @@ export const generateAIQuestionForFeed = action({
 		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
 		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
 
-		const recentlySeenQuestions = await ctx.runQuery(internal.users.getRecentlySeenQuestions, { userId: user._id });
-		const recentlySeen = recentlySeenQuestions.filter((q) => q !== undefined);
+		const recentlySeenQuestions = await ctx.runQuery(internal.internal.users.getRecentlySeenQuestions, { userId: user._id });
+		const recentlySeen = recentlySeenQuestions.filter((q: string) => q !== undefined);
 		if (recentlySeen.length > 0) {
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
 		}
 
-		const blockedQuestions = await ctx.runQuery(internal.users.getBlockedQuestions, { userId: user._id });
+		const blockedQuestions = await ctx.runQuery(internal.internal.users.getBlockedQuestions, { userId: user._id });
 		if (blockedQuestions.length > 0) {
 			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these blocked questions:\n- ${blockedQuestions.join('\n- ')}`;
 		}
@@ -340,14 +338,14 @@ export const generateAIQuestionForFeed = action({
 
 		let userContext = "";
 
-		const allowedCount = await ctx.runMutation(internal.users.checkAndIncrementAIUsage, {
+		const allowedCount = await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
 			userId: user._id,
 		});
 		if (allowedCount < 0) {
 			throw new Error("You have reached your AI question limit. Please upgrade your plan.");
 		}
 		if (user?.questionPreferenceEmbedding) {
-			const nearestQuestions = await ctx.runAction(api.questions.getNearestQuestionsByEmbedding, {
+			const nearestQuestions = await ctx.runAction(api.core.questions.getNearestQuestionsByEmbedding, {
 				embedding: user.questionPreferenceEmbedding,
 				count: 5
 			});
@@ -519,7 +517,7 @@ export const generateAIQuestionForFeed = action({
 					continue;
 				}
 
-				const newQuestion = await ctx.runMutation(api.questions.saveAIQuestion, {
+				const newQuestion = await ctx.runMutation(api.core.questions.saveAIQuestion, {
 					text: question.text,
 					style: style.id,
 					styleId: style._id,
@@ -535,446 +533,4 @@ export const generateAIQuestionForFeed = action({
 		}
 		return newQuestions;
 	}
-});
-
-export const populateMissingEmbeddings = internalAction({
-	args: {
-		maxBatchSize: v.number(),
-	},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		const questions = await ctx.runQuery(internal.questions.getQuestionsWithMissingEmbeddings);
-		let questionsProcessed = 0;
-		const questionsMissingEmbeddings = questions.length;
-		const errors: string[] = [];
-		for (const question of questions) {
-			try {
-				await ctx.runAction(internal.lib.retriever.embedQuestion, { questionId: question._id });
-				questionsProcessed++;
-				if (questionsProcessed >= args.maxBatchSize) {
-					break;
-				}
-			} catch (error) {
-				errors.push(`Error embedding question ${question._id}: ${error instanceof Error ? error.message : String(error)}`);
-				console.error(error);
-			}
-		}
-		const results = {
-			questionsProcessed,
-			questionsMissingEmbeddings,
-			errors,
-		};
-		if (questionsProcessed > 0 || errors.length > 0) {
-			const { subject, html } = createPopulateMissingEmbeddingsEmail(results);
-			await ctx.runAction(internal.email.sendEmail, { subject, html });
-		}
-	},
-});
-
-export const populateMissingStyleEmbeddings = internalAction({
-	args: {},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		const styles = await ctx.runQuery(internal.styles.getStylesWithMissingEmbeddings);
-		let stylesProcessed = 0;
-		const stylesMissingEmbeddings = styles.length;
-		const errors: string[] = [];
-		for (const style of styles) {
-			try {
-				await ctx.runAction(internal.lib.retriever.embedStyle, { styleId: style._id });
-				stylesProcessed++;
-			} catch (error) {
-				errors.push(`Error embedding style ${style._id}: ${error instanceof Error ? error.message : String(error)}`);
-				console.error(error);
-			}
-		}
-		const results = {
-			stylesProcessed,
-			stylesMissingEmbeddings,
-			errors,
-		};
-		if (stylesProcessed > 0 || errors.length > 0) {
-			const { subject, html } = createPopulateMissingStyleEmbeddingsEmail(results);
-			await ctx.runAction(internal.email.sendEmail, { subject, html });
-		}
-	},
-});
-
-export const populateMissingToneEmbeddings = internalAction({
-	args: {},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		const tones = await ctx.runQuery(internal.tones.getTonesWithMissingEmbeddings);
-		let tonesProcessed = 0;
-		const tonesMissingEmbeddings = tones.length;
-		const errors: string[] = [];
-		for (const tone of tones) {
-			try {
-				await ctx.runAction(internal.lib.retriever.embedTone, { toneId: tone._id });
-				tonesProcessed++;
-			} catch (error) {
-				errors.push(`Error embedding tone ${tone._id}: ${error instanceof Error ? error.message : String(error)}`);
-				console.error(error);
-			}
-		}
-		const results = {
-			tonesProcessed,
-			tonesMissingEmbeddings,
-			errors,
-		};
-		if (tonesProcessed > 0 || errors.length > 0) {
-			const { subject, html } = createPopulateMissingToneEmbeddingsEmail(results);
-			await ctx.runAction(internal.email.sendEmail, { subject, html });
-		}
-	},
-});
-
-export const startDuplicateDetection = action({
-	args: {
-		threshold: v.optional(v.number()),
-	},
-	returns: v.id("duplicateDetectionProgress"),
-	handler: async (ctx, args): Promise<Id<"duplicateDetectionProgress">> => {
-		await ensureAdmin(ctx);
-		return await ctx.runAction(internal.ai.detectDuplicateQuestionsStreaming, {
-			threshold: args.threshold,
-		}) as Id<"duplicateDetectionProgress">;
-	},
-});
-
-export const detectDuplicateQuestionsStreaming = internalAction({
-	args: {
-		threshold: v.optional(v.number()),
-	},
-	returns: v.id("duplicateDetectionProgress"),
-	handler: async (ctx, args): Promise<Id<"duplicateDetectionProgress">> => {
-		const threshold = args.threshold ?? 0.95;
-		// 1. Initialize progress
-		const totalQuestions = await ctx.runQuery(internal.questions.countQuestions);
-		const BATCH_SIZE = 50;
-		const totalBatches = Math.ceil(totalQuestions / BATCH_SIZE);
-
-		const progressId: Id<"duplicateDetectionProgress"> = await ctx.runMutation(api.duplicates.createDuplicateDetectionProgress, {
-			totalQuestions,
-			totalBatches,
-		});
-
-		// 2. Fetch already pending/approved detections to avoid re-detecting
-		// We can't easily fetch ALL detected pairs, so we'll just check against existing detections during the loop or
-		// rely on the `saveDuplicateDetection` uniqueness check if any.
-		// However, `saveDuplicateDetection` doesn't enforce uniqueness on question pairs, so we should try to avoid it.
-		// For now, let's just proceed. The user can reject duplicates if they are already handled.
-
-		// 3. Start processing in background (or simpler: loop here and update progress)
-		// Since this is an action, it can run for a while.
-
-		// We need to fetch questions in batches.
-		let cursor: string | null = null;
-		let processedQuestions = 0;
-		let duplicatesFound = 0;
-		let currentBatch = 0;
-		const errors: string[] = [];
-
-		// Helper to check if we should continue
-		// (In a real background job we might check for cancellation)
-
-		try {
-			do {
-				currentBatch++;
-
-				// Fetch batch of questions with embeddings
-				const result: { questions: { _id: Id<"questions">, text?: string, embedding?: number[] }[], continueCursor: string, isDone: boolean } =
-					await ctx.runQuery(internal.questions.getQuestionsWithEmbeddingsBatch, {
-						cursor,
-						limit: BATCH_SIZE
-					});
-
-				const questions = result.questions;
-				cursor = result.continueCursor; // Update cursor for next iteration logic
-				const isDone = result.isDone;
-
-				// Process this batch
-				for (const question of questions) {
-					if (!question.embedding || question.embedding.length === 0) continue;
-
-					// Search for similar questions
-					// We use vector search.
-					// We are looking for VERY similar questions (duplicates).
-					// Threshold: 0.95 or higher?
-					const searchResults = await ctx.vectorSearch("questions", "by_embedding", {
-						vector: question.embedding,
-						limit: 5, // We only care about the top few matches
-					});
-
-					for (const match of searchResults) {
-						// Ignore self and ensure unique pair processing (A-B vs B-A) by enforcing order
-						if (match._id <= question._id) continue;
-
-						// Check score
-						if (match._score > threshold) {
-							// Potential duplicate!
-							try {
-								// saveDuplicateDetection will handle sorting IDs and basic checks.
-								const result = await ctx.runMutation(internal.questions.saveDuplicateDetection, {
-									questionIds: [question._id, match._id],
-									reason: `High embedding similarity (${match._score.toFixed(4)})`,
-									confidence: match._score,
-								});
-								if (result) {
-									duplicatesFound++;
-								}
-							} catch (e) {
-								// Ignore errors (e.g. if we add uniqueness constraint later)
-								console.error("Error saving duplicate:", e);
-							}
-						}
-					}
-				}
-
-				processedQuestions += questions.length;
-
-				// Update progress
-				await ctx.runMutation(api.duplicates.updateDuplicateDetectionProgress, {
-					progressId,
-					processedQuestions,
-					currentBatch,
-					duplicatesFound,
-					errors,
-				});
-
-				if (isDone) {
-					break;
-				}
-
-			} while (cursor); // Continue if cursor exists (logic handled by isDone check inside, but good to have safety)
-
-			await ctx.runMutation(api.duplicates.completeDuplicateDetectionProgress, {
-				progressId,
-				processedQuestions,
-				duplicatesFound,
-				errors,
-			});
-
-		} catch (error) {
-			console.error("Duplicate detection failed:", error);
-			errors.push(error instanceof Error ? error.message : String(error));
-			await ctx.runMutation(api.duplicates.failDuplicateDetectionProgress, {
-				progressId,
-				errors,
-			});
-		}
-
-		return progressId;
-	},
-});
-
-// Nightly question pool generation - creates a batch of AI questions for daily distribution
-export const generateNightlyQuestionPool = internalAction({
-	args: {
-		targetCount: v.number(),        // Questions per style/tone combo
-		maxCombinations: v.number(),    // Max combos to process (avoid timeout)
-	},
-	returns: v.object({
-		questionsGenerated: v.number(),
-		combinationsProcessed: v.number(),
-		errors: v.array(v.string()),
-	}),
-	handler: async (ctx, args) => {
-		const { targetCount, maxCombinations } = args;
-
-		// Check if we need to generate questions (stop if all subscribers have >= 3 unseen questions)
-		const needsQuestions = await ctx.runQuery(internal.questions.hasUsersWithLowUnseenCount, { threshold: 3 });
-		if (!needsQuestions) {
-			console.log("Skipping nightly pool generation: All users have enough unseen questions.");
-			return {
-				questionsGenerated: 0,
-				combinationsProcessed: 0,
-				errors: [],
-			};
-		}
-
-		const today = new Date().toISOString().split('T')[0]; // "2026-01-30"
-
-		let questionsGenerated = 0;
-		let combinationsProcessed = 0;
-		const errors: Array<string> = [];
-
-		// Get all styles and tones
-		const styles: Array<Doc<"styles">> = await ctx.runQuery(api.styles.getStyles, {});
-		const tones: Array<Doc<"tones">> = await ctx.runQuery(api.tones.getTones, {});
-
-		// Create all combinations
-		const combinations: Array<{ style: Doc<"styles">, tone: Doc<"tones"> }> = [];
-		for (const style of styles) {
-			for (const tone of tones) {
-				combinations.push({ style, tone });
-			}
-		}
-
-		// Shuffle to ensure variety across runs
-		for (let i = combinations.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			[combinations[i], combinations[j]] = [combinations[j], combinations[i]];
-		}
-
-		// Process limited combinations to avoid timeout
-		const toProcess = combinations.slice(0, maxCombinations);
-
-		for (const { style, tone } of toProcess) {
-			combinationsProcessed++;
-
-			try {
-				// Generate questions for this combo
-				const stylePrompt = `${style.name} - ${style.description || ''} ${style.promptGuidanceForAI || ''}`;
-				const tonePrompt = `${tone.name} - ${tone.description || ''} ${tone.promptGuidanceForAI || ''}`;
-
-				// Track generated questions for this specific combination to ensure variety
-				const questionsGeneratedInThisCombo: string[] = [];
-
-				// Generate targetCount questions
-				const MAX_RATE_RETRIES = 3;
-				let rateLimitRetryCount = 0;
-				for (let i = 0; i < targetCount; i++) {
-					try {
-						// Rate limit delay
-						if (questionsGenerated > 0) {
-							await new Promise(resolve => setTimeout(resolve, 1000));
-						}
-
-						const alreadyGeneratedText = questionsGeneratedInThisCombo.length > 0
-							? `\n\nAlready generated for this style/tone (AVOID SIMILAR THEMES OR STRUCTURES):\n- ${questionsGeneratedInThisCombo.join('\n- ')}`
-							: "";
-
-						const completion = await openai.chat.completions.create({
-							model: "@preset/break-the-ice-berg-default",
-							messages: [
-								{
-									role: "system",
-									content: `You are a creative ice-breaker question generator. Generate a single unique, engaging ice-breaker question.
-									
-RESPOND WITH ONLY THE QUESTION TEXT. No quotes, no formatting, no explanations.
-
-Requirements:
-- Keep it short and conversational
-- Make it thought-provoking but accessible
-- Only ONE question mark at the end
-- BE CREATIVE and explore different angles of the requested style and tone. Do not settle on a single template.`
-								},
-								{
-									role: "user",
-									content: `Generate 1 ice-breaker question.
-Style: ${stylePrompt}
-Tone: ${tonePrompt}${alreadyGeneratedText}`
-								}
-							],
-							max_tokens: 100,
-							temperature: 0.95, // Slightly higher for more variety
-						});
-
-						const questionText = completion.choices[0]?.message?.content?.trim();
-						if (!questionText || questionText.length < 10) {
-							continue;
-						}
-
-						// Clean the question text
-						const cleanedText = questionText.replace(/^["']|["']$/g, '').trim();
-
-						// Check for exact duplicate via text index
-						const existingExact = await ctx.runQuery(internal.questions.checkExactDuplicate, {
-							text: cleanedText,
-						});
-						if (existingExact) {
-							console.log(`Skipping exact duplicate: ${cleanedText.substring(0, 50)}...`);
-							continue;
-						}
-
-						// Check for similarity via embedding (match score > 0.9)
-						const isSimilar: boolean = await ctx.runAction(internal.questions.checkSimilarity, {
-							text: cleanedText,
-						});
-						if (isSimilar) {
-							console.log(`Skipping similar question: ${cleanedText.substring(0, 50)}...`);
-							continue;
-						}
-
-						// Save the question with pool metadata
-						const savedQuestion = await ctx.runMutation(internal.questions.savePoolQuestion, {
-							text: cleanedText,
-							styleId: style._id,
-							style: style.id,
-							toneId: tone._id,
-							tone: tone.id,
-							poolDate: today,
-						});
-
-						if (savedQuestion) {
-							questionsGenerated++;
-							questionsGeneratedInThisCombo.push(cleanedText);
-							rateLimitRetryCount = 0; // Reset retry count on success
-							// Trigger embedding generation asynchronously
-							await ctx.scheduler.runAfter(0, internal.lib.retriever.embedQuestion, {
-								questionId: savedQuestion,
-							});
-						} else {
-							// Log when save returns null (duplicate/race condition)
-							console.warn(`Pool question save skipped (duplicate/race):`, {
-								text: cleanedText.substring(0, 50) + '...',
-								styleId: style.id,
-								toneId: tone.id,
-								poolDate: today,
-							});
-						}
-
-					} catch (error: any) {
-						const isRateLimit = error.status === 429;
-						if (isRateLimit) {
-							rateLimitRetryCount++;
-							if (rateLimitRetryCount < MAX_RATE_RETRIES) {
-								// Wait and retry
-								const retryAfter = error.headers?.['retry-after'];
-								let waitTime = 5000; // Default backoff
-								if (retryAfter) {
-									const parsed = parseInt(retryAfter);
-									if (Number.isFinite(parsed)) {
-										waitTime = parsed * 1000;
-									} else {
-										const retryDate = Date.parse(retryAfter);
-										if (Number.isFinite(retryDate)) {
-											waitTime = Math.max(0, retryDate - Date.now());
-										}
-									}
-								}
-								console.log(`Rate limited (attempt ${rateLimitRetryCount}/${MAX_RATE_RETRIES}), waiting ${waitTime}ms...`);
-								await new Promise(resolve => setTimeout(resolve, waitTime));
-								i--; // Retry this iteration
-							} else {
-								errors.push(`Rate limit retries exhausted for ${style.name}/${tone.name} after ${MAX_RATE_RETRIES} attempts`);
-								rateLimitRetryCount = 0; // Reset for next iteration
-							}
-						} else {
-							errors.push(`Error generating question for ${style.name}/${tone.name}: ${error.message}`);
-						}
-					}
-				}
-
-			} catch (error: any) {
-				errors.push(`Error processing combo ${style.name}/${tone.name}: ${error.message}`);
-			}
-		}
-
-		// Send summary email if anything happened
-		if (questionsGenerated > 0 || errors.length > 0) {
-			const subject = `🌙 Nightly Pool Generated: ${questionsGenerated} questions`;
-			const html = `
-				<h2>Nightly Question Pool Summary</h2>
-				<p><strong>Date:</strong> ${today}</p>
-				<p><strong>Questions Generated:</strong> ${questionsGenerated}</p>
-				<p><strong>Combinations Processed:</strong> ${combinationsProcessed}/${combinations.length}</p>
-				${errors.length > 0 ? `<h3>Errors (${errors.length})</h3><ul>${errors.map(e => `<li>${e}</li>`).join('')}</ul>` : ''}
-			`;
-			await ctx.runAction(internal.email.sendEmail, { subject, html });
-		}
-
-		return { questionsGenerated, combinationsProcessed, errors };
-	},
 });

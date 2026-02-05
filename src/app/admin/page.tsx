@@ -19,7 +19,7 @@ import { Link } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 
 export default function AdminDashboard() {
-  const stats = useQuery(api.questions.getAdminStats)
+  const stats = useQuery(api.admin.questions.getAdminStats)
 
   if (!stats) {
     return (

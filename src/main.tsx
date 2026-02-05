@@ -39,6 +39,7 @@ import ContactPage from "./app/contact/page";
 import FeedbackButton from "./components/FeedbackButton";
 import { AnalyticsManager } from "./components/AnalyticsManager";
 import GeneratorPage from "./app/admin/generator/page.tsx";
+import { Toaster } from "sonner";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -87,6 +88,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/contact" element={<ContactPage />} />
               </Routes>
               <FeedbackButton />
+              <Toaster position="bottom-left" richColors />
             </BrowserRouter>
           </WorkspaceProvider>
         </StorageProvider>

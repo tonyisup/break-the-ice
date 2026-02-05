@@ -28,14 +28,14 @@ const SettingsPage = () => {
   const { activeWorkspace } = useWorkspace();
 
   const allStyles = useQuery(
-    api.styles.getStyles,
+    api.core.styles.getStyles,
     { organizationId: activeWorkspace ?? undefined }
   );
   const allTones = useQuery(
-    api.tones.getTones,
+    api.core.tones.getTones,
     { organizationId: activeWorkspace ?? undefined }
   );
-  const currentUser = useQuery(api.users.getCurrentUser, {});
+  const currentUser = useQuery(api.core.users.getCurrentUser, {});
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -76,7 +76,7 @@ const SettingsPage = () => {
   } = useStorageContext();
 
   const handleToggleStyle = (styleId: Id<"styles">) => {
-    if (hiddenStyles.includes(styleId)) {
+    if (hiddenStyles?.includes(styleId)) {
       removeHiddenStyle(styleId);
     } else {
       addHiddenStyle(styleId);
@@ -84,7 +84,7 @@ const SettingsPage = () => {
   };
 
   const handleToggleTone = (toneId: Id<"tones">) => {
-    if (hiddenTones.includes(toneId)) {
+    if (hiddenTones?.includes(toneId)) {
       removeHiddenTone(toneId);
     } else {
       addHiddenTone(toneId);
@@ -94,7 +94,7 @@ const SettingsPage = () => {
   const unhideQuestion = (questionId: Id<"questions">) => {
     removeHiddenQuestion(questionId);
   };
-  const hiddenQuestionObjects = useQuery(api.questions.getQuestionsByIds, { ids: hiddenQuestions });
+  const hiddenQuestionObjects = useQuery(api.core.questions.getQuestionsByIds, { ids: hiddenQuestions });
 
   // prevent flickering when unhiding questions
   const [lastKnownHiddenQuestions, setLastKnownHiddenQuestions] = useState<Doc<"questions">[] | undefined>(undefined);
@@ -114,8 +114,8 @@ const SettingsPage = () => {
     if (allStyles) {
       const serverIds = allStyles.map(s => s._id);
       const localIds = hiddenStyles;
-      const filteredIds = localIds.filter(id => serverIds.includes(id));
-      if (filteredIds.length !== localIds.length) {
+      const filteredIds = localIds?.filter(id => serverIds.includes(id));
+      if (filteredIds && localIds && filteredIds?.length !== localIds?.length) {
         setHiddenStyles(filteredIds);
       }
     }
@@ -125,8 +125,8 @@ const SettingsPage = () => {
     if (allTones) {
       const serverIds = allTones.map(t => t._id);
       const localIds = hiddenTones;
-      const filteredIds = localIds.filter(id => serverIds.includes(id));
-      if (filteredIds.length !== localIds.length) {
+      const filteredIds = localIds?.filter(id => serverIds.includes(id));
+      if (filteredIds && localIds && filteredIds?.length !== localIds?.length) {
         setHiddenTones(filteredIds);
       }
     }
@@ -141,11 +141,11 @@ const SettingsPage = () => {
     }
   }, [hiddenQuestionObjects, hiddenQuestions, setHiddenQuestions]);
 
-  const visibleStyleCount = allStyles?.filter(s => !hiddenStyles.includes(s._id)).length;
-  const hiddenStyleCount = allStyles?.filter(s => hiddenStyles.includes(s._id)).length;
+  const visibleStyleCount = allStyles?.filter(s => !hiddenStyles?.includes(s._id)).length;
+  const hiddenStyleCount = allStyles?.filter(s => hiddenStyles?.includes(s._id)).length;
 
-  const visibleToneCount = allTones?.filter(t => !hiddenTones.includes(t._id)).length;
-  const hiddenToneCount = allTones?.filter(t => hiddenTones.includes(t._id)).length;
+  const visibleToneCount = allTones?.filter(t => !hiddenTones?.includes(t._id)).length;
+  const hiddenToneCount = allTones?.filter(t => hiddenTones?.includes(t._id)).length;
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradientDark = ["#3B2554", "#262D54"];
@@ -254,7 +254,7 @@ const SettingsPage = () => {
               <div className="space-y-4">
                 <div className="flex flex-col gap-2">
                   <p className="text-sm dark:text-white/70 text-black/70 mb-2">
-                    Choose what happens when you reach the limit of liked or hidden items as a guest.
+                    Choose what happens when you reach the limit of history, liked, or hidden items as a guest.
                   </p>
                   <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-white/10 dark:hover:bg-white/5 transition-colors">
                     <input
@@ -293,119 +293,122 @@ const SettingsPage = () => {
             </CollapsibleSection>
           )}
 
-          <CollapsibleSection
-            title="Manage Styles"
-            isOpen={!!openSections['manage-styles']}
-            onOpenChange={() => toggleSection('manage-styles')}
-            visibleCount={visibleStyleCount}
-            hiddenCount={hiddenStyleCount}
-          >
-            {allStyles && allStyles.length > 0 ? (
-              <>
-                <div className="flex space-x-2 mb-4">
-                  <button
-                    onClick={() => setHiddenStyles([])}
-                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
-                  >
-                    Include All
-                  </button>
-                  <button
-                    onClick={() => setHiddenStyles(allStyles.map(s => s._id))}
-                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
-                  >
-                    Hide All
-                  </button>
-                </div>
-                <ul className="space-y-2">
-                  {allStyles.map(style => {
-                    const isIncluded = !hiddenStyles.includes(style._id);
-                    return (
-                      <li key={style._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                        <div className="flex items-center">
-                          <DynamicIcon name={style.icon} color={style.color} size={24} className="mr-2" />
-                          <span className="dark:text-white text-black">{style.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => handleShowInfo(style, "Style")} className="p-1">
-                            <DynamicIcon name="info" size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleToggleStyle(style._id)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
-                            aria-pressed={isIncluded}
-                            aria-label={`Toggle style ${style.name}`}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
-                            />
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            ) : (
-              <p className="dark:text-white/70 text-black/70">No styles available to manage.</p>
-            )}
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Manage Tones"
-            isOpen={!!openSections['manage-tones']}
-            onOpenChange={() => toggleSection('manage-tones')}
-            visibleCount={visibleToneCount}
-            hiddenCount={hiddenToneCount}
-          >
-            {allTones && allTones.length > 0 ? (
-              <>
-                <div className="flex space-x-2 mb-4">
-                  <button
-                    onClick={() => setHiddenTones([])}
-                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
-                  >
-                    Include All
-                  </button>
-                  <button
-                    onClick={() => setHiddenTones(allTones.map(t => t._id))}
-                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
-                  >
-                    Hide All
-                  </button>
-                </div>
-                <ul className="space-y-2">
-                  {allTones.map(tone => {
-                    const isIncluded = !hiddenTones.includes(tone._id);
-                    return (
-                      <li key={tone._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                        <div className="flex items-center">
-                          <DynamicIcon name={tone.icon} color={tone.color} size={24} className="mr-2" />
-                          <span className="dark:text-white text-black">{tone.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => handleShowInfo(tone, "Tone")} className="p-1">
-                            <DynamicIcon name="info" size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleToggleTone(tone._id)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
-                            aria-pressed={isIncluded}
-                            aria-label={`Toggle tone ${tone.name}`}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
-                            />
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            ) : (
-              <p className="dark:text-white/70 text-black/70">No tones available to manage.</p>
-            )}
-          </CollapsibleSection>
+          {isSignedIn && (
+            <CollapsibleSection
+              title="Manage Styles"
+              isOpen={!!openSections['manage-styles']}
+              onOpenChange={() => toggleSection('manage-styles')}
+              visibleCount={visibleStyleCount}
+              hiddenCount={hiddenStyleCount}
+            >
+              {allStyles && allStyles.length > 0 ? (
+                <>
+                  <div className="flex space-x-2 mb-4">
+                    <button
+                      onClick={() => setHiddenStyles([])}
+                      className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                    >
+                      Include All
+                    </button>
+                    <button
+                      onClick={() => setHiddenStyles(allStyles.map(s => s._id))}
+                      className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                    >
+                      Hide All
+                    </button>
+                  </div>
+                  <ul className="space-y-2">
+                    {allStyles.map(style => {
+                      const isIncluded = !hiddenStyles?.includes(style._id);
+                      return (
+                        <li key={style._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                          <div className="flex items-center">
+                            <DynamicIcon name={style.icon} color={style.color} size={24} className="mr-2" />
+                            <span className="dark:text-white text-black">{style.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => handleShowInfo(style, "Style")} className="p-1">
+                              <DynamicIcon name="info" size={18} />
+                            </button>
+                            <button
+                              onClick={() => handleToggleStyle(style._id)}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
+                              aria-pressed={isIncluded}
+                              aria-label={`Toggle style ${style.name}`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
+                              />
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              ) : (
+                <p className="dark:text-white/70 text-black/70">No styles available to manage.</p>
+              )}
+            </CollapsibleSection>
+          )}
+          {isSignedIn && (
+            <CollapsibleSection
+              title="Manage Tones"
+              isOpen={!!openSections['manage-tones']}
+              onOpenChange={() => toggleSection('manage-tones')}
+              visibleCount={visibleToneCount}
+              hiddenCount={hiddenToneCount}
+            >
+              {allTones && allTones.length > 0 ? (
+                <>
+                  <div className="flex space-x-2 mb-4">
+                    <button
+                      onClick={() => setHiddenTones([])}
+                      className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                    >
+                      Include All
+                    </button>
+                    <button
+                      onClick={() => setHiddenTones(allTones.map(t => t._id))}
+                      className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                    >
+                      Hide All
+                    </button>
+                  </div>
+                  <ul className="space-y-2">
+                    {allTones.map(tone => {
+                      const isIncluded = !hiddenTones?.includes(tone._id);
+                      return (
+                        <li key={tone._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                          <div className="flex items-center">
+                            <DynamicIcon name={tone.icon} color={tone.color} size={24} className="mr-2" />
+                            <span className="dark:text-white text-black">{tone.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => handleShowInfo(tone, "Tone")} className="p-1">
+                              <DynamicIcon name="info" size={18} />
+                            </button>
+                            <button
+                              onClick={() => handleToggleTone(tone._id)}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
+                              aria-pressed={isIncluded}
+                              aria-label={`Toggle tone ${tone.name}`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
+                              />
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              ) : (
+                <p className="dark:text-white/70 text-black/70">No tones available to manage.</p>
+              )}
+            </CollapsibleSection>
+          )}
 
           {!isSignedIn && hiddenQuestions.length >= MAX_ANON_BLOCKED && (
             <div className="mb-6">

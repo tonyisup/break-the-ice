@@ -45,7 +45,7 @@ export const embedQuestion = internalAction({
     questionId: v.id("questions"),
   },
   handler: async (ctx, args) => {
-    const question = await ctx.runQuery(api.questions.getQuestion, {
+    const question = await ctx.runQuery(api.core.questions.getQuestion, {
       id: args.questionId,
     });
     if (!question) {
@@ -56,7 +56,7 @@ export const embedQuestion = internalAction({
     if (!textToEmbed) return;
 
     const vector = await embed(textToEmbed);
-    await ctx.runMutation(internal.questions.addEmbedding, {
+    await ctx.runMutation(internal.internal.questions.addEmbedding, {
       questionId: args.questionId,
       embedding: vector,
     });
@@ -69,7 +69,7 @@ export const embedTopic = internalAction({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const topic = await ctx.runQuery(api.topics.getTopicBySystemId, {
+    const topic = await ctx.runQuery(api.core.topics.getTopicById, {
       id: args.topicId,
     });
     if (!topic) {
@@ -84,7 +84,7 @@ export const embedTopic = internalAction({
     const textToEmbed = textParts.join(". ");
 
     const vector = await embed(textToEmbed);
-    await ctx.runMutation(internal.topics.addTopicEmbedding, {
+    await ctx.runMutation(internal.internal.topics.addTopicEmbedding, {
       topicId: args.topicId,
       embedding: vector,
     });
@@ -96,7 +96,7 @@ export const embedStyle = internalAction({
     styleId: v.id("styles"),
   },
   handler: async (ctx, args) => {
-    const style = await ctx.runQuery(internal.styles.getStyleBySystemId, {
+    const style = await ctx.runQuery(internal.internal.styles.getStyleBySystemId, {
       id: args.styleId,
     });
     if (!style) {
@@ -111,7 +111,7 @@ export const embedStyle = internalAction({
     const textToEmbed = textParts.join(". ");
 
     const vector = await embed(textToEmbed);
-    await ctx.runMutation(internal.styles.addStyleEmbedding, {
+    await ctx.runMutation(internal.internal.styles.addStyleEmbedding, {
       styleId: args.styleId,
       embedding: vector,
     });
@@ -123,7 +123,7 @@ export const embedTone = internalAction({
     toneId: v.id("tones"),
   },
   handler: async (ctx, args) => {
-    const tone = await ctx.runQuery(api.tones.getTone, {
+    const tone = await ctx.runQuery(api.core.tones.getTone, {
       id: args.toneId,
     });
     if (!tone) {
@@ -134,7 +134,7 @@ export const embedTone = internalAction({
     if (!textToEmbed) return;
 
     const vector = await embed(textToEmbed);
-    await ctx.runMutation(internal.tones.addToneEmbedding, {
+    await ctx.runMutation(internal.internal.tones.addToneEmbedding, {
       toneId: args.toneId,
       embedding: vector,
     });

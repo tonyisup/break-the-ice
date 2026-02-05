@@ -1,12 +1,11 @@
 import { Link } from "react-router-dom";
-import { ThemeToggle } from "../ui/theme-toggle";
-import { InlineSignInButton } from "../../InlineSignInButton";
 import { Button } from "../ui/button";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@clerk/clerk-react";
-import { Heart, History, Settings, Home } from "@/components/ui/icons/icons";
+import { Heart, History, Home } from "@/components/ui/icons/icons";
 import { useStorageContext } from "@/hooks/useStorageContext";
+import { UserMenu } from "./UserMenu";
 
 interface HeaderProps {
   homeLinkSlot?: "liked" | "history" | "settings";
@@ -14,7 +13,7 @@ interface HeaderProps {
 
 export const Header = ({ homeLinkSlot }: HeaderProps) => {
   const { isSignedIn } = useAuth();
-  const customQuestions = useQuery(api.questions.getCustomQuestions, {});
+  const customQuestions = useQuery(api.core.questions.getCustomQuestions, {});
   const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
 
   const { likedQuestions, likedLimit, hiddenQuestions, hiddenLimit } = useStorageContext();
@@ -63,26 +62,11 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
         )}
       </div>
       <div className="flex items-center gap-2">
-        {homeLinkSlot === "settings" ? (
-          <HomeLink icon={<Settings className="w-5 h-5" />} text="Settings" />
-        ) : (
-          <div className="relative">
-            <Button asChild>
-              <Link to="/settings">
-                <Settings className="w-5 h-5" />
-                <span className="hidden sm:inline"> Settings</span>
-              </Link>
-            </Button>
-            {showSettingsLimitBadge && (
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-white dark:border-gray-900" title={`${hiddenLimit - hiddenQuestions.length} left`} />
-            )}
-            {showSettingsFullBadge && (
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" title="Limit reached" />
-            )}
-          </div>
-        )}
-        <ThemeToggle />
-        <InlineSignInButton />
+        <UserMenu
+          showSettingsBadge={showSettingsLimitBadge || showSettingsFullBadge}
+          settingsBadgeColor={showSettingsFullBadge ? "red" : "yellow"}
+          settingsBadgeTitle={showSettingsFullBadge ? "Limit reached" : `${hiddenLimit - hiddenQuestions.length} left`}
+        />
       </div>
 
     </header>
@@ -99,3 +83,4 @@ export const HomeLink = ({ icon = <Home className="w-5 h-5" />, text = "Home" }:
     </Button>
   );
 };
+

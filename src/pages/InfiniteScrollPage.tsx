@@ -20,7 +20,7 @@ export default function InfiniteScrollPage() {
   const convex = useConvex();
   const user = useAuth();
   const { activeWorkspace } = useWorkspace();
-  const generateAIQuestions = useAction(api.ai.generateAIQuestionForFeed);
+  const generateAIQuestions = useAction(api.core.ai.generateAIQuestionForFeed);
 
   const {
     likedQuestions,
@@ -46,14 +46,14 @@ export default function InfiniteScrollPage() {
   const [prevQuestion, setPrevQuestion] = useState<Doc<"questions"> | null>(null);
   const [nextQuestion, setNextQuestion] = useState<Doc<"questions"> | null>(null);
   // Fetch all styles and tones for card rendering
-  const allStyles = useQuery(api.styles.getStyles, {
+  const allStyles = useQuery(api.core.styles.getStyles, {
     organizationId: activeWorkspace ?? undefined,
   });
-  const allTones = useQuery(api.tones.getTones, {
+  const allTones = useQuery(api.core.tones.getTones, {
     organizationId: activeWorkspace ?? undefined,
   });
-  const currentUser = useQuery(api.users.getCurrentUser, {});
-  const recordAnalytics = useMutation(api.questions.recordAnalytics);
+  const currentUser = useQuery(api.core.users.getCurrentUser, {});
+  const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
 
   const stylesMap = useMemo(() => {
     if (!allStyles) return new Map<string, Doc<"styles">>();
@@ -160,8 +160,8 @@ export default function InfiniteScrollPage() {
     };
   }, [activeQuestion, recordAnalytics, addQuestionToHistory]);
 
-  const style = useQuery(api.styles.getStyle, { id: activeQuestion?.style || "would-you-rather" });
-  const tone = useQuery(api.tones.getTone, { id: activeQuestion?.tone || "fun-silly" });
+  const style = useQuery(api.core.styles.getStyle, { id: activeQuestion?.style || "would-you-rather" });
+  const tone = useQuery(api.core.tones.getTone, { id: activeQuestion?.tone || "fun-silly" });
 
   // Check if all styles or tones are blocked
   const allStylesBlocked = useMemo(() => {
@@ -201,7 +201,7 @@ export default function InfiniteScrollPage() {
       const BATCH_SIZE = 5;
 
       // 1. Try to get from DB
-      const dbQuestions = await convex.query(api.questions.getNextRandomQuestions, {
+      const dbQuestions = await convex.query(api.core.questions.getNextRandomQuestions, {
         count: BATCH_SIZE,
         seen: Array.from(seenIds), // Pass currently seen IDs to avoid duplicates
         hidden: hiddenQuestions,

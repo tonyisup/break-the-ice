@@ -4,20 +4,22 @@ import { api } from "../../convex/_generated/api";
 import { MessageCircle, X, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { useStorageContext } from "@/hooks/useStorageContext";
 
 export default function FeedbackButton() {
   const { isAuthenticated } = useConvexAuth();
+  const { sessionId } = useStorageContext();
   const [isOpen, setIsOpen] = useState(false);
   const [text, setText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const submitFeedback = useMutation(api.feedback.submitFeedback);
+  const submitFeedback = useMutation(api.core.feedback.submitFeedback);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         if (isOpen && text.trim() === "") {
-            setIsOpen(false);
+          setIsOpen(false);
         }
       }
     }
@@ -39,13 +41,19 @@ export default function FeedbackButton() {
       await submitFeedback({
         text,
         pageUrl: window.location.href,
+        sessionId,
       });
       toast.success("Feedback submitted! Thank you.");
       setText("");
       setIsOpen(false);
     } catch (error) {
       console.error(error);
-      toast.error("Failed to submit feedback. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "Failed to submit feedback.";
+      if (errorMessage.includes("recently")) {
+        toast.error(errorMessage);
+      } else {
+        toast.error("Failed to submit feedback. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }

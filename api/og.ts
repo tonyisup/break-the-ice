@@ -3,7 +3,7 @@ import { ImageResponse } from '@vercel/og';
 import React from 'react';
 import { ConvexHttpClient } from 'convex/browser';
 import { api } from '../convex/_generated/api.js';
-import { iconMap } from '../src/components/ui/icons/icons';
+import { iconMap } from '../src/components/ui/icons/icons.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         throw new Error('NEXT_PUBLIC_CONVEX_URL is not set');
       }
       const convex = new ConvexHttpClient(convexUrl);
-      const questionInfo: any = await convex.query(api.questions.getQuestionForOgImage, { id: id as any });
+      const questionInfo: any = await convex.query(api.core.questions.getQuestionForOgImage, { id: id as any });
       if (questionInfo) {
         text = questionInfo.text;
         styleName = questionInfo.styleName;

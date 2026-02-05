@@ -14,7 +14,7 @@ interface NewsletterCardProps {
 export function NewsletterCard({ variant, prefilledEmail }: NewsletterCardProps) {
   const [email, setEmail] = useState(prefilledEmail || '');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'verification_required'>('idle');
-  const subscribe = useAction(api.newsletter.subscribe);
+  const subscribe = useAction(api.core.newsletter.subscribe);
 
   useEffect(() => {
     if (prefilledEmail) {

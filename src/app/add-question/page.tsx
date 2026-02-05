@@ -7,7 +7,7 @@ import { Header } from "@/components/header";
 
 export default function AddQuestionPage() {
   const [questionText, setQuestionText] = useState("");
-  const addCustomQuestion = useMutation(api.questions.addCustomQuestion);
+  const addCustomQuestion = useMutation(api.core.questions.addCustomQuestion);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

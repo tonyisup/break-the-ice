@@ -165,6 +165,7 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_questionId", ["questionId"])
     .index("by_status", ["status"])
+    .index("by_userId_status", ["userId", "status"])
     .index("by_userId_status_updatedAt", ["userId", "status", "updatedAt"])
     .index("by_questionIdAndStatus", ["questionId", "status"])
     .index("by_userIdAndQuestionId", ["userId", "questionId"]),
@@ -282,13 +283,17 @@ export default defineSchema({
   feedback: defineTable({
     text: v.string(),
     pageUrl: v.string(),
-    userId: v.id("users"),
+    userId: v.optional(v.id("users")),
+    sessionId: v.optional(v.string()),
     createdAt: v.float64(),
     status: v.union(v.literal("new"), v.literal("read"), v.literal("archived")),
   })
     .index("by_status", ["status"])
     .index("by_userId", ["userId"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_sessionId", ["sessionId"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_sessionId_createdAt", ["sessionId", "createdAt"]),
   pendingSubscriptions: defineTable({
     email: v.string(),
     token: v.string(),

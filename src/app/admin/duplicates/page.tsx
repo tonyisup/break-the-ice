@@ -37,13 +37,13 @@ import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 
 export default function DuplicatesPage() {
-	const duplicateDetections = useQuery(api.questions.getPendingDuplicateDetections)
-	const progress = useQuery(api.duplicates.getLatestDuplicateDetectionProgress)
+	const duplicateDetections = useQuery(api.admin.questions.getPendingDuplicateDetections)
+	const progress = useQuery(api.admin.duplicates.getLatestDuplicateDetectionProgress)
 
-	const updateStatus = useMutation(api.questions.updateDuplicateDetectionStatus)
-	const deleteDuplicates = useMutation(api.questions.deleteDuplicateQuestions)
-	const updateQuestion = useMutation(api.questions.updateQuestion)
-	const detectDuplicatesAction = useAction(api.ai.startDuplicateDetection)
+	const updateStatus = useMutation(api.admin.questions.updateDuplicateDetectionStatus)
+	const deleteDuplicates = useMutation(api.admin.questions.deleteDuplicateQuestions)
+	const updateQuestion = useMutation(api.admin.questions.updateQuestion)
+	const detectDuplicatesAction = useAction(api.admin.ai.startDuplicateDetection)
 
 	const [selectedToDelete, setSelectedToDelete] = React.useState<Set<Id<"questions">>>(new Set())
 	const [keepQuestionId, setKeepQuestionId] = React.useState<Id<"questions"> | null>(null)

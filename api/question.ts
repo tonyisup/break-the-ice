@@ -25,7 +25,7 @@ export default async function handler(
     const convex = new ConvexHttpClient(
       convexUrl
     );
-    const question = await convex.query(api.questions.getQuestionById, { id });
+    const question = await convex.query(api.core.questions.getQuestionById, { id });
 
     if (!question) {
       return response.status(404).send("Question not found");

@@ -35,7 +35,7 @@ function LikedQuestionsPageContent() {
   const [isLikedOpen, setIsLikedOpen] = useState(true);
 
   // Filter out invalid question IDs to prevent errors
-  const myQuestions = useQuery(api.questions.getCustomQuestions, {});
+  const myQuestions = useQuery(api.core.questions.getCustomQuestions, {});
 
 
   const validLikedQuestions = useMemo(() => {
@@ -46,9 +46,9 @@ function LikedQuestionsPageContent() {
     });
   }, [likedQuestions]);
 
-  const questions = useQuery(api.questions.getQuestionsByIds, { ids: validLikedQuestions as Id<"questions">[] });
-  const styles = useQuery(api.styles.getStyles, {});
-  const tones = useQuery(api.tones.getTones, {});
+  const questions = useQuery(api.core.questions.getQuestionsByIds, { ids: validLikedQuestions as Id<"questions">[] });
+  const styles = useQuery(api.core.styles.getStyles, {});
+  const tones = useQuery(api.core.tones.getTones, {});
 
   const filteredQuestions = useFilter(questions || [], searchText, selectedStyles, selectedTones);
 

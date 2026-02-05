@@ -43,10 +43,10 @@ import { IconPicker } from "@/components/ui/icon-picker"
 import { toast } from "sonner"
 
 export default function StylesPage() {
-	const styles = useQuery(api.styles.getStyles, {})
-	const createStyle = useMutation(api.styles.createStyle)
-	const updateStyle = useMutation(api.styles.updateStyle)
-	const deleteStyle = useMutation(api.styles.deleteStyle)
+	const styles = useQuery(api.core.styles.getStyles, {})
+	const createStyle = useMutation(api.admin.styles.createStyle)
+	const updateStyle = useMutation(api.admin.styles.updateStyle)
+	const deleteStyle = useMutation(api.admin.styles.deleteStyle)
 
 	const [search, setSearch] = React.useState("")
 	const [editingStyle, setEditingStyle] = React.useState<Doc<"styles"> | null>(null)

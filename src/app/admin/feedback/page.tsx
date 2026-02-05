@@ -29,8 +29,8 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 
 export default function FeedbackPage() {
-	const allFeedback = useQuery(api.feedback.getFeedback)
-	const updateStatus = useMutation(api.feedback.updateFeedbackStatus)
+	const allFeedback = useQuery(api.admin.feedback.getFeedback)
+	const updateStatus = useMutation(api.admin.feedback.updateFeedbackStatus)
 
 	const [search, setSearch] = React.useState("")
 	const [statusFilter, setStatusFilter] = React.useState<string>("all")

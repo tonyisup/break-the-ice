@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { internalAction } from "./_generated/server";
-import { api } from "./_generated/api";
-import { Doc } from "./_generated/dataModel";
+import { internalAction } from "../_generated/server";
+import { api } from "../_generated/api";
+import { Doc } from "../_generated/dataModel";
 
 export const testDedupeLogic = internalAction({
 	args: {
@@ -31,8 +31,8 @@ export const testPromptAssembly = internalAction({
 	handler: async (ctx, args) => {
 		const { style, tone, recentlySeen = [] } = args;
 
-		const styleDoc = await ctx.runQuery(api.styles.getStylesWithExamples, { id: style, seed: Math.random() });
-		const toneDoc = await ctx.runQuery(api.tones.getTone, { id: tone });
+		const styleDoc = await ctx.runQuery(api.core.styles.getStylesWithExamples, { id: style, seed: Math.random() });
+		const toneDoc = await ctx.runQuery(api.core.tones.getTone, { id: tone });
 
 		if (!styleDoc || !toneDoc) {
 			return { error: "Style or Tone not found" };

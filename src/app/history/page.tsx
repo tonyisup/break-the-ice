@@ -33,9 +33,9 @@ function HistoryPageContent() {
   const [searchText, setSearchText] = useState("");
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
-  const recordAnalytics = useMutation(api.questions.recordAnalytics);
-  const styles = useQuery(api.styles.getStyles, {});
-  const tones = useQuery(api.tones.getTones, {});
+  const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
+  const styles = useQuery(api.core.styles.getStyles, {});
+  const tones = useQuery(api.core.tones.getTones, {});
   const { effectiveTheme } = useTheme();
 
   const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) || 100;

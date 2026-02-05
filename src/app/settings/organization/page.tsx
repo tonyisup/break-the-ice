@@ -21,12 +21,12 @@ const OrganizationSettings = () => {
   if (!has({ permission: "organization" })) {
     return null;
   }
-  const organizations = useQuery(api.organizations.getOrganizations);
-  const invitations = useQuery(api.organizations.getInvitations);
+  const organizations = useQuery(api.core.organizations.getOrganizations);
+  const invitations = useQuery(api.core.organizations.getInvitations);
 
-  const createOrganization = useMutation(api.organizations.createOrganization);
-  const inviteMember = useMutation(api.organizations.inviteMember);
-  const acceptInvitation = useMutation(api.organizations.acceptInvitation);
+  const createOrganization = useMutation(api.core.organizations.createOrganization);
+  const inviteMember = useMutation(api.core.organizations.inviteMember);
+  const acceptInvitation = useMutation(api.core.organizations.acceptInvitation);
 
   const [newOrgName, setNewOrgName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
