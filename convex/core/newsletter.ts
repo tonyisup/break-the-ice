@@ -76,7 +76,14 @@ export const subscribe = action({
 
 			// If authenticated, proceed with direct subscription (Legacy/Auth Flow)
 			if (identity) {
-				const result = await subscribeUser(ctx, args.email);
+				if (!identity.email) {
+					return {
+						success: false,
+						status: "error",
+						message: "Authenticated user has no email address.",
+					};
+				}
+				const result = await subscribeUser(ctx, identity.email);
 				return {
 					success: result.success,
 					status: result.success ? "subscribed" : "error",

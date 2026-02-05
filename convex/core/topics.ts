@@ -10,6 +10,15 @@ const publicTopicFields = {
 	order: v.optional(v.float64()),
 	organizationId: v.optional(v.id("organizations")),
 };
+const mapToPublicTopic = (topic: any) => ({
+	_id: topic._id,
+	_creationTime: topic._creationTime,
+	id: topic.id,
+	name: topic.name,
+	description: topic.description,
+	order: topic.order,
+	organizationId: topic.organizationId,
+});
 
 export const getTopics = query({
 	args: {
@@ -22,10 +31,11 @@ export const getTopics = query({
 			.withIndex("by_order")
 			.collect();
 
-		if (args.organizationId) {
-			return topics.filter(t => t.organizationId === args.organizationId);
-		}
-		return topics;
+		const filtered = args.organizationId
+			? topics.filter(t => t.organizationId === args.organizationId)
+			: topics;
+
+		return filtered.map(mapToPublicTopic);
 	},
 });
 
@@ -35,10 +45,11 @@ export const getTopic = query({
 	},
 	returns: v.union(v.object(publicTopicFields), v.null()),
 	handler: async (ctx, args) => {
-		return await ctx.db
+		const topic = await ctx.db
 			.query("topics")
 			.withIndex("by_my_id", (q) => q.eq("id", args.id))
 			.unique();
+		return topic ? mapToPublicTopic(topic) : null;
 	},
 });
 
@@ -49,6 +60,7 @@ export const getTopicBySystemId = query({
 	},
 	returns: v.union(v.object(publicTopicFields), v.null()),
 	handler: async (ctx, args) => {
-		return await ctx.db.get(args.id);
+		const topic = await ctx.db.get(args.id);
+		return topic ? mapToPublicTopic(topic) : null;
 	},
 });

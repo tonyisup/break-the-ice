@@ -54,7 +54,19 @@ export const updateTone = mutation({
 		if (!existingTone) {
 			throw new Error("Tone not found");
 		}
+
+		if (args.id !== existingTone.id) {
+			const toneWithId = await ctx.db
+				.query("tones")
+				.withIndex("by_my_id", (q) => q.eq("id", args.id))
+				.unique();
+			if (toneWithId) {
+				throw new Error("Tone with this ID already exists");
+			}
+		}
+
 		await ctx.db.patch(args._id, {
+			id: args.id,
 			name: args.name,
 			description: args.description,
 			promptGuidanceForAI: args.promptGuidanceForAI,

@@ -259,7 +259,7 @@ export const getQuestionForNewsletter = query({
 		userId: v.id("users"),
 		randomSeed: v.optional(v.float64()),
 	},
-	returns: v.any(),
+	returns: v.union(v.null(), v.any()),
 	handler: async (ctx, args) => {
 		const { userId, randomSeed } = args;
 		const user = await ctx.db.get(userId);
@@ -636,6 +636,7 @@ export const getLikedQuestions = query({
 	args: {
 		organizationId: v.optional(v.id("organizations")),
 	},
+	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
