@@ -90,6 +90,17 @@ export default function QuestionsPage() {
 		}
 	}
 
+	const handleUpdateField = async (id: Id<"questions">, updates: any) => {
+		try {
+			await updateQuestion({
+				id,
+				...updates,
+			})
+		} catch (error) {
+			toast.error("Failed to update question")
+		}
+	}
+
 	const handleUpdate = async (q: Doc<"questions">) => {
 		try {
 			await updateQuestion({
@@ -224,19 +235,52 @@ export default function QuestionsPage() {
 					</div>
 					<div className="grid gap-4">
 						{pendingQuestions.map((q) => (
-							<div key={q._id} className="p-4 md:p-6 bg-white dark:bg-gray-800 rounded-xl border-2 border-primary/20 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 transition-all hover:border-primary/40">
-								<div className="space-y-2 flex-1">
+							<div key={q._id} className="p-4 md:p-6 bg-white dark:bg-gray-800 rounded-xl border-2 border-primary/20 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 transition-all hover:border-primary/40">
+								<div className="space-y-4 flex-1 w-full">
 									<div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-widest">
 										<UserCircle className="size-3" />
 										User Submitted
 									</div>
-									<p className="text-base md:text-lg font-medium">{q.customText}</p>
+									<textarea
+										className="w-full min-h-[80px] p-3 rounded-md border bg-background text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none resize-none"
+										defaultValue={q.text || q.customText || ""}
+										onBlur={(e) => {
+											if (e.target.value !== (q.text || q.customText)) {
+												handleUpdateField(q._id, { text: e.target.value })
+											}
+										}}
+										placeholder="Question text..."
+									/>
+									<div className="flex flex-col sm:flex-row gap-4">
+										<div className="flex-1 space-y-1">
+											<label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Style</label>
+											<select
+												value={q.style || ""}
+												onChange={(e) => handleUpdateField(q._id, { style: e.target.value })}
+												className="w-full h-9 rounded-md border bg-background px-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+											>
+												<option value="">Select Style...</option>
+												{styles.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+											</select>
+										</div>
+										<div className="flex-1 space-y-1">
+											<label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tone</label>
+											<select
+												value={q.tone || ""}
+												onChange={(e) => handleUpdateField(q._id, { tone: e.target.value })}
+												className="w-full h-9 rounded-md border bg-background px-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+											>
+												<option value="">Select Tone...</option>
+												{tones.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+											</select>
+										</div>
+									</div>
 								</div>
-								<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-									<Button variant="outline" size="sm" className="text-blue-500 hover:text-blue-600 hover:bg-blue-50 flex-1 sm:flex-none justify-center" onClick={() => handleApprove(q, "personal")}>
+								<div className="flex flex-row lg:flex-col items-stretch gap-2 sm:gap-3 w-full lg:w-48">
+									<Button variant="outline" size="sm" className="text-blue-500 hover:text-blue-600 hover:bg-blue-50 flex-1 justify-center" onClick={() => handleApprove(q, "personal")}>
 										Mark Personal
 									</Button>
-									<Button size="sm" className="bg-green-600 hover:bg-green-700 text-white gap-2 flex-1 sm:flex-none justify-center" onClick={() => handleApprove(q, "public")}>
+									<Button size="sm" className="bg-green-600 hover:bg-green-700 text-white gap-2 flex-1 justify-center" onClick={() => handleApprove(q, "public")}>
 										<CheckCircle2 className="size-4" />
 										Approve Public
 									</Button>
