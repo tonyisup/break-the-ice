@@ -140,6 +140,7 @@ export default defineSchema({
     questionPreferenceEmbedding: v.optional(v.array(v.number())),
     defaultStyle: v.optional(v.string()),
     defaultTone: v.optional(v.string()),
+    dismissedRefineCTA: v.optional(v.boolean()),
     subscriptionTier: v.optional(v.union(v.literal("free"), v.literal("casual"))),
     aiUsage: v.optional(v.object({
       count: v.number(),

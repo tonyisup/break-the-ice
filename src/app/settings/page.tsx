@@ -38,6 +38,20 @@ const SettingsPage = () => {
   const currentUser = useQuery(api.core.users.getCurrentUser, {});
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const expand = params.get('expand');
+    if (expand) {
+      const sections = expand.split(',');
+      const newOpenSections: Record<string, boolean> = {};
+      sections.forEach(s => {
+        newOpenSections[s.trim()] = true;
+      });
+      setOpenSections(prev => ({ ...prev, ...newOpenSections }));
+    }
+  }, []);
+
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ItemDetails | null>(null);
 
