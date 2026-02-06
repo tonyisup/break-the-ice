@@ -200,6 +200,8 @@ export default function InfiniteScrollPage() {
     try {
       const BATCH_SIZE = 5;
 
+      const isFirstPull = questionsRef.current.length === 0;
+
       // 1. Try to get from DB
       const dbQuestions = await convex.action(api.core.questions.getNextRandomQuestions, {
         count: BATCH_SIZE,
@@ -216,17 +218,18 @@ export default function InfiniteScrollPage() {
 
       let combinedQuestions = [...dbQuestions];
 
-      // Update state with DB questions immediately
-      if (dbQuestions.length > 0) {
+      // Update state immediately ONLY if it's NOT the first pull
+      // For the first pull, we want to collect the full batch (including AI) before sorting
+      if (!isFirstPull && combinedQuestions.length > 0) {
         setQuestions(prev => {
           const existingIds = new Set(prev.map(q => q._id));
-          const uniqueNew = dbQuestions.filter(q => !existingIds.has(q._id));
+          const uniqueNew = combinedQuestions.filter(q => !existingIds.has(q._id));
           if (uniqueNew.length === 0) return prev;
           return [...prev, ...uniqueNew];
         });
         setSeenIds(prev => {
           const next = new Set(prev);
-          dbQuestions.forEach(q => next.add(q._id));
+          combinedQuestions.forEach(q => next.add(q._id));
           return next;
         });
       }
@@ -236,6 +239,16 @@ export default function InfiniteScrollPage() {
         if (!user.isSignedIn) {
           setShowAuthCTA(true);
           setHasMore(false);
+          // If we have some DB questions and it was the first pull, we need to show them now
+          if (isFirstPull && combinedQuestions.length > 0) {
+            combinedQuestions.sort((a, b) => {
+              const lenA = (a.text || a.customText || "").length;
+              const lenB = (b.text || b.customText || "").length;
+              return lenA - lenB;
+            });
+            setQuestions(combinedQuestions);
+            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+          }
           return;
         }
 
@@ -246,24 +259,30 @@ export default function InfiniteScrollPage() {
           if (currentRequestId !== requestIdRef.current) return;
 
           const validGenerated = (generated || []).filter((q): q is Doc<"questions"> => q !== null);
+          const uniqueGenerated = validGenerated.filter(q => !combinedQuestions.some(cq => cq._id === q._id));
 
-          if (validGenerated.length > 0) {
+          if (isFirstPull) {
+            combinedQuestions = [...combinedQuestions, ...uniqueGenerated];
+            combinedQuestions.sort((a, b) => {
+              const lenA = (a.text || a.customText || "").length;
+              const lenB = (b.text || b.customText || "").length;
+              return lenA - lenB;
+            });
+            setQuestions(combinedQuestions);
+            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+          } else if (uniqueGenerated.length > 0) {
             setQuestions(prev => {
               const existingIds = new Set(prev.map(q => q._id));
-              const uniqueNew = validGenerated.filter(q => !existingIds.has(q._id));
+              const uniqueNew = uniqueGenerated.filter(q => !existingIds.has(q._id));
               if (uniqueNew.length === 0) return prev;
               return [...prev, ...uniqueNew];
             });
             setSeenIds(prev => {
               const next = new Set(prev);
-              validGenerated.forEach(q => next.add(q._id));
+              uniqueGenerated.forEach(q => next.add(q._id));
               return next;
             });
           }
-
-          // If we are signed in, we theoretically always have "more" (via AI generation)
-          // unless we hit a limit or specific error.
-          // So we don't set hasMore(false) just because one batch came back empty.
         } catch (err) {
           console.error("AI Generation failed:", err);
           if (currentRequestId !== requestIdRef.current) return;
@@ -276,7 +295,27 @@ export default function InfiniteScrollPage() {
             setShowUpgradeCTA(true);
             setHasMore(false);
           }
+
+          // If AI failed and it was first pull, show what we have from DB
+          if (isFirstPull && combinedQuestions.length > 0) {
+            combinedQuestions.sort((a, b) => {
+              const lenA = (a.text || a.customText || "").length;
+              const lenB = (b.text || b.customText || "").length;
+              return lenA - lenB;
+            });
+            setQuestions(combinedQuestions);
+            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+          }
         }
+      } else if (isFirstPull) {
+        // We have a full batch from DB, sort and show
+        combinedQuestions.sort((a, b) => {
+          const lenA = (a.text || a.customText || "").length;
+          const lenB = (b.text || b.customText || "").length;
+          return lenA - lenB;
+        });
+        setQuestions(combinedQuestions);
+        setSeenIds(new Set(combinedQuestions.map(q => q._id)));
       }
     } catch (error) {
       console.error("Error fetching questions:", error);
