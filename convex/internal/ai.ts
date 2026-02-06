@@ -390,7 +390,7 @@ export const remixQuestion = internalAction({
 		const [style, tone, topic] = await Promise.all([
 			question.styleId ? ctx.runQuery(internal.internal.styles.getStyleById, { id: question.styleId }) : null,
 			question.toneId ? ctx.runQuery(internal.internal.tones.getToneById, { id: question.toneId }) : null,
-			ctx.runQuery(internal.internal.topics.getTopCurrentTopic, {}),
+			question.topicId ? ctx.runQuery(internal.internal.topics.getTopicById, { id: question.topicId }) : null,
 		]);
 
 		const completion = await openai.chat.completions.create({
@@ -411,8 +411,7 @@ export const remixQuestion = internalAction({
 					
 					Context:
 					Style: ${style?.name ?? "General"} (${style?.description ?? ""})
-					Tone: ${tone?.name ?? "General"} (${tone?.description ?? ""})
-					Topic Focus: ${topic?.name ?? "General"} (${topic?.description ?? ""})`
+					Tone: ${tone?.name ?? "General"} (${tone?.description ?? ""})${topic ? `\n\t\t\t\t\tTopic Focus: ${topic.name} (${topic.description ?? ""})` : ""}`
 				}
 			],
 			temperature: 0.9,

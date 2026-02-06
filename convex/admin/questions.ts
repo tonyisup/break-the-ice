@@ -46,13 +46,26 @@ export const createQuestion = mutation({
 	returns: v.id("questions"),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
+
+		let styleId = args.styleId;
+		if (args.style && !styleId) {
+			const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", q => q.eq("id", args.style!)).unique();
+			if (styleDoc) styleId = styleDoc._id;
+		}
+
+		let toneId = args.toneId;
+		if (args.tone && !toneId) {
+			const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", q => q.eq("id", args.tone!)).unique();
+			if (toneDoc) toneId = toneDoc._id;
+		}
+
 		return await ctx.db.insert("questions", {
 			text: args.text,
 			tags: args.tags ?? [],
 			style: args.style ?? undefined,
-			styleId: args.styleId ?? undefined,
+			styleId: styleId ?? undefined,
 			tone: args.tone ?? undefined,
-			toneId: args.toneId ?? undefined,
+			toneId: toneId ?? undefined,
 			status: args.status ?? "pending",
 			totalLikes: 0,
 			totalThumbsDown: 0,
@@ -65,10 +78,12 @@ export const createQuestion = mutation({
 export const updateQuestion = mutation({
 	args: {
 		id: v.id("questions"),
-		text: v.string(),
+		text: v.optional(v.string()),
 		tags: v.optional(v.array(v.string())),
 		style: v.optional(v.string()),
 		tone: v.optional(v.string()),
+		styleId: v.optional(v.id("styles")),
+		toneId: v.optional(v.id("tones")),
 		status: v.optional(v.union(
 			v.literal("pending"),
 			v.literal("approved"),
@@ -81,9 +96,13 @@ export const updateQuestion = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
-		const { id, text, tags, style, tone, status } = args;
+		const { id, text, tags, style, tone, status, styleId, toneId } = args;
 
-		const updateData: any = { text };
+		const updateData: any = {};
+
+		if (text !== undefined) {
+			updateData.text = text;
+		}
 
 		if (tags !== undefined) {
 			updateData.tags = tags;
@@ -91,10 +110,26 @@ export const updateQuestion = mutation({
 
 		if (style !== undefined) {
 			updateData.style = style;
+			if (!styleId) {
+				const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", q => q.eq("id", style)).unique();
+				if (styleDoc) updateData.styleId = styleDoc._id;
+			}
+		}
+
+		if (styleId !== undefined) {
+			updateData.styleId = styleId;
 		}
 
 		if (tone !== undefined) {
 			updateData.tone = tone;
+			if (!toneId) {
+				const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", q => q.eq("id", tone)).unique();
+				if (toneDoc) updateData.toneId = toneDoc._id;
+			}
+		}
+
+		if (toneId !== undefined) {
+			updateData.toneId = toneId;
 		}
 
 		if (status !== undefined) {
