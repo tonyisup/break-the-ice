@@ -373,6 +373,10 @@ export default function InfiniteScrollPage() {
         removeLikedQuestion(questionId);
         toast.success("Removed from favorites");
       } else {
+        // If it was hidden, remove it from hidden
+        if (hiddenQuestions.includes(questionId)) {
+          removeHiddenQuestion(questionId);
+        }
         addLikedQuestion(questionId);
         await recordAnalytics({
           questionId,
@@ -389,10 +393,23 @@ export default function InfiniteScrollPage() {
 
   const toggleHide = (questionId: Id<"questions">) => {
     try {
-      addHiddenQuestion(questionId);
-      toast.success("Question hidden");
-      // Remove from list
-      setQuestions(prev => prev.filter(q => q._id !== questionId));
+      const isHidden = hiddenQuestions.includes(questionId);
+      if (isHidden) {
+        removeHiddenQuestion(questionId);
+        toast.success("Question unhidden");
+      } else {
+        // If it was liked, remove it from favorites
+        if (likedQuestions.includes(questionId)) {
+          removeLikedQuestion(questionId);
+        }
+        addHiddenQuestion(questionId);
+        void recordAnalytics({
+          questionId,
+          event: "hidden",
+          viewDuration: 0,
+        });
+        toast.success("Question hidden");
+      }
     } catch (error) {
       console.error("Error hiding question:", error);
       toast.error("Failed to hide question.");
@@ -590,6 +607,7 @@ export default function InfiniteScrollPage() {
                     isGenerating={false}
                     question={question}
                     isFavorite={likedQuestions.includes(question._id)}
+                    isHidden={hiddenQuestions.includes(question._id)}
                     gradient={cardGradient}
                     style={cardStyle}
                     tone={cardTone}

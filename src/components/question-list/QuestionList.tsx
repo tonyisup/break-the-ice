@@ -11,6 +11,7 @@ interface QuestionListProps {
   styles: Doc<"styles">[];
   tones: Doc<"tones">[];
   likedQuestions: Id<"questions">[];
+  hiddenQuestions: Id<"questions">[];
   onToggleLike: (questionId: Id<"questions">) => void;
   onRemoveItem: (questionId: Id<"questions">) => void;
   isHistory?: boolean;
@@ -34,6 +35,7 @@ export function QuestionList({
   styles,
   tones,
   likedQuestions,
+  hiddenQuestions,
   onToggleLike,
   onRemoveItem,
   isHistory = false,
@@ -84,6 +86,7 @@ export function QuestionList({
           question={question}
           isGenerating={false}
           isFavorite={likedQuestions.includes(question._id)}
+          isHidden={hiddenQuestions.includes(question._id)}
           onToggleFavorite={() => onToggleLike(question._id)}
           onToggleHidden={() => onRemoveItem(question._id)}
           gradient={gradient}

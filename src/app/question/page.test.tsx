@@ -29,6 +29,15 @@ vi.mock('@clerk/clerk-react', async () => {
       userId: null,
       isSignedIn: false,
     }),
+    useClerk: () => ({
+      openSignIn: vi.fn(),
+      signOut: vi.fn(),
+      user: null,
+    }),
+    useUser: () => ({
+      isSignedIn: false,
+      user: null,
+    }),
   };
 });
 vi.mock('../../hooks/useTheme', () => ({

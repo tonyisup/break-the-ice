@@ -8,6 +8,7 @@ interface QuestionGridProps {
   styles: Doc<"styles">[];
   tones: Doc<"tones">[];
   likedQuestions: Id<"questions">[];
+  hiddenQuestions: Id<"questions">[];
   onToggleLike: (questionId: Id<"questions">) => void;
   onRemoveItem: (questionId: Id<"questions">) => void;
   variant?: "card" | "condensed";
@@ -44,6 +45,7 @@ export function QuestionGrid({
   styles,
   tones,
   likedQuestions,
+  hiddenQuestions,
   onToggleLike,
   onRemoveItem,
   variant = "card",
@@ -61,6 +63,7 @@ export function QuestionGrid({
         const style = styles.find((s) => s.id === question.style);
         const tone = tones.find((t) => t.id === question.tone);
         const isFavorite = likedQuestions.includes(question._id);
+        const isHidden = hiddenQuestions.includes(question._id);
 
         if (isCondensed) {
           return (
@@ -103,10 +106,11 @@ export function QuestionGrid({
                   <button
                     onClick={(e) => { e.stopPropagation(); onRemoveItem(question._id); }}
                     className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-                    title="Hide"
+                    title={isHidden ? "Unhide" : "Hide"}
                   >
                     <ThumbsDown
                       size={14}
+                      className={isHidden ? 'text-blue-500 fill-blue-500' : ''}
                     />
                   </button>
                 </div>
@@ -164,10 +168,11 @@ export function QuestionGrid({
                 <button
                   onClick={() => onRemoveItem(question._id)}
                   className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-                  title="Hide"
+                  title={isHidden ? "Unhide" : "Hide"}
                 >
                   <ThumbsDown
                     size={16}
+                    className={isHidden ? 'text-blue-500 fill-blue-500' : ''}
                   />
                 </button>
               </div>
