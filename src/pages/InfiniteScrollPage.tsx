@@ -14,6 +14,7 @@ import { useAuth } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
 import { UpgradeCTA } from "@/components/UpgradeCTA";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
+import { RefineResultsCTA } from "@/components/RefineResultsCTA";
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
@@ -54,6 +55,8 @@ export default function InfiniteScrollPage() {
     organizationId: activeWorkspace ?? undefined,
   });
   const currentUser = useQuery(api.core.users.getCurrentUser, {});
+  const interactionStats = useQuery(api.core.users.getUserInteractionStats, {});
+  const dismissRefineCTA = useMutation(api.core.users.dismissRefineCTA);
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
 
   const stylesMap = useMemo(() => {
@@ -443,6 +446,11 @@ export default function InfiniteScrollPage() {
   // Smooth gradient transition logic
   const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
 
+  const showRefineCTA = interactionStats &&
+    interactionStats.totalSeen >= 50 &&
+    interactionStats.totalLikes === 0 &&
+    !interactionStats.dismissedRefineCTA;
+
   // Determine variant for A/B testing (randomized on mount)
   // We use a ref to keep it consistent across re-renders
   const newsletterVariantRef = useRef(Math.random() > 0.5 ? 'blend' as const : 'standout' as const);
@@ -629,6 +637,16 @@ export default function InfiniteScrollPage() {
                       prefilledEmail={user.isSignedIn ? currentUser?.email : undefined}
                     />
                   )}
+
+                {/* Insert Refine Results CTA after the 10th question (index 9) */}
+                {index === 9 && showRefineCTA && (
+                  <RefineResultsCTA
+                    bgGradient={bgGradient}
+                    onDismiss={() => {
+                      dismissRefineCTA();
+                    }}
+                  />
+                )}
               </div>
             );
           })}
