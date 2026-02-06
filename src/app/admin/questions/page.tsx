@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useQuery, useMutation } from "convex/react"
+import { useQuery, useMutation, useAction } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
 import { Doc, Id } from "../../../../convex/_generated/dataModel"
 import {
@@ -17,6 +17,8 @@ import {
 	Share2,
 	LayoutGrid,
 	List,
+	Sparkles,
+	Loader2,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -49,6 +51,9 @@ export default function QuestionsPage() {
 	const createQuestion = useMutation(api.admin.questions.createQuestion)
 	const updateQuestion = useMutation(api.admin.questions.updateQuestion)
 	const deleteQuestion = useMutation(api.admin.questions.deleteQuestion)
+	const remixQuestion = useAction(api.admin.questions.remixQuestion)
+
+	const [remixingIds, setRemixingIds] = React.useState<Set<Id<"questions">>>(new Set())
 
 	const [search, setSearch] = React.useState("")
 	const [viewMode, setViewMode] = React.useState<"table" | "grid">("table")
@@ -142,6 +147,27 @@ export default function QuestionsPage() {
 		}
 	}
 
+	const handleRemix = async (id: Id<"questions">) => {
+		setRemixingIds(prev => {
+			const next = new Set(prev)
+			next.add(id)
+			return next
+		})
+		try {
+			const newText = await remixQuestion({ id })
+			await updateQuestion({ id, text: newText })
+			toast.success("Question remixed!")
+		} catch (error: any) {
+			toast.error(`Remix failed: ${error.message}`)
+		} finally {
+			setRemixingIds(prev => {
+				const next = new Set(prev)
+				next.delete(id)
+				return next
+			})
+		}
+	}
+
 	if (!allQuestions || !styles || !tones) {
 		return (
 			<div className="flex flex-col gap-4 animate-pulse">
@@ -230,10 +256,24 @@ export default function QuestionsPage() {
 										<UserCircle className="size-3" />
 										User Submitted
 									</div>
-									<p className="text-base md:text-lg font-medium">{q.customText}</p>
+									<p className="text-base md:text-lg font-medium">{q.text || q.customText}</p>
 								</div>
 								<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-									<Button variant="outline" size="sm" className="text-blue-500 hover:text-blue-600 hover:bg-blue-50 flex-1 sm:flex-none justify-center" onClick={() => handleApprove(q, "personal")}>
+									<Button
+										variant="outline"
+										size="sm"
+										className="text-blue-500 hover:text-blue-600 hover:bg-blue-50 flex-1 sm:flex-none justify-center gap-2"
+										onClick={() => handleRemix(q._id)}
+										disabled={remixingIds.has(q._id)}
+									>
+										{remixingIds.has(q._id) ? (
+											<Loader2 className="size-4 animate-spin" />
+										) : (
+											<Sparkles className="size-4" />
+										)}
+										Remix
+									</Button>
+									<Button variant="outline" size="sm" className="text-blue-400 hover:text-blue-500 hover:bg-blue-50 flex-1 sm:flex-none justify-center" onClick={() => handleApprove(q, "personal")}>
 										Mark Personal
 									</Button>
 									<Button size="sm" className="bg-green-600 hover:bg-green-700 text-white gap-2 flex-1 sm:flex-none justify-center" onClick={() => handleApprove(q, "public")}>
@@ -392,6 +432,18 @@ export default function QuestionsPage() {
 																		<Trash2 className="size-4" />
 																		Delete
 																	</DropdownMenuItem>
+																	<DropdownMenuItem
+																		className="gap-2 py-2.5 text-blue-500 focus:text-blue-600"
+																		onClick={() => handleRemix(q._id)}
+																		disabled={remixingIds.has(q._id)}
+																	>
+																		{remixingIds.has(q._id) ? (
+																			<Loader2 className="size-4 animate-spin" />
+																		) : (
+																			<Sparkles className="size-4" />
+																		)}
+																		Remix with AI
+																	</DropdownMenuItem>
 																</DropdownMenuContent>
 															</DropdownMenu>
 														</div>
@@ -468,6 +520,18 @@ export default function QuestionsPage() {
 													</DropdownMenuItem>
 													<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={() => handleDelete(q._id)}>
 														<Trash2 className="size-4" /> Delete
+													</DropdownMenuItem>
+													<DropdownMenuItem
+														className="gap-2 text-blue-500 focus:text-blue-600"
+														onClick={() => handleRemix(q._id)}
+														disabled={remixingIds.has(q._id)}
+													>
+														{remixingIds.has(q._id) ? (
+															<Loader2 className="size-4 animate-spin" />
+														) : (
+															<Sparkles className="size-4" />
+														)}
+														Remix with AI
 													</DropdownMenuItem>
 												</DropdownMenuContent>
 											</DropdownMenu>

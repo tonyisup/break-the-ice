@@ -26,6 +26,7 @@ export default function InfiniteScrollPage() {
     likedQuestions,
     addLikedQuestion,
     removeLikedQuestion,
+    removeHiddenQuestion,
     hiddenQuestions,
     addHiddenQuestion,
     hiddenStyles,

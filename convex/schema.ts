@@ -83,6 +83,7 @@ export default defineSchema({
     status: v.optional(
       v.union(
         v.literal("pending"),
+        v.literal("approved"),
         v.literal("public"),
         v.literal("private"),
         v.literal("pruning"),

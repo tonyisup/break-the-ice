@@ -45,6 +45,7 @@ export const getQuestionById = internalQuery({
 		customText: v.optional(v.string()),
 		status: v.optional(v.union(
 			v.literal("pending"),
+			v.literal("approved"),
 			v.literal("public"),
 			v.literal("private"),
 			v.literal("pruning"),
@@ -568,22 +569,6 @@ export const getRandomQuestionsInternal = internalQuery({
 		hiddenTones: v.array(v.id("tones")),
 		organizationId: v.optional(v.id("organizations")),
 	},
-	returns: v.array(v.object({
-		_id: v.id("questions"),
-		_creationTime: v.number(),
-		text: v.optional(v.string()),
-		styleId: v.optional(v.id("styles")),
-		toneId: v.optional(v.id("tones")),
-		organizationId: v.optional(v.id("organizations")),
-		status: v.optional(v.union(
-			v.literal("pending"),
-			v.literal("public"),
-			v.literal("private"),
-			v.literal("pruning"),
-			v.literal("pruned")
-		)),
-		prunedAt: v.optional(v.number()),
-	})),
 	handler: async (ctx, args) => {
 		const { count, startTime, seen, hidden, hiddenStyles, hiddenTones, organizationId } = args;
 		const seenIds = new Set(seen);
@@ -596,17 +581,22 @@ export const getRandomQuestionsInternal = internalQuery({
 				q.eq(q.field("organizationId"), organizationId),
 				q.eq(q.field("prunedAt"), undefined),
 				q.neq(q.field("text"), undefined),
-				q.or(q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
+				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
 			];
 			return q.and(...conditions);
 		};
 
 		// 1. Fetch candidates from random start point
-		let candidates = await ctx.db
+		const candidatesWithEmbeddings = await ctx.db
 			.query("questions")
 			.withIndex("by_creation_time", (q) => q.gt("_creationTime", startTime))
 			.filter((q) => applyFilters(q))
 			.take(count * 5);
+
+		let candidates = candidatesWithEmbeddings.map(q => {
+			const { embedding, ...rest } = q;
+			return rest;
+		});
 
 		// 2. Wrap around if needed
 		if (candidates.length < count * 2) {

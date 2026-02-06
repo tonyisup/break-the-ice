@@ -34,6 +34,7 @@ export const createQuestion = mutation({
 		tone: v.optional(v.string()),
 		status: v.optional(v.union(
 			v.literal("pending"),
+			v.literal("approved"),
 			v.literal("public"),
 			v.literal("private"),
 			v.literal("pruning"),
@@ -70,6 +71,7 @@ export const updateQuestion = mutation({
 		tone: v.optional(v.string()),
 		status: v.optional(v.union(
 			v.literal("pending"),
+			v.literal("approved"),
 			v.literal("public"),
 			v.literal("private"),
 			v.literal("pruning"),
@@ -542,7 +544,7 @@ export const getAdminStats = query({
 		return {
 			questions: {
 				total: questions.length,
-				public: questions.filter(q => q.status === "public" || !q.status).length,
+				public: questions.filter(q => q.status === "public" || q.status === "approved" || !q.status).length,
 				pending: questions.filter(q => q.status === "pending").length,
 				pruned: questions.filter(q => q.prunedAt !== undefined).length,
 			},

@@ -190,7 +190,7 @@ export const getNextRandomQuestions = action({
 		organizationId: v.optional(v.id("organizations")),
 		randomSeed: v.optional(v.float64()),
 	},
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<any[]> => {
 		const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed = Math.random() } = args;
 
 		// 1. Get time range for randomization
@@ -211,7 +211,7 @@ export const getNextRandomQuestions = action({
 			hiddenStyles,
 			hiddenTones,
 			organizationId,
-		}) as any[];
+		});
 
 		// 3. Shuffle results (deterministic based on seed)
 		const results = [...candidates];
