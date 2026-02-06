@@ -251,19 +251,19 @@ export const generateNightlyQuestionPool = internalAction({
 		} else {
 			// Aggregate visible styles/tones for specific users with low counts
 			const allUserStyles = await Promise.all(
-				usersWithLowUnseenCount.map(userId =>
+				usersWithLowUnseenCount.map((userId: Id<"users">) =>
 					ctx.runQuery(internal.internal.users.getUserVisibleStyles, { userId })
 				)
 			);
 			const allUserTones = await Promise.all(
-				usersWithLowUnseenCount.map(userId =>
+				usersWithLowUnseenCount.map((userId: Id<"users">) =>
 					ctx.runQuery(internal.internal.users.getUserVisibleTones, { userId })
 				)
 			);
 
 			// Flatten and de-duplicate by ID to ensure we generate variety across all targeted users
-			styles = Array.from(new Map(allUserStyles.flat().map(s => [s._id, s])).values());
-			tones = Array.from(new Map(allUserTones.flat().map(t => [t._id, t])).values());
+			styles = Array.from(new Map((allUserStyles.flat() as Doc<"styles">[]).map((s: Doc<"styles">) => [s._id, s])).values());
+			tones = Array.from(new Map((allUserTones.flat() as Doc<"tones">[]).map((t: Doc<"tones">) => [t._id, t])).values());
 		}
 		const topic = await ctx.runQuery(internal.internal.topics.getTopCurrentTopic, {});
 
@@ -382,14 +382,15 @@ export const remixQuestion = internalAction({
 	returns: v.string(),
 	handler: async (ctx, args): Promise<string> => {
 		const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
-		if (!question || !question.text) {
+		const questionText = question?.text || question?.customText;
+		if (!question || !questionText) {
 			throw new Error("Question not found or has no text");
 		}
 
 		const [style, tone, topic] = await Promise.all([
 			question.styleId ? ctx.runQuery(internal.internal.styles.getStyleById, { id: question.styleId }) : null,
 			question.toneId ? ctx.runQuery(internal.internal.tones.getToneById, { id: question.toneId }) : null,
-			ctx.runQuery(internal.internal.topics.getTopCurrentTopic, {}),
+			question.topicId ? ctx.runQuery(internal.internal.topics.getTopicById, { id: question.topicId }) : null,
 		]);
 
 		const completion = await openai.chat.completions.create({
@@ -406,12 +407,11 @@ export const remixQuestion = internalAction({
 				},
 				{
 					role: "user",
-					content: `Remix this question: "${question.text}"
+					content: `Remix this question: "${questionText}"
 					
 					Context:
 					Style: ${style?.name ?? "General"} (${style?.description ?? ""})
-					Tone: ${tone?.name ?? "General"} (${tone?.description ?? ""})
-					Topic Focus: ${topic?.name ?? "General"} (${topic?.description ?? ""})`
+					Tone: ${tone?.name ?? "General"} (${tone?.description ?? ""})${topic ? `\n\t\t\t\t\tTopic Focus: ${topic.name} (${topic.description ?? ""})` : ""}`
 				}
 			],
 			temperature: 0.9,

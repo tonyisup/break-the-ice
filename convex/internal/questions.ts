@@ -45,6 +45,7 @@ export const getQuestionById = internalQuery({
 		customText: v.optional(v.string()),
 		status: v.optional(v.union(
 			v.literal("pending"),
+			v.literal("approved"),
 			v.literal("public"),
 			v.literal("private"),
 			v.literal("pruning"),
@@ -580,17 +581,22 @@ export const getRandomQuestionsInternal = internalQuery({
 				q.eq(q.field("organizationId"), organizationId),
 				q.eq(q.field("prunedAt"), undefined),
 				q.neq(q.field("text"), undefined),
-				q.or(q.eq(q.field("status"), "public"), q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
+				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
 			];
 			return q.and(...conditions);
 		};
 
 		// 1. Fetch candidates from random start point
-		let candidates = await ctx.db
+		const candidatesWithEmbeddings = await ctx.db
 			.query("questions")
 			.withIndex("by_creation_time", (q) => q.gt("_creationTime", startTime))
 			.filter((q) => applyFilters(q))
 			.take(count * 5);
+
+		let candidates = candidatesWithEmbeddings.map(q => {
+			const { embedding, ...rest } = q;
+			return rest;
+		});
 
 		// 2. Wrap around if needed
 		if (candidates.length < count * 2) {
@@ -626,6 +632,10 @@ export const getRandomQuestionsInternal = internalQuery({
 // Get the time range of all questions for randomization
 export const getQuestionTimeRange = internalQuery({
 	args: {},
+	returns: v.object({
+		minTime: v.number(),
+		maxTime: v.number(),
+	}),
 	handler: async (ctx) => {
 		const firstQ = await ctx.db.query("questions").withIndex("by_creation_time").order("asc").first();
 		const lastQ = await ctx.db.query("questions").withIndex("by_creation_time").order("desc").first();

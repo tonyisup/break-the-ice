@@ -159,11 +159,11 @@ export const generateAIQuestions = action({
     - Do not number the items in the array (e.g. no "1. {...}").
 		- DO NOT provide your own examples of any generated content. No dashes, no lists.
     
-    Example format: {"text": "Question 1"}
+    Example format: [{"text": "Question 1"}]
     
     Requirements:
     - Return exactly 1 question
-    - Each question should be a string in the JSON array
+    - Each question should be an object in the JSON array
     - Avoid questions too similar to existing ones
     - Make questions engaging and conversation-starting
 		- Avoid being verbose; keep it short and sweet.
@@ -177,11 +177,11 @@ export const generateAIQuestions = action({
     Response with a JSON array of objects, each containing the following properties:
     - text: The question text
     For example:
-    {
+    [
       {
         "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?"
       }
-    }`
+    ]`
 						}
 					],
 					max_tokens: 200,
@@ -260,7 +260,8 @@ export const generateAIQuestions = action({
 		let parsedContent: { text: string; }[] = [];
 
 		try {
-			parsedContent = JSON.parse(cleanedContent);
+			const parsed = JSON.parse(cleanedContent);
+			parsedContent = Array.isArray(parsed) ? parsed : [parsed];
 		} catch (error) {
 			console.log("Failed to parse JSON, attempting fallback parsing for numbered list...");
 			// Fallback parsing for numbered lists (e.g., "1. Question\n2. Question")
@@ -269,7 +270,7 @@ export const generateAIQuestions = action({
 
 			for (const line of lines) {
 				const match = line.match(regex);
-				if (match) {
+				if (match && match[1]) {
 					parsedContent.push({
 						text: match[1].trim(),
 					});
@@ -373,11 +374,11 @@ export const generateAIQuestionForFeed = action({
     - Do not number the items in the array (e.g. no "1. {...}").
 		- DO NOT provide your own examples of any generated content. No dashes, no lists.
     
-    Example format: {"text": "Question 1"}
+    Example format: [{"text": "Question 1"}]
     
     Requirements:
     - Return exactly 1 question
-    - Each question should be a string in the JSON array
+    - Each question should be an object in the JSON array
     - Avoid questions too similar to existing ones
     - Make questions engaging and conversation-starting
 		- Avoid being verbose; keep it short and sweet.
@@ -393,11 +394,11 @@ export const generateAIQuestionForFeed = action({
     Response with a JSON array of objects, each containing the following properties:
     - text: The question text
     For example:
-    {
+    [
       {
         "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?"
       }
-    }`
+    ]`
 						}
 					],
 					max_tokens: 200,
@@ -476,7 +477,8 @@ export const generateAIQuestionForFeed = action({
 		let parsedContent: { text: string; }[] = [];
 
 		try {
-			parsedContent = JSON.parse(cleanedContent);
+			const parsed = JSON.parse(cleanedContent);
+			parsedContent = Array.isArray(parsed) ? parsed : [parsed];
 		} catch (error) {
 			console.log("Failed to parse JSON, attempting fallback parsing for numbered list...");
 			// Fallback parsing for numbered lists (e.g., "1. Question\n2. Question")
@@ -485,7 +487,7 @@ export const generateAIQuestionForFeed = action({
 
 			for (const line of lines) {
 				const match = line.match(regex);
-				if (match) {
+				if (match && match[1]) {
 					parsedContent.push({
 						text: match[1].trim(),
 					});

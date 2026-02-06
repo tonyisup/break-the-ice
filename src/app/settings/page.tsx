@@ -19,7 +19,7 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@clerk/clerk-react";
 import { MAX_ANON_BLOCKED } from "../../hooks/useStorage";
 import { SignInCTA } from "@/components/SignInCTA";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Link as LinkIcon, ExternalLink } from "lucide-react";
 
 const SettingsPage = () => {
@@ -37,7 +37,21 @@ const SettingsPage = () => {
   );
   const currentUser = useQuery(api.core.users.getCurrentUser, {});
 
+  const [searchParams] = useSearchParams();
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const expand = searchParams.get('expand');
+    if (expand) {
+      const sections = expand.split(',');
+      const newOpenSections: Record<string, boolean> = {};
+      sections.forEach(s => {
+        newOpenSections[s.trim()] = true;
+      });
+      setOpenSections(prev => ({ ...prev, ...newOpenSections }));
+    }
+  }, [searchParams]);
+
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ItemDetails | null>(null);
 

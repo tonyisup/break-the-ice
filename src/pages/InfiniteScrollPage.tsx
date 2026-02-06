@@ -14,6 +14,10 @@ import { useAuth } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
 import { UpgradeCTA } from "@/components/UpgradeCTA";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
+import { RefineResultsCTA } from "@/components/RefineResultsCTA";
+
+const compareByTextLength = (a: Doc<"questions">, b: Doc<"questions">) =>
+  (a.text || a.customText || "").length - (b.text || b.customText || "").length;
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
@@ -26,6 +30,7 @@ export default function InfiniteScrollPage() {
     likedQuestions,
     addLikedQuestion,
     removeLikedQuestion,
+    removeHiddenQuestion,
     hiddenQuestions,
     addHiddenQuestion,
     hiddenStyles,
@@ -53,6 +58,8 @@ export default function InfiniteScrollPage() {
     organizationId: activeWorkspace ?? undefined,
   });
   const currentUser = useQuery(api.core.users.getCurrentUser, {});
+  const interactionStats = useQuery(api.core.users.getUserInteractionStats, {});
+  const dismissRefineCTA = useMutation(api.core.users.dismissRefineCTA);
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
 
   const stylesMap = useMemo(() => {
@@ -200,6 +207,8 @@ export default function InfiniteScrollPage() {
     try {
       const BATCH_SIZE = 5;
 
+      const isFirstPull = questionsRef.current.length === 0;
+
       // 1. Try to get from DB
       const dbQuestions = await convex.action(api.core.questions.getNextRandomQuestions, {
         count: BATCH_SIZE,
@@ -216,17 +225,18 @@ export default function InfiniteScrollPage() {
 
       let combinedQuestions = [...dbQuestions];
 
-      // Update state with DB questions immediately
-      if (dbQuestions.length > 0) {
+      // Update state immediately ONLY if it's NOT the first pull
+      // For the first pull, we want to collect the full batch (including AI) before sorting
+      if (!isFirstPull && combinedQuestions.length > 0) {
         setQuestions(prev => {
           const existingIds = new Set(prev.map(q => q._id));
-          const uniqueNew = dbQuestions.filter(q => !existingIds.has(q._id));
+          const uniqueNew = combinedQuestions.filter(q => !existingIds.has(q._id));
           if (uniqueNew.length === 0) return prev;
           return [...prev, ...uniqueNew];
         });
         setSeenIds(prev => {
           const next = new Set(prev);
-          dbQuestions.forEach(q => next.add(q._id));
+          combinedQuestions.forEach(q => { next.add(q._id); });
           return next;
         });
       }
@@ -236,6 +246,13 @@ export default function InfiniteScrollPage() {
         if (!user.isSignedIn) {
           setShowAuthCTA(true);
           setHasMore(false);
+          // If we have some DB questions and it was the first pull, we need to show them now
+          if (isFirstPull && combinedQuestions.length > 0) {
+            combinedQuestions.sort(compareByTextLength);
+
+            setQuestions(combinedQuestions);
+            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+          }
           return;
         }
 
@@ -246,24 +263,27 @@ export default function InfiniteScrollPage() {
           if (currentRequestId !== requestIdRef.current) return;
 
           const validGenerated = (generated || []).filter((q): q is Doc<"questions"> => q !== null);
+          const uniqueGenerated = validGenerated.filter(q => !combinedQuestions.some(cq => cq._id === q._id));
 
-          if (validGenerated.length > 0) {
+          if (isFirstPull) {
+            combinedQuestions = [...combinedQuestions, ...uniqueGenerated];
+            combinedQuestions.sort(compareByTextLength);
+
+            setQuestions(combinedQuestions);
+            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+          } else if (uniqueGenerated.length > 0) {
             setQuestions(prev => {
               const existingIds = new Set(prev.map(q => q._id));
-              const uniqueNew = validGenerated.filter(q => !existingIds.has(q._id));
+              const uniqueNew = uniqueGenerated.filter(q => !existingIds.has(q._id));
               if (uniqueNew.length === 0) return prev;
               return [...prev, ...uniqueNew];
             });
             setSeenIds(prev => {
               const next = new Set(prev);
-              validGenerated.forEach(q => next.add(q._id));
+              uniqueGenerated.forEach(q => next.add(q._id));
               return next;
             });
           }
-
-          // If we are signed in, we theoretically always have "more" (via AI generation)
-          // unless we hit a limit or specific error.
-          // So we don't set hasMore(false) just because one batch came back empty.
         } catch (err) {
           console.error("AI Generation failed:", err);
           if (currentRequestId !== requestIdRef.current) return;
@@ -276,7 +296,21 @@ export default function InfiniteScrollPage() {
             setShowUpgradeCTA(true);
             setHasMore(false);
           }
+
+          // If AI failed and it was first pull, show what we have from DB
+          if (isFirstPull && combinedQuestions.length > 0) {
+            combinedQuestions.sort(compareByTextLength);
+
+            setQuestions(combinedQuestions);
+            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+          }
         }
+      } else if (isFirstPull) {
+        // We have a full batch from DB, sort and show
+        combinedQuestions.sort(compareByTextLength);
+
+        setQuestions(combinedQuestions);
+        setSeenIds(new Set(combinedQuestions.map(q => q._id)));
       }
     } catch (error) {
       console.error("Error fetching questions:", error);
@@ -334,6 +368,10 @@ export default function InfiniteScrollPage() {
         removeLikedQuestion(questionId);
         toast.success("Removed from favorites");
       } else {
+        // If it was hidden, remove it from hidden
+        if (hiddenQuestions.includes(questionId)) {
+          removeHiddenQuestion(questionId);
+        }
         addLikedQuestion(questionId);
         await recordAnalytics({
           questionId,
@@ -350,10 +388,23 @@ export default function InfiniteScrollPage() {
 
   const toggleHide = (questionId: Id<"questions">) => {
     try {
-      addHiddenQuestion(questionId);
-      toast.success("Question hidden");
-      // Remove from list
-      setQuestions(prev => prev.filter(q => q._id !== questionId));
+      const isHidden = hiddenQuestions.includes(questionId);
+      if (isHidden) {
+        removeHiddenQuestion(questionId);
+        toast.success("Question unhidden");
+      } else {
+        // If it was liked, remove it from favorites
+        if (likedQuestions.includes(questionId)) {
+          removeLikedQuestion(questionId);
+        }
+        addHiddenQuestion(questionId);
+        void recordAnalytics({
+          questionId,
+          event: "hidden",
+          viewDuration: 0,
+        });
+        toast.success("Question hidden");
+      }
     } catch (error) {
       console.error("Error hiding question:", error);
       toast.error("Failed to hide question.");
@@ -385,6 +436,11 @@ export default function InfiniteScrollPage() {
 
   // Smooth gradient transition logic
   const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
+
+  const showRefineCTA = interactionStats &&
+    interactionStats.totalSeen >= 50 &&
+    interactionStats.totalLikes === 0 &&
+    !interactionStats.dismissedRefineCTA;
 
   // Determine variant for A/B testing (randomized on mount)
   // We use a ref to keep it consistent across re-renders
@@ -551,6 +607,7 @@ export default function InfiniteScrollPage() {
                     isGenerating={false}
                     question={question}
                     isFavorite={likedQuestions.includes(question._id)}
+                    isHidden={hiddenQuestions.includes(question._id)}
                     gradient={cardGradient}
                     style={cardStyle}
                     tone={cardTone}
@@ -571,6 +628,16 @@ export default function InfiniteScrollPage() {
                       prefilledEmail={user.isSignedIn ? currentUser?.email : undefined}
                     />
                   )}
+
+                {/* Insert Refine Results CTA after the 10th question (index 9) */}
+                {index === 9 && showRefineCTA && (
+                  <RefineResultsCTA
+                    bgGradient={bgGradient}
+                    onDismiss={() => {
+                      dismissRefineCTA();
+                    }}
+                  />
+                )}
               </div>
             );
           })}

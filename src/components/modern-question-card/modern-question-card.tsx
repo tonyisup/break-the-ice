@@ -12,6 +12,7 @@ interface ModernQuestionCardProps {
   question: Doc<"questions"> | null;
   isGenerating: boolean;
   isFavorite: boolean;
+  isHidden?: boolean;
   gradient: string[];
   style?: Doc<"styles">;
   tone?: Doc<"tones">;
@@ -31,6 +32,7 @@ export function ModernQuestionCard({
   question,
   isGenerating,
   isFavorite,
+  isHidden = false,
   gradient,
   style,
   tone,
@@ -160,6 +162,7 @@ export function ModernQuestionCard({
                 tone={tone}
                 gradient={gradient}
                 isFavorite={isFavorite}
+                isHidden={isHidden}
                 onToggleFavorite={onToggleFavorite}
                 onToggleHidden={onToggleHidden}
                 disabled={disabled}
@@ -201,7 +204,7 @@ const LoadingSpinner = ({ gradient }: { gradient: string[] }) => {
   );
 };
 
-const QuestionContent = ({ question, style, tone, gradient, isFavorite, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone }: { question: Doc<"questions">, style?: Doc<"styles">, tone?: Doc<"tones">, gradient: string[], isFavorite: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void }) => {
+const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone }: { question: Doc<"questions">, style?: Doc<"styles">, tone?: Doc<"tones">, gradient: string[], isFavorite: boolean, isHidden: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void }) => {
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
@@ -226,8 +229,7 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, onToggle
   };
 
   const handleHide = () => {
-    // Check if current question is already hidden (unlikely in this context, but good to be safe)
-    const isHidden = hiddenQuestions.includes(question._id);
+    // Check if current question is already hidden
     if (!isHidden && hiddenQuestions.length >= hiddenLimit) {
       setShakeThumbsDown(true);
       setTimeout(() => setShakeThumbsDown(false), 500);
@@ -313,11 +315,11 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, onToggle
             "bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50",
             shakeThumbsDown && "animate-shake"
           )}
-          title="Hide question"
+          title={isHidden ? "Unhide question" : "Hide question"}
         >
           <ThumbsDown
             size={24}
-            className='text-gray-600 dark:text-gray-400'
+            className={isHidden ? 'text-blue-500 fill-blue-500' : 'text-gray-600 dark:text-gray-400'}
           />
         </button>
 

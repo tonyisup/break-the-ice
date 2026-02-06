@@ -83,6 +83,7 @@ export default defineSchema({
     status: v.optional(
       v.union(
         v.literal("pending"),
+        v.literal("approved"),
         v.literal("public"),
         v.literal("private"),
         v.literal("pruning"),
@@ -140,6 +141,7 @@ export default defineSchema({
     questionPreferenceEmbedding: v.optional(v.array(v.number())),
     defaultStyle: v.optional(v.string()),
     defaultTone: v.optional(v.string()),
+    dismissedRefineCTA: v.optional(v.boolean()),
     subscriptionTier: v.optional(v.union(v.literal("free"), v.literal("casual"))),
     aiUsage: v.optional(v.object({
       count: v.number(),

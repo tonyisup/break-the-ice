@@ -56,11 +56,13 @@ vi.mock('@/components/newsletter-card/NewsletterCard', () => ({
 // Mock api object structure
 vi.mock('../../convex/_generated/api', () => ({
   api: {
-    styles: { getStyles: 'getStyles', getStyle: 'getStyle' },
-    tones: { getTones: 'getTones', getTone: 'getTone' },
-    questions: { getNextRandomQuestions: 'getNextRandomQuestions', recordAnalytics: 'recordAnalytics' },
-    ai: { generateAIQuestions: 'generateAIQuestions' },
-    users: { getCurrentUser: 'getCurrentUser' },
+    core: {
+      styles: { getStyles: 'getStyles', getStyle: 'getStyle' },
+      tones: { getTones: 'getTones', getTone: 'getTone' },
+      questions: { getNextRandomQuestions: 'getNextRandomQuestions', recordAnalytics: 'recordAnalytics' },
+      ai: { generateAIQuestionForFeed: 'generateAIQuestionForFeed' },
+      users: { getCurrentUser: 'getCurrentUser' },
+    }
   },
 }));
 
@@ -280,5 +282,144 @@ describe('InfiniteScrollPage', () => {
         })
       );
     });
+  });
+
+  it('sorts the first batch of questions by text length', async () => {
+    const questionsWithDifferentLengths = [
+      { _id: 'q1', text: 'This is a long question text', style: 'style1', tone: 'tone1' },
+      { _id: 'q2', text: 'Short', style: 'style2', tone: 'tone2' },
+      { _id: 'q3', text: 'Medium length question', style: 'style1', tone: 'tone1' },
+    ];
+
+    (useConvex as any).mockReturnValue({
+      query: vi.fn(),
+      action: vi.fn().mockResolvedValue(questionsWithDifferentLengths),
+    });
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+      const cards = screen.getAllByTestId('modern-question-card');
+      expect(cards).toHaveLength(3);
+    });
+
+    // Check if they are rendered in order of length: Short, Medium, Long
+    // ModernQuestionCard is mocked to just show "Card", so we need to check the props passed to it
+    expect(ModernQuestionCard).toHaveBeenCalledTimes(3);
+
+    // Get the questions passed to the first 3 calls to ModernQuestionCard
+    // Note: Since render happens multiple times, we need to find the latest calls or check the order in the DOM if we didn't mock it so simply.
+    // However, since we want to verify the order in the 'questions' state which is used to map,
+    // we can check the order of questions in the last few calls.
+
+    const calls = (ModernQuestionCard as any).mock.calls;
+    // The last 3 calls should be for our 3 questions in the sorted order
+    const lastThreeCalls = calls.slice(-3);
+
+    expect(lastThreeCalls[0][0].question.text).toBe('Short');
+    expect(lastThreeCalls[1][0].question.text).toBe('Medium length question');
+    expect(lastThreeCalls[2][0].question.text).toBe('This is a long question text');
+  });
+
+  it('sorts combined DB and AI questions by length in the first batch', async () => {
+    const dbQuestions = [
+      { _id: 'db1', text: 'Longer DB question', style: 'style1', tone: 'tone1' },
+    ];
+    const aiQuestions = [
+      { _id: 'ai1', text: 'Short AI', style: 'style1', tone: 'tone1' },
+      { _id: 'ai2', text: 'Medium AI question', style: 'style1', tone: 'tone1' },
+    ];
+
+    (useConvex as any).mockReturnValue({
+      query: vi.fn(),
+      action: vi.fn().mockResolvedValue(dbQuestions),
+    });
+    (useAction as any).mockReturnValue(vi.fn().mockResolvedValue(aiQuestions));
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+      const cards = screen.getAllByTestId('modern-question-card');
+      expect(cards).toHaveLength(3);
+    });
+
+    const calls = (ModernQuestionCard as any).mock.calls;
+    const lastThreeCalls = calls.slice(-3);
+
+    // Sorted: 'Short AI' (8), 'Medium AI question' (18), 'Longer DB question' (18)
+    // Wait, 'Longer DB question' (18) and 'Medium AI question' (18) have same length.
+    // Lengths: 8, 18, 18.
+    expect(lastThreeCalls[0][0].question.text).toBe('Short AI');
+    // Order of equal length depends on original order or stable sort.
+    // db was first, then ai.
+    expect(lastThreeCalls[1][0].question.text).toBe('Longer DB question');
+    expect(lastThreeCalls[2][0].question.text).toBe('Medium AI question');
+  });
+
+  it('does not sort subsequent batches by length', async () => {
+    const batch1 = [
+      { _id: 'q1', text: 'Short', style: 'style1', tone: 'tone1' },
+      { _id: 'q2', text: 'Very long question text', style: 'style1', tone: 'tone1' },
+    ];
+    const batch2 = [
+      { _id: 'q3', text: 'Long second batch question', style: 'style1', tone: 'tone1' },
+      { _id: 'q4', text: 'S2', style: 'style1', tone: 'tone1' },
+    ];
+
+    const actionMock = vi.fn()
+      .mockResolvedValueOnce(batch1)
+      .mockResolvedValueOnce(batch2);
+
+    (useConvex as any).mockReturnValue({
+      query: vi.fn(),
+      action: actionMock,
+    });
+
+    const { rerender } = render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(2);
+    });
+
+    // Manually trigger loadMore (simulating scroll)
+    // Since loadMore is internal, we can try to trigger it by scrolling if we had a real DOM,
+    // but here we can just wait for the component to call it if we can trigger the effect.
+    // Alternatively, we can just check that the first batch WAS sorted.
+
+    const calls = (ModernQuestionCard as any).mock.calls;
+    expect(calls[0][0].question.text).toBe('Short');
+    expect(calls[1][0].question.text).toBe('Very long question text');
+
+    // For the sake of this test, let's assume the second batch is loaded.
+    // In the real component, it's triggered by scroll or the "Load More" button.
+    const loadMoreButton = screen.getByText('Load More');
+    loadMoreButton.click();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(4);
+    });
+
+    const updatedCalls = (ModernQuestionCard as any).mock.calls;
+    // We expect the last 4 calls to be for q1, q2, q3, q4 (since they all re-render)
+    const lastFourCalls = updatedCalls.slice(-4);
+
+    expect(lastFourCalls[0][0].question.text).toBe('Short');
+    expect(lastFourCalls[1][0].question.text).toBe('Very long question text');
+    // Batch 2 should be in original order: q3 (Long), q4 (Short)
+    // It should NOT be sorted to q4, q3.
+    expect(lastFourCalls[2][0].question.text).toBe('Long second batch question');
+    expect(lastFourCalls[3][0].question.text).toBe('S2');
   });
 });
