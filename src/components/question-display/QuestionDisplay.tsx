@@ -7,6 +7,7 @@ interface QuestionDisplayProps {
   isGenerating: boolean;
   currentQuestion: Doc<"questions"> | null;
   isFavorite: boolean;
+  isHidden?: boolean;
   gradient: string[];
   style?: Doc<"styles">;
   tone?: Doc<"tones">;
@@ -22,6 +23,7 @@ export const QuestionDisplay = ({
   isGenerating,
   currentQuestion,
   isFavorite,
+  isHidden = false,
   gradient,
   style,
   tone,
@@ -82,6 +84,7 @@ export const QuestionDisplay = ({
         isGenerating={isGenerating}
         question={currentQuestion}
         isFavorite={isFavorite}
+        isHidden={isHidden}
         gradient={gradient}
         style={style}
         tone={tone}

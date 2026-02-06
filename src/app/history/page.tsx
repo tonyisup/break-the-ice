@@ -25,6 +25,9 @@ function HistoryPageContent() {
     likedQuestions,
     addLikedQuestion,
     removeLikedQuestion,
+    hiddenQuestions,
+    addHiddenQuestion,
+    removeHiddenQuestion,
     hiddenStyles,
     hiddenTones,
     addHiddenStyle,
@@ -91,6 +94,31 @@ function HistoryPageContent() {
   const handleHideTone = (toneId: Id<"tones">) => {
     addHiddenTone(toneId);
     toast.success("Tone hidden. It will not appear on the main page.");
+  };
+
+  const toggleHide = (questionId: Id<"questions">) => {
+    try {
+      const isHidden = hiddenQuestions.includes(questionId);
+      if (isHidden) {
+        removeHiddenQuestion(questionId);
+        toast.success("Question unhidden");
+      } else {
+        // If it was liked, remove it from favorites
+        if (likedQuestions.includes(questionId)) {
+          removeLikedQuestion(questionId);
+        }
+        addHiddenQuestion(questionId);
+        void recordAnalytics({
+          questionId,
+          event: "hidden",
+          viewDuration: 0,
+        });
+        toast.success("Question hidden");
+      }
+    } catch (error) {
+      console.error("Error toggling hide:", error);
+      toast.error("Failed to hide question.");
+    }
   };
 
   const handleClearHistory = () => {
@@ -170,8 +198,9 @@ function HistoryPageContent() {
               styles={styles || []}
               tones={tones || []}
               likedQuestions={likedQuestions}
+              hiddenQuestions={hiddenQuestions}
               onToggleLike={handleToggleLike}
-              onRemoveItem={removeQuestionHistoryEntry}
+              onRemoveItem={toggleHide}
               isHistory
               onHideStyle={handleHideStyle}
               onHideTone={handleHideTone}

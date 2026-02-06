@@ -25,7 +25,7 @@ function LikedQuestionsPageContent() {
   const { openSignIn } = useClerk();
   const { effectiveTheme } = useTheme();
   const [searchText, setSearchText] = useState("");
-  const { likedQuestions, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, addHiddenStyle, addHiddenTone } = useStorageContext();
+  const { likedQuestions, addLikedQuestion, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
@@ -107,9 +107,39 @@ function LikedQuestionsPageContent() {
   }, []);
 
 
-  const handleRemoveFavorite = (questionId: Id<"questions">) => {
-    if (!questions) return;
-    removeLikedQuestion(questionId);
+  const handleToggleLike = (questionId: Id<"questions">) => {
+    const isLiked = likedQuestions.includes(questionId);
+    if (isLiked) {
+      removeLikedQuestion(questionId);
+      toast.success("Removed from favorites");
+    } else {
+      // If it was hidden, remove it from hidden
+      if (hiddenQuestions.includes(questionId)) {
+        removeHiddenQuestion(questionId);
+      }
+      addLikedQuestion(questionId);
+      toast.success("Added to favorites!");
+    }
+  };
+
+  const toggleHide = (questionId: Id<"questions">) => {
+    try {
+      const isHidden = hiddenQuestions.includes(questionId);
+      if (isHidden) {
+        removeHiddenQuestion(questionId);
+        toast.success("Question unhidden");
+      } else {
+        // If it was liked, remove it from favorites
+        if (likedQuestions.includes(questionId)) {
+          removeLikedQuestion(questionId);
+        }
+        addHiddenQuestion(questionId);
+        toast.success("Question hidden");
+      }
+    } catch (error) {
+      console.error("Error toggling hide:", error);
+      toast.error("Failed to hide question.");
+    }
   };
 
   const handleClearLikes = () => {
@@ -167,8 +197,9 @@ function LikedQuestionsPageContent() {
                 styles={styles || []}
                 tones={tones || []}
                 likedQuestions={likedQuestions}
-                onToggleLike={handleRemoveFavorite}
-                onRemoveItem={handleRemoveFavorite}
+                hiddenQuestions={hiddenQuestions}
+                onToggleLike={handleToggleLike}
+                onRemoveItem={toggleHide}
                 variant="condensed"
               />
             </CollapsibleSection>
@@ -228,8 +259,9 @@ function LikedQuestionsPageContent() {
                 styles={styles || []}
                 tones={tones || []}
                 likedQuestions={likedQuestions}
-                onToggleLike={handleRemoveFavorite}
-                onRemoveItem={handleRemoveFavorite}
+                hiddenQuestions={hiddenQuestions}
+                onToggleLike={handleToggleLike}
+                onRemoveItem={toggleHide}
                 variant="condensed"
               />
             </CollapsibleSection>

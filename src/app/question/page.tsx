@@ -16,7 +16,7 @@ export default function QuestionPage() {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { addQuestionHistoryEntry } = useQuestionHistory();
-  const { likedQuestions, setLikedQuestions, addHiddenStyle, addHiddenTone } = useStorageContext();
+  const { likedQuestions, addLikedQuestion, removeLikedQuestion, setLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
 
   const question = useQuery(api.core.questions.getQuestionById, id ? { id } : "skip");
@@ -36,16 +36,40 @@ export default function QuestionPage() {
   const toggleLike = async (questionId: Id<"questions">) => {
     const isLiked = likedQuestions.includes(questionId);
     if (isLiked) {
-      setLikedQuestions(likedQuestions.filter((id) => id !== questionId));
+      removeLikedQuestion(questionId);
       toast.success("Removed from favorites");
     } else {
-      setLikedQuestions([...likedQuestions, questionId]);
+      // If it was hidden, remove it from hidden
+      if (hiddenQuestions.includes(questionId)) {
+        removeHiddenQuestion(questionId);
+      }
+      addLikedQuestion(questionId);
       await recordAnalytics({
         questionId,
-        event: "like",
+        event: "liked",
         viewDuration: 0, // No view duration for shared questions
       });
       toast.success("Added to favorites!");
+    }
+  };
+
+  const toggleHide = async (questionId: Id<"questions">) => {
+    const isHidden = hiddenQuestions.includes(questionId);
+    if (isHidden) {
+      removeHiddenQuestion(questionId);
+      toast.success("Question unhidden");
+    } else {
+      // If it was liked, remove it from favorites
+      if (likedQuestions.includes(questionId)) {
+        removeLikedQuestion(questionId);
+      }
+      addHiddenQuestion(questionId);
+      await recordAnalytics({
+        questionId,
+        event: "hidden",
+        viewDuration: 0,
+      });
+      toast.success("Question hidden");
     }
   };
 
@@ -110,10 +134,11 @@ export default function QuestionPage() {
           isGenerating={false}
           currentQuestion={question}
           isFavorite={isFavorite}
+          isHidden={question ? hiddenQuestions.includes(question._id) : false}
           gradient={gradient}
           toggleLike={toggleLike}
           onSwipe={() => navigate("/")}
-          toggleHide={() => navigate("/")}
+          toggleHide={() => question && toggleHide(question._id)}
           onHideStyle={handleHideStyle}
           onHideTone={handleHideTone}
         />
