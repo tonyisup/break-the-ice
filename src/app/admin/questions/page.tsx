@@ -166,10 +166,13 @@ export default function QuestionsPage() {
 		})
 		try {
 			const newText = await remixQuestion({ id })
-			await updateQuestion({ id, text: newText })
-			toast.success("Question remixed!")
-		} catch (error: any) {
-			toast.error(`Remix failed: ${error.message}`)
+			if (window.confirm(`Review the remixed question:\n\n"${newText}"\n\nApply this change?`)) {
+				await updateQuestion({ id, text: newText })
+				toast.success("Question remixed!")
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			toast.error(`Remix failed: ${message}`)
 		} finally {
 			setRemixingIds(prev => {
 				const next = new Set(prev)
