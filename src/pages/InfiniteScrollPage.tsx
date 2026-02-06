@@ -16,6 +16,9 @@ import { UpgradeCTA } from "@/components/UpgradeCTA";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
 import { RefineResultsCTA } from "@/components/RefineResultsCTA";
 
+const compareByTextLength = (a: Doc<"questions">, b: Doc<"questions">) =>
+  (a.text || a.customText || "").length - (b.text || b.customText || "").length;
+
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
   const convex = useConvex();
@@ -233,7 +236,7 @@ export default function InfiniteScrollPage() {
         });
         setSeenIds(prev => {
           const next = new Set(prev);
-          combinedQuestions.forEach(q => next.add(q._id));
+          combinedQuestions.forEach(q => { next.add(q._id); });
           return next;
         });
       }
@@ -245,11 +248,8 @@ export default function InfiniteScrollPage() {
           setHasMore(false);
           // If we have some DB questions and it was the first pull, we need to show them now
           if (isFirstPull && combinedQuestions.length > 0) {
-            combinedQuestions.sort((a, b) => {
-              const lenA = (a.text || a.customText || "").length;
-              const lenB = (b.text || b.customText || "").length;
-              return lenA - lenB;
-            });
+            combinedQuestions.sort(compareByTextLength);
+
             setQuestions(combinedQuestions);
             setSeenIds(new Set(combinedQuestions.map(q => q._id)));
           }
@@ -267,11 +267,8 @@ export default function InfiniteScrollPage() {
 
           if (isFirstPull) {
             combinedQuestions = [...combinedQuestions, ...uniqueGenerated];
-            combinedQuestions.sort((a, b) => {
-              const lenA = (a.text || a.customText || "").length;
-              const lenB = (b.text || b.customText || "").length;
-              return lenA - lenB;
-            });
+            combinedQuestions.sort(compareByTextLength);
+
             setQuestions(combinedQuestions);
             setSeenIds(new Set(combinedQuestions.map(q => q._id)));
           } else if (uniqueGenerated.length > 0) {
@@ -302,22 +299,16 @@ export default function InfiniteScrollPage() {
 
           // If AI failed and it was first pull, show what we have from DB
           if (isFirstPull && combinedQuestions.length > 0) {
-            combinedQuestions.sort((a, b) => {
-              const lenA = (a.text || a.customText || "").length;
-              const lenB = (b.text || b.customText || "").length;
-              return lenA - lenB;
-            });
+            combinedQuestions.sort(compareByTextLength);
+
             setQuestions(combinedQuestions);
             setSeenIds(new Set(combinedQuestions.map(q => q._id)));
           }
         }
       } else if (isFirstPull) {
         // We have a full batch from DB, sort and show
-        combinedQuestions.sort((a, b) => {
-          const lenA = (a.text || a.customText || "").length;
-          const lenB = (b.text || b.customText || "").length;
-          return lenA - lenB;
-        });
+        combinedQuestions.sort(compareByTextLength);
+
         setQuestions(combinedQuestions);
         setSeenIds(new Set(combinedQuestions.map(q => q._id)));
       }
