@@ -20,105 +20,112 @@ function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 /**
+ * Internal helper to satisfy both the cron and manual trigger.
+ */
+async function gatherPruningTargetsImpl(ctx: any): Promise<{ targetsFound: number }> {
+	const questions: Doc<"questions">[] = await ctx.runQuery(internal.admin.pruning.getQuestionsForPruningReview);
+	const hiddenCounts: Record<string, number> = await ctx.runQuery(internal.admin.pruning.getBatchHiddenCounts, {
+		questionIds: questions.map((q) => q._id),
+	});
+	const styles: Doc<"styles">[] = await ctx.runQuery(internal.internal.styles.getAllStylesInternal);
+	const tones: Doc<"tones">[] = await ctx.runQuery(internal.internal.tones.getAllTonesInternal);
+	const settings = await ctx.runQuery(internal.admin.pruning.getPruningSettingsInternal);
+
+	// Fallback defaults if no settings record exists
+	const s = settings || {
+		minShowsForEngagement: 50,
+		minLikeRate: 0.03,
+		minShowsForAvgDuration: 20,
+		minAvgViewDuration: 2000,
+		minHiddenCount: 1,
+		minHiddenRate: 0.1,
+		minStyleSimilarity: 0.10,
+		minToneSimilarity: 0.20,
+		enableToneCheck: false,
+	};
+
+	const styleMap = new Map<Id<"styles">, Doc<"styles">>(styles.map((s: Doc<"styles">) => [s._id, s]));
+	const toneMap = new Map<Id<"tones">, Doc<"tones">>(tones.map((t: Doc<"tones">) => [t._id, t]));
+
+	const targetsFound = [];
+
+	for (const question of questions) {
+		const reasons: string[] = [];
+		const metrics = {
+			totalShows: question.totalShows || 0,
+			totalLikes: question.totalLikes || 0,
+			averageViewDuration: question.averageViewDuration || 0,
+			hiddenCount: 0,
+			styleSimilarity: undefined as number | undefined,
+			toneSimilarity: undefined as number | undefined,
+		};
+
+		// 1. Check Engagement (Low view duration or low likes with sufficient exposure)
+		if (metrics.totalShows > s.minShowsForEngagement) {
+			const likeRate = metrics.totalLikes / metrics.totalShows;
+			if (likeRate < s.minLikeRate) {
+				reasons.push(`Low like rate: ${(likeRate * 100).toFixed(1)}%`);
+			}
+			if (metrics.averageViewDuration < s.minAvgViewDuration && metrics.totalShows > s.minShowsForAvgDuration) {
+				reasons.push(`Low average view duration: ${metrics.averageViewDuration.toFixed(0)}ms`);
+			}
+		}
+
+		// 2. Check Hiddens
+		const hiddenCount = hiddenCounts[question._id] || 0;
+		metrics.hiddenCount = hiddenCount;
+		const hiddenRate = metrics.totalShows > 0 ? hiddenCount / metrics.totalShows : 0;
+		if (hiddenCount > s.minHiddenCount || hiddenRate > s.minHiddenRate) {
+			reasons.push(`High hidden count: ${hiddenCount} (${(hiddenRate * 100).toFixed(1)}% of shows)`);
+		}
+
+		// 3. Check Style/Tone Mismatch
+		if (question.embedding) {
+			if (question.styleId && styleMap.has(question.styleId)) {
+				const style = styleMap.get(question.styleId)!;
+				if (style.embedding) {
+					const sim = cosineSimilarity(question.embedding, style.embedding);
+					metrics.styleSimilarity = sim;
+					if (sim < s.minStyleSimilarity) {
+						reasons.push(`Style mismatch: ${sim.toFixed(2)} similarity to "${style.name}"`);
+					}
+				}
+			}
+			if (s.enableToneCheck && question.toneId && toneMap.has(question.toneId)) {
+				const tone = toneMap.get(question.toneId)!;
+				if (tone.embedding) {
+					const sim = cosineSimilarity(question.embedding, tone.embedding);
+					metrics.toneSimilarity = sim;
+					if (sim < s.minToneSimilarity) {
+						reasons.push(`Tone mismatch: ${sim.toFixed(2)} similarity to "${tone.name}"`);
+					}
+				}
+			}
+		}
+
+		if (reasons.length > 0) {
+			targetsFound.push({
+				questionId: question._id,
+				reason: reasons.join("; "),
+				metrics,
+			});
+		}
+	}
+
+	// Save targets
+	await ctx.runMutation(internal.admin.pruning.savePruningTargets, { targets: targetsFound });
+
+	return { targetsFound: targetsFound.length };
+}
+
+/**
  * Nightly action to identify potential pruning targets.
  */
 export const gatherPruningTargets = internalAction({
 	args: {},
+	returns: v.object({ targetsFound: v.number() }),
 	handler: async (ctx): Promise<{ targetsFound: number }> => {
-		await ensureAdmin(ctx);
-		const questions: Doc<"questions">[] = await ctx.runQuery(internal.admin.pruning.getQuestionsForPruningReview);
-		const hiddenCounts: Record<string, number> = await ctx.runQuery(internal.admin.pruning.getBatchHiddenCounts, {
-			questionIds: questions.map((q) => q._id),
-		});
-		const styles: Doc<"styles">[] = await ctx.runQuery(internal.internal.styles.getAllStylesInternal);
-		const tones: Doc<"tones">[] = await ctx.runQuery(internal.internal.tones.getAllTonesInternal);
-		const settings = await ctx.runQuery(internal.admin.pruning.getPruningSettingsInternal);
-
-		// Fallback defaults if no settings record exists
-		const s = settings || {
-			minShowsForEngagement: 50,
-			minLikeRate: 0.03,
-			minShowsForAvgDuration: 20,
-			minAvgViewDuration: 2000,
-			minHiddenCount: 1,
-			minHiddenRate: 0.1,
-			minStyleSimilarity: 0.10,
-			minToneSimilarity: 0.20,
-			enableToneCheck: false,
-		};
-
-		const styleMap = new Map<Id<"styles">, Doc<"styles">>(styles.map((s: Doc<"styles">) => [s._id, s]));
-		const toneMap = new Map<Id<"tones">, Doc<"tones">>(tones.map((t: Doc<"tones">) => [t._id, t]));
-
-		const targetsFound = [];
-
-		for (const question of questions) {
-			const reasons: string[] = [];
-			const metrics = {
-				totalShows: question.totalShows || 0,
-				totalLikes: question.totalLikes || 0,
-				averageViewDuration: question.averageViewDuration || 0,
-				hiddenCount: 0,
-				styleSimilarity: undefined as number | undefined,
-				toneSimilarity: undefined as number | undefined,
-			};
-
-			// 1. Check Engagement (Low view duration or low likes with sufficient exposure)
-			if (metrics.totalShows > s.minShowsForEngagement) {
-				const likeRate = metrics.totalLikes / metrics.totalShows;
-				if (likeRate < s.minLikeRate) {
-					reasons.push(`Low like rate: ${(likeRate * 100).toFixed(1)}%`);
-				}
-				if (metrics.averageViewDuration < s.minAvgViewDuration && metrics.totalShows > s.minShowsForAvgDuration) {
-					reasons.push(`Low average view duration: ${metrics.averageViewDuration.toFixed(0)}ms`);
-				}
-			}
-
-			// 2. Check Hiddens
-			const hiddenCount = hiddenCounts[question._id] || 0;
-			metrics.hiddenCount = hiddenCount;
-			const hiddenRate = metrics.totalShows > 0 ? hiddenCount / metrics.totalShows : 0;
-			if (hiddenCount > s.minHiddenCount || hiddenRate > s.minHiddenRate) {
-				reasons.push(`High hidden count: ${hiddenCount} (${(hiddenRate * 100).toFixed(1)}% of shows)`);
-			}
-
-			// 3. Check Style/Tone Mismatch
-			if (question.embedding) {
-				if (question.styleId && styleMap.has(question.styleId)) {
-					const style = styleMap.get(question.styleId)!;
-					if (style.embedding) {
-						const sim = cosineSimilarity(question.embedding, style.embedding);
-						metrics.styleSimilarity = sim;
-						if (sim < s.minStyleSimilarity) {
-							reasons.push(`Style mismatch: ${sim.toFixed(2)} similarity to "${style.name}"`);
-						}
-					}
-				}
-				if (s.enableToneCheck && question.toneId && toneMap.has(question.toneId)) {
-					const tone = toneMap.get(question.toneId)!;
-					if (tone.embedding) {
-						const sim = cosineSimilarity(question.embedding, tone.embedding);
-						metrics.toneSimilarity = sim;
-						if (sim < s.minToneSimilarity) {
-							reasons.push(`Tone mismatch: ${sim.toFixed(2)} similarity to "${tone.name}"`);
-						}
-					}
-				}
-			}
-
-			if (reasons.length > 0) {
-				targetsFound.push({
-					questionId: question._id,
-					reason: reasons.join("; "),
-					metrics,
-				});
-			}
-		}
-
-		// Save targets
-		await ctx.runMutation(internal.admin.pruning.savePruningTargets, { targets: targetsFound });
-
-		return { targetsFound: targetsFound.length };
+		return await gatherPruningTargetsImpl(ctx);
 	},
 });
 
@@ -126,15 +133,19 @@ export const gatherPruningTargets = internalAction({
  * Internal query to fetch candidates for pruning review.
  */
 export const getQuestionsForPruningReview = internalQuery({
+	args: {},
+	returns: v.array(v.any()),
 	handler: async (ctx): Promise<Doc<"questions">[]> => {
-		await ensureAdmin(ctx);
 		// Fetch public/approved questions that aren't already pruned or in pruning review
+		// Optimized to use by_prunedAt_status_text index
 		return await ctx.db
 			.query("questions")
+			.withIndex("by_prunedAt_status_text", (q) => q.eq("prunedAt", undefined))
 			.filter((q) =>
-				q.and(
-					q.or(q.eq(q.field("status"), "public"), q.eq(q.field("status"), "approved"), q.eq(q.field("status"), undefined)),
-					q.eq(q.field("prunedAt"), undefined)
+				q.or(
+					q.eq(q.field("status"), "public"),
+					q.eq(q.field("status"), "approved"),
+					q.eq(q.field("status"), undefined)
 				)
 			)
 			.collect();
@@ -146,8 +157,8 @@ export const getQuestionsForPruningReview = internalQuery({
  */
 export const getBatchHiddenCounts = internalQuery({
 	args: { questionIds: v.array(v.id("questions")) },
+	returns: v.any(),
 	handler: async (ctx, args): Promise<Record<string, number>> => {
-		await ensureAdmin(ctx);
 		const results: Record<string, number> = {};
 		for (const questionId of args.questionIds) {
 			const hiddens = await ctx.db
@@ -180,13 +191,14 @@ export const savePruningTargets = internalMutation({
 			})
 		),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ensureAdmin(ctx);
 		for (const target of args.targets) {
 			const existing = await ctx.db
 				.query("pruning")
-				.withIndex("by_questionId", (q) => q.eq("questionId", target.questionId))
-				.filter((q) => q.eq(q.field("status"), "pending"))
+				.withIndex("by_questionId_status", (q) =>
+					q.eq("questionId", target.questionId).eq("status", "pending")
+				)
 				.first();
 
 			if (!existing) {
@@ -211,6 +223,8 @@ export const savePruningTargets = internalMutation({
  * Query to get pending pruning targets for admin review.
  */
 export const getPendingTargets = query({
+	args: {},
+	returns: v.array(v.any()),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
 
@@ -238,10 +252,14 @@ export const getPendingTargets = query({
  */
 export const approvePruning = mutation({
 	args: { pruningId: v.id("pruning") },
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		const target = await ctx.db.get(args.pruningId);
 		if (!target) throw new Error("Target not found");
+		if (target.status !== "pending") {
+			throw new Error(`Pruning target is already ${target.status}`);
+		}
 
 		await ctx.db.patch(target.questionId, {
 			status: "pruned",
@@ -260,28 +278,27 @@ export const approvePruning = mutation({
  */
 export const rejectPruning = mutation({
 	args: { pruningId: v.id("pruning") },
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		const target = await ctx.db.get(args.pruningId);
 		if (!target) throw new Error("Target not found");
+		if (target.status !== "pending") {
+			throw new Error(`Pruning target is already ${target.status}`);
+		}
 
 		await ctx.db.patch(args.pruningId, {
 			status: "rejected",
 		});
-
-		// Optionally reset status to approved to clear any ambiguity
-		const question = await ctx.db.get(target.questionId);
-		if (question && (question.status === undefined || question.status === "pending")) {
-			await ctx.db.patch(target.questionId, { status: "approved" });
-		}
 	},
 });
 /**
  * Internal query to fetch pruning settings.
  */
 export const getPruningSettingsInternal = internalQuery({
+	args: {},
+	returns: v.any(),
 	handler: async (ctx) => {
-		await ensureAdmin(ctx);
 		return await ctx.db.query("pruningSettings").first();
 	},
 });
@@ -290,6 +307,8 @@ export const getPruningSettingsInternal = internalQuery({
  * Public query to fetch pruning settings for the admin UI.
  */
 export const getPruningSettings = query({
+	args: {},
+	returns: v.any(),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
 		return await ctx.db.query("pruningSettings").first();
@@ -311,6 +330,7 @@ export const updatePruningSettings = mutation({
 		minToneSimilarity: v.number(),
 		enableToneCheck: v.boolean(),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 
@@ -328,9 +348,10 @@ export const updatePruningSettings = mutation({
  */
 export const triggerGathering = action({
 	args: {},
+	returns: v.object({ targetsFound: v.number() }),
 	handler: async (ctx): Promise<{ targetsFound: number }> => {
 		await ensureAdmin(ctx);
 
-		return await ctx.runAction(internal.admin.pruning.gatherPruningTargets, {});
+		return await gatherPruningTargetsImpl(ctx);
 	},
 });

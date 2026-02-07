@@ -42,9 +42,10 @@ export default function PruningSettingsPage() {
 		minToneSimilarity: 0.20,
 		enableToneCheck: false,
 	})
+	const [hasLocalEdits, setHasLocalEdits] = React.useState(false)
 
 	React.useEffect(() => {
-		if (settings) {
+		if (settings && !hasLocalEdits) {
 			setFormData({
 				minShowsForEngagement: settings.minShowsForEngagement,
 				minLikeRate: settings.minLikeRate,
@@ -57,19 +58,24 @@ export default function PruningSettingsPage() {
 				enableToneCheck: settings.enableToneCheck,
 			})
 		}
-	}, [settings])
+	}, [settings, hasLocalEdits])
 
-	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault()
+	const saveConfiguration = async () => {
 		setIsSaving(true)
 		try {
 			await updateSettings(formData)
 			toast.success("Pruning settings updated successfully")
+			setHasLocalEdits(false)
 		} catch (error) {
 			toast.error("Failed to update settings")
 		} finally {
 			setIsSaving(false)
 		}
+	}
+
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault()
+		await saveConfiguration()
 	}
 
 	return (
@@ -94,7 +100,7 @@ export default function PruningSettingsPage() {
 					</p>
 				</div>
 				<Button
-					onClick={handleSubmit}
+					onClick={saveConfiguration}
 					disabled={isSaving}
 					className="h-11 rounded-xl px-6 font-bold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95"
 				>
@@ -131,7 +137,10 @@ export default function PruningSettingsPage() {
 									id="minShowsForEngagement"
 									type="number"
 									value={formData.minShowsForEngagement}
-									onChange={(e) => setFormData(prev => ({ ...prev, minShowsForEngagement: parseInt(e.target.value) || 0 }))}
+									onChange={(e) => {
+										setFormData(prev => ({ ...prev, minShowsForEngagement: parseInt(e.target.value) || 0 }))
+										setHasLocalEdits(true)
+									}}
 									className="rounded-xl border-2"
 								/>
 								<p className="text-[11px] text-muted-foreground italic">Required exposure before checking like rates.</p>
@@ -148,7 +157,10 @@ export default function PruningSettingsPage() {
 								<div className="pt-2 flex items-center gap-4">
 									<Slider
 										value={[formData.minLikeRate * 100]}
-										onValueChange={([val]) => setFormData(prev => ({ ...prev, minLikeRate: val / 100 }))}
+										onValueChange={([val]) => {
+											setFormData(prev => ({ ...prev, minLikeRate: val / 100 }))
+											setHasLocalEdits(true)
+										}}
 										min={0}
 										max={20}
 										step={0.5}
@@ -157,7 +169,10 @@ export default function PruningSettingsPage() {
 									<Input
 										type="number"
 										value={(formData.minLikeRate * 100).toFixed(1)}
-										onChange={(e) => setFormData(prev => ({ ...prev, minLikeRate: parseFloat(e.target.value) / 100 || 0 }))}
+										onChange={(e) => {
+											setFormData(prev => ({ ...prev, minLikeRate: parseFloat(e.target.value) / 100 || 0 }))
+											setHasLocalEdits(true)
+										}}
 										className="w-20 rounded-xl border-2 h-9 text-xs"
 										step="0.1"
 									/>
@@ -177,7 +192,10 @@ export default function PruningSettingsPage() {
 									id="minShowsForAvgDuration"
 									type="number"
 									value={formData.minShowsForAvgDuration}
-									onChange={(e) => setFormData(prev => ({ ...prev, minShowsForAvgDuration: parseInt(e.target.value) || 0 }))}
+									onChange={(e) => {
+										setFormData(prev => ({ ...prev, minShowsForAvgDuration: parseInt(e.target.value) || 0 }))
+										setHasLocalEdits(true)
+									}}
 									className="rounded-xl border-2"
 								/>
 							</div>
@@ -194,7 +212,10 @@ export default function PruningSettingsPage() {
 									id="minAvgViewDuration"
 									type="number"
 									value={formData.minAvgViewDuration}
-									onChange={(e) => setFormData(prev => ({ ...prev, minAvgViewDuration: parseInt(e.target.value) || 0 }))}
+									onChange={(e) => {
+										setFormData(prev => ({ ...prev, minAvgViewDuration: parseInt(e.target.value) || 0 }))
+										setHasLocalEdits(true)
+									}}
 									className="rounded-xl border-2"
 									step="100"
 								/>
@@ -227,7 +248,10 @@ export default function PruningSettingsPage() {
 									id="minHiddenCount"
 									type="number"
 									value={formData.minHiddenCount}
-									onChange={(e) => setFormData(prev => ({ ...prev, minHiddenCount: parseInt(e.target.value) || 0 }))}
+									onChange={(e) => {
+										setFormData(prev => ({ ...prev, minHiddenCount: parseInt(e.target.value) || 0 }))
+										setHasLocalEdits(true)
+									}}
 									className="rounded-xl border-2"
 								/>
 								<p className="text-[11px] text-muted-foreground italic">Flag if hidden by this many individual users regardless of exposure.</p>
@@ -244,7 +268,10 @@ export default function PruningSettingsPage() {
 								<div className="pt-2 flex items-center gap-4">
 									<Slider
 										value={[formData.minHiddenRate * 100]}
-										onValueChange={([val]) => setFormData(prev => ({ ...prev, minHiddenRate: val / 100 }))}
+										onValueChange={([val]) => {
+											setFormData(prev => ({ ...prev, minHiddenRate: val / 100 }))
+											setHasLocalEdits(true)
+										}}
 										min={0}
 										max={50}
 										step={1}
@@ -253,7 +280,10 @@ export default function PruningSettingsPage() {
 									<Input
 										type="number"
 										value={(formData.minHiddenRate * 100).toFixed(1)}
-										onChange={(e) => setFormData(prev => ({ ...prev, minHiddenRate: parseFloat(e.target.value) / 100 || 0 }))}
+										onChange={(e) => {
+											setFormData(prev => ({ ...prev, minHiddenRate: parseFloat(e.target.value) / 100 || 0 }))
+											setHasLocalEdits(true)
+										}}
 										className="w-20 rounded-xl border-2 h-9 text-xs"
 									/>
 								</div>
@@ -284,7 +314,10 @@ export default function PruningSettingsPage() {
 								</div>
 								<Slider
 									value={[formData.minStyleSimilarity]}
-									onValueChange={([val]) => setFormData(prev => ({ ...prev, minStyleSimilarity: val }))}
+									onValueChange={([val]) => {
+										setFormData(prev => ({ ...prev, minStyleSimilarity: val }))
+										setHasLocalEdits(true)
+									}}
 									min={0}
 									max={1}
 									step={0.05}
@@ -305,7 +338,10 @@ export default function PruningSettingsPage() {
 										<span className="text-[10px] font-bold uppercase text-muted-foreground">{formData.enableToneCheck ? "Enabled" : "Disabled"}</span>
 										<Switch
 											checked={formData.enableToneCheck}
-											onCheckedChange={(checked) => setFormData(prev => ({ ...prev, enableToneCheck: checked }))}
+											onCheckedChange={(checked) => {
+												setFormData(prev => ({ ...prev, enableToneCheck: checked }))
+												setHasLocalEdits(true)
+											}}
 										/>
 									</div>
 								</div>
@@ -317,10 +353,14 @@ export default function PruningSettingsPage() {
 									</div>
 									<Slider
 										value={[formData.minToneSimilarity]}
-										onValueChange={([val]) => setFormData(prev => ({ ...prev, minToneSimilarity: val }))}
+										onValueChange={([val]) => {
+											setFormData(prev => ({ ...prev, minToneSimilarity: val }))
+											setHasLocalEdits(true)
+										}}
 										min={0}
 										max={1}
 										step={0.05}
+										disabled={!formData.enableToneCheck}
 									/>
 								</div>
 							</div>

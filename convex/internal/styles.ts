@@ -46,6 +46,7 @@ export const updateQuestionsWithMissingStyleIds = internalMutation({
 });
 export const getAllStylesInternal = internalQuery({
 	args: {},
+	returns: v.array(v.any()),
 	handler: async (ctx) => {
 		return await ctx.db.query("styles").collect();
 	},

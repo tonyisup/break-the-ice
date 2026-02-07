@@ -3,17 +3,15 @@
 import * as React from "react"
 import { useQuery, useMutation, useAction } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
-import { Doc, Id } from "../../../../convex/_generated/dataModel"
+import { Id } from "../../../../convex/_generated/dataModel"
 import {
 	Trash2,
 	CheckCircle2,
 	AlertCircle,
-	ArrowRight,
 	BarChart3,
 	Eye,
 	Heart,
 	Ghost,
-	LayoutDashboard,
 	RefreshCw,
 	MessageSquareOff,
 	Zap,
@@ -239,7 +237,11 @@ export default function PruningPage() {
 									onClick={() => handleReject(target._id)}
 									disabled={processingIds.has(target._id)}
 								>
-									<CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+									{processingIds.has(target._id) ? (
+										<RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+									) : (
+										<CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+									)}
 									Keep
 								</Button>
 								<Button

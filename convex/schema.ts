@@ -254,7 +254,8 @@ export default defineSchema({
     prunedAt: v.optional(v.number()),
   })
     .index("by_status", ["status"])
-    .index("by_questionId", ["questionId"]),
+    .index("by_questionId", ["questionId"])
+    .index("by_questionId_status", ["questionId", "status"]),
   organizations: defineTable({
     name: v.string(),
   }),

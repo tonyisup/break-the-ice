@@ -4,6 +4,7 @@ import { internal } from "../_generated/api";
 
 export const manualTrigger = internalAction({
 	args: {},
+	returns: v.object({ targetsFound: v.number() }),
 	handler: async (ctx): Promise<{ targetsFound: number }> => {
 		console.log("Starting manual pruning gathering...");
 		const result: { targetsFound: number } = await ctx.runAction(internal.admin.pruning.gatherPruningTargets, {});

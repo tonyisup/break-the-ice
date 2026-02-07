@@ -69,6 +69,7 @@ export const getToneById = internalQuery({
 });
 export const getAllTonesInternal = internalQuery({
 	args: {},
+	returns: v.array(v.any()),
 	handler: async (ctx) => {
 		return await ctx.db.query("tones").collect();
 	},
