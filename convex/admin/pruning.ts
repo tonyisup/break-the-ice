@@ -193,19 +193,33 @@ export const getQuestionsForPruningReview = internalQuery({
 	args: {},
 	returns: v.array(questionValidator),
 	handler: async (ctx): Promise<Doc<"questions">[]> => {
-		// Fetch public/approved questions that aren't already pruned or in pruning review
-		// Optimized to use by_prunedAt_status_text index
-		return await ctx.db
-			.query("questions")
-			.withIndex("by_prunedAt_status_text", (q) => q.eq("prunedAt", undefined))
-			.filter((q) =>
-				q.or(
-					q.eq(q.field("status"), "public"),
-					q.eq(q.field("status"), "approved"),
-					q.eq(q.field("status"), undefined)
-				)
-			)
-			.collect();
+		// Fetch public/approved/undefined status questions that aren't already pruned
+		// We avoid .filter() by performing three indexed queries and merging
+		const results = await Promise.all([
+			ctx.db
+				.query("questions")
+				.withIndex("by_prunedAt_status_text", (q) => q.eq("prunedAt", undefined).eq("status", "public"))
+				.collect(),
+			ctx.db
+				.query("questions")
+				.withIndex("by_prunedAt_status_text", (q) => q.eq("prunedAt", undefined).eq("status", "approved"))
+				.collect(),
+			ctx.db
+				.query("questions")
+				.withIndex("by_prunedAt_status_text", (q) => q.eq("prunedAt", undefined).eq("status", undefined))
+				.collect(),
+		]);
+
+		const flat = results.flat();
+		const seen = new Set<Id<"questions">>();
+		const unique: Doc<"questions">[] = [];
+		for (const q of flat) {
+			if (!seen.has(q._id)) {
+				seen.add(q._id);
+				unique.push(q);
+			}
+		}
+		return unique;
 	},
 });
 
@@ -216,19 +230,16 @@ export const getBatchHiddenCounts = internalQuery({
 	args: { questionIds: v.array(v.id("questions")) },
 	returns: v.record(v.string(), v.number()),
 	handler: async (ctx, args): Promise<Record<string, number>> => {
-		// Batched query to avoid O(N) sequential calls
-		const hiddens = await ctx.db
-			.query("userQuestions")
-			.withIndex("by_status", (q) => q.eq("status", "hidden"))
-			.filter((q) =>
-				q.or(...args.questionIds.map((id) => q.eq(q.field("questionId"), id)))
-			)
-			.collect();
-
 		const results: Record<string, number> = {};
-		for (const id of args.questionIds) results[id] = 0;
-		for (const h of hiddens) {
-			results[h.questionId] = (results[h.questionId] || 0) + 1;
+		// Perform per-question indexed queries to avoid full hidden scan + filter
+		for (const id of args.questionIds) {
+			const hiddens = await ctx.db
+				.query("userQuestions")
+				.withIndex("by_questionIdAndStatus", (q) =>
+					q.eq("questionId", id).eq("status", "hidden")
+				)
+				.collect();
+			results[id] = hiddens.length;
 		}
 		return results;
 	},
@@ -313,7 +324,7 @@ export const getPendingTargets = query({
 			.withIndex("by_status", (q) => q.eq("status", "pending"))
 			.collect();
 
-		const result = [];
+		const result: (Doc<"pruning"> & { question: Doc<"questions"> })[] = [];
 		for (const target of targets) {
 			const question = await ctx.db.get(target.questionId);
 			if (question) {
