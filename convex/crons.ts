@@ -61,4 +61,11 @@ crons.cron(
   { questionsPerUser: 6 }
 );
 
+// Nightly pruning gathering - identifies questions that don't hit
+crons.cron(
+  "gather pruning targets",
+  "0 10 * * *", // 10:00 AM UTC (2:00 AM PST / 3:00 AM PDT)
+  internal.admin.pruning.gatherPruningTargets
+);
+
 export default crons

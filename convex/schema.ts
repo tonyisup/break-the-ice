@@ -236,15 +236,26 @@ export default defineSchema({
     .index("by_status", ["status"]),
   pruning: defineTable({
     questionId: v.id("questions"),
-    userId: v.id("users"),
+    userId: v.optional(v.id("users")), // Optional, as some pruning might be global
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),
       v.literal("rejected")
     ),
     reason: v.string(),
-    prunedAt: v.number(),
-  }),
+    metrics: v.optional(v.object({
+      totalShows: v.number(),
+      totalLikes: v.number(),
+      averageViewDuration: v.number(),
+      hiddenCount: v.number(),
+      styleSimilarity: v.optional(v.number()),
+      toneSimilarity: v.optional(v.number()),
+    })),
+    prunedAt: v.optional(v.number()),
+  })
+    .index("by_status", ["status"])
+    .index("by_questionId", ["questionId"])
+    .index("by_questionId_and_status", ["questionId", "status"]),
   organizations: defineTable({
     name: v.string(),
   }),
@@ -293,4 +304,20 @@ export default defineSchema({
     email: v.string(),
     token: v.string(),
   }).index("by_token", ["token"]),
+  pruningSettings: defineTable({
+    name: v.string(),
+    status: v.union(
+      v.literal("default"),
+      v.literal("custom")
+    ),
+    minShowsForEngagement: v.number(),
+    minLikeRate: v.number(),
+    minShowsForAvgDuration: v.number(),
+    minAvgViewDuration: v.number(),
+    minHiddenCount: v.number(),
+    minHiddenRate: v.number(),
+    minStyleSimilarity: v.number(),
+    minToneSimilarity: v.number(),
+    enableToneCheck: v.boolean(),
+  }).index("by_status", ["status"]),
 });
