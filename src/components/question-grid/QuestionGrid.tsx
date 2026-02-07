@@ -1,6 +1,6 @@
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { IconComponent, Icon } from "@/components/ui/icons/icon";
-import { Heart, ThumbsDown } from "@/components/ui/icons/icons";
+import { Heart, ThumbsDown, Globe } from "@/components/ui/icons/icons";
 import { cn } from "@/lib/utils";
 
 interface QuestionGridProps {
@@ -11,6 +11,7 @@ interface QuestionGridProps {
   hiddenQuestions: Id<"questions">[];
   onToggleLike: (questionId: Id<"questions">) => void;
   onRemoveItem: (questionId: Id<"questions">) => void;
+  onMakePublic?: (questionId: Id<"questions">) => void;
   variant?: "card" | "condensed";
 }
 
@@ -93,6 +94,15 @@ export function QuestionGrid({
                 </div>
 
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  {question.status === 'private' && onMakePublic && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onMakePublic(question._id); }}
+                      className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-blue-500"
+                      title="Make Public (Requires Review)"
+                    >
+                      <Globe size={14} />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); onToggleLike(question._id); }}
                     className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-red-500"
@@ -155,6 +165,15 @@ export function QuestionGrid({
                 {getStatusBadge(question.status)}
               </div>
               <div className="flex items-center gap-1">
+                {question.status === 'private' && onMakePublic && (
+                  <button
+                    onClick={() => onMakePublic(question._id)}
+                    className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-blue-500"
+                    title="Make Public (Requires Review)"
+                  >
+                    <Globe size={16} />
+                  </button>
+                )}
                 <button
                   onClick={() => onToggleLike(question._id)}
                   className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-400 hover:text-red-500"

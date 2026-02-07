@@ -5,16 +5,23 @@ import FeedbackButton from "./FeedbackButton";
 // Mock dependencies
 const mockUseConvexAuth = vi.fn();
 const mockUseMutation = vi.fn();
+const mockUseStorageContext = vi.fn();
 
 vi.mock("convex/react", () => ({
   useConvexAuth: () => mockUseConvexAuth(),
   useMutation: () => mockUseMutation(),
 }));
 
+vi.mock("@/hooks/useStorageContext", () => ({
+  useStorageContext: () => mockUseStorageContext(),
+}));
+
 vi.mock("../../convex/_generated/api", () => ({
   api: {
-    feedback: {
-      submitFeedback: "submitFeedback"
+    core: {
+      feedback: {
+        submitFeedback: "submitFeedback"
+      }
     }
   }
 }));
@@ -35,6 +42,9 @@ vi.mock("framer-motion", async () => {
 describe("FeedbackButton", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseStorageContext.mockReturnValue({
+      sessionId: "test-session",
+    });
   });
 
   it("should not render when user is not authenticated", () => {
@@ -80,7 +90,8 @@ describe("FeedbackButton", () => {
 
     expect(submitMock).toHaveBeenCalledWith({
       text: "Great app!",
-      pageUrl: window.location.href
+      pageUrl: window.location.href,
+      sessionId: "test-session",
     });
 
     // Check if form closes (in a real browser this would wait for async,

@@ -26,6 +26,7 @@ function LikedQuestionsPageContent() {
   const { effectiveTheme } = useTheme();
   const [searchText, setSearchText] = useState("");
   const { likedQuestions, addLikedQuestion, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
+  const makeQuestionPublic = useMutation(api.core.questions.makeQuestionPublic);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
@@ -142,6 +143,16 @@ function LikedQuestionsPageContent() {
     }
   };
 
+  const handleMakePublic = async (questionId: Id<"questions">) => {
+    try {
+      await makeQuestionPublic({ questionId });
+      toast.success("Question submitted for review!");
+    } catch (error) {
+      console.error("Error making question public:", error);
+      toast.error("Failed to make question public.");
+    }
+  };
+
   const handleClearLikes = () => {
     setSearchText("");
     toast.success("Likes cleared");
@@ -200,6 +211,7 @@ function LikedQuestionsPageContent() {
                 hiddenQuestions={hiddenQuestions}
                 onToggleLike={handleToggleLike}
                 onRemoveItem={toggleHide}
+                onMakePublic={handleMakePublic}
                 variant="condensed"
               />
             </CollapsibleSection>
