@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { ActionCtx, internalAction, internalMutation, internalQuery, mutation, query } from "../_generated/server";
+import { action, ActionCtx, internalAction, internalMutation, internalQuery, mutation, query } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
@@ -378,7 +378,7 @@ export const rejectPruning = mutation({
 export const getPruningSettingsInternal = internalQuery({
 	args: {},
 	returns: v.nullable(pruningSettingsValidator),
-	handler: async (ctx) => {
+	handler: async (ctx): Promise<Doc<"pruningSettings"> | null> => {
 		return await ctx.db
 			.query("pruningSettings")
 			.withIndex("by_status", (q) => q.eq("status", "default"))
@@ -392,7 +392,7 @@ export const getPruningSettingsInternal = internalQuery({
 export const getPruningSettings = query({
 	args: {},
 	returns: v.nullable(pruningSettingsValidator),
-	handler: async (ctx) => {
+	handler: async (ctx): Promise<Doc<"pruningSettings"> | null> => {
 		await ensureAdmin(ctx);
 		return await ctx.runQuery(internal.admin.pruning.getPruningSettingsInternal);
 	},
