@@ -44,3 +44,9 @@ export const updateQuestionsWithMissingStyleIds = internalMutation({
 		}));
 	},
 });
+export const getAllStylesInternal = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		return await ctx.db.query("styles").collect();
+	},
+});
