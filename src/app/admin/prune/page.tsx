@@ -70,16 +70,12 @@ export default function PruningPage() {
 
 	const handleGatherNow = async () => {
 		setIsGathering(true)
-		const promise = triggerGathering({})
-		toast.promise(promise, {
-			loading: "Searching for pruning targets...",
-			success: (data) => `Found ${data.targetsFound} new targets`,
-			error: "Failed to gather pruning targets"
-		})
 		try {
-			await promise
-		} catch (e) {
-			console.error(e)
+			await toast.promise(triggerGathering({}), {
+				loading: "Searching for pruning targets...",
+				success: (data: { targetsFound: number }) => `Found ${data.targetsFound} new targets`,
+				error: "Failed to gather pruning targets"
+			})
 		} finally {
 			setIsGathering(false)
 		}

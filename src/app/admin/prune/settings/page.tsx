@@ -32,6 +32,8 @@ export default function PruningSettingsPage() {
 
 	const [isSaving, setIsSaving] = React.useState(false)
 	const [formData, setFormData] = React.useState({
+		name: "Default Pruning Settings",
+		status: "default" as "default" | "custom",
 		minShowsForEngagement: 50,
 		minLikeRate: 0.03,
 		minShowsForAvgDuration: 20,
@@ -47,6 +49,8 @@ export default function PruningSettingsPage() {
 	React.useEffect(() => {
 		if (settings && !hasLocalEdits) {
 			setFormData({
+				name: settings.name || "Default Pruning Settings",
+				status: settings.status || "default",
 				minShowsForEngagement: settings.minShowsForEngagement,
 				minLikeRate: settings.minLikeRate,
 				minShowsForAvgDuration: settings.minShowsForAvgDuration,
@@ -63,7 +67,10 @@ export default function PruningSettingsPage() {
 	const saveConfiguration = async () => {
 		setIsSaving(true)
 		try {
-			await updateSettings(formData)
+			await updateSettings({
+				id: settings?._id,
+				...formData
+			})
 			toast.success("Pruning settings updated successfully")
 			setHasLocalEdits(false)
 		} catch (error) {
@@ -77,6 +84,8 @@ export default function PruningSettingsPage() {
 		e.preventDefault()
 		await saveConfiguration()
 	}
+
+	const isUsingDefaultSettings = settings === null
 
 	return (
 		<div className="space-y-8 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-500">
@@ -113,7 +122,79 @@ export default function PruningSettingsPage() {
 				</Button>
 			</div>
 
+			{isUsingDefaultSettings && (
+				<div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-2xl p-4 flex gap-3 items-center text-amber-800 dark:text-amber-200 animate-in fade-in slide-in-from-top-2 duration-300">
+					<AlertTriangle className="w-5 h-5 shrink-0 text-amber-500" />
+					<p className="text-sm font-medium">
+						Viewing system default settings. No custom configuration has been saved yet.
+					</p>
+				</div>
+			)}
+
 			<form onSubmit={handleSubmit} className="grid gap-8">
+				{/* Settings Identity */}
+				<Card className="border-2 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-primary/5">
+					<CardHeader className="border-b bg-background/50">
+						<div className="flex items-center gap-2">
+							<Database className="w-5 h-5 text-primary" />
+							<CardTitle>Settings Identity</CardTitle>
+						</div>
+						<CardDescription>Name and categorize this pruning configuration.</CardDescription>
+					</CardHeader>
+					<CardContent className="pt-6 space-y-6">
+						<div className="grid sm:grid-cols-2 gap-6">
+							<div className="space-y-3">
+								<Label htmlFor="settingsName" className="text-sm font-bold">Configuration Name</Label>
+								<Input
+									id="settingsName"
+									value={formData.name}
+									onChange={(e) => {
+										setFormData(prev => ({ ...prev, name: e.target.value }))
+										setHasLocalEdits(true)
+									}}
+									placeholder="e.g. Strict engagement rules"
+									className="rounded-xl border-2 bg-background"
+								/>
+							</div>
+							<div className="space-y-3">
+								<Label htmlFor="settingsStatus" className="text-sm font-bold">Status Profile</Label>
+								<div className="flex items-center gap-4 h-10">
+									<label className="flex items-center gap-2 cursor-pointer">
+										<input
+											type="radio"
+											name="status"
+											value="default"
+											checked={formData.status === "default"}
+											onChange={() => {
+												setFormData(prev => ({ ...prev, status: "default" }))
+												setHasLocalEdits(true)
+											}}
+											className="w-4 h-4 text-primary accent-primary"
+										/>
+										<span className="text-sm font-medium">Default</span>
+									</label>
+									<label className="flex items-center gap-2 cursor-pointer">
+										<input
+											type="radio"
+											name="status"
+											value="custom"
+											checked={formData.status === "custom"}
+											onChange={() => {
+												setFormData(prev => ({ ...prev, status: "custom" }))
+												setHasLocalEdits(true)
+											}}
+											className="w-4 h-4 text-primary accent-primary"
+										/>
+										<span className="text-sm font-medium">Custom</span>
+									</label>
+								</div>
+								<p className="text-[10px] text-muted-foreground italic">
+									* Cron jobs only process the first configuration found with 'Default' status.
+								</p>
+							</div>
+						</div>
+					</CardContent>
+				</Card>
 				{/* Engagement Thresholds */}
 				<Card className="border-2 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
 					<CardHeader className="bg-secondary/10 border-b">

@@ -255,7 +255,7 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_questionId", ["questionId"])
-    .index("by_questionId_status", ["questionId", "status"]),
+    .index("by_questionId_and_status", ["questionId", "status"]),
   organizations: defineTable({
     name: v.string(),
   }),
@@ -305,6 +305,11 @@ export default defineSchema({
     token: v.string(),
   }).index("by_token", ["token"]),
   pruningSettings: defineTable({
+    name: v.string(),
+    status: v.union(
+      v.literal("default"),
+      v.literal("custom")
+    ),
     minShowsForEngagement: v.number(),
     minLikeRate: v.number(),
     minShowsForAvgDuration: v.number(),
@@ -314,5 +319,5 @@ export default defineSchema({
     minStyleSimilarity: v.number(),
     minToneSimilarity: v.number(),
     enableToneCheck: v.boolean(),
-  }),
+  }).index("by_status", ["status"]),
 });
