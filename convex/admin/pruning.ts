@@ -27,6 +27,9 @@ export const gatherPruningTargets = internalAction({
 	handler: async (ctx): Promise<{ targetsFound: number }> => {
 		await ensureAdmin(ctx);
 		const questions: Doc<"questions">[] = await ctx.runQuery(internal.admin.pruning.getQuestionsForPruningReview);
+		const hiddenCounts: Record<string, number> = await ctx.runQuery(internal.admin.pruning.getBatchHiddenCounts, {
+			questionIds: questions.map((q) => q._id),
+		});
 		const styles: Doc<"styles">[] = await ctx.runQuery(internal.internal.styles.getAllStylesInternal);
 		const tones: Doc<"tones">[] = await ctx.runQuery(internal.internal.tones.getAllTonesInternal);
 		const settings = await ctx.runQuery(internal.admin.pruning.getPruningSettingsInternal);
@@ -72,10 +75,11 @@ export const gatherPruningTargets = internalAction({
 			}
 
 			// 2. Check Hiddens
-			const hiddenCount: number = await ctx.runQuery(internal.admin.pruning.getHiddenCount, { questionId: question._id });
+			const hiddenCount = hiddenCounts[question._id] || 0;
 			metrics.hiddenCount = hiddenCount;
-			if (hiddenCount > s.minHiddenCount || (metrics.totalShows > 0 && (hiddenCount / metrics.totalShows) > s.minHiddenRate)) {
-				reasons.push(`High hidden count: ${hiddenCount} (${((hiddenCount / metrics.totalShows) * 100).toFixed(1)}% of shows)`);
+			const hiddenRate = metrics.totalShows > 0 ? hiddenCount / metrics.totalShows : 0;
+			if (hiddenCount > s.minHiddenCount || hiddenRate > s.minHiddenRate) {
+				reasons.push(`High hidden count: ${hiddenCount} (${(hiddenRate * 100).toFixed(1)}% of shows)`);
 			}
 
 			// 3. Check Style/Tone Mismatch
@@ -112,9 +116,7 @@ export const gatherPruningTargets = internalAction({
 		}
 
 		// Save targets
-		for (const target of targetsFound) {
-			await ctx.runMutation(internal.admin.pruning.savePruningTarget, target);
-		}
+		await ctx.runMutation(internal.admin.pruning.savePruningTargets, { targets: targetsFound });
 
 		return { targetsFound: targetsFound.length };
 	},
@@ -140,57 +142,67 @@ export const getQuestionsForPruningReview = internalQuery({
 });
 
 /**
- * Internal query to get hidden count for a question.
+ * Internal query to get hidden counts for multiple questions.
  */
-export const getHiddenCount = internalQuery({
-	args: { questionId: v.id("questions") },
-	handler: async (ctx, args): Promise<number> => {
+export const getBatchHiddenCounts = internalQuery({
+	args: { questionIds: v.array(v.id("questions")) },
+	handler: async (ctx, args): Promise<Record<string, number>> => {
 		await ensureAdmin(ctx);
-		const hiddens = await ctx.db
-			.query("userQuestions")
-			.withIndex("by_questionIdAndStatus", (q) => q.eq("questionId", args.questionId).eq("status", "hidden"))
-			.collect();
-		return hiddens.length;
+		const results: Record<string, number> = {};
+		for (const questionId of args.questionIds) {
+			const hiddens = await ctx.db
+				.query("userQuestions")
+				.withIndex("by_questionIdAndStatus", (q) => q.eq("questionId", questionId).eq("status", "hidden"))
+				.collect();
+			results[questionId] = hiddens.length;
+		}
+		return results;
 	},
 });
 
 /**
- * Internal mutation to save a potential pruning target.
+ * Internal mutation to save multiple potential pruning targets.
  */
-export const savePruningTarget = internalMutation({
+export const savePruningTargets = internalMutation({
 	args: {
-		questionId: v.id("questions"),
-		reason: v.string(),
-		metrics: v.object({
-			totalShows: v.number(),
-			totalLikes: v.number(),
-			averageViewDuration: v.number(),
-			hiddenCount: v.number(),
-			styleSimilarity: v.optional(v.number()),
-			toneSimilarity: v.optional(v.number()),
-		}),
+		targets: v.array(
+			v.object({
+				questionId: v.id("questions"),
+				reason: v.string(),
+				metrics: v.object({
+					totalShows: v.number(),
+					totalLikes: v.number(),
+					averageViewDuration: v.number(),
+					hiddenCount: v.number(),
+					styleSimilarity: v.optional(v.number()),
+					toneSimilarity: v.optional(v.number()),
+				}),
+			})
+		),
 	},
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
-		const existing = await ctx.db
-			.query("pruning")
-			.withIndex("by_questionId", (q) => q.eq("questionId", args.questionId))
-			.filter((q) => q.eq(q.field("status"), "pending"))
-			.first();
+		for (const target of args.targets) {
+			const existing = await ctx.db
+				.query("pruning")
+				.withIndex("by_questionId", (q) => q.eq("questionId", target.questionId))
+				.filter((q) => q.eq(q.field("status"), "pending"))
+				.first();
 
-		if (!existing) {
-			await ctx.db.insert("pruning", {
-				questionId: args.questionId,
-				reason: args.reason,
-				status: "pending",
-				metrics: args.metrics,
-			});
-		} else {
-			// Update the entry with new metrics/reason if still pending
-			await ctx.db.patch(existing._id, {
-				reason: args.reason,
-				metrics: args.metrics,
-			});
+			if (!existing) {
+				await ctx.db.insert("pruning", {
+					questionId: target.questionId,
+					reason: target.reason,
+					status: "pending",
+					metrics: target.metrics,
+				});
+			} else {
+				// Update the entry with new metrics/reason if still pending
+				await ctx.db.patch(existing._id, {
+					reason: target.reason,
+					metrics: target.metrics,
+				});
+			}
 		}
 	},
 });
