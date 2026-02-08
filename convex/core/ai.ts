@@ -120,6 +120,14 @@ export const generateAIQuestions = action({
 	handler: async (ctx, args) => {
 		const { count, selectedTags, currentQuestion, styleId, toneId, topicId } = args;
 
+		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
+
+		if (user) {
+			await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+				userId: user._id,
+			});
+		}
+
 		const style = (await ctx.runQuery(api.core.styles.getStyleById, { id: styleId }));
 		const tone = (await ctx.runQuery(api.core.tones.getToneById, { id: toneId }));
 		const topic = topicId ? (await ctx.runQuery(api.core.topics.getTopicById, { id: topicId })) : null;
@@ -348,12 +356,9 @@ export const generateAIQuestionForFeed = action({
 
 		let userContext = "";
 
-		const allowedCount = await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+		await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
 			userId: user._id,
 		});
-		if (allowedCount < 0) {
-			throw new Error("You have reached your AI question limit. Please upgrade your plan.");
-		}
 		if (user?.questionPreferenceEmbedding) {
 			const nearestQuestions = await ctx.runAction(api.core.questions.getNearestQuestionsByEmbedding, {
 				embedding: user.questionPreferenceEmbedding,
