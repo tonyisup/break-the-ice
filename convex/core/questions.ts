@@ -68,6 +68,7 @@ export const addPersonalQuestion = mutation({
 	args: {
 		customText: v.string(),
 		authorId: v.optional(v.id("users")),
+		isPublic: v.boolean(),
 	},
 	returns: v.union(v.id("questions"), v.null()),
 	handler: async (ctx, args) => {
@@ -89,7 +90,7 @@ export const addPersonalQuestion = mutation({
 			userId = user._id;
 		}
 
-		const { customText } = args;
+		const { customText, isPublic } = args;
 		if (customText.trim().length === 0) {
 			// do not save empty questions
 			return null;
@@ -97,7 +98,7 @@ export const addPersonalQuestion = mutation({
 		return await ctx.db.insert("questions", {
 			authorId: userId,
 			customText,
-			status: "pending",
+			status: isPublic ? "pending" : "private",
 			totalLikes: 0,
 			totalThumbsDown: 0,
 			totalShows: 0,
@@ -767,6 +768,7 @@ export const saveAIQuestion = mutation({
 export const addCustomQuestion = mutation({
 	args: {
 		customText: v.string(),
+		isPublic: v.boolean(),
 	},
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
@@ -783,18 +785,50 @@ export const addCustomQuestion = mutation({
 			throw new Error("User not found.");
 		}
 
-		const { customText } = args;
+		const { customText, isPublic } = args;
 		if (customText.trim().length === 0) {
 			return;
 		}
 		return await ctx.db.insert("questions", {
 			authorId: user._id,
 			customText,
-			status: "pending",
+			status: isPublic ? "pending" : "private",
 			totalLikes: 0,
 			totalThumbsDown: 0,
 			totalShows: 0,
 			averageViewDuration: 0,
+		});
+	},
+});
+
+export const makeQuestionPublic = mutation({
+	args: {
+		questionId: v.id("questions"),
+	},
+	handler: async (ctx, args) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			throw new Error("You must be logged in to update a question.");
+		}
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email))
+			.unique();
+		if (!user) {
+			throw new Error("User not found.");
+		}
+		const question = await ctx.db.get(args.questionId);
+		if (!question) {
+			throw new Error("Question not found.");
+		}
+		if (question.authorId !== user._id) {
+			throw new Error("You are not authorized to update this question.");
+		}
+		if (question.status !== "private") {
+			throw new Error("Only private questions can be made public.");
+		}
+		await ctx.db.patch(args.questionId, {
+			status: "pending",
 		});
 	},
 });

@@ -74,7 +74,8 @@ import {
   Presentation,
   Cloud,
   Info,
-  User
+  User,
+  Globe
 } from 'lucide-react';
 
 // Export all icons for direct use
@@ -153,7 +154,8 @@ export {
   Presentation,
   Cloud,
   Info,
-  User
+  User,
+  Globe
 };
 
 // Create a mapping of icon names to icon components for dynamic access
@@ -241,6 +243,7 @@ export const iconMap: Record<string, LucideIcon> = {
   Presentation,
   Cloud,
   Info,
-  User
+  User,
+  Globe
 };
 
