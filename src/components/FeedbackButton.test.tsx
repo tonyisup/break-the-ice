@@ -11,10 +11,16 @@ vi.mock("convex/react", () => ({
   useMutation: () => mockUseMutation(),
 }));
 
+vi.mock("@/hooks/useStorageContext", () => ({
+  useStorageContext: () => ({ sessionId: "mock-session" }),
+}));
+
 vi.mock("../../convex/_generated/api", () => ({
   api: {
-    feedback: {
-      submitFeedback: "submitFeedback"
+    core: {
+      feedback: {
+        submitFeedback: "submitFeedback"
+      }
     }
   }
 }));
@@ -80,7 +86,8 @@ describe("FeedbackButton", () => {
 
     expect(submitMock).toHaveBeenCalledWith({
       text: "Great app!",
-      pageUrl: window.location.href
+      pageUrl: window.location.href,
+      sessionId: "mock-session"
     });
 
     // Check if form closes (in a real browser this would wait for async,
