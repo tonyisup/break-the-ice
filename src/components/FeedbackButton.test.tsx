@@ -46,6 +46,7 @@ vi.mock("framer-motion", async () => {
 describe("FeedbackButton", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedMutationArg = null;
     mockUseStorageContext.mockReturnValue({ sessionId: "test-session" });
   });
 

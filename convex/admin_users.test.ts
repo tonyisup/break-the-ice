@@ -17,14 +17,14 @@ describe("Admin users", () => {
       });
     });
 
-    // 3. Update user as admin
+    // 2. Update user as admin
     await t.withIdentity({ metadata: { isAdmin: "true" } }).mutation(api.admin.users.updateUser, {
       userId,
       aiUsageCount: 10,
       newsletterSubscriptionStatus: "subscribed",
     });
 
-    // 4. Verify updates
+    // 3. Verify updates
     const updatedUser = await t.run(async (ctx) => {
       return await ctx.db.get(userId);
     });
@@ -50,7 +50,26 @@ describe("Admin users", () => {
         userId,
         aiUsageCount: 10,
       })
-    ).rejects.toThrow();
+    ).rejects.toThrow("Not an admin");
+  });
+
+  test("admin cannot set negative ai usage", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+
+    // 1. Create a regular user
+    const userId = await t.run(async (ctx) => {
+      return await ctx.db.insert("users", {
+        email: "user@example.com",
+      });
+    });
+
+    // 2. Attempt negative update
+    await expect(
+      t.withIdentity({ metadata: { isAdmin: "true" } }).mutation(api.admin.users.updateUser, {
+        userId,
+        aiUsageCount: -5,
+      })
+    ).rejects.toThrow("AI usage count cannot be negative");
   });
 
   test("unauthenticated cannot update user", async () => {

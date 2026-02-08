@@ -47,6 +47,7 @@ export const updateUser = mutation({
 
 		if (aiUsageCount !== undefined) {
 			if (aiUsageCount < 0) throw new Error("AI usage count cannot be negative");
+			if (!Number.isInteger(aiUsageCount)) throw new Error("AI usage count must be an integer");
 			updates.aiUsage = {
 				...(user.aiUsage ?? { cycleStart: Date.now() }),
 				count: aiUsageCount,

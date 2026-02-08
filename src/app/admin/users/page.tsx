@@ -52,13 +52,6 @@ export default function UsersPage() {
 		users?.find(u => u._id === editingUserId) ?? null
 		, [users, editingUserId])
 
-	React.useEffect(() => {
-		if (editingUser) {
-			setEditAiUsage(editingUser.aiUsage?.count ?? 0)
-			setEditNewsletter(editingUser.newsletterSubscriptionStatus === "subscribed")
-		}
-	}, [editingUser])
-
 	const filteredUsers = users?.filter(u =>
 		u.name?.toLowerCase().includes(search.toLowerCase()) ||
 		u.email?.toLowerCase().includes(search.toLowerCase()) ||
