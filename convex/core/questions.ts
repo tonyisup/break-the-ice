@@ -726,10 +726,11 @@ export const saveAIQuestion = mutation({
 		tone: v.optional(v.string()),
 		toneId: v.id("tones"),
 		topic: v.optional(v.string()),
+		topicId: v.optional(v.id("topics")),
 	},
 	returns: v.union(v.any(), v.null()),
 	handler: async (ctx, args) => {
-		const { text, tags, style, tone, topic } = args;
+		const { text, tags, style, tone, topic, topicId } = args;
 
 		// Check if a question with the same text already exists
 		const existingQuestion = await ctx.db
@@ -749,6 +750,7 @@ export const saveAIQuestion = mutation({
 			tone,
 			toneId: args.toneId,
 			topic,
+			topicId,
 			status: "public",
 			isAIGenerated: true,
 			lastShownAt: 0,

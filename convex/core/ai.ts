@@ -115,12 +115,14 @@ export const generateAIQuestions = action({
 		currentQuestion: v.optional(v.string()),
 		styleId: v.id("styles"),
 		toneId: v.id("tones"),
+		topicId: v.optional(v.id("topics")),
 	},
 	handler: async (ctx, args) => {
-		const { count, selectedTags, currentQuestion, styleId, toneId } = args;
+		const { count, selectedTags, currentQuestion, styleId, toneId, topicId } = args;
 
 		const style = (await ctx.runQuery(api.core.styles.getStyleById, { id: styleId }));
 		const tone = (await ctx.runQuery(api.core.tones.getToneById, { id: toneId }));
+		const topic = topicId ? (await ctx.runQuery(api.core.topics.getTopicById, { id: topicId })) : null;
 
 		if (!style || !tone) {
 			throw new Error("Failed to generate AI question: No style or tone found.");
@@ -129,8 +131,15 @@ export const generateAIQuestions = action({
 		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
 		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
 
+		if (topic) {
+			prompt += `\nTopic Focus: ${topic.name} (${topic.description || ""})`;
+			if (topic.promptGuidanceForAI) {
+				prompt += `\nAI Guidance for Topic: ${topic.promptGuidanceForAI}`;
+			}
+		}
+
 		if (selectedTags.length > 0) {
-			prompt += `\nTopics: ${selectedTags.join(", ")}`;
+			prompt += `\nTags: ${selectedTags.join(", ")}`;
 		}
 
 		if (currentQuestion && currentQuestion.length > 0) {

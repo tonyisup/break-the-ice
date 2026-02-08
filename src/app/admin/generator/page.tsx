@@ -25,6 +25,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 export default function GeneratorPage() {
     const styles = useQuery(api.core.styles.getStyles, {})
     const tones = useQuery(api.core.tones.getTones, {})
+    const topics = useQuery(api.core.topics.getTopics, {})
     const tags = useQuery(api.core.tags.getTags)
 
     const generateAIQuestions = useAction(api.core.ai.generateAIQuestions)
@@ -34,6 +35,7 @@ export default function GeneratorPage() {
     const [customTag, setCustomTag] = React.useState("")
     const [selectedStyleId, setSelectedStyleId] = React.useState<Id<"styles"> | null>(null)
     const [selectedToneId, setSelectedToneId] = React.useState<Id<"tones"> | null>(null)
+    const [selectedTopicId, setSelectedTopicId] = React.useState<Id<"topics"> | null>(null)
     const [isGenerating, setIsGenerating] = React.useState(false)
     const [isSaving, setIsSaving] = React.useState(false)
     const [expandedTagGroupings, setExpandedTagGroupings] = React.useState<Set<string>>(new Set())
@@ -99,6 +101,7 @@ export default function GeneratorPage() {
                 currentQuestion: previewQuestion ? previewQuestion : undefined,
                 styleId: selectedStyleId,
                 toneId: selectedToneId,
+                topicId: selectedTopicId || undefined,
             })
             if (generatedQuestion) {
                 setPreviewQuestion(generatedQuestion)
@@ -123,11 +126,20 @@ export default function GeneratorPage() {
                 toast.error("Please select a style and tone")
                 return
             }
+
+            const selectedStyle = styles?.find(s => s._id === selectedStyleId)
+            const selectedTone = tones?.find(t => t._id === selectedToneId)
+            const selectedTopic = topics?.find(t => t._id === selectedTopicId)
+
             const result = await saveAIQuestion({
                 text: previewQuestion,
                 tags: selectedTags,
                 styleId: selectedStyleId,
+                style: selectedStyle?.id,
                 toneId: selectedToneId,
+                tone: selectedTone?.id,
+                topicId: selectedTopicId || undefined,
+                topic: selectedTopic?.id,
             })
 
             if (result === null) {
@@ -148,7 +160,7 @@ export default function GeneratorPage() {
 
     const tagGroupings = tags ? Array.from(new Set(tags.map(tag => tag.grouping))).sort() : []
 
-    if (!styles || !tones || !tags) {
+    if (!styles || !tones || !tags || !topics) {
         return (
             <div className="flex items-center justify-center h-full p-12">
                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -160,7 +172,7 @@ export default function GeneratorPage() {
         <div className="space-y-6">
             <div>
                 <h2 className="text-3xl font-bold tracking-tight">AI Generator</h2>
-                <p className="text-muted-foreground">Generate new questions using AI based on styles, tones, and topics.</p>
+                <p className="text-muted-foreground">Generate new questions using AI based on styles, tones, topics, and tags.</p>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-12 items-start">
@@ -215,12 +227,49 @@ export default function GeneratorPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Topics Selection */}
+                    {/* Topic Selection */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Topic</CardTitle>
+                            <CardDescription>Select a thematic focus (optional).</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex flex-wrap gap-2">
+                                <div
+                                    onClick={() => setSelectedTopicId(null)}
+                                    className={`
+                                        cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
+                                        ${selectedTopicId === null
+                                            ? "bg-primary text-primary-foreground border-primary"
+                                            : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
+                                    `}
+                                >
+                                    None (General)
+                                </div>
+                                {topics.map(topic => (
+                                    <div
+                                        key={topic._id}
+                                        onClick={() => setSelectedTopicId(topic._id)}
+                                        className={`
+                                            cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
+                                            ${selectedTopicId === topic._id
+                                                ? "bg-primary text-primary-foreground border-primary"
+                                                : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
+                                        `}
+                                    >
+                                        {topic.name}
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Tags Selection */}
                     <Card className="flex flex-col h-[600px]">
                         <CardHeader className="pb-3">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <CardTitle>Topics</CardTitle>
+                                    <CardTitle>Tags</CardTitle>
                                     <CardDescription>Select categories to guide the AI.</CardDescription>
                                 </div>
                                 <div className="flex gap-2">
