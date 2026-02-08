@@ -49,6 +49,7 @@ export function QuestionGrid({
   hiddenQuestions,
   onToggleLike,
   onRemoveItem,
+  onMakePublic,
   variant = "card",
 }: QuestionGridProps) {
   const isCondensed = variant === "condensed";
