@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Link } from "react-router-dom";
-import { Toaster, toast } from 'sonner';
+import { toast } from 'sonner';
 import { Header } from "@/components/header";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -23,9 +23,9 @@ export default function AddQuestionPage() {
       await addCustomQuestion({ customText: questionText, isPublic });
       setQuestionText("");
       if (isPublic) {
-        toast.success("Your question has been submitted for review!");
+        toast.success("Question submitted for review!");
       } else {
-        toast.success("Your question has been added to your personal stash!");
+        toast.success("Personal question added to your stash!");
       }
     } catch (error) {
       toast.error("Failed to submit question. Please try again.");
@@ -35,7 +35,6 @@ export default function AddQuestionPage() {
 
   return (
     <div className="container mx-auto p-4 pt-24 max-w-2xl">
-      <Toaster />
       <Header />
       <h1 className="text-2xl font-bold mb-4">Add a Custom Question</h1>
       <div className="mb-6 space-y-2">

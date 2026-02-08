@@ -198,7 +198,7 @@ function LikedQuestionsPageContent() {
 
           {myQuestions && myQuestions.length > 0 && (
             <CollapsibleSection
-              title="My Submitted Questions"
+              title="My Personal Stash"
               count={myQuestions.length}
               isOpen={isPersonalOpen}
               onOpenChange={setIsPersonalOpen}
