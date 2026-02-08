@@ -8,15 +8,7 @@ describe("Admin users", () => {
   test("admin can update user ai usage and newsletter status", async () => {
     const t = convexTest(schema, import.meta.glob("./**/*.ts"));
 
-    // 1. Create an admin user
-    const adminId = await t.run(async (ctx) => {
-      return await ctx.db.insert("users", {
-        email: "admin@example.com",
-        isAdmin: true,
-      });
-    });
-
-    // 2. Create a regular user
+    // 1. Create a regular user
     const userId = await t.run(async (ctx) => {
       return await ctx.db.insert("users", {
         email: "user@example.com",
@@ -59,5 +51,24 @@ describe("Admin users", () => {
         aiUsageCount: 10,
       })
     ).rejects.toThrow();
+  });
+
+  test("unauthenticated cannot update user", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+
+    // 1. Create a regular user
+    const userId = await t.run(async (ctx) => {
+      return await ctx.db.insert("users", {
+        email: "user@example.com",
+      });
+    });
+
+    // 2. Attempt update without identity
+    await expect(
+      t.mutation(api.admin.users.updateUser, {
+        userId,
+        aiUsageCount: 10,
+      })
+    ).rejects.toThrow("Not authenticated");
   });
 });

@@ -43,10 +43,21 @@ export default function UsersPage() {
 	const updateUserMutation = useMutation(api.admin.users.updateUser)
 
 	const [search, setSearch] = React.useState("")
-	const [editingUser, setEditingUser] = React.useState<Doc<"users"> | null>(null)
+	const [editingUserId, setEditingUserId] = React.useState<Id<"users"> | null>(null)
 	const [editAiUsage, setEditAiUsage] = React.useState<number>(0)
 	const [editNewsletter, setEditNewsletter] = React.useState<boolean>(false)
 	const [isSaving, setIsSaving] = React.useState(false)
+
+	const editingUser = React.useMemo(() =>
+		users?.find(u => u._id === editingUserId) ?? null
+		, [users, editingUserId])
+
+	React.useEffect(() => {
+		if (editingUser) {
+			setEditAiUsage(editingUser.aiUsage?.count ?? 0)
+			setEditNewsletter(editingUser.newsletterSubscriptionStatus === "subscribed")
+		}
+	}, [editingUser])
 
 	const filteredUsers = users?.filter(u =>
 		u.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -65,22 +76,22 @@ export default function UsersPage() {
 	}
 
 	const handleEdit = (user: Doc<"users">) => {
-		setEditingUser(user)
-		setEditAiUsage(user.aiUsage?.count || 0)
+		setEditingUserId(user._id)
+		setEditAiUsage(user.aiUsage?.count ?? 0)
 		setEditNewsletter(user.newsletterSubscriptionStatus === "subscribed")
 	}
 
 	const handleSave = async () => {
-		if (!editingUser) return
+		if (!editingUserId) return
 		setIsSaving(true)
 		try {
 			await updateUserMutation({
-				userId: editingUser._id,
+				userId: editingUserId,
 				aiUsageCount: editAiUsage,
 				newsletterSubscriptionStatus: editNewsletter ? "subscribed" : "unsubscribed",
 			})
 			toast.success("User updated successfully")
-			setEditingUser(null)
+			setEditingUserId(null)
 		} catch (error: any) {
 			toast.error(error.message || "Failed to update user")
 		} finally {
@@ -212,7 +223,7 @@ export default function UsersPage() {
 				)}
 			</div>
 
-			<Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+			<Dialog open={!!editingUserId} onOpenChange={(open) => !open && setEditingUserId(null)}>
 				<DialogContent className="sm:max-w-[425px]">
 					<DialogHeader>
 						<DialogTitle>Edit User</DialogTitle>
@@ -226,8 +237,9 @@ export default function UsersPage() {
 							<Input
 								id="aiUsage"
 								type="number"
+								min={0}
 								value={editAiUsage}
-								onChange={(e) => setEditAiUsage(parseInt(e.target.value) || 0)}
+								onChange={(e) => setEditAiUsage(Math.max(0, parseInt(e.target.value) || 0))}
 							/>
 						</div>
 						<div className="flex items-center justify-between space-x-2">
@@ -245,7 +257,7 @@ export default function UsersPage() {
 						</div>
 					</div>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setEditingUser(null)}>Cancel</Button>
+						<Button variant="outline" onClick={() => setEditingUserId(null)}>Cancel</Button>
 						<Button onClick={handleSave} disabled={isSaving}>
 							{isSaving ? "Saving..." : "Save Changes"}
 						</Button>

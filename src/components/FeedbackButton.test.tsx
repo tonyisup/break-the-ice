@@ -7,9 +7,13 @@ const mockUseConvexAuth = vi.fn();
 const mockUseMutation = vi.fn();
 const mockUseStorageContext = vi.fn();
 
+let capturedMutationArg: any = null;
 vi.mock("convex/react", () => ({
   useConvexAuth: () => mockUseConvexAuth(),
-  useMutation: () => mockUseMutation(),
+  useMutation: vi.fn().mockImplementation((arg) => {
+    capturedMutationArg = arg;
+    return mockUseMutation();
+  }),
 }));
 
 vi.mock("@/hooks/useStorageContext", () => ({
@@ -86,6 +90,7 @@ describe("FeedbackButton", () => {
     const submitBtn = screen.getByRole("button", { name: /send/i });
     fireEvent.click(submitBtn);
 
+    expect(capturedMutationArg).toBe("submitFeedback");
     expect(submitMock).toHaveBeenCalledWith({
       text: "Great app!",
       pageUrl: window.location.href,

@@ -32,6 +32,7 @@ export const updateUser = mutation({
 			v.union(v.literal("subscribed"), v.literal("unsubscribed"))
 		),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		const { userId, aiUsageCount, newsletterSubscriptionStatus } = args;
@@ -45,6 +46,7 @@ export const updateUser = mutation({
 		} = {};
 
 		if (aiUsageCount !== undefined) {
+			if (aiUsageCount < 0) throw new Error("AI usage count cannot be negative");
 			updates.aiUsage = {
 				...(user.aiUsage ?? { cycleStart: Date.now() }),
 				count: aiUsageCount,
@@ -56,6 +58,7 @@ export const updateUser = mutation({
 		}
 
 		await ctx.db.patch(userId, updates);
+		return null;
 	},
 });
 
