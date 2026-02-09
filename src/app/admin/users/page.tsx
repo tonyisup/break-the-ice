@@ -26,12 +26,31 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 
 export default function UsersPage() {
 	const users = useQuery(api.admin.users.getUsers)
 	const makeAdminMutation = useMutation(api.admin.users.makeAdmin)
+	const updateUserMutation = useMutation(api.admin.users.updateUser)
 
 	const [search, setSearch] = React.useState("")
+	const [editingUserId, setEditingUserId] = React.useState<Id<"users"> | null>(null)
+	const [editAiUsage, setEditAiUsage] = React.useState<number>(0)
+	const [editNewsletter, setEditNewsletter] = React.useState<boolean>(false)
+	const [isSaving, setIsSaving] = React.useState(false)
+
+	const editingUser = React.useMemo(() =>
+		users?.find(u => u._id === editingUserId) ?? null
+		, [users, editingUserId])
 
 	const filteredUsers = users?.filter(u =>
 		u.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -46,6 +65,30 @@ export default function UsersPage() {
 			toast.success("User is now an admin")
 		} catch (error: any) {
 			toast.error(error.message || "Failed to update permissions")
+		}
+	}
+
+	const handleEdit = (user: Doc<"users">) => {
+		setEditingUserId(user._id)
+		setEditAiUsage(user.aiUsage?.count ?? 0)
+		setEditNewsletter(user.newsletterSubscriptionStatus === "subscribed")
+	}
+
+	const handleSave = async () => {
+		if (!editingUserId) return
+		setIsSaving(true)
+		try {
+			await updateUserMutation({
+				userId: editingUserId,
+				aiUsageCount: editAiUsage,
+				newsletterSubscriptionStatus: editNewsletter ? "subscribed" : "unsubscribed",
+			})
+			toast.success("User updated successfully")
+			setEditingUserId(null)
+		} catch (error: any) {
+			toast.error(error.message || "Failed to update user")
+		} finally {
+			setIsSaving(false)
 		}
 	}
 
@@ -149,9 +192,9 @@ export default function UsersPage() {
 													Grant Admin Access
 												</DropdownMenuItem>
 											)}
-											<DropdownMenuItem className="gap-2">
+											<DropdownMenuItem className="gap-2" onClick={() => handleEdit(user)}>
 												<Pencil className="size-3.5" />
-												Edit Subscription
+												Edit User
 											</DropdownMenuItem>
 											<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive">
 												<Ban className="size-3.5" />
@@ -172,6 +215,48 @@ export default function UsersPage() {
 					</div>
 				)}
 			</div>
+
+			<Dialog open={!!editingUserId} onOpenChange={(open) => !open && setEditingUserId(null)}>
+				<DialogContent className="sm:max-w-[425px]">
+					<DialogHeader>
+						<DialogTitle>Edit User</DialogTitle>
+						<DialogDescription>
+							Update details for {editingUser?.name || editingUser?.email || "this user"}.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="grid gap-4 py-4">
+						<div className="grid gap-2">
+							<Label htmlFor="aiUsage">AI Usage Count</Label>
+							<Input
+								id="aiUsage"
+								type="number"
+								min={0}
+								value={editAiUsage}
+								onChange={(e) => setEditAiUsage(Math.max(0, parseInt(e.target.value) || 0))}
+							/>
+						</div>
+						<div className="flex items-center justify-between space-x-2">
+							<Label htmlFor="newsletter" className="flex flex-col gap-1">
+								<span>Newsletter Subscription</span>
+								<span className="font-normal text-xs text-muted-foreground">
+									Whether the user receives daily icebreakers.
+								</span>
+							</Label>
+							<Switch
+								id="newsletter"
+								checked={editNewsletter}
+								onCheckedChange={setEditNewsletter}
+							/>
+						</div>
+					</div>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setEditingUserId(null)}>Cancel</Button>
+						<Button onClick={handleSave} disabled={isSaving}>
+							{isSaving ? "Saving..." : "Save Changes"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	)
 }
