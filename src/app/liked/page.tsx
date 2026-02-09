@@ -1,4 +1,4 @@
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
@@ -26,6 +26,7 @@ function LikedQuestionsPageContent() {
   const { effectiveTheme } = useTheme();
   const [searchText, setSearchText] = useState("");
   const { likedQuestions, addLikedQuestion, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
+  const makeQuestionPublic = useMutation(api.core.questions.makeQuestionPublic);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
@@ -142,6 +143,16 @@ function LikedQuestionsPageContent() {
     }
   };
 
+  const handleMakePublic = async (questionId: Id<"questions">) => {
+    try {
+      await makeQuestionPublic({ questionId });
+      toast.success("Question submitted for review!");
+    } catch (error) {
+      console.error("Error making question public:", error);
+      toast.error("Failed to make question public.");
+    }
+  };
+
   const handleClearLikes = () => {
     setSearchText("");
     toast.success("Likes cleared");
@@ -187,7 +198,7 @@ function LikedQuestionsPageContent() {
 
           {myQuestions && myQuestions.length > 0 && (
             <CollapsibleSection
-              title="My Submitted Questions"
+              title="My Personal Stash"
               count={myQuestions.length}
               isOpen={isPersonalOpen}
               onOpenChange={setIsPersonalOpen}
@@ -200,6 +211,7 @@ function LikedQuestionsPageContent() {
                 hiddenQuestions={hiddenQuestions}
                 onToggleLike={handleToggleLike}
                 onRemoveItem={toggleHide}
+                onMakePublic={handleMakePublic}
                 variant="condensed"
               />
             </CollapsibleSection>
