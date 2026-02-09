@@ -140,6 +140,23 @@ export const checkAndIncrementAIUsage = internalMutation({
 	},
 });
 
+export const decrementAIUsage = internalMutation({
+	args: {
+		userId: v.id("users"),
+	},
+	handler: async (ctx, args) => {
+		const user = await ctx.db.get(args.userId);
+		if (!user || !user.aiUsage) return;
+
+		await ctx.db.patch(user._id, {
+			aiUsage: {
+				count: Math.max(0, user.aiUsage.count - 1),
+				cycleStart: user.aiUsage.cycleStart,
+			},
+		});
+	},
+});
+
 export const getUser = internalQuery({
 	args: {
 		userId: v.id("users"),

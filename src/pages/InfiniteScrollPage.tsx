@@ -292,7 +292,7 @@ export default function InfiniteScrollPage() {
           if (errorMessage.includes("logged in")) {
             setShowAuthCTA(true);
             setHasMore(false);
-          } else if (errorMessage.includes("limit reached")) {
+          } else if (errorMessage.toLowerCase().includes("limit")) {
             setShowUpgradeCTA(true);
             setHasMore(false);
           }

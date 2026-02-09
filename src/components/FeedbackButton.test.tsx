@@ -20,6 +20,10 @@ vi.mock("@/hooks/useStorageContext", () => ({
   useStorageContext: () => mockUseStorageContext(),
 }));
 
+vi.mock("@/hooks/useStorageContext", () => ({
+  useStorageContext: () => ({ sessionId: "mock-session" }),
+}));
+
 vi.mock("../../convex/_generated/api", () => ({
   api: {
     core: {
