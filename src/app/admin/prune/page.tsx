@@ -15,7 +15,12 @@ import {
 	RefreshCw,
 	MessageSquareOff,
 	Zap,
-	Settings
+	Settings,
+	Pencil,
+	Save,
+	X,
+	Sparkles,
+	Loader2
 } from "lucide-react"
 
 import { Link } from "react-router-dom"
@@ -25,13 +30,19 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
+import { Textarea } from "@/components/ui/textarea"
 
 export default function PruningPage() {
 	const pendingTargets = useQuery(api.admin.pruning.getPendingTargets)
 	const approvePruning = useMutation(api.admin.pruning.approvePruning)
 	const rejectPruning = useMutation(api.admin.pruning.rejectPruning)
+	const updateQuestion = useMutation(api.admin.questions.updateQuestion)
+	const remixQuestion = useAction(api.admin.questions.remixQuestion)
 
 	const [processingIds, setProcessingIds] = React.useState<Set<Id<"pruning">>>(new Set())
+	const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
+	const [editedText, setEditedText] = React.useState("")
+	const [remixingIds, setRemixingIds] = React.useState<Set<Id<"questions">>>(new Set())
 
 	const handleApprove = async (id: Id<"pruning">) => {
 		setProcessingIds(prev => new Set(prev).add(id))
@@ -42,6 +53,37 @@ export default function PruningPage() {
 			toast.error("Failed to prune question")
 		} finally {
 			setProcessingIds(prev => {
+				const next = new Set(prev)
+				next.delete(id)
+				return next
+			})
+		}
+	}
+
+	const handleSaveEdit = async (id: Id<"questions">) => {
+		try {
+			await updateQuestion({ id, text: editedText })
+			toast.success("Question updated")
+			setEditingQuestionId(null)
+		} catch (error) {
+			toast.error("Failed to update question")
+		}
+	}
+
+	const handleRemix = async (id: Id<"questions">) => {
+		setRemixingIds(prev => {
+			const next = new Set(prev)
+			next.add(id)
+			return next
+		})
+		try {
+			const newText = await remixQuestion({ id })
+			await updateQuestion({ id, text: newText })
+			toast.success("Question remixed!")
+		} catch (error: any) {
+			toast.error(`Remix failed: ${error.message}`)
+		} finally {
+			setRemixingIds(prev => {
 				const next = new Set(prev)
 				next.delete(id)
 				return next
@@ -166,10 +208,58 @@ export default function PruningPage() {
 									</Badge>
 								</div>
 
-								<div className="min-h-[80px] flex items-center">
-									<p className="text-lg font-medium italic text-foreground/90 leading-relaxed">
-										"{target.question.text || target.question.customText}"
-									</p>
+								<div className="min-h-[80px] flex flex-col justify-center">
+									{editingQuestionId === target.questionId ? (
+										<div className="flex gap-2 items-start w-full">
+											<Textarea
+												value={editedText}
+												onChange={(e) => setEditedText(e.target.value)}
+												className="min-h-[80px] text-base"
+											/>
+											<div className="flex flex-col gap-1">
+												<Button aria-label="Save" size="icon" className="size-8 bg-green-600 hover:bg-green-700" onClick={() => handleSaveEdit(target.questionId)}>
+													<Save className="size-3.5" />
+												</Button>
+												<Button aria-label="Cancel" size="icon" variant="ghost" className="size-8" onClick={() => setEditingQuestionId(null)}>
+													<X className="size-3.5" />
+												</Button>
+											</div>
+										</div>
+									) : (
+										<div className="group/text flex items-start justify-between gap-2">
+											<p className="text-lg font-medium italic text-foreground/90 leading-relaxed">
+												"{target.question.text || target.question.customText}"
+											</p>
+											<div className="flex flex-col gap-1 opacity-0 group-hover/text:opacity-100 transition-opacity">
+												<Button
+													aria-label="Edit"
+													variant="ghost"
+													size="icon"
+													className="size-8"
+													onClick={() => {
+														setEditingQuestionId(target.questionId)
+														setEditedText(target.question.text || target.question.customText || "")
+													}}
+												>
+													<Pencil className="size-4" />
+												</Button>
+												<Button
+													aria-label="Remix"
+													variant="ghost"
+													size="icon"
+													className="size-8 text-blue-500 hover:text-blue-600"
+													onClick={() => handleRemix(target.questionId)}
+													disabled={remixingIds.has(target.questionId)}
+												>
+													{remixingIds.has(target.questionId) ? (
+														<Loader2 className="size-4 animate-spin" />
+													) : (
+														<Sparkles className="size-4" />
+													)}
+												</Button>
+											</div>
+										</div>
+									)}
 								</div>
 							</CardHeader>
 

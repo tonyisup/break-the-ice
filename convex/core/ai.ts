@@ -115,22 +115,44 @@ export const generateAIQuestions = action({
 		currentQuestion: v.optional(v.string()),
 		styleId: v.id("styles"),
 		toneId: v.id("tones"),
+		topicId: v.optional(v.id("topics")),
 	},
 	handler: async (ctx, args) => {
-		const { count, selectedTags, currentQuestion, styleId, toneId } = args;
+		const { count, selectedTags, currentQuestion, styleId, toneId, topicId } = args;
 
-		const style = (await ctx.runQuery(api.core.styles.getStyleById, { id: styleId }));
-		const tone = (await ctx.runQuery(api.core.tones.getToneById, { id: toneId }));
+		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
 
-		if (!style || !tone) {
-			throw new Error("Failed to generate AI question: No style or tone found.");
+		if (!user) {
+			throw new Error("You must be logged in to generate AI questions.");
 		}
+
+		let usageIncremented = false;
+		try {
+			await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+				userId: user._id,
+			});
+			usageIncremented = true;
+
+			const style = (await ctx.runQuery(api.core.styles.getStyleById, { id: styleId }));
+			const tone = (await ctx.runQuery(api.core.tones.getToneById, { id: toneId }));
+			const topic = topicId ? (await ctx.runQuery(api.core.topics.getTopicById, { id: topicId })) : null;
+
+			if (!style || !tone) {
+				throw new Error("Failed to generate AI question: No style or tone found.");
+			}
 
 		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
 		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
 
+		if (topic) {
+			prompt += `\nTopic Focus: ${topic.name} (${topic.description || ""})`;
+			if (topic.promptGuidanceForAI) {
+				prompt += `\nAI Guidance for Topic: ${topic.promptGuidanceForAI}`;
+			}
+		}
+
 		if (selectedTags.length > 0) {
-			prompt += `\nTopics: ${selectedTags.join(", ")}`;
+			prompt += `\nTags: ${selectedTags.join(", ")}`;
 		}
 
 		if (currentQuestion && currentQuestion.length > 0) {
@@ -285,17 +307,23 @@ export const generateAIQuestions = action({
 			}
 		}
 
-		for (const question of parsedContent) {
-			try {
-				// Simple dedupe check
-				return question.text;
+			for (const question of parsedContent) {
+				try {
+					// Simple dedupe check
+					return question.text;
 
-			} catch (error) {
-				console.error(`Failed to save question: "${question.text}"`, error);
-				// Continue with other questions even if one fails
+				} catch (error) {
+					console.error(`Failed to save question: "${question.text}"`, error);
+					// Continue with other questions even if one fails
+				}
 			}
+			throw new Error("No questions generated");
+		} catch (error) {
+			if (usageIncremented) {
+				await ctx.runMutation(internal.internal.users.decrementAIUsage, { userId: user._id });
+			}
+			throw error;
 		}
-		return "No questions generated";
 	}
 });
 
@@ -339,17 +367,18 @@ export const generateAIQuestionForFeed = action({
 
 		let userContext = "";
 
-		const allowedCount = await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
-			userId: user._id,
-		});
-		if (allowedCount < 0) {
-			throw new Error("You have reached your AI question limit. Please upgrade your plan.");
-		}
-		if (user?.questionPreferenceEmbedding) {
-			const nearestQuestions = await ctx.runAction(api.core.questions.getNearestQuestionsByEmbedding, {
-				embedding: user.questionPreferenceEmbedding,
-				count: 5
+		let usageIncremented = false;
+		try {
+			await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+				userId: user._id,
 			});
+			usageIncremented = true;
+
+			if (user?.questionPreferenceEmbedding) {
+				const nearestQuestions = await ctx.runAction(api.core.questions.getNearestQuestionsByEmbedding, {
+					embedding: user.questionPreferenceEmbedding,
+					count: 5
+				});
 			const examples = nearestQuestions.map((q: any) => q.text).filter((t: any): t is string => !!t);
 			// Fallback if vector search returns empty (e.g. strict filter with no results)
 			if (examples.length > 0) {
@@ -533,6 +562,12 @@ export const generateAIQuestionForFeed = action({
 				// Continue with other questions even if one fails
 			}
 		}
-		return newQuestions;
+			return newQuestions;
+		} catch (error) {
+			if (usageIncremented) {
+				await ctx.runMutation(internal.internal.users.decrementAIUsage, { userId: user._id });
+			}
+			throw error;
+		}
 	}
 });
