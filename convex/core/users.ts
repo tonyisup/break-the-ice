@@ -30,7 +30,7 @@ export async function getUserOrCreate(ctx: MutationCtx) {
 export const getCurrentUser = query({
 	args: {},
 	returns: v.union(v.null(), v.any()),
-	handler: async (ctx): Promise<Doc<"users"> | null> => {
+	handler: async (ctx): Promise<any> => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			return null;
@@ -41,7 +41,17 @@ export const getCurrentUser = query({
 			.withIndex("email", (q) => q.eq("email", identity.email))
 			.unique();
 
-		return user;
+		if (!user) {
+			return null;
+		}
+
+		const limit = user.subscriptionTier === "casual" ? parseInt(process.env.MAX_CASUAL_AIGEN ?? "100") : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
+
+		return {
+			...user,
+			aiLimit: limit,
+			isAiLimitReached: (user.aiUsage?.count ?? 0) >= limit,
+		};
 	},
 });
 
