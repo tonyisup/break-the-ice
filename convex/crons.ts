@@ -46,26 +46,26 @@ crons.interval(
 );
 
 // Nightly question pool generation - generates fresh AI questions for daily use
-crons.cron(
-  "generate nightly question pool",
-  "0 8 * * *", // 10:00 AM UTC (12:00 AM PST / 1:00 AM PDT)
-  internal.internal.ai.generateNightlyQuestionPool,
-  { targetCount: 5, maxCombinations: 10 } // ~50 questions per night
-);
+// crons.cron(
+//   "generate nightly question pool",
+//   "0 8 * * *", // 10:00 AM UTC (12:00 AM PST / 1:00 AM PDT)
+//   internal.internal.ai.generateNightlyQuestionPool,
+//   { targetCount: 5, maxCombinations: 10 } // ~50 questions per night
+// );
 
 // Assign pool questions to newsletter subscribers (runs after pool generation)
-crons.cron(
-  "assign pool questions to users",
-  "0 9 * * *", // 11:00 AM UTC (1:00 AM PST / 2:00 AM PDT)
-  internal.internal.questions.assignPoolQuestionsToUsers,
-  { questionsPerUser: 6 }
-);
+// crons.cron(
+//   "assign pool questions to users",
+//   "0 9 * * *", // 11:00 AM UTC (1:00 AM PST / 2:00 AM PDT)
+//   internal.internal.questions.assignPoolQuestionsToUsers,
+//   { questionsPerUser: 6 }
+// );
 
 // Nightly pruning gathering - identifies questions that don't hit
-crons.cron(
-  "gather pruning targets",
-  "0 10 * * *", // 10:00 AM UTC (2:00 AM PST / 3:00 AM PDT)
-  internal.admin.pruning.gatherPruningTargets
-);
+// crons.cron(
+//   "gather pruning targets",
+//   "0 10 * * *", // 10:00 AM UTC (2:00 AM PST / 3:00 AM PDT)
+//   internal.admin.pruning.gatherPruningTargets
+// );
 
 export default crons
