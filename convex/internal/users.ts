@@ -1,6 +1,7 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { internalMutation, internalQuery, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { ERROR_MESSAGES, ERROR_CODES } from "../constants";
 
 // Helper function for average embedding calculation
 export function calculateAverageEmbedding(embeddings: number[][]): number[] {
@@ -124,7 +125,10 @@ export const checkAndIncrementAIUsage = internalMutation({
 
 		const remaining = limit - aiUsage.count;
 		if (remaining <= 0) {
-			throw new Error(`AI generation limit reached. You have used ${aiUsage.count}/${limit} generations this cycle.`);
+			throw new ConvexError({
+				code: ERROR_CODES.AI_LIMIT_REACHED,
+				message: ERROR_MESSAGES.AI_LIMIT_REACHED,
+			});
 		}
 
 		const actualCount = Math.min(1, remaining);

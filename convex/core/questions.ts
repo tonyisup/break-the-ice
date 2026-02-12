@@ -64,47 +64,7 @@ export const discardQuestion = mutation({
 	},
 });
 
-export const getUnseenQuestionsForUser = query({
-	args: {
-		userId: v.id("users"),
-		count: v.number(),
-	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args) => {
-		const { userId, count } = args;
-		const unseenUserQuestions = await ctx.db
-			.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
-				q.eq("userId", userId).eq("status", "unseen")
-			)
-			.take(count);
 
-		const questions = await Promise.all(
-			unseenUserQuestions.map((uq) => ctx.db.get(uq.questionId))
-		);
-
-		return questions
-			.filter((q) => q !== null && !q.prunedAt && q.text)
-			.slice(0, count);
-	},
-});
-
-export const getSentQuestionsForUser = query({
-	args: {
-		userId: v.id("users"),
-	},
-	returns: v.array(v.id("questions")),
-	handler: async (ctx, args) => {
-		const { userId } = args;
-		const sentQuestions = await ctx.db
-			.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
-				q.eq("userId", userId).eq("status", "sent")
-			)
-			.collect();
-		return sentQuestions.map((q) => q.questionId);
-	},
-});
 
 export const getNextUnseenQuestions = action({
 	args: {
@@ -113,7 +73,7 @@ export const getNextUnseenQuestions = action({
 	},
 	returns: v.array(v.any()),
 	handler: async (ctx, args): Promise<any[]> => {
-		const questions = await ctx.runQuery(api.core.questions.getUnseenQuestionsForUser, args);
+		const questions = await ctx.runQuery(internal.internal.questions.getUnseenQuestionsForUser, args);
 		
 		return questions.slice(0, args.count);
 	},
@@ -122,31 +82,35 @@ export const getNextUnseenQuestions = action({
 export const getNextRandomQuestionsUnsentForUser = action({
 	args: {
 		userId: v.id("users"),
-		count: v.number(),
+		count: v.float64(),
+		hidden: v.optional(v.array(v.id("questions"))),
+		hiddenStyles: v.optional(v.array(v.id("styles"))),
+		hiddenTones: v.optional(v.array(v.id("tones"))),
+		organizationId: v.optional(v.id("organizations")),
+		randomSeed: v.optional(v.float64()),
 	},
 	returns: v.array(v.any()),
 	handler: async (ctx, args): Promise<any[]> => {
-		const { userId, count } = args;
-		const seen = await ctx.runQuery(api.core.questions.getSentQuestionsForUser, {
+		const { userId, ...rest } = args;
+		const seen = await ctx.runQuery(internal.internal.questions.getSentQuestionsForUser, {
 			userId: userId
 		});
 
-		if (seen.length === 0) {
-			return await ctx.runAction(api.core.questions.getNextRandomQuestions, {
-				count: count
-			});
-		}
-
-		return await ctx.runAction(api.core.questions.getNextRandomQuestions, {
-			seen: seen,
-			count: count,
+		return await getNextRandomQuestionsInternal(ctx, {
+			...rest,
+			seen,
 		});
 	},
 });
 
 export const getNextRandomQuestionsUnsent = action({
 	args: {
-		count: v.number(),
+		count: v.float64(),
+		hidden: v.optional(v.array(v.id("questions"))),
+		hiddenStyles: v.optional(v.array(v.id("styles"))),
+		hiddenTones: v.optional(v.array(v.id("tones"))),
+		organizationId: v.optional(v.id("organizations")),
+		randomSeed: v.optional(v.float64()),
 	},
 	returns: v.array(v.any()),
 	handler: async (ctx, args): Promise<any[]> => {
@@ -158,9 +122,14 @@ export const getNextRandomQuestionsUnsent = action({
 		if (!user) {
 			throw new Error("User not found");
 		}
-		return await ctx.runAction(api.core.questions.getNextRandomQuestionsUnsentForUser, {
-			userId: user._id,
-			count: args.count
+
+		const seen = await ctx.runQuery(internal.internal.questions.getSentQuestionsForUser, {
+			userId: user._id
+		});
+
+		return await getNextRandomQuestionsInternal(ctx, {
+			...args,
+			seen,
 		});
 	},
 });
@@ -282,6 +251,51 @@ export const getSimilarQuestions = query({
 	},
 });
 
+/**
+ * Shared logic for getting random questions.
+ * Extracted into a helper to avoid action-to-action chaining.
+ */
+async function getNextRandomQuestionsInternal(
+	ctx: ActionCtx,
+	args: {
+		count: number;
+		seen?: Id<"questions">[];
+		hidden?: Id<"questions">[];
+		hiddenStyles?: Id<"styles">[];
+		hiddenTones?: Id<"tones">[];
+		organizationId?: Id<"organizations">;
+		randomSeed?: number;
+	}
+): Promise<any[]> {
+	const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed = Math.random() } = args;
+
+	// 1. Get time range for randomization
+	const { minTime, maxTime } = await ctx.runQuery(internal.internal.questions.getQuestionTimeRange);
+
+	let startTime = 0;
+	if (maxTime > minTime) {
+		const normalizedSeed = randomSeed - Math.floor(randomSeed);
+		startTime = minTime + normalizedSeed * (maxTime - minTime);
+	}
+
+	// 2. Fetch candidates using internal query
+	const candidates = await ctx.runQuery(internal.internal.questions.getRandomQuestionsInternal, {
+		count,
+		startTime,
+		seen,
+		hidden,
+		hiddenStyles,
+		hiddenTones,
+		organizationId,
+	});
+
+	// 3. Shuffle results (deterministic based on seed)
+	const results = [...candidates];
+	shuffleArray(results, randomSeed);
+
+	return results.slice(0, count);
+}
+
 export const getNextRandomQuestions = action({
 	args: {
 		count: v.float64(),
@@ -293,33 +307,7 @@ export const getNextRandomQuestions = action({
 		randomSeed: v.optional(v.float64()),
 	},
 	handler: async (ctx, args): Promise<any[]> => {
-		const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed = Math.random() } = args;
-
-		// 1. Get time range for randomization
-		const { minTime, maxTime } = await ctx.runQuery(internal.internal.questions.getQuestionTimeRange);
-
-		let startTime = 0;
-		if (maxTime > minTime) {
-			const normalizedSeed = randomSeed - Math.floor(randomSeed);
-			startTime = minTime + normalizedSeed * (maxTime - minTime);
-		}
-
-		// 2. Fetch candidates using internal query
-		const candidates = await ctx.runQuery(internal.internal.questions.getRandomQuestionsInternal, {
-			count,
-			startTime,
-			seen,
-			hidden,
-			hiddenStyles,
-			hiddenTones,
-			organizationId,
-		});
-
-		// 3. Shuffle results (deterministic based on seed)
-		const results = [...candidates];
-		shuffleArray(results, randomSeed);
-
-		return results.slice(0, count);
+		return await getNextRandomQuestionsInternal(ctx, args);
 	},
 });
 

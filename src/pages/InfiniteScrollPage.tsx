@@ -15,6 +15,8 @@ import { SignInCTA } from "@/components/SignInCTA";
 import { UpgradeCTA } from "@/components/UpgradeCTA";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
 import { RefineResultsCTA } from "@/components/RefineResultsCTA";
+import { ERROR_MESSAGES, ERROR_CODES } from "../../convex/constants";
+import { ConvexError } from "convex/values";
 
 const compareByTextLength = (a: Doc<"questions">, b: Doc<"questions">) =>
   (a.text || a.customText || "").length - (b.text || b.customText || "").length;
@@ -310,7 +312,14 @@ export default function InfiniteScrollPage() {
           if (currentRequestId !== requestIdRef.current) return;
 
           const errorMessage = typeof err === 'string' ? err : (err instanceof Error ? err.message : JSON.stringify(err));
-          const isLimitError = errorMessage.toLowerCase().includes("limit") || errorMessage.toLowerCase().includes("reached");
+          const errorCode = err instanceof ConvexError ? (err.data as any)?.code : null;
+          const errorDataMessage = err instanceof ConvexError ? (err.data as any)?.message : null;
+
+          // Use structured error code if available, otherwise fall back to exact constant match or conservative substring check
+          const isLimitError = errorCode === ERROR_CODES.AI_LIMIT_REACHED || 
+            errorMessage === ERROR_MESSAGES.AI_LIMIT_REACHED || 
+            errorDataMessage === ERROR_MESSAGES.AI_LIMIT_REACHED ||
+            errorMessage.includes("AI generation limit reached");
 
           if (errorMessage.includes("logged in")) {
             setShowAuthCTA(true);
@@ -351,7 +360,7 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, isLoading, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, hasMore, showAuthCTA, showUpgradeCTA, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked]);
+  }, [convex, isLoading, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, hasMore, showAuthCTA, showUpgradeCTA, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser]);
 
   // Initial load
   useEffect(() => {
