@@ -577,43 +577,29 @@ export const getRandomQuestionsInternal = internalQuery({
 
 		const applyFilters = (q: any) => {
 			const conditions = [
-				q.eq(q.field("organizationId"), organizationId),
-				q.eq(q.field("prunedAt"), undefined),
 				q.neq(q.field("text"), undefined),
-				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
+				q.eq(q.field("status"), "public"),
 			];
 			return q.and(...conditions);
 		};
 
-		// 1. Fetch candidates from random start point
+		// Fetch enough candidates to survive post-filtering.
+		// We need at least count results AFTER removing seen + hidden IDs,
+		// so we must pull count + exclusionList.length candidates from the DB.
+		const exclusionCount = seenIds.size + hiddenIds.size;
+		const fetchCount = Math.min(Math.max(count + exclusionCount + 10, 50), 500);
+
 		const candidatesWithEmbeddings = await ctx.db
 			.query("questions")
 			.filter((q) => applyFilters(q))
-			.take(count * 5);
+			.take(fetchCount);
 
-		let candidates = candidatesWithEmbeddings.map(q => {
+		const candidates = candidatesWithEmbeddings.map(q => {
 			const { embedding, ...rest } = q;
 			return rest;
 		});
 
-		// 2. Wrap around if needed
-		if (candidates.length < count * 2) {
-			const moreCandidates = await ctx.db
-				.query("questions")
-				.withIndex("by_creation_time")
-				.filter((q) => applyFilters(q))
-				.take(count * 5 - candidates.length);
-
-			const existingIds = new Set(candidates.map((q) => q._id));
-			for (const q of moreCandidates) {
-				if (!existingIds.has(q._id)) {
-					candidates.push(q);
-					existingIds.add(q._id);
-				}
-			}
-		}
-
-		// 3. Post-filter for seen, hidden, styles, and tones
+		// Post-filter for seen, hidden, styles, and tones
 		const filtered = candidates.filter((q) => {
 			if (seenIds.has(q._id)) return false;
 			if (hiddenIds.has(q._id)) return false;

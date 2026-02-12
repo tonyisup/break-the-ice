@@ -199,7 +199,7 @@ export default function InfiniteScrollPage() {
     const isStorageLoaded = hiddenStyles !== undefined && hiddenTones !== undefined &&
       (!user.isSignedIn || (hiddenStyles !== null && hiddenTones !== null));
 
-    if (!user.isLoaded || isLoading || !hasMore || showAuthCTA || showUpgradeCTA || allStylesBlocked || allTonesBlocked || !isStorageLoaded) return;
+    if (!user.isLoaded || isLoading || !hasMore || allStylesBlocked || allTonesBlocked || !isStorageLoaded) return;
 
     // Capture current request ID
     requestIdRef.current++;
@@ -248,6 +248,7 @@ export default function InfiniteScrollPage() {
         if (!user.isSignedIn) {
           setShowAuthCTA(true);
           setHasMore(false);
+          
           // If we have some DB questions and it was the first pull, we need to show them now
           if (isFirstPull && combinedQuestions.length > 0) {
             combinedQuestions.sort(compareByTextLength);
