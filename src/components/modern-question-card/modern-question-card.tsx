@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
 import { Heart, Share2, ThumbsDown } from '@/components/ui/icons/icons';
 import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
@@ -169,6 +170,7 @@ export function ModernQuestionCard({
                 handleShare={() => void handleShare()}
                 onClickStyle={handleOpenStyleDrawer}
                 onClickTone={handleOpenToneDrawer}
+                containerRef={cardRef}
               />
               <ItemDetailDrawer
                 item={selectedItemForDrawer}
@@ -204,7 +206,23 @@ const LoadingSpinner = ({ gradient }: { gradient: string[] }) => {
   );
 };
 
-const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone }: { question: Doc<"questions">, style?: Doc<"styles"> | null, tone?: Doc<"tones"> | null, gradient: string[], isFavorite: boolean, isHidden: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void }) => {
+const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone, containerRef }: { question: Doc<"questions">, style?: Doc<"styles"> | null, tone?: Doc<"tones"> | null, gradient: string[], isFavorite: boolean, isHidden: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void, containerRef: React.RefObject<HTMLDivElement | null> }) => {
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start end", "end start"]
+  });
+
+  const baseRotate = useTransform(
+    scrollYProgress,
+    [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
+    [0, 25, -25, 25, -25, 25, -25, 25, -25, 25, 0]
+  );
+
+  const rotate = useSpring(baseRotate, {
+    stiffness: 100,
+    damping: 10,
+    mass: 3
+  });
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
@@ -340,9 +358,12 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Topic: {topic.name}
           </p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <motion.p 
+            style={{ rotate }}
+            className="text-sm text-gray-600 dark:text-gray-400"
+          >
             <IconComponent icon={topic.icon as Icon} size={24} />
-          </p>
+          </motion.p>
         </div>
       )}
     </div>
