@@ -15,6 +15,58 @@ import { Link, useParams } from "react-router-dom"
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
 
+interface PreferenceItem {
+    _id: string;
+    status: string;
+    updatedAt: number;
+    style?: { name: string; icon: string };
+    tone?: { name: string; icon: string };
+}
+
+function PreferenceGrid({
+    items,
+    type,
+    loading
+}: {
+    items: PreferenceItem[] | undefined,
+    type: "style" | "tone",
+    loading: boolean
+}) {
+    if (loading) {
+        return <div className="flex justify-center p-4"><Loader2 className="animate-spin text-muted-foreground" /></div>
+    }
+
+    if (!items || items.length === 0) {
+        return <div className="text-muted-foreground text-center py-8">No {type} preferences recorded.</div>
+    }
+
+    return (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {items.map(item => {
+                const entity = type === 'style' ? item.style : item.tone
+                const label = type === 'style' ? "Unknown Style" : "Unknown Tone"
+
+                return (
+                    <div key={item._id} className="flex justify-between items-center p-3 border rounded-lg bg-card hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl p-1 bg-muted rounded">{entity?.icon || "?"}</span>
+                            <div className="flex flex-col">
+                                <span className="font-medium text-sm">{entity?.name || label}</span>
+                                <span className="text-[10px] text-muted-foreground">
+                                    {new Date(item.updatedAt).toLocaleDateString()}
+                                </span>
+                            </div>
+                        </div>
+                        <Badge variant={item.status === 'preferred' ? 'default' : 'secondary'} className={item.status === 'preferred' ? 'bg-green-600 hover:bg-green-700' : ''}>
+                            {item.status}
+                        </Badge>
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+
 export default function UserDetailsPage() {
     const { userId } = useParams<{ userId: string }>()
     const userIdTyped = userId as Id<"users">
@@ -40,8 +92,8 @@ export default function UserDetailsPage() {
     }, [user])
 
     const handleSave = async () => {
-        setIsSaving(true)
         if (!userIdTyped) return;
+        setIsSaving(true)
         try {
             await updateUser({
                 userId: userIdTyped,
@@ -64,10 +116,18 @@ export default function UserDetailsPage() {
         )
     }
 
-    if (!user) {
+    if (user === undefined) {
         return (
             <div className="flex items-center justify-center h-96">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
+
+    if (user === null) {
+        return (
+            <div className="flex items-center justify-center h-96">
+                <div className="text-muted-foreground">User not found</div>
             </div>
         )
     }
@@ -205,32 +265,7 @@ export default function UserDetailsPage() {
                             <CardDescription>Styles the user has explicitly preferred or hidden.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-2">
-                                {!styles ? (
-                                    <div className="flex justify-center p-4"><Loader2 className="animate-spin text-muted-foreground" /></div>
-                                ) : styles.length === 0 ? (
-                                    <div className="text-muted-foreground text-center py-8">No style preferences recorded.</div>
-                                ) : (
-                                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                        {styles.map(item => (
-                                            <div key={item._id} className="flex justify-between items-center p-3 border rounded-lg bg-card hover:bg-muted/50 transition-colors">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-2xl p-1 bg-muted rounded">{item.style?.icon || "?"}</span>
-                                                    <div className="flex flex-col">
-                                                        <span className="font-medium text-sm">{item.style?.name || "Unknown Style"}</span>
-                                                        <span className="text-[10px] text-muted-foreground">
-                                                            {new Date(item.updatedAt).toLocaleDateString()}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <Badge variant={item.status === 'preferred' ? 'default' : 'secondary'} className={item.status === 'preferred' ? 'bg-green-600 hover:bg-green-700' : ''}>
-                                                    {item.status}
-                                                </Badge>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            <PreferenceGrid items={styles} type="style" loading={!styles} />
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -242,32 +277,7 @@ export default function UserDetailsPage() {
                             <CardDescription>Tones the user has explicitly preferred or hidden.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-2">
-                                {!tones ? (
-                                    <div className="flex justify-center p-4"><Loader2 className="animate-spin text-muted-foreground" /></div>
-                                ) : tones.length === 0 ? (
-                                    <div className="text-muted-foreground text-center py-8">No tone preferences recorded.</div>
-                                ) : (
-                                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                        {tones.map(item => (
-                                            <div key={item._id} className="flex justify-between items-center p-3 border rounded-lg bg-card hover:bg-muted/50 transition-colors">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-2xl p-1 bg-muted rounded">{item.tone?.icon || "?"}</span>
-                                                    <div className="flex flex-col">
-                                                        <span className="font-medium text-sm">{item.tone?.name || "Unknown Tone"}</span>
-                                                        <span className="text-[10px] text-muted-foreground">
-                                                            {new Date(item.updatedAt).toLocaleDateString()}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <Badge variant={item.status === 'preferred' ? 'default' : 'secondary'} className={item.status === 'preferred' ? 'bg-green-600 hover:bg-green-700' : ''}>
-                                                    {item.status}
-                                                </Badge>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            <PreferenceGrid items={tones} type="tone" loading={!tones} />
                         </CardContent>
                     </Card>
                 </TabsContent>

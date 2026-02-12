@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import UserDetailsPage from './page';
 import { useQuery, useMutation } from 'convex/react';
 
@@ -74,16 +75,16 @@ describe('UserDetailsPage', () => {
 
   it('renders user details correctly', () => {
     render(<UserDetailsPage />);
-    expect(screen.getByText('Test User')).toBeDefined();
-    expect(screen.getByText('test@example.com')).toBeDefined();
-    expect(screen.getByText('user123')).toBeDefined();
+    expect(screen.getByText('Test User')).toBeInTheDocument();
+    expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    expect(screen.getByText('user123')).toBeInTheDocument();
   });
 
   it('renders tabs and content', async () => {
     render(<UserDetailsPage />);
 
     // Overview tab is default
-    expect(screen.getByText('User Information')).toBeDefined();
+    expect(screen.getByText('User Information')).toBeInTheDocument();
   });
 
   it('updates user settings', async () => {

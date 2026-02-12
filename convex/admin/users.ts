@@ -78,6 +78,7 @@ export const getUsers = query({
 
 export const getUser = query({
 	args: { userId: v.id("users") },
+	returns: v.union(v.null(), v.any()),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		return await ctx.db.get(args.userId);
@@ -86,6 +87,7 @@ export const getUser = query({
 
 export const getUserStyles = query({
 	args: { userId: v.id("users") },
+	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		const userStyles = await ctx.db
@@ -106,6 +108,7 @@ export const getUserStyles = query({
 
 export const getUserTones = query({
 	args: { userId: v.id("users") },
+	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		const userTones = await ctx.db
@@ -126,13 +129,14 @@ export const getUserTones = query({
 
 export const getUserQuestions = query({
 	args: { userId: v.id("users"), limit: v.optional(v.number()) },
+	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 		const userQuestions = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId", (q) => q.eq("userId", args.userId))
 			.order("desc") // Most recent first
-			.take(args.limit || 100);
+			.take(args.limit ?? 100);
 
 		// Join with questions table
 		const results = await Promise.all(
