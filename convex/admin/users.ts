@@ -75,3 +75,72 @@ export const getUsers = query({
 			.collect();
 	},
 });
+
+export const getUser = query({
+	args: { userId: v.id("users") },
+	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
+		return await ctx.db.get(args.userId);
+	},
+});
+
+export const getUserStyles = query({
+	args: { userId: v.id("users") },
+	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
+		const userStyles = await ctx.db
+			.query("userStyles")
+			.withIndex("by_userId", (q) => q.eq("userId", args.userId))
+			.collect();
+
+		// Join with styles table
+		const results = await Promise.all(
+			userStyles.map(async (us) => {
+				const style = await ctx.db.get(us.styleId);
+				return { ...us, style };
+			})
+		);
+		return results;
+	},
+});
+
+export const getUserTones = query({
+	args: { userId: v.id("users") },
+	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
+		const userTones = await ctx.db
+			.query("userTones")
+			.withIndex("by_userId", (q) => q.eq("userId", args.userId))
+			.collect();
+
+		// Join with tones table
+		const results = await Promise.all(
+			userTones.map(async (ut) => {
+				const tone = await ctx.db.get(ut.toneId);
+				return { ...ut, tone };
+			})
+		);
+		return results;
+	},
+});
+
+export const getUserQuestions = query({
+	args: { userId: v.id("users"), limit: v.optional(v.number()) },
+	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
+		const userQuestions = await ctx.db
+			.query("userQuestions")
+			.withIndex("by_userId", (q) => q.eq("userId", args.userId))
+			.order("desc") // Most recent first
+			.take(args.limit || 100);
+
+		// Join with questions table
+		const results = await Promise.all(
+			userQuestions.map(async (uq) => {
+				const question = await ctx.db.get(uq.questionId);
+				return { ...uq, question };
+			})
+		);
+		return results;
+	},
+});
