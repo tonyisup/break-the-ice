@@ -194,23 +194,25 @@ export default function TopicsPage() {
 											onChange={e => setNewTopic({ ...newTopic, startDate: e.target.value })}
 										/>
 									</div>
-									<div className="grid grid-cols-2 gap-4">
-										<div className="grid gap-2">
-											<label className="text-sm font-medium">End Date (Optional)</label>
-											<Input
-												type="date"
-												value={newTopic.endDate}
-												onChange={e => setNewTopic({ ...newTopic, endDate: e.target.value })}
-											/>
-										</div>
-										<div className="grid gap-2">
-											<label className="text-sm font-medium">Icon</label>
-											<IconPicker
-												value={newTopic.icon}
-												onChange={icon => setNewTopic({ ...newTopic, icon })}
-											/>
-										</div>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<label htmlFor="newTopicEndDate" className="text-sm font-medium">End Date (Optional)</label>
+										<Input
+											id="newTopicEndDate"
+											type="date"
+											value={newTopic.endDate}
+											onChange={e => setNewTopic({ ...newTopic, endDate: e.target.value })}
+										/>
 									</div>
+									<div className="grid gap-2">
+										<label htmlFor="newTopicIcon" className="text-sm font-medium">Icon</label>
+										<IconPicker
+											id="newTopicIcon"
+											value={newTopic.icon}
+											onChange={icon => setNewTopic({ ...newTopic, icon })}
+										/>
+									</div>
+								</div>
 								</div>
 								<div className="grid gap-2">
 									<label className="text-sm font-medium">Description</label>
@@ -404,23 +406,25 @@ export default function TopicsPage() {
 											onChange={e => setEditingTopic({ ...editingTopic, startDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
 										/>
 									</div>
-									<div className="grid grid-cols-2 gap-4">
-										<div className="grid gap-2">
-											<label className="text-sm font-medium">End Date</label>
-											<Input
-												type="date"
-												value={editingTopic.endDate ? new Date(editingTopic.endDate).toISOString().split('T')[0] : ""}
-												onChange={e => setEditingTopic({ ...editingTopic, endDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
-											/>
-										</div>
-										<div className="grid gap-2">
-											<label className="text-sm font-medium">Icon</label>
-											<IconPicker
-												value={editingTopic.icon || ""}
-												onChange={icon => setEditingTopic({ ...editingTopic, icon })}
-											/>
-										</div>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<label htmlFor="editTopicEndDate" className="text-sm font-medium">End Date</label>
+										<Input
+											id="editTopicEndDate"
+											type="date"
+											value={editingTopic.endDate ? new Date(editingTopic.endDate).toISOString().split('T')[0] : ""}
+											onChange={e => setEditingTopic({ ...editingTopic, endDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
+										/>
 									</div>
+									<div className="grid gap-2">
+										<label htmlFor="editTopicIcon" className="text-sm font-medium">Icon</label>
+										<IconPicker
+											id="editTopicIcon"
+											value={editingTopic.icon || ""}
+											onChange={icon => setEditingTopic({ ...editingTopic, icon })}
+										/>
+									</div>
+								</div>
 								</div>
 								<div className="grid gap-2">
 									<label className="text-sm font-medium">Description</label>

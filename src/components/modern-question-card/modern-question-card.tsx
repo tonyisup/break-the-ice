@@ -219,14 +219,15 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden
   );
 
   const rotate = useSpring(baseRotate, {
-    stiffness: 100,
+    stiffness: 30,
     damping: 10,
     mass: 3
   });
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
-  const topic = useQuery(api.core.topics.getTopicById, { id: question.topicId })
+  const topic = useQuery(api.core.topics.getTopicById, question.topicId ? { id: question.topicId } : "skip")
+  const safeIcon = (topic?.icon ? topic.icon : "CircleQuestionMark") as Icon;
 
   const handleClickStyle = () => {
     onClickStyle?.(); 
@@ -362,7 +363,7 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden
             style={{ rotate }}
             className="text-sm text-gray-600 dark:text-gray-400"
           >
-            <IconComponent icon={topic.icon as Icon} size={24} />
+            <IconComponent icon={safeIcon} size={24} />
           </motion.p>
         </div>
       )}

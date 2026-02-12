@@ -630,14 +630,27 @@ export const getRandomQuestionsInternal = internalQuery({
 			.withIndex("by_startDate_endDate_order", (q) => q.lt("startDate", now))
 			.filter((q) => q.or(q.eq(q.field("endDate"), undefined), q.gt(q.field("endDate"), now)))
 			.take(1);
+
 		if (activeTopics.length > 0) {
+			const existingIds = new Set(filtered.map(q => q._id));
 			for (const activeTopic of activeTopics) {
-				const topicQuestions = await ctx.db.query("questions").filter((q) => q.eq(q.field("topicId"), activeTopic._id)).take(1);
-				if (topicQuestions.length > 0) {
-					const topicQuestion = topicQuestions[0];
-					if (!filtered.includes(topicQuestion)) {
-						filtered.push(topicQuestion);
-					}
+				const topicQuestions = await ctx.db.query("questions")
+					.withIndex("by_topic", (q) => q.eq("topicId", activeTopic._id))
+					.filter((q) => applyFilters(q))
+					.take(10); // Take a few to find one that isn't filtered out
+
+				const validTopicQuestion = topicQuestions.find(q => {
+					if (existingIds.has(q._id)) return false;
+					if (seenIds.has(q._id)) return false;
+					if (hiddenIds.has(q._id)) return false;
+					if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
+					if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
+					return true;
+				});
+
+				if (validTopicQuestion) {
+					filtered.push(validTopicQuestion);
+					existingIds.add(validTopicQuestion._id);
 				}
 			}
 		}
