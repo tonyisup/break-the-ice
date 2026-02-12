@@ -45,7 +45,10 @@ export const getTopCurrentTopic = internalQuery({
 			.withIndex("by_startDate_endDate_order", (t) =>
 				t.lt("startDate", now)
 			)
-			.filter((q) => q.gt(q.field("endDate"), now))
+			.filter((q) => q.or(
+				q.eq(q.field("endDate"), undefined),
+				q.gt(q.field("endDate"), now)
+			))
 			.order("asc")
 			.first();
 	},

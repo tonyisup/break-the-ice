@@ -75,7 +75,8 @@ import {
   Cloud,
   Info,
   User,
-  Globe
+  Globe,
+  BookOpen
 } from 'lucide-react';
 
 // Export all icons for direct use
@@ -155,7 +156,8 @@ export {
   Cloud,
   Info,
   User,
-  Globe
+  Globe,
+  BookOpen
 };
 
 // Create a mapping of icon names to icon components for dynamic access
@@ -244,6 +246,7 @@ export const iconMap: Record<string, LucideIcon> = {
   Cloud,
   Info,
   User,
-  Globe
+  Globe,
+  BookOpen
 };
 

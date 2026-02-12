@@ -64,54 +64,6 @@ export const discardQuestion = mutation({
 	},
 });
 
-export const getNextRandomQuestionsUnsentForUser = action({
-	args: {
-		userId: v.id("users"),
-		count: v.float64(),
-		hidden: v.optional(v.array(v.id("questions"))),
-		hiddenStyles: v.optional(v.array(v.id("styles"))),
-		hiddenTones: v.optional(v.array(v.id("tones"))),
-		organizationId: v.optional(v.id("organizations")),
-		randomSeed: v.optional(v.float64()),
-	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args): Promise<any[]> => {
-		const { userId, ...rest } = args;
-		const seen = await ctx.runQuery(internal.internal.questions.getSentQuestionsForUser, {
-			userId: userId
-		});
-
-		return await getNextRandomQuestionsInternal(ctx, {
-			...rest,
-			seen,
-		});
-	},
-});
-
-export const getNextRandomQuestionsUnsent = action({
-	args: {
-		userId: v.id("users"),
-		count: v.float64(),
-		hidden: v.optional(v.array(v.id("questions"))),
-		hiddenStyles: v.optional(v.array(v.id("styles"))),
-		hiddenTones: v.optional(v.array(v.id("tones"))),
-		organizationId: v.optional(v.id("organizations")),
-		randomSeed: v.optional(v.float64()),
-	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args): Promise<any[]> => {
-
-		const seen = await ctx.runQuery(internal.internal.questions.getSentQuestionsForUser, {
-			userId: args.userId
-		});
-
-		return await getNextRandomQuestionsInternal(ctx, {
-			...args,
-			seen,
-		});
-	},
-});
-
 export const addPersonalQuestion = mutation({
 	args: {
 		customText: v.string(),
