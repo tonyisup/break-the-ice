@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, QueryCtx, action, ActionCtx } from "../_generated/server";
+import { mutation, query, QueryCtx, action, ActionCtx, internalAction } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
 import { embed } from "../lib/retriever";
@@ -61,21 +61,6 @@ export const discardQuestion = mutation({
 			await Promise.all([analytics, updateQuestion]);
 		}
 		return null;
-	},
-});
-
-
-
-export const getNextUnseenQuestions = action({
-	args: {
-		userId: v.id("users"),
-		count: v.number(),
-	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args): Promise<any[]> => {
-		const questions = await ctx.runQuery(internal.internal.questions.getUnseenQuestionsForUser, args);
-		
-		return questions.slice(0, args.count);
 	},
 });
 

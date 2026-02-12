@@ -37,7 +37,7 @@ export const getQuestionForUser = action({
 			});
 		} else if (user) {
 			// 4. For users without embeddings, check for unseen pool questions first
-			const unseenQuestions: any[] = await ctx.runAction(api.core.questions.getNextUnseenQuestions, {
+			const unseenQuestions: any[] = await ctx.runAction(internal.internal.questions.getNextUnseenQuestions, {
 				userId: user._id,
 				count: 1,
 			});

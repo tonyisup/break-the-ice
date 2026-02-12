@@ -689,3 +689,16 @@ export const getSentQuestionsForUser = internalQuery({
 	},
 });
 
+
+export const getNextUnseenQuestions = internalAction({
+	args: {
+		userId: v.id("users"),
+		count: v.number(),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args): Promise<any[]> => {
+		const questions = await ctx.runQuery(internal.internal.questions.getUnseenQuestionsForUser, args);
+		
+		return questions.slice(0, args.count);
+	},
+});
