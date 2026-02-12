@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
+import { motion, useScroll, useTransform, useSpring, useVelocity } from 'framer-motion';
 import { Heart, Share2, ThumbsDown } from '@/components/ui/icons/icons';
 import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
@@ -207,20 +207,15 @@ const LoadingSpinner = ({ gradient }: { gradient: string[] }) => {
 };
 
 const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone, containerRef }: { question: Doc<"questions">, style?: Doc<"styles"> | null, tone?: Doc<"tones"> | null, gradient: string[], isFavorite: boolean, isHidden: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void, containerRef: React.RefObject<HTMLDivElement | null> }) => {
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start end", "end start"]
-  });
+  const { scrollYProgress } = useScroll({ target: containerRef });
+  const scrollVelocity = useVelocity(scrollYProgress);
+  
+  // Map scroll velocity to rotation (-1 to 1 range usually covers most flicks)
+  const velocityRotate = useTransform(scrollVelocity, [-1, 0, 1], [-180, 0, 180]);
 
-  const baseRotate = useTransform(
-    scrollYProgress,
-    [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
-    [0, 25, -25, 25, -25, 25, -25, 25, -25, 25, 0]
-  );
-
-  const rotate = useSpring(baseRotate, {
-    stiffness: 30,
-    damping: 10,
+  const rotate = useSpring(velocityRotate, {
+    stiffness: 40,
+    damping: 12,
     mass: 3
   });
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
