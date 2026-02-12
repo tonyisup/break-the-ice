@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useQuery, useMutation } from "convex/react"
+import { Link } from "react-router-dom"
 import { api } from "../../../../convex/_generated/api"
 import { Doc, Id } from "../../../../convex/_generated/dataModel"
 import {
@@ -13,7 +14,8 @@ import {
 	Zap,
 	ShieldCheck,
 	Ban,
-	Pencil
+	Pencil,
+	Eye
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -144,7 +146,9 @@ export default function UsersPage() {
 										)}
 										<div className="flex flex-col">
 											<div className="flex items-center gap-2">
-												<span className="font-bold">{user.name || "Unknown"}</span>
+												<Link to={`/admin/users/${user._id}`} className="hover:underline decoration-blue-500 underline-offset-4">
+													<span className="font-bold">{user.name || "Unknown"}</span>
+												</Link>
 												{user.isAdmin && (
 													<Badge variant="default" className="bg-blue-500 hover:bg-blue-600 h-4 px-1 text-[8px] uppercase">Admin</Badge>
 												)}
@@ -192,6 +196,12 @@ export default function UsersPage() {
 													Grant Admin Access
 												</DropdownMenuItem>
 											)}
+											<DropdownMenuItem asChild>
+												<Link to={`/admin/users/${user._id}`}>
+													<Eye className="size-3.5" />
+													View Details
+												</Link>
+											</DropdownMenuItem>
 											<DropdownMenuItem className="gap-2" onClick={() => handleEdit(user)}>
 												<Pencil className="size-3.5" />
 												Edit User
