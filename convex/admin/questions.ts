@@ -84,6 +84,8 @@ export const updateQuestion = mutation({
 		tone: v.optional(v.string()),
 		styleId: v.optional(v.id("styles")),
 		toneId: v.optional(v.id("tones")),
+		topic: v.optional(v.string()),
+		topicId: v.optional(v.id("topics")),
 		status: v.optional(v.union(
 			v.literal("pending"),
 			v.literal("approved"),
@@ -96,7 +98,7 @@ export const updateQuestion = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
-		const { id, text, tags, style, tone, status, styleId, toneId } = args;
+		const { id, text, tags, style, tone, status, styleId, toneId, topic, topicId } = args;
 
 		const updateData: any = {};
 
@@ -132,12 +134,130 @@ export const updateQuestion = mutation({
 			updateData.toneId = toneId;
 		}
 
+		if (topic !== undefined) {
+			updateData.topic = topic;
+			if (!topicId) {
+				const topicDoc = await ctx.db.query("topics").withIndex("by_my_id", q => q.eq("id", topic)).unique();
+				if (topicDoc) updateData.topicId = topicDoc._id;
+			}
+		}
+
+		if (topicId !== undefined) {
+			updateData.topicId = topicId;
+		}
+
 		if (status !== undefined) {
 			updateData.status = status;
 		}
 
 		await ctx.db.patch(id, updateData);
 		return null;
+	},
+});
+
+// Get a single question by ID with resolved style/tone/topic for the admin detail page
+export const getQuestionById = query({
+	args: { id: v.id("questions") },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
+		const question = await ctx.db.get(args.id);
+		if (!question) return null;
+
+		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
+			question.styleId ? ctx.db.get(question.styleId) : null,
+			question.toneId ? ctx.db.get(question.toneId) : null,
+			question.topicId ? ctx.db.get(question.topicId) : null,
+		]);
+
+		return {
+			...question,
+			_style: styleDoc ? { _id: styleDoc._id, id: styleDoc.id, name: styleDoc.name, icon: styleDoc.icon, color: styleDoc.color } : null,
+			_tone: toneDoc ? { _id: toneDoc._id, id: toneDoc.id, name: toneDoc.name, icon: toneDoc.icon, color: toneDoc.color } : null,
+			_topic: topicDoc ? { _id: topicDoc._id, id: topicDoc.id, name: topicDoc.name, description: topicDoc.description } : null,
+		};
+	},
+});
+
+// Get analytics for a single question
+export const getQuestionAnalytics = query({
+	args: { questionId: v.id("questions") },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
+
+		const events = await ctx.db
+			.query("analytics")
+			.withIndex("by_questionId_event_timestamp", (q) => q.eq("questionId", args.questionId))
+			.collect();
+
+		// Count events by type
+		const seenEvents = events.filter(e => e.event === "seen");
+		const likedEvents = events.filter(e => e.event === "liked");
+		const sharedEvents = events.filter(e => e.event === "shared");
+		const hiddenEvents = events.filter(e => e.event === "hidden");
+
+		// View duration stats
+		const durations = seenEvents.map(e => e.viewDuration).filter(d => d > 0);
+		const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+		const maxDuration = durations.length > 0 ? Math.max(...durations) : 0;
+
+		// Daily breakdown for last 30 days
+		const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+		const recentEvents = events.filter(e => e.timestamp >= thirtyDaysAgo);
+
+		const dailyMap = new Map<string, { seen: number; liked: number; shared: number; hidden: number }>();
+		for (const e of recentEvents) {
+			const day = new Date(e.timestamp).toISOString().split('T')[0];
+			if (!dailyMap.has(day)) {
+				dailyMap.set(day, { seen: 0, liked: 0, shared: 0, hidden: 0 });
+			}
+			const counts = dailyMap.get(day)!;
+			if (e.event === "seen") counts.seen++;
+			else if (e.event === "liked") counts.liked++;
+			else if (e.event === "shared") counts.shared++;
+			else if (e.event === "hidden") counts.hidden++;
+		}
+
+		// Unique users who interacted
+		const uniqueUsers = new Set(events.filter(e => e.userId).map(e => e.userId!.toString()));
+		const uniqueSessions = new Set(events.filter(e => e.sessionId).map(e => e.sessionId!));
+
+		// Get userQuestion records for this question
+		const userQuestions = await ctx.db
+			.query("userQuestions")
+			.withIndex("by_questionId", (q) => q.eq("questionId", args.questionId))
+			.collect();
+
+		const statusDistribution = {
+			unseen: userQuestions.filter(uq => uq.status === "unseen").length,
+			seen: userQuestions.filter(uq => uq.status === "seen").length,
+			liked: userQuestions.filter(uq => uq.status === "liked").length,
+			hidden: userQuestions.filter(uq => uq.status === "hidden").length,
+			sent: userQuestions.filter(uq => uq.status === "sent").length,
+		};
+
+		return {
+			totals: {
+				seen: seenEvents.length,
+				liked: likedEvents.length,
+				shared: sharedEvents.length,
+				hidden: hiddenEvents.length,
+			},
+			viewDuration: {
+				average: Math.round(avgDuration),
+				max: Math.round(maxDuration),
+				totalViews: durations.length,
+			},
+			reach: {
+				uniqueUsers: uniqueUsers.size,
+				uniqueSessions: uniqueSessions.size,
+			},
+			userStatusDistribution: statusDistribution,
+			dailyBreakdown: Array.from(dailyMap.entries())
+				.sort(([a], [b]) => a.localeCompare(b))
+				.map(([date, counts]) => ({ date, ...counts })),
+		};
 	},
 });
 

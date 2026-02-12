@@ -35,7 +35,7 @@ export function UpgradeCTA({ bgGradient, title, description, onUpgrade }: Upgrad
         </Button>
 
         <p className="text-xs text-gray-500 dark:text-gray-500 italic">
-          Get up to 100 AI generations per month and help support the project!
+          Get up to {import.meta.env.VITE_MAX_CASUAL_AIGEN} AI generations per month and help support the project!
         </p>
       </div>
     </div>

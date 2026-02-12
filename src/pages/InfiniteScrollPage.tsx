@@ -692,7 +692,7 @@ export default function InfiniteScrollPage() {
               title="Want more questions?"
               featureHighlight={{
                 pre: "Sign in to get",
-                highlight: "10 free AI generations",
+                highlight: `${import.meta.env.VITE_MAX_FREE_AIGEN} free AI generations`,
                 post: "every month!"
               }}
             />
@@ -703,8 +703,8 @@ export default function InfiniteScrollPage() {
               bgGradient={bgGradient}
               title="Generation Limit Reached"
               description={currentUser?.subscriptionTier === 'casual'
-                ? "You've reached your monthly limit for the Casual plan. Contact support if you need more!"
-                : "You've used all your free AI generations for this month."
+                ? `You've reached your monthly ${import.meta.env.VITE_MAX_CASUAL_AIGEN} limit for the Casual plan. Contact support if you need more!`
+                : `You've used all ${import.meta.env.VITE_MAX_FREE_AIGEN} of your free AI generations for this month.`
               }
               onUpgrade={() => {
                 // Link to upgrade flow or settings

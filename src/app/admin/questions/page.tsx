@@ -42,6 +42,7 @@ import { Icon, IconComponent } from "@/components/ui/icons/icon"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { Link } from "react-router-dom"
 
 export default function QuestionsPage() {
 	const allQuestions = useQuery(api.admin.questions.getQuestions)
@@ -392,7 +393,9 @@ export default function QuestionsPage() {
 										<tr key={q._id} className="block md:table-row hover:bg-muted/30 transition-colors group">
 											<td className="block md:table-cell px-4 md:px-6 py-3 md:py-4">
 												<div className="md:hidden text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">ID</div>
-												<code className="text-xs text-muted-foreground">{q._id}</code>
+												<Link to={`/admin/questions/${q._id}`} className="hover:underline">
+													<code className="text-xs text-primary/80 hover:text-primary transition-colors">{q._id}</code>
+												</Link>
 											</td>
 											<td className="block md:table-cell px-4 md:px-6 py-3 md:py-4">
 												<div className="md:hidden text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Question</div>
@@ -643,7 +646,7 @@ export default function QuestionsPage() {
 											<Badge variant="secondary" className="capitalize text-[10px] font-normal px-2 py-0">
 												{q.status || "Public"}
 											</Badge>
-											<span>ID: {q._id.slice(0, 8)}...</span>
+											<span>ID: <Link to={`/admin/questions/${q._id}`} className="hover:underline text-primary/80 hover:text-primary">{q._id.slice(0, 8)}...</Link></span>
 										</div>
 									)}
 								</div>
