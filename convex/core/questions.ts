@@ -64,6 +64,107 @@ export const discardQuestion = mutation({
 	},
 });
 
+export const getUnseenQuestionsForUser = query({
+	args: {
+		userId: v.id("users"),
+		count: v.number(),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args) => {
+		const { userId, count } = args;
+		const unseenUserQuestions = await ctx.db
+			.query("userQuestions")
+			.withIndex("by_userId_status_updatedAt", (q) =>
+				q.eq("userId", userId).eq("status", "unseen")
+			)
+			.take(count);
+
+		const questions = await Promise.all(
+			unseenUserQuestions.map((uq) => ctx.db.get(uq.questionId))
+		);
+
+		return questions
+			.filter((q) => q !== null && !q.prunedAt && q.text)
+			.slice(0, count);
+	},
+});
+
+export const getSentQuestionsForUser = query({
+	args: {
+		userId: v.id("users"),
+	},
+	returns: v.array(v.id("questions")),
+	handler: async (ctx, args) => {
+		const { userId } = args;
+		const sentQuestions = await ctx.db
+			.query("userQuestions")
+			.withIndex("by_userId_status_updatedAt", (q) =>
+				q.eq("userId", userId).eq("status", "sent")
+			)
+			.collect();
+		return sentQuestions.map((q) => q.questionId);
+	},
+});
+
+export const getNextUnseenQuestions = action({
+	args: {
+		userId: v.id("users"),
+		count: v.number(),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args): Promise<any[]> => {
+		const questions = await ctx.runQuery(api.core.questions.getUnseenQuestionsForUser, args);
+		
+		return questions.slice(0, args.count);
+	},
+});
+
+export const getNextRandomQuestionsUnsentForUser = action({
+	args: {
+		userId: v.id("users"),
+		count: v.number(),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args): Promise<any[]> => {
+		const { userId, count } = args;
+		const seen = await ctx.runQuery(api.core.questions.getSentQuestionsForUser, {
+			userId: userId
+		});
+
+		if (seen.length === 0) {
+			return await ctx.runAction(api.core.questions.getNextRandomQuestions, {
+				count: count
+			});
+		}
+
+		return await ctx.runAction(api.core.questions.getNextRandomQuestions, {
+			seen: seen,
+			count: count,
+		});
+	},
+});
+
+export const getNextRandomQuestionsUnsent = action({
+	args: {
+		count: v.number(),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args): Promise<any[]> => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			throw new Error("Not authenticated");
+		}
+		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
+		if (!user) {
+			throw new Error("User not found");
+		}
+		return await ctx.runAction(api.core.questions.getNextRandomQuestionsUnsentForUser, {
+			userId: user._id,
+			count: args.count
+		});
+	},
+});
+
 export const addPersonalQuestion = mutation({
 	args: {
 		customText: v.string(),
@@ -387,7 +488,7 @@ export const getNextQuestions = query({
 		organizationId: v.optional(v.id("organizations")),
 	},
 	returns: v.array(v.any()),
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<any[]> => {
 		const { count, style, tone, seen, hidden, organizationId } = args;
 		const seenIds = new Set(seen ?? []);
 
@@ -843,7 +944,7 @@ export const getNearestQuestionsByEmbedding = action({
 		count: v.optional(v.number()),
 	},
 	returns: v.array(v.any()),
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<any[]> => {
 		return await getNearestQuestionsByEmbeddingInternal(ctx, args);
 	},
 });
@@ -856,7 +957,7 @@ export const getNextQuestionsByEmbedding = action({
 		userId: v.optional(v.id("users")),
 	},
 	returns: v.array(v.any()),
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<any[]> => {
 		const { style, tone, count, userId } = args;
 		if (!userId) {
 			return [];
