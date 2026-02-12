@@ -42,6 +42,7 @@ import { AnalyticsManager } from "./components/AnalyticsManager";
 import GeneratorPage from "./app/admin/generator/page.tsx";
 import { Toaster } from "sonner";
 import UserDetailsPage from "./app/admin/users/[userId]/page.tsx";
+import QuestionDetailsPage from "./app/admin/questions/[questionId]/page.tsx";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -68,6 +69,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route element={<AdminLayout />}>
                   <Route path="/admin" element={<AdminPage />} />
                   <Route path="/admin/questions" element={<QuestionsPage />} />
+                  <Route path="/admin/questions/:questionId" element={<QuestionDetailsPage />} />
                   <Route path="/admin/tags" element={<TagsPage />} />
                   <Route path="/admin/topics" element={<TopicsPage />} />
                   <Route path="/admin/styles" element={<StylesPage />} />
