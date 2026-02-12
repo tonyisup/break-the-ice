@@ -646,3 +646,59 @@ export const getQuestionTimeRange = internalQuery({
 	},
 });
 
+
+export const getUnseenQuestionsForUser = internalQuery({
+	args: {
+		userId: v.id("users"),
+		count: v.number(),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args) => {
+		const { userId, count } = args;
+		const unseenUserQuestions = await ctx.db
+			.query("userQuestions")
+			.withIndex("by_userId_status_updatedAt", (q) =>
+				q.eq("userId", userId).eq("status", "unseen")
+			)
+			.take(count);
+
+		const questions = await Promise.all(
+			unseenUserQuestions.map((uq) => ctx.db.get(uq.questionId))
+		);
+
+		return questions
+			.filter((q) => q !== null && !q.prunedAt && q.text)
+			.slice(0, count);
+	},
+});
+
+export const getSentQuestionsForUser = internalQuery({
+	args: {
+		userId: v.id("users"),
+	},
+	returns: v.array(v.id("questions")),
+	handler: async (ctx, args) => {
+		const { userId } = args;
+		const sentQuestions = await ctx.db
+			.query("userQuestions")
+			.withIndex("by_userId_status_updatedAt", (q) =>
+				q.eq("userId", userId).eq("status", "sent")
+			)
+			.collect();
+		return sentQuestions.map((q) => q.questionId);
+	},
+});
+
+
+export const getNextUnseenQuestions = internalAction({
+	args: {
+		userId: v.id("users"),
+		count: v.number(),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args): Promise<any[]> => {
+		const questions = await ctx.runQuery(internal.internal.questions.getUnseenQuestionsForUser, args);
+		
+		return questions.slice(0, args.count);
+	},
+});

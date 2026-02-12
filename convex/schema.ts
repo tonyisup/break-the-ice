@@ -159,7 +159,8 @@ export default defineSchema({
       v.literal("unseen"),
       v.literal("seen"),
       v.literal("liked"),
-      v.literal("hidden")
+      v.literal("hidden"),
+      v.literal("sent")
     ),
     viewDuration: v.optional(v.number()),
     seenCount: v.optional(v.number()),

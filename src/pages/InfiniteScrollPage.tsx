@@ -15,6 +15,8 @@ import { SignInCTA } from "@/components/SignInCTA";
 import { UpgradeCTA } from "@/components/UpgradeCTA";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
 import { RefineResultsCTA } from "@/components/RefineResultsCTA";
+import { ERROR_MESSAGES, ERROR_CODES } from "../../convex/constants";
+import { ConvexError } from "convex/values";
 
 const compareByTextLength = (a: Doc<"questions">, b: Doc<"questions">) =>
   (a.text || a.customText || "").length - (b.text || b.customText || "").length;
@@ -256,6 +258,20 @@ export default function InfiniteScrollPage() {
           return;
         }
 
+        // Proactively check for AI limit if we need more
+        if (currentUser?.isAiLimitReached) {
+          setShowUpgradeCTA(true);
+          setHasMore(false);
+
+          // If we have some DB questions and it was the first pull, we need to show them now
+          if (isFirstPull && combinedQuestions.length > 0) {
+            combinedQuestions.sort(compareByTextLength);
+            setQuestions(combinedQuestions);
+            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+          }
+          return;
+        }
+
         try {
           const generated = await generateAIQuestions({});
 
@@ -267,10 +283,14 @@ export default function InfiniteScrollPage() {
 
           if (isFirstPull) {
             combinedQuestions = [...combinedQuestions, ...uniqueGenerated];
-            combinedQuestions.sort(compareByTextLength);
 
-            setQuestions(combinedQuestions);
-            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+            if (combinedQuestions.length === 0) {
+              setHasMore(false);
+            } else {
+              combinedQuestions.sort(compareByTextLength);
+              setQuestions(combinedQuestions);
+              setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+            }
           } else if (uniqueGenerated.length > 0) {
             setQuestions(prev => {
               const existingIds = new Set(prev.map(q => q._id));
@@ -283,18 +303,34 @@ export default function InfiniteScrollPage() {
               uniqueGenerated.forEach(q => next.add(q._id));
               return next;
             });
+          } else if (dbQuestions.length === 0) {
+            // If both DB and AI returned nothing, we're likely at the end
+            setHasMore(false);
           }
         } catch (err) {
           console.error("AI Generation failed:", err);
           if (currentRequestId !== requestIdRef.current) return;
 
-          const errorMessage = err instanceof Error ? err.message : String(err);
+          const errorMessage = typeof err === 'string' ? err : (err instanceof Error ? err.message : JSON.stringify(err));
+          const errorCode = err instanceof ConvexError ? (err.data as any)?.code : null;
+          const errorDataMessage = err instanceof ConvexError ? (err.data as any)?.message : null;
+
+          // Use structured error code if available, otherwise fall back to exact constant match or conservative substring check
+          const isLimitError = errorCode === ERROR_CODES.AI_LIMIT_REACHED || 
+            errorMessage === ERROR_MESSAGES.AI_LIMIT_REACHED || 
+            errorDataMessage === ERROR_MESSAGES.AI_LIMIT_REACHED ||
+            errorMessage.includes("AI generation limit reached");
+
           if (errorMessage.includes("logged in")) {
             setShowAuthCTA(true);
             setHasMore(false);
-          } else if (errorMessage.toLowerCase().includes("limit")) {
+          } else if (isLimitError) {
             setShowUpgradeCTA(true);
             setHasMore(false);
+          } else if (dbQuestions.length === 0) {
+            // Generic failure but no DB questions left, stop trying to load more
+            setHasMore(false);
+            toast.error("Failed to generate more questions.");
           }
 
           // If AI failed and it was first pull, show what we have from DB
@@ -303,6 +339,8 @@ export default function InfiniteScrollPage() {
 
             setQuestions(combinedQuestions);
             setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+          } else if (isFirstPull && combinedQuestions.length === 0) {
+            setHasMore(false);
           }
         }
       } else if (isFirstPull) {
@@ -322,7 +360,7 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, isLoading, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, hasMore, showAuthCTA, showUpgradeCTA, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked]);
+  }, [convex, isLoading, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, hasMore, showAuthCTA, showUpgradeCTA, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser]);
 
   // Initial load
   useEffect(() => {

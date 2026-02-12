@@ -422,4 +422,59 @@ describe('InfiniteScrollPage', () => {
     expect(lastFourCalls[2][0].question.text).toBe('Long second batch question');
     expect(lastFourCalls[3][0].question.text).toBe('S2');
   });
+
+  it('shows UpgradeCTA when AI limit is reached during initial load', async () => {
+    (useConvex as any).mockReturnValue({
+      query: vi.fn(),
+      action: vi.fn().mockResolvedValue([]), // DB returns nothing
+    });
+
+    const limitError = new Error('AI generation limit reached');
+    const generateAction = vi.fn().mockRejectedValue(limitError);
+    (useAction as any).mockReturnValue(generateAction);
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    // Should automatically try to load first batch, fail, and show UpgradeCTA
+    await waitFor(() => {
+      expect(screen.getByText('Generation Limit Reached')).toBeDefined();
+      expect(screen.queryByText('Load More')).toBeNull();
+    });
+  });
+
+  it('proactively shows UpgradeCTA if isAiLimitReached is true and DB is empty', async () => {
+    (useConvex as any).mockReturnValue({
+      query: vi.fn(),
+      action: vi.fn().mockResolvedValue([]), // DB returns nothing
+    });
+
+    (useQuery as any).mockImplementation((queryFn: any) => {
+      if (queryFn === 'getCurrentUser') return {
+        _id: 'u1',
+        email: 'test@example.com',
+        isAiLimitReached: true,
+        aiLimit: 10,
+        aiUsage: { count: 10 }
+      };
+      if (queryFn === 'getStyles') return mockStyles;
+      if (queryFn === 'getTones') return mockTones;
+      return undefined;
+    });
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    // Should immediately show UpgradeCTA if it tries to load and finds no DB questions
+    await waitFor(() => {
+      expect(screen.getByText('Generation Limit Reached')).toBeDefined();
+      expect(screen.queryByText('Load More')).toBeNull();
+    });
+  });
 });

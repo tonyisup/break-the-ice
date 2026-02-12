@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, QueryCtx, action, ActionCtx } from "../_generated/server";
+import { mutation, query, QueryCtx, action, ActionCtx, internalAction } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
 import { embed } from "../lib/retriever";
@@ -61,6 +61,61 @@ export const discardQuestion = mutation({
 			await Promise.all([analytics, updateQuestion]);
 		}
 		return null;
+	},
+});
+
+export const getNextRandomQuestionsUnsentForUser = action({
+	args: {
+		userId: v.id("users"),
+		count: v.float64(),
+		hidden: v.optional(v.array(v.id("questions"))),
+		hiddenStyles: v.optional(v.array(v.id("styles"))),
+		hiddenTones: v.optional(v.array(v.id("tones"))),
+		organizationId: v.optional(v.id("organizations")),
+		randomSeed: v.optional(v.float64()),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args): Promise<any[]> => {
+		const { userId, ...rest } = args;
+		const seen = await ctx.runQuery(internal.internal.questions.getSentQuestionsForUser, {
+			userId: userId
+		});
+
+		return await getNextRandomQuestionsInternal(ctx, {
+			...rest,
+			seen,
+		});
+	},
+});
+
+export const getNextRandomQuestionsUnsent = action({
+	args: {
+		count: v.float64(),
+		hidden: v.optional(v.array(v.id("questions"))),
+		hiddenStyles: v.optional(v.array(v.id("styles"))),
+		hiddenTones: v.optional(v.array(v.id("tones"))),
+		organizationId: v.optional(v.id("organizations")),
+		randomSeed: v.optional(v.float64()),
+	},
+	returns: v.array(v.any()),
+	handler: async (ctx, args): Promise<any[]> => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			throw new Error("Not authenticated");
+		}
+		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
+		if (!user) {
+			throw new Error("User not found");
+		}
+
+		const seen = await ctx.runQuery(internal.internal.questions.getSentQuestionsForUser, {
+			userId: user._id
+		});
+
+		return await getNextRandomQuestionsInternal(ctx, {
+			...args,
+			seen,
+		});
 	},
 });
 
@@ -181,6 +236,51 @@ export const getSimilarQuestions = query({
 	},
 });
 
+/**
+ * Shared logic for getting random questions.
+ * Extracted into a helper to avoid action-to-action chaining.
+ */
+async function getNextRandomQuestionsInternal(
+	ctx: ActionCtx,
+	args: {
+		count: number;
+		seen?: Id<"questions">[];
+		hidden?: Id<"questions">[];
+		hiddenStyles?: Id<"styles">[];
+		hiddenTones?: Id<"tones">[];
+		organizationId?: Id<"organizations">;
+		randomSeed?: number;
+	}
+): Promise<any[]> {
+	const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed = Math.random() } = args;
+
+	// 1. Get time range for randomization
+	const { minTime, maxTime } = await ctx.runQuery(internal.internal.questions.getQuestionTimeRange);
+
+	let startTime = 0;
+	if (maxTime > minTime) {
+		const normalizedSeed = randomSeed - Math.floor(randomSeed);
+		startTime = minTime + normalizedSeed * (maxTime - minTime);
+	}
+
+	// 2. Fetch candidates using internal query
+	const candidates = await ctx.runQuery(internal.internal.questions.getRandomQuestionsInternal, {
+		count,
+		startTime,
+		seen,
+		hidden,
+		hiddenStyles,
+		hiddenTones,
+		organizationId,
+	});
+
+	// 3. Shuffle results (deterministic based on seed)
+	const results = [...candidates];
+	shuffleArray(results, randomSeed);
+
+	return results.slice(0, count);
+}
+
 export const getNextRandomQuestions = action({
 	args: {
 		count: v.float64(),
@@ -192,33 +292,7 @@ export const getNextRandomQuestions = action({
 		randomSeed: v.optional(v.float64()),
 	},
 	handler: async (ctx, args): Promise<any[]> => {
-		const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed = Math.random() } = args;
-
-		// 1. Get time range for randomization
-		const { minTime, maxTime } = await ctx.runQuery(internal.internal.questions.getQuestionTimeRange);
-
-		let startTime = 0;
-		if (maxTime > minTime) {
-			const normalizedSeed = randomSeed - Math.floor(randomSeed);
-			startTime = minTime + normalizedSeed * (maxTime - minTime);
-		}
-
-		// 2. Fetch candidates using internal query
-		const candidates = await ctx.runQuery(internal.internal.questions.getRandomQuestionsInternal, {
-			count,
-			startTime,
-			seen,
-			hidden,
-			hiddenStyles,
-			hiddenTones,
-			organizationId,
-		});
-
-		// 3. Shuffle results (deterministic based on seed)
-		const results = [...candidates];
-		shuffleArray(results, randomSeed);
-
-		return results.slice(0, count);
+		return await getNextRandomQuestionsInternal(ctx, args);
 	},
 });
 
@@ -387,7 +461,7 @@ export const getNextQuestions = query({
 		organizationId: v.optional(v.id("organizations")),
 	},
 	returns: v.array(v.any()),
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<any[]> => {
 		const { count, style, tone, seen, hidden, organizationId } = args;
 		const seenIds = new Set(seen ?? []);
 
@@ -843,7 +917,7 @@ export const getNearestQuestionsByEmbedding = action({
 		count: v.optional(v.number()),
 	},
 	returns: v.array(v.any()),
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<any[]> => {
 		return await getNearestQuestionsByEmbeddingInternal(ctx, args);
 	},
 });
@@ -856,7 +930,7 @@ export const getNextQuestionsByEmbedding = action({
 		userId: v.optional(v.id("users")),
 	},
 	returns: v.array(v.any()),
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<any[]> => {
 		const { style, tone, count, userId } = args;
 		if (!userId) {
 			return [];

@@ -35,9 +35,18 @@ export const getQuestionForUser = action({
 				userId: user._id,
 				randomSeed: Math.random(),
 			});
-		} else {
-			// 4. For non-registered subscribers, just get any random question
-			const randomQuestions: any[] = await ctx.runAction(api.core.questions.getNextRandomQuestions, {
+		} else if (user) {
+			// 4. For users without embeddings, check for unseen pool questions first
+			const unseenQuestions: any[] = await ctx.runAction(internal.internal.questions.getNextUnseenQuestions, {
+				userId: user._id,
+				count: 1,
+			});
+			question = unseenQuestions[0];
+		}
+
+		// 5. Final fallback for everyone (unregistered or no unseen/personalized questions)
+		if (!question) {
+			const randomQuestions: any[] = await ctx.runAction(api.core.questions.getNextRandomQuestionsUnsent, {
 				count: 1,
 			});
 			question = randomQuestions[0];
