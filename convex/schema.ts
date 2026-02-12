@@ -119,7 +119,7 @@ export default defineSchema({
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 384,
-      filterFields: ["styleId", "toneId"],
+      filterFields: ["status", "styleId", "toneId"],
     })
     .index("by_author", ["authorId", "status"])
     .index("by_prunedAt_status_text", ["prunedAt", "status", "text"])

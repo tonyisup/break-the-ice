@@ -14,8 +14,8 @@ interface ModernQuestionCardProps {
   isFavorite: boolean;
   isHidden?: boolean;
   gradient: string[];
-  style?: Doc<"styles">;
-  tone?: Doc<"tones">;
+  style?: Doc<"styles"> | null;
+  tone?: Doc<"tones"> | null;
   onToggleFavorite: () => void;
   onToggleHidden: () => void;
   onShare?: () => void;
@@ -204,7 +204,7 @@ const LoadingSpinner = ({ gradient }: { gradient: string[] }) => {
   );
 };
 
-const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone }: { question: Doc<"questions">, style?: Doc<"styles">, tone?: Doc<"tones">, gradient: string[], isFavorite: boolean, isHidden: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void }) => {
+const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone }: { question: Doc<"questions">, style?: Doc<"styles"> | null, tone?: Doc<"tones"> | null, gradient: string[], isFavorite: boolean, isHidden: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void }) => {
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
@@ -252,7 +252,7 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden
           }}
         >
           <div
-            title={style && style.name}
+            title={style && style.name || "style"}
             className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
             onClick={handleClickStyle}
           >
@@ -271,7 +271,7 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden
           }}
         >
           <div
-            title={tone && tone.name}
+            title={tone && tone.name || "tone"}
             className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
             onClick={handleClickTone}
           >

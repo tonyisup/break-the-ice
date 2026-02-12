@@ -1,7 +1,7 @@
 import router from "./router";
 import { usersWebhook } from "./clerk";
 import { httpAction } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 const http = router;
 
@@ -23,7 +23,7 @@ export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
 	}
 
 	try {
-		const result = await ctx.runAction(api.core.newsletter.getQuestionForUser, { email });
+		const result = await ctx.runAction(internal.internal.newsletter.getQuestionForUser, { email });
 		return new Response(JSON.stringify(result), {
 			status: 200,
 			headers: { "Content-Type": "application/json" },

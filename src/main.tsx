@@ -41,6 +41,7 @@ import FeedbackButton from "./components/FeedbackButton";
 import { AnalyticsManager } from "./components/AnalyticsManager";
 import GeneratorPage from "./app/admin/generator/page.tsx";
 import { Toaster } from "sonner";
+import UserDetailsPage from "./app/admin/users/[userId]/page.tsx";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -79,6 +80,7 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/admin/prune/settings" element={<PruneSettingsPage />} />
                   <Route path="/admin/pool" element={<PoolPage />} />
                   <Route path="/admin/generator" element={<GeneratorPage />} />
+                  <Route path="/admin/users/:userId" element={<UserDetailsPage />} />
                 </Route>
 
 
