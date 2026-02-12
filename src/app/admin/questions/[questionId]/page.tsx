@@ -23,7 +23,7 @@ import {
 	Send,
 } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -208,8 +208,9 @@ export default function QuestionDetailsPage() {
 	const [remixing, setRemixing] = useState(false)
 	const [hasChanges, setHasChanges] = useState(false)
 
-	// Populate form when question loads
-	useEffect(() => {
+	const hasInitialized = useRef(false)
+
+	const handleReset = () => {
 		if (question) {
 			setEditText(question.text || question.customText || "")
 			setEditStyle(question.style || "")
@@ -217,6 +218,20 @@ export default function QuestionDetailsPage() {
 			setEditTopic(question.topic || "")
 			setEditStatus(question.status || "public")
 			setEditTags((question.tags || []).join(", "))
+			toast.info("Form reset to database version")
+		}
+	}
+
+	// Populate form when question loads (only once)
+	useEffect(() => {
+		if (question && !hasInitialized.current) {
+			setEditText(question.text || question.customText || "")
+			setEditStyle(question.style || "")
+			setEditTone(question.tone || "")
+			setEditTopic(question.topic || "")
+			setEditStatus(question.status || "public")
+			setEditTags((question.tags || []).join(", "))
+			hasInitialized.current = true
 		}
 	}, [question])
 
@@ -364,6 +379,17 @@ export default function QuestionDetailsPage() {
 					>
 						{remixing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
 						Remix with AI
+					</Button>
+
+					<Button
+						variant="outline"
+						size="sm"
+						className="gap-2"
+						onClick={handleReset}
+						title="Reset form to database version"
+					>
+						<Activity className="size-4" />
+						Reset
 					</Button>
 
 					<Button size="sm" className="gap-2" onClick={handleSave} disabled={saving || !hasChanges}>
@@ -725,16 +751,7 @@ export default function QuestionDetailsPage() {
 							<Button
 								variant="secondary"
 								size="sm"
-								onClick={() => {
-									if (question) {
-										setEditText(question.text || question.customText || "")
-										setEditStyle(question.style || "")
-										setEditTone(question.tone || "")
-										setEditTopic(question.topic || "")
-										setEditStatus(question.status || "public")
-										setEditTags((question.tags || []).join(", "))
-									}
-								}}
+								onClick={handleReset}
 							>
 								Discard
 							</Button>
