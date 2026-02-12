@@ -562,7 +562,6 @@ export const checkSimilarity = internalAction({
 export const getRandomQuestionsInternal = internalQuery({
 	args: {
 		count: v.number(),
-		startTime: v.number(),
 		seen: v.array(v.id("questions")),
 		hidden: v.array(v.id("questions")),
 		hiddenStyles: v.array(v.id("styles")),
@@ -570,7 +569,7 @@ export const getRandomQuestionsInternal = internalQuery({
 		organizationId: v.optional(v.id("organizations")),
 	},
 	handler: async (ctx, args) => {
-		const { count, startTime, seen, hidden, hiddenStyles, hiddenTones, organizationId } = args;
+		const { count, seen, hidden, hiddenStyles, hiddenTones, organizationId } = args;
 		const seenIds = new Set(seen);
 		const hiddenIds = new Set(hidden);
 		const hiddenStyleIds = new Set(hiddenStyles);
@@ -589,7 +588,6 @@ export const getRandomQuestionsInternal = internalQuery({
 		// 1. Fetch candidates from random start point
 		const candidatesWithEmbeddings = await ctx.db
 			.query("questions")
-			.withIndex("by_creation_time", (q) => q.gt("_creationTime", startTime))
 			.filter((q) => applyFilters(q))
 			.take(count * 5);
 

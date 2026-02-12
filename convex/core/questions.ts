@@ -199,19 +199,10 @@ async function getNextRandomQuestionsInternal(
 ): Promise<any[]> {
 	const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed = Math.random() } = args;
 
-	// 1. Get time range for randomization
-	const { minTime, maxTime } = await ctx.runQuery(internal.internal.questions.getQuestionTimeRange);
-
-	let startTime = 0;
-	if (maxTime > minTime) {
-		const normalizedSeed = randomSeed - Math.floor(randomSeed);
-		startTime = minTime + normalizedSeed * (maxTime - minTime);
-	}
 
 	// 2. Fetch candidates using internal query
 	const candidates = await ctx.runQuery(internal.internal.questions.getRandomQuestionsInternal, {
 		count,
-		startTime,
 		seen,
 		hidden,
 		hiddenStyles,

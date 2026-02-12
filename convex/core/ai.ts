@@ -113,12 +113,17 @@ export const generateAIQuestions = action({
 		count: v.number(),
 		selectedTags: v.array(v.string()),
 		currentQuestion: v.optional(v.string()),
-		styleId: v.id("styles"),
-		toneId: v.id("tones"),
+		excludedQuestions: v.optional(v.array(v.string())),
+		styleId: v.optional(v.id("styles")),
+		style: v.optional(v.string()),
+		toneId: v.optional(v.id("tones")),
+		tone: v.optional(v.string()),
 		topicId: v.optional(v.id("topics")),
+		topic: v.optional(v.string()),
+		bypassUsageCheck: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
-		const { count, selectedTags, currentQuestion, styleId, toneId, topicId } = args;
+		const { count, selectedTags, currentQuestion, excludedQuestions, styleId, toneId, topicId, bypassUsageCheck } = args;
 
 		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
 
@@ -128,14 +133,24 @@ export const generateAIQuestions = action({
 
 		let usageIncremented = false;
 		try {
-			await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
-				userId: user._id,
-			});
-			usageIncremented = true;
+			if (!bypassUsageCheck) {
+				await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+					userId: user._id,
+				});
+				usageIncremented = true;
+			}
 
-			const style = (await ctx.runQuery(api.core.styles.getStyleById, { id: styleId }));
-			const tone = (await ctx.runQuery(api.core.tones.getToneById, { id: toneId }));
-			const topic = topicId ? (await ctx.runQuery(api.core.topics.getTopicById, { id: topicId })) : null;
+			const style = styleId 
+				? (await ctx.runQuery(api.core.styles.getStyleById, { id: styleId }))
+				: args.style ? (await ctx.runQuery(api.core.styles.getStyle, { id: args.style })) : null;
+				
+			const tone = toneId
+				? (await ctx.runQuery(api.core.tones.getToneById, { id: toneId }))
+				: args.tone ? (await ctx.runQuery(api.core.tones.getTone, { id: args.tone })) : null;
+				
+			const topic = topicId 
+				? (await ctx.runQuery(api.core.topics.getTopicById, { id: topicId }))
+				: args.topic ? (await ctx.runQuery(api.core.topics.getTopic, { id: args.topic })) : null;
 
 			if (!style || !tone) {
 				throw new Error("Failed to generate AI question: No style or tone found.");
@@ -155,8 +170,11 @@ export const generateAIQuestions = action({
 			prompt += `\nTags: ${selectedTags.join(", ")}`;
 		}
 
-		if (currentQuestion && currentQuestion.length > 0) {
-			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${currentQuestion}`;
+		const excluded = [...(excludedQuestions ?? [])];
+		if (currentQuestion) excluded.push(currentQuestion);
+
+		if (excluded.length > 0) {
+			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${excluded.join('\n- ')}`;
 		}
 
 		// Retry logic for AI generation
