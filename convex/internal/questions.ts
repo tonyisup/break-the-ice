@@ -624,6 +624,23 @@ export const getRandomQuestionsInternal = internalQuery({
 			return true;
 		});
 
+		// pull any active topics, find a question that has that topic, and inject it if there is one
+		const now = Date.now();
+		const activeTopics = await ctx.db.query("topics")
+			.withIndex("by_startDate_endDate_order", (q) => q.lt("startDate", now))
+			.filter((q) => q.or(q.eq(q.field("endDate"), undefined), q.gt(q.field("endDate"), now)))
+			.take(1);
+		if (activeTopics.length > 0) {
+			for (const activeTopic of activeTopics) {
+				const topicQuestions = await ctx.db.query("questions").filter((q) => q.eq(q.field("topicId"), activeTopic._id)).take(1);
+				if (topicQuestions.length > 0) {
+					const topicQuestion = topicQuestions[0];
+					if (!filtered.includes(topicQuestion)) {
+						filtered.push(topicQuestion);
+					}
+				}
+			}
+		}
 
 		return filtered;
 	},

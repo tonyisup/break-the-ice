@@ -14,8 +14,11 @@ import {
 	BookOpen,
 	Calendar,
 	LayoutGrid,
-	List
+	List,
+	Smile
 } from "lucide-react"
+import { IconComponent, Icon } from "@/components/ui/icons/icon"
+import { IconPicker } from "@/components/ui/icon-picker"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -56,7 +59,8 @@ export default function TopicsPage() {
 		promptGuidanceForAI: "",
 		order: 0,
 		startDate: "",
-		endDate: ""
+		endDate: "",
+		icon: "Smile"
 	})
 
 	const filteredTopics = topics?.filter(t =>
@@ -85,7 +89,8 @@ export default function TopicsPage() {
 				promptGuidanceForAI: "",
 				order: (topics?.length ?? 0) + 1,
 				startDate: "",
-				endDate: ""
+				endDate: "",
+				icon: "Smile"
 			})
 		} catch (error) {
 			toast.error("Failed to create topic")
@@ -102,7 +107,8 @@ export default function TopicsPage() {
 				promptGuidanceForAI: t.promptGuidanceForAI,
 				order: t.order,
 				startDate: t.startDate,
-				endDate: t.endDate
+				endDate: t.endDate,
+				icon: t.icon
 			})
 			toast.success("Topic updated")
 			setEditingTopic(null)
@@ -188,13 +194,22 @@ export default function TopicsPage() {
 											onChange={e => setNewTopic({ ...newTopic, startDate: e.target.value })}
 										/>
 									</div>
-									<div className="grid gap-2">
-										<label className="text-sm font-medium">End Date (Optional)</label>
-										<Input
-											type="date"
-											value={newTopic.endDate}
-											onChange={e => setNewTopic({ ...newTopic, endDate: e.target.value })}
-										/>
+									<div className="grid grid-cols-2 gap-4">
+										<div className="grid gap-2">
+											<label className="text-sm font-medium">End Date (Optional)</label>
+											<Input
+												type="date"
+												value={newTopic.endDate}
+												onChange={e => setNewTopic({ ...newTopic, endDate: e.target.value })}
+											/>
+										</div>
+										<div className="grid gap-2">
+											<label className="text-sm font-medium">Icon</label>
+											<IconPicker
+												value={newTopic.icon}
+												onChange={icon => setNewTopic({ ...newTopic, icon })}
+											/>
+										</div>
 									</div>
 								</div>
 								<div className="grid gap-2">
@@ -243,7 +258,11 @@ export default function TopicsPage() {
 							<div className="flex items-start justify-between">
 								<div className="flex items-center gap-3">
 									<div className="p-3 rounded-xl bg-purple-500/10 text-purple-600 border border-purple-200">
-										<BookOpen className="size-6" />
+										{topic.icon ? (
+											<IconComponent icon={topic.icon as Icon} size={24} />
+										) : (
+											<BookOpen className="size-6" />
+										)}
 									</div>
 									<div>
 										<h3 className="font-bold text-lg">{topic.name}</h3>
@@ -309,9 +328,18 @@ export default function TopicsPage() {
 							{filteredTopics.map((topic) => (
 								<tr key={topic._id} className="hover:bg-muted/30 transition-colors">
 									<td className="px-6 py-4">
-										<div className="flex flex-col">
-											<span className="font-bold">{topic.name}</span>
-											<span className="text-[10px] text-muted-foreground font-mono">{topic.id}</span>
+										<div className="flex items-center gap-3">
+											<div className="p-2 rounded-lg bg-muted text-muted-foreground">
+												{topic.icon ? (
+													<IconComponent icon={topic.icon as Icon} size={16} />
+												) : (
+													<BookOpen className="size-4" />
+												)}
+											</div>
+											<div className="flex flex-col">
+												<span className="font-bold">{topic.name}</span>
+												<span className="text-[10px] text-muted-foreground font-mono">{topic.id}</span>
+											</div>
 										</div>
 									</td>
 									<td className="px-6 py-4">
@@ -376,13 +404,22 @@ export default function TopicsPage() {
 											onChange={e => setEditingTopic({ ...editingTopic, startDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
 										/>
 									</div>
-									<div className="grid gap-2">
-										<label className="text-sm font-medium">End Date</label>
-										<Input
-											type="date"
-											value={editingTopic.endDate ? new Date(editingTopic.endDate).toISOString().split('T')[0] : ""}
-											onChange={e => setEditingTopic({ ...editingTopic, endDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
-										/>
+									<div className="grid grid-cols-2 gap-4">
+										<div className="grid gap-2">
+											<label className="text-sm font-medium">End Date</label>
+											<Input
+												type="date"
+												value={editingTopic.endDate ? new Date(editingTopic.endDate).toISOString().split('T')[0] : ""}
+												onChange={e => setEditingTopic({ ...editingTopic, endDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
+											/>
+										</div>
+										<div className="grid gap-2">
+											<label className="text-sm font-medium">Icon</label>
+											<IconPicker
+												value={editingTopic.icon || ""}
+												onChange={icon => setEditingTopic({ ...editingTopic, icon })}
+											/>
+										</div>
 									</div>
 								</div>
 								<div className="grid gap-2">

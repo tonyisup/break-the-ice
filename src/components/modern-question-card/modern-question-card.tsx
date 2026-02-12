@@ -208,9 +208,10 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
+  const topic = useQuery(api.core.topics.getTopicById, { id: question.topicId })
 
   const handleClickStyle = () => {
-    onClickStyle?.();
+    onClickStyle?.(); 
   };
   const handleClickTone = () => {
     onClickTone?.();
@@ -334,6 +335,16 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden
           </button>
         )}
       </div>
+      {topic && (
+        <div className="mt-4 flex flex-row gap-2 justify-between">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Topic: {topic.name}
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            <IconComponent icon={topic.icon as Icon} size={24} />
+          </p>
+        </div>
+      )}
     </div>
   );
 };

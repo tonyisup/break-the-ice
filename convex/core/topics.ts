@@ -9,6 +9,7 @@ const publicTopicFields = {
 	description: v.optional(v.string()),
 	order: v.optional(v.float64()),
 	organizationId: v.optional(v.id("organizations")),
+	icon: v.optional(v.string()),
 };
 const mapToPublicTopic = (topic: any) => ({
 	_id: topic._id,
@@ -18,6 +19,7 @@ const mapToPublicTopic = (topic: any) => ({
 	description: topic.description,
 	order: topic.order,
 	organizationId: topic.organizationId,
+	icon: topic.icon,
 });
 
 export const getTopics = query({
@@ -67,9 +69,10 @@ export const getTopicBySystemId = query({
 
 export const getTopicById = query({
 	args: {
-		id: v.id("topics"),
+		id: v.optional(v.id("topics")),
 	},
 	handler: async (ctx, args) => {
+		if (!args.id) return null;
 		const topic = await ctx.db.get(args.id);
 		return topic;
 	},

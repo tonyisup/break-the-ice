@@ -18,6 +18,7 @@ export const getTopics = query({
 		organizationId: v.optional(v.id("organizations")),
 		startDate: v.optional(v.number()),
 		endDate: v.optional(v.number()),
+		icon: v.optional(v.string()),
 	})),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
@@ -40,6 +41,7 @@ export const createTopic = mutation({
 		organizationId: v.optional(v.id("organizations")),
 		startDate: v.optional(v.number()),
 		endDate: v.optional(v.number()),
+		icon: v.optional(v.string()),
 	},
 	returns: v.id("topics"),
 	handler: async (ctx, args) => {
@@ -65,6 +67,7 @@ export const createTopic = mutation({
 			organizationId: args.organizationId,
 			startDate: args.startDate,
 			endDate: args.endDate,
+			icon: args.icon,
 		});
 
 		// Trigger embedding generation
@@ -87,6 +90,7 @@ export const updateTopic = mutation({
 		organizationId: v.optional(v.id("organizations")),
 		startDate: v.optional(v.number()),
 		endDate: v.optional(v.number()),
+		icon: v.optional(v.string()),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
