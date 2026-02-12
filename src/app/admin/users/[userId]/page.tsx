@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, Save, Loader2, UserCircle, Mail } from "lucide-react"
+import { ChevronLeft, Save, Loader2, UserCircle, Mail, Search, Filter, X } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
@@ -19,8 +19,8 @@ interface PreferenceItem {
     _id: string;
     status: string;
     updatedAt: number;
-    style?: { name: string; icon: string };
-    tone?: { name: string; icon: string };
+    style?: { name: string; icon: string; [key: string]: unknown } | null;
+    tone?: { name: string; icon: string; [key: string]: unknown } | null;
 }
 
 function PreferenceGrid({
@@ -83,6 +83,8 @@ export default function UserDetailsPage() {
     const [aiUsage, setAiUsage] = useState(0)
     const [isSubscribed, setIsSubscribed] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
+    const [searchTerm, setSearchTerm] = useState("")
+    const [filterStatus, setFilterStatus] = useState<string>("all")
 
     useEffect(() => {
         if (user) {
@@ -90,6 +92,15 @@ export default function UserDetailsPage() {
             setIsSubscribed(user.newsletterSubscriptionStatus === "subscribed")
         }
     }, [user])
+
+    const filteredQuestions = questions?.filter(q => {
+        const text = (q.question?.text || q.question?.customText || "").toLowerCase()
+        const matchesSearch = text.includes(searchTerm.toLowerCase())
+        const matchesStatus = filterStatus === "all" || q.status === filterStatus
+        return matchesSearch && matchesStatus
+    })
+
+    const questionStatuses = questions ? Array.from(new Set(questions.map(q => q.status))) : []
 
     const handleSave = async () => {
         if (!userIdTyped) return;
@@ -175,10 +186,6 @@ export default function UserDetailsPage() {
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="grid grid-cols-1 gap-4 text-sm">
-                                    <div className="grid grid-cols-3 gap-4 border-b pb-2">
-                                        <div className="font-medium text-muted-foreground">ID</div>
-                                        <div className="col-span-2 font-mono text-xs">{user._id}</div>
-                                    </div>
                                     <div className="grid grid-cols-3 gap-4 border-b pb-2">
                                         <div className="font-medium text-muted-foreground">Joined</div>
                                         <div className="col-span-2">{new Date(user._creationTime).toLocaleDateString()}</div>
@@ -284,18 +291,77 @@ export default function UserDetailsPage() {
 
                 <TabsContent value="questions" className="mt-6">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Question History</CardTitle>
-                            <CardDescription>Recent questions the user has interacted with (Showing last 100).</CardDescription>
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle>Question History</CardTitle>
+                                    <CardDescription>Recent questions the user has interacted with.</CardDescription>
+                                </div>
+                                <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                                    Total: {questions?.length || 0}
+                                </div>
+                            </div>
                         </CardHeader>
                         <CardContent>
+                             <div className="flex flex-col md:flex-row gap-3 mb-6">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Search questions..."
+                                        className="pl-9"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
+                                    {searchTerm && (
+                                        <button 
+                                            onClick={() => setSearchTerm("")}
+                                            className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    <select
+                                        className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                        value={filterStatus}
+                                        onChange={(e) => setFilterStatus(e.target.value)}
+                                    >
+                                        <option value="all">All Statuses</option>
+                                        {questionStatuses.map(status => (
+                                            <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>
+                                        ))}
+                                    </select>
+                                    {(searchTerm || filterStatus !== "all") && (
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            onClick={() => {
+                                                setSearchTerm("")
+                                                setFilterStatus("all")
+                                            }}
+                                            title="Reset Filters"
+                                        >
+                                            <Filter className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+
                              {!questions ? (
-                                <div className="flex justify-center p-4"><Loader2 className="animate-spin text-muted-foreground" /></div>
-                            ) : questions.length === 0 ? (
-                                <div className="text-muted-foreground text-center py-8">No interaction history found.</div>
+                                <div className="flex justify-center p-8"><Loader2 className="animate-spin text-muted-foreground h-8 w-8" /></div>
+                            ) : filteredQuestions?.length === 0 ? (
+                                <div className="text-muted-foreground text-center py-12 border rounded-lg border-dashed">
+                                    <div className="mb-2">No questions found matching your filters.</div>
+                                    {(searchTerm || filterStatus !== "all") && (
+                                        <Button variant="link" onClick={() => { setSearchTerm(""); setFilterStatus("all"); }}>
+                                            Clear all filters
+                                        </Button>
+                                    )}
+                                </div>
                             ) : (
                                 <div className="space-y-2">
-                                    {questions.map(q => (
+                                    {filteredQuestions?.map(q => (
                                         <div key={q._id} className="p-4 border rounded-lg space-y-2 hover:bg-muted/30 transition-colors">
                                             <div className="font-medium text-sm leading-relaxed">{q.question?.text || q.question?.customText || "No text content"}</div>
                                             <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">

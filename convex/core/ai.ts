@@ -330,6 +330,8 @@ export const generateAIQuestions = action({
 export const generateAIQuestionForFeed = action({
 	args: {
 		userId: v.optional(v.string()),
+		count: v.optional(v.number()),
+		bypassAIUsage: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
 		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
@@ -337,7 +339,7 @@ export const generateAIQuestionForFeed = action({
 		if (!user) {
 			throw new Error("You must be logged in or provide a valid user ID to generate AI questions.");
 		}
-		const count = 1;
+		const count = args.count || 1;
 
 		const style = (await ctx.runQuery(api.core.styles.getRandomStyleForUser, { userId: user._id }));
 		const tone = (await ctx.runQuery(api.core.tones.getRandomToneForUser, { userId: user._id }));
@@ -369,10 +371,12 @@ export const generateAIQuestionForFeed = action({
 
 		let usageIncremented = false;
 		try {
-			await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
-				userId: user._id,
-			});
-			usageIncremented = true;
+			if (!args.bypassAIUsage) {
+				await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+					userId: user._id,
+				});
+				usageIncremented = true;
+			}				
 
 			if (user?.questionPreferenceEmbedding) {
 				const nearestQuestions = await ctx.runAction(api.core.questions.getNearestQuestionsByEmbedding, {

@@ -66,14 +66,8 @@ export const QuestionDisplay = ({
     }
   };
   return (
-    <motion.div
+    <div
       className="flex-1 flex items-center justify-center px-5 pb-8"
-      initial={{ x: 0, y:-300, opacity: 0 }}
-      animate={{ x: 0, y:0, opacity: 1 }}
-      exit={{ x: dragDirection === "left" ? -300 : 300, opacity: 0 }}
-      drag={!disabled}
-      dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-      onDragEnd={handleDragEnd}
       onDoubleClick={() => {
         if (currentQuestion && !disabled) {
           toggleLike(currentQuestion._id);
@@ -94,6 +88,6 @@ export const QuestionDisplay = ({
         onHideTone={handleHideTone}
         disabled={disabled}
       />
-    </motion.div>
+    </div>
   );
 };

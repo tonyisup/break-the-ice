@@ -90,6 +90,7 @@ export const getNextRandomQuestionsUnsentForUser = action({
 
 export const getNextRandomQuestionsUnsent = action({
 	args: {
+		userId: v.id("users"),
 		count: v.float64(),
 		hidden: v.optional(v.array(v.id("questions"))),
 		hiddenStyles: v.optional(v.array(v.id("styles"))),
@@ -99,17 +100,9 @@ export const getNextRandomQuestionsUnsent = action({
 	},
 	returns: v.array(v.any()),
 	handler: async (ctx, args): Promise<any[]> => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) {
-			throw new Error("Not authenticated");
-		}
-		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
-		if (!user) {
-			throw new Error("User not found");
-		}
 
 		const seen = await ctx.runQuery(internal.internal.questions.getSentQuestionsForUser, {
-			userId: user._id
+			userId: args.userId
 		});
 
 		return await getNextRandomQuestionsInternal(ctx, {
@@ -296,83 +289,6 @@ export const getNextRandomQuestions = action({
 	},
 });
 
-export const getQuestionForNewsletter = query({
-	args: {
-		userId: v.id("users"),
-		randomSeed: v.optional(v.float64()),
-	},
-	returns: v.union(v.null(), v.any()),
-	handler: async (ctx, args) => {
-		const { userId, randomSeed } = args;
-		const user = await ctx.db.get(userId);
-		if (!user) {
-			return null;
-		}
-
-		// PRIORITY 1: Check for unseen pool questions first
-		const unseenUserQuestion = await ctx.db
-			.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
-				q.eq("userId", userId).eq("status", "unseen")
-			)
-			.order("asc")
-			.first();
-
-		if (unseenUserQuestion) {
-			const unseenQuestion = await ctx.db.get(unseenUserQuestion.questionId);
-			if (unseenQuestion && !unseenQuestion.prunedAt && unseenQuestion.text) {
-				return unseenQuestion;
-			}
-		}
-
-		// FALLBACK: Random selection from pool
-		const userQuestions = await ctx.db.query("userQuestions")
-			.withIndex("by_userId", (q) => q.eq("userId", userId))
-			.collect();
-		const seenIds = new Set(userQuestions.map((uq) => uq.questionId));
-
-		const userHiddenStyles = await ctx.db.query("userStyles")
-			.withIndex("by_userId_status", (q) => q
-				.eq("userId", args.userId)
-				.eq("status", "hidden")
-			)
-			.collect();
-		const hiddenStyleIds = new Set(userHiddenStyles.map((s) => s.styleId));
-
-		const userHiddenTones = await ctx.db.query("userTones")
-			.withIndex("by_userId_status", (q) => q
-				.eq("userId", args.userId)
-				.eq("status", "hidden")
-			)
-			.collect();
-		const hiddenToneIds = new Set(userHiddenTones.map((t) => t.toneId));
-
-		const rawCandidates = await ctx.db
-			.query("questions")
-			.withIndex("by_prunedAt_status_text", (q) => q.eq("prunedAt", undefined))
-			.filter((q: any) => q.and(
-				q.neq(q.field("text"), undefined),
-				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
-			))
-			.take(1000);
-
-		const candidates = rawCandidates
-			.filter((q) => !seenIds.has(q._id))
-			.filter((q) => !q.styleId || !hiddenStyleIds.has(q.styleId))
-			.filter((q) => !q.toneId || !hiddenToneIds.has(q.toneId))
-			.slice(0, 50);
-
-		if (candidates.length === 0) {
-			return null;
-		}
-
-		const seed = randomSeed ?? Math.random();
-		const normalizedSeed = seed - Math.floor(seed);
-		const randomIndex = Math.floor(normalizedSeed * candidates.length);
-		return candidates[randomIndex];
-	},
-});
-
 /**
  * Shared logic for finding nearest questions by embedding.
  * Extracted into a helper to avoid action-to-action chaining.
@@ -417,39 +333,6 @@ async function getNearestQuestionsByEmbeddingInternal(
 	return filtered.slice(0, requestedCount);
 }
 
-export const getQuestionForNewsletterWithFallback = action({
-	args: {
-		userId: v.id("users"),
-		randomSeed: v.optional(v.float64()),
-	},
-	returns: v.union(v.any(), v.null()),
-	handler: async (ctx, args): Promise<Doc<"questions"> | null> => {
-		// 1. Try to get an existing question they haven't seen via query
-		const question: Doc<"questions"> | null = await ctx.runQuery(api.core.questions.getQuestionForNewsletter, {
-			userId: args.userId,
-			randomSeed: args.randomSeed ?? Math.random(),
-		});
-
-		if (question) {
-			return question;
-		}
-
-		// 2. If no question found, generate a new one via action
-		try {
-			const generatedQuestions: (Doc<"questions"> | null)[] = await ctx.runAction(api.core.ai.generateAIQuestionForFeed, {
-				userId: args.userId,
-			});
-
-			if (Array.isArray(generatedQuestions) && generatedQuestions.length > 0) {
-				return generatedQuestions[0];
-			}
-			return (generatedQuestions as any) || null;
-		} catch (error) {
-			console.error("Failed to generate question for newsletter fallback:", error);
-			return null;
-		}
-	},
-});
 
 export const getNextQuestions = query({
 	args: {

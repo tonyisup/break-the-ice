@@ -647,28 +647,29 @@ export const getQuestionTimeRange = internalQuery({
 });
 
 
-export const getUnseenQuestionsForUser = internalQuery({
+export const getUnseenQuestionIdsForUser = internalQuery({
 	args: {
 		userId: v.id("users"),
-		count: v.number(),
+		count: v.optional(v.number()),
 	},
-	returns: v.array(v.any()),
+	returns: v.array(v.id("questions")),
 	handler: async (ctx, args) => {
 		const { userId, count } = args;
-		const unseenUserQuestions = await ctx.db
+		const unseenUserQuestions = count ? await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", userId).eq("status", "unseen")
 			)
-			.take(count);
+			.take(count) : await ctx.db
+			.query("userQuestions")
+			.withIndex("by_userId_status_updatedAt", (q) =>
+				q.eq("userId", userId).eq("status", "unseen")
+			)
+			.collect();
 
-		const questions = await Promise.all(
-			unseenUserQuestions.map((uq) => ctx.db.get(uq.questionId))
-		);
+		const questionIds = unseenUserQuestions.map((uq) => uq.questionId);
 
-		return questions
-			.filter((q) => q !== null && !q.prunedAt && q.text)
-			.slice(0, count);
+		return questionIds;
 	},
 });
 
@@ -690,15 +691,106 @@ export const getSentQuestionsForUser = internalQuery({
 });
 
 
-export const getNextUnseenQuestions = internalAction({
+export const getQuestionForNewsletter = internalQuery({
 	args: {
 		userId: v.id("users"),
-		count: v.number(),
+		randomSeed: v.optional(v.float64()),
 	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args): Promise<any[]> => {
-		const questions = await ctx.runQuery(internal.internal.questions.getUnseenQuestionsForUser, args);
-		
-		return questions.slice(0, args.count);
+	returns: v.union(v.null(), v.any()),
+	handler: async (ctx, args) => {
+		const { userId, randomSeed } = args;
+		const user = await ctx.db.get(userId);
+		if (!user) {
+			return null;
+		}
+
+		// PRIORITY 1: Check for unseen pool questions first
+		const unseenUserQuestion = await ctx.db
+			.query("userQuestions")
+			.withIndex("by_userId_status_updatedAt", (q) =>
+				q.eq("userId", userId).eq("status", "unseen")
+			)
+			.order("asc")
+			.first();
+
+		if (unseenUserQuestion) {
+			const unseenQuestion = await ctx.db.get(unseenUserQuestion.questionId);
+			if (unseenQuestion && !unseenQuestion.prunedAt && unseenQuestion.text) {
+				return unseenQuestion;
+			}
+		}
+
+		// FALLBACK: Random selection from pool
+		const userQuestions = await ctx.db.query("userQuestions")
+			.withIndex("by_userId", (q) => q.eq("userId", userId))
+			.collect();
+		const seenIds = new Set(userQuestions.map((uq) => uq.questionId));
+
+		const userHiddenStyles = await ctx.db.query("userStyles")
+			.withIndex("by_userId_status", (q) => q
+				.eq("userId", args.userId)
+				.eq("status", "hidden")
+			)
+			.collect();
+		const hiddenStyleIds = new Set(userHiddenStyles.map((s) => s.styleId));
+
+		const userHiddenTones = await ctx.db.query("userTones")
+			.withIndex("by_userId_status", (q) => q
+				.eq("userId", args.userId)
+				.eq("status", "hidden")
+			)
+			.collect();
+		const hiddenToneIds = new Set(userHiddenTones.map((t) => t.toneId));
+
+		const rawCandidates = await ctx.db
+			.query("questions")
+			.withIndex("by_prunedAt_status_text", (q) => q.eq("prunedAt", undefined))
+			.filter((q: any) => q.and(
+				q.neq(q.field("text"), undefined),
+				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
+			))
+			.take(1000);
+
+		const candidates = rawCandidates
+			.filter((q) => !seenIds.has(q._id))
+			.filter((q) => !q.styleId || !hiddenStyleIds.has(q.styleId))
+			.filter((q) => !q.toneId || !hiddenToneIds.has(q.toneId))
+			.slice(0, 50);
+
+		if (candidates.length === 0) {
+			return null;
+		}
+
+		const seed = randomSeed ?? Math.random();
+		const normalizedSeed = seed - Math.floor(seed);
+		const randomIndex = Math.floor(normalizedSeed * candidates.length);
+		return candidates[randomIndex];
+	},
+});
+
+
+export const markUserQuestionAsSent = internalMutation({
+	args: {
+		userId: v.id("users"),
+		questionId: v.id("questions"),
+	},
+	handler: async (ctx, args) => {	
+		const userQuestion = await ctx.db.query("userQuestions").filter((q) => q.eq(q.field("userId"), args.userId)).filter((q) => q.eq(q.field("questionId"), args.questionId)).first();
+		if (userQuestion) {
+			await ctx.db.patch(userQuestion._id, {
+				status: "sent",
+				updatedAt: Date.now(),
+			});
+			return;
+		}	
+
+		await ctx.db.insert("userQuestions", {
+			userId: args.userId,
+			questionId: args.questionId,
+			status: "sent",	
+			viewDuration: 0,
+			seenCount: 0,
+			updatedAt: Date.now(),
+		});
 	},
 });

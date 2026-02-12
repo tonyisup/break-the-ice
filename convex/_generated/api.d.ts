@@ -41,6 +41,7 @@ import type * as http from "../http.js";
 import type * as instagram from "../instagram.js";
 import type * as internal_ai from "../internal/ai.js";
 import type * as internal_migrations from "../internal/migrations.js";
+import type * as internal_newsletter from "../internal/newsletter.js";
 import type * as internal_qa from "../internal/qa.js";
 import type * as internal_questions from "../internal/questions.js";
 import type * as internal_styles from "../internal/styles.js";
@@ -93,6 +94,7 @@ declare const fullApi: ApiFromModules<{
   instagram: typeof instagram;
   "internal/ai": typeof internal_ai;
   "internal/migrations": typeof internal_migrations;
+  "internal/newsletter": typeof internal_newsletter;
   "internal/qa": typeof internal_qa;
   "internal/questions": typeof internal_questions;
   "internal/styles": typeof internal_styles;

@@ -10,6 +10,7 @@ import { useEffect } from "react";
 import { QuestionDisplay } from "../../components/question-display";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
+import { ModernQuestionCard } from "@/components/modern-question-card";
 
 export default function QuestionPage() {
   const { id } = useParams<{ id: string }>();
@@ -73,11 +74,11 @@ export default function QuestionPage() {
     }
   };
 
-  const handleHideStyle = (styleId: string) => {
+  const handleHideStyle = (styleId: Id<"styles">) => {
     addHiddenStyle(styleId);
     navigate("/app");
   }
-  const handleHideTone = (toneId: string) => {
+  const handleHideTone = (toneId: Id<"tones">) => {
     addHiddenTone(toneId);
     navigate("/app");
   }
@@ -126,22 +127,21 @@ export default function QuestionPage() {
         background: `linear-gradient(135deg, ${gradient[0]}, ${gradientTarget}, ${gradient[1]})`
       }}
     >
-      <Header
-        gradient={gradient}
-      />
+      <Header />
       <main className="flex-1 flex flex-col pt-20">
-        <QuestionDisplay
-          isGenerating={false}
-          currentQuestion={question}
-          isFavorite={isFavorite}
-          isHidden={question ? hiddenQuestions.includes(question._id) : false}
-          gradient={gradient}
-          toggleLike={toggleLike}
-          onSwipe={() => navigate("/")}
-          toggleHide={() => question && toggleHide(question._id)}
-          onHideStyle={handleHideStyle}
-          onHideTone={handleHideTone}
-        />
+        <ModernQuestionCard
+                isGenerating={false}  
+                question={question}
+                isFavorite={isFavorite}
+                isHidden={question ? hiddenQuestions.includes(question._id) : false}
+                gradient={gradient}
+                style={style}
+                tone={tone}
+                onToggleFavorite={() => question && toggleLike(question._id)}
+                onToggleHidden={() => question && toggleHide(question._id)}
+                onHideStyle={handleHideStyle}
+                onHideTone={handleHideTone}
+              />
         <div className="flex justify-center p-4">
           <Link
             to="/"
