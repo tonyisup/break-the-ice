@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
@@ -78,8 +78,33 @@ export function RemixQuestionDrawer({
 	const updatePersonalQuestion = useMutation(api.core.questions.updatePersonalQuestion);
 	const deletePersonalQuestion = useMutation(api.core.questions.deletePersonalQuestion);
 
+	const isClosingRef = useRef(false);
+
+	const hasChanges = useMemo(() => {
+		const styleChanged = selectedStyleId !== styleId;
+		const toneChanged = selectedToneId !== toneId;
+		const initialTags = question?.tags || [];
+		const tagsChanged = tags.length !== initialTags.length || 
+						  !tags.every(t => initialTags.includes(t)) ||
+						  !initialTags.every(t => tags.includes(t));
+		
+		return remixState === "remixing" || remixState === "remixed" || styleChanged || toneChanged || tagsChanged;
+	}, [remixState, selectedStyleId, styleId, selectedToneId, toneId, tags, question?.tags]);
+
 	// Reset state when drawer opens/closes
 	const handleOpenChange = (open: boolean) => {
+		if (isClosingRef.current) return;
+
+		if (!open && hasChanges) {
+			toast.warning("Please save or discard your changes.", {
+				id: "remix-unsaved-changes",
+				description: remixState === "remixed" 
+					? "A remixed draft has been created."
+					: "You have adjusted filters or tags."
+			});
+			return;
+		}
+
 		if (!open) {
 			resetState();
 		} else {
@@ -89,6 +114,16 @@ export function RemixQuestionDrawer({
 			setTags(question?.tags || []);
 		}
 		onOpenChange(open);
+	};
+
+	const forceClose = () => {
+		isClosingRef.current = true;
+		onOpenChange(false);
+		resetState();
+		// Reset the ref after animation
+		setTimeout(() => {
+			isClosingRef.current = false;
+		}, 500);
 	};
 
 	const resetState = () => {
@@ -170,7 +205,7 @@ export function RemixQuestionDrawer({
 				onRemixed(question, updatedQuestion as Doc<"questions">);
 			}
 			toast.success(isPublic ? "Question submitted for review!" : "Remixed question saved to your stash!");
-			handleOpenChange(false);
+			forceClose();
 		} catch (error) {
 			toast.error("Failed to save remixed question.");
 		}
@@ -184,7 +219,7 @@ export function RemixQuestionDrawer({
 				// If delete fails, still close
 			}
 		}
-		handleOpenChange(false);
+		forceClose();
 	};
 
 	const handleAddTag = (tagName?: string) => {
@@ -244,7 +279,7 @@ export function RemixQuestionDrawer({
 					</DrawerDescription>
 				</DrawerHeader>
 
-				<div className="px-4 pb-2 space-y-4 max-h-[60vh] overflow-y-auto">
+				<div className="px-4 pb-6 space-y-6 max-h-[70vh] overflow-y-auto">
 					{/* Original question */}
 					<div className="rounded-lg border bg-muted/50 p-3">
 						<p className="text-xs font-medium text-muted-foreground mb-1">Original</p>
@@ -288,13 +323,13 @@ export function RemixQuestionDrawer({
 					)}
 
 					{/* Style / Tone selectors */}
-					<div className="grid grid-cols-2 gap-3">
-						<div className="space-y-1.5">
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+						<div className="space-y-2.5">
 							<Label className="text-xs font-medium">Style</Label>
 							<select
 								value={selectedStyleId ?? ""}
 								onChange={(e) => setSelectedStyleId(e.target.value === "" ? undefined : e.target.value as Id<"styles">)}
-								className="w-full h-9 rounded-lg border bg-background px-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+								className="w-full h-11 rounded-lg border bg-background px-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
 							>
 								<option value="">Current</option>
 								{styles?.map((s) => (
@@ -330,12 +365,12 @@ export function RemixQuestionDrawer({
 								</div>
 							)}
 						</div>
-						<div className="space-y-1.5">
+						<div className="space-y-2.5">
 							<Label className="text-xs font-medium">Tone</Label>
 							<select
 								value={selectedToneId ?? ""}
 								onChange={(e) => setSelectedToneId(e.target.value === "" ? undefined : e.target.value as Id<"tones">)}
-								className="w-full h-9 rounded-lg border bg-background px-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+								className="w-full h-11 rounded-lg border bg-background px-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
 							>
 								<option value="">Current</option>
 								{tones?.map((t) => (
@@ -374,9 +409,9 @@ export function RemixQuestionDrawer({
 					</div>
 
 					{/* Tags Section */}
-					<div className="space-y-1.5">
+					<div className="space-y-2.5">
 						<Label className="text-xs font-medium text-muted-foreground">Tags</Label>
-						<div className="flex flex-wrap gap-1.5 p-2 border rounded-lg bg-background focus-within:ring-2 focus-within:ring-primary/20 min-h-[40px]">
+						<div className="flex flex-wrap gap-1.5 p-2.5 border rounded-lg bg-background focus-within:ring-2 focus-within:ring-primary/20 min-h-[48px]">
 							{tags.map((tag) => (
 								<Badge key={tag} variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-[10px] h-6">
 									{tag}
@@ -424,7 +459,7 @@ export function RemixQuestionDrawer({
 						</div>
 						{tagInput && filteredSuggestions.length > 0 && (
 							<div 
-								className="flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200 mt-1"
+								className="flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200 mt-2"
 								role="listbox"
 								aria-label="Tag suggestions"
 							>
@@ -457,7 +492,7 @@ export function RemixQuestionDrawer({
 
 					{/* Private / Submit toggle */}
 					{remixState === "remixed" && (
-						<div className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border dark:border-gray-800">
+						<div className="flex items-center space-x-3 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border dark:border-gray-800">
 							<Switch
 								id="remix-public-toggle"
 								checked={isPublic}
@@ -477,7 +512,7 @@ export function RemixQuestionDrawer({
 					)}
 				</div>
 
-				<DrawerFooter>
+				<DrawerFooter className="gap-3 pt-4">
 					{remixState === "idle" && (
 						<>
 							<Button 
