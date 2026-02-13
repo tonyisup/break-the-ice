@@ -624,7 +624,7 @@ export const getRandomQuestionsInternal = internalQuery({
 		const activeTopics = await ctx.db.query("topics")
 			.withIndex("by_startDate_endDate_order", (q) => q.lt("startDate", now))
 			.filter((q) => q.or(q.eq(q.field("endDate"), undefined), q.gt(q.field("endDate"), now)))
-			.take(1);
+			.collect()
 
 		if (activeTopics.length > 0) {
 			const existingIds = new Set(filtered.map(q => q._id));
@@ -635,8 +635,6 @@ export const getRandomQuestionsInternal = internalQuery({
 					.take(10); // Take a few to find one that isn't filtered out
 
 				const validTopicQuestion = topicQuestions.find(q => {
-					if (existingIds.has(q._id)) return false;
-					if (seenIds.has(q._id)) return false;
 					if (hiddenIds.has(q._id)) return false;
 					if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
 					if (q.toneId && hiddenToneIds.has(q.toneId)) return false;

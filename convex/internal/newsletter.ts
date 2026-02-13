@@ -57,45 +57,48 @@ export const getQuestionForUser = internalAction({
 			hiddenTones.map((t: any) => t.toneId.toString())
 		);
 
-		// 2. If the user has a preference embedding, find the most similar valid question
-		if (user.questionPreferenceEmbedding && user.questionPreferenceEmbedding.length > 0) {
-			const MAX_CANDIDATES = 100;
-			const unseenQuestionIds = await ctx.runQuery(
-				internal.internal.questions.getUnseenQuestionIdsForUser,
-				{ userId: user._id }
-			);
+		const unseenQuestionIds = await ctx.runQuery(
+			internal.internal.questions.getUnseenQuestionIdsForUser,
+			{ userId: user._id }
+		);
 
-			const unseenQuestionIdsSet = new Set<string>(
-				unseenQuestionIds.map(id => id.toString())
-			);
-
-			const results = await ctx.vectorSearch("questions", "by_embedding", {
-				vector: user.questionPreferenceEmbedding,
-				limit: MAX_CANDIDATES,
-				filter: (q) => q.eq("status", "public"),
+		if (unseenQuestionIds.length > 0) {
+			question = await ctx.runQuery(internal.internal.questions.getQuestionById, {
+				id: unseenQuestionIds[0],
 			});
+		}
+		else {
+		// 2. If the user has a preference embedding, find the most similar valid question
+			if (user.questionPreferenceEmbedding && user.questionPreferenceEmbedding.length > 0) {
+				const MAX_CANDIDATES = 100;
 
-			if (results.length > 0) {
-				const candidateIds = results.map(r => r._id);
-				for (const candidateId of candidateIds) {
-					if (excludedQuestionIds.size > 0 && excludedQuestionIds.has(candidateId.toString())) continue;
-					if (unseenQuestionIdsSet.size > 0 && !unseenQuestionIdsSet.has(candidateId.toString())) continue;
+				const results = await ctx.vectorSearch("questions", "by_embedding", {
+					vector: user.questionPreferenceEmbedding,
+					limit: MAX_CANDIDATES,
+					filter: (q) => q.eq("status", "public"),
+				});
 
-					const candidate: Doc<"questions"> | null = await ctx.runQuery(
-						internal.internal.questions.getQuestionById,
-						{ id: candidateId }
-					);
+				if (results.length > 0) {
+					const candidateIds = results.map(r => r._id);
+					for (const candidateId of candidateIds) {
+						if (excludedQuestionIds.size > 0 && excludedQuestionIds.has(candidateId.toString())) continue;
 
-					if (!candidate) continue;
-					if (!candidate.text) continue;
-					if (candidate.prunedAt !== undefined) continue;
-					if (candidate.status !== "approved" && candidate.status !== "public" && candidate.status !== undefined) continue;
-					if (candidate.styleId && excludedStyleIds.has(candidate.styleId.toString())) continue;
-					if (candidate.toneId && excludedToneIds.has(candidate.toneId.toString())) continue;
+						const candidate: Doc<"questions"> | null = await ctx.runQuery(
+							internal.internal.questions.getQuestionById,
+							{ id: candidateId }
+						);
 
-					// Found a valid question
-					question = candidate;
-					break;
+						if (!candidate) continue;
+						if (!candidate.text) continue;
+						if (candidate.prunedAt !== undefined) continue;
+						if (candidate.status !== "approved" && candidate.status !== "public" && candidate.status !== undefined) continue;
+						if (candidate.styleId && excludedStyleIds.has(candidate.styleId.toString())) continue;
+						if (candidate.toneId && excludedToneIds.has(candidate.toneId.toString())) continue;
+
+						// Found a valid question
+						question = candidate;
+						break;
+					}
 				}
 			}
 		}
@@ -104,10 +107,9 @@ export const getQuestionForUser = internalAction({
 		if (!question) {
 			try {
 				const questions = await ctx.runAction(
-					api.core.ai.generateAIQuestionForFeed,
+					api.core.ai.generateAIQuestionForNewsletter,
 					{
-						userId: user._id,
-						bypassAIUsage: true,
+						userId: user._id
 					}
 				);
 				if (questions.length == 0) {
