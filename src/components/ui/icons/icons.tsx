@@ -1,5 +1,5 @@
 import {
-  CircleQuestionMark,
+  CircleHelp,
   ArrowLeft as ArrowLeftIcon,
   CloudLightning,
   ArrowBigRight,
@@ -81,7 +81,7 @@ import {
 
 // Export all icons for direct use
 export {
-  CircleQuestionMark,
+  CircleHelp,
   ArrowLeftIcon,
   CloudLightning,
   ArrowBigRight,
@@ -162,7 +162,7 @@ export {
 
 // Create a mapping of icon names to icon components for dynamic access
 export const iconMap: Record<string, LucideIcon> = {
-  CircleQuestionMark,
+  CircleHelp,
   ArrowLeft: ArrowLeftIcon,
   ArrowLeftIcon,
   CloudLightning,

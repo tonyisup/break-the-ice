@@ -15,12 +15,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let text = searchParams.get('text');
     let styleName = searchParams.get('styleName') || 'General';
     let styleColor = searchParams.get('styleColor') || '#000000';
-    let styleIcon = searchParams.get('styleIcon') || 'CircleQuestionMark';
+    let styleIcon = searchParams.get('styleIcon') || 'CircleHelp';
     let gradientStart = searchParams.get('gradientStart') || '#f0f0f0';
     let gradientEnd = searchParams.get('gradientEnd') || '#d0d0d0';
     let toneName = searchParams.get('toneName') || 'Casual';
     let toneColor = searchParams.get('toneColor') || '#000000';
-    let toneIcon = searchParams.get('toneIcon') || 'CircleQuestionMark';
+    let toneIcon = searchParams.get('toneIcon') || 'CircleHelp';
 
     if (id) {
       const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -47,8 +47,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const StyleIcon = iconMap[styleIcon] || iconMap['CircleQuestionMark'];
-    const ToneIcon = iconMap[toneIcon] || iconMap['CircleQuestionMark'];
+    const StyleIcon = iconMap[styleIcon] || iconMap['CircleHelp'] || iconMap['HelpCircle'];
+    const ToneIcon = iconMap[toneIcon] || iconMap['CircleHelp'] || iconMap['HelpCircle'];
 
     const element = React.createElement(
       'div',
@@ -125,7 +125,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   gap: '12px',
                 },
               },
-              React.createElement(StyleIcon, { size: 32, color: styleColor }),
+              React.createElement(
+                'div',
+                { style: { display: 'flex' } },
+                React.createElement(StyleIcon, { size: 32, color: styleColor })
+              ),
               React.createElement(
                 'span',
                 { style: { fontSize: '24px', fontWeight: 700, color: '#374151' } },
@@ -152,7 +156,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   gap: '12px',
                 },
               },
-              React.createElement(ToneIcon, { size: 32, color: toneColor }),
+              React.createElement(
+                'div',
+                { style: { display: 'flex' } },
+                React.createElement(ToneIcon, { size: 32, color: toneColor })
+              ),
               React.createElement(
                 'span',
                 { style: { fontSize: '24px', fontWeight: 700, color: '#374151' } },

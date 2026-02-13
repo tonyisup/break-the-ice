@@ -43,8 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       gradientEnd
     } = questionInfo;
 
-    const StyleIcon = iconMap[styleIcon] || iconMap['CircleQuestionMark'];
-    const ToneIcon = iconMap[toneIcon] || iconMap['CircleQuestionMark'];
+    const StyleIcon = iconMap[styleIcon] || iconMap['CircleHelp'] || iconMap['HelpCircle'];
+    const ToneIcon = iconMap[toneIcon] || iconMap['CircleHelp'] || iconMap['HelpCircle'];
 
     const element = React.createElement(
       'div',
@@ -121,7 +121,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   gap: '12px',
                 },
               },
-              React.createElement(StyleIcon, { size: 32, color: styleColor }),
+              React.createElement(
+                'div',
+                { style: { display: 'flex' } },
+                React.createElement(StyleIcon, { size: 32, color: styleColor })
+              ),
               React.createElement(
                 'span',
                 { style: { fontSize: '24px', fontWeight: 700, color: '#374151' } },
@@ -148,7 +152,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   gap: '12px',
                 },
               },
-              React.createElement(ToneIcon, { size: 32, color: toneColor }),
+              React.createElement(
+                'div',
+                { style: { display: 'flex' } },
+                React.createElement(ToneIcon, { size: 32, color: toneColor })
+              ),
               React.createElement(
                 'span',
                 { style: { fontSize: '24px', fontWeight: 700, color: '#374151' } },

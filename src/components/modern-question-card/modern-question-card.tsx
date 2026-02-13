@@ -271,7 +271,7 @@ const QuestionContent = ({
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
   const topic = useQuery(api.core.topics.getTopicById, question.topicId ? { id: question.topicId } : "skip")
-  const safeIcon = (topic?.icon ? topic.icon : "CircleQuestionMark") as Icon;
+  const safeIcon = (topic?.icon ? topic.icon : "CircleHelp") as Icon;
 
   const handleClickStyle = () => {
     onClickStyle?.(); 

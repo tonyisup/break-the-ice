@@ -1,5 +1,5 @@
 import {
-  CircleQuestionMark,
+  CircleHelp,
   ArrowLeft as ArrowLeftIcon,
   CloudLightning,
   ArrowBigRight,
@@ -80,7 +80,7 @@ import {
 } from 'lucide-react';
 
 export const iconMap: Record<string, LucideIcon> = {
-  CircleQuestionMark,
+  CircleHelp,
   ArrowLeft: ArrowLeftIcon,
   ArrowLeftIcon,
   CloudLightning,
