@@ -592,7 +592,7 @@ export const getQuestion = query({
 
 export const getQuestionForOgImage = query({
 	args: {
-		id: v.id("questions"),
+		id: v.string(),
 	},
 	returns: v.union(
 		v.object({
@@ -609,8 +609,16 @@ export const getQuestionForOgImage = query({
 		v.null()
 	),
 	handler: async (ctx, args) => {
-		const question = await ctx.db.get(args.id);
-		if (!question) return null;
+		const questionId = ctx.db.normalizeId("questions", args.id);
+		if (!questionId) {
+			console.log(`Normalization failed for ID: ${args.id}`);
+			return null;
+		}
+		const question = await ctx.db.get(questionId);
+		if (!question) {
+			console.log(`Question not found in DB for normalized ID: ${questionId}`);
+			return null;
+		}
 
 		let styleDoc = null;
 		if (question.style) {
