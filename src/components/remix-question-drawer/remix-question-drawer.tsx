@@ -91,14 +91,20 @@ export function RemixQuestionDrawer({
 						  !tags.every(t => initialTags.includes(t)) ||
 						  !initialTags.every(t => tags.includes(t));
 		
-		return remixState === "remixing" || remixState === "remixed" || styleChanged || toneChanged || tagsChanged;
+		return remixState === "remixed" || styleChanged || toneChanged || tagsChanged;
 	}, [remixState, selectedStyleId, styleId, selectedToneId, toneId, tags, question?.tags]);
 
 	// Reset state when drawer opens/closes
 	const handleOpenChange = (open: boolean) => {
 		if (isClosingRef.current) return;
 
-		if (!open && hasChanges && remixState !== "idle") {
+		if (!open && (hasChanges || remixState === "remixing") && remixState !== "idle") {
+			if (remixState === "remixing") {
+				toast.warning("Please wait for the remix to finish or cancel it.", {
+					id: "remix-in-progress"
+				});
+				return;
+			}
 			toast.warning("Please save or discard your changes.", {
 				id: "remix-unsaved-changes",
 				description: remixState === "remixed" 
@@ -152,6 +158,12 @@ export function RemixQuestionDrawer({
 				toneId: selectedToneId,
 				topicId: question.topicId,
 			});
+			
+			// If user cancelled or closed during the await, don't update state
+			// We check remixState indirectly via its current closure or just trust the ref sync if we had one.
+			// However, since handleRemix is recreated on every render where questin/ids change, 
+			// it's safer to use the state setter with a check or a ref.
+			
 			setRemixedText(text);
 
 			let currentId = newQuestionId;
@@ -182,12 +194,16 @@ export function RemixQuestionDrawer({
 				});
 			}
 
-			setRemixState("remixed");
+			// Final check before marking as remixed
+			setRemixState(current => current === "remixing" ? "remixed" : current);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			toast.error(`Remix failed: ${message}`);
 			setSaveFailed(true);
-			setRemixState(remixedText ? "remixed" : "idle");
+			setRemixState(current => {
+				if (current !== "remixing") return current;
+				return remixedText ? "remixed" : "idle";
+			});
 		}
 	};
 
@@ -545,10 +561,15 @@ export function RemixQuestionDrawer({
 					)}
 
 					{remixState === "remixing" && (
-						<Button disabled className="gap-2">
-							<Loader2 className="size-4 animate-spin" />
-							Remixing…
-						</Button>
+						<div className="flex flex-col gap-2 w-full">
+							<Button disabled className="gap-2">
+								<Loader2 className="size-4 animate-spin" />
+								Remixing…
+							</Button>
+							<Button variant="ghost" onClick={() => setRemixState("idle")}>
+								Cancel Remix
+							</Button>
+						</div>
 					)}
 
 					{remixState === "remixed" && (
