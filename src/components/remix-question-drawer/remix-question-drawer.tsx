@@ -114,7 +114,7 @@ export function RemixQuestionDrawer({
 			return;
 		}
 
-		if (open) {
+		if (open && !isOpen) {
 			// Initialize selections from the current question
 			setSelectedStyleId(styleId);
 			setSelectedToneId(toneId);
@@ -269,8 +269,10 @@ export function RemixQuestionDrawer({
 			open={isOpen} 
 			onOpenChange={handleOpenChange}
 			onClose={() => {
-				resetState();
-				isClosingRef.current = false;
+				if (!isOpen) {
+					resetState();
+					isClosingRef.current = false;
+				}
 			}}
 		>
 			<DrawerContent onAnimationEnd={() => {
