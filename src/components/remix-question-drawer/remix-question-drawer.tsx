@@ -33,6 +33,9 @@ interface RemixQuestionDrawerProps {
 	onRemixed?: (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => void;
 }
 
+const CLOSE_ANIMATION_DURATION_MS = 500;
+
+
 export function RemixQuestionDrawer({
 	question,
 	styleId,
@@ -95,7 +98,7 @@ export function RemixQuestionDrawer({
 	const handleOpenChange = (open: boolean) => {
 		if (isClosingRef.current) return;
 
-		if (!open && hasChanges) {
+		if (!open && hasChanges && remixState !== "idle") {
 			toast.warning("Please save or discard your changes.", {
 				id: "remix-unsaved-changes",
 				description: remixState === "remixed" 
@@ -105,25 +108,24 @@ export function RemixQuestionDrawer({
 			return;
 		}
 
-		if (!open) {
-			resetState();
-		} else {
+		if (open) {
 			// Initialize selections from the current question
 			setSelectedStyleId(styleId);
 			setSelectedToneId(toneId);
 			setTags(question?.tags || []);
 		}
+
 		onOpenChange(open);
 	};
 
 	const forceClose = () => {
 		isClosingRef.current = true;
 		onOpenChange(false);
-		resetState();
-		// Reset the ref after animation
+		// isClosingRef.current will be reset in onClose or handleAnimationEnd
+		// We add a safety timeout just in case onClose doesn't trigger
 		setTimeout(() => {
 			isClosingRef.current = false;
-		}, 500);
+		}, CLOSE_ANIMATION_DURATION_MS);
 	};
 
 	const resetState = () => {
@@ -247,8 +249,21 @@ export function RemixQuestionDrawer({
 	const questionText = question.text ?? question.customText ?? "No question text";
 
 	return (
-		<Drawer open={isOpen} onOpenChange={handleOpenChange}>
-			<DrawerContent>
+		<Drawer 
+			open={isOpen} 
+			onOpenChange={handleOpenChange}
+			onClose={() => {
+				resetState();
+				isClosingRef.current = false;
+			}}
+		>
+			<DrawerContent onAnimationEnd={() => {
+				// Fallback cleanup if onClose didn't fire
+				if (!isOpen) {
+					resetState();
+					isClosingRef.current = false;
+				}
+			}}>
 				<DrawerHeader>
 					<DrawerTitle className="flex items-center gap-2 justify-between">
 						<span className="flex items-center gap-2">							
