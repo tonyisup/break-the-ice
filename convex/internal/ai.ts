@@ -1,7 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { internalAction } from "../_generated/server";
+import { action, internalAction, ActionCtx } from "../_generated/server";
 import OpenAI from "openai";
 import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
@@ -374,7 +374,7 @@ export const generateNightlyQuestionPool = internalAction({
 	},
 });
 const remixQuestionHelper = async (
-	ctx: any,
+	ctx: ActionCtx,
 	args: {
 		questionText: string;
 		styleId?: Id<"styles">;

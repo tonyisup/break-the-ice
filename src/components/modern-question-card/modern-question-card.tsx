@@ -223,7 +223,39 @@ const LoadingSpinner = ({ gradient }: { gradient: string[] }) => {
   );
 };
 
-const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone, containerRef, onRemix }: { question: Doc<"questions">, style?: Doc<"styles"> | null, tone?: Doc<"tones"> | null, gradient: string[], isFavorite: boolean, isHidden: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void, containerRef: React.RefObject<HTMLDivElement | null>, onRemix?: () => void }) => {
+interface QuestionContentProps {
+  question: Doc<"questions">;
+  style?: Doc<"styles"> | null;
+  tone?: Doc<"tones"> | null;
+  gradient: string[];
+  isFavorite: boolean;
+  isHidden: boolean;
+  onToggleFavorite: () => void;
+  onToggleHidden: () => void;
+  disabled: boolean;
+  handleShare: () => void;
+  onClickStyle?: () => void;
+  onClickTone?: () => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  onRemix?: () => void;
+}
+
+const QuestionContent = ({
+  question,
+  style,
+  tone,
+  gradient,
+  isFavorite,
+  isHidden,
+  onToggleFavorite,
+  onToggleHidden,
+  disabled,
+  handleShare,
+  onClickStyle,
+  onClickTone,
+  containerRef,
+  onRemix
+}: QuestionContentProps) => {
   const { scrollYProgress } = useScroll({ target: containerRef });
   const scrollVelocity = useVelocity(scrollYProgress);
   

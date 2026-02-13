@@ -748,28 +748,39 @@ export const remixQuestionForUser = action({
 		if (!user) {
 			throw new Error("User not found.");
 		}
-		await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
-			userId: user._id,
-		});
+		let usageIncremented = false;
+		try {
+			await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+				userId: user._id,
+			});
+			usageIncremented = true;
 
-		const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
-		if (!question) {
-			throw new Error("Question not found.");
+			const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
+			if (!question) {
+				throw new Error("Question not found.");
+			}
+
+			const questionText = question.text ?? question.customText;
+
+			if (!questionText) {
+				throw new Error("Question text not found.");
+			}
+			const remixText = await ctx.runAction(internal.internal.ai.remixQuestionFull, {
+				questionText,
+				styleId: args.styleId,
+				toneId: args.toneId,
+				topicId: args.topicId,
+			});
+
+			return remixText;
+		} catch (error) {
+			if (usageIncremented) {
+				await ctx.runMutation(internal.internal.users.decrementAIUsage, {
+					userId: user._id,
+				});
+			}
+			throw error;
 		}
-
-		const questionText = question.text ?? question.customText;
-
-		if (!questionText) {
-			throw new Error("Question text not found.");
-		}
-		const remixText = await ctx.runAction(internal.internal.ai.remixQuestionFull, {
-			questionText,
-			styleId: args.styleId,
-			toneId: args.toneId,
-			topicId: args.topicId,
-		});
-
-		return remixText;
 	},
 });
 

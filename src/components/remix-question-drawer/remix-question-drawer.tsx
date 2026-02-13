@@ -47,6 +47,8 @@ export function RemixQuestionDrawer({
 	const [isPublic, setIsPublic] = useState(false);
 	const [tagInput, setTagInput] = useState("");
 	const [tags, setTags] = useState<string[]>([]);
+	const [saveFailed, setSaveFailed] = useState(false);
+	const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
 
 	const styles = useQuery(api.core.styles.getStyles, isOpen ? {} : "skip");
 	const tones = useQuery(api.core.tones.getTones, isOpen ? {} : "skip");
@@ -98,11 +100,14 @@ export function RemixQuestionDrawer({
 		setTags([]);
 		setSelectedStyleId(styleId);
 		setSelectedToneId(toneId);
+		setSaveFailed(false);
+		setFocusedSuggestionIndex(-1);
 	};
 
 	const handleRemix = async () => {
 		if (!question) return;
 		setRemixState("remixing");
+		setSaveFailed(false);
 		try {
 			const text = await remixQuestion({ 
 				questionId: question._id,
@@ -112,7 +117,8 @@ export function RemixQuestionDrawer({
 			});
 			setRemixedText(text);
 
-			if (!newQuestionId) {
+			let currentId = newQuestionId;
+			if (!currentId) {
 				// First remix — create a new private question
 				const id = await addPersonalQuestion({
 					customText: text,
@@ -124,11 +130,12 @@ export function RemixQuestionDrawer({
 				});
 				if (id) {
 					setNewQuestionId(id);
+					currentId = id;
 				}
 			} else {
 				// Subsequent remix — update the existing new question
 				await updatePersonalQuestion({
-					questionId: newQuestionId,
+					questionId: currentId,
 					customText: text,
 					isPublic: false,
 					styleId: selectedStyleId,
@@ -142,7 +149,8 @@ export function RemixQuestionDrawer({
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			toast.error(`Remix failed: ${message}`);
-			setRemixState(newQuestionId ? "remixed" : "idle");
+			setSaveFailed(true);
+			setRemixState(remixedText ? "remixed" : "idle");
 		}
 	};
 
@@ -389,26 +397,56 @@ export function RemixQuestionDrawer({
 								onKeyDown={(e) => {
 									if (e.key === "Enter") {
 										e.preventDefault();
-										if (filteredSuggestions.length > 0) {
+										if (focusedSuggestionIndex >= 0 && filteredSuggestions[focusedSuggestionIndex]) {
+											handleAddTag(filteredSuggestions[focusedSuggestionIndex].name);
+										} else if (filteredSuggestions.length > 0) {
 											handleAddTag(filteredSuggestions[0].name);
 										} else {
 											handleAddTag();
 										}
+									} else if (e.key === "ArrowRight") {
+										setFocusedSuggestionIndex(prev => 
+											prev < filteredSuggestions.length - 1 ? prev + 1 : prev
+										);
+									} else if (e.key === "ArrowLeft") {
+										setFocusedSuggestionIndex(prev => 
+											prev > 0 ? prev - 1 : prev
+										);
 									} else if (e.key === "Backspace" && !tagInput && tags.length > 0) {
 										handleRemoveTag(tags[tags.length - 1]);
 									}
 								}}
 								className="flex-1 bg-transparent border-none outline-none text-sm min-w-[80px] h-6"
+								aria-autocomplete="list"
+								aria-haspopup="listbox"
+								aria-expanded={tagInput && filteredSuggestions.length > 0 ? "true" : "false"}
 							/>
 						</div>
 						{tagInput && filteredSuggestions.length > 0 && (
-							<div className="flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200 mt-1">
-								{filteredSuggestions.map((s) => (
+							<div 
+								className="flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200 mt-1"
+								role="listbox"
+								aria-label="Tag suggestions"
+							>
+								{filteredSuggestions.map((s, index) => (
 									<Badge
 										key={s._id}
 										variant="outline"
-										className="cursor-pointer hover:bg-muted text-[10px] py-0.5 px-2 font-normal border-dashed border-primary/30"
+										role="option"
+										tabIndex={0}
+										aria-selected={focusedSuggestionIndex === index}
+										className={cn(
+											"cursor-pointer hover:bg-muted text-[10px] py-0.5 px-2 font-normal border-dashed",
+											focusedSuggestionIndex === index ? "bg-primary/10 border-primary ring-1 ring-primary/20" : "border-primary/30"
+										)}
 										onClick={() => handleAddTag(s.name)}
+										onKeyDown={(e) => {
+											if (e.key === "Enter" || e.key === " ") {
+												e.preventDefault();
+												handleAddTag(s.name);
+											}
+										}}
+										onMouseEnter={() => setFocusedSuggestionIndex(index)}
 									>
 										+ {s.name}
 									</Badge>
