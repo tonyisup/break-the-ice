@@ -23,6 +23,12 @@
   "functions": {
     "api/question.ts": {
       "includeFiles": "dist/index.html"
+    },
+    "api/og_question.ts": {
+      "includeFiles": "src/components/ui/icons/icons.tsx"
+    },
+    "api/og.ts": {
+      "includeFiles": "src/components/ui/icons/icons.tsx"
     }
   },
   "rewrites": [
