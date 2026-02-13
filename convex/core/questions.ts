@@ -734,6 +734,22 @@ export const remixQuestionForUser = action({
 		if (!identity) {
 			throw new Error("You must be logged in to remix a question.");
 		}
+
+		if (!identity.email) {
+			throw new Error("You must have an email to remix a question.");
+		}
+		
+		const user = await ctx.runQuery(internal.internal.users.getUserByEmail, {
+			email: identity.email,
+		});
+
+		if (!user) {
+			throw new Error("User not found.");
+		}
+		await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+			userId: user._id,
+		});
+
 		const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
 		if (!question) {
 			throw new Error("Question not found.");
@@ -744,12 +760,14 @@ export const remixQuestionForUser = action({
 		if (!questionText) {
 			throw new Error("Question text not found.");
 		}
-		return await ctx.runAction(internal.internal.ai.remixQuestionFull, {
+		const remixText = await ctx.runAction(internal.internal.ai.remixQuestionFull, {
 			questionText,
 			styleId: args.styleId,
 			toneId: args.toneId,
 			topicId: args.topicId,
 		});
+
+		return remixText;
 	},
 });
 

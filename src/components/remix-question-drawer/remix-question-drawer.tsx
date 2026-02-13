@@ -62,6 +62,7 @@ export function RemixQuestionDrawer({
 	const questionTone = useQuery(api.core.tones.getToneById, { id: toneId });
 
 
+	const currentUser = useQuery(api.core.users.getCurrentUser, {});
 	const remixQuestion = useAction(api.core.questions.remixQuestionForUser);
 	const addPersonalQuestion = useMutation(api.core.questions.addPersonalQuestion);
 	const updatePersonalQuestion = useMutation(api.core.questions.updatePersonalQuestion);
@@ -191,9 +192,15 @@ export function RemixQuestionDrawer({
 		<Drawer open={isOpen} onOpenChange={handleOpenChange}>
 			<DrawerContent>
 				<DrawerHeader>
-					<DrawerTitle className="flex items-center gap-2">
-						<Sparkles className="size-5 text-blue-500" />
-						Remix Question
+					<DrawerTitle className="flex items-center gap-2 justify-between">
+						<span className="flex items-center gap-2">							
+							Remix Question
+						</span>
+						{currentUser && (
+							<span className={`flex items-center gap-2 text-xs font-normal ${currentUser.isAiLimitReached ? "text-red-500" : "text-muted-foreground"}`}>
+								{currentUser.aiUsage?.count ?? 0}/{currentUser.aiLimit} <Sparkles className="size-4 text-blue-500" /> AI generations
+							</span>
+						)}
 					</DrawerTitle>
 					<DrawerDescription>
 						Create your own spin on this question
@@ -354,7 +361,11 @@ export function RemixQuestionDrawer({
 				<DrawerFooter>
 					{remixState === "idle" && (
 						<>
-							<Button onClick={handleRemix} className="gap-2">
+							<Button 
+								onClick={handleRemix} 
+								className="gap-2"
+								disabled={currentUser?.isAiLimitReached}
+							>
 								<Sparkles className="size-4" />
 								Remix
 							</Button>
@@ -377,7 +388,12 @@ export function RemixQuestionDrawer({
 								<Save className="size-4" />
 								Save
 							</Button>
-							<Button variant="outline" onClick={handleRemix} className="gap-2">
+							<Button 
+								variant="outline" 
+								onClick={handleRemix} 
+								className="gap-2"
+								disabled={currentUser?.isAiLimitReached}
+							>
 								<RotateCcw className="size-4" />
 								Remix Again
 							</Button>
