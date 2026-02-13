@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
@@ -47,23 +47,31 @@ export function RemixQuestionDrawer({
 	const [isPublic, setIsPublic] = useState(false);
 	const [tagInput, setTagInput] = useState("");
 	const [tags, setTags] = useState<string[]>([]);
+	const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
 
-	const styles = useQuery(api.core.styles.getStyles, {});
-	const tones = useQuery(api.core.tones.getTones, {});
+	const styles = useQuery(api.core.styles.getStyles, isOpen ? {} : "skip");
+	const tones = useQuery(api.core.tones.getTones, isOpen ? {} : "skip");
+	const allAvailableTags = useQuery(api.core.tags.getTags, isOpen ? {} : "skip");
+
+	const filteredSuggestions = useMemo(() => {
+		if (!tagInput.trim()) return [];
+		return allAvailableTags?.filter(t => 
+			t.name.toLowerCase().includes(tagInput.toLowerCase()) && 
+			!tags.includes(t.name)
+		).slice(0, 10) || [];
+	}, [allAvailableTags, tagInput, tags]);
 
 	// Style / tone selection (default to the question's current values)
-	const [selectedStyleId, setSelectedStyleId] = useState<Id<"styles">>(styleId);
-	const [selectedToneId, setSelectedToneId] = useState<Id<"tones">>(toneId);
+	const [selectedStyleId, setSelectedStyleId] = useState<Id<"styles"> | undefined>(styleId);
+	const [selectedToneId, setSelectedToneId] = useState<Id<"tones"> | undefined>(toneId);
 
-	const style = useQuery(api.core.styles.getStyleById, { id: selectedStyleId });
-	const tone = useQuery(api.core.tones.getToneById, { id: selectedToneId });
+	const style = useQuery(api.core.styles.getStyleById, selectedStyleId && isOpen ? { id: selectedStyleId } : "skip");
+	const tone = useQuery(api.core.tones.getToneById, selectedToneId && isOpen ? { id: selectedToneId } : "skip");
 
+	const questionStyle = useQuery(api.core.styles.getStyleById, isOpen ? { id: styleId } : "skip");
+	const questionTone = useQuery(api.core.tones.getToneById, isOpen ? { id: toneId } : "skip");
 
-	const questionStyle = useQuery(api.core.styles.getStyleById, { id: styleId });
-	const questionTone = useQuery(api.core.tones.getToneById, { id: toneId });
-
-
-	const currentUser = useQuery(api.core.users.getCurrentUser, {});
+	const currentUser = useQuery(api.core.users.getCurrentUser, isOpen ? {} : "skip");
 	const remixQuestion = useAction(api.core.questions.remixQuestionForUser);
 	const addPersonalQuestion = useMutation(api.core.questions.addPersonalQuestion);
 	const updatePersonalQuestion = useMutation(api.core.questions.updatePersonalQuestion);
@@ -72,10 +80,6 @@ export function RemixQuestionDrawer({
 	// Reset state when drawer opens/closes
 	const handleOpenChange = (open: boolean) => {
 		if (!open) {
-			// If we have a saved question and we're closing, fire onRemixed
-			if (remixState === "remixed" && newQuestionId && remixedText) {
-				// onRemixed already called on save
-			}
 			resetState();
 		} else {
 			// Initialize selections from the current question
@@ -117,6 +121,7 @@ export function RemixQuestionDrawer({
 					styleId: selectedStyleId,
 					toneId: selectedToneId,
 					topicId: question.topicId,
+					tags,
 				});
 				if (id) {
 					setNewQuestionId(id);
@@ -130,6 +135,7 @@ export function RemixQuestionDrawer({
 					styleId: selectedStyleId,
 					toneId: selectedToneId,
 					topicId: question.topicId,
+					tags,
 				});
 			}
 
@@ -151,6 +157,7 @@ export function RemixQuestionDrawer({
 				styleId: selectedStyleId,
 				toneId: selectedToneId,
 				topicId: question.topicId,
+				tags,
 			});
 			if (updatedQuestion && onRemixed) {
 				onRemixed(question, updatedQuestion as Doc<"questions">);
@@ -173,12 +180,21 @@ export function RemixQuestionDrawer({
 		handleOpenChange(false);
 	};
 
-	const handleAddTag = () => {
-		if (!tagInput.trim()) return;
-		if (!tags.includes(tagInput.trim())) {
-			setTags([...tags, tagInput.trim()]);
+	const handleAddTag = (tagName?: string) => {
+		const tagToAdd = (tagName || tagInput).trim().toLowerCase();
+		if (!tagToAdd) return;
+		
+		const tagExists = allAvailableTags?.some(t => t.name.toLowerCase() === tagToAdd);
+		if (!tagExists) {
+			toast.error(`"${tagToAdd}" is not a valid tag. Please select from the list.`);
+			return;
+		}
+
+		if (!tags.includes(tagToAdd)) {
+			setTags([...tags, tagToAdd]);
 		}
 		setTagInput("");
+		setIsTagPopoverOpen(false);
 	};
 
 	const handleRemoveTag = (tag: string) => {
@@ -271,7 +287,7 @@ export function RemixQuestionDrawer({
 							<Label className="text-xs font-medium">Style</Label>
 							<select
 								value={selectedStyleId ?? ""}
-								onChange={(e) => setSelectedStyleId(e.target.value as Id<"styles">)}
+								onChange={(e) => setSelectedStyleId(e.target.value === "" ? undefined : e.target.value as Id<"styles">)}
 								className="w-full h-9 rounded-lg border bg-background px-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
 							>
 								<option value="">Current</option>
@@ -312,7 +328,7 @@ export function RemixQuestionDrawer({
 							<Label className="text-xs font-medium">Tone</Label>
 							<select
 								value={selectedToneId ?? ""}
-								onChange={(e) => setSelectedToneId(e.target.value as Id<"tones">)}
+								onChange={(e) => setSelectedToneId(e.target.value === "" ? undefined : e.target.value as Id<"tones">)}
 								className="w-full h-9 rounded-lg border bg-background px-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
 							>
 								<option value="">Current</option>
@@ -348,6 +364,63 @@ export function RemixQuestionDrawer({
 								</Popover>
 							</div>
 							)}
+						</div>
+					</div>
+
+					{/* Tags Section */}
+					<div className="space-y-2">
+						<Label className="text-xs font-medium text-muted-foreground">Tags</Label>
+						<div className="flex gap-2 relative">
+							<Input
+								placeholder="Add a tag..."
+								value={tagInput}
+								onChange={(e) => {
+									setTagInput(e.target.value);
+									setIsTagPopoverOpen(true);
+								}}
+								onFocus={() => setIsTagPopoverOpen(true)}
+								onBlur={() => {
+									// Small delay to allow clicking suggestions
+									setTimeout(() => setIsTagPopoverOpen(false), 200);
+								}}
+								onKeyDown={(e) => e.key === "Enter" && handleAddTag()}
+								className="h-8 text-sm"
+							/>
+							{isTagPopoverOpen && filteredSuggestions.length > 0 && (
+								<div className="absolute top-10 left-0 w-full z-50 bg-background border rounded-lg shadow-lg max-h-40 overflow-y-auto p-1">
+									{filteredSuggestions.map(s => (
+										<div 
+											key={s._id}
+											className="px-2 py-1.5 text-sm hover:bg-muted cursor-pointer rounded-md flex justify-between items-center"
+											onClick={() => {
+												handleAddTag(s.name);
+											}}
+										>
+											<span>{s.name}</span>
+											<span className="text-[10px] text-muted-foreground">{s.grouping}</span>
+										</div>
+									))}
+								</div>
+							)}
+							<Button size="sm" variant="secondary" onClick={() => handleAddTag()} className="h-8">Add</Button>
+						</div>
+						<div className="flex flex-wrap gap-1.5 mt-2">
+							{tags.length === 0 && (
+								<p className="text-[10px] text-muted-foreground italic">No tags added yet</p>
+							)}
+							{tags.map((tag) => (
+								<Badge key={tag} variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-[10px]">
+									{tag}
+									<Button
+										variant="ghost"
+										size="icon"
+										className="h-3 w-3 p-0 hover:bg-transparent"
+										onClick={() => handleRemoveTag(tag)}
+									>
+										<Trash2 className="size-2" />
+									</Button>
+								</Badge>
+							))}
 						</div>
 					</div>
 

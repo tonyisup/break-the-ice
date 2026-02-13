@@ -368,6 +368,7 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden
 
         {onRemix && style && tone && (
           <button
+            type="button"
             onClick={onRemix}
             disabled={disabled}
             className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"

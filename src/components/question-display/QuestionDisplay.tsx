@@ -17,7 +17,7 @@ interface QuestionDisplayProps {
   onHideStyle: (styleId: string) => void;
   onHideTone: (toneId: string) => void;
   disabled?: boolean;
-  onRemixed?: (newQuestion: Doc<"questions">) => void;
+  onRemixed?: (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => void;
 }
 
 export const QuestionDisplay = ({

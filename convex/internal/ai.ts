@@ -373,6 +373,59 @@ export const generateNightlyQuestionPool = internalAction({
 		return { questionsGenerated, combinationsProcessed, errors };
 	},
 });
+const remixQuestionHelper = async (
+	ctx: any,
+	args: {
+		questionText: string;
+		styleId?: Id<"styles">;
+		toneId?: Id<"tones">;
+		topicId?: Id<"topics">;
+	}
+): Promise<string> => {
+	const { questionText, styleId, toneId, topicId } = args;
+
+	const [style, tone, topic] = await Promise.all([
+		styleId ? ctx.runQuery(internal.internal.styles.getStyleById, { id: styleId }) : null,
+		toneId ? ctx.runQuery(internal.internal.tones.getToneById, { id: toneId }) : null,
+		topicId ? ctx.runQuery(internal.internal.topics.getTopicById, { id: topicId }) : null,
+	]);
+
+	const completion = await openai.chat.completions.create({
+		model: "@preset/break-the-ice-berg-default",
+		messages: [
+			{
+				role: "system",
+				content: `You are a world-class creative writer specializing in social psychology and ice-breakers.
+				
+				TASK: "Remix" the user's question. Change the words and phrasing completely.
+				FORMAT: Return ONLY the new question text as a plain string. No quotes, no JSON, no prefixes.
+				
+				STYLE STRUCTURE: Use this as your base: "${style?.structure ?? "Direct and engaging"}"
+				TONE GUIDE: Use this as your base: "${tone?.promptGuidanceForAI ?? "KEEP the tone of the original text"}"
+				TOPIC FOCUS: Use this as your base: "${topic?.promptGuidanceForAI ?? "KEEP the topic of the original text"}"
+				`
+			},
+			{
+				role: "user",
+				content: `Remix this question: "${questionText}"
+				
+				Context:
+				Style: ${style?.name ?? "General"} (${style?.description ?? ""})
+				Tone: ${tone?.name ?? "General"} (${tone?.description ?? ""})${topic ? `\n\t\t\t\t\tTopic Focus: ${topic.name} (${topic.description ?? ""})` : ""}`
+			}
+		],
+		temperature: 0.9,
+		max_tokens: 150,
+	});
+
+	const remixedText = completion.choices[0]?.message?.content?.trim() ?? "";
+	if (!remixedText) {
+		throw new Error("AI failed to generate a remix");
+	}
+
+	return remixedText.replace(/^["']|["']$/g, '').trim();
+};
+
 // Remix a single question and allow changing style and tone
 export const remixQuestionFull = internalAction({
 	args: {
@@ -382,49 +435,8 @@ export const remixQuestionFull = internalAction({
 		topicId: v.optional(v.id("topics")),
 	},
 	returns: v.string(),
-	handler: async(ctx, args): Promise<string> => {	
-		const { questionText, styleId, toneId, topicId } = args;
-		
-		const [style, tone, topic] = await Promise.all([
-			styleId ? ctx.runQuery(internal.internal.styles.getStyleById, { id: styleId }) : null,
-			toneId ? ctx.runQuery(internal.internal.tones.getToneById, { id: toneId }) : null,
-			topicId ? ctx.runQuery(internal.internal.topics.getTopicById, { id: topicId }) : null,
-		]);
-		
-		const completion = await openai.chat.completions.create({
-			model: "@preset/break-the-ice-berg-default",
-			messages: [
-				{
-					role: "system",
-					content: `You are a world-class creative writer specializing in social psychology and ice-breakers.
-					
-					TASK: "Remix" the user's question. Change the words and phrasing completely.
-					FORMAT: Return ONLY the new question text as a plain string. No quotes, no JSON, no prefixes.
-					
-					STYLE STRUCTURE: Use this as your base: "${style?.structure ?? "Direct and engaging"}"
-					TONE GUIDE: Use this as your base: "${tone?.promptGuidanceForAI ?? "KEEP the tone of the original text"}"
-					TOPIC FOCUS: Use this as your base: "${topic?.promptGuidanceForAI ?? "KEEP the topic of the original text"}"
-					`
-				},
-				{
-					role: "user",
-					content: `Remix this question: "${questionText}"
-					
-					Context:
-					Style: ${style?.name ?? "General"} (${style?.description ?? ""})
-					Tone: ${tone?.name ?? "General"} (${tone?.description ?? ""})${topic ? `\n\t\t\t\t\tTopic Focus: ${topic.name} (${topic.description ?? ""})` : ""}`
-				}
-			],
-			temperature: 0.9,
-			max_tokens: 150,
-		});
-
-		const remixedText = completion.choices[0]?.message?.content?.trim() ?? "";
-		if (!remixedText) {
-			throw new Error("AI failed to generate a remix");
-		}
-
-		return remixedText.replace(/^["']|["']$/g, '').trim();
+	handler: async (ctx, args): Promise<string> => {
+		return await remixQuestionHelper(ctx, args);
 	}
 });
 
@@ -441,18 +453,12 @@ export const remixQuestion = internalAction({
 			throw new Error("Question not found or has no text");
 		}
 
-		const remixedText = await ctx.runAction(internal.internal.ai.remixQuestionFull, {
+		return await remixQuestionHelper(ctx, {
 			questionText,
 			styleId: question.styleId,
 			toneId: question.toneId,
 			topicId: question.topicId,
 		});
-
-		if (!remixedText) {
-			throw new Error("AI failed to generate a remix");
-		}
-
-		return remixedText.replace(/^["']|["']$/g, '').trim();
 	},
 });
 

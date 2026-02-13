@@ -72,6 +72,7 @@ export const addPersonalQuestion = mutation({
 		styleId: v.optional(v.id("styles")),
 		toneId: v.optional(v.id("tones")),
 		topicId: v.optional(v.id("topics")),
+		tags: v.optional(v.array(v.string())),
 	},
 	returns: v.union(v.id("questions"), v.null()),
 	handler: async (ctx, args) => {
@@ -120,6 +121,7 @@ export const addPersonalQuestion = mutation({
 			tone: toneDoc?.id,
 			topicId: args.topicId,
 			topic: topicDoc?.id,
+			tags: args.tags,
 		});
 	},
 });
@@ -780,6 +782,7 @@ export const updatePersonalQuestion = mutation({
 		styleId: v.optional(v.id("styles")),
 		toneId: v.optional(v.id("tones")),
 		topicId: v.optional(v.id("topics")),
+		tags: v.optional(v.array(v.string())),
 	},
 	returns: v.union(v.any(), v.null()),
 	handler: async (ctx, args) => {
@@ -817,6 +820,7 @@ export const updatePersonalQuestion = mutation({
 			tone: toneDoc?.id,
 			topicId: args.topicId,
 			topic: topicDoc?.id,
+			tags: args.tags,
 		});
 		return await ctx.db.get(args.questionId);
 	},
