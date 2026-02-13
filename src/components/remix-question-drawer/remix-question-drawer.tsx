@@ -3,7 +3,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { toast } from "sonner";
-import { Loader2, Sparkles, Trash2, RotateCcw, Save } from "lucide-react";
+import { Loader2, Sparkles, Trash2, RotateCcw, Save, X } from "lucide-react";
 import {
 	Drawer,
 	DrawerContent,
@@ -47,7 +47,6 @@ export function RemixQuestionDrawer({
 	const [isPublic, setIsPublic] = useState(false);
 	const [tagInput, setTagInput] = useState("");
 	const [tags, setTags] = useState<string[]>([]);
-	const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
 
 	const styles = useQuery(api.core.styles.getStyles, isOpen ? {} : "skip");
 	const tones = useQuery(api.core.tones.getTones, isOpen ? {} : "skip");
@@ -194,7 +193,6 @@ export function RemixQuestionDrawer({
 			setTags([...tags, tagToAdd]);
 		}
 		setTagInput("");
-		setIsTagPopoverOpen(false);
 	};
 
 	const handleRemoveTag = (tag: string) => {
@@ -368,48 +366,11 @@ export function RemixQuestionDrawer({
 					</div>
 
 					{/* Tags Section */}
-					<div className="space-y-2">
+					<div className="space-y-1.5">
 						<Label className="text-xs font-medium text-muted-foreground">Tags</Label>
-						<div className="flex gap-2 relative">
-							<Input
-								placeholder="Add a tag..."
-								value={tagInput}
-								onChange={(e) => {
-									setTagInput(e.target.value);
-									setIsTagPopoverOpen(true);
-								}}
-								onFocus={() => setIsTagPopoverOpen(true)}
-								onBlur={() => {
-									// Small delay to allow clicking suggestions
-									setTimeout(() => setIsTagPopoverOpen(false), 200);
-								}}
-								onKeyDown={(e) => e.key === "Enter" && handleAddTag()}
-								className="h-8 text-sm"
-							/>
-							{isTagPopoverOpen && filteredSuggestions.length > 0 && (
-								<div className="absolute top-10 left-0 w-full z-50 bg-background border rounded-lg shadow-lg max-h-40 overflow-y-auto p-1">
-									{filteredSuggestions.map(s => (
-										<div 
-											key={s._id}
-											className="px-2 py-1.5 text-sm hover:bg-muted cursor-pointer rounded-md flex justify-between items-center"
-											onClick={() => {
-												handleAddTag(s.name);
-											}}
-										>
-											<span>{s.name}</span>
-											<span className="text-[10px] text-muted-foreground">{s.grouping}</span>
-										</div>
-									))}
-								</div>
-							)}
-							<Button size="sm" variant="secondary" onClick={() => handleAddTag()} className="h-8">Add</Button>
-						</div>
-						<div className="flex flex-wrap gap-1.5 mt-2">
-							{tags.length === 0 && (
-								<p className="text-[10px] text-muted-foreground italic">No tags added yet</p>
-							)}
+						<div className="flex flex-wrap gap-1.5 p-2 border rounded-lg bg-background focus-within:ring-2 focus-within:ring-primary/20 min-h-[40px]">
 							{tags.map((tag) => (
-								<Badge key={tag} variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-[10px]">
+								<Badge key={tag} variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-[10px] h-6">
 									{tag}
 									<Button
 										variant="ghost"
@@ -417,11 +378,43 @@ export function RemixQuestionDrawer({
 										className="h-3 w-3 p-0 hover:bg-transparent"
 										onClick={() => handleRemoveTag(tag)}
 									>
-										<Trash2 className="size-2" />
+										<X className="size-2" />
 									</Button>
 								</Badge>
 							))}
+							<input
+								placeholder={tags.length === 0 ? "Add tags (e.g. food, travel)..." : ""}
+								value={tagInput}
+								onChange={(e) => setTagInput(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter") {
+										e.preventDefault();
+										if (filteredSuggestions.length > 0) {
+											handleAddTag(filteredSuggestions[0].name);
+										} else {
+											handleAddTag();
+										}
+									} else if (e.key === "Backspace" && !tagInput && tags.length > 0) {
+										handleRemoveTag(tags[tags.length - 1]);
+									}
+								}}
+								className="flex-1 bg-transparent border-none outline-none text-sm min-w-[80px] h-6"
+							/>
 						</div>
+						{tagInput && filteredSuggestions.length > 0 && (
+							<div className="flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200 mt-1">
+								{filteredSuggestions.map((s) => (
+									<Badge
+										key={s._id}
+										variant="outline"
+										className="cursor-pointer hover:bg-muted text-[10px] py-0.5 px-2 font-normal border-dashed border-primary/30"
+										onClick={() => handleAddTag(s.name)}
+									>
+										+ {s.name}
+									</Badge>
+								))}
+							</div>
+						)}
 					</div>
 
 					{/* Private / Submit toggle */}
