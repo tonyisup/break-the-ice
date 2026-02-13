@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useQuery, useAction, useMutation } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
-import { Doc, Id } from "../../../../convex/_generated/dataModel"
+import { Id } from "../../../../convex/_generated/dataModel"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -13,7 +13,8 @@ import {
     RefreshCw,
     Plus,
     ChevronRight,
-    Check
+    Check,
+    X
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -21,6 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function GeneratorPage() {
     const styles = useQuery(api.core.styles.getStyles, {})
@@ -28,7 +30,7 @@ export default function GeneratorPage() {
     const topics = useQuery(api.core.topics.getTopics, {})
     const tags = useQuery(api.core.tags.getTags)
 
-    const generateAIQuestions = useAction(api.core.ai.generateAIQuestions)
+    const generateAIQuestions = useAction(api.admin.ai.generateAIQuestions)
     const saveAIQuestion = useMutation(api.core.questions.saveAIQuestion)
 
     const [selectedTags, setSelectedTags] = React.useState<string[]>([])
@@ -39,10 +41,21 @@ export default function GeneratorPage() {
     const [isGenerating, setIsGenerating] = React.useState(false)
     const [isSaving, setIsSaving] = React.useState(false)
     const [expandedTagGroupings, setExpandedTagGroupings] = React.useState<Set<string>>(new Set())
-    const [previewQuestion, setPreviewQuestion] = React.useState<string | null>(null)
+    const [generatedQuestions, setGeneratedQuestions] = React.useState<string[]>([])
+    const [activeTabIndex, setActiveTabIndex] = React.useState<string>("0")
 
+    // Convenience for active question
+    const activeQuestion = generatedQuestions[parseInt(activeTabIndex)]
+
+    // Reset generated questions when major configuration changes
+    React.useEffect(() => {
+        setGeneratedQuestions([])
+        setActiveTabIndex("0")
+    }, [selectedStyleId, selectedToneId, selectedTopicId])
 
     const handleTagToggle = (tagName: string) => {
+        setGeneratedQuestions([]) // Reset on tag change too
+        setActiveTabIndex("0")
         setSelectedTags(prev =>
             prev.includes(tagName)
                 ? prev.filter(tag => tag !== tagName)
@@ -53,6 +66,8 @@ export default function GeneratorPage() {
     const handleAddCustomTag = () => {
         const newTag = customTag.trim()
         if (newTag && !selectedTags.includes(newTag)) {
+            setGeneratedQuestions([]) // Reset on tag change
+            setActiveTabIndex("0")
             setSelectedTags(prev => [...prev, newTag])
             setCustomTag("")
         } else if (selectedTags.includes(newTag)) {
@@ -95,16 +110,19 @@ export default function GeneratorPage() {
                 toast.error("Please select a style and tone")
                 return
             }
+
             const generatedQuestion = await generateAIQuestions({
                 count: 1,
                 selectedTags,
-                currentQuestion: previewQuestion ? previewQuestion : undefined,
+                excludedQuestions: generatedQuestions.length > 0 ? generatedQuestions : undefined,
                 styleId: selectedStyleId,
                 toneId: selectedToneId,
-                topicId: selectedTopicId || undefined,
+                topicId: selectedTopicId || undefined
             })
             if (generatedQuestion) {
-                setPreviewQuestion(generatedQuestion)
+                const newQuestions = [...generatedQuestions, generatedQuestion]
+                setGeneratedQuestions(newQuestions)
+                setActiveTabIndex((newQuestions.length - 1).toString())
                 toast.success("Preview generated")
             } else {
                 toast.error("No question generated")
@@ -118,7 +136,7 @@ export default function GeneratorPage() {
     }
 
     const handleAccept = async () => {
-        if (!previewQuestion) return
+        if (!activeQuestion) return
 
         setIsSaving(true)
         try {
@@ -132,7 +150,7 @@ export default function GeneratorPage() {
             const selectedTopic = topics?.find(t => t._id === selectedTopicId)
 
             const result = await saveAIQuestion({
-                text: previewQuestion,
+                text: activeQuestion,
                 tags: selectedTags,
                 styleId: selectedStyleId,
                 style: selectedStyle?.id,
@@ -144,12 +162,13 @@ export default function GeneratorPage() {
 
             if (result === null) {
                 toast.warning("This question already exists in the database")
-                // Do not clear preview so user can regenerate or modify
                 return
             }
 
             toast.success("Question saved to database!")
-            setPreviewQuestion(null) // Clear preview after saving
+            const newQuestions = generatedQuestions.filter((_, i) => i !== parseInt(activeTabIndex))
+            setGeneratedQuestions(newQuestions)
+            setActiveTabIndex(Math.max(0, newQuestions.length - 1).toString())
         } catch (error) {
             console.error("Error saving question:", error)
             toast.error("Failed to save question")
@@ -360,39 +379,75 @@ export default function GeneratorPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-6 min-h-[300px] flex flex-col justify-between">
-                            {previewQuestion ? (
-                                <div className="space-y-6 animate-in fade-in zoom-in duration-300">
-                                    <div className="space-y-4">
-                                        <p className="text-xl font-medium leading-relaxed">{previewQuestion}</p>
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedTags.map(tag => (
-                                                <Badge key={tag} variant="secondary" className="text-xs">
-                                                    {tag}
-                                                </Badge>
+                            {generatedQuestions.length > 0 ? (
+                                <Tabs value={activeTabIndex} onValueChange={setActiveTabIndex} className="w-full flex flex-col min-h-[250px]">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <TabsList className="bg-muted/50 w-full justify-start overflow-x-auto h-auto p-1 gap-1">
+                                            {generatedQuestions.map((_, i) => (
+                                                <TabsTrigger 
+                                                    key={i} 
+                                                    value={i.toString()}
+                                                    className="px-3 py-1 h-8 min-w-[32px]"
+                                                >
+                                                    {i + 1}
+                                                </TabsTrigger>
                                             ))}
-                                        </div>
+                                        </TabsList>
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="ml-2 h-8 w-8 text-muted-foreground hover:text-destructive"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                const indexToRemove = parseInt(activeTabIndex)
+                                                const newQuestions = generatedQuestions.filter((_, i) => i !== indexToRemove)
+                                                setGeneratedQuestions(newQuestions)
+                                                setActiveTabIndex(Math.max(0, indexToRemove - 1).toString())
+                                            }}
+                                        >
+                                            <X className="size-4" />
+                                        </Button>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-3 pt-6 border-t">
-                                        <Button
-                                            variant="outline"
-                                            onClick={handleGenerate}
-                                            disabled={isGenerating}
-                                            className="w-full"
+                                    {generatedQuestions.map((q, i) => (
+                                        <TabsContent 
+                                            key={i} 
+                                            value={i.toString()} 
+                                            className="flex-1 mt-0 flex flex-col justify-between space-y-6 animate-in fade-in zoom-in duration-300"
                                         >
-                                            {isGenerating ? <Loader2 className="size-4 animate-spin mr-2" /> : <RefreshCw className="size-4 mr-2" />}
-                                            Retry
-                                        </Button>
-                                        <Button
-                                            onClick={handleAccept}
-                                            disabled={isSaving}
-                                            className="w-full bg-green-600 hover:bg-green-700"
-                                        >
-                                            {isSaving ? <Loader2 className="size-4 animate-spin mr-2" /> : <Check className="size-4 mr-2" />}
-                                            Accept
-                                        </Button>
-                                    </div>
-                                </div>
+                                            <div className="space-y-4">
+                                                <p className="text-xl font-medium leading-relaxed">{q}</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {selectedTags.map(tag => (
+                                                        <Badge key={tag} variant="secondary" className="text-xs">
+                                                            {tag}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3 pt-6 border-t">
+                                                <Button
+                                                    variant="outline"
+                                                    onClick={handleGenerate}
+                                                    disabled={isGenerating}
+                                                    className="w-full"
+                                                >
+                                                    {isGenerating ? <Loader2 className="size-4 animate-spin mr-2" /> : <RefreshCw className="size-4 mr-2" />}
+                                                    Generate Another
+                                                </Button>
+                                                <Button
+                                                    onClick={handleAccept}
+                                                    disabled={isSaving}
+                                                    className="w-full bg-green-600 hover:bg-green-700"
+                                                >
+                                                    {isSaving ? <Loader2 className="size-4 animate-spin mr-2" /> : <Check className="size-4 mr-2" />}
+                                                    Accept
+                                                </Button>
+                                            </div>
+                                        </TabsContent>
+                                    ))}
+                                </Tabs>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full text-center space-y-4 py-12 text-muted-foreground">
                                     <div className="p-4 rounded-full bg-muted/50">

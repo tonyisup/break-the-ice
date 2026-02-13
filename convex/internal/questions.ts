@@ -562,7 +562,6 @@ export const checkSimilarity = internalAction({
 export const getRandomQuestionsInternal = internalQuery({
 	args: {
 		count: v.number(),
-		startTime: v.number(),
 		seen: v.array(v.id("questions")),
 		hidden: v.array(v.id("questions")),
 		hiddenStyles: v.array(v.id("styles")),
@@ -570,7 +569,7 @@ export const getRandomQuestionsInternal = internalQuery({
 		organizationId: v.optional(v.id("organizations")),
 	},
 	handler: async (ctx, args) => {
-		const { count, startTime, seen, hidden, hiddenStyles, hiddenTones, organizationId } = args;
+		const { count, seen, hidden, hiddenStyles, hiddenTones, organizationId } = args;
 		const seenIds = new Set(seen);
 		const hiddenIds = new Set(hidden);
 		const hiddenStyleIds = new Set(hiddenStyles);
@@ -578,44 +577,35 @@ export const getRandomQuestionsInternal = internalQuery({
 
 		const applyFilters = (q: any) => {
 			const conditions = [
-				q.eq(q.field("organizationId"), organizationId),
-				q.eq(q.field("prunedAt"), undefined),
 				q.neq(q.field("text"), undefined),
-				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
+				q.eq(q.field("status"), "public"),
 			];
 			return q.and(...conditions);
 		};
 
-		// 1. Fetch candidates from random start point
-		const candidatesWithEmbeddings = await ctx.db
+		// Collect all public questions so we can sample across the full set
+		// rather than always returning the oldest rows via _creationTime order.
+		// With ~300-1000 questions this is very efficient; the 1000-row cap
+		// protects against unbounded growth.
+		const allPublic = await ctx.db
 			.query("questions")
-			.withIndex("by_creation_time", (q) => q.gt("_creationTime", startTime))
 			.filter((q) => applyFilters(q))
-			.take(count * 5);
+			.take(1000);
 
-		let candidates = candidatesWithEmbeddings.map(q => {
+		// Strip embeddings to reduce payload size
+		const candidates = allPublic.map(q => {
 			const { embedding, ...rest } = q;
 			return rest;
 		});
 
-		// 2. Wrap around if needed
-		if (candidates.length < count * 2) {
-			const moreCandidates = await ctx.db
-				.query("questions")
-				.withIndex("by_creation_time")
-				.filter((q) => applyFilters(q))
-				.take(count * 5 - candidates.length);
-
-			const existingIds = new Set(candidates.map((q) => q._id));
-			for (const q of moreCandidates) {
-				if (!existingIds.has(q._id)) {
-					candidates.push(q);
-					existingIds.add(q._id);
-				}
-			}
+		// In-memory Fisher-Yates shuffle so each request samples randomly
+		// across the full question set instead of always the oldest slice
+		for (let i = candidates.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[candidates[i], candidates[j]] = [candidates[j], candidates[i]];
 		}
 
-		// 3. Post-filter for seen, hidden, styles, and tones
+		// Post-filter for seen, hidden, styles, and tones
 		const filtered = candidates.filter((q) => {
 			if (seenIds.has(q._id)) return false;
 			if (hiddenIds.has(q._id)) return false;
@@ -623,6 +613,11 @@ export const getRandomQuestionsInternal = internalQuery({
 			if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
 			return true;
 		});
+
+		// Return enough candidates to fill the requested count after the
+		// caller's own shuffle + slice. Account for all exclusion sources.
+		const exclusionCount = seenIds.size + hiddenIds.size + hiddenStyleIds.size + hiddenToneIds.size;
+		const returnCount = Math.min(Math.max(count + exclusionCount + 10, 50), 500);
 
 		// pull any active topics, find a question that has that topic, and inject it if there is one
 		const now = Date.now();
@@ -655,7 +650,7 @@ export const getRandomQuestionsInternal = internalQuery({
 			}
 		}
 
-		return filtered;
+		return filtered.slice(0, returnCount);
 	},
 });
 
