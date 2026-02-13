@@ -112,8 +112,9 @@ export function RemixQuestionDrawer({
 				const id = await addPersonalQuestion({
 					customText: text,
 					isPublic: false,
-					styleId: selectedStyleId ?? undefined,
-					toneId: selectedToneId ?? undefined,
+					styleId: selectedStyleId,
+					toneId: selectedToneId,
+					topicId: question.topicId,
 				});
 				if (id) {
 					setNewQuestionId(id);
@@ -124,8 +125,9 @@ export function RemixQuestionDrawer({
 					questionId: newQuestionId,
 					customText: text,
 					isPublic: false,
-					styleId: selectedStyleId ?? undefined,
-					toneId: selectedToneId ?? undefined,
+					styleId: selectedStyleId,
+					toneId: selectedToneId,
+					topicId: question.topicId,
 				});
 			}
 
@@ -144,6 +146,9 @@ export function RemixQuestionDrawer({
 				questionId: newQuestionId,
 				customText: remixedText,
 				isPublic,
+				styleId: selectedStyleId,
+				toneId: selectedToneId,
+				topicId: question.topicId,
 			});
 			if (updatedQuestion && onRemixed) {
 				onRemixed(question, updatedQuestion as Doc<"questions">);

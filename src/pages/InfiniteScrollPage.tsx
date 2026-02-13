@@ -65,14 +65,23 @@ export default function InfiniteScrollPage() {
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
 
   const stylesMap = useMemo(() => {
-    if (!allStyles) return new Map<string, Doc<"styles">>();
-    // Cast to Doc<"styles"> as getStyles returns objects compatible with the Doc type
-    return new Map(allStyles.map(s => [s.id, s as unknown as Doc<"styles">]));
+    const map = new Map<string, Doc<"styles">>();
+    if (!allStyles) return map;
+    allStyles.forEach(s => {
+      map.set(s.id, s as unknown as Doc<"styles">);
+      map.set(s._id, s as unknown as Doc<"styles">);
+    });
+    return map;
   }, [allStyles]);
 
   const tonesMap = useMemo(() => {
-    if (!allTones) return new Map<string, Doc<"tones">>();
-    return new Map(allTones.map(t => [t.id, t as unknown as Doc<"tones">]));
+    const map = new Map<string, Doc<"tones">>();
+    if (!allTones) return map;
+    allTones.forEach(t => {
+      map.set(t.id, t as unknown as Doc<"tones">);
+      map.set(t._id, t as unknown as Doc<"tones">);
+    });
+    return map;
   }, [allTones]);
 
   // Request ID to handle race conditions
@@ -471,8 +480,22 @@ export default function InfiniteScrollPage() {
   }
 
   const handleRemix = (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => {
+    setQuestions((prev) =>
+      prev.map((q) => (q._id === originalQuestion._id ? newQuestion : q))
+    );
 
-  }
+    // Update activeQuestion if the one being remixed is the active one
+    if (activeQuestion?._id === originalQuestion._id) {
+      setActiveQuestion(newQuestion);
+    }
+
+    // Add the new question to seen IDs so it doesn't get fetched again if it were to appear in the pool
+    setSeenIds((prev) => {
+      const next = new Set(prev);
+      next.add(newQuestion._id);
+      return next;
+    });
+  };
 
   // Smooth gradient transition logic
   const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
@@ -629,8 +652,8 @@ export default function InfiniteScrollPage() {
 
           {!allStylesBlocked && !allTonesBlocked && questions.map((question, index) => {
             // Derive specific style/tone/gradient for this card
-            const cardStyle = question.style ? stylesMap.get(question.style) : undefined;
-            const cardTone = question.tone ? tonesMap.get(question.tone) : undefined;
+            const cardStyle = stylesMap.get(question.styleId || (question.style as string) || "");
+            const cardTone = tonesMap.get(question.toneId || (question.tone as string) || "");
             const cardGradient = (cardStyle?.color && cardTone?.color)
               ? [cardStyle.color, cardTone.color]
               : ['#667EEA', '#764BA2'];

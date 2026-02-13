@@ -71,6 +71,7 @@ export const addPersonalQuestion = mutation({
 		isPublic: v.boolean(),
 		styleId: v.optional(v.id("styles")),
 		toneId: v.optional(v.id("tones")),
+		topicId: v.optional(v.id("topics")),
 	},
 	returns: v.union(v.id("questions"), v.null()),
 	handler: async (ctx, args) => {
@@ -97,6 +98,14 @@ export const addPersonalQuestion = mutation({
 			// do not save empty questions
 			return null;
 		}
+
+		// Look up slugs for legacy support
+		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
+			styleId ? ctx.db.get(styleId) : null,
+			toneId ? ctx.db.get(toneId) : null,
+			args.topicId ? ctx.db.get(args.topicId) : null,
+		]);
+
 		return await ctx.db.insert("questions", {
 			authorId: userId,
 			customText,
@@ -106,7 +115,11 @@ export const addPersonalQuestion = mutation({
 			totalShows: 0,
 			averageViewDuration: 0,
 			styleId,
+			style: styleDoc?.id,
 			toneId,
+			tone: toneDoc?.id,
+			topicId: args.topicId,
+			topic: topicDoc?.id,
 		});
 	},
 });
@@ -748,6 +761,7 @@ export const updatePersonalQuestion = mutation({
 		isPublic: v.boolean(),
 		styleId: v.optional(v.id("styles")),
 		toneId: v.optional(v.id("tones")),
+		topicId: v.optional(v.id("topics")),
 	},
 	returns: v.union(v.any(), v.null()),
 	handler: async (ctx, args) => {
@@ -769,11 +783,22 @@ export const updatePersonalQuestion = mutation({
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to update this question.");
 		}
+		// Look up slugs for legacy support
+		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
+			args.styleId ? ctx.db.get(args.styleId) : null,
+			args.toneId ? ctx.db.get(args.toneId) : null,
+			args.topicId ? ctx.db.get(args.topicId) : null,
+		]);
+
 		await ctx.db.patch(args.questionId, {
 			customText: args.customText,
 			status: args.isPublic ? "pending" : "private",
 			styleId: args.styleId,
+			style: styleDoc?.id,
 			toneId: args.toneId,
+			tone: toneDoc?.id,
+			topicId: args.topicId,
+			topic: topicDoc?.id,
 		});
 		return await ctx.db.get(args.questionId);
 	},
