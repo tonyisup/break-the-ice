@@ -3,7 +3,7 @@ import { ImageResponse } from '@vercel/og';
 import React from 'react';
 import { ConvexHttpClient } from 'convex/browser';
 import { api } from '../convex/_generated/api.js';
-import { iconMap } from '@/components/ui/icons/icons';
+import { iconMap } from '../src/components/ui/icons/icons.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
