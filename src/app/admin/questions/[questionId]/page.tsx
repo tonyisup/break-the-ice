@@ -21,6 +21,7 @@ import {
 	Calendar,
 	Activity,
 	Send,
+	Image,
 } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { useState, useEffect, useRef } from "react"
@@ -370,6 +371,22 @@ export default function QuestionDetailsPage() {
 				</div>
 
 				<div className="flex items-center gap-2">
+					<a
+						href={`/api/og_question?id=${question._id}`}
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						<Button
+							variant="outline"
+							size="sm"
+							className="gap-2"
+							type="button"
+						>
+							<Image className="size-4" />
+							View Image
+						</Button>
+					</a>
+
 					<Button
 						variant="outline"
 						size="sm"

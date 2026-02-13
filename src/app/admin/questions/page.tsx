@@ -19,6 +19,7 @@ import {
 	List,
 	Sparkles,
 	Loader2,
+	Image,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -486,6 +487,12 @@ export default function QuestionsPage() {
 																		<Share2 className="size-4" />
 																		Share Link
 																	</DropdownMenuItem>
+																	<DropdownMenuItem className="gap-2 py-2.5" asChild>
+																		<a href={`/api/og_question?id=${q._id}`} target="_blank" rel="noopener noreferrer">
+																			<Image className="size-4" />
+																			View Image
+																		</a>
+																	</DropdownMenuItem>
 																	<DropdownMenuItem className="gap-2 py-2.5" onClick={() => setEditingQuestion(q)}>
 																		<Pencil className="size-4" />
 																		Edit Question
@@ -576,6 +583,11 @@ export default function QuestionsPage() {
 												<DropdownMenuContent align="end">
 													<DropdownMenuItem className="gap-2" onClick={() => handleShare(q)}>
 														<Share2 className="size-4" /> Share Link
+													</DropdownMenuItem>
+													<DropdownMenuItem className="gap-2" asChild>
+														<a href={`/api/og_question?id=${q._id}`} target="_blank" rel="noopener noreferrer">
+															<Image className="size-4" /> View Image
+														</a>
 													</DropdownMenuItem>
 													<DropdownMenuItem className="gap-2" onClick={() => setEditingQuestion(q)}>
 														<Pencil className="size-4" /> Edit
