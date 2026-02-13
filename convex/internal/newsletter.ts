@@ -59,7 +59,10 @@ export const getQuestionForUser = internalAction({
 
 		const unseenQuestionIds = await ctx.runQuery(
 			internal.internal.questions.getUnseenQuestionIdsForUser,
-			{ userId: user._id }
+			{
+				userId: user._id,
+				count: 1
+			}
 		);
 
 		if (unseenQuestionIds.length > 0) {
@@ -107,12 +110,12 @@ export const getQuestionForUser = internalAction({
 		if (!question) {
 			try {
 				const questions = await ctx.runAction(
-					api.core.ai.generateAIQuestionForNewsletter,
+					internal.internal.ai.generateAIQuestionForUser,
 					{
 						userId: user._id
 					}
 				);
-				if (questions.length == 0) {
+				if (questions.length === 0) {
 					throw new Error("Could not generate a question.");
 				}
 				question = questions[0];

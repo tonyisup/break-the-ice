@@ -557,6 +557,7 @@ export const generateAIQuestionForUser = internalAction({
 				if (generatedContent.length < 10) {
 					console.log(`Attempt ${attempts}: Response too short (${generatedContent.length} chars):`, generatedContent);
 					if (attempts < maxAttempts) {
+						generatedContent = "";
 						const waitTime = 1000 * Math.pow(2, attempts - 1);
 						console.log(`Response too short. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
 						await new Promise(resolve => setTimeout(resolve, waitTime));
