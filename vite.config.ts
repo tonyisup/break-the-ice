@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => ({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "favicon.svg"],
+      includeAssets: ["break-the-iceberg.png"],
       manifest: {
         name: "Break the Ice(berg)",
         short_name: "Break the Ice",
@@ -21,17 +21,17 @@ export default defineConfig(({ mode }) => ({
         start_url: "/",
         icons: [
           {
-            src: "pwa-192x192.png",
+            src: "break-the-iceberg.png",
             sizes: "192x192",
             type: "image/png",
           },
           {
-            src: "pwa-512x512.png",
+            src: "break-the-iceberg.png",
             sizes: "512x512",
             type: "image/png",
           },
           {
-            src: "pwa-512x512.png",
+            src: "break-the-iceberg.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
