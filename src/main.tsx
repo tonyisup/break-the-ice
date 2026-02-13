@@ -30,7 +30,6 @@ import AdminLayout from "./app/admin/layout";
 import AddQuestionPage from "./app/add-question/page";
 import UnsubscribePage from "./app/unsubscribe/page";
 import VerifySubscriptionPage from "./app/verify-subscription/page";
-import SingleQuestionPage from "./pages/SingleQuestionPage";
 import PrivacyPolicyPage from "./app/privacy/page";
 import TermsOfServicePage from "./app/terms/page";
 import DataRetentionPage from "./app/data-retention/page";
@@ -58,7 +57,6 @@ createRoot(document.getElementById("root")!).render(
               <Routes>
                 <Route path="/" element={<Root />} />
                 <Route path="/app" element={<App />} />
-                <Route path="/single" element={<SingleQuestionPage />} />
                 <Route path="/question/:id" element={<QuestionPage />} />
                 <Route path="/liked" element={<LikedQuestionsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />

@@ -373,26 +373,24 @@ export const generateNightlyQuestionPool = internalAction({
 		return { questionsGenerated, combinationsProcessed, errors };
 	},
 });
-
-// Remix a single question - alters the words while keeping the same style, tone, and vibe
-export const remixQuestion = internalAction({
+// Remix a single question and allow changing style and tone
+export const remixQuestionFull = internalAction({
 	args: {
-		questionId: v.id("questions"),
+		questionText: v.string(),
+		styleId: v.optional(v.id("styles")),
+		toneId: v.optional(v.id("tones")),
+		topicId: v.optional(v.id("topics")),
 	},
 	returns: v.string(),
-	handler: async (ctx, args): Promise<string> => {
-		const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
-		const questionText = question?.text || question?.customText;
-		if (!question || !questionText) {
-			throw new Error("Question not found or has no text");
-		}
-
+	handler: async(ctx, args): Promise<string> => {	
+		const { questionText, styleId, toneId, topicId } = args;
+		
 		const [style, tone, topic] = await Promise.all([
-			question.styleId ? ctx.runQuery(internal.internal.styles.getStyleById, { id: question.styleId }) : null,
-			question.toneId ? ctx.runQuery(internal.internal.tones.getToneById, { id: question.toneId }) : null,
-			question.topicId ? ctx.runQuery(internal.internal.topics.getTopicById, { id: question.topicId }) : null,
+			styleId ? ctx.runQuery(internal.internal.styles.getStyleById, { id: styleId }) : null,
+			toneId ? ctx.runQuery(internal.internal.tones.getToneById, { id: toneId }) : null,
+			topicId ? ctx.runQuery(internal.internal.topics.getTopicById, { id: topicId }) : null,
 		]);
-
+		
 		const completion = await openai.chat.completions.create({
 			model: "@preset/break-the-ice-berg-default",
 			messages: [
@@ -400,10 +398,13 @@ export const remixQuestion = internalAction({
 					role: "system",
 					content: `You are a world-class creative writer specializing in social psychology and ice-breakers.
 					
-					TASK: "Remix" the user's question. Change the words and phrasing completely, but keep the EXACT SAME style, tone, and topic vibe.
+					TASK: "Remix" the user's question. Change the words and phrasing completely.
 					FORMAT: Return ONLY the new question text as a plain string. No quotes, no JSON, no prefixes.
 					
-					STYLE STRUCTURE: Use this as your base: "${style?.structure ?? "Direct and engaging"}"`
+					STYLE STRUCTURE: Use this as your base: "${style?.structure ?? "Direct and engaging"}"
+					TONE GUIDE: Use this as your base: "${tone?.promptGuidanceForAI ?? "KEEP the tone of the original text"}"
+					TOPIC FOCUS: Use this as your base: "${topic?.promptGuidanceForAI ?? "KEEP the topic of the original text"}"
+					`
 				},
 				{
 					role: "user",
@@ -419,6 +420,34 @@ export const remixQuestion = internalAction({
 		});
 
 		const remixedText = completion.choices[0]?.message?.content?.trim() ?? "";
+		if (!remixedText) {
+			throw new Error("AI failed to generate a remix");
+		}
+
+		return remixedText.replace(/^["']|["']$/g, '').trim();
+	}
+});
+
+// Remix a single question - alters the words while keeping the same style, tone, and vibe
+export const remixQuestion = internalAction({
+	args: {
+		questionId: v.id("questions"),
+	},
+	returns: v.string(),
+	handler: async (ctx, args): Promise<string> => {
+		const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
+		const questionText = question?.text || question?.customText;
+		if (!question || !questionText) {
+			throw new Error("Question not found or has no text");
+		}
+
+		const remixedText = await ctx.runAction(internal.internal.ai.remixQuestionFull, {
+			questionText,
+			styleId: question.styleId,
+			toneId: question.toneId,
+			topicId: question.topicId,
+		});
+
 		if (!remixedText) {
 			throw new Error("AI failed to generate a remix");
 		}

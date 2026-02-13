@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { MoveRight } from "@/components/ui/icons/icon";
 
 const LandingPage = () => {
   return (
@@ -23,7 +22,6 @@ const LandingPage = () => {
           className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-full text-lg transition-transform transform hover:scale-105 flex items-center"
         >
           Enter the App
-          <MoveRight className="ml-2" />
         </Link>
       </main>
 

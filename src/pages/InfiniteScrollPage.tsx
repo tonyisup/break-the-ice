@@ -470,8 +470,9 @@ export default function InfiniteScrollPage() {
     setShowUpgradeCTA(false);
   }
 
-  // Mock highlighting states required by selectors but not used here
-  const [isHighlighting, setIsHighlighting] = useState(false);
+  const handleRemix = (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => {
+
+  }
 
   // Smooth gradient transition logic
   const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
@@ -654,6 +655,7 @@ export default function InfiniteScrollPage() {
                     onToggleHidden={() => toggleHide(question._id)}
                     onHideStyle={handleHideStyle}
                     onHideTone={handleHideTone}
+                    onRemixed={handleRemix}
                   />
                 </div>
 
