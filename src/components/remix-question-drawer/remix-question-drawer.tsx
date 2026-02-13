@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { cn } from "@/lib/utils";
 
 type RemixState = "idle" | "remixing" | "remixed";
 
@@ -198,7 +199,21 @@ export function RemixQuestionDrawer({
 						</span>
 						{currentUser && (
 							<span className={`flex items-center gap-2 text-xs font-normal ${currentUser.isAiLimitReached ? "text-red-500" : "text-muted-foreground"}`}>
-								{currentUser.aiUsage?.count ?? 0}/{currentUser.aiLimit} <Sparkles className="size-4 text-blue-500" /> AI generations
+								{currentUser.aiUsage?.count ?? 0}/{currentUser.aiLimit} 
+								<Sparkles className={cn(
+									`size-4`, 
+									currentUser.aiLimit - (currentUser.aiUsage?.count ?? 0) <= 3 ? "text-yellow-500" : "",
+									currentUser.isAiLimitReached ? "text-red-500" : ""
+								)} /> 
+								{currentUser.isAiLimitReached ? <Badge 
+																			onClick={() => {
+																				toast.info("Upgrade flow coming soon!");
+																			}}
+																			variant="outline"
+																			className="cursor-pointer"
+																			>
+																				Upgrade to continue
+																			</Badge> : "AI generations"}
 							</span>
 						)}
 					</DrawerTitle>
