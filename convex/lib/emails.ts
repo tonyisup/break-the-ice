@@ -23,6 +23,33 @@ export const createDuplicateDetectionEmail = (result: DuplicateDetectionResult) 
   return { subject, html };
 };
 
+function escapeHtml(unsafe: string) {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+export const createSubscriptionNotificationEmail = (email: string) => {
+  const subject = "New Newsletter Subscription";
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>New Newsletter Subscription</title>
+    </head>
+    <body>
+      <h1>New Newsletter Subscription</h1>
+      <p>A new user has subscribed to the newsletter:</p>
+      <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+    </body>
+    </html>
+  `;
+  return { subject, html };
+};
+
 type MinimumQuestionsResult = {
   combinationsProcessed: number;
   questionsGenerated: number;
