@@ -7,6 +7,7 @@ export const sendEmail = internalAction({
   args: {
     subject: v.string(),
     html: v.string(),
+    fromName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const resendApiKey = process.env.RESEND_API_TOKEN || process.env.RESEND_API_KEY;
@@ -23,6 +24,7 @@ export const sendEmail = internalAction({
     }
 
     const adminEmail = adminEmailVar;
+    const fromName = args.fromName || "Break the Iceberg Notifier";
 
     try {
       const response = await fetch("https://api.resend.com/emails", {
@@ -32,7 +34,7 @@ export const sendEmail = internalAction({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "Cron Job Notifier <notifier@breaktheiceberg.com>",
+          from: `${fromName} <notifier@breaktheiceberg.com>`,
           to: [adminEmail],
           subject: `${environment || "Production"} - ${args.subject}`,
           html: args.html,

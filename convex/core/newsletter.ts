@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
 import * as crypto from "crypto";
+import { createSubscriptionNotificationEmail } from "../lib/emails";
 
 export const subscribe = action({
 	args: { email: v.string() },
@@ -118,6 +119,19 @@ async function subscribeUser(ctx: ActionCtx, email: string): Promise<{ success: 
 			email: email,
 			status: "subscribed",
 		});
+
+		// Notify admin of new subscription (simulated)
+		try {
+			const { subject, html } = createSubscriptionNotificationEmail(email);
+			await ctx.runAction(internal.email.sendEmail, {
+				subject: `[Simulated] ${subject}`,
+				html,
+				fromName: "Newsletter Notifier"
+			});
+		} catch (error) {
+			console.error("Failed to send admin notification for simulated subscription:", error);
+		}
+
 		return { success: true, message: "Simulated subscription" };
 	}
 
@@ -146,6 +160,19 @@ async function subscribeUser(ctx: ActionCtx, email: string): Promise<{ success: 
 			email: email,
 			status: "subscribed",
 		});
+
+		// Notify admin of new subscription
+		try {
+			const { subject, html } = createSubscriptionNotificationEmail(email);
+			await ctx.runAction(internal.email.sendEmail, {
+				subject,
+				html,
+				fromName: "Newsletter Notifier"
+			});
+		} catch (error) {
+			console.error("Failed to send admin notification for subscription:", error);
+			// We don't throw here to avoid failing the subscription itself
+		}
 
 		return { success: true };
 	} catch (error: any) {
