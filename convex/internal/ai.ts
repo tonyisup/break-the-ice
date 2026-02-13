@@ -426,3 +426,255 @@ export const remixQuestion = internalAction({
 		return remixedText.replace(/^["']|["']$/g, '').trim();
 	},
 });
+
+
+export const generateAIQuestionForUser = internalAction({
+	args: {
+		userId: v.id("users"),
+		count: v.optional(v.number()),
+		bypassAIUsage: v.optional(v.boolean()),
+	},
+	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
+		const user = await ctx.runQuery(internal.internal.users.getUserById, { id: args.userId });
+
+		if (!user) {
+			throw new Error("You must be logged in or provide a valid user ID to generate AI questions.");
+		}
+		const count = args.count || 1;
+
+		const style = (await ctx.runQuery(api.core.styles.getRandomStyleForUser, { userId: user._id }));
+		const tone = (await ctx.runQuery(api.core.tones.getRandomToneForUser, { userId: user._id }));
+
+		if (!style || !tone) {
+			throw new Error("Failed to generate AI question: No style or tone found for user");
+		}
+
+		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
+		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
+
+		const recentlySeenQuestions = await ctx.runQuery(internal.internal.users.getRecentlySeenQuestions, { userId: user._id });
+		const recentlySeen = recentlySeenQuestions.filter((q: string) => q !== undefined);
+		if (recentlySeen.length > 0) {
+			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
+		}
+
+		const blockedQuestions = await ctx.runQuery(internal.internal.users.getBlockedQuestions, { userId: user._id });
+		if (blockedQuestions.length > 0) {
+			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these blocked questions:\n- ${blockedQuestions.join('\n- ')}`;
+		}
+
+		// Retry logic for AI generation
+		let attempts = 0;
+		const maxAttempts = 3;
+		let generatedContent = "";
+
+		let userContext = "";
+
+		let usageIncremented = false;
+		try {
+			if (!args.bypassAIUsage) {
+				await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+					userId: user._id,
+				});
+				usageIncremented = true;
+			}
+						
+
+			if (user?.questionPreferenceEmbedding) {
+				const nearestQuestions = await ctx.runAction(api.core.questions.getNearestQuestionsByEmbedding, {
+					embedding: user.questionPreferenceEmbedding,
+					count: 5
+				});
+			const examples = nearestQuestions.map((q: any) => q.text).filter((t: any): t is string => !!t);
+			// Fallback if vector search returns empty (e.g. strict filter with no results)
+			if (examples.length > 0) {
+				userContext = "User likes questions similar to: " + examples.join("; ");
+			}
+		}
+
+		while (attempts < maxAttempts && !generatedContent) {
+			try {
+				attempts++;
+				const completion = await openai.chat.completions.create({
+					model: "@preset/break-the-ice-berg-default",
+					messages: [
+						{
+							role: "system",
+							content: `You are clever, well travelled, emotionally and socially intelligent. You will provide guidance and suggestions to help people break the ice in social settings. You will be providing unique questions that would be perfect for starting conversations. You will be able to combine a provided STYLE (question structure) with a TONE (vibe/color).
+    
+    CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of objects.
+    - Do not include any text before or after the JSON.
+    - Do not use markdown formatting (no \`\`\`json wrappers).
+    - Do not include explanations or comments.
+    - Do not number the items in the array (e.g. no "1. {...}").
+		- DO NOT provide your own examples of any generated content. No dashes, no lists.
+    
+    Example format: [{"text": "Question 1"}]
+    
+    Requirements:
+    - Return exactly 1 question
+    - Each question should be an object in the JSON array
+    - Avoid questions too similar to existing ones
+    - Make questions engaging and conversation-starting
+		- Avoid being verbose; keep it short and sweet.
+    - Only ONE question per text. There should only be one question mark at the end of the text.`
+						},
+						{
+							role: "user",
+							content: `Generate 1 ice-breaker question with these parameters:
+    ${prompt}
+    
+    ${userContext}
+    
+    Response with a JSON array of objects, each containing the following properties:
+    - text: The question text
+    For example:
+    [
+      {
+        "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?"
+      }
+    ]`
+						}
+					],
+					max_tokens: 200,
+					temperature: 0.7,
+				});
+
+				generatedContent = completion.choices[0]?.message?.content?.trim() || "";
+
+				if (!generatedContent) {
+					console.log(`Attempt ${attempts}: No content generated`);
+					if (attempts < maxAttempts) {
+						const waitTime = 1000 * Math.pow(2, attempts - 1);
+						console.log(`No content generated. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+						await new Promise(resolve => setTimeout(resolve, waitTime));
+						continue;
+					}
+					throw new Error("Failed to generate question after multiple attempts");
+				}
+
+				// Validate that we have a reasonable response length
+				if (generatedContent.length < 10) {
+					console.log(`Attempt ${attempts}: Response too short (${generatedContent.length} chars):`, generatedContent);
+					if (attempts < maxAttempts) {
+						generatedContent = "";
+						const waitTime = 1000 * Math.pow(2, attempts - 1);
+						console.log(`Response too short. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+						await new Promise(resolve => setTimeout(resolve, waitTime));
+						continue;
+					}
+					throw new Error("AI response too short");
+				}
+
+				// If we get here, we have content, so break out of the retry loop
+				break;
+
+			} catch (error: any) {
+				const isRateLimit = error.status === 429 || error.message?.includes("429");
+				console.error(`Attempt ${attempts} failed (${isRateLimit ? "Rate Limit" : "Error"}):`, error);
+
+				if (attempts >= maxAttempts) {
+					throw error;
+				}
+
+				let waitTime = 1000 * Math.pow(2, attempts - 1); // Exponential backoff by default
+				if (error.status === 429) {
+					const retryAfter = error.headers?.['retry-after'];
+					if (retryAfter) {
+						const seconds = parseInt(retryAfter);
+						if (!isNaN(seconds)) {
+							waitTime = seconds * 1000;
+						} else {
+							// Could be a date string
+							const retryDate = new Date(retryAfter).getTime();
+							if (!isNaN(retryDate)) {
+								waitTime = Math.max(1000, retryDate - Date.now());
+							}
+						}
+					}
+					console.log(`Respecting 429 Rate Limit. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
+				}
+
+				await new Promise(resolve => setTimeout(resolve, waitTime));
+			}
+		}
+
+		if (!generatedContent) {
+			throw new Error("Failed to generate question after all attempts");
+		}
+
+		// Try to clean and parse the response
+		// Remove markdown code blocks if present
+		const cleanedContent = generatedContent
+			.replace(/^```json\s*/, "")
+			.replace(/^```\s*/, "")
+			.replace(/\s*```$/, "");
+
+		let parsedContent: { text: string; }[] = [];
+
+		try {
+			const parsed = JSON.parse(cleanedContent);
+			parsedContent = Array.isArray(parsed) ? parsed : [parsed];
+		} catch (error) {
+			console.log("Failed to parse JSON, attempting fallback parsing for numbered list...");
+			// Fallback parsing for numbered lists (e.g., "1. Question\n2. Question")
+			const lines = cleanedContent.split('\n');
+			const regex = /^\d+\.\s*(.+)/;
+
+			for (const line of lines) {
+				const match = line.match(regex);
+				if (match && match[1]) {
+					parsedContent.push({
+						text: match[1].trim(),
+					});
+				}
+			}
+
+			if (parsedContent.length === 0) {
+				console.error("Failed to parse AI response. Content was:", generatedContent);
+				console.error("Cleaned content was:", cleanedContent);
+				console.error("Parse error:", error);
+				throw error;
+			}
+		}
+
+		const normalize = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+		const normalizedRecentlySeen = recentlySeen.map((q: string) => normalize(q));
+
+		const newQuestions: (Doc<"questions"> | null)[] = [];
+		for (const question of parsedContent) {
+			try {
+				// Simple dedupe check
+				const normalizedText = normalize(question.text);
+				const isDuplicate = normalizedRecentlySeen.some((seen: string) =>
+					normalizedText.includes(seen) || seen.includes(normalizedText)
+				);
+
+				if (isDuplicate) {
+					console.log(`Skipping duplicate/similar question: ${question.text}`);
+					continue;
+				}
+
+				const newQuestion = await ctx.runMutation(api.core.questions.saveAIQuestion, {
+					text: question.text,
+					style: style.id,
+					styleId: style._id,
+					tone: tone.id,
+					toneId: tone._id,
+					tags: [],
+				});
+				newQuestions.push(newQuestion);
+			} catch (error) {
+				console.error(`Failed to save question: "${question.text}"`, error);
+				// Continue with other questions even if one fails
+			}
+		}
+			return newQuestions;
+		} catch (error) {
+			if (usageIncremented) {
+				await ctx.runMutation(internal.internal.users.decrementAIUsage, { userId: user._id });
+			}
+			throw error;
+		}
+	}
+});
