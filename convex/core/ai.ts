@@ -119,11 +119,10 @@ export const generateAIQuestions = action({
 		toneId: v.optional(v.id("tones")),
 		tone: v.optional(v.string()),
 		topicId: v.optional(v.id("topics")),
-		topic: v.optional(v.string()),
-		bypassUsageCheck: v.optional(v.boolean()),
+		topic: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		const { count, selectedTags, currentQuestion, excludedQuestions, styleId, toneId, topicId, bypassUsageCheck } = args;
+		const { count, selectedTags, currentQuestion, excludedQuestions, styleId, toneId, topicId } = args;
 
 		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
 
@@ -133,12 +132,10 @@ export const generateAIQuestions = action({
 
 		let usageIncremented = false;
 		try {
-			if (!bypassUsageCheck) {
-				await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
-					userId: user._id,
-				});
-				usageIncremented = true;
-			}
+			await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+				userId: user._id,
+			});
+			usageIncremented = true;
 
 			const style = styleId 
 				? (await ctx.runQuery(api.core.styles.getStyleById, { id: styleId }))

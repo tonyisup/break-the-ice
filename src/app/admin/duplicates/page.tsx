@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useQuery, useMutation, useAction } from "convex/react"
-import { api } from "../../../../convex/_generated/api"
+import { api, internal } from "../../../../convex/_generated/api"
 import { Doc, Id } from "../../../../convex/_generated/dataModel"
 import {
 	Copy,
@@ -21,12 +21,6 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"

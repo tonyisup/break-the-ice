@@ -583,21 +583,27 @@ export const getRandomQuestionsInternal = internalQuery({
 			return q.and(...conditions);
 		};
 
-		// Fetch enough candidates to survive post-filtering.
-		// We need at least count results AFTER removing seen + hidden IDs,
-		// so we must pull count + exclusionList.length candidates from the DB.
-		const exclusionCount = seenIds.size + hiddenIds.size;
-		const fetchCount = Math.min(Math.max(count + exclusionCount + 10, 50), 500);
-
-		const candidatesWithEmbeddings = await ctx.db
+		// Collect all public questions so we can sample across the full set
+		// rather than always returning the oldest rows via _creationTime order.
+		// With ~300-1000 questions this is very efficient; the 1000-row cap
+		// protects against unbounded growth.
+		const allPublic = await ctx.db
 			.query("questions")
 			.filter((q) => applyFilters(q))
-			.take(fetchCount);
+			.take(1000);
 
-		const candidates = candidatesWithEmbeddings.map(q => {
+		// Strip embeddings to reduce payload size
+		const candidates = allPublic.map(q => {
 			const { embedding, ...rest } = q;
 			return rest;
 		});
+
+		// In-memory Fisher-Yates shuffle so each request samples randomly
+		// across the full question set instead of always the oldest slice
+		for (let i = candidates.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+		}
 
 		// Post-filter for seen, hidden, styles, and tones
 		const filtered = candidates.filter((q) => {
@@ -607,6 +613,11 @@ export const getRandomQuestionsInternal = internalQuery({
 			if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
 			return true;
 		});
+
+		// Return enough candidates to fill the requested count after the
+		// caller's own shuffle + slice. Account for all exclusion sources.
+		const exclusionCount = seenIds.size + hiddenIds.size + hiddenStyleIds.size + hiddenToneIds.size;
+		const returnCount = Math.min(Math.max(count + exclusionCount + 10, 50), 500);
 
 		// pull any active topics, find a question that has that topic, and inject it if there is one
 		const now = Date.now();
@@ -639,7 +650,7 @@ export const getRandomQuestionsInternal = internalQuery({
 			}
 		}
 
-		return filtered;
+		return filtered.slice(0, returnCount);
 	},
 });
 

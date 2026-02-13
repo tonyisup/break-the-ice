@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useQuery, useAction, useMutation } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
-import { Doc, Id } from "../../../../convex/_generated/dataModel"
+import { Id } from "../../../../convex/_generated/dataModel"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -30,7 +30,7 @@ export default function GeneratorPage() {
     const topics = useQuery(api.core.topics.getTopics, {})
     const tags = useQuery(api.core.tags.getTags)
 
-    const generateAIQuestions = useAction(api.core.ai.generateAIQuestions)
+    const generateAIQuestions = useAction(api.admin.ai.generateAIQuestions)
     const saveAIQuestion = useMutation(api.core.questions.saveAIQuestion)
 
     const [selectedTags, setSelectedTags] = React.useState<string[]>([])
@@ -117,8 +117,7 @@ export default function GeneratorPage() {
                 excludedQuestions: generatedQuestions.length > 0 ? generatedQuestions : undefined,
                 styleId: selectedStyleId,
                 toneId: selectedToneId,
-                topicId: selectedTopicId || undefined,
-                bypassUsageCheck: true,
+                topicId: selectedTopicId || undefined
             })
             if (generatedQuestion) {
                 const newQuestions = [...generatedQuestions, generatedQuestion]
@@ -435,7 +434,7 @@ export default function GeneratorPage() {
                                                     className="w-full"
                                                 >
                                                     {isGenerating ? <Loader2 className="size-4 animate-spin mr-2" /> : <RefreshCw className="size-4 mr-2" />}
-                                                    Retry
+                                                    Generate Another
                                                 </Button>
                                                 <Button
                                                     onClick={handleAccept}
