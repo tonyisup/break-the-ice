@@ -69,6 +69,10 @@ export const addPersonalQuestion = mutation({
 		customText: v.string(),
 		authorId: v.optional(v.id("users")),
 		isPublic: v.boolean(),
+		styleId: v.optional(v.id("styles")),
+		toneId: v.optional(v.id("tones")),
+		topicId: v.optional(v.id("topics")),
+		tags: v.optional(v.array(v.string())),
 	},
 	returns: v.union(v.id("questions"), v.null()),
 	handler: async (ctx, args) => {
@@ -90,11 +94,19 @@ export const addPersonalQuestion = mutation({
 			userId = user._id;
 		}
 
-		const { customText, isPublic } = args;
+		const { customText, isPublic, styleId, toneId } = args;
 		if (customText.trim().length === 0) {
 			// do not save empty questions
 			return null;
 		}
+
+		// Look up slugs for legacy support
+		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
+			styleId ? ctx.db.get(styleId) : null,
+			toneId ? ctx.db.get(toneId) : null,
+			args.topicId ? ctx.db.get(args.topicId) : null,
+		]);
+
 		return await ctx.db.insert("questions", {
 			authorId: userId,
 			customText,
@@ -103,6 +115,13 @@ export const addPersonalQuestion = mutation({
 			totalThumbsDown: 0,
 			totalShows: 0,
 			averageViewDuration: 0,
+			styleId,
+			style: styleDoc?.id,
+			toneId,
+			tone: toneDoc?.id,
+			topicId: args.topicId,
+			topic: topicDoc?.id,
+			tags: args.tags,
 		});
 	},
 });
@@ -700,6 +719,151 @@ export const addCustomQuestion = mutation({
 			totalShows: 0,
 			averageViewDuration: 0,
 		});
+	},
+});
+
+// Remix a question for a regular user (returns the remixed text, does NOT modify the original)
+export const remixQuestionForUser = action({
+	args: {
+		questionId: v.id("questions"),
+		styleId: v.optional(v.id("styles")),
+		toneId: v.optional(v.id("tones")),
+		topicId: v.optional(v.id("topics")),
+	},
+	returns: v.string(),
+	handler: async (ctx, args): Promise<string> => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			throw new Error("You must be logged in to remix a question.");
+		}
+
+		if (!identity.email) {
+			throw new Error("You must have an email to remix a question.");
+		}
+		
+		const user = await ctx.runQuery(internal.internal.users.getUserByEmail, {
+			email: identity.email,
+		});
+
+		if (!user) {
+			throw new Error("User not found.");
+		}
+		let usageIncremented = false;
+		try {
+			await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+				userId: user._id,
+			});
+			usageIncremented = true;
+
+			const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
+			if (!question) {
+				throw new Error("Question not found.");
+			}
+
+			const questionText = question.text ?? question.customText;
+
+			if (!questionText) {
+				throw new Error("Question text not found.");
+			}
+			const remixText = await ctx.runAction(internal.internal.ai.remixQuestionFull, {
+				questionText,
+				styleId: args.styleId,
+				toneId: args.toneId,
+				topicId: args.topicId,
+			});
+
+			return remixText;
+		} catch (error) {
+			if (usageIncremented) {
+				await ctx.runMutation(internal.internal.users.decrementAIUsage, {
+					userId: user._id,
+				});
+			}
+			throw error;
+		}
+	},
+});
+
+// Update a personal question (must be owned by the current user)
+export const updatePersonalQuestion = mutation({
+	args: {
+		questionId: v.id("questions"),
+		customText: v.string(),
+		isPublic: v.boolean(),
+		styleId: v.optional(v.id("styles")),
+		toneId: v.optional(v.id("tones")),
+		topicId: v.optional(v.id("topics")),
+		tags: v.optional(v.array(v.string())),
+	},
+	returns: v.union(v.any(), v.null()),
+	handler: async (ctx, args) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			throw new Error("You must be logged in to update a personal question.");
+		}
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email))
+			.unique();
+		if (!user) {
+			throw new Error("User not found.");
+		}
+		const question = await ctx.db.get(args.questionId);
+		if (!question) {
+			throw new Error("Question not found.");
+		}
+		if (question.authorId !== user._id) {
+			throw new Error("You are not authorized to update this question.");
+		}
+		// Look up slugs for legacy support
+		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
+			args.styleId ? ctx.db.get(args.styleId) : null,
+			args.toneId ? ctx.db.get(args.toneId) : null,
+			args.topicId ? ctx.db.get(args.topicId) : null,
+		]);
+
+		await ctx.db.patch(args.questionId, {
+			customText: args.customText,
+			status: args.isPublic ? "pending" : "private",
+			styleId: args.styleId,
+			style: styleDoc?.id,
+			toneId: args.toneId,
+			tone: toneDoc?.id,
+			topicId: args.topicId,
+			topic: topicDoc?.id,
+			tags: args.tags,
+		});
+		return await ctx.db.get(args.questionId);
+	},
+});
+
+// Delete a personal question (must be owned by the current user)
+export const deletePersonalQuestion = mutation({
+	args: {
+		questionId: v.id("questions"),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			throw new Error("You must be logged in to delete a question.");
+		}
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email))
+			.unique();
+		if (!user) {
+			throw new Error("User not found.");
+		}
+		const question = await ctx.db.get(args.questionId);
+		if (!question) {
+			throw new Error("Question not found.");
+		}
+		if (question.authorId !== user._id) {
+			throw new Error("You are not authorized to delete this question.");
+		}
+		await ctx.db.delete(args.questionId);
+		return null;
 	},
 });
 

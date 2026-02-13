@@ -17,6 +17,7 @@ interface QuestionDisplayProps {
   onHideStyle: (styleId: string) => void;
   onHideTone: (toneId: string) => void;
   disabled?: boolean;
+  onRemixed?: (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => void;
 }
 
 export const QuestionDisplay = ({
@@ -33,6 +34,7 @@ export const QuestionDisplay = ({
   onHideStyle,
   onHideTone,
   disabled = false,
+  onRemixed,
 }: QuestionDisplayProps) => {
   const [dragDirection, setDragDirection] = useState<"left" | "right">("right");
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
@@ -87,6 +89,7 @@ export const QuestionDisplay = ({
         onHideStyle={handleHideStyle}
         onHideTone={handleHideTone}
         disabled={disabled}
+        onRemixed={onRemixed}
       />
     </div>
   );

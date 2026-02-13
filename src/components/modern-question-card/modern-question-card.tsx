@@ -1,11 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { motion, useScroll, useTransform, useSpring, useVelocity } from 'framer-motion';
 import { Heart, Share2, ThumbsDown } from '@/components/ui/icons/icons';
+import { Sparkles } from 'lucide-react';
 import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
-import { useQuery } from 'convex/react';
+import { useQuery, useConvexAuth } from 'convex/react';
 import { Icon, IconComponent } from '../ui/icons/icon';
 import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer/item-detail-drawer';
+import { RemixQuestionDrawer } from '../remix-question-drawer/remix-question-drawer';
 import { useStorageContext } from '@/hooks/useStorageContext';
 import { cn } from '@/lib/utils';
 
@@ -27,6 +29,7 @@ interface ModernQuestionCardProps {
   selectedStyles?: string[];
   selectedTones?: string[];
   disabled?: boolean;
+  onRemixed?: (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => void;
 }
 
 export function ModernQuestionCard({
@@ -46,10 +49,13 @@ export function ModernQuestionCard({
   selectedStyles,
   selectedTones,
   disabled = false,
+  onRemixed,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
+  const [isRemixDrawerOpen, setIsRemixDrawerOpen] = useState(false);
+  const { isAuthenticated } = useConvexAuth();
 
   const handleHideStyle = (itemId: Id<"styles">) => {
     if (!style) return;
@@ -171,6 +177,7 @@ export function ModernQuestionCard({
                 onClickStyle={handleOpenStyleDrawer}
                 onClickTone={handleOpenToneDrawer}
                 containerRef={cardRef}
+                onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
               />
               <ItemDetailDrawer
                 item={selectedItemForDrawer}
@@ -179,6 +186,16 @@ export function ModernQuestionCard({
                 onHideItem={handleHideItem}
                 onAddFilter={onAddFilter}
               />
+              {isAuthenticated && style && tone && (
+                <RemixQuestionDrawer
+                  question={question}
+                  styleId={style._id}
+                  toneId={tone._id}
+                  isOpen={isRemixDrawerOpen}
+                  onOpenChange={setIsRemixDrawerOpen}
+                  onRemixed={onRemixed}
+                />
+              )}
             </>
           )}
         </div>
@@ -206,7 +223,39 @@ const LoadingSpinner = ({ gradient }: { gradient: string[] }) => {
   );
 };
 
-const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden, onToggleFavorite, onToggleHidden, disabled, handleShare, onClickStyle, onClickTone, containerRef }: { question: Doc<"questions">, style?: Doc<"styles"> | null, tone?: Doc<"tones"> | null, gradient: string[], isFavorite: boolean, isHidden: boolean, onToggleFavorite: () => void, onToggleHidden: () => void, disabled: boolean, handleShare: () => void, onClickStyle?: () => void, onClickTone?: () => void, containerRef: React.RefObject<HTMLDivElement | null> }) => {
+interface QuestionContentProps {
+  question: Doc<"questions">;
+  style?: Doc<"styles"> | null;
+  tone?: Doc<"tones"> | null;
+  gradient: string[];
+  isFavorite: boolean;
+  isHidden: boolean;
+  onToggleFavorite: () => void;
+  onToggleHidden: () => void;
+  disabled: boolean;
+  handleShare: () => void;
+  onClickStyle?: () => void;
+  onClickTone?: () => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  onRemix?: () => void;
+}
+
+const QuestionContent = ({
+  question,
+  style,
+  tone,
+  gradient,
+  isFavorite,
+  isHidden,
+  onToggleFavorite,
+  onToggleHidden,
+  disabled,
+  handleShare,
+  onClickStyle,
+  onClickTone,
+  containerRef,
+  onRemix
+}: QuestionContentProps) => {
   const { scrollYProgress } = useScroll({ target: containerRef });
   const scrollVelocity = useVelocity(scrollYProgress);
   
@@ -346,6 +395,18 @@ const QuestionContent = ({ question, style, tone, gradient, isFavorite, isHidden
             title="Share question"
           >
             <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
+          </button>
+        )}
+
+        {onRemix && style && tone && (
+          <button
+            type="button"
+            onClick={onRemix}
+            disabled={disabled}
+            className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+            title="Remix question"
+          >
+            <Sparkles size={24} className="text-gray-600 dark:text-gray-400" />
           </button>
         )}
       </div>
