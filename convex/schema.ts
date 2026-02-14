@@ -58,10 +58,13 @@ export default defineSchema({
     organizationId: v.optional(v.id("organizations")),
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
+    takeoverStartDate: v.optional(v.number()),
+    takeoverEndDate: v.optional(v.number()),
   }).index("by_my_id", ["id"])
     .index("by_name", ["name"])
     .index("by_order", ["order"])
-    .index("by_startDate_endDate_order", ["startDate", "endDate", "order"]),
+    .index("by_startDate_endDate_order", ["startDate", "endDate", "order"])
+    .index("by_takeoverStartDate_takeoverEndDate_order", ["takeoverStartDate", "takeoverEndDate", "order"]),
   questions: defineTable({
     organizationId: v.optional(v.id("organizations")),
     averageViewDuration: v.number(),

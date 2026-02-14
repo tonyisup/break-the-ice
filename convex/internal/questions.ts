@@ -3,6 +3,7 @@ import { internalQuery, internalMutation, internalAction } from "../_generated/s
 import { Doc, Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { embed } from "../lib/retriever";
+import { getActiveTakeoverTopicsHelper } from "../lib/takeover";
 
 // Helper: Simple cosine similarity for preference matching
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -614,13 +615,48 @@ export const getRandomQuestionsInternal = internalQuery({
 			return true;
 		});
 
+		const activeTakeoverTopics = await getActiveTakeoverTopicsHelper(ctx);
+
+		if (activeTakeoverTopics.length > 0) {
+			const takeoverTopicIds = activeTakeoverTopics.map(t => t._id);
+			let takeoverCandidates: any[] = [];
+
+			for (const topicId of takeoverTopicIds) {
+				const topicQs = await ctx.db.query("questions")
+					.withIndex("by_topic", (q) => q.eq("topicId", topicId))
+					.filter((q) => applyFilters(q))
+					.collect();
+
+				takeoverCandidates = takeoverCandidates.concat(topicQs.map(q => {
+					const { embedding, ...rest } = q;
+					return rest;
+				}));
+			}
+
+			// Filter takeover candidates
+			const filteredTakeover = takeoverCandidates.filter((q) => {
+				if (seenIds.has(q._id)) return false;
+				if (hiddenIds.has(q._id)) return false;
+				if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
+				if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
+				return true;
+			});
+
+			// Shuffle takeover candidates
+			for (let i = filteredTakeover.length - 1; i > 0; i--) {
+				const j = Math.floor(Math.random() * (i + 1));
+				[filteredTakeover[i], filteredTakeover[j]] = [filteredTakeover[j], filteredTakeover[i]];
+			}
+
+			return filteredTakeover.slice(0, count + 10);
+		}
+
 		// Return enough candidates to fill the requested count after the
 		// caller's own shuffle + slice. Account for all exclusion sources.
 		const exclusionCount = seenIds.size + hiddenIds.size + hiddenStyleIds.size + hiddenToneIds.size;
 		const returnCount = Math.min(Math.max(count + exclusionCount + 10, 50), 500);
 
 		// pull any active topics, find a question that has that topic, and inject it if there is one
-		const now = Date.now();
 		const activeTopics = await ctx.db.query("topics")
 			.withIndex("by_startDate_endDate_order", (q) => q.lt("startDate", now))
 			.filter((q) => q.or(q.eq(q.field("endDate"), undefined), q.gt(q.field("endDate"), now)))

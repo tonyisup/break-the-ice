@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
+import { getActiveTakeoverTopicsHelper } from "../lib/takeover";
 
 export const addTopicEmbedding = internalMutation({
 	args: {
@@ -37,6 +38,8 @@ export const getTopCurrentTopic = internalQuery({
 		organizationId: v.optional(v.id("organizations")),
 		startDate: v.optional(v.number()),
 		endDate: v.optional(v.number()),
+		takeoverStartDate: v.optional(v.number()),
+		takeoverEndDate: v.optional(v.number()),
 	})),
 	handler: async (ctx) => {
 		const now = Date.now();
@@ -51,5 +54,12 @@ export const getTopCurrentTopic = internalQuery({
 			))
 			.order("asc")
 			.first();
+	},
+});
+
+export const getActiveTakeoverTopicsInternal = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		return await getActiveTakeoverTopicsHelper(ctx);
 	},
 });
