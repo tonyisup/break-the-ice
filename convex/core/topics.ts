@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
+import { getActiveTakeoverTopicsHelper } from "../lib/takeover";
 
 const publicTopicFields = {
 	_id: v.id("topics"),
@@ -11,6 +12,8 @@ const publicTopicFields = {
 	order: v.optional(v.float64()),
 	organizationId: v.optional(v.id("organizations")),
 	icon: v.optional(v.string()),
+	takeoverStartDate: v.optional(v.number()),
+	takeoverEndDate: v.optional(v.number()),
 };
 const mapToPublicTopic = (topic: any) => ({
 	_id: topic._id,
@@ -22,6 +25,8 @@ const mapToPublicTopic = (topic: any) => ({
 	order: topic.order,
 	organizationId: topic.organizationId,
 	icon: topic.icon,
+	takeoverStartDate: topic.takeoverStartDate,
+	takeoverEndDate: topic.takeoverEndDate,
 });
 
 export const getTopics = query({
@@ -54,6 +59,15 @@ export const getTopic = query({
 			.withIndex("by_my_id", (q) => q.eq("id", args.id))
 			.unique();
 		return topic ? mapToPublicTopic(topic) : null;
+	},
+});
+
+export const getActiveTakeoverTopics = query({
+	args: {},
+	returns: v.array(v.object(publicTopicFields)),
+	handler: async (ctx) => {
+		const topics = await getActiveTakeoverTopicsHelper(ctx);
+		return topics.map(mapToPublicTopic);
 	},
 });
 

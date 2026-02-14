@@ -60,6 +60,8 @@ export default function TopicsPage() {
 		order: 0,
 		startDate: "",
 		endDate: "",
+		takeoverStartDate: "",
+		takeoverEndDate: "",
 		icon: "Smile"
 	})
 
@@ -78,6 +80,8 @@ export default function TopicsPage() {
 				...newTopic,
 				startDate: newTopic.startDate ? new Date(newTopic.startDate).getTime() : undefined,
 				endDate: newTopic.endDate ? new Date(newTopic.endDate).getTime() : undefined,
+				takeoverStartDate: newTopic.takeoverStartDate ? new Date(newTopic.takeoverStartDate).getTime() : undefined,
+				takeoverEndDate: newTopic.takeoverEndDate ? new Date(newTopic.takeoverEndDate).getTime() : undefined,
 			})
 			toast.success("Topic created successfully")
 			setIsCreateDialogOpen(false)
@@ -90,6 +94,8 @@ export default function TopicsPage() {
 				order: (topics?.length ?? 0) + 1,
 				startDate: "",
 				endDate: "",
+				takeoverStartDate: "",
+				takeoverEndDate: "",
 				icon: "Smile"
 			})
 		} catch (error) {
@@ -108,6 +114,8 @@ export default function TopicsPage() {
 				order: t.order,
 				startDate: t.startDate,
 				endDate: t.endDate,
+				takeoverStartDate: t.takeoverStartDate,
+				takeoverEndDate: t.takeoverEndDate,
 				icon: t.icon
 			})
 			toast.success("Topic updated")
@@ -194,7 +202,6 @@ export default function TopicsPage() {
 											onChange={e => setNewTopic({ ...newTopic, startDate: e.target.value })}
 										/>
 									</div>
-								<div className="grid grid-cols-2 gap-4">
 									<div className="grid gap-2">
 										<label htmlFor="newTopicEndDate" className="text-sm font-medium">End Date (Optional)</label>
 										<Input
@@ -204,15 +211,32 @@ export default function TopicsPage() {
 											onChange={e => setNewTopic({ ...newTopic, endDate: e.target.value })}
 										/>
 									</div>
+								</div>
+								<div className="grid grid-cols-2 gap-4">
 									<div className="grid gap-2">
-										<label htmlFor="newTopicIcon" className="text-sm font-medium">Icon</label>
-										<IconPicker
-											id="newTopicIcon"
-											value={newTopic.icon}
-											onChange={icon => setNewTopic({ ...newTopic, icon })}
+										<label className="text-sm font-medium">Takeover Start (Optional)</label>
+										<Input
+											type="date"
+											value={newTopic.takeoverStartDate}
+											onChange={e => setNewTopic({ ...newTopic, takeoverStartDate: e.target.value })}
+										/>
+									</div>
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Takeover End (Optional)</label>
+										<Input
+											type="date"
+											value={newTopic.takeoverEndDate}
+											onChange={e => setNewTopic({ ...newTopic, takeoverEndDate: e.target.value })}
 										/>
 									</div>
 								</div>
+								<div className="grid gap-2">
+									<label htmlFor="newTopicIcon" className="text-sm font-medium">Icon</label>
+									<IconPicker
+										id="newTopicIcon"
+										value={newTopic.icon}
+										onChange={icon => setNewTopic({ ...newTopic, icon })}
+									/>
 								</div>
 								<div className="grid gap-2">
 									<label className="text-sm font-medium">Description</label>
@@ -295,15 +319,37 @@ export default function TopicsPage() {
 							</div>
 
 							{(topic.startDate || topic.endDate) && (
-								<div className="flex items-center gap-4 text-[10px] text-muted-foreground bg-muted/30 p-2 rounded-lg">
-									<div className="flex items-center gap-1">
-										<Calendar className="size-3" />
-										{topic.startDate ? new Date(topic.startDate).toLocaleDateString() : "—"}
+								<div className="flex flex-col gap-1 text-[10px] text-muted-foreground bg-muted/30 p-2 rounded-lg">
+									<div className="font-semibold uppercase tracking-wider">Sprinkle Dates</div>
+									<div className="flex items-center gap-4">
+										<div className="flex items-center gap-1">
+											<Calendar className="size-3" />
+											{topic.startDate ? new Date(topic.startDate).toLocaleDateString() : "—"}
+										</div>
+										<span>to</span>
+										<div className="flex items-center gap-1">
+											<Calendar className="size-3" />
+											{topic.endDate ? new Date(topic.endDate).toLocaleDateString() : "—"}
+										</div>
 									</div>
-									<span>to</span>
-									<div className="flex items-center gap-1">
-										<Calendar className="size-3" />
-										{topic.endDate ? new Date(topic.endDate).toLocaleDateString() : "—"}
+								</div>
+							)}
+
+							{(topic.takeoverStartDate || topic.takeoverEndDate) && (
+								<div className="flex flex-col gap-1 text-[10px] text-white bg-purple-600/80 p-2 rounded-lg">
+									<div className="font-semibold uppercase tracking-wider flex items-center gap-1">
+										<Sparkles className="size-3" /> Takeover Dates
+									</div>
+									<div className="flex items-center gap-4">
+										<div className="flex items-center gap-1">
+											<Calendar className="size-3" />
+											{topic.takeoverStartDate ? new Date(topic.takeoverStartDate).toLocaleDateString() : "—"}
+										</div>
+										<span>to</span>
+										<div className="flex items-center gap-1">
+											<Calendar className="size-3" />
+											{topic.takeoverEndDate ? new Date(topic.takeoverEndDate).toLocaleDateString() : "—"}
+										</div>
 									</div>
 								</div>
 							)}
@@ -346,8 +392,19 @@ export default function TopicsPage() {
 									</td>
 									<td className="px-6 py-4">
 										<div className="text-xs text-muted-foreground flex flex-col gap-0.5">
-											<span>Start: {topic.startDate ? new Date(topic.startDate).toLocaleDateString() : "—"}</span>
-											<span>End: {topic.endDate ? new Date(topic.endDate).toLocaleDateString() : "—"}</span>
+											{(topic.startDate || topic.endDate) && (
+												<div className="flex flex-col border-b pb-1 mb-1 border-muted">
+													<span className="text-[8px] font-bold uppercase opacity-70">Sprinkle</span>
+													<span>{topic.startDate ? new Date(topic.startDate).toLocaleDateString() : "—"} - {topic.endDate ? new Date(topic.endDate).toLocaleDateString() : "—"}</span>
+												</div>
+											)}
+											{(topic.takeoverStartDate || topic.takeoverEndDate) && (
+												<div className="flex flex-col text-purple-600 font-medium">
+													<span className="text-[8px] font-bold uppercase opacity-70">Takeover</span>
+													<span>{topic.takeoverStartDate ? new Date(topic.takeoverStartDate).toLocaleDateString() : "—"} - {topic.takeoverEndDate ? new Date(topic.takeoverEndDate).toLocaleDateString() : "—"}</span>
+												</div>
+											)}
+											{!(topic.startDate || topic.endDate || topic.takeoverStartDate || topic.takeoverEndDate) && <span>—</span>}
 										</div>
 									</td>
 									<td className="px-6 py-4">
@@ -406,7 +463,6 @@ export default function TopicsPage() {
 											onChange={e => setEditingTopic({ ...editingTopic, startDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
 										/>
 									</div>
-								<div className="grid grid-cols-2 gap-4">
 									<div className="grid gap-2">
 										<label htmlFor="editTopicEndDate" className="text-sm font-medium">End Date</label>
 										<Input
@@ -416,15 +472,32 @@ export default function TopicsPage() {
 											onChange={e => setEditingTopic({ ...editingTopic, endDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
 										/>
 									</div>
+								</div>
+								<div className="grid grid-cols-2 gap-4">
 									<div className="grid gap-2">
-										<label htmlFor="editTopicIcon" className="text-sm font-medium">Icon</label>
-										<IconPicker
-											id="editTopicIcon"
-											value={editingTopic.icon || ""}
-											onChange={icon => setEditingTopic({ ...editingTopic, icon })}
+										<label className="text-sm font-medium">Takeover Start</label>
+										<Input
+											type="date"
+											value={editingTopic.takeoverStartDate ? new Date(editingTopic.takeoverStartDate).toISOString().split('T')[0] : ""}
+											onChange={e => setEditingTopic({ ...editingTopic, takeoverStartDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
+										/>
+									</div>
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Takeover End</label>
+										<Input
+											type="date"
+											value={editingTopic.takeoverEndDate ? new Date(editingTopic.takeoverEndDate).toISOString().split('T')[0] : ""}
+											onChange={e => setEditingTopic({ ...editingTopic, takeoverEndDate: e.target.value ? new Date(e.target.value).getTime() : undefined })}
 										/>
 									</div>
 								</div>
+								<div className="grid gap-2">
+									<label htmlFor="editTopicIcon" className="text-sm font-medium">Icon</label>
+									<IconPicker
+										id="editTopicIcon"
+										value={editingTopic.icon || ""}
+										onChange={icon => setEditingTopic({ ...editingTopic, icon })}
+									/>
 								</div>
 								<div className="grid gap-2">
 									<label className="text-sm font-medium">Description</label>

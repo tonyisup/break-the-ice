@@ -18,6 +18,8 @@ export const getTopics = query({
 		organizationId: v.optional(v.id("organizations")),
 		startDate: v.optional(v.number()),
 		endDate: v.optional(v.number()),
+		takeoverStartDate: v.optional(v.number()),
+		takeoverEndDate: v.optional(v.number()),
 		icon: v.optional(v.string()),
 	})),
 	handler: async (ctx) => {
@@ -41,6 +43,8 @@ export const createTopic = mutation({
 		organizationId: v.optional(v.id("organizations")),
 		startDate: v.optional(v.number()),
 		endDate: v.optional(v.number()),
+		takeoverStartDate: v.optional(v.number()),
+		takeoverEndDate: v.optional(v.number()),
 		icon: v.optional(v.string()),
 	},
 	returns: v.id("topics"),
@@ -67,6 +71,8 @@ export const createTopic = mutation({
 			organizationId: args.organizationId,
 			startDate: args.startDate,
 			endDate: args.endDate,
+			takeoverStartDate: args.takeoverStartDate,
+			takeoverEndDate: args.takeoverEndDate,
 			icon: args.icon,
 		});
 
@@ -90,6 +96,8 @@ export const updateTopic = mutation({
 		organizationId: v.optional(v.id("organizations")),
 		startDate: v.optional(v.number()),
 		endDate: v.optional(v.number()),
+		takeoverStartDate: v.optional(v.number()),
+		takeoverEndDate: v.optional(v.number()),
 		icon: v.optional(v.string()),
 	},
 	returns: v.null(),
