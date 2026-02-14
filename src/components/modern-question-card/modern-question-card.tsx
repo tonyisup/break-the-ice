@@ -30,6 +30,7 @@ interface ModernQuestionCardProps {
   selectedTones?: string[];
   disabled?: boolean;
   onRemixed?: (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => void;
+  topic?: any;
 }
 
 export function ModernQuestionCard({
@@ -50,6 +51,7 @@ export function ModernQuestionCard({
   selectedTones,
   disabled = false,
   onRemixed,
+  topic
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -178,6 +180,7 @@ export function ModernQuestionCard({
                 onClickTone={handleOpenToneDrawer}
                 containerRef={cardRef}
                 onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
+                topic={topic}
               />
               <ItemDetailDrawer
                 item={selectedItemForDrawer}
@@ -238,6 +241,7 @@ interface QuestionContentProps {
   onClickTone?: () => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
   onRemix?: () => void;
+  topic?: any;
 }
 
 const QuestionContent = ({
@@ -254,11 +258,12 @@ const QuestionContent = ({
   onClickStyle,
   onClickTone,
   containerRef,
-  onRemix
+  onRemix,
+  topic: providedTopic
 }: QuestionContentProps) => {
   const { scrollYProgress } = useScroll({ target: containerRef });
   const scrollVelocity = useVelocity(scrollYProgress);
-  
+
   // Map scroll velocity to rotation (-1 to 1 range usually covers most flicks)
   const velocityRotate = useTransform(scrollVelocity, [-1, 0, 1], [-180, 0, 180]);
 
@@ -267,14 +272,23 @@ const QuestionContent = ({
     damping: 12,
     mass: 3
   });
+
+  // Trail effects for the topic icon
+  const trail1Rotate = useSpring(velocityRotate, { stiffness: 30, damping: 10, mass: 2 });
+  const trail2Rotate = useSpring(velocityRotate, { stiffness: 20, damping: 10, mass: 1.5 });
+
+  const trail1Y = useSpring(useTransform(scrollVelocity, [-1, 1], [-15, 15]), { stiffness: 30, damping: 10 });
+  const trail2Y = useSpring(useTransform(scrollVelocity, [-1, 1], [-30, 30]), { stiffness: 20, damping: 10 });
+
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
-  const topic = useQuery(api.core.topics.getTopicById, question.topicId ? { id: question.topicId } : "skip")
+  const fetchedTopic = useQuery(api.core.topics.getTopicById, (!providedTopic && question.topicId) ? { id: question.topicId } : "skip")
+  const topic = providedTopic || fetchedTopic;
   const safeIcon = (topic?.icon ? topic.icon : "CircleHelp") as Icon;
 
   const handleClickStyle = () => {
-    onClickStyle?.(); 
+    onClickStyle?.();
   };
   const handleClickTone = () => {
     onClickTone?.();
@@ -411,16 +425,33 @@ const QuestionContent = ({
         )}
       </div>
       {topic && (
-        <div className="mt-4 flex flex-row gap-2 justify-between">
+        <div className="mt-4 flex flex-row gap-2 justify-between items-center">
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Topic: {topic.name}
           </p>
-          <motion.p 
-            style={{ rotate }}
-            className="text-sm text-gray-600 dark:text-gray-400"
-          >
-            <IconComponent icon={safeIcon} size={24} />
-          </motion.p>
+          <div className="relative">
+            {/* Trail icons */}
+            <motion.div
+              style={{ rotate: trail2Rotate, y: trail2Y, opacity: 0.2 }}
+              className="absolute inset-0 pointer-events-none"
+              contentEditable={false}
+            >
+              <IconComponent icon={safeIcon} size={24} color={topic.color} />
+            </motion.div>
+            <motion.div
+              style={{ rotate: trail1Rotate, y: trail1Y, opacity: 0.4 }}
+              className="absolute inset-0 pointer-events-none"
+            >
+              <IconComponent icon={safeIcon} size={24} color={topic.color} />
+            </motion.div>
+            {/* Main icon */}
+            <motion.div
+              style={{ rotate }}
+              className="relative z-10"
+            >
+              <IconComponent icon={safeIcon} size={24} color={topic.color} />
+            </motion.div>
+          </div>
         </div>
       )}
     </div>

@@ -62,6 +62,9 @@ export default function InfiniteScrollPage() {
     organizationId: activeWorkspace ?? undefined,
   });
   const currentUser = useQuery(api.core.users.getCurrentUser, {});
+  const allTopics = useQuery(api.core.topics.getTopics, {
+    organizationId: activeWorkspace ?? undefined,
+  });
   const activeTakeoverTopics = useQuery(api.core.topics.getActiveTakeoverTopics);
   const interactionStats = useQuery(api.core.users.getUserInteractionStats, {});
   const dismissRefineCTA = useMutation(api.core.users.dismissRefineCTA);
@@ -86,6 +89,16 @@ export default function InfiniteScrollPage() {
     });
     return map;
   }, [allTones]);
+
+  const topicsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (!allTopics) return map;
+    allTopics.forEach(t => {
+      map.set(t.id, t);
+      map.set(t._id, t);
+    });
+    return map;
+  }, [allTopics]);
 
   // Request ID to handle race conditions
   const requestIdRef = useRef(0);
@@ -682,6 +695,7 @@ export default function InfiniteScrollPage() {
                     onHideStyle={handleHideStyle}
                     onHideTone={handleHideTone}
                     onRemixed={handleRemix}
+                    topic={question.topicId ? topicsMap.get(question.topicId) : undefined}
                   />
                 </div>
 
@@ -770,7 +784,13 @@ export default function InfiniteScrollPage() {
       )}
 
       {activeTakeoverTopics && activeTakeoverTopics.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-purple-600 text-white py-3 px-4 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] flex items-center justify-center gap-4 animate-in slide-in-from-bottom duration-500">
+        <div
+          className="fixed bottom-0 left-0 right-0 z-50 text-white py-3 px-4 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] flex items-center justify-center gap-4 animate-in slide-in-from-bottom duration-500"
+          style={{
+            backgroundColor: activeTakeoverTopics.length === 1 && activeTakeoverTopics[0].color ? activeTakeoverTopics[0].color : undefined,
+            background: activeTakeoverTopics.length > 1 ? `linear-gradient(90deg, ${activeTakeoverTopics[0].color || '#9333ea'}, ${activeTakeoverTopics[activeTakeoverTopics.length - 1].color || '#7c3aed'})` : undefined
+          }}
+        >
           <Sparkles className="size-5 text-yellow-300 fill-yellow-300" />
           <div className="flex items-center gap-2 font-bold tracking-tight uppercase text-sm">
             <span>Topic Takeover:</span>

@@ -50,6 +50,7 @@ export default defineSchema({
     id: v.string(), // slug
     name: v.string(),
     icon: v.optional(v.string()),
+    color: v.optional(v.string()),
     description: v.optional(v.string()),
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),

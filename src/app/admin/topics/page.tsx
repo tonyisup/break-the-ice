@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { IconComponent, Icon } from "@/components/ui/icons/icon"
 import { IconPicker } from "@/components/ui/icon-picker"
+import { ColorPicker } from "@/components/ui/color-picker"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -62,7 +63,8 @@ export default function TopicsPage() {
 		endDate: "",
 		takeoverStartDate: "",
 		takeoverEndDate: "",
-		icon: "Smile"
+		icon: "Smile",
+		color: ""
 	})
 
 	const filteredTopics = topics?.filter(t =>
@@ -96,7 +98,8 @@ export default function TopicsPage() {
 				endDate: "",
 				takeoverStartDate: "",
 				takeoverEndDate: "",
-				icon: "Smile"
+				icon: "Smile",
+				color: ""
 			})
 		} catch (error) {
 			toast.error("Failed to create topic")
@@ -116,7 +119,8 @@ export default function TopicsPage() {
 				endDate: t.endDate,
 				takeoverStartDate: t.takeoverStartDate,
 				takeoverEndDate: t.takeoverEndDate,
-				icon: t.icon
+				icon: t.icon,
+				color: t.color
 			})
 			toast.success("Topic updated")
 			setEditingTopic(null)
@@ -230,13 +234,22 @@ export default function TopicsPage() {
 										/>
 									</div>
 								</div>
-								<div className="grid gap-2">
-									<label htmlFor="newTopicIcon" className="text-sm font-medium">Icon</label>
-									<IconPicker
-										id="newTopicIcon"
-										value={newTopic.icon}
-										onChange={icon => setNewTopic({ ...newTopic, icon })}
-									/>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<label htmlFor="newTopicIcon" className="text-sm font-medium">Icon</label>
+										<IconPicker
+											id="newTopicIcon"
+											value={newTopic.icon}
+											onChange={icon => setNewTopic({ ...newTopic, icon })}
+										/>
+									</div>
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Topic Color</label>
+										<ColorPicker
+											color={newTopic.color || ""}
+											onChange={color => setNewTopic({ ...newTopic, color })}
+										/>
+									</div>
 								</div>
 								<div className="grid gap-2">
 									<label className="text-sm font-medium">Description</label>
@@ -491,13 +504,22 @@ export default function TopicsPage() {
 										/>
 									</div>
 								</div>
-								<div className="grid gap-2">
-									<label htmlFor="editTopicIcon" className="text-sm font-medium">Icon</label>
-									<IconPicker
-										id="editTopicIcon"
-										value={editingTopic.icon || ""}
-										onChange={icon => setEditingTopic({ ...editingTopic, icon })}
-									/>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<label htmlFor="editTopicIcon" className="text-sm font-medium">Icon</label>
+										<IconPicker
+											id="editTopicIcon"
+											value={editingTopic.icon || ""}
+											onChange={icon => setEditingTopic({ ...editingTopic, icon })}
+										/>
+									</div>
+									<div className="grid gap-2">
+										<label className="text-sm font-medium">Topic Color</label>
+										<ColorPicker
+											color={editingTopic.color || ""}
+											onChange={color => setEditingTopic({ ...editingTopic, color })}
+										/>
+									</div>
 								</div>
 								<div className="grid gap-2">
 									<label className="text-sm font-medium">Description</label>

@@ -14,6 +14,7 @@ const publicTopicFields = {
 	icon: v.optional(v.string()),
 	takeoverStartDate: v.optional(v.number()),
 	takeoverEndDate: v.optional(v.number()),
+	color: v.optional(v.string()),
 };
 const mapToPublicTopic = (topic: any) => ({
 	_id: topic._id,
@@ -27,6 +28,7 @@ const mapToPublicTopic = (topic: any) => ({
 	icon: topic.icon,
 	takeoverStartDate: topic.takeoverStartDate,
 	takeoverEndDate: topic.takeoverEndDate,
+	color: topic.color,
 });
 
 export const getTopics = query({

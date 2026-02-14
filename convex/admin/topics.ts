@@ -21,6 +21,7 @@ export const getTopics = query({
 		takeoverStartDate: v.optional(v.number()),
 		takeoverEndDate: v.optional(v.number()),
 		icon: v.optional(v.string()),
+		color: v.optional(v.string()),
 	})),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
@@ -46,6 +47,7 @@ export const createTopic = mutation({
 		takeoverStartDate: v.optional(v.number()),
 		takeoverEndDate: v.optional(v.number()),
 		icon: v.optional(v.string()),
+		color: v.optional(v.string()),
 	},
 	returns: v.id("topics"),
 	handler: async (ctx, args) => {
@@ -74,6 +76,7 @@ export const createTopic = mutation({
 			takeoverStartDate: args.takeoverStartDate,
 			takeoverEndDate: args.takeoverEndDate,
 			icon: args.icon,
+			color: args.color,
 		});
 
 		// Trigger embedding generation
@@ -99,6 +102,7 @@ export const updateTopic = mutation({
 		takeoverStartDate: v.optional(v.number()),
 		takeoverEndDate: v.optional(v.number()),
 		icon: v.optional(v.string()),
+		color: v.optional(v.string()),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
