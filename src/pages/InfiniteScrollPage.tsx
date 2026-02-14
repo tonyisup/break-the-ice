@@ -635,7 +635,7 @@ export default function InfiniteScrollPage() {
       </div>
       <Header />
 
-      <main className="z-10 flex-1 flex flex-col pb-20 pt-20">
+      <main className="z-10 flex-1 flex flex-col pb-32 pt-20">
         <div className="flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full">
           {(allStylesBlocked || allTonesBlocked) && (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-4 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20">
@@ -785,25 +785,27 @@ export default function InfiniteScrollPage() {
 
       {activeTakeoverTopics && activeTakeoverTopics.length > 0 && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-50 text-white py-3 px-4 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] flex items-center justify-center gap-4 animate-in slide-in-from-bottom duration-500"
+          className="fixed bottom-0 left-0 right-0 z-50 text-white py-4 px-6 shadow-[0_-8px_30px_rgba(0,0,0,0.3)] flex items-center justify-center gap-6 animate-in slide-in-from-bottom duration-700 backdrop-blur-md border-t border-white/10"
           style={{
-            backgroundColor: activeTakeoverTopics.length === 1 && activeTakeoverTopics[0].color ? activeTakeoverTopics[0].color : undefined,
-            background: activeTakeoverTopics.length > 1 ? `linear-gradient(90deg, ${activeTakeoverTopics[0].color || '#9333ea'}, ${activeTakeoverTopics[activeTakeoverTopics.length - 1].color || '#7c3aed'})` : undefined
+            background: activeTakeoverTopics.length === 1
+              ? `${activeTakeoverTopics[0].color || '#9333ea'}F2`
+              : `linear-gradient(90deg, ${activeTakeoverTopics[0].color || '#9333ea'}F2, ${activeTakeoverTopics[activeTakeoverTopics.length - 1].color || '#7c3aed'}F2)`
           }}
         >
-          <Sparkles className="size-5 text-yellow-300 fill-yellow-300" />
-          <div className="flex items-center gap-2 font-bold tracking-tight uppercase text-sm">
-            <span>Topic Takeover:</span>
-            <div className="flex -space-x-1">
+          <Sparkles className="size-6 text-yellow-300 fill-yellow-300 animate-pulse" />
+          <div className="flex items-center gap-4 font-black tracking-tighter uppercase text-xl italic">
+            <div className="flex -space-x-3">
               {activeTakeoverTopics.map((t) => (
-                <div key={t._id} className="bg-white/20 p-1 rounded-full border border-white/30 backdrop-blur-sm" title={t.name}>
-                  <IconComponent icon={(t.icon || "CircleQuestionMark") as Icon} size={16} />
+                <div key={t._id} className="bg-white/20 p-2 rounded-full border-2 border-white/40 shadow-xl backdrop-blur-sm" title={t.name}>
+                  <IconComponent icon={(t.icon || "CircleQuestionMark") as Icon} size={28} />
                 </div>
               ))}
             </div>
-            <span>{activeTakeoverTopics.map(t => t.name).join(" & ")}</span>
+            <span className="drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
+              {activeTakeoverTopics.map(t => t.name).join(" & ")} Takeover!
+            </span>
           </div>
-          <Sparkles className="size-5 text-yellow-300 fill-yellow-300" />
+          <Sparkles className="size-6 text-yellow-300 fill-yellow-300 animate-pulse" />
         </div>
       )}
 
