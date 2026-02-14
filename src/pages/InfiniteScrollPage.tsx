@@ -8,8 +8,9 @@ import { useStorageContext } from "@/hooks/useStorageContext";
 import { useWorkspace } from "@/hooks/useWorkspace.tsx";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, SearchX } from "lucide-react";
+import { ArrowUp, SearchX, Sparkles } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
+import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { useAuth } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
 import { UpgradeCTA } from "@/components/UpgradeCTA";
@@ -60,6 +61,7 @@ export default function InfiniteScrollPage() {
     organizationId: activeWorkspace ?? undefined,
   });
   const currentUser = useQuery(api.core.users.getCurrentUser, {});
+  const activeTakeoverTopics = useQuery(api.core.topics.getActiveTakeoverTopics);
   const interactionStats = useQuery(api.core.users.getUserInteractionStats, {});
   const dismissRefineCTA = useMutation(api.core.users.dismissRefineCTA);
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
@@ -757,10 +759,31 @@ export default function InfiniteScrollPage() {
         <Button
           onClick={scrollToTop}
           data-testid="scroll-to-top-button"
-          className="fixed bottom-6 left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50"
+          className={cn(
+            "fixed left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50 transition-all duration-300",
+            activeTakeoverTopics && activeTakeoverTopics.length > 0 ? "bottom-20" : "bottom-6"
+          )}
         >
           <ArrowUp className="w-6 h-6" />
         </Button>
+      )}
+
+      {activeTakeoverTopics && activeTakeoverTopics.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-purple-600 text-white py-3 px-4 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] flex items-center justify-center gap-4 animate-in slide-in-from-bottom duration-500">
+          <Sparkles className="size-5 text-yellow-300 fill-yellow-300" />
+          <div className="flex items-center gap-2 font-bold tracking-tight uppercase text-sm">
+            <span>Topic Takeover:</span>
+            <div className="flex -space-x-1">
+              {activeTakeoverTopics.map((t) => (
+                <div key={t._id} className="bg-white/20 p-1 rounded-full border border-white/30 backdrop-blur-sm" title={t.name}>
+                  <IconComponent icon={(t.icon || "CircleQuestionMark") as Icon} size={16} />
+                </div>
+              ))}
+            </div>
+            <span>{activeTakeoverTopics.map(t => t.name).join(" & ")}</span>
+          </div>
+          <Sparkles className="size-5 text-yellow-300 fill-yellow-300" />
+        </div>
       )}
 
     </div>

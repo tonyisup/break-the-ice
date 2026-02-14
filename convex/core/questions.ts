@@ -756,16 +756,23 @@ export const remixQuestionForUser = action({
 		if (!user) {
 			throw new Error("User not found.");
 		}
+
+		const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
+		if (!question) {
+			throw new Error("Question not found.");
+		}
+
+		const topicIdToUse = args.topicId || question.topicId;
+		const takeoverTopics = await ctx.runQuery(api.core.topics.getActiveTakeoverTopics);
+		const isTakeover = takeoverTopics.some(t => t._id === topicIdToUse);
+
 		let usageIncremented = false;
 		try {
-			await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
-				userId: user._id,
-			});
-			usageIncremented = true;
-
-			const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
-			if (!question) {
-				throw new Error("Question not found.");
+			if (!isTakeover) {
+				await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
+					userId: user._id,
+				});
+				usageIncremented = true;
 			}
 
 			const questionText = question.text ?? question.customText;

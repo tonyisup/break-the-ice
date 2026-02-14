@@ -468,6 +468,7 @@ export const generateAIQuestionForUser = internalAction({
 		userId: v.id("users"),
 		count: v.optional(v.number()),
 		bypassAIUsage: v.optional(v.boolean()),
+		topicId: v.optional(v.id("topics")),
 	},
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
 		const user = await ctx.runQuery(internal.internal.users.getUserById, { id: args.userId });
@@ -479,6 +480,7 @@ export const generateAIQuestionForUser = internalAction({
 
 		const style = (await ctx.runQuery(api.core.styles.getRandomStyleForUser, { userId: user._id }));
 		const tone = (await ctx.runQuery(api.core.tones.getRandomToneForUser, { userId: user._id }));
+		const topic = args.topicId ? (await ctx.runQuery(api.core.topics.getTopicById, { id: args.topicId })) : null;
 
 		if (!style || !tone) {
 			throw new Error("Failed to generate AI question: No style or tone found for user");
@@ -486,6 +488,13 @@ export const generateAIQuestionForUser = internalAction({
 
 		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
 		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
+
+		if (topic) {
+			prompt += `\nTopic Focus: ${topic.name} (${topic.description || ""})`;
+			if (topic.promptGuidanceForAI) {
+				prompt += `\nAI Guidance for Topic: ${topic.promptGuidanceForAI}`;
+			}
+		}
 
 		const recentlySeenQuestions = await ctx.runQuery(internal.internal.users.getRecentlySeenQuestions, { userId: user._id });
 		const recentlySeen = recentlySeenQuestions.filter((q: string) => q !== undefined);
@@ -696,6 +705,8 @@ export const generateAIQuestionForUser = internalAction({
 					styleId: style._id,
 					tone: tone.id,
 					toneId: tone._id,
+					topic: topic?.id,
+					topicId: topic?._id,
 					tags: [],
 				});
 				newQuestions.push(newQuestion);

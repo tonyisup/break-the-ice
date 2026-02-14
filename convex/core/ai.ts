@@ -353,7 +353,23 @@ export const generateAIQuestionForFeed = action({
 		}
 
 		const count = args.count || 1;
-		return await ctx.runAction(internal.internal.ai.generateAIQuestionForUser, { userId: user._id, count });
+
+		const takeoverTopics = await ctx.runQuery(api.core.topics.getActiveTakeoverTopics);
+		let topicId;
+		let bypassAIUsage = false;
+
+		if (takeoverTopics.length > 0) {
+			// Pick a random active takeover topic
+			topicId = takeoverTopics[Math.floor(Math.random() * takeoverTopics.length)]._id;
+			bypassAIUsage = true;
+		}
+
+		return await ctx.runAction(internal.internal.ai.generateAIQuestionForUser, {
+			userId: user._id,
+			count,
+			topicId,
+			bypassAIUsage
+		});
 	}
 });
 
