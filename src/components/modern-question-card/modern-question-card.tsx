@@ -267,6 +267,14 @@ const QuestionContent = ({
     damping: 12,
     mass: 3
   });
+
+  // Trail effects for the topic icon
+  const trail1Rotate = useSpring(velocityRotate, { stiffness: 30, damping: 15, mass: 2 });
+  const trail2Rotate = useSpring(velocityRotate, { stiffness: 20, damping: 20, mass: 1.5 });
+
+  const trail1Y = useSpring(useTransform(scrollVelocity, [-1, 1], [-15, 15]), { stiffness: 30, damping: 15 });
+  const trail2Y = useSpring(useTransform(scrollVelocity, [-1, 1], [-30, 30]), { stiffness: 20, damping: 20 });
+
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
@@ -411,16 +419,32 @@ const QuestionContent = ({
         )}
       </div>
       {topic && (
-        <div className="mt-4 flex flex-row gap-2 justify-between">
+        <div className="mt-4 flex flex-row gap-2 justify-between items-center">
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Topic: {topic.name}
           </p>
-          <motion.p 
-            style={{ rotate }}
-            className="text-sm text-gray-600 dark:text-gray-400"
-          >
-            <IconComponent icon={safeIcon} size={24} />
-          </motion.p>
+          <div className="relative">
+            {/* Trail icons */}
+            <motion.div
+              style={{ rotate: trail2Rotate, y: trail2Y, opacity: 0.2 }}
+              className="absolute inset-0 text-gray-600 dark:text-gray-400 pointer-events-none"
+            >
+              <IconComponent icon={safeIcon} size={24} />
+            </motion.div>
+            <motion.div
+              style={{ rotate: trail1Rotate, y: trail1Y, opacity: 0.4 }}
+              className="absolute inset-0 text-gray-600 dark:text-gray-400 pointer-events-none"
+            >
+              <IconComponent icon={safeIcon} size={24} />
+            </motion.div>
+            {/* Main icon */}
+            <motion.div
+              style={{ rotate }}
+              className="relative z-10 text-gray-600 dark:text-gray-400"
+            >
+              <IconComponent icon={safeIcon} size={24} />
+            </motion.div>
+          </div>
         </div>
       )}
     </div>

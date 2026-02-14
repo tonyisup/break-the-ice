@@ -53,6 +53,8 @@ import type * as lib_emails from "../lib/emails.js";
 import type * as lib_retriever from "../lib/retriever.js";
 import type * as resend from "../resend.js";
 import type * as router from "../router.js";
+import type * as temp_check from "../temp_check.js";
+import type * as temp_seed from "../temp_seed.js";
 
 import type {
   ApiFromModules,
@@ -106,6 +108,8 @@ declare const fullApi: ApiFromModules<{
   "lib/retriever": typeof lib_retriever;
   resend: typeof resend;
   router: typeof router;
+  temp_check: typeof temp_check;
+  temp_seed: typeof temp_seed;
 }>;
 
 /**
