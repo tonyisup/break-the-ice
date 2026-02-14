@@ -656,6 +656,8 @@ export const getRandomQuestionsInternal = internalQuery({
 		const exclusionCount = seenIds.size + hiddenIds.size + hiddenStyleIds.size + hiddenToneIds.size;
 		const returnCount = Math.min(Math.max(count + exclusionCount + 10, 50), 500);
 
+		const now = Date.now();
+
 		// pull any active topics, find a question that has that topic, and inject it if there is one
 		const activeTopics = await ctx.db.query("topics")
 			.withIndex("by_startDate_endDate_order", (q) => q.lt("startDate", now))
