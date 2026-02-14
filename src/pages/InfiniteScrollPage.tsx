@@ -18,6 +18,7 @@ import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
 import { RefineResultsCTA } from "@/components/RefineResultsCTA";
 import { ERROR_MESSAGES, ERROR_CODES } from "../../convex/constants";
 import { ConvexError } from "convex/values";
+import { cn } from "@/lib/utils";
 
 const compareByTextLength = (a: Doc<"questions">, b: Doc<"questions">) =>
   (a.text || a.customText || "").length - (b.text || b.customText || "").length;
@@ -259,7 +260,7 @@ export default function InfiniteScrollPage() {
         if (!user.isSignedIn) {
           setShowAuthCTA(true);
           setHasMore(false);
-          
+
           // If we have some DB questions and it was the first pull, we need to show them now
           if (isFirstPull && combinedQuestions.length > 0) {
             combinedQuestions.sort(compareByTextLength);
@@ -328,8 +329,8 @@ export default function InfiniteScrollPage() {
           const errorDataMessage = err instanceof ConvexError ? (err.data as any)?.message : null;
 
           // Use structured error code if available, otherwise fall back to exact constant match or conservative substring check
-          const isLimitError = errorCode === ERROR_CODES.AI_LIMIT_REACHED || 
-            errorMessage === ERROR_MESSAGES.AI_LIMIT_REACHED || 
+          const isLimitError = errorCode === ERROR_CODES.AI_LIMIT_REACHED ||
+            errorMessage === ERROR_MESSAGES.AI_LIMIT_REACHED ||
             errorDataMessage === ERROR_MESSAGES.AI_LIMIT_REACHED ||
             errorMessage.includes("AI generation limit reached");
 
