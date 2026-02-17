@@ -24,7 +24,6 @@ export const userValidator = v.object({
 	phone: v.optional(v.string()),
 	phoneVerificationTime: v.optional(v.number()),
 	isAdmin: v.optional(v.boolean()),
-	questionPreferenceEmbedding: v.optional(v.array(v.number())),
 	defaultStyle: v.optional(v.string()),
 	defaultTone: v.optional(v.string()),
 	subscriptionTier: v.optional(v.union(v.literal("free"), v.literal("casual"))),
@@ -191,13 +190,36 @@ export const getUserLikedQuestions = internalQuery({
 	},
 });
 
+export const getUserEmbedding = internalQuery({
+	args: { userId: v.id("users") },
+	returns: v.union(v.array(v.number()), v.null()),
+	handler: async (ctx, args) => {
+		const row = await ctx.db
+			.query("user_embeddings")
+			.withIndex("by_userId", (q) => q.eq("userId", args.userId))
+			.first();
+		return row?.embedding ?? null;
+	},
+});
+
 export const updateUserPreferenceEmbedding = internalMutation({
 	args: {
 		userId: v.id("users"),
 		questionPreferenceEmbedding: v.array(v.number()),
 	},
 	handler: async (ctx, args) => {
-		await ctx.db.patch(args.userId, { questionPreferenceEmbedding: args.questionPreferenceEmbedding });
+		const existing = await ctx.db
+			.query("user_embeddings")
+			.withIndex("by_userId", (q) => q.eq("userId", args.userId))
+			.first();
+		if (existing) {
+			await ctx.db.patch(existing._id, { embedding: args.questionPreferenceEmbedding });
+		} else {
+			await ctx.db.insert("user_embeddings", {
+				userId: args.userId,
+				embedding: args.questionPreferenceEmbedding,
+			});
+		}
 	},
 });
 
@@ -243,15 +265,11 @@ export const getUsersWithMissingEmbeddings = internalQuery({
 	args: {},
 	returns: v.array(userValidator),
 	handler: async (ctx) => {
-		return await ctx.db
-			.query("users")
-			.filter((q) =>
-				q.or(
-					q.eq(q.field("questionPreferenceEmbedding"), undefined),
-					q.eq(q.field("questionPreferenceEmbedding"), [])
-				)
-			)
-			.collect();
+		const withEmbeddingUserIds = new Set(
+			(await ctx.db.query("user_embeddings").collect()).map((e) => e.userId)
+		);
+		const allUsers = await ctx.db.query("users").collect();
+		return allUsers.filter((u) => !withEmbeddingUserIds.has(u._id));
 	},
 });
 
