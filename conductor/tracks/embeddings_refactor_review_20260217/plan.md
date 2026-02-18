@@ -1,0 +1,34 @@
+# Implementation Plan: Embeddings Refactor Code Review
+
+This plan outlines the steps to address the code review feedback for the embeddings refactor.
+
+## Phase 1: Fixes in `@convex/admin`
+
+- [ ] Task: `@convex/admin/pruning.ts`: Remove duplicate `getQuestionEmbeddingsForIds` function.
+- [ ] Task: `@convex/admin/questions.ts`: Fix scheduler condition to check `updateData`.
+
+## Phase 2: Fixes in `@convex/core`
+
+- [ ] Task: `@convex/core/questions.ts`: Prevent empty arrays in `calculateAverageEmbedding`.
+- [ ] Task: `@convex/core/questions.ts`: Extract `calculateAverageEmbedding` into a shared utility.
+- [ ] Task: `@convex/core/questions.ts`: Filter out null IDs before calling `getQuestionsByIds`.
+- [ ] Task: `@convex/core/styles.ts`: Exclude `embedding` field from returned objects.
+- [ ] Task: `@convex/core/tones.ts`: Exclude `embedding` field from returned objects.
+
+## Phase 3: Fixes in `@convex/internal`
+
+- [ ] Task: `@convex/internal/ai.ts`: Fix brace indentation.
+- [ ] Task: `@convex/internal/ai.ts`: Add missing `returns` validator to `generateAIQuestionForUser`.
+- [ ] Task: `@convex/internal/ai.ts`: Align scores and IDs in vector-search loop.
+- [ ] Task: `@convex/internal/migrations.ts`: Refactor migration functions to use batching.
+- [ ] Task: `@convex/internal/migrations.ts`: Exclude system fields when replacing documents.
+- [ ] Task: `@convex/internal/newsletter.ts`: Refactor N+1 query to a single batch query.
+- [ ] Task: `@convex/internal/questions.ts`: Ensure `getQuestionIdsByEmbeddingRowIds` preserves order.
+- [ ] Task: `@convex/internal/questions.ts`: Refactor duplicate logic for finding questions without embeddings.
+- [ ] Task: `@convex/internal/styles.ts`: Add missing validators and use index for lookup.
+- [ ] Task: `@convex/internal/styles.ts`: Add missing `returns` validator to `addStyleEmbedding`.
+- [ ] Task: `@convex/internal/tones.ts`: Add missing validators and use index for lookup.
+- [ ] Task: `@convex/internal/tones.ts`: Add missing `returns` validator to `addToneEmbedding`.
+- [ ] Task: `@convex/internal/topics.ts`: Add missing `returns` validator to `addTopicEmbedding`.
+- [ ] Task: `@convex/internal/users.ts`: Filter empty embeddings before calculating average.
+- [ ] Task: `@convex/internal/users.ts`: Refactor `getUsersWithMissingEmbeddings` to be scalable.
