@@ -198,6 +198,7 @@ export const updateUserPreferenceEmbedding = internalMutation({
 		userId: v.id("users"),
 		questionPreferenceEmbedding: v.array(v.number()),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		const existing = await ctx.db
 			.query("user_embeddings")
@@ -235,7 +236,7 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 			const embedding = await ctx.runQuery(internal.internal.questions.getQuestionEmbedding, {
 				questionId: uq.questionId,
 			});
-			if (!embedding || embedding.length === 0) {
+			if (!embedding) {
 				return null;
 			}
 			return embedding;
@@ -244,10 +245,12 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 		const validEmbeddings = userQuestionEmbeddings.filter((e): e is number[] => e !== null && e.length > 0);
 		const averageEmbedding = calculateAverageEmbedding(validEmbeddings);
 
-		await ctx.runMutation(internal.internal.users.updateUserPreferenceEmbedding, {
-			userId: args.userId,
-			questionPreferenceEmbedding: averageEmbedding,
-		});
+		if (averageEmbedding.length > 0) {
+			await ctx.runMutation(internal.internal.users.updateUserPreferenceEmbedding, {
+				userId: args.userId,
+				questionPreferenceEmbedding: averageEmbedding,
+			});
+		}
 
 		return null;
 	},

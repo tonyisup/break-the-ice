@@ -472,9 +472,13 @@ export const getUserLikedAndPreferredEmbedding = query({
 			)
 		);
 		const embeddings = questionEmbeddings
-			.filter((e) => e !== null)
-			.map((e) => e!.embedding);
-		const results = calculateAverageEmbedding([...embeddings, userEmb?.embedding ?? []]);
+			.filter((e): e is NonNullable<typeof e> => e != null)
+			.map((e) => e.embedding);
+		const toAverage: number[][] = [...embeddings];
+		if (userEmb?.embedding && userEmb.embedding.length > 0) {
+			toAverage.push(userEmb.embedding);
+		}
+		const results = calculateAverageEmbedding(toAverage);
 		return results;
 	},
 });

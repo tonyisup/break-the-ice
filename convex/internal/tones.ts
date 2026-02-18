@@ -45,6 +45,7 @@ export const addToneEmbedding = internalMutation({
 				embedding: args.embedding,
 			});
 		}
+		return null;
 	},
 });
 
@@ -54,8 +55,8 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
 	handler: async (ctx) => {
 		const questions = await ctx.db.query("questions").collect();
 		for (const q of questions) {
-			if (!q.toneId) {
-				const tone = await ctx.db.query("tones").filter((t) => t.eq(t.field("id"), q.tone)).first();
+			if (!q.toneId && q.tone) {
+				const tone = await ctx.db.query("tones").withIndex("by_my_id", (t) => t.eq("id", q.tone!)).first();
 				if (tone) {
 					await ctx.db.patch(q._id, { toneId: tone._id });
 					await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
@@ -87,7 +88,7 @@ export const getToneById = internalQuery({
 });
 export const getAllTonesInternal = internalQuery({
 	args: {},
-	returns: v.array(v.any()),
+	returns: v.array(v.object(publicToneFields)),
 	handler: async (ctx) => {
 		return await ctx.db.query("tones").collect();
 	},

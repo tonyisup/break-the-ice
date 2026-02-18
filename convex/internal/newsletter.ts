@@ -79,7 +79,6 @@ export const getQuestionForUser = internalAction({
 				const results = await ctx.vectorSearch("question_embeddings", "by_embedding", {
 					vector: userEmb,
 					limit: MAX_CANDIDATES,
-					filter: (q) => q.eq("status", "public"),
 				});
 
 				if (results.length > 0) {
@@ -97,7 +96,6 @@ export const getQuestionForUser = internalAction({
 						) as Doc<"questions"> | null;
 
 						if (!candidate) continue;
-						if (excludedQuestionIds.size > 0 && excludedQuestionIds.has(candidate._id.toString())) continue;
 						if (!candidate.text) continue;
 						if (candidate.prunedAt !== undefined) continue;
 						if (candidate.status !== "approved" && candidate.status !== "public" && candidate.status !== undefined) continue;

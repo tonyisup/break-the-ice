@@ -4,22 +4,7 @@ import { Doc, Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { embed } from "../lib/retriever";
 import { getActiveTakeoverTopicsHelper } from "../lib/takeover";
-
-// Helper: Simple cosine similarity for preference matching
-function cosineSimilarity(a: number[], b: number[]): number {
-	if (a.length !== b.length || a.length === 0) return 0;
-	let dotProduct = 0;
-	let normA = 0;
-	let normB = 0;
-	for (let i = 0; i < a.length; i++) {
-		dotProduct += a[i] * b[i];
-		normA += a[i] * a[i];
-		normB += b[i] * b[i];
-	}
-	if (normA === 0 || normB === 0) return 0;
-	return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-
+import { cosineSimilarity } from "../lib/embeddings";
 
 export const getQuestionById = internalQuery({
 	args: { id: v.id("questions") },
@@ -87,9 +72,10 @@ export const addEmbedding = internalMutation({
 		questionId: v.id("questions"),
 		embedding: v.array(v.float64()),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		const question = await ctx.db.get(args.questionId);
-		if (!question) return;
+		if (!question) return null;
 		const existing = await ctx.db
 			.query("question_embeddings")
 			.withIndex("by_questionId", (q) => q.eq("questionId", args.questionId))
@@ -100,16 +86,18 @@ export const addEmbedding = internalMutation({
 			status: question.status,
 			styleId: question.styleId,
 			toneId: question.toneId,
+			topicId: question.topicId,
 		};
 		if (existing) {
 			await ctx.db.patch(existing._id, payload);
 		} else {
 			await ctx.db.insert("question_embeddings", payload);
 		}
+		return null;
 	},
 });
 
-/** Sync status, styleId, toneId from question to its question_embeddings row (for vector search filters). */
+/** Sync status, styleId, toneId, topicId from question to its question_embeddings row (for vector search filters). */
 export const syncQuestionEmbeddingFilters = internalMutation({
 	args: { questionId: v.id("questions") },
 	returns: v.null(),
@@ -125,6 +113,7 @@ export const syncQuestionEmbeddingFilters = internalMutation({
 			status: question.status,
 			styleId: question.styleId,
 			toneId: question.toneId,
+			topicId: question.topicId,
 		});
 		return null;
 	},
@@ -245,12 +234,13 @@ export const getQuestionEmbedding = internalQuery({
 	args: {
 		questionId: v.id("questions"),
 	},
+	returns: v.union(v.null(), v.array(v.float64())),
 	handler: async (ctx, args) => {
 		const row = await ctx.db
 			.query("question_embeddings")
 			.withIndex("by_questionId", (q) => q.eq("questionId", args.questionId))
 			.first();
-		if (!row) return [];
+		if (!row) return null;
 		return row.embedding;
 	},
 });
@@ -293,6 +283,15 @@ export const getQuestionsWithEmbeddingsBatch = internalQuery({
 		cursor: v.union(v.string(), v.null()),
 		limit: v.number(),
 	},
+	returns: v.object({
+		questions: v.array(v.object({
+			_id: v.id("questions"),
+			text: v.optional(v.union(v.string(), v.null())),
+			embedding: v.array(v.float64()),
+		})),
+		continueCursor: v.string(),
+		isDone: v.boolean(),
+	}),
 	handler: async (ctx, args) => {
 		const { cursor, limit } = args;
 		const paginationResult = await ctx.db

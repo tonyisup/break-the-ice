@@ -45,5 +45,7 @@ test("getUserLikedAndPreferredEmbedding should ignore empty user embedding", asy
 
   // 4. Assert the average is correct (should be [2, 2, 2])
   // The failing implementation would likely produce a skewed result (e.g. [1.33, 1.33, 1.33])
+  expect(result).toBeDefined();
+  expect(result).not.toBeNull();
   expect(result).toEqual([2, 2, 2]);
 });

@@ -83,7 +83,7 @@ export default defineSchema({
     topic: v.optional(v.string()),
     topicId: v.optional(v.id("topics")),
     authorId: v.optional(v.string()),
-    customText: v.optional(v.string()),   
+    customText: v.optional(v.string()),
     embedding: v.optional(v.array(v.number())),
     status: v.optional(
       v.union(
@@ -324,7 +324,7 @@ export default defineSchema({
   // Embedding tables (one-to-one with parent; embeddings only, to reduce bandwidth on main tables)
   question_embeddings: defineTable({
     questionId: v.id("questions"),
-    embedding: v.array(v.number()),
+    embedding: v.array(v.float64()),
     status: v.optional(v.union(
       v.literal("pending"),
       v.literal("approved"),
@@ -335,27 +335,28 @@ export default defineSchema({
     )),
     styleId: v.optional(v.id("styles")),
     toneId: v.optional(v.id("tones")),
+    topicId: v.optional(v.id("topics")),
   })
     .index("by_questionId", ["questionId"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 384,
-      filterFields: ["status", "styleId", "toneId"],
+      filterFields: ["status", "styleId", "toneId", "topicId"],
     }),
   style_embeddings: defineTable({
     styleId: v.id("styles"),
-    embedding: v.array(v.number()),
+    embedding: v.array(v.float64()),
   }).index("by_styleId", ["styleId"]),
   tone_embeddings: defineTable({
     toneId: v.id("tones"),
-    embedding: v.array(v.number()),
+    embedding: v.array(v.float64()),
   }).index("by_toneId", ["toneId"]),
   topic_embeddings: defineTable({
     topicId: v.id("topics"),
-    embedding: v.array(v.number()),
+    embedding: v.array(v.float64()),
   }).index("by_topicId", ["topicId"]),
   user_embeddings: defineTable({
     userId: v.id("users"),
-    embedding: v.array(v.number()),
+    embedding: v.array(v.float64()),
   }).index("by_userId", ["userId"]),
 });

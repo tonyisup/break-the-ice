@@ -3,6 +3,7 @@ import { action, ActionCtx, internalAction, internalMutation, internalQuery, mut
 import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
+import { cosineSimilarity } from "../lib/embeddings";
 
 // Shared return validators for type safety
 export const pruningSettingsValidator = v.object({
@@ -56,21 +57,6 @@ export const questionValidator = v.object({
 	poolDate: v.optional(v.string()),
 	poolStatus: v.optional(v.union(v.literal("available"), v.literal("distributed"))),
 });
-
-// Helper: Simple cosine similarity for matching
-function cosineSimilarity(a: number[], b: number[]): number {
-	if (!a || !b || a.length !== b.length || a.length === 0) return 0;
-	let dotProduct = 0;
-	let normA = 0;
-	let normB = 0;
-	for (let i = 0; i < a.length; i++) {
-		dotProduct += a[i] * b[i];
-		normA += a[i] * a[i];
-		normB += b[i] * b[i];
-	}
-	if (normA === 0 || normB === 0) return 0;
-	return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
 
 /**
  * Internal helper to satisfy both the cron and manual trigger.

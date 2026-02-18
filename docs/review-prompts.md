@@ -129,15 +129,7 @@ In `@convex/core/questions.ts`:
 
 In `@convex/internal/ai.ts`:
 
-- Around line 532-543: The closing brace for the if (userEmb && userEmb.length >
-
-0. block is mis-indented and appears to close the surrounding try; fix by moving
-   the brace indentation so it lines up with the opening if statement and the
-   nested code (the block around userEmb, getUserEmbedding,
-   getNearestQuestionsByEmbedding and building userContext), ensuring the try
-   block's braces remain distinct from the if block to make control flow clear
-   (adjust the indentation of the `}` that follows the examples.length check to
-   match the `if (userEmb && userEmb.length > 0)` line).
+- Around line 532-543: The closing brace for the if (userEmb && userEmb.length > 0) block is mis-indented and appears to close the surrounding try; fix by moving the brace indentation so it lines up with the opening if statement and the nested code (the block around userEmb, getUserEmbedding, getNearestQuestionsByEmbedding and building userContext), ensuring the try block's braces remain distinct from the if block to make control flow clear (adjust the indentation of the `}` that follows the examples.length check to match the `if (userEmb && userEmb.length > 0)` line).
 
 - Around line 471-478: The internalAction generateAIQuestionForUser is missing a
   returns validator; add a returns validator to the internalAction declaration
