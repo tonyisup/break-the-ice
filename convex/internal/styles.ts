@@ -42,24 +42,29 @@ export const addStyleEmbedding = internalMutation({
 		styleId: v.id("styles"),
 		embedding: v.array(v.float64()),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ctx.db.patch(args.styleId, {
 			embedding: args.embedding,
 		});
+		return null;
 	},
 });
 
 export const updateQuestionsWithMissingStyleIds = internalMutation({
+	args: {},
+	returns: v.null(),
 	handler: async (ctx) => {
 		const questions = await ctx.db.query("questions").collect();
 		await Promise.all(questions.map(async (q) => {
-			if (!q.styleId) {
-				const style = await ctx.db.query("styles").filter((s) => s.eq(s.field("id"), q.style)).first();
+			if (!q.styleId && q.style) {
+				const style = await ctx.db.query("styles").withIndex("by_my_id", (s) => s.eq("id", q.style)).first();
 				if (style) {
 					await ctx.db.patch(q._id, { styleId: style._id });
 				}
 			}
 		}));
+		return null;
 	},
 });
 export const getAllStylesInternal = internalQuery({

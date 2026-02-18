@@ -7,10 +7,12 @@ export const addTopicEmbedding = internalMutation({
 		topicId: v.id("topics"),
 		embedding: v.array(v.float64()),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ctx.db.patch(args.topicId, {
 			embedding: args.embedding,
 		});
+		return null;
 	},
 });
 

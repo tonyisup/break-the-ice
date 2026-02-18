@@ -212,13 +212,14 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 			const embedding = await ctx.runQuery(internal.internal.questions.getQuestionEmbedding, {
 				questionId: uq.questionId,
 			});
-			if (!embedding) {
-				return [];
+			if (!embedding || embedding.length === 0) {
+				return null;
 			}
 			return embedding;
 		}));
 
-		const averageEmbedding = calculateAverageEmbedding(userQuestionEmbeddings);
+		const validEmbeddings = userQuestionEmbeddings.filter((e): e is number[] => e !== null && e.length > 0);
+		const averageEmbedding = calculateAverageEmbedding(validEmbeddings);
 
 		await ctx.runMutation(internal.internal.users.updateUserPreferenceEmbedding, {
 			userId: args.userId,
@@ -230,10 +231,18 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 });
 
 export const getUsersWithMissingEmbeddings = internalQuery({
-	args: {},
-	returns: v.array(userValidator),
-	handler: async (ctx) => {
-		return await ctx.db
+	args: {
+		cursor: v.optional(v.union(v.string(), v.null())),
+		limit: v.optional(v.number()),
+	},
+	returns: v.object({
+		users: v.array(userValidator),
+		continueCursor: v.union(v.string(), v.null()),
+		isDone: v.boolean(),
+	}),
+	handler: async (ctx, args) => {
+		const limit = args.limit ?? 100;
+		const paginationResult = await ctx.db
 			.query("users")
 			.filter((q) =>
 				q.or(
@@ -241,19 +250,36 @@ export const getUsersWithMissingEmbeddings = internalQuery({
 					q.eq(q.field("questionPreferenceEmbedding"), [])
 				)
 			)
-			.collect();
+			.paginate({ cursor: args.cursor ?? null, numItems: limit });
+		return {
+			users: paginationResult.page,
+			continueCursor: paginationResult.continueCursor,
+			isDone: paginationResult.isDone,
+		};
 	},
 });
 
 export const updateUsersWithMissingEmbeddingsAction = internalAction({
 	args: {},
+	returns: v.null(),
 	handler: async (ctx) => {
-		const users = await ctx.runQuery(internal.internal.users.getUsersWithMissingEmbeddings);
-		for (const user of users) {
-			await ctx.runAction(internal.internal.users.updateUserPreferenceEmbeddingAction, {
-				userId: user._id,
+		let cursor: string | null = null;
+		do {
+			const result = await ctx.runQuery(internal.internal.users.getUsersWithMissingEmbeddings, {
+				cursor,
+				limit: 100,
 			});
-		}
+			for (const user of result.users) {
+				await ctx.runAction(internal.internal.users.updateUserPreferenceEmbeddingAction, {
+					userId: user._id,
+				});
+			}
+			cursor = result.continueCursor;
+			if (result.isDone) {
+				break;
+			}
+		} while (cursor);
+		return null;
 	},
 });
 

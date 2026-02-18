@@ -27,24 +27,29 @@ export const addToneEmbedding = internalMutation({
 		toneId: v.id("tones"),
 		embedding: v.array(v.float64()),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ctx.db.patch(args.toneId, {
 			embedding: args.embedding,
 		});
+		return null;
 	},
 });
 
 export const updateQuestionsWithMissingToneIds = internalMutation({
+	args: {},
+	returns: v.null(),
 	handler: async (ctx) => {
 		const questions = await ctx.db.query("questions").collect();
 		await Promise.all(questions.map(async (q) => {
-			if (!q.toneId) {
-				const tone = await ctx.db.query("tones").filter((t) => t.eq(t.field("id"), q.tone)).first();
+			if (!q.toneId && q.tone) {
+				const tone = await ctx.db.query("tones").withIndex("by_my_id", (t) => t.eq("id", q.tone)).first();
 				if (tone) {
 					await ctx.db.patch(q._id, { toneId: tone._id });
 				}
 			}
 		}));
+		return null;
 	},
 });
 

@@ -9,7 +9,7 @@ export const removeOldTimestampFields = internalMutation({
 		const feedbacks = await ctx.db.query("feedback").collect();
 		for (const f of feedbacks) {
 			if ("createdAt" in f) {
-				const { createdAt, ...rest } = f as any;
+				const { createdAt, _id, _creationTime, ...rest } = f as any;
 				await ctx.db.replace(f._id, rest);
 			}
 		}
@@ -18,7 +18,7 @@ export const removeOldTimestampFields = internalMutation({
 		const subscriptions = await ctx.db.query("pendingSubscriptions").collect();
 		for (const s of subscriptions) {
 			if ("createdAt" in s) {
-				const { createdAt, ...rest } = s as any;
+				const { createdAt, _id, _creationTime, ...rest } = s as any;
 				await ctx.db.replace(s._id, rest);
 			}
 		}
@@ -27,7 +27,7 @@ export const removeOldTimestampFields = internalMutation({
 		const progress = await ctx.db.query("duplicateDetectionProgress").collect();
 		for (const p of progress) {
 			if ("startedAt" in p) {
-				const { startedAt, ...rest } = p as any;
+				const { startedAt, _id, _creationTime, ...rest } = p as any;
 				await ctx.db.replace(p._id, rest);
 			}
 		}
@@ -36,7 +36,7 @@ export const removeOldTimestampFields = internalMutation({
 		const detections = await ctx.db.query("duplicateDetections").collect();
 		for (const d of detections) {
 			if ("detectedAt" in d) {
-				const { detectedAt, ...rest } = d as any;
+				const { detectedAt, _id, _creationTime, ...rest } = d as any;
 				await ctx.db.replace(d._id, rest);
 			}
 		}

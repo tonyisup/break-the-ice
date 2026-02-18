@@ -83,15 +83,14 @@ export const getQuestionForUser = internalAction({
 
 				if (results.length > 0) {
 					const candidateIds = results.map(r => r._id);
-					for (const candidateId of candidateIds) {
-						if (excludedQuestionIds.size > 0 && excludedQuestionIds.has(candidateId.toString())) continue;
+					const candidates = await ctx.runQuery(
+						api.core.questions.getQuestionsByIds,
+						{ ids: candidateIds }
+					) as Doc<"questions">[];
 
-						const candidate: Doc<"questions"> | null = await ctx.runQuery(
-							internal.internal.questions.getQuestionById,
-							{ id: candidateId }
-						);
-
+					for (const candidate of candidates) {
 						if (!candidate) continue;
+						if (excludedQuestionIds.size > 0 && excludedQuestionIds.has(candidate._id.toString())) continue;
 						if (!candidate.text) continue;
 						if (candidate.prunedAt !== undefined) continue;
 						if (candidate.status !== "approved" && candidate.status !== "public" && candidate.status !== undefined) continue;
