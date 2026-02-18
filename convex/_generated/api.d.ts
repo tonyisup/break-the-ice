@@ -51,6 +51,7 @@ import type * as internal_topics from "../internal/topics.js";
 import type * as internal_users from "../internal/users.js";
 import type * as lib_emails from "../lib/emails.js";
 import type * as lib_retriever from "../lib/retriever.js";
+import type * as lib_takeover from "../lib/takeover.js";
 import type * as resend from "../resend.js";
 import type * as router from "../router.js";
 import type * as seed from "../seed.js";
@@ -105,6 +106,7 @@ declare const fullApi: ApiFromModules<{
   "internal/users": typeof internal_users;
   "lib/emails": typeof lib_emails;
   "lib/retriever": typeof lib_retriever;
+  "lib/takeover": typeof lib_takeover;
   resend: typeof resend;
   router: typeof router;
   seed: typeof seed;
