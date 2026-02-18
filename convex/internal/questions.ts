@@ -50,18 +50,29 @@ export const getQuestionById = internalQuery({
 });
 
 export const getQuestionsToEmbed = internalQuery({
-	args: {
-		startCreationTime: v.optional(v.number()),
-		startQuestionId: v.optional(v.id("questions")),
-	},
-	handler: async (ctx, args) => {
+	args: {},
+	returns: v.array(v.object({
+		_id: v.id("questions"),
+		_creationTime: v.number(),
+		text: v.optional(v.string()),
+		styleId: v.optional(v.id("styles")),
+		toneId: v.optional(v.id("tones")),
+		topicId: v.optional(v.id("topics")),
+		status: v.optional(v.union(
+			v.literal("pending"),
+			v.literal("approved"),
+			v.literal("public"),
+			v.literal("private"),
+			v.literal("pruning"),
+			v.literal("pruned")
+		)),
+	})),
+	handler: async (ctx) => {
 		const withEmbeddingIds = new Set(
 			(await ctx.db.query("question_embeddings").collect()).map((e) => e.questionId)
 		);
-		const questions = await ctx.db
-			.query("questions")
-			.filter((q) => q.neq(q.field("text"), undefined))
-			.take(500);
+		const raw = await ctx.db.query("questions").take(500);
+		const questions = raw.filter((q) => q.text !== undefined);
 		const missing = questions.filter((q) => !withEmbeddingIds.has(q._id));
 		return missing.slice(0, 10);
 	},
@@ -220,10 +231,8 @@ export const getQuestionsWithMissingEmbeddings = internalQuery({
 		const withEmbeddingIds = new Set(
 			(await ctx.db.query("question_embeddings").collect()).map((e) => e.questionId)
 		);
-		const questions = await ctx.db
-			.query("questions")
-			.filter((q) => q.neq(q.field("text"), undefined))
-			.collect();
+		const raw = await ctx.db.query("questions").collect();
+		const questions = raw.filter((q) => q.text !== undefined);
 		return questions
 			.filter((q) => !withEmbeddingIds.has(q._id))
 			.map((q) => ({ _id: q._id, text: q.text }));
@@ -252,7 +261,7 @@ export const getQuestionIdsByEmbeddingRowIds = internalQuery({
 	args: { embeddingRowIds: v.array(v.id("question_embeddings")) },
 	returns: v.array(v.union(v.id("questions"), v.null())),
 	handler: async (ctx, args) => {
-		const ids: (Id<"questions"> | null)[] = [];
+		const ids: Array<Id<"questions"> | null> = [];
 		for (const rowId of args.embeddingRowIds) {
 			const row = await ctx.db.get(rowId);
 			ids.push(row?.questionId ?? null);
@@ -266,7 +275,7 @@ export const getEmbeddingsByQuestionIds = internalQuery({
 	args: { questionIds: v.array(v.id("questions")) },
 	returns: v.array(v.object({ questionId: v.id("questions"), embedding: v.array(v.float64()) })),
 	handler: async (ctx, args) => {
-		const out: { questionId: Id<"questions">; embedding: number[] }[] = [];
+		const out: Array<{ questionId: Id<"questions">; embedding: Array<number> }> = [];
 		for (const questionId of args.questionIds) {
 			const row = await ctx.db
 				.query("question_embeddings")

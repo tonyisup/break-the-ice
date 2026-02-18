@@ -12,6 +12,7 @@ const publicToneFields = {
 	color: v.string(),
 	icon: v.string(),
 	order: v.optional(v.float64()),
+	organizationId: v.optional(v.id("organizations")),
 };
 
 export const getTonesWithMissingEmbeddings = internalQuery({

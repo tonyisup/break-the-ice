@@ -71,8 +71,8 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 	const settings = await ctx.runQuery(internal.admin.pruning.getPruningSettingsInternal);
 
 	const questionIds = questions.map((q) => q._id);
-	const styleIds = [...new Set(styles.map((s) => s._id))];
-	const toneIds = [...new Set(tones.map((t) => t._id))];
+	const styleIds = styles.map((s) => s._id);
+	const toneIds = tones.map((t) => t._id);
 	const [questionEmbList, styleEmbList, toneEmbList] = await Promise.all([
 		ctx.runQuery(internal.internal.questions.getEmbeddingsByQuestionIds, { questionIds }),
 		ctx.runQuery(internal.admin.pruning.getStyleEmbeddingsForIds, { styleIds }),
@@ -227,13 +227,13 @@ export const getStyleEmbeddingsForIds = internalQuery({
 	args: { styleIds: v.array(v.id("styles")) },
 	returns: v.array(v.object({ styleId: v.id("styles"), embedding: v.array(v.number()) })),
 	handler: async (ctx, args) => {
-		const out: Array<{ styleId: Id<"styles">; embedding: number[] }> = [];
-		for (const styleId of args.styleIds) {
-			const row = await ctx.db
-				.query("style_embeddings")
-				.withIndex("by_styleId", (q) => q.eq("styleId", styleId))
-				.first();
-			if (row) out.push({ styleId, embedding: row.embedding });
+		const wantSet = new Set(args.styleIds);
+		const rows = await ctx.db.query("style_embeddings").collect();
+		const out: Array<{ styleId: Id<"styles">; embedding: Array<number> }> = [];
+		for (const row of rows) {
+			if (wantSet.has(row.styleId)) {
+				out.push({ styleId: row.styleId, embedding: row.embedding });
+			}
 		}
 		return out;
 	},
@@ -243,13 +243,13 @@ export const getToneEmbeddingsForIds = internalQuery({
 	args: { toneIds: v.array(v.id("tones")) },
 	returns: v.array(v.object({ toneId: v.id("tones"), embedding: v.array(v.number()) })),
 	handler: async (ctx, args) => {
-		const out: Array<{ toneId: Id<"tones">; embedding: number[] }> = [];
-		for (const toneId of args.toneIds) {
-			const row = await ctx.db
-				.query("tone_embeddings")
-				.withIndex("by_toneId", (q) => q.eq("toneId", toneId))
-				.first();
-			if (row) out.push({ toneId, embedding: row.embedding });
+		const wantSet = new Set(args.toneIds);
+		const rows = await ctx.db.query("tone_embeddings").collect();
+		const out: Array<{ toneId: Id<"tones">; embedding: Array<number> }> = [];
+		for (const row of rows) {
+			if (wantSet.has(row.toneId)) {
+				out.push({ toneId: row.toneId, embedding: row.embedding });
+			}
 		}
 		return out;
 	},
@@ -322,6 +322,7 @@ export const savePruningTargets = internalMutation({
 				});
 			}
 		}
+		return null;
 	},
 });
 

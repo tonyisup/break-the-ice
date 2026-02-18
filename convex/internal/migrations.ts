@@ -1,28 +1,55 @@
 import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 
+const BATCH_SIZE = 200;
+const cursorArg = v.optional(v.union(v.string(), v.null()));
+
 /**
  * One-time migration: copy embeddings from main tables into dedicated embedding tables.
- * Run this once before removing embedding fields from the schema.
+ * Run repeatedly with returned next cursors until allDone is true. Uses cursor-based
+ * batching to stay within Convex transaction limits.
  */
 export const copyEmbeddingsToSeparateTables = internalMutation({
-	args: {},
+	args: {
+		questionsCursor: cursorArg,
+		stylesCursor: cursorArg,
+		tonesCursor: cursorArg,
+		topicsCursor: cursorArg,
+		usersCursor: cursorArg,
+	},
 	returns: v.object({
 		questions: v.number(),
 		styles: v.number(),
 		tones: v.number(),
 		topics: v.number(),
 		users: v.number(),
+		nextQuestionsCursor: v.union(v.string(), v.null()),
+		nextStylesCursor: v.union(v.string(), v.null()),
+		nextTonesCursor: v.union(v.string(), v.null()),
+		nextTopicsCursor: v.union(v.string(), v.null()),
+		nextUsersCursor: v.union(v.string(), v.null()),
+		allDone: v.boolean(),
 	}),
-	handler: async (ctx) => {
+	handler: async (ctx, args) => {
 		let questions = 0;
 		let styles = 0;
 		let tones = 0;
 		let topics = 0;
 		let users = 0;
 
-		const questionsWithEmb = await ctx.db.query("questions").collect();
-		for (const q of questionsWithEmb) {
+		let qDone = true;
+		let sDone = true;
+		let tDone = true;
+		let topDone = true;
+		let uDone = true;
+
+		// Questions batch
+		const qResult = await ctx.db.query("questions").paginate({
+			cursor: args.questionsCursor ?? null,
+			numItems: BATCH_SIZE,
+		});
+		qDone = qResult.isDone;
+		for (const q of qResult.page) {
 			const emb = (q as { embedding?: number[] }).embedding;
 			if (!emb || emb.length === 0) continue;
 			const existing = await ctx.db
@@ -41,8 +68,13 @@ export const copyEmbeddingsToSeparateTables = internalMutation({
 			questions++;
 		}
 
-		const stylesWithEmb = await ctx.db.query("styles").collect();
-		for (const s of stylesWithEmb) {
+		// Styles batch
+		const sResult = await ctx.db.query("styles").paginate({
+			cursor: args.stylesCursor ?? null,
+			numItems: BATCH_SIZE,
+		});
+		sDone = sResult.isDone;
+		for (const s of sResult.page) {
 			const emb = (s as { embedding?: number[] }).embedding;
 			if (!emb || emb.length === 0) continue;
 			const existing = await ctx.db
@@ -54,8 +86,13 @@ export const copyEmbeddingsToSeparateTables = internalMutation({
 			styles++;
 		}
 
-		const tonesWithEmb = await ctx.db.query("tones").collect();
-		for (const t of tonesWithEmb) {
+		// Tones batch
+		const tResult = await ctx.db.query("tones").paginate({
+			cursor: args.tonesCursor ?? null,
+			numItems: BATCH_SIZE,
+		});
+		tDone = tResult.isDone;
+		for (const t of tResult.page) {
 			const emb = (t as { embedding?: number[] }).embedding;
 			if (!emb || emb.length === 0) continue;
 			const existing = await ctx.db
@@ -67,8 +104,13 @@ export const copyEmbeddingsToSeparateTables = internalMutation({
 			tones++;
 		}
 
-		const topicsWithEmb = await ctx.db.query("topics").collect();
-		for (const t of topicsWithEmb) {
+		// Topics batch
+		const topResult = await ctx.db.query("topics").paginate({
+			cursor: args.topicsCursor ?? null,
+			numItems: BATCH_SIZE,
+		});
+		topDone = topResult.isDone;
+		for (const t of topResult.page) {
 			const emb = (t as { embedding?: number[] }).embedding;
 			if (!emb || emb.length === 0) continue;
 			const existing = await ctx.db
@@ -80,8 +122,13 @@ export const copyEmbeddingsToSeparateTables = internalMutation({
 			topics++;
 		}
 
-		const usersWithEmb = await ctx.db.query("users").collect();
-		for (const u of usersWithEmb) {
+		// Users batch
+		const uResult = await ctx.db.query("users").paginate({
+			cursor: args.usersCursor ?? null,
+			numItems: BATCH_SIZE,
+		});
+		uDone = uResult.isDone;
+		for (const u of uResult.page) {
 			const emb = (u as { questionPreferenceEmbedding?: number[] }).questionPreferenceEmbedding;
 			if (!emb || emb.length === 0) continue;
 			const existing = await ctx.db
@@ -93,33 +140,63 @@ export const copyEmbeddingsToSeparateTables = internalMutation({
 			users++;
 		}
 
-		return { questions, styles, tones, topics, users };
+		const allDone = qDone && sDone && tDone && topDone && uDone;
+		return {
+			questions,
+			styles,
+			tones,
+			topics,
+			users,
+			nextQuestionsCursor: qDone ? null : qResult.continueCursor,
+			nextStylesCursor: sDone ? null : sResult.continueCursor,
+			nextTonesCursor: tDone ? null : tResult.continueCursor,
+			nextTopicsCursor: topDone ? null : topResult.continueCursor,
+			nextUsersCursor: uDone ? null : uResult.continueCursor,
+			allDone,
+		};
 	},
 });
 
 /**
  * One-time migration: remove embedding fields from main table documents.
- * Run this after copyEmbeddingsToSeparateTables and after schema no longer defines these fields.
- * Fixes ReturnsValidationError when old docs still have `embedding` / `questionPreferenceEmbedding` on disk.
+ * Run repeatedly with returned next cursors until allDone is true. Uses cursor-based
+ * batching to stay within Convex transaction limits. Run after copyEmbeddingsToSeparateTables
+ * and after schema no longer defines these fields.
  */
 export const dropEmbeddingsFromMainTables = internalMutation({
-	args: {},
+	args: {
+		questionsCursor: cursorArg,
+		stylesCursor: cursorArg,
+		tonesCursor: cursorArg,
+		topicsCursor: cursorArg,
+		usersCursor: cursorArg,
+	},
 	returns: v.object({
 		questions: v.number(),
 		styles: v.number(),
 		tones: v.number(),
 		topics: v.number(),
 		users: v.number(),
+		nextQuestionsCursor: v.union(v.string(), v.null()),
+		nextStylesCursor: v.union(v.string(), v.null()),
+		nextTonesCursor: v.union(v.string(), v.null()),
+		nextTopicsCursor: v.union(v.string(), v.null()),
+		nextUsersCursor: v.union(v.string(), v.null()),
+		allDone: v.boolean(),
 	}),
-	handler: async (ctx) => {
+	handler: async (ctx, args) => {
 		let questions = 0;
 		let styles = 0;
 		let tones = 0;
 		let topics = 0;
 		let users = 0;
 
-		const allQuestions = await ctx.db.query("questions").collect();
-		for (const q of allQuestions) {
+		// Questions batch
+		const qResult = await ctx.db.query("questions").paginate({
+			cursor: args.questionsCursor ?? null,
+			numItems: BATCH_SIZE,
+		});
+		for (const q of qResult.page) {
 			if ("embedding" in q && (q as { embedding?: unknown }).embedding !== undefined) {
 				const { embedding: _e, _id: _idField, _creationTime, ...rest } = q as { embedding?: number[]; _id: typeof q._id; _creationTime: number; [k: string]: unknown };
 				await ctx.db.replace(q._id, rest as any);
@@ -127,8 +204,12 @@ export const dropEmbeddingsFromMainTables = internalMutation({
 			}
 		}
 
-		const allStyles = await ctx.db.query("styles").collect();
-		for (const s of allStyles) {
+		// Styles batch
+		const sResult = await ctx.db.query("styles").paginate({
+			cursor: args.stylesCursor ?? null,
+			numItems: BATCH_SIZE,
+		});
+		for (const s of sResult.page) {
 			if ("embedding" in s && (s as { embedding?: unknown }).embedding !== undefined) {
 				const { embedding: _e, _id: _idField, _creationTime, ...rest } = s as { embedding?: number[]; _id: typeof s._id; _creationTime: number; [k: string]: unknown };
 				await ctx.db.replace(s._id, rest as any);
@@ -136,8 +217,12 @@ export const dropEmbeddingsFromMainTables = internalMutation({
 			}
 		}
 
-		const allTones = await ctx.db.query("tones").collect();
-		for (const t of allTones) {
+		// Tones batch
+		const tResult = await ctx.db.query("tones").paginate({
+			cursor: args.tonesCursor ?? null,
+			numItems: BATCH_SIZE,
+		});
+		for (const t of tResult.page) {
 			if ("embedding" in t && (t as { embedding?: unknown }).embedding !== undefined) {
 				const { embedding: _e, _id: _idField, _creationTime, ...rest } = t as { embedding?: number[]; _id: typeof t._id; _creationTime: number; [k: string]: unknown };
 				await ctx.db.replace(t._id, rest as any);
@@ -145,8 +230,12 @@ export const dropEmbeddingsFromMainTables = internalMutation({
 			}
 		}
 
-		const allTopics = await ctx.db.query("topics").collect();
-		for (const t of allTopics) {
+		// Topics batch
+		const topResult = await ctx.db.query("topics").paginate({
+			cursor: args.topicsCursor ?? null,
+			numItems: BATCH_SIZE,
+		});
+		for (const t of topResult.page) {
 			if ("embedding" in t && (t as { embedding?: unknown }).embedding !== undefined) {
 				const { embedding: _e, _id: _idField, _creationTime, ...rest } = t as { embedding?: number[]; _id: typeof t._id; _creationTime: number; [k: string]: unknown };
 				await ctx.db.replace(t._id, rest as any);
@@ -154,8 +243,12 @@ export const dropEmbeddingsFromMainTables = internalMutation({
 			}
 		}
 
-		const allUsers = await ctx.db.query("users").collect();
-		for (const u of allUsers) {
+		// Users batch
+		const uResult = await ctx.db.query("users").paginate({
+			cursor: args.usersCursor ?? null,
+			numItems: BATCH_SIZE,
+		});
+		for (const u of uResult.page) {
 			if ("questionPreferenceEmbedding" in u && (u as { questionPreferenceEmbedding?: unknown }).questionPreferenceEmbedding !== undefined) {
 				const { questionPreferenceEmbedding: _e, _id: _idField, _creationTime, ...rest } = u as { questionPreferenceEmbedding?: number[]; _id: typeof u._id; _creationTime: number; [k: string]: unknown };
 				await ctx.db.replace(u._id, rest as any);
@@ -163,7 +256,20 @@ export const dropEmbeddingsFromMainTables = internalMutation({
 			}
 		}
 
-		return { questions, styles, tones, topics, users };
+		const allDone = qResult.isDone && sResult.isDone && tResult.isDone && topResult.isDone && uResult.isDone;
+		return {
+			questions,
+			styles,
+			tones,
+			topics,
+			users,
+			nextQuestionsCursor: qResult.isDone ? null : qResult.continueCursor,
+			nextStylesCursor: sResult.isDone ? null : sResult.continueCursor,
+			nextTonesCursor: tResult.isDone ? null : tResult.continueCursor,
+			nextTopicsCursor: topResult.isDone ? null : topResult.continueCursor,
+			nextUsersCursor: uResult.isDone ? null : uResult.continueCursor,
+			allDone,
+		};
 	},
 });
 
