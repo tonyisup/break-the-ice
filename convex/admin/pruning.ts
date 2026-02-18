@@ -88,7 +88,7 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 	const styleIds = [...new Set(styles.map((s) => s._id))];
 	const toneIds = [...new Set(tones.map((t) => t._id))];
 	const [questionEmbList, styleEmbList, toneEmbList] = await Promise.all([
-		ctx.runQuery(internal.admin.pruning.getQuestionEmbeddingsForIds, { questionIds }),
+		ctx.runQuery(internal.internal.questions.getEmbeddingsByQuestionIds, { questionIds }),
 		ctx.runQuery(internal.admin.pruning.getStyleEmbeddingsForIds, { styleIds }),
 		ctx.runQuery(internal.admin.pruning.getToneEmbeddingsForIds, { toneIds }),
 	]);
@@ -234,22 +234,6 @@ export const getQuestionsForPruningReview = internalQuery({
 			}
 		}
 		return unique;
-	},
-});
-
-export const getQuestionEmbeddingsForIds = internalQuery({
-	args: { questionIds: v.array(v.id("questions")) },
-	returns: v.array(v.object({ questionId: v.id("questions"), embedding: v.array(v.number()) })),
-	handler: async (ctx, args) => {
-		const out: { questionId: Id<"questions">; embedding: number[] }[] = [];
-		for (const questionId of args.questionIds) {
-			const row = await ctx.db
-				.query("question_embeddings")
-				.withIndex("by_questionId", (q) => q.eq("questionId", questionId))
-				.first();
-			if (row) out.push({ questionId, embedding: row.embedding });
-		}
-		return out;
 	},
 });
 
