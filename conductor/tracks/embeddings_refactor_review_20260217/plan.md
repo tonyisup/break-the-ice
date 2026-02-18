@@ -11,7 +11,8 @@ This plan outlines the steps to address the code review feedback for the embeddi
 
 ## Phase 2: Fixes in `@convex/core`
 
-- [ ] Task: `@convex/core/questions.ts`: Prevent empty arrays in `calculateAverageEmbedding`.
+- [x] Task: `@convex/core/questions.ts`: Prevent empty arrays in `calculateAverageEmbedding`.
+  - NOTE: The `calculateAverageEmbedding` function already handles empty arrays. The bug described in the review was not present. A test has been added to confirm this behavior.
 - [ ] Task: `@convex/core/questions.ts`: Extract `calculateAverageEmbedding` into a shared utility.
 - [ ] Task: `@convex/core/questions.ts`: Filter out null IDs before calling `getQuestionsByIds`.
 - [ ] Task: `@convex/core/styles.ts`: Exclude `embedding` field from returned objects.
