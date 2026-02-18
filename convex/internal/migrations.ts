@@ -120,7 +120,7 @@ export const dropEmbeddingsFromMainTables = internalMutation({
 		const allQuestions = await ctx.db.query("questions").collect();
 		for (const q of allQuestions) {
 			if ("embedding" in q && (q as { embedding?: unknown }).embedding !== undefined) {
-				const { embedding: _e, ...rest } = q as { embedding?: number[]; [k: string]: unknown };
+				const { embedding: _e, _id: _idField, _creationTime, ...rest } = q as { embedding?: number[]; _id: typeof q._id; _creationTime: number; [k: string]: unknown };
 				await ctx.db.replace(q._id, rest as typeof q);
 				questions++;
 			}
@@ -129,7 +129,7 @@ export const dropEmbeddingsFromMainTables = internalMutation({
 		const allStyles = await ctx.db.query("styles").collect();
 		for (const s of allStyles) {
 			if ("embedding" in s && (s as { embedding?: unknown }).embedding !== undefined) {
-				const { embedding: _e, ...rest } = s as { embedding?: number[]; [k: string]: unknown };
+				const { embedding: _e, _id: _idField, _creationTime, ...rest } = s as { embedding?: number[]; _id: typeof s._id; _creationTime: number; [k: string]: unknown };
 				await ctx.db.replace(s._id, rest as typeof s);
 				styles++;
 			}
@@ -138,7 +138,7 @@ export const dropEmbeddingsFromMainTables = internalMutation({
 		const allTones = await ctx.db.query("tones").collect();
 		for (const t of allTones) {
 			if ("embedding" in t && (t as { embedding?: unknown }).embedding !== undefined) {
-				const { embedding: _e, ...rest } = t as { embedding?: number[]; [k: string]: unknown };
+				const { embedding: _e, _id: _idField, _creationTime, ...rest } = t as { embedding?: number[]; _id: typeof t._id; _creationTime: number; [k: string]: unknown };
 				await ctx.db.replace(t._id, rest as typeof t);
 				tones++;
 			}
@@ -147,7 +147,7 @@ export const dropEmbeddingsFromMainTables = internalMutation({
 		const allTopics = await ctx.db.query("topics").collect();
 		for (const t of allTopics) {
 			if ("embedding" in t && (t as { embedding?: unknown }).embedding !== undefined) {
-				const { embedding: _e, ...rest } = t as { embedding?: number[]; [k: string]: unknown };
+				const { embedding: _e, _id: _idField, _creationTime, ...rest } = t as { embedding?: number[]; _id: typeof t._id; _creationTime: number; [k: string]: unknown };
 				await ctx.db.replace(t._id, rest as typeof t);
 				topics++;
 			}
@@ -156,7 +156,7 @@ export const dropEmbeddingsFromMainTables = internalMutation({
 		const allUsers = await ctx.db.query("users").collect();
 		for (const u of allUsers) {
 			if ("questionPreferenceEmbedding" in u && (u as { questionPreferenceEmbedding?: unknown }).questionPreferenceEmbedding !== undefined) {
-				const { questionPreferenceEmbedding: _e, ...rest } = u as { questionPreferenceEmbedding?: number[]; [k: string]: unknown };
+				const { questionPreferenceEmbedding: _e, _id: _idField, _creationTime, ...rest } = u as { questionPreferenceEmbedding?: number[]; _id: typeof u._id; _creationTime: number; [k: string]: unknown };
 				await ctx.db.replace(u._id, rest as typeof u);
 				users++;
 			}
