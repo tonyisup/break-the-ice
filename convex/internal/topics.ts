@@ -9,10 +9,18 @@ export const addTopicEmbedding = internalMutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ctx.db.patch(args.topicId, {
-			embedding: args.embedding,
-		});
-		return null;
+		const existing = await ctx.db
+			.query("topic_embeddings")
+			.withIndex("by_topicId", (q) => q.eq("topicId", args.topicId))
+			.first();
+		if (existing) {
+			await ctx.db.patch(existing._id, { embedding: args.embedding });
+		} else {
+			await ctx.db.insert("topic_embeddings", {
+				topicId: args.topicId,
+				embedding: args.embedding,
+			});
+		}
 	},
 });
 
@@ -35,7 +43,6 @@ export const getTopCurrentTopic = internalQuery({
 		description: v.optional(v.string()),
 		example: v.optional(v.string()),
 		promptGuidanceForAI: v.optional(v.string()),
-		embedding: v.optional(v.array(v.number())),
 		order: v.optional(v.number()),
 		organizationId: v.optional(v.id("organizations")),
 		startDate: v.optional(v.number()),

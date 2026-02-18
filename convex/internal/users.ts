@@ -15,7 +15,6 @@ export const userValidator = v.object({
 	phone: v.optional(v.string()),
 	phoneVerificationTime: v.optional(v.number()),
 	isAdmin: v.optional(v.boolean()),
-	questionPreferenceEmbedding: v.optional(v.array(v.number())),
 	defaultStyle: v.optional(v.string()),
 	defaultTone: v.optional(v.string()),
 	subscriptionTier: v.optional(v.union(v.literal("free"), v.literal("casual"))),
@@ -182,13 +181,36 @@ export const getUserLikedQuestions = internalQuery({
 	},
 });
 
+export const getUserEmbedding = internalQuery({
+	args: { userId: v.id("users") },
+	returns: v.union(v.array(v.number()), v.null()),
+	handler: async (ctx, args) => {
+		const row = await ctx.db
+			.query("user_embeddings")
+			.withIndex("by_userId", (q) => q.eq("userId", args.userId))
+			.first();
+		return row?.embedding ?? null;
+	},
+});
+
 export const updateUserPreferenceEmbedding = internalMutation({
 	args: {
 		userId: v.id("users"),
 		questionPreferenceEmbedding: v.array(v.number()),
 	},
 	handler: async (ctx, args) => {
-		await ctx.db.patch(args.userId, { questionPreferenceEmbedding: args.questionPreferenceEmbedding });
+		const existing = await ctx.db
+			.query("user_embeddings")
+			.withIndex("by_userId", (q) => q.eq("userId", args.userId))
+			.first();
+		if (existing) {
+			await ctx.db.patch(existing._id, { embedding: args.questionPreferenceEmbedding });
+		} else {
+			await ctx.db.insert("user_embeddings", {
+				userId: args.userId,
+				embedding: args.questionPreferenceEmbedding,
+			});
+		}
 	},
 });
 
@@ -232,59 +254,26 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 });
 
 export const getUsersWithMissingEmbeddings = internalQuery({
-	args: {
-		cursor: v.optional(v.union(v.string(), v.null())),
-		limit: v.optional(v.number()),
-	},
-	returns: v.object({
-		users: v.array(userValidator),
-		continueCursor: v.union(v.string(), v.null()),
-		isDone: v.boolean(),
-	}),
-	handler: async (ctx, args) => {
-		const limit = args.limit ?? 100;
-		const paginationResult = await ctx.db
-			.query("users")
-			.filter((q) =>
-				q.or(
-					q.eq(q.field("questionPreferenceEmbedding"), undefined),
-					q.eq(q.field("questionPreferenceEmbedding"), [])
-				)
-			)
-			.paginate({ cursor: args.cursor ?? null, numItems: limit });
-		return {
-			users: paginationResult.page,
-			continueCursor: paginationResult.continueCursor,
-			isDone: paginationResult.isDone,
-		};
+	args: {},
+	returns: v.array(userValidator),
+	handler: async (ctx) => {
+		const withEmbeddingUserIds = new Set(
+			(await ctx.db.query("user_embeddings").collect()).map((e) => e.userId)
+		);
+		const allUsers = await ctx.db.query("users").collect();
+		return allUsers.filter((u) => !withEmbeddingUserIds.has(u._id));
 	},
 });
 
 export const updateUsersWithMissingEmbeddingsAction = internalAction({
 	args: {},
-	returns: v.null(),
 	handler: async (ctx) => {
-		let cursor: string | null = null;
-		do {
-			const result = await ctx.runQuery(internal.internal.users.getUsersWithMissingEmbeddings, {
-				cursor,
-				limit: 100,
-			}) as {
-				users: Array<Doc<"users">>;
-				continueCursor: string | null;
-				isDone: boolean;
-			};
-			for (const user of result.users) {
-				await ctx.runAction(internal.internal.users.updateUserPreferenceEmbeddingAction, {
-					userId: user._id,
-				});
-			}
-			cursor = result.continueCursor;
-			if (result.isDone) {
-				break;
-			}
-		} while (cursor);
-		return null;
+		const users = await ctx.runQuery(internal.internal.users.getUsersWithMissingEmbeddings);
+		for (const user of users) {
+			await ctx.runAction(internal.internal.users.updateUserPreferenceEmbeddingAction, {
+				userId: user._id,
+			});
+		}
 	},
 });
 

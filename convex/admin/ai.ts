@@ -46,13 +46,6 @@ export const generateAIQuestions = action({
 		await ensureAdmin(ctx);
 		const { count, selectedTags, currentQuestion, excludedQuestions, styleId, toneId, topicId } = args;
 
-		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
-
-		if (!user) {
-			throw new Error("You must be logged in to generate AI questions.");
-		}
-
-
 		const style = styleId 
 			? (await ctx.runQuery(api.core.styles.getStyleById, { id: styleId }))
 			: args.style ? (await ctx.runQuery(api.core.styles.getStyle, { id: args.style })) : null;

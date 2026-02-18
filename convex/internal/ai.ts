@@ -152,21 +152,26 @@ export const detectDuplicateQuestionsStreaming = internalAction({
 				for (const question of questions) {
 					if (!question.embedding || question.embedding.length === 0) continue;
 
-					// Search for similar questions
-					const searchResults = await ctx.vectorSearch("questions", "by_embedding", {
+					// Search for similar questions (question_embeddings table returns docs with questionId)
+					const searchResults = await ctx.vectorSearch("question_embeddings", "by_embedding", {
 						vector: question.embedding,
 						limit: 5,
 					});
 
-					for (const match of searchResults) {
-						if (match._id <= question._id) continue;
-
-						if (match._score > threshold) {
+					const matchQuestionIds = await ctx.runQuery(
+						internal.internal.questions.getQuestionIdsByEmbeddingRowIds,
+						{ embeddingRowIds: searchResults.map((m) => m._id) }
+					);
+					for (let i = 0; i < searchResults.length; i++) {
+						const matchQuestionId = matchQuestionIds[i];
+						if (!matchQuestionId || matchQuestionId <= question._id) continue;
+						const _score = searchResults[i]._score;
+						if (_score > threshold) {
 							try {
 								const result = await ctx.runMutation(internal.internal.questions.saveDuplicateDetection, {
-									questionIds: [question._id, match._id],
-									reason: `High embedding similarity (${match._score.toFixed(4)})`,
-									confidence: match._score,
+									questionIds: [question._id, matchQuestionId],
+									reason: `High embedding similarity (${_score.toFixed(4)})`,
+									confidence: _score,
 								});
 								if (result) {
 									duplicatesFound++;
@@ -525,9 +530,10 @@ export const generateAIQuestionForUser = internalAction({
 			}
 						
 
-			if (user?.questionPreferenceEmbedding) {
+			const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId: user._id });
+			if (userEmb && userEmb.length > 0) {
 				const nearestQuestions = await ctx.runAction(api.core.questions.getNearestQuestionsByEmbedding, {
-					embedding: user.questionPreferenceEmbedding,
+					embedding: userEmb,
 					count: 5
 				});
 				const examples = nearestQuestions.map((q: any) => q.text).filter((t: any): t is string => !!t);

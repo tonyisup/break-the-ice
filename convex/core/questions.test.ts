@@ -11,7 +11,6 @@ test("getUserLikedAndPreferredEmbedding should ignore empty user embedding", asy
     return await ctx.db.insert("users", {
       name: "Test User",
       email: "test@example.com",
-      questionPreferenceEmbedding: [], // This is the problematic case
     });
   });
 

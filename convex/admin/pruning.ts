@@ -39,7 +39,6 @@ export const questionValidator = v.object({
 	toneId: v.optional(v.id("tones")),
 	topic: v.optional(v.string()),
 	topicId: v.optional(v.id("topics")),
-	embedding: v.optional(v.array(v.number())),
 	authorId: v.optional(v.string()),
 	customText: v.optional(v.string()),
 	status: v.optional(
@@ -84,6 +83,18 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 	const styles: Doc<"styles">[] = await ctx.runQuery(internal.internal.styles.getAllStylesInternal);
 	const tones: Doc<"tones">[] = await ctx.runQuery(internal.internal.tones.getAllTonesInternal);
 	const settings = await ctx.runQuery(internal.admin.pruning.getPruningSettingsInternal);
+
+	const questionIds = questions.map((q) => q._id);
+	const styleIds = [...new Set(styles.map((s) => s._id))];
+	const toneIds = [...new Set(tones.map((t) => t._id))];
+	const [questionEmbList, styleEmbList, toneEmbList] = await Promise.all([
+		ctx.runQuery(internal.admin.pruning.getQuestionEmbeddingsForIds, { questionIds }),
+		ctx.runQuery(internal.admin.pruning.getStyleEmbeddingsForIds, { styleIds }),
+		ctx.runQuery(internal.admin.pruning.getToneEmbeddingsForIds, { toneIds }),
+	]);
+	const questionEmbeddingMap = new Map(questionEmbList.map((e) => [e.questionId, e.embedding]));
+	const styleEmbeddingMap = new Map(styleEmbList.map((e) => [e.styleId, e.embedding]));
+	const toneEmbeddingMap = new Map(toneEmbList.map((e) => [e.toneId, e.embedding]));
 
 	// Fallback defaults if no settings record exists
 	const s = settings || {
@@ -136,12 +147,14 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 			reasons.push(`High hidden count: ${hiddenCount} (${(hiddenRate * 100).toFixed(1)}% of shows)`);
 		}
 
-		// 4. Check Style/Tone Mismatch
-		if (question.embedding) {
+		// 4. Check Style/Tone Mismatch (embeddings from embedding tables)
+		const questionEmbedding = questionEmbeddingMap.get(question._id);
+		if (questionEmbedding) {
 			if (question.styleId && styleMap.has(question.styleId)) {
 				const style = styleMap.get(question.styleId)!;
-				if (style.embedding) {
-					const sim = cosineSimilarity(question.embedding, style.embedding);
+				const styleEmbedding = styleEmbeddingMap.get(question.styleId);
+				if (styleEmbedding) {
+					const sim = cosineSimilarity(questionEmbedding, styleEmbedding);
 					metrics.styleSimilarity = sim;
 					if (sim < s.minStyleSimilarity) {
 						reasons.push(`Style mismatch: ${sim.toFixed(2)} similarity to "${style.name}"`);
@@ -150,8 +163,9 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 			}
 			if (s.enableToneCheck && question.toneId && toneMap.has(question.toneId)) {
 				const tone = toneMap.get(question.toneId)!;
-				if (tone.embedding) {
-					const sim = cosineSimilarity(question.embedding, tone.embedding);
+				const toneEmbedding = toneEmbeddingMap.get(question.toneId);
+				if (toneEmbedding) {
+					const sim = cosineSimilarity(questionEmbedding, toneEmbedding);
 					metrics.toneSimilarity = sim;
 					if (sim < s.minToneSimilarity) {
 						reasons.push(`Tone mismatch: ${sim.toFixed(2)} similarity to "${tone.name}"`);
@@ -220,6 +234,54 @@ export const getQuestionsForPruningReview = internalQuery({
 			}
 		}
 		return unique;
+	},
+});
+
+export const getQuestionEmbeddingsForIds = internalQuery({
+	args: { questionIds: v.array(v.id("questions")) },
+	returns: v.array(v.object({ questionId: v.id("questions"), embedding: v.array(v.number()) })),
+	handler: async (ctx, args) => {
+		const out: { questionId: Id<"questions">; embedding: number[] }[] = [];
+		for (const questionId of args.questionIds) {
+			const row = await ctx.db
+				.query("question_embeddings")
+				.withIndex("by_questionId", (q) => q.eq("questionId", questionId))
+				.first();
+			if (row) out.push({ questionId, embedding: row.embedding });
+		}
+		return out;
+	},
+});
+
+export const getStyleEmbeddingsForIds = internalQuery({
+	args: { styleIds: v.array(v.id("styles")) },
+	returns: v.array(v.object({ styleId: v.id("styles"), embedding: v.array(v.number()) })),
+	handler: async (ctx, args) => {
+		const out: { styleId: Id<"styles">; embedding: number[] }[] = [];
+		for (const styleId of args.styleIds) {
+			const row = await ctx.db
+				.query("style_embeddings")
+				.withIndex("by_styleId", (q) => q.eq("styleId", styleId))
+				.first();
+			if (row) out.push({ styleId, embedding: row.embedding });
+		}
+		return out;
+	},
+});
+
+export const getToneEmbeddingsForIds = internalQuery({
+	args: { toneIds: v.array(v.id("tones")) },
+	returns: v.array(v.object({ toneId: v.id("tones"), embedding: v.array(v.number()) })),
+	handler: async (ctx, args) => {
+		const out: { toneId: Id<"tones">; embedding: number[] }[] = [];
+		for (const toneId of args.toneIds) {
+			const row = await ctx.db
+				.query("tone_embeddings")
+				.withIndex("by_toneId", (q) => q.eq("toneId", toneId))
+				.first();
+			if (row) out.push({ toneId, embedding: row.embedding });
+		}
+		return out;
 	},
 });
 
@@ -355,6 +417,9 @@ export const approvePruning = mutation({
 		await ctx.db.patch(target.questionId, {
 			status: "pruned",
 			prunedAt: Date.now(),
+		});
+		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+			questionId: target.questionId,
 		});
 
 		await ctx.db.patch(args.pruningId, {

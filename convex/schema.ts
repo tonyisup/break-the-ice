@@ -28,8 +28,8 @@ export default defineSchema({
     promptGuidanceForAI: v.optional(v.string()),
     example: v.optional(v.string()),
     order: v.optional(v.number()),
-    embedding: v.optional(v.array(v.number())),
     organizationId: v.optional(v.id("organizations")),
+    embedding: v.optional(v.array(v.number())),
   }).index("by_my_id", ["id"])
     .index("by_name", ["name"])
     .index("by_order", ["order"]),
@@ -41,8 +41,8 @@ export default defineSchema({
     icon: v.string(),
     promptGuidanceForAI: v.string(),
     order: v.optional(v.number()),
-    embedding: v.optional(v.array(v.number())),
     organizationId: v.optional(v.id("organizations")),
+    embedding: v.optional(v.array(v.number())),
   }).index("by_my_id", ["id"])
     .index("by_name", ["name"])
     .index("by_order", ["order"]),
@@ -54,13 +54,13 @@ export default defineSchema({
     description: v.optional(v.string()),
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
-    embedding: v.optional(v.array(v.number())),
     order: v.optional(v.number()),
     organizationId: v.optional(v.id("organizations")),
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
     takeoverStartDate: v.optional(v.number()),
     takeoverEndDate: v.optional(v.number()),
+    embedding: v.optional(v.array(v.number())),
   }).index("by_my_id", ["id"])
     .index("by_name", ["name"])
     .index("by_order", ["order"])
@@ -82,9 +82,9 @@ export default defineSchema({
     toneId: v.optional(v.id("tones")),
     topic: v.optional(v.string()),
     topicId: v.optional(v.id("topics")),
-    embedding: v.optional(v.array(v.number())),
     authorId: v.optional(v.string()),
-    customText: v.optional(v.string()),
+    customText: v.optional(v.string()),   
+    embedding: v.optional(v.array(v.number())),
     status: v.optional(
       v.union(
         v.literal("pending"),
@@ -121,11 +121,6 @@ export default defineSchema({
     .index("by_tone_and_total_likes", ["toneId", "totalLikes"])
     .index("by_style_and_tone", ["styleId", "toneId"])
     .index("by_text", ["text"])
-    .vectorIndex("by_embedding", {
-      vectorField: "embedding",
-      dimensions: 384,
-      filterFields: ["status", "styleId", "toneId"],
-    })
     .index("by_author", ["authorId", "status"])
     .index("by_prunedAt_status_text", ["prunedAt", "status", "text"])
     .index("by_poolDate_and_poolStatus", ["poolDate", "poolStatus"]),
@@ -143,7 +138,6 @@ export default defineSchema({
     phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.float64()),
     isAdmin: v.optional(v.boolean()),
-    questionPreferenceEmbedding: v.optional(v.array(v.number())),
     defaultStyle: v.optional(v.string()),
     defaultTone: v.optional(v.string()),
     dismissedRefineCTA: v.optional(v.boolean()),
@@ -326,4 +320,42 @@ export default defineSchema({
     minToneSimilarity: v.number(),
     enableToneCheck: v.boolean(),
   }).index("by_status", ["status"]),
+
+  // Embedding tables (one-to-one with parent; embeddings only, to reduce bandwidth on main tables)
+  question_embeddings: defineTable({
+    questionId: v.id("questions"),
+    embedding: v.array(v.number()),
+    status: v.optional(v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("public"),
+      v.literal("private"),
+      v.literal("pruning"),
+      v.literal("pruned")
+    )),
+    styleId: v.optional(v.id("styles")),
+    toneId: v.optional(v.id("tones")),
+  })
+    .index("by_questionId", ["questionId"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 384,
+      filterFields: ["status", "styleId", "toneId"],
+    }),
+  style_embeddings: defineTable({
+    styleId: v.id("styles"),
+    embedding: v.array(v.number()),
+  }).index("by_styleId", ["styleId"]),
+  tone_embeddings: defineTable({
+    toneId: v.id("tones"),
+    embedding: v.array(v.number()),
+  }).index("by_toneId", ["toneId"]),
+  topic_embeddings: defineTable({
+    topicId: v.id("topics"),
+    embedding: v.array(v.number()),
+  }).index("by_topicId", ["topicId"]),
+  user_embeddings: defineTable({
+    userId: v.id("users"),
+    embedding: v.array(v.number()),
+  }).index("by_userId", ["userId"]),
 });

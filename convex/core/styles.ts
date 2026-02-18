@@ -25,7 +25,7 @@ export const getStyle = query({
 		if (!style) {
 			return null;
 		}
-		const { embedding, ...rest } = style;
+		const { organizationId: _o, ...rest } = style;
 		return rest;
 	},
 });
@@ -38,7 +38,7 @@ export const getStyleById = query({
 		if (!style) {
 			return null;
 		}
-		const { embedding, ...rest } = style;
+		const { organizationId: _o, ...rest } = style;
 		return rest;
 	},
 });
@@ -70,7 +70,7 @@ export const getStylesWithExamples = query({
 			return null;
 		}
 
-		const { embedding, ...rest } = style;
+		const { organizationId: _o, ...rest } = style;
 
 		const exampleQuestions = await ctx.db.query("questions")
 			.withIndex("by_style", (q) => q.eq("styleId", style._id))
@@ -117,7 +117,7 @@ export const getStyles = query({
 			.order("asc")
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 			.collect();
-		return styles.map(({ embedding, ...rest }) => rest);
+		return styles.map(({ organizationId: _o, ...rest }) => rest);
 	},
 });
 
@@ -135,7 +135,7 @@ export const getFilteredStyles = query({
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 			.filter((q) => q.and(...args.excluded.map(styleId => q.neq(q.field("id"), styleId))))
 			.collect();
-		return styles.map(({ embedding, ...rest }) => rest);
+		return styles.map(({ organizationId: _o, ...rest }) => rest);
 	},
 });
 
@@ -161,7 +161,7 @@ export const getRandomStyle = query({
 
 		const index = Math.floor(rng() * styles.length);
 		const randomStyle = styles[index];
-		const { embedding, ...rest } = randomStyle;
+		const { organizationId: _o, ...rest } = randomStyle;
 		return rest;
 	},
 });
@@ -203,7 +203,7 @@ export const getRandomStyleForUser = query({
 
 		const index = Math.floor(rng() * styles.length);
 		const randomStyle = styles[index];
-		const { embedding, ...rest } = randomStyle;
+		const { organizationId: _o, ...rest } = randomStyle;
 		return rest;
 	},
 });
