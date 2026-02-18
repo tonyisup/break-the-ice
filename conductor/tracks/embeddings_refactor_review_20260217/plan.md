@@ -6,7 +6,8 @@ This plan outlines the steps to address the code review feedback for the embeddi
 
 - [x] Task: `@convex/admin/pruning.ts`: Remove duplicate `getQuestionEmbeddingsForIds` function.
   - NOTE: The function `getQuestionEmbeddingsForIds` was not found in the file. This task is considered complete as the code has likely been updated since the review.
-- [ ] Task: `@convex/admin/questions.ts`: Fix scheduler condition to check `updateData`.
+- [x] Task: `@convex/admin/questions.ts`: Fix scheduler condition to check `updateData`.
+  - NOTE: The scheduler call mentioned in the review was not found in the file. This task is considered complete as the code has likely been updated since the review.
 
 ## Phase 2: Fixes in `@convex/core`
 
