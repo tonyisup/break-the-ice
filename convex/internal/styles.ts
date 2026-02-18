@@ -59,6 +59,7 @@ export const addStyleEmbedding = internalMutation({
 				embedding: args.embedding,
 			});
 		}
+		return null;
 	},
 });
 
@@ -78,6 +79,7 @@ export const updateQuestionsWithMissingStyleIds = internalMutation({
 				}
 			}
 		}
+		return null;
 	},
 });
 export const getAllStylesInternal = internalQuery({

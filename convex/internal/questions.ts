@@ -264,7 +264,7 @@ export const getQuestionIdsByEmbeddingRowIds = internalQuery({
 /** Returns embedding for each question id (only for ids that have an embedding). */
 export const getEmbeddingsByQuestionIds = internalQuery({
 	args: { questionIds: v.array(v.id("questions")) },
-	returns: v.array(v.object({ questionId: v.id("questions"), embedding: v.array(v.number()) })),
+	returns: v.array(v.object({ questionId: v.id("questions"), embedding: v.array(v.float64()) })),
 	handler: async (ctx, args) => {
 		const out: { questionId: Id<"questions">; embedding: number[] }[] = [];
 		for (const questionId of args.questionIds) {

@@ -65,6 +65,7 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
 				}
 			}
 		}
+		return null;
 	},
 });
 

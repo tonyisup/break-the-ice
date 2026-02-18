@@ -227,7 +227,7 @@ export const getStyleEmbeddingsForIds = internalQuery({
 	args: { styleIds: v.array(v.id("styles")) },
 	returns: v.array(v.object({ styleId: v.id("styles"), embedding: v.array(v.number()) })),
 	handler: async (ctx, args) => {
-		const out: { styleId: Id<"styles">; embedding: number[] }[] = [];
+		const out: Array<{ styleId: Id<"styles">; embedding: number[] }> = [];
 		for (const styleId of args.styleIds) {
 			const row = await ctx.db
 				.query("style_embeddings")
@@ -243,7 +243,7 @@ export const getToneEmbeddingsForIds = internalQuery({
 	args: { toneIds: v.array(v.id("tones")) },
 	returns: v.array(v.object({ toneId: v.id("tones"), embedding: v.array(v.number()) })),
 	handler: async (ctx, args) => {
-		const out: { toneId: Id<"tones">; embedding: number[] }[] = [];
+		const out: Array<{ toneId: Id<"tones">; embedding: number[] }> = [];
 		for (const toneId of args.toneIds) {
 			const row = await ctx.db
 				.query("tone_embeddings")

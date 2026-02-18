@@ -36,7 +36,7 @@ export const copyEmbeddingsToSeparateTables = internalMutation({
 				status: q.status,
 				styleId: q.styleId,
 				toneId: q.toneId,
-				topicId: (q as { topicId?: typeof q.styleId }).topicId,
+				topicId: q.topicId,
 			});
 			questions++;
 		}
