@@ -43,7 +43,8 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
 		const questions = await ctx.db.query("questions").collect();
 		await Promise.all(questions.map(async (q) => {
 			if (!q.toneId && q.tone) {
-				const tone = await ctx.db.query("tones").withIndex("by_my_id", (t) => t.eq("id", q.tone)).first();
+				const toneId = q.tone;
+				const tone = await ctx.db.query("tones").withIndex("by_my_id", (t) => t.eq("id", toneId)).first();
 				if (tone) {
 					await ctx.db.patch(q._id, { toneId: tone._id });
 				}

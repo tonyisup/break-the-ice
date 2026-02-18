@@ -58,7 +58,8 @@ export const updateQuestionsWithMissingStyleIds = internalMutation({
 		const questions = await ctx.db.query("questions").collect();
 		await Promise.all(questions.map(async (q) => {
 			if (!q.styleId && q.style) {
-				const style = await ctx.db.query("styles").withIndex("by_my_id", (s) => s.eq("id", q.style)).first();
+				const styleId = q.style;
+				const style = await ctx.db.query("styles").withIndex("by_my_id", (s) => s.eq("id", styleId)).first();
 				if (style) {
 					await ctx.db.patch(q._id, { styleId: style._id });
 				}

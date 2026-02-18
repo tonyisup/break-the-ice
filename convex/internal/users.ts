@@ -1,6 +1,7 @@
 import { v, ConvexError } from "convex/values";
 import { internalMutation, internalQuery, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { Doc } from "../_generated/dataModel";
 import { ERROR_MESSAGES, ERROR_CODES } from "../constants";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 
@@ -268,7 +269,11 @@ export const updateUsersWithMissingEmbeddingsAction = internalAction({
 			const result = await ctx.runQuery(internal.internal.users.getUsersWithMissingEmbeddings, {
 				cursor,
 				limit: 100,
-			});
+			}) as {
+				users: Array<Doc<"users">>;
+				continueCursor: string | null;
+				isDone: boolean;
+			};
 			for (const user of result.users) {
 				await ctx.runAction(internal.internal.users.updateUserPreferenceEmbeddingAction, {
 					userId: user._id,
