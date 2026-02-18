@@ -249,9 +249,10 @@ async function getNearestQuestionsByEmbeddingInternal(
 	});
 
 	const embeddingRowIds = results.map((r) => r._id);
-	const ids = await ctx.runQuery(internal.internal.questions.getQuestionIdsByEmbeddingRowIds, {
+	const idsRaw = await ctx.runQuery(internal.internal.questions.getQuestionIdsByEmbeddingRowIds, {
 		embeddingRowIds,
 	});
+	const ids = idsRaw.filter((id): id is Id<"questions"> => id !== null);
 	if (ids.length === 0) return [];
 
 	const questions = (await ctx.runQuery(api.core.questions.getQuestionsByIds, { ids })) as any[];

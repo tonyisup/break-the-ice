@@ -88,6 +88,7 @@ export const getQuestionForUser = internalAction({
 						{ embeddingRowIds: results.map((r) => r._id) }
 					);
 					for (const candidateId of candidateIds) {
+						if (!candidateId) continue;
 						if (excludedQuestionIds.size > 0 && excludedQuestionIds.has(candidateId.toString())) continue;
 
 						const candidate = await ctx.runQuery(

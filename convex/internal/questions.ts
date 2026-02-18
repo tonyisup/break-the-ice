@@ -255,15 +255,17 @@ export const getQuestionEmbedding = internalQuery({
 	},
 });
 
-/** Resolve question_embeddings row ids to question ids (for vector search results). */
+/** Resolve question_embeddings row ids to question ids (for vector search results).
+ * Returns one entry per input embedding row id; null where the row is missing.
+ * Positional correspondence with the input array is preserved for alignment with scores. */
 export const getQuestionIdsByEmbeddingRowIds = internalQuery({
 	args: { embeddingRowIds: v.array(v.id("question_embeddings")) },
-	returns: v.array(v.id("questions")),
+	returns: v.array(v.union(v.id("questions"), v.null())),
 	handler: async (ctx, args) => {
-		const ids: Id<"questions">[] = [];
+		const ids: (Id<"questions"> | null)[] = [];
 		for (const rowId of args.embeddingRowIds) {
 			const row = await ctx.db.get(rowId);
-			if (row?.questionId) ids.push(row.questionId);
+			ids.push(row?.questionId ?? null);
 		}
 		return ids;
 	},
