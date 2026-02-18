@@ -41,7 +41,6 @@ export const getQuestionById = internalQuery({
 		toneId: v.optional(v.id("tones")),
 		topic: v.optional(v.string()),
 		topicId: v.optional(v.id("topics")),
-		embedding: v.optional(v.array(v.number())),
 		authorId: v.optional(v.string()),
 		customText: v.optional(v.string()),
 		status: v.optional(v.union(
@@ -71,13 +70,15 @@ export const getQuestionsToEmbed = internalQuery({
 		startQuestionId: v.optional(v.id("questions")),
 	},
 	handler: async (ctx, args) => {
+		const withEmbeddingIds = new Set(
+			(await ctx.db.query("question_embeddings").collect()).map((e) => e.questionId)
+		);
 		const questions = await ctx.db
 			.query("questions")
-			.withIndex("by_creation_time")
-			.order("desc")
-			.filter((q) => q.eq(q.field("embedding"), undefined))
-			.take(10);
-		return questions;
+			.filter((q) => q.neq(q.field("text"), undefined))
+			.take(500);
+		const missing = questions.filter((q) => !withEmbeddingIds.has(q._id));
+		return missing.slice(0, 10);
 	},
 });
 
@@ -87,9 +88,45 @@ export const addEmbedding = internalMutation({
 		embedding: v.array(v.float64()),
 	},
 	handler: async (ctx, args) => {
-		await ctx.db.patch(args.questionId, {
+		const question = await ctx.db.get(args.questionId);
+		if (!question) return;
+		const existing = await ctx.db
+			.query("question_embeddings")
+			.withIndex("by_questionId", (q) => q.eq("questionId", args.questionId))
+			.first();
+		const payload = {
+			questionId: args.questionId,
 			embedding: args.embedding,
+			status: question.status,
+			styleId: question.styleId,
+			toneId: question.toneId,
+		};
+		if (existing) {
+			await ctx.db.patch(existing._id, payload);
+		} else {
+			await ctx.db.insert("question_embeddings", payload);
+		}
+	},
+});
+
+/** Sync status, styleId, toneId from question to its question_embeddings row (for vector search filters). */
+export const syncQuestionEmbeddingFilters = internalMutation({
+	args: { questionId: v.id("questions") },
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const question = await ctx.db.get(args.questionId);
+		if (!question) return null;
+		const row = await ctx.db
+			.query("question_embeddings")
+			.withIndex("by_questionId", (q) => q.eq("questionId", args.questionId))
+			.first();
+		if (!row) return null;
+		await ctx.db.patch(row._id, {
+			status: question.status,
+			styleId: question.styleId,
+			toneId: question.toneId,
 		});
+		return null;
 	},
 });
 
@@ -191,20 +228,17 @@ export const getQuestionsWithMissingEmbeddings = internalQuery({
 		text: v.optional(v.string()),
 	})),
 	handler: async (ctx) => {
-		const questions = await ctx.db.query("questions").filter((q) => q.and(
-			q.neq(q.field("text"), undefined),
-			q.eq(q.field("embedding"), undefined)
-		)).collect();
-
-		const result = [];
-		for (const q of questions) {
-			result.push({
-				_id: q._id,
-				text: q.text,
-			});
-		}
-		return result;
-	}
+		const withEmbeddingIds = new Set(
+			(await ctx.db.query("question_embeddings").collect()).map((e) => e.questionId)
+		);
+		const questions = await ctx.db
+			.query("questions")
+			.filter((q) => q.neq(q.field("text"), undefined))
+			.collect();
+		return questions
+			.filter((q) => !withEmbeddingIds.has(q._id))
+			.map((q) => ({ _id: q._id, text: q.text }));
+	},
 });
 
 export const getQuestionEmbedding = internalQuery({
@@ -212,11 +246,45 @@ export const getQuestionEmbedding = internalQuery({
 		questionId: v.id("questions"),
 	},
 	handler: async (ctx, args) => {
-		const question = await ctx.db.query("questions").withIndex("by_id", (q) => q.eq("_id", args.questionId)).first();
-		if (!question) {
-			return [];
+		const row = await ctx.db
+			.query("question_embeddings")
+			.withIndex("by_questionId", (q) => q.eq("questionId", args.questionId))
+			.first();
+		if (!row) return [];
+		return row.embedding;
+	},
+});
+
+/** Resolve question_embeddings row ids to question ids (for vector search results).
+ * Returns one entry per input embedding row id; null where the row is missing.
+ * Positional correspondence with the input array is preserved for alignment with scores. */
+export const getQuestionIdsByEmbeddingRowIds = internalQuery({
+	args: { embeddingRowIds: v.array(v.id("question_embeddings")) },
+	returns: v.array(v.union(v.id("questions"), v.null())),
+	handler: async (ctx, args) => {
+		const ids: (Id<"questions"> | null)[] = [];
+		for (const rowId of args.embeddingRowIds) {
+			const row = await ctx.db.get(rowId);
+			ids.push(row?.questionId ?? null);
 		}
-		return question.embedding;
+		return ids;
+	},
+});
+
+/** Returns embedding for each question id (only for ids that have an embedding). */
+export const getEmbeddingsByQuestionIds = internalQuery({
+	args: { questionIds: v.array(v.id("questions")) },
+	returns: v.array(v.object({ questionId: v.id("questions"), embedding: v.array(v.number()) })),
+	handler: async (ctx, args) => {
+		const out: { questionId: Id<"questions">; embedding: number[] }[] = [];
+		for (const questionId of args.questionIds) {
+			const row = await ctx.db
+				.query("question_embeddings")
+				.withIndex("by_questionId", (q) => q.eq("questionId", questionId))
+				.first();
+			if (row) out.push({ questionId, embedding: row.embedding });
+		}
+		return out;
 	},
 });
 
@@ -228,16 +296,21 @@ export const getQuestionsWithEmbeddingsBatch = internalQuery({
 	handler: async (ctx, args) => {
 		const { cursor, limit } = args;
 		const paginationResult = await ctx.db
-			.query("questions")
-			.filter((q) => q.neq(q.field("embedding"), undefined))
+			.query("question_embeddings")
 			.paginate({ cursor, numItems: limit });
-
+		const questionIds = paginationResult.page.map((e) => e.questionId);
+		const questions = await Promise.all(questionIds.map((id) => ctx.db.get(id)));
+		const questionMap = new Map(questions.filter(Boolean).map((q) => [q!._id, q!]));
+		const questionsWithEmbeddings = paginationResult.page.map((e) => {
+			const q = questionMap.get(e.questionId);
+			return {
+				_id: e.questionId,
+				text: q?.text,
+				embedding: e.embedding,
+			};
+		});
 		return {
-			questions: paginationResult.page.map(q => ({
-				_id: q._id,
-				text: q.text,
-				embedding: q.embedding,
-			})),
+			questions: questionsWithEmbeddings,
 			continueCursor: paginationResult.continueCursor,
 			isDone: paginationResult.isDone,
 		};
@@ -480,11 +553,20 @@ export const assignPoolQuestionsToUsers = internalAction({
 					return true;
 				});
 
-				if (user.questionPreferenceEmbedding && user.questionPreferenceEmbedding.length > 0) {
+				const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId: user._id });
+				const poolIds = userQuestions.map((q) => q._id);
+				const embMap = new Map(
+					(await ctx.runQuery(internal.internal.questions.getEmbeddingsByQuestionIds, { questionIds: poolIds })).map(
+						(e) => [e.questionId, e.embedding]
+					)
+				);
+				if (userEmb && userEmb.length > 0) {
 					userQuestions.sort((a, b) => {
-						if (!a.embedding || !b.embedding) return 0;
-						const simA = cosineSimilarity(user.questionPreferenceEmbedding!, a.embedding);
-						const simB = cosineSimilarity(user.questionPreferenceEmbedding!, b.embedding);
+						const embA = embMap.get(a._id);
+						const embB = embMap.get(b._id);
+						if (!embA || !embB) return 0;
+						const simA = cosineSimilarity(userEmb, embA);
+						const simB = cosineSimilarity(userEmb, embB);
 						return simB - simA;
 					});
 				} else {
@@ -547,7 +629,7 @@ export const checkSimilarity = internalAction({
 		const embedding = await embed(args.text);
 		if (embedding.length === 0) return false;
 
-		const results = await ctx.vectorSearch("questions", "by_embedding", {
+		const results = await ctx.vectorSearch("question_embeddings", "by_embedding", {
 			vector: embedding,
 			limit: 1,
 		});
@@ -593,11 +675,7 @@ export const getRandomQuestionsInternal = internalQuery({
 			.filter((q) => applyFilters(q))
 			.take(1000);
 
-		// Strip embeddings to reduce payload size
-		const candidates = allPublic.map(q => {
-			const { embedding, ...rest } = q;
-			return rest;
-		});
+		const candidates = allPublic;
 
 		// In-memory Fisher-Yates shuffle so each request samples randomly
 		// across the full question set instead of always the oldest slice
@@ -627,10 +705,7 @@ export const getRandomQuestionsInternal = internalQuery({
 					.filter((q) => applyFilters(q))
 					.collect();
 
-				takeoverCandidates = takeoverCandidates.concat(topicQs.map(q => {
-					const { embedding, ...rest } = q;
-					return rest;
-				}));
+				takeoverCandidates = takeoverCandidates.concat(topicQs);
 			}
 
 			// Filter takeover candidates

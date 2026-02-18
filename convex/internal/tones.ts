@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery, internalMutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 
 const publicToneFields = {
 	_id: v.id("tones"),
@@ -17,8 +18,11 @@ export const getTonesWithMissingEmbeddings = internalQuery({
 	args: {},
 	returns: v.array(v.object(publicToneFields)),
 	handler: async (ctx) => {
-		const tones = await ctx.db.query("tones").filter((q) => q.eq(q.field("embedding"), undefined)).collect();
-		return tones.map(({ embedding, ...rest }) => rest);
+		const withEmbeddingIds = new Set(
+			(await ctx.db.query("tone_embeddings").collect()).map((e) => e.toneId)
+		);
+		const tones = await ctx.db.query("tones").collect();
+		return tones.filter((t) => !withEmbeddingIds.has(t._id));
 	},
 });
 
@@ -27,24 +31,39 @@ export const addToneEmbedding = internalMutation({
 		toneId: v.id("tones"),
 		embedding: v.array(v.float64()),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ctx.db.patch(args.toneId, {
-			embedding: args.embedding,
-		});
+		const existing = await ctx.db
+			.query("tone_embeddings")
+			.withIndex("by_toneId", (q) => q.eq("toneId", args.toneId))
+			.first();
+		if (existing) {
+			await ctx.db.patch(existing._id, { embedding: args.embedding });
+		} else {
+			await ctx.db.insert("tone_embeddings", {
+				toneId: args.toneId,
+				embedding: args.embedding,
+			});
+		}
 	},
 });
 
 export const updateQuestionsWithMissingToneIds = internalMutation({
+	args: {},
+	returns: v.null(),
 	handler: async (ctx) => {
 		const questions = await ctx.db.query("questions").collect();
-		await Promise.all(questions.map(async (q) => {
+		for (const q of questions) {
 			if (!q.toneId) {
 				const tone = await ctx.db.query("tones").filter((t) => t.eq(t.field("id"), q.tone)).first();
 				if (tone) {
 					await ctx.db.patch(q._id, { toneId: tone._id });
+					await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+						questionId: q._id,
+					});
 				}
 			}
-		}));
+		}
 	},
 });
 
@@ -60,7 +79,6 @@ export const getToneById = internalQuery({
 		icon: v.string(),
 		promptGuidanceForAI: v.string(),
 		order: v.optional(v.number()),
-		embedding: v.optional(v.array(v.number())),
 		organizationId: v.optional(v.id("organizations")),
 	})),
 	handler: async (ctx, args) => {

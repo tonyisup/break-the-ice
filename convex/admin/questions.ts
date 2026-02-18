@@ -151,6 +151,15 @@ export const updateQuestion = mutation({
 		}
 
 		await ctx.db.patch(id, updateData);
+		if (
+			status !== undefined ||
+			updateData.styleId !== undefined ||
+			updateData.toneId !== undefined
+		) {
+			await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+				questionId: id,
+			});
+		}
 		return null;
 	},
 });
