@@ -23,7 +23,7 @@ export const getTone = query({
 		if (!tone) {
 			return null;
 		}
-		const { embedding, ...rest } = tone;
+		const { organizationId: _o, embedding: _e, ...rest } = tone;
 		return rest;
 	},
 });
@@ -36,7 +36,7 @@ export const getToneById = query({
 		if (!tone) {
 			return null;
 		}
-		const { embedding, ...rest } = tone;
+		const { organizationId: _o, embedding: _e, ...rest } = tone;
 		return rest;
 	},
 });
@@ -54,7 +54,7 @@ export const getTones = query({
 			.order("asc")
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 			.collect();
-		return tones.map(({ embedding, ...rest }) => rest);
+		return tones.map(({ organizationId: _o, embedding: _e, ...rest }) => rest);
 	},
 });
 
@@ -71,7 +71,7 @@ export const getFilteredTones = query({
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 			.filter((q) => q.and(...args.excluded.map(toneId => q.neq(q.field("id"), toneId))))
 			.collect();
-		return tones.map(({ embedding, ...rest }) => rest);
+		return tones.map(({ organizationId: _o, embedding: _e, ...rest }) => rest);
 	},
 });
 
@@ -97,7 +97,7 @@ export const getRandomTone = query({
 
 		const index = Math.floor(rng() * tones.length);
 		const randomTone = tones[index];
-		const { embedding, ...rest } = randomTone;
+		const { organizationId: _o, embedding: _e, ...rest } = randomTone;
 		return rest;
 	},
 });
@@ -140,7 +140,7 @@ export const getRandomToneForUser = query({
 
 		const index = Math.floor(rng() * tones.length);
 		const randomTone = tones[index];
-		const { embedding, ...rest } = randomTone;
+		const { organizationId: _o, embedding: _e, ...rest } = randomTone;
 		return rest;
 	},
 });

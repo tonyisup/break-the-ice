@@ -4,16 +4,16 @@ This plan outlines the steps to implement the "Scheduled Question Delivery" feat
 
 ## Phase 1: Backend Scheduling Core
 
-- [ ] Task: Set up Convex scheduled functions
-    - [ ] Write tests for Convex scheduled function setup
-    - [ ] Implement Convex scheduled function boilerplate
-- [ ] Task: Update Convex schema for scheduled questions
-    - [ ] Write tests for schema modifications and data access
-    - [ ] Implement schema changes to store scheduled questions (date, time, questionId, status, userId)
-- [ ] Task: Implement basic scheduling logic
-    - [ ] Write tests for scheduling functions (e.g., function to add a scheduled task, function to execute a scheduled task)
-    - [ ] Implement Convex functions to create, read, update, and delete scheduled questions
-    - [ ] Implement logic to trigger question delivery at the scheduled time
+- [x] Task: Set up Convex scheduled functions [71fb0a5]
+    - [x] Write tests for Convex scheduled function setup
+    - [x] Implement Convex scheduled function boilerplate
+- [x] Task: Update Convex schema for scheduled questions [96b4103]
+    - [x] Write tests for schema modifications and data access
+    - [x] Implement schema changes to store scheduled questions (date, time, questionId, status, userId)
+- [x] Task: Implement basic scheduling logic [98312e1]
+    - [x] Write tests for scheduling functions (e.g., function to add a scheduled task, function to execute a scheduled task)
+    - [x] Implement Convex functions to create, read, update, and delete scheduled questions
+    - [x] Implement logic to trigger question delivery at the scheduled time
 - [ ] Task: Conductor - User Manual Verification 'Backend Scheduling Core' (Protocol in workflow.md)
 
 ## Phase 2: UI for Scheduling
