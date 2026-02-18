@@ -470,6 +470,7 @@ export const generateAIQuestionForUser = internalAction({
 		bypassAIUsage: v.optional(v.boolean()),
 		topicId: v.optional(v.id("topics")),
 	},
+	returns: v.array(v.union(v.any(), v.null())),
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
 		const user = await ctx.runQuery(internal.internal.users.getUserById, { id: args.userId });
 
@@ -529,12 +530,12 @@ export const generateAIQuestionForUser = internalAction({
 					embedding: user.questionPreferenceEmbedding,
 					count: 5
 				});
-			const examples = nearestQuestions.map((q: any) => q.text).filter((t: any): t is string => !!t);
-			// Fallback if vector search returns empty (e.g. strict filter with no results)
-			if (examples.length > 0) {
-				userContext = "User likes questions similar to: " + examples.join("; ");
+				const examples = nearestQuestions.map((q: any) => q.text).filter((t: any): t is string => !!t);
+				// Fallback if vector search returns empty (e.g. strict filter with no results)
+				if (examples.length > 0) {
+					userContext = "User likes questions similar to: " + examples.join("; ");
+				}
 			}
-		}
 
 		while (attempts < maxAttempts && !generatedContent) {
 			try {

@@ -13,16 +13,16 @@ This plan outlines the steps to address the code review feedback for the embeddi
 
 - [x] Task: `@convex/core/questions.ts`: Prevent empty arrays in `calculateAverageEmbedding`.
   - NOTE: The `calculateAverageEmbedding` function already handles empty arrays. The bug described in the review was not present. A test has been added to confirm this behavior.
-- [ ] Task: `@convex/core/questions.ts`: Extract `calculateAverageEmbedding` into a shared utility.
-- [ ] Task: `@convex/core/questions.ts`: Filter out null IDs before calling `getQuestionsByIds`.
-- [ ] Task: `@convex/core/styles.ts`: Exclude `embedding` field from returned objects.
-- [ ] Task: `@convex/core/tones.ts`: Exclude `embedding` field from returned objects.
+- [x] Task: `@convex/core/questions.ts`: Extract `calculateAverageEmbedding` into a shared utility.
+- [x] Task: `@convex/core/questions.ts`: Filter out null IDs before calling `getQuestionsByIds`.
+- [x] Task: `@convex/core/styles.ts`: Exclude `embedding` field from returned objects.
+- [x] Task: `@convex/core/tones.ts`: Exclude `embedding` field from returned objects.
 
 ## Phase 3: Fixes in `@convex/internal`
 
-- [ ] Task: `@convex/internal/ai.ts`: Fix brace indentation.
-- [ ] Task: `@convex/internal/ai.ts`: Add missing `returns` validator to `generateAIQuestionForUser`.
-- [ ] Task: `@convex/internal/ai.ts`: Align scores and IDs in vector-search loop.
+- [x] Task: `@convex/internal/ai.ts`: Fix brace indentation.
+- [x] Task: `@convex/internal/ai.ts`: Add missing `returns` validator to `generateAIQuestionForUser`.
+- [x] Task: `@convex/internal/ai.ts`: Align scores and IDs in vector-search loop.
 - [ ] Task: `@convex/internal/migrations.ts`: Refactor migration functions to use batching.
 - [ ] Task: `@convex/internal/migrations.ts`: Exclude system fields when replacing documents.
 - [ ] Task: `@convex/internal/newsletter.ts`: Refactor N+1 query to a single batch query.

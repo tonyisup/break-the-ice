@@ -2,17 +2,7 @@ import { v, ConvexError } from "convex/values";
 import { internalMutation, internalQuery, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { ERROR_MESSAGES, ERROR_CODES } from "../constants";
-
-// Helper function for average embedding calculation
-export function calculateAverageEmbedding(embeddings: number[][]): number[] {
-	if (embeddings.length === 0) {
-		return [];
-	}
-	const sum = embeddings.reduce((acc, embedding) => {
-		return acc.map((val, i) => val + (embedding[i] || 0));
-	}, new Array(embeddings[0]?.length || 0).fill(0));
-	return sum.map((val) => val / embeddings.length);
-}
+import { calculateAverageEmbedding } from "../lib/embeddings";
 
 export const userValidator = v.object({
 	_id: v.id("users"),

@@ -3,35 +3,7 @@ import { mutation, query, QueryCtx, action, ActionCtx, internalAction } from "..
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
 import { embed } from "../lib/retriever";
-
-export const calculateAverageEmbedding = (embeddings: number[][]) => {
-	const validEmbeddings = embeddings.filter((e) => e && e.length > 0);
-
-	if (validEmbeddings.length === 0) {
-		return [];
-	}
-
-	const embeddingLength = validEmbeddings[0].length;
-	const sumEmbedding = new Array(embeddingLength).fill(0);
-
-	let validCount = 0;
-	for (const embedding of validEmbeddings) {
-		if (embedding.length !== embeddingLength) {
-			console.warn("Embedding length mismatch ignoring:", embedding.length);
-			continue;
-		}
-		for (let i = 0; i < embeddingLength; i++) {
-			sumEmbedding[i] += embedding[i];
-		}
-		validCount++;
-	}
-
-	if (validCount === 0) {
-		return [];
-	}
-
-	return sumEmbedding.map((value) => value / validCount);
-};
+import { calculateAverageEmbedding } from "../lib/embeddings";
 
 export const discardQuestion = mutation({
 	args: {
@@ -277,9 +249,10 @@ async function getNearestQuestionsByEmbeddingInternal(
 	});
 
 	const ids = results.map((r) => r._id);
-	if (ids.length === 0) return [];
+	const validIds = ids.filter((id): id is Id<"questions"> => id !== null && id !== undefined);
+	if (validIds.length === 0) return [];
 
-	const questions = (await ctx.runQuery(api.core.questions.getQuestionsByIds, { ids })) as any[];
+	const questions = (await ctx.runQuery(api.core.questions.getQuestionsByIds, { ids: validIds })) as any[];
 
 	const filtered = questions.filter((q) => {
 		if (q.prunedAt !== undefined) return false;
