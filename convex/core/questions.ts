@@ -3,35 +3,7 @@ import { mutation, query, QueryCtx, action, ActionCtx, internalAction } from "..
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
 import { embed } from "../lib/retriever";
-
-export const calculateAverageEmbedding = (embeddings: number[][]) => {
-	const validEmbeddings = embeddings.filter((e) => e && e.length > 0);
-
-	if (validEmbeddings.length === 0) {
-		return [];
-	}
-
-	const embeddingLength = validEmbeddings[0].length;
-	const sumEmbedding = new Array(embeddingLength).fill(0);
-
-	let validCount = 0;
-	for (const embedding of validEmbeddings) {
-		if (embedding.length !== embeddingLength) {
-			console.warn("Embedding length mismatch ignoring:", embedding.length);
-			continue;
-		}
-		for (let i = 0; i < embeddingLength; i++) {
-			sumEmbedding[i] += embedding[i];
-		}
-		validCount++;
-	}
-
-	if (validCount === 0) {
-		return [];
-	}
-
-	return sumEmbedding.map((value) => value / validCount);
-};
+import { calculateAverageEmbedding } from "../lib/embeddings";
 
 export const discardQuestion = mutation({
 	args: {
@@ -271,12 +243,16 @@ async function getNearestQuestionsByEmbeddingInternal(
 	const requestedCount = count ?? 10;
 	const limit = requestedCount * 10;
 
-	const results = await ctx.vectorSearch("questions", "by_embedding", {
+	const results = await ctx.vectorSearch("question_embeddings", "by_embedding", {
 		vector: embedding,
 		limit,
 	});
 
-	const ids = results.map((r) => r._id);
+	const embeddingRowIds = results.map((r) => r._id);
+	const idsRaw = await ctx.runQuery(internal.internal.questions.getQuestionIdsByEmbeddingRowIds, {
+		embeddingRowIds,
+	});
+	const ids = idsRaw.filter((id): id is Id<"questions"> => id !== null);
 	if (ids.length === 0) return [];
 
 	const questions = (await ctx.runQuery(api.core.questions.getQuestionsByIds, { ids })) as any[];
@@ -326,11 +302,11 @@ export const getNextQuestions = query({
 		const unseenQuestions = filteredQuestions.filter(q => !seenIds.has(q._id));
 		if (unseenQuestions.length > 0) {
 			shuffleArray(unseenQuestions);
-			return unseenQuestions.slice(0, count).map(({ embedding, ...question }) => question);;
+			return unseenQuestions.slice(0, count);
 		}
 
 		shuffleArray(filteredQuestions);
-		return filteredQuestions.slice(0, count).map(({ embedding, ...question }) => question);
+		return filteredQuestions.slice(0, count);
 	}
 })
 
@@ -477,19 +453,32 @@ export const getUserLikedAndPreferredEmbedding = query({
 		if (!user) {
 			return [];
 		}
+		const userEmb = await ctx.db
+			.query("user_embeddings")
+			.withIndex("by_userId", (q) => q.eq("userId", user._id))
+			.first();
 		const likedQuestionIds = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", user._id).eq("status", "liked")
 			)
 			.collect();
-		const likedQuestions = await Promise.all(
-			likedQuestionIds.map((q) => ctx.db.get(q.questionId))
+		const questionEmbeddings = await Promise.all(
+			likedQuestionIds.map((uq) =>
+				ctx.db
+					.query("question_embeddings")
+					.withIndex("by_questionId", (q) => q.eq("questionId", uq.questionId))
+					.first()
+			)
 		);
-		const embeddings = likedQuestions
-			.map((q) => q?.embedding)
-			.filter((e) => e !== undefined);
-		const results = calculateAverageEmbedding([...embeddings, user.questionPreferenceEmbedding ?? []]);
+		const embeddings = questionEmbeddings
+			.filter((e): e is NonNullable<typeof e> => e != null)
+			.map((e) => e.embedding);
+		const toAverage: number[][] = [...embeddings];
+		if (userEmb?.embedding && userEmb.embedding.length > 0) {
+			toAverage.push(userEmb.embedding);
+		}
+		const results = calculateAverageEmbedding(toAverage);
 		return results;
 	},
 });
@@ -583,10 +572,7 @@ export const getQuestion = query({
 	},
 	returns: v.union(v.any(), v.null()),
 	handler: async (ctx, args) => {
-		const question = await ctx.db.get(args.id);
-		if (!question) return null;
-		const { embedding, ...questionData } = question;
-		return questionData;
+		return await ctx.db.get(args.id);
 	},
 });
 
@@ -848,6 +834,9 @@ export const updatePersonalQuestion = mutation({
 			topic: topicDoc?.id,
 			tags: args.tags,
 		});
+		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+			questionId: args.questionId,
+		});
 		return await ctx.db.get(args.questionId);
 	},
 });
@@ -911,6 +900,9 @@ export const makeQuestionPublic = mutation({
 		await ctx.db.patch(args.questionId, {
 			status: "pending",
 		});
+		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+			questionId: args.questionId,
+		});
 	},
 });
 
@@ -946,11 +938,12 @@ export const getNextQuestionsByEmbedding = action({
 		if (!user) {
 			return [];
 		}
+		const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId });
 		const embedding = await embed(style + " " + tone);
 		if (!embedding) {
 			return [];
 		}
-		const averageEmbedding = calculateAverageEmbedding([embedding, user.questionPreferenceEmbedding ?? []] as number[][]);
+		const averageEmbedding = calculateAverageEmbedding([embedding, userEmb ?? []] as number[][]);
 
 		// Use the helper instead of calling the action to avoid action-to-action chaining
 		return await getNearestQuestionsByEmbeddingInternal(ctx, {

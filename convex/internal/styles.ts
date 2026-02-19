@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery, internalMutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 
 export const styleFields = v.object({
 	_id: v.id("styles"),
@@ -13,7 +14,6 @@ export const styleFields = v.object({
 	promptGuidanceForAI: v.optional(v.string()),
 	example: v.optional(v.string()),
 	order: v.optional(v.number()),
-	embedding: v.optional(v.array(v.number())),
 	organizationId: v.optional(v.id("organizations")),
 });
 
@@ -21,8 +21,11 @@ export const getStylesWithMissingEmbeddings = internalQuery({
 	args: {},
 	returns: v.array(styleFields),
 	handler: async (ctx) => {
+		const withEmbeddingIds = new Set(
+			(await ctx.db.query("style_embeddings").collect()).map((e) => e.styleId)
+		);
 		const styles = await ctx.db.query("styles").collect();
-		return styles.filter((s) => !s.embedding);
+		return styles.filter((s) => !withEmbeddingIds.has(s._id));
 	},
 });
 
@@ -42,24 +45,41 @@ export const addStyleEmbedding = internalMutation({
 		styleId: v.id("styles"),
 		embedding: v.array(v.float64()),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ctx.db.patch(args.styleId, {
-			embedding: args.embedding,
-		});
+		const existing = await ctx.db
+			.query("style_embeddings")
+			.withIndex("by_styleId", (q) => q.eq("styleId", args.styleId))
+			.first();
+		if (existing) {
+			await ctx.db.patch(existing._id, { embedding: args.embedding });
+		} else {
+			await ctx.db.insert("style_embeddings", {
+				styleId: args.styleId,
+				embedding: args.embedding,
+			});
+		}
+		return null;
 	},
 });
 
 export const updateQuestionsWithMissingStyleIds = internalMutation({
+	args: {},
+	returns: v.null(),
 	handler: async (ctx) => {
 		const questions = await ctx.db.query("questions").collect();
-		await Promise.all(questions.map(async (q) => {
-			if (!q.styleId) {
-				const style = await ctx.db.query("styles").filter((s) => s.eq(s.field("id"), q.style)).first();
+		for (const q of questions) {
+			if (!q.styleId && q.style) {
+				const style = await ctx.db.query("styles").withIndex("by_my_id", (s) => s.eq("id", q.style!)).first();
 				if (style) {
 					await ctx.db.patch(q._id, { styleId: style._id });
+					await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+						questionId: q._id,
+					});
 				}
 			}
-		}));
+		}
+		return null;
 	},
 });
 export const getAllStylesInternal = internalQuery({

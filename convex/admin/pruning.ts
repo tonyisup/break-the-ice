@@ -3,6 +3,7 @@ import { action, ActionCtx, internalAction, internalMutation, internalQuery, mut
 import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
+import { cosineSimilarity } from "../lib/embeddings";
 
 // Shared return validators for type safety
 export const pruningSettingsValidator = v.object({
@@ -39,7 +40,6 @@ export const questionValidator = v.object({
 	toneId: v.optional(v.id("tones")),
 	topic: v.optional(v.string()),
 	topicId: v.optional(v.id("topics")),
-	embedding: v.optional(v.array(v.number())),
 	authorId: v.optional(v.string()),
 	customText: v.optional(v.string()),
 	status: v.optional(
@@ -58,21 +58,6 @@ export const questionValidator = v.object({
 	poolStatus: v.optional(v.union(v.literal("available"), v.literal("distributed"))),
 });
 
-// Helper: Simple cosine similarity for matching
-function cosineSimilarity(a: number[], b: number[]): number {
-	if (!a || !b || a.length !== b.length || a.length === 0) return 0;
-	let dotProduct = 0;
-	let normA = 0;
-	let normB = 0;
-	for (let i = 0; i < a.length; i++) {
-		dotProduct += a[i] * b[i];
-		normA += a[i] * a[i];
-		normB += b[i] * b[i];
-	}
-	if (normA === 0 || normB === 0) return 0;
-	return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-
 /**
  * Internal helper to satisfy both the cron and manual trigger.
  */
@@ -84,6 +69,18 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 	const styles: Doc<"styles">[] = await ctx.runQuery(internal.internal.styles.getAllStylesInternal);
 	const tones: Doc<"tones">[] = await ctx.runQuery(internal.internal.tones.getAllTonesInternal);
 	const settings = await ctx.runQuery(internal.admin.pruning.getPruningSettingsInternal);
+
+	const questionIds = questions.map((q) => q._id);
+	const styleIds = styles.map((s) => s._id);
+	const toneIds = tones.map((t) => t._id);
+	const [questionEmbList, styleEmbList, toneEmbList] = await Promise.all([
+		ctx.runQuery(internal.internal.questions.getEmbeddingsByQuestionIds, { questionIds }),
+		ctx.runQuery(internal.admin.pruning.getStyleEmbeddingsForIds, { styleIds }),
+		ctx.runQuery(internal.admin.pruning.getToneEmbeddingsForIds, { toneIds }),
+	]);
+	const questionEmbeddingMap = new Map(questionEmbList.map((e) => [e.questionId, e.embedding]));
+	const styleEmbeddingMap = new Map(styleEmbList.map((e) => [e.styleId, e.embedding]));
+	const toneEmbeddingMap = new Map(toneEmbList.map((e) => [e.toneId, e.embedding]));
 
 	// Fallback defaults if no settings record exists
 	const s = settings || {
@@ -136,12 +133,14 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 			reasons.push(`High hidden count: ${hiddenCount} (${(hiddenRate * 100).toFixed(1)}% of shows)`);
 		}
 
-		// 4. Check Style/Tone Mismatch
-		if (question.embedding) {
+		// 4. Check Style/Tone Mismatch (embeddings from embedding tables)
+		const questionEmbedding = questionEmbeddingMap.get(question._id);
+		if (questionEmbedding) {
 			if (question.styleId && styleMap.has(question.styleId)) {
 				const style = styleMap.get(question.styleId)!;
-				if (style.embedding) {
-					const sim = cosineSimilarity(question.embedding, style.embedding);
+				const styleEmbedding = styleEmbeddingMap.get(question.styleId);
+				if (styleEmbedding) {
+					const sim = cosineSimilarity(questionEmbedding, styleEmbedding);
 					metrics.styleSimilarity = sim;
 					if (sim < s.minStyleSimilarity) {
 						reasons.push(`Style mismatch: ${sim.toFixed(2)} similarity to "${style.name}"`);
@@ -150,8 +149,9 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 			}
 			if (s.enableToneCheck && question.toneId && toneMap.has(question.toneId)) {
 				const tone = toneMap.get(question.toneId)!;
-				if (tone.embedding) {
-					const sim = cosineSimilarity(question.embedding, tone.embedding);
+				const toneEmbedding = toneEmbeddingMap.get(question.toneId);
+				if (toneEmbedding) {
+					const sim = cosineSimilarity(questionEmbedding, toneEmbedding);
 					metrics.toneSimilarity = sim;
 					if (sim < s.minToneSimilarity) {
 						reasons.push(`Tone mismatch: ${sim.toFixed(2)} similarity to "${tone.name}"`);
@@ -223,6 +223,38 @@ export const getQuestionsForPruningReview = internalQuery({
 	},
 });
 
+export const getStyleEmbeddingsForIds = internalQuery({
+	args: { styleIds: v.array(v.id("styles")) },
+	returns: v.array(v.object({ styleId: v.id("styles"), embedding: v.array(v.number()) })),
+	handler: async (ctx, args) => {
+		const wantSet = new Set(args.styleIds);
+		const rows = await ctx.db.query("style_embeddings").collect();
+		const out: Array<{ styleId: Id<"styles">; embedding: Array<number> }> = [];
+		for (const row of rows) {
+			if (wantSet.has(row.styleId)) {
+				out.push({ styleId: row.styleId, embedding: row.embedding });
+			}
+		}
+		return out;
+	},
+});
+
+export const getToneEmbeddingsForIds = internalQuery({
+	args: { toneIds: v.array(v.id("tones")) },
+	returns: v.array(v.object({ toneId: v.id("tones"), embedding: v.array(v.number()) })),
+	handler: async (ctx, args) => {
+		const wantSet = new Set(args.toneIds);
+		const rows = await ctx.db.query("tone_embeddings").collect();
+		const out: Array<{ toneId: Id<"tones">; embedding: Array<number> }> = [];
+		for (const row of rows) {
+			if (wantSet.has(row.toneId)) {
+				out.push({ toneId: row.toneId, embedding: row.embedding });
+			}
+		}
+		return out;
+	},
+});
+
 /**
  * Internal query to get hidden counts for multiple questions.
  */
@@ -290,6 +322,7 @@ export const savePruningTargets = internalMutation({
 				});
 			}
 		}
+		return null;
 	},
 });
 
@@ -355,6 +388,9 @@ export const approvePruning = mutation({
 		await ctx.db.patch(target.questionId, {
 			status: "pruned",
 			prunedAt: Date.now(),
+		});
+		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+			questionId: target.questionId,
 		});
 
 		await ctx.db.patch(args.pruningId, {

@@ -72,24 +72,28 @@ export const getQuestionForUser = internalAction({
 		}
 		else {
 		// 2. If the user has a preference embedding, find the most similar valid question
-			if (user.questionPreferenceEmbedding && user.questionPreferenceEmbedding.length > 0) {
+			const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId: user._id });
+			if (userEmb && userEmb.length > 0) {
 				const MAX_CANDIDATES = 100;
 
-				const results = await ctx.vectorSearch("questions", "by_embedding", {
-					vector: user.questionPreferenceEmbedding,
+				const results = await ctx.vectorSearch("question_embeddings", "by_embedding", {
+					vector: userEmb,
 					limit: MAX_CANDIDATES,
-					filter: (q) => q.eq("status", "public"),
 				});
 
 				if (results.length > 0) {
-					const candidateIds = results.map(r => r._id);
+					const candidateIds = await ctx.runQuery(
+						internal.internal.questions.getQuestionIdsByEmbeddingRowIds,
+						{ embeddingRowIds: results.map((r) => r._id) }
+					);
 					for (const candidateId of candidateIds) {
+						if (!candidateId) continue;
 						if (excludedQuestionIds.size > 0 && excludedQuestionIds.has(candidateId.toString())) continue;
 
-						const candidate: Doc<"questions"> | null = await ctx.runQuery(
+						const candidate = await ctx.runQuery(
 							internal.internal.questions.getQuestionById,
 							{ id: candidateId }
-						);
+						) as Doc<"questions"> | null;
 
 						if (!candidate) continue;
 						if (!candidate.text) continue;
@@ -145,5 +149,5 @@ export const getQuestionForUser = internalAction({
 			unsubscribeUrl: `${baseUrl}unsubscribe?email=${encodeURIComponent(args.email)}`,
 			email: args.email,
 		};
-	},
+	}
 });

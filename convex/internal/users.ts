@@ -1,18 +1,9 @@
 import { v, ConvexError } from "convex/values";
 import { internalMutation, internalQuery, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { Doc } from "../_generated/dataModel";
 import { ERROR_MESSAGES, ERROR_CODES } from "../constants";
-
-// Helper function for average embedding calculation
-export function calculateAverageEmbedding(embeddings: number[][]): number[] {
-	if (embeddings.length === 0) {
-		return [];
-	}
-	const sum = embeddings.reduce((acc, embedding) => {
-		return acc.map((val, i) => val + (embedding[i] || 0));
-	}, new Array(embeddings[0]?.length || 0).fill(0));
-	return sum.map((val) => val / embeddings.length);
-}
+import { calculateAverageEmbedding } from "../lib/embeddings";
 
 export const userValidator = v.object({
 	_id: v.id("users"),
@@ -24,7 +15,6 @@ export const userValidator = v.object({
 	phone: v.optional(v.string()),
 	phoneVerificationTime: v.optional(v.number()),
 	isAdmin: v.optional(v.boolean()),
-	questionPreferenceEmbedding: v.optional(v.array(v.number())),
 	defaultStyle: v.optional(v.string()),
 	defaultTone: v.optional(v.string()),
 	subscriptionTier: v.optional(v.union(v.literal("free"), v.literal("casual"))),
@@ -191,13 +181,37 @@ export const getUserLikedQuestions = internalQuery({
 	},
 });
 
+export const getUserEmbedding = internalQuery({
+	args: { userId: v.id("users") },
+	returns: v.union(v.array(v.number()), v.null()),
+	handler: async (ctx, args) => {
+		const row = await ctx.db
+			.query("user_embeddings")
+			.withIndex("by_userId", (q) => q.eq("userId", args.userId))
+			.first();
+		return row?.embedding ?? null;
+	},
+});
+
 export const updateUserPreferenceEmbedding = internalMutation({
 	args: {
 		userId: v.id("users"),
 		questionPreferenceEmbedding: v.array(v.number()),
 	},
+	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ctx.db.patch(args.userId, { questionPreferenceEmbedding: args.questionPreferenceEmbedding });
+		const existing = await ctx.db
+			.query("user_embeddings")
+			.withIndex("by_userId", (q) => q.eq("userId", args.userId))
+			.first();
+		if (existing) {
+			await ctx.db.patch(existing._id, { embedding: args.questionPreferenceEmbedding });
+		} else {
+			await ctx.db.insert("user_embeddings", {
+				userId: args.userId,
+				embedding: args.questionPreferenceEmbedding,
+			});
+		}
 	},
 });
 
@@ -223,17 +237,20 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 				questionId: uq.questionId,
 			});
 			if (!embedding) {
-				return [];
+				return null;
 			}
 			return embedding;
 		}));
 
-		const averageEmbedding = calculateAverageEmbedding(userQuestionEmbeddings);
+		const validEmbeddings = userQuestionEmbeddings.filter((e): e is number[] => e !== null && e.length > 0);
+		const averageEmbedding = calculateAverageEmbedding(validEmbeddings);
 
-		await ctx.runMutation(internal.internal.users.updateUserPreferenceEmbedding, {
-			userId: args.userId,
-			questionPreferenceEmbedding: averageEmbedding,
-		});
+		if (averageEmbedding.length > 0) {
+			await ctx.runMutation(internal.internal.users.updateUserPreferenceEmbedding, {
+				userId: args.userId,
+				questionPreferenceEmbedding: averageEmbedding,
+			});
+		}
 
 		return null;
 	},
@@ -243,15 +260,11 @@ export const getUsersWithMissingEmbeddings = internalQuery({
 	args: {},
 	returns: v.array(userValidator),
 	handler: async (ctx) => {
-		return await ctx.db
-			.query("users")
-			.filter((q) =>
-				q.or(
-					q.eq(q.field("questionPreferenceEmbedding"), undefined),
-					q.eq(q.field("questionPreferenceEmbedding"), [])
-				)
-			)
-			.collect();
+		const withEmbeddingUserIds = new Set(
+			(await ctx.db.query("user_embeddings").collect()).map((e) => e.userId)
+		);
+		const allUsers = await ctx.db.query("users").collect();
+		return allUsers.filter((u) => !withEmbeddingUserIds.has(u._id));
 	},
 });
 

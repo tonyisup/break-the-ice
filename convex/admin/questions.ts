@@ -59,7 +59,7 @@ export const createQuestion = mutation({
 			if (toneDoc) toneId = toneDoc._id;
 		}
 
-		return await ctx.db.insert("questions", {
+		const questionId = await ctx.db.insert("questions", {
 			text: args.text,
 			tags: args.tags ?? [],
 			style: args.style ?? undefined,
@@ -72,6 +72,10 @@ export const createQuestion = mutation({
 			totalShows: 0,
 			averageViewDuration: 0,
 		});
+		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+			questionId,
+		});
+		return questionId;
 	},
 });
 
@@ -151,6 +155,15 @@ export const updateQuestion = mutation({
 		}
 
 		await ctx.db.patch(id, updateData);
+		if (
+			status !== undefined ||
+			updateData.styleId !== undefined ||
+			updateData.toneId !== undefined
+		) {
+			await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+				questionId: id,
+			});
+		}
 		return null;
 	},
 });
@@ -268,6 +281,13 @@ export const deleteQuestion = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
+		const embeddingRows = await ctx.db
+			.query("question_embeddings")
+			.withIndex("by_questionId", (q) => q.eq("questionId", args.id))
+			.collect();
+		for (const row of embeddingRows) {
+			await ctx.db.delete(row._id);
+		}
 		await ctx.db.delete(args.id);
 		return null;
 	},
@@ -319,7 +339,27 @@ export const updateCategories = mutation({
 		const results = [];
 		for (const update of args.updates) {
 			try {
-				await ctx.db.patch(update.id, { style: update.style, tone: update.tone });
+				let styleId: Id<"styles"> | undefined;
+				let toneId: Id<"tones"> | undefined;
+				if (update.style !== undefined) {
+					const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", (q) => q.eq("id", update.style!)).unique();
+					if (styleDoc) styleId = styleDoc._id;
+				}
+				if (update.tone !== undefined) {
+					const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", (q) => q.eq("id", update.tone!)).unique();
+					if (toneDoc) toneId = toneDoc._id;
+				}
+				await ctx.db.patch(update.id, {
+					style: update.style,
+					tone: update.tone,
+					...(styleId !== undefined && { styleId }),
+					...(toneId !== undefined && { toneId }),
+				});
+				if (update.style !== undefined || update.tone !== undefined) {
+					await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+						questionId: update.id,
+					});
+				}
 				results.push({ id: update.id, success: true });
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : String(error);
@@ -343,6 +383,13 @@ export const cleanDuplicateQuestions = mutation({
 			index !== self.findIndex((t) => t.text === question.text)
 		);
 		for (const question of duplicateQuestions) {
+			const embeddingRows = await ctx.db
+				.query("question_embeddings")
+				.withIndex("by_questionId", (q) => q.eq("questionId", question._id))
+				.collect();
+			for (const row of embeddingRows) {
+				await ctx.db.delete(row._id);
+			}
 			await ctx.db.delete(question._id);
 			totalDeleted++;
 		}
@@ -608,6 +655,13 @@ export const deleteDuplicateQuestions = mutation({
 		for (const questionId of args.questionIdsToDelete) {
 			if (args.keepQuestionId && questionId === args.keepQuestionId) {
 				continue;
+			}
+			const embeddingRows = await ctx.db
+				.query("question_embeddings")
+				.withIndex("by_questionId", (q) => q.eq("questionId", questionId))
+				.collect();
+			for (const row of embeddingRows) {
+				await ctx.db.delete(row._id);
 			}
 			await ctx.db.delete(questionId);
 		}
