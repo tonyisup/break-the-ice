@@ -29,7 +29,6 @@ export default defineSchema({
     example: v.optional(v.string()),
     order: v.optional(v.number()),
     organizationId: v.optional(v.id("organizations")),
-    embedding: v.optional(v.array(v.number())),
   }).index("by_my_id", ["id"])
     .index("by_name", ["name"])
     .index("by_order", ["order"]),
@@ -42,7 +41,6 @@ export default defineSchema({
     promptGuidanceForAI: v.string(),
     order: v.optional(v.number()),
     organizationId: v.optional(v.id("organizations")),
-    embedding: v.optional(v.array(v.number())),
   }).index("by_my_id", ["id"])
     .index("by_name", ["name"])
     .index("by_order", ["order"]),
@@ -60,7 +58,6 @@ export default defineSchema({
     endDate: v.optional(v.number()),
     takeoverStartDate: v.optional(v.number()),
     takeoverEndDate: v.optional(v.number()),
-    embedding: v.optional(v.array(v.number())),
   }).index("by_my_id", ["id"])
     .index("by_name", ["name"])
     .index("by_order", ["order"])
@@ -84,7 +81,6 @@ export default defineSchema({
     topicId: v.optional(v.id("topics")),
     authorId: v.optional(v.string()),
     customText: v.optional(v.string()),
-    embedding: v.optional(v.array(v.number())),
     status: v.optional(
       v.union(
         v.literal("pending"),
