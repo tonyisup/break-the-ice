@@ -19,7 +19,15 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('convex/react');
+vi.mock('convex/react', async () => {
+  const actual = await vi.importActual('convex/react');
+  return {
+    ...actual,
+    useQuery: vi.fn(),
+    useMutation: vi.fn(),
+    useConvexAuth: vi.fn(() => ({ isAuthenticated: false })),
+  };
+});
 vi.mock('@clerk/clerk-react', async () => {
   const actual = await vi.importActual('@clerk/clerk-react');
   return {
