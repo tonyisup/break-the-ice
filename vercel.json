@@ -40,6 +40,14 @@
       "destination": "/api/question"
     },
     {
+      "source": "/question/:id/",
+      "destination": "/api/question"
+    },
+    {
+      "source": "/og-image/:id.png",
+      "destination": "/api/og_question?id=:id"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
