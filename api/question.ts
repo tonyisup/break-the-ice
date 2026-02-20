@@ -40,14 +40,25 @@ export default async function handler(
 
     const head = document.getElementsByTagName("head")[0];
 
-    const protocol = request.headers["x-forwarded-proto"] || "https";
-    const host = request.headers.host || "iceberg-breaker.vercel.app";
+    // Handle protocol from x-forwarded-proto, coercion to single string
+    let protocol = request.headers["x-forwarded-proto"];
+    if (Array.isArray(protocol)) {
+      protocol = protocol[0];
+    }
+    protocol = (protocol === "http" || protocol === "https") ? protocol : "https";
+
+    // Handle host: prefer header, then env, then fallback
+    let host = request.headers.host;
+    if (!host) {
+      host = process.env.NEXT_PUBLIC_APP_HOST || process.env.APP_HOST || process.env.BASE_HOST || "localhost:3000";
+    }
+
     const baseUrl = `${protocol}://${host}`;
     const questionText = question.text || question.customText || "";
 
-    // Remove existing og:image tags from index.html to avoid duplicates
-    const existingOgImages = document.querySelectorAll('meta[property="og:image"]');
-    existingOgImages.forEach(tag => tag.remove());
+    // Remove existing og:* and twitter:* tags from index.html to avoid duplicates
+    const existingTags = document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"]');
+    existingTags.forEach(tag => tag.remove());
 
     const metaTags = [
       { property: "og:title", content: "Break the Ice(berg)" },
