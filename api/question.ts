@@ -18,9 +18,9 @@ export default async function handler(
   }
 
   try {
-    const convexUrl = process.env.VITE_CONVEX_URL || process.env.CONVEX_URL;
+    const convexUrl = process.env.VITE_CONVEX_URL || process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
     if (!convexUrl) {
-      return response.status(500).send("CONVEX_URL or VITE_CONVEX_URL is not set in environment variables.");
+      return response.status(500).send("CONVEX_URL, VITE_CONVEX_URL, or NEXT_PUBLIC_CONVEX_URL is not set in environment variables.");
     }
     const convex = new ConvexHttpClient(
       convexUrl
@@ -40,31 +40,36 @@ export default async function handler(
 
     const head = document.getElementsByTagName("head")[0];
 
-    const ogTitle = document.createElement("meta");
-    ogTitle.setAttribute("property", "og:title");
-    ogTitle.setAttribute("content", "Break the Ice(berg)");
-    head.appendChild(ogTitle);
+    const protocol = request.headers["x-forwarded-proto"] || "https";
+    const host = request.headers.host || "iceberg-breaker.vercel.app";
+    const baseUrl = `${protocol}://${host}`;
+    const questionText = question.text || question.customText || "";
 
-    const ogDescription = document.createElement("meta");
-    ogDescription.setAttribute("property", "og:description");
-    ogDescription.setAttribute("content", question.text ?? "");
-    head.appendChild(ogDescription);
+    // Remove existing og:image tags from index.html to avoid duplicates
+    const existingOgImages = document.querySelectorAll('meta[property="og:image"]');
+    existingOgImages.forEach(tag => tag.remove());
 
-    const ogUrl = document.createElement("meta");
-    ogUrl.setAttribute("property", "og:url");
-    ogUrl.setAttribute(
-      "content",
-      `https://iceberg-breaker.vercel.app/question/${id}`
-    );
-    head.appendChild(ogUrl);
+    const metaTags = [
+      { property: "og:title", content: "Break the Ice(berg)" },
+      { property: "og:description", content: questionText },
+      { property: "og:url", content: `${baseUrl}/question/${id}` },
+      { property: "og:image", content: `${baseUrl}/api/og_question?id=${id}` },
+      { property: "og:image:width", content: "1080" },
+      { property: "og:image:height", content: "1350" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Break the Ice(berg)" },
+      { name: "twitter:description", content: questionText },
+      { name: "twitter:image", content: `${baseUrl}/api/og_question?id=${id}` },
+    ];
 
-    const ogImage = document.createElement("meta");
-    ogImage.setAttribute("property", "og:image");
-    ogImage.setAttribute(
-      "content",
-      "https://iceberg-breaker.vercel.app/og-preview.png"
-    );
-    head.appendChild(ogImage);
+    metaTags.forEach(tagData => {
+      const tag = document.createElement("meta");
+      Object.entries(tagData).forEach(([key, value]) => {
+        tag.setAttribute(key, value);
+      });
+      head.appendChild(tag);
+    });
 
     return response.status(200).send(dom.serialize());
   } catch (error: any) {
