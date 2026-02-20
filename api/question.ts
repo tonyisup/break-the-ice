@@ -64,14 +64,15 @@ export default async function handler(
       { property: "og:title", content: "Break the Ice(berg)" },
       { property: "og:description", content: questionText },
       { property: "og:url", content: `${baseUrl}/question/${id}` },
-      { property: "og:image", content: `${baseUrl}/api/og_question?id=${id}` },
+      { property: "og:image", content: `${baseUrl}/og-image/${id}.png` },
       { property: "og:image:width", content: "1080" },
       { property: "og:image:height", content: "1350" },
       { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "Break the Ice(berg)" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Break the Ice(berg)" },
       { name: "twitter:description", content: questionText },
-      { name: "twitter:image", content: `${baseUrl}/api/og_question?id=${id}` },
+      { name: "twitter:image", content: `${baseUrl}/og-image/${id}.png` },
     ];
 
     metaTags.forEach(tagData => {
@@ -82,6 +83,7 @@ export default async function handler(
       head.appendChild(tag);
     });
 
+    response.setHeader("Content-Type", "text/html; charset=utf-8");
     return response.status(200).send(dom.serialize());
   } catch (error: any) {
     console.error(error);

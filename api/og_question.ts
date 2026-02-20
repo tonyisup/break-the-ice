@@ -7,11 +7,15 @@ import { iconPathMap } from './lib/icon-paths.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const url = new URL(req.url || '', `http://${req.headers.host}`);
-    const searchParams = url.searchParams;
-
     // Extract params
-    const id = searchParams.get('id')?.trim();
+    let id = (Array.isArray(req.query.id) ? req.query.id[0] : req.query.id) || '';
+
+    if (!id && req.url) {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      id = url.searchParams.get('id') || '';
+    }
+
+    id = id.trim();
 
     if (!id) {
       res.status(400).send('Missing id parameter');
