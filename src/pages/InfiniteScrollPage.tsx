@@ -47,6 +47,7 @@ export default function InfiniteScrollPage() {
   const [questions, setQuestions] = useState<Doc<"questions">[]>([]);
   const [seenIds, setSeenIds] = useState<Set<Id<"questions">>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [showTopButton, setShowTopButton] = useState(false);
   const [showAuthCTA, setShowAuthCTA] = useState(false);
@@ -108,6 +109,9 @@ export default function InfiniteScrollPage() {
 
   const observerRef = useRef<IntersectionObserver | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const isLoadingRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  hasMoreRef.current = hasMore;
 
   const setQuestionRef = useCallback((element: HTMLDivElement | null, questionId: string) => {
     if (element) {
@@ -178,7 +182,7 @@ export default function InfiniteScrollPage() {
       if (activeQuestionRef.current) {
         const duration = Date.now() - startTimeRef.current;
         if (duration > 1000) {
-          recordAnalytics({
+          void recordAnalytics({
             questionId: activeQuestionRef.current._id,
             event: "seen",
             viewDuration: duration,
@@ -224,12 +228,14 @@ export default function InfiniteScrollPage() {
     const isStorageLoaded = hiddenStyles !== undefined && hiddenTones !== undefined &&
       (!user.isSignedIn || (hiddenStyles !== null && hiddenTones !== null));
 
-    if (!user.isLoaded || isLoading || !hasMore || allStylesBlocked || allTonesBlocked || !isStorageLoaded) return;
+    if (!user.isLoaded || isLoadingRef.current || !hasMore || allStylesBlocked || allTonesBlocked || !isStorageLoaded) return;
 
     // Capture current request ID
     requestIdRef.current++;
     const currentRequestId = requestIdRef.current;
+    isLoadingRef.current = true;
     setIsLoading(true);
+    setLoadError(null);
 
     try {
       const BATCH_SIZE = 5;
@@ -338,8 +344,8 @@ export default function InfiniteScrollPage() {
           if (currentRequestId !== requestIdRef.current) return;
 
           const errorMessage = typeof err === 'string' ? err : (err instanceof Error ? err.message : JSON.stringify(err));
-          const errorCode = err instanceof ConvexError ? (err.data as any)?.code : null;
-          const errorDataMessage = err instanceof ConvexError ? (err.data as any)?.message : null;
+          const errorCode = err instanceof ConvexError ? err.data?.code : null;
+          const errorDataMessage = err instanceof ConvexError ? err.data?.message : null;
 
           // Use structured error code if available, otherwise fall back to exact constant match or conservative substring check
           const isLimitError = errorCode === ERROR_CODES.AI_LIMIT_REACHED ||
@@ -379,19 +385,28 @@ export default function InfiniteScrollPage() {
     } catch (error) {
       console.error("Error fetching questions:", error);
       if (currentRequestId !== requestIdRef.current) return;
-      toast.error("Failed to load more questions.");
+
+      const errorMessage = error instanceof Error ? error.message : "Failed to load more questions.";
+      setLoadError(errorMessage);
+      toast.error(errorMessage);
+
+      // Stop the infinite loop if we can't get any questions at all
+      if (questionsRef.current.length === 0) {
+        setHasMore(false);
+      }
     } finally {
       // Only reset loading if this request is still the active one
       if (currentRequestId === requestIdRef.current) {
+        isLoadingRef.current = false;
         setIsLoading(false);
       }
     }
-  }, [convex, isLoading, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, hasMore, showAuthCTA, showUpgradeCTA, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser]);
+  }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded]);
 
   // Initial load
   useEffect(() => {
     if (questions.length === 0 && hasMore) {
-      loadMoreQuestions();
+      void loadMoreQuestions();
     }
   }, [questions.length, hasMore, loadMoreQuestions]);
 
@@ -407,7 +422,7 @@ export default function InfiniteScrollPage() {
     const handleScroll = () => {
       // Increased threshold to 1000px for pre-emptive loading
       if (window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 1000) {
-        loadMoreQuestions();
+        void loadMoreQuestions();
       }
 
       if (window.scrollY > 500) {
@@ -666,6 +681,36 @@ export default function InfiniteScrollPage() {
             </div>
           )}
 
+          {!allStylesBlocked && !allTonesBlocked && questions.length === 0 && !hasMore && !isLoading && (
+            <div className="flex flex-col items-center justify-center py-20 px-4 text-center space-y-6 bg-white/10 backdrop-blur-md rounded-[30px] border border-white/20">
+              <div className="bg-white/20 p-6 rounded-full">
+                <SearchX className="w-12 h-12 text-white" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-white uppercase italic">
+                  {loadError ? "Oops! Something went wrong" : "No results found"}
+                </h3>
+                <p className="text-white/70 max-w-md mx-auto text-lg">
+                  {loadError
+                    ? "We hit a snag trying to load some icebreakers for you. Mind giving it another shot?"
+                    : "We've searched high and low but couldn't find any questions matching your filters. Try adjusting your settings!"}
+                </p>
+              </div>
+              <Button
+                variant="default"
+                size="lg"
+                className="rounded-full px-10 font-bold uppercase italic tracking-wider transition-all hover:scale-105"
+                onClick={() => {
+                  setHasMore(true);
+                  setLoadError(null);
+                  // The Effect will trigger loadMoreQuestions automatically
+                }}
+              >
+                {loadError ? "Try Again" : "Reset Filters"}
+              </Button>
+            </div>
+          )}
+
           {!allStylesBlocked && !allTonesBlocked && questions.map((question, index) => {
             // Derive specific style/tone/gradient for this card
             const cardStyle = stylesMap.get(question.styleId || (question.style as string) || "");
@@ -690,7 +735,7 @@ export default function InfiniteScrollPage() {
                     gradient={cardGradient}
                     style={cardStyle}
                     tone={cardTone}
-                    onToggleFavorite={() => toggleLike(question._id)}
+                    onToggleFavorite={() => void toggleLike(question._id)}
                     onToggleHidden={() => toggleHide(question._id)}
                     onHideStyle={handleHideStyle}
                     onHideTone={handleHideTone}
@@ -715,7 +760,7 @@ export default function InfiniteScrollPage() {
                   <RefineResultsCTA
                     bgGradient={bgGradient}
                     onDismiss={() => {
-                      dismissRefineCTA();
+                      void dismissRefineCTA();
                     }}
                   />
                 )}
@@ -760,7 +805,7 @@ export default function InfiniteScrollPage() {
             <div className="flex justify-center py-8">
               <Button
                 onClick={() => {
-                  loadMoreQuestions();
+                  void loadMoreQuestions();
                 }}
               >
                 Load More
