@@ -656,7 +656,7 @@ export const generateAIQuestionForUser = internalAction({
 
 		// Try to clean and parse the response
 		// Remove markdown code blocks if present
-		const cleanedContent = generatedContent
+		let cleanedContent = generatedContent
 			.replace(/^```json\s*/, "")
 			.replace(/^```\s*/, "")
 			.replace(/\s*```$/, "");
@@ -664,10 +664,20 @@ export const generateAIQuestionForUser = internalAction({
 		let parsedContent: { text: string; }[] = [];
 
 		try {
-			const parsed = JSON.parse(cleanedContent);
+			let parsed = JSON.parse(cleanedContent);
 			parsedContent = Array.isArray(parsed) ? parsed : [parsed];
-		} catch (error) {
-			console.log("Failed to parse JSON, attempting fallback parsing for numbered list...");
+		} catch (firstError) {
+			// Retry after stripping trailing garbage (e.g. extra `}` after the array)
+			try {
+				const trimmed = cleanedContent.replace(/\]\s*\}+\s*$/, "]");
+				if (trimmed !== cleanedContent) {
+					const parsed = JSON.parse(trimmed);
+					parsedContent = Array.isArray(parsed) ? parsed : [parsed];
+				} else {
+					throw firstError;
+				}
+			} catch {
+				console.log("Failed to parse JSON, attempting fallback parsing for numbered list...");
 			// Fallback parsing for numbered lists (e.g., "1. Question\n2. Question")
 			const lines = cleanedContent.split('\n');
 			const regex = /^\d+\.\s*(.+)/;
@@ -684,8 +694,9 @@ export const generateAIQuestionForUser = internalAction({
 			if (parsedContent.length === 0) {
 				console.error("Failed to parse AI response. Content was:", generatedContent);
 				console.error("Cleaned content was:", cleanedContent);
-				console.error("Parse error:", error);
-				throw error;
+				console.error("Parse error:", firstError);
+				throw firstError;
+			}
 			}
 		}
 
