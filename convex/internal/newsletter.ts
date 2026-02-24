@@ -32,31 +32,6 @@ export const getQuestionForUser = internalAction({
 
 		let question: Doc<"questions"> | null = null;
 
-		// 1. Get exclusion lists: sent questions, hidden questions, hidden styles, hidden tones
-		const sentQuestionIds: Id<"questions">[] = await ctx.runQuery(
-			internal.internal.questions.getSentQuestionsForUser,
-			{ userId: user._id }
-		);
-
-		const hiddenStyles: any[] = await ctx.runQuery(
-			internal.internal.users.getUserHiddenStyles,
-			{ userId: user._id }
-		);
-		const hiddenTones: any[] = await ctx.runQuery(
-			internal.internal.users.getUserHiddenTones,
-			{ userId: user._id }
-		);
-
-		const excludedQuestionIds = new Set<string>(
-			sentQuestionIds.map(id => id.toString())
-		);
-		const excludedStyleIds = new Set<string>(
-			hiddenStyles.map((s: any) => s.styleId.toString())
-		);
-		const excludedToneIds = new Set<string>(
-			hiddenTones.map((t: any) => t.toneId.toString())
-		);
-
 		const unseenQuestionIds = await ctx.runQuery(
 			internal.internal.questions.getUnseenQuestionIdsForUser,
 			{
@@ -71,6 +46,32 @@ export const getQuestionForUser = internalAction({
 			});
 		}
 		else {
+
+      // 1. Get exclusion lists: sent questions, hidden questions, hidden styles, hidden tones
+      const sentQuestionIds: Id<"questions">[] = await ctx.runQuery(
+        internal.internal.questions.getSentQuestionsForUser,
+        { userId: user._id }
+      );
+  
+      const hiddenStyles: any[] = await ctx.runQuery(
+        internal.internal.users.getUserHiddenStyles,
+        { userId: user._id }
+      );
+      const hiddenTones: any[] = await ctx.runQuery(
+        internal.internal.users.getUserHiddenTones,
+        { userId: user._id }
+      );
+  
+      const excludedQuestionIds = new Set<string>(
+        sentQuestionIds.map(id => id.toString())
+      );
+      const excludedStyleIds = new Set<string>(
+        hiddenStyles.map((s: any) => s.styleId.toString())
+      );
+      const excludedToneIds = new Set<string>(
+        hiddenTones.map((t: any) => t.toneId.toString())
+      );
+
 		// 2. If the user has a preference embedding, find the most similar valid question
 			const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId: user._id });
 			if (userEmb && userEmb.length > 0) {
@@ -116,7 +117,8 @@ export const getQuestionForUser = internalAction({
 				const questions = await ctx.runAction(
 					internal.internal.ai.generateAIQuestionForUser,
 					{
-						userId: user._id
+						userId: user._id,
+            bypassAIUsage: true,
 					}
 				);
 				if (questions.length === 0) {

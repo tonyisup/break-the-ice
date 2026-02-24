@@ -480,7 +480,7 @@ export const generateAIQuestionForUser = internalAction({
 		const user = await ctx.runQuery(internal.internal.users.getUserById, { id: args.userId });
 
 		if (!user) {
-			throw new Error("You must be logged in or provide a valid user ID to generate AI questions.");
+			throw new Error("Could not find user.");
 		}
 		const count = args.count || 1;
 
