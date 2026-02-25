@@ -13,10 +13,10 @@ import { Icon, IconComponent } from '@/components/ui/icons/icon';
 import { Id } from '../../../convex/_generated/dataModel';
 
 export interface ItemDetails {
-  id: Id<"styles"> | Id<"tones">;
+  id: Id<"styles"> | Id<"tones"> | Id<"topics">;
   slug: string;
   name: string;
-  type: "Style" | "Tone";
+  type: "Style" | "Tone" | "Topic";
   description: string;
   icon: Icon;
   color: string;
@@ -29,6 +29,8 @@ interface ItemDetailDrawerProps {
   onSelectItem?: (item: ItemDetails) => void;
   onHideItem?: (item: ItemDetails) => void;
   onAddFilter?: (item: ItemDetails) => void;
+  onAnchorItem?: (item: ItemDetails) => void;
+  isAnchored?: boolean;
 }
 
 export function ItemDetailDrawer({
@@ -38,6 +40,8 @@ export function ItemDetailDrawer({
   onSelectItem,
   onHideItem,
   onAddFilter,
+  onAnchorItem,
+  isAnchored,
 }: ItemDetailDrawerProps) {
 
   if (!item) {
@@ -56,6 +60,11 @@ export function ItemDetailDrawer({
 
   const handleAddFilter = () => {
     onAddFilter?.(item);
+    onOpenChange(false);
+  }
+
+  const handleAnchor = () => {
+    onAnchorItem?.(item);
     onOpenChange(false);
   }
 
@@ -79,12 +88,21 @@ export function ItemDetailDrawer({
           <DrawerDescription className="pt-4 text-sm text-muted-foreground">{item.description}</DrawerDescription>
         </DrawerHeader>
         <DrawerFooter>
+          {onAnchorItem && (
+            <Button
+              onClick={handleAnchor}
+              className={isColorDark(item.color) ? "text-white" : "text-black"}
+              style={{ backgroundColor: item.color }}
+            >
+              {isAnchored ? "Remove Anchor" : `More Like This ${item.type}`}
+            </Button>
+          )}
           {onSelectItem && <Button
             onClick={handleSelect}
             className={isColorDark(item.color) ? "text-white" : "text-black"}
             style={{ backgroundColor: item.color }}
           >Select</Button>}
-          {onHideItem && <Button variant="outline" onClick={handleHide}>Hide</Button>}
+          {onHideItem && item.type !== "Topic" && <Button variant="outline" onClick={handleHide}>Hide</Button>}
           <DrawerClose asChild>
             <Button variant="ghost">Close</Button>
           </DrawerClose>

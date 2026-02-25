@@ -13,24 +13,24 @@ vi.mock('@/components/ui/icons/icon', () => ({
 window.HTMLElement.prototype.scrollTo = vi.fn();
 
 const mockItems: ItemDetails[] = [
-  { id: '1', name: 'Item 1', type: 'Style', description: 'desc 1', icon: 'Cat', color: '#ff0000' },
-  { id: '2', name: 'Item 2', type: 'Style', description: 'desc 2', icon: 'Dog', color: '#00ff00' },
-  { id: '3', name: 'Item 3', type: 'Style', description: 'desc 3', icon: 'Rabbit', color: '#0000ff' },
+  { id: 'style-1' as any, slug: '1', name: 'Item 1', type: 'Style', description: 'desc 1', icon: 'CircleHelp' as any, color: '#ff0000' },
+  { id: 'style-2' as any, slug: '2', name: 'Item 2', type: 'Style', description: 'desc 2', icon: 'CircleHelp' as any, color: '#00ff00' },
+  { id: 'style-3' as any, slug: '3', name: 'Item 3', type: 'Style', description: 'desc 3', icon: 'CircleHelp' as any, color: '#0000ff' },
 ];
 
 describe('GenericSelector', () => {
-  let ref: React.RefObject<GenericSelectorRef>;
+  let ref: React.RefObject<GenericSelectorRef | null>;
   const mockOnClickItem = vi.fn();
   const mockOnSelectItem = vi.fn();
   const mockOnRandomizeItem = vi.fn();
   const mockSetHighlightedItem = vi.fn();
 
   beforeEach(() => {
-    ref = React.createRef<GenericSelectorRef>();
+    ref = React.createRef<GenericSelectorRef | null>();
     vi.clearAllMocks();
   });
 
-  const renderComponent = (selectedItem = '1', highlightedItem = null) => {
+  const renderComponent = (selectedItem = '1', highlightedItem: ItemDetails | null = null) => {
     render(
       <GenericSelector
         ref={ref}

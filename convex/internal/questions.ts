@@ -658,9 +658,22 @@ export const getRandomQuestionsInternal = internalQuery({
 		hiddenStyles: v.array(v.id("styles")),
 		hiddenTones: v.array(v.id("tones")),
 		organizationId: v.optional(v.id("organizations")),
+		anchoredStyleId: v.optional(v.id("styles")),
+		anchoredToneId: v.optional(v.id("tones")),
+		anchoredTopicId: v.optional(v.id("topics")),
 	},
 	handler: async (ctx, args) => {
-		const { count, seen, hidden, hiddenStyles, hiddenTones, organizationId } = args;
+		const {
+			count,
+			seen,
+			hidden,
+			hiddenStyles,
+			hiddenTones,
+			organizationId,
+			anchoredStyleId,
+			anchoredToneId,
+			anchoredTopicId
+		} = args;
 		const seenIds = new Set(seen);
 		const hiddenIds = new Set(hidden);
 		const hiddenStyleIds = new Set(hiddenStyles);
@@ -671,6 +684,9 @@ export const getRandomQuestionsInternal = internalQuery({
 				q.neq(q.field("text"), undefined),
 				q.eq(q.field("status"), "public"),
 			];
+			if (organizationId) {
+				conditions.push(q.eq(q.field("organizationId"), organizationId));
+			}
 			return q.and(...conditions);
 		};
 
@@ -678,28 +694,83 @@ export const getRandomQuestionsInternal = internalQuery({
 		// rather than always returning the oldest rows via _creationTime order.
 		// With ~300-1000 questions this is very efficient; the 1000-row cap
 		// protects against unbounded growth.
+		let candidates: any[] = [];
+		const hasAnchors = anchoredStyleId || anchoredToneId || anchoredTopicId;
+
+		if (hasAnchors) {
+			// Targeted fetch for anchored attributes to ensure "heavier weight"
+			const anchorMatchPool: any[] = [];
+			if (anchoredStyleId) {
+				const styleMatches = await ctx.db.query("questions")
+					.withIndex("by_style", (q) => q.eq("styleId", anchoredStyleId))
+					.filter(applyFilters)
+					.take(100);
+				anchorMatchPool.push(...styleMatches);
+			}
+			if (anchoredToneId) {
+				const toneMatches = await ctx.db.query("questions")
+					.withIndex("by_tone", (q) => q.eq("toneId", anchoredToneId))
+					.filter(applyFilters)
+					.take(100);
+				anchorMatchPool.push(...toneMatches);
+			}
+			if (anchoredTopicId) {
+				const topicMatches = await ctx.db.query("questions")
+					.withIndex("by_topic", (q) => q.eq("topicId", anchoredTopicId))
+					.filter(applyFilters)
+					.take(100);
+				anchorMatchPool.push(...topicMatches);
+			}
+
+			// De-duplicate anchored matches
+			const uniqueAnchored = Array.from(new Map(anchorMatchPool.map(q => [q._id, q])).values());
+
+			// Filter seen/hidden
+			const filteredAnchored = uniqueAnchored.filter((q) => {
+				if (seenIds.has(q._id)) return false;
+				if (hiddenIds.has(q._id)) return false;
+				if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
+				if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
+				return true;
+			});
+
+			// Shuffle anchored matches
+			for (let i = filteredAnchored.length - 1; i > 0; i--) {
+				const j = Math.floor(Math.random() * (i + 1));
+				[filteredAnchored[i], filteredAnchored[j]] = [filteredAnchored[j], filteredAnchored[i]];
+			}
+
+			// We want most of the results to be anchored if available
+			candidates = filteredAnchored.slice(0, count * 5);
+		}
+
+		// Fill with general public questions
 		const allPublic = await ctx.db
 			.query("questions")
 			.filter((q) => applyFilters(q))
 			.take(1000);
 
-		const candidates = allPublic;
-
-		// In-memory Fisher-Yates shuffle so each request samples randomly
-		// across the full question set instead of always the oldest slice
-		for (let i = candidates.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			[candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-		}
-
 		// Post-filter for seen, hidden, styles, and tones
-		const filtered = candidates.filter((q) => {
+		const filteredGeneral = allPublic.filter((q) => {
 			if (seenIds.has(q._id)) return false;
 			if (hiddenIds.has(q._id)) return false;
 			if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
 			if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
+			// If we already have this in candidates from the anchor pool, skip
+			if (hasAnchors && candidates.some(cq => cq._id === q._id)) return false;
 			return true;
 		});
+
+		// Shuffle general questions
+		for (let i = filteredGeneral.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[filteredGeneral[i], filteredGeneral[j]] = [filteredGeneral[j], filteredGeneral[i]];
+		}
+
+		// Combine pools: Anchored first, then general
+		candidates = [...candidates, ...filteredGeneral];
+
+		const filtered = candidates;
 
 		const activeTakeoverTopics = await getActiveTakeoverTopicsHelper(ctx);
 
