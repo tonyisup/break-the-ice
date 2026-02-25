@@ -9,12 +9,14 @@
  */
 
 import type * as admin_ai from "../admin/ai.js";
+import type * as admin_aiModels from "../admin/aiModels.js";
 import type * as admin_duplicates from "../admin/duplicates.js";
 import type * as admin_feedback from "../admin/feedback.js";
 import type * as admin_manual_pruning_test from "../admin/manual_pruning_test.js";
 import type * as admin_pruning from "../admin/pruning.js";
 import type * as admin_questions from "../admin/questions.js";
 import type * as admin_styles from "../admin/styles.js";
+import type * as admin_systemPrompts from "../admin/systemPrompts.js";
 import type * as admin_tags from "../admin/tags.js";
 import type * as admin_tones from "../admin/tones.js";
 import type * as admin_topics from "../admin/topics.js";
@@ -65,12 +67,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "admin/ai": typeof admin_ai;
+  "admin/aiModels": typeof admin_aiModels;
   "admin/duplicates": typeof admin_duplicates;
   "admin/feedback": typeof admin_feedback;
   "admin/manual_pruning_test": typeof admin_manual_pruning_test;
   "admin/pruning": typeof admin_pruning;
   "admin/questions": typeof admin_questions;
   "admin/styles": typeof admin_styles;
+  "admin/systemPrompts": typeof admin_systemPrompts;
   "admin/tags": typeof admin_tags;
   "admin/tones": typeof admin_tones;
   "admin/topics": typeof admin_topics;

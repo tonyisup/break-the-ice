@@ -39,6 +39,8 @@ import ContactPage from "./app/contact/page";
 import FeedbackButton from "./components/FeedbackButton";
 import { AnalyticsManager } from "./components/AnalyticsManager";
 import GeneratorPage from "./app/admin/generator/page.tsx";
+import AIModelsPage from "./app/admin/ai-models/page";
+import SystemPromptsPage from "./app/admin/system-prompts/page";
 import { Toaster } from "sonner";
 import UserDetailsPage from "./app/admin/users/[userId]/page.tsx";
 import QuestionDetailsPage from "./app/admin/questions/[questionId]/page.tsx";
@@ -80,6 +82,8 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/admin/prune/settings" element={<PruneSettingsPage />} />
                   <Route path="/admin/pool" element={<PoolPage />} />
                   <Route path="/admin/generator" element={<GeneratorPage />} />
+                  <Route path="/admin/ai-models" element={<AIModelsPage />} />
+                  <Route path="/admin/system-prompts" element={<SystemPromptsPage />} />
                   <Route path="/admin/users/:userId" element={<UserDetailsPage />} />
                 </Route>
 

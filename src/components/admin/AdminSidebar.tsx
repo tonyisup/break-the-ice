@@ -13,6 +13,8 @@ import {
 	ShieldCheck,
 	Box,
 	Sparkles,
+	Cpu,
+	MessageSquareQuote,
 } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
@@ -95,6 +97,19 @@ const items = [
 	},
 ]
 
+const aiItems = [
+	{
+		title: "AI Models",
+		url: "/admin/ai-models",
+		icon: Cpu,
+	},
+	{
+		title: "System Prompts",
+		url: "/admin/system-prompts",
+		icon: MessageSquareQuote,
+	},
+]
+
 export function AdminSidebar() {
 	const location = useLocation()
 
@@ -119,6 +134,31 @@ export function AdminSidebar() {
 					<SidebarGroupContent>
 						<SidebarMenu>
 							{items.map((item) => (
+								<SidebarMenuItem key={item.title}>
+									<SidebarMenuButton
+										asChild
+										isActive={location.pathname === item.url}
+										tooltip={item.title}
+										className="hover:bg-accent transition-all duration-200"
+									>
+										<Link to={item.url} className="flex items-center gap-3">
+											<item.icon className="size-5 shrink-0" />
+											<span className="font-medium">{item.title}</span>
+										</Link>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+							))}
+						</SidebarMenu>
+					</SidebarGroupContent>
+				</SidebarGroup>
+
+				<SidebarGroup>
+					<SidebarGroupLabel className="px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 group-data-[collapsible=icon]:hidden">
+						AI Configuration
+					</SidebarGroupLabel>
+					<SidebarGroupContent>
+						<SidebarMenu>
+							{aiItems.map((item) => (
 								<SidebarMenuItem key={item.title}>
 									<SidebarMenuButton
 										asChild

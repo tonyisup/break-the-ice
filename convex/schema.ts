@@ -317,6 +317,19 @@ export default defineSchema({
     enableToneCheck: v.boolean(),
   }).index("by_status", ["status"]),
 
+  aiModels: defineTable({
+    name: v.string(),
+    identifier: v.string(),
+    provider: v.string(),
+    isDefault: v.boolean(),
+  }).index("by_isDefault", ["isDefault"]),
+
+  systemPrompts: defineTable({
+    name: v.string(),
+    content: v.string(),
+    isDefault: v.boolean(),
+  }).index("by_isDefault", ["isDefault"]),
+
   // Embedding tables (one-to-one with parent; embeddings only, to reduce bandwidth on main tables)
   question_embeddings: defineTable({
     questionId: v.id("questions"),

@@ -29,6 +29,8 @@ export default function GeneratorPage() {
     const tones = useQuery(api.core.tones.getTones, {})
     const topics = useQuery(api.core.topics.getTopics, {})
     const tags = useQuery(api.core.tags.getTags)
+    const aiModels = useQuery(api.admin.aiModels.getModels)
+    const systemPrompts = useQuery(api.admin.systemPrompts.getPrompts)
 
     const generateAIQuestions = useAction(api.admin.ai.generateAIQuestions)
     const saveAIQuestion = useMutation(api.core.questions.saveAIQuestion)
@@ -38,6 +40,8 @@ export default function GeneratorPage() {
     const [selectedStyleId, setSelectedStyleId] = React.useState<Id<"styles"> | null>(null)
     const [selectedToneId, setSelectedToneId] = React.useState<Id<"tones"> | null>(null)
     const [selectedTopicId, setSelectedTopicId] = React.useState<Id<"topics"> | null>(null)
+    const [selectedModelId, setSelectedModelId] = React.useState<Id<"aiModels"> | null>(null)
+    const [selectedPromptId, setSelectedPromptId] = React.useState<Id<"systemPrompts"> | null>(null)
     const [isGenerating, setIsGenerating] = React.useState(false)
     const [isSaving, setIsSaving] = React.useState(false)
     const [expandedTagGroupings, setExpandedTagGroupings] = React.useState<Set<string>>(new Set())
@@ -51,7 +55,22 @@ export default function GeneratorPage() {
     React.useEffect(() => {
         setGeneratedQuestions([])
         setActiveTabIndex("0")
-    }, [selectedStyleId, selectedToneId, selectedTopicId])
+    }, [selectedStyleId, selectedToneId, selectedTopicId, selectedModelId, selectedPromptId])
+
+    // Set defaults when models/prompts load
+    React.useEffect(() => {
+        if (aiModels && !selectedModelId) {
+            const defaultModel = aiModels.find(m => m.isDefault)
+            if (defaultModel) setSelectedModelId(defaultModel._id)
+        }
+    }, [aiModels, selectedModelId])
+
+    React.useEffect(() => {
+        if (systemPrompts && !selectedPromptId) {
+            const defaultPrompt = systemPrompts.find(p => p.isDefault)
+            if (defaultPrompt) setSelectedPromptId(defaultPrompt._id)
+        }
+    }, [systemPrompts, selectedPromptId])
 
     const handleTagToggle = (tagName: string) => {
         setGeneratedQuestions([]) // Reset on tag change too
@@ -117,7 +136,9 @@ export default function GeneratorPage() {
                 excludedQuestions: generatedQuestions.length > 0 ? generatedQuestions : undefined,
                 styleId: selectedStyleId,
                 toneId: selectedToneId,
-                topicId: selectedTopicId || undefined
+                topicId: selectedTopicId || undefined,
+                modelId: selectedModelId || undefined,
+                systemPromptId: selectedPromptId || undefined,
             })
             if (generatedQuestion) {
                 const newQuestions = [...generatedQuestions, generatedQuestion]
@@ -179,7 +200,7 @@ export default function GeneratorPage() {
 
     const tagGroupings = tags ? Array.from(new Set(tags.map(tag => tag.grouping))).sort() : []
 
-    if (!styles || !tones || !tags || !topics) {
+    if (!styles || !tones || !tags || !topics || !aiModels || !systemPrompts) {
         return (
             <div className="flex items-center justify-center h-full p-12">
                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -241,6 +262,48 @@ export default function GeneratorPage() {
                                             {tone.name}
                                         </div>
                                     ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-sm font-medium">AI Model</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {aiModels.map(model => (
+                                        <div
+                                            key={model._id}
+                                            onClick={() => setSelectedModelId(model._id)}
+                                            className={`
+                                                cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
+                                                ${selectedModelId === model._id
+                                                    ? "bg-primary text-primary-foreground border-primary"
+                                                    : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
+                                            `}
+                                        >
+                                            {model.name}
+                                        </div>
+                                    ))}
+                                    {aiModels.length === 0 && <p className="text-xs text-muted-foreground italic">No models configured. Using default.</p>}
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-sm font-medium">System Prompt</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {systemPrompts.map(prompt => (
+                                        <div
+                                            key={prompt._id}
+                                            onClick={() => setSelectedPromptId(prompt._id)}
+                                            className={`
+                                                cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
+                                                ${selectedPromptId === prompt._id
+                                                    ? "bg-primary text-primary-foreground border-primary"
+                                                    : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
+                                            `}
+                                        >
+                                            {prompt.name}
+                                        </div>
+                                    ))}
+                                    {systemPrompts.length === 0 && <p className="text-xs text-muted-foreground italic">No prompts configured. Using default.</p>}
                                 </div>
                             </div>
                         </CardContent>

@@ -41,10 +41,12 @@ export const generateAIQuestions = action({
 		tone: v.optional(v.string()),
 		topicId: v.optional(v.id("topics")),
 		topic: v.optional(v.string()),
+		modelId: v.optional(v.id("aiModels")),
+		systemPromptId: v.optional(v.id("systemPrompts")),
 	},
 	handler: async (ctx, args) => {		
 		await ensureAdmin(ctx);
-		const { count, selectedTags, currentQuestion, excludedQuestions, styleId, toneId, topicId } = args;
+		const { count, selectedTags, currentQuestion, excludedQuestions, styleId, toneId, topicId, modelId, systemPromptId } = args;
 
 		const style = styleId 
 			? (await ctx.runQuery(api.core.styles.getStyleById, { id: styleId }))
@@ -60,6 +62,42 @@ export const generateAIQuestions = action({
 
 		if (!style || !tone) {
 			throw new Error("Failed to generate AI question: No style or tone found.");
+		}
+
+		let modelIdentifier = "@preset/break-the-ice-berg-default";
+		if (modelId) {
+			const model = await ctx.runQuery(api.admin.aiModels.getModelById, { id: modelId });
+			if (model) modelIdentifier = model.identifier;
+		} else {
+			const defaultModel = await ctx.runQuery(api.admin.aiModels.getDefaultModel, {});
+			if (defaultModel) modelIdentifier = defaultModel.identifier;
+		}
+
+		let systemPrompt = `You are clever, well travelled, emotionally and socially intelligent. You will provide guidance and suggestions to help people break the ice in social settings. You will be providing unique questions that would be perfect for starting conversations. You will be able to combine a provided STYLE (question structure) with a TONE (vibe/color).
+
+		CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of objects.
+		- Do not include any text before or after the JSON.
+		- Do not use markdown formatting (no \`\`\`json wrappers).
+		- Do not include explanations or comments.
+		- Do not number the items in the array (e.g. no "1. {...}").
+		- DO NOT provide your own examples of any generated content. No dashes, no lists.
+
+		Example format: [{"text": "Question 1"}]
+
+		Requirements:
+		- Return exactly 1 question
+		- Each question should be an object in the JSON array
+		- Avoid questions too similar to existing ones
+		- Make questions engaging and conversation-starting
+		- Avoid being verbose; keep it short and sweet.
+		- Only ONE question per text. There should only be one question mark at the end of the text.`;
+
+		if (systemPromptId) {
+			const promptDoc = await ctx.runQuery(api.admin.systemPrompts.getPromptById, { id: systemPromptId });
+			if (promptDoc) systemPrompt = promptDoc.content;
+		} else {
+			const defaultPrompt = await ctx.runQuery(api.admin.systemPrompts.getDefaultPrompt, {});
+			if (defaultPrompt) systemPrompt = defaultPrompt.content;
 		}
 
 		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
@@ -92,28 +130,11 @@ export const generateAIQuestions = action({
 			try {
 				attempts++;
 				const completion = await openai.chat.completions.create({
-					model: "@preset/break-the-ice-berg-default",
+					model: modelIdentifier,
 					messages: [
 						{
 							role: "system",
-							content: `You are clever, well travelled, emotionally and socially intelligent. You will provide guidance and suggestions to help people break the ice in social settings. You will be providing unique questions that would be perfect for starting conversations. You will be able to combine a provided STYLE (question structure) with a TONE (vibe/color).
-		
-		CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of objects.
-		- Do not include any text before or after the JSON.
-		- Do not use markdown formatting (no \`\`\`json wrappers).
-		- Do not include explanations or comments.
-		- Do not number the items in the array (e.g. no "1. {...}").
-		- DO NOT provide your own examples of any generated content. No dashes, no lists.
-		
-		Example format: [{"text": "Question 1"}]
-		
-		Requirements:
-		- Return exactly 1 question
-		- Each question should be an object in the JSON array
-		- Avoid questions too similar to existing ones
-		- Make questions engaging and conversation-starting
-		- Avoid being verbose; keep it short and sweet.
-		- Only ONE question per text. There should only be one question mark at the end of the text.`
+							content: systemPrompt
 						},
 						{
 							role: "user",
