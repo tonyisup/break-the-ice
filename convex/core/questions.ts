@@ -186,9 +186,23 @@ async function getNextRandomQuestionsInternal(
 		hiddenTones?: Id<"tones">[];
 		organizationId?: Id<"organizations">;
 		randomSeed?: number;
+		anchoredStyleId?: Id<"styles">;
+		anchoredToneId?: Id<"tones">;
+		anchoredTopicId?: Id<"topics">;
 	}
 ): Promise<any[]> {
-	const { count, seen = [], hidden = [], hiddenStyles = [], hiddenTones = [], organizationId, randomSeed = Math.random() } = args;
+	const {
+		count,
+		seen = [],
+		hidden = [],
+		hiddenStyles = [],
+		hiddenTones = [],
+		organizationId,
+		randomSeed = Math.random(),
+		anchoredStyleId,
+		anchoredToneId,
+		anchoredTopicId
+	} = args;
 
 
 	// 2. Fetch candidates using internal query
@@ -199,6 +213,9 @@ async function getNextRandomQuestionsInternal(
 		hiddenStyles,
 		hiddenTones,
 		organizationId,
+		anchoredStyleId,
+		anchoredToneId,
+		anchoredTopicId,
 	});
 
 	// 3. Shuffle results (deterministic based on seed)
@@ -217,6 +234,9 @@ export const getNextRandomQuestions = action({
 		hiddenTones: v.optional(v.array(v.id("tones"))),
 		organizationId: v.optional(v.id("organizations")),
 		randomSeed: v.optional(v.float64()),
+		anchoredStyleId: v.optional(v.id("styles")),
+		anchoredToneId: v.optional(v.id("tones")),
+		anchoredTopicId: v.optional(v.id("topics")),
 	},
 	handler: async (ctx, args): Promise<any[]> => {
 		return await getNextRandomQuestionsInternal(ctx, args);

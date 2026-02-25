@@ -344,6 +344,9 @@ export const generateAIQuestions = action({
 export const generateAIQuestionForFeed = action({
 	args: {
 		count: v.optional(v.number()),
+		anchoredStyleId: v.optional(v.id("styles")),
+		anchoredToneId: v.optional(v.id("tones")),
+		anchoredTopicId: v.optional(v.id("topics")),
 	},
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
 		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
@@ -355,7 +358,7 @@ export const generateAIQuestionForFeed = action({
 		const count = args.count || 1;
 
 		const takeoverTopics = await ctx.runQuery(api.core.topics.getActiveTakeoverTopics);
-		let topicId;
+		let topicId = args.anchoredTopicId;
 		let bypassAIUsage = false;
 
 		if (takeoverTopics.length > 0) {
@@ -368,7 +371,9 @@ export const generateAIQuestionForFeed = action({
 			userId: user._id,
 			count,
 			topicId,
-			bypassAIUsage
+			bypassAIUsage,
+			anchoredStyleId: args.anchoredStyleId,
+			anchoredToneId: args.anchoredToneId,
 		});
 	}
 });

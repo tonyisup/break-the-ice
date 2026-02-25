@@ -1,4 +1,5 @@
 import { useQuery, useConvex, useMutation, useAction } from "convex/react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
@@ -10,6 +11,8 @@ import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { ArrowUp, SearchX, Sparkles } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
+import { AnchorHeader } from "@/components/filter-controls/AnchorHeader";
+import { ItemDetails, ItemDetailDrawer } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { useAuth } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
@@ -29,6 +32,14 @@ export default function InfiniteScrollPage() {
   const user = useAuth();
   const { activeWorkspace } = useWorkspace();
   const generateAIQuestions = useAction(api.core.ai.generateAIQuestionForFeed);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const anchoredStyleId = searchParams.get("style") as Id<"styles"> | null;
+  const anchoredToneId = searchParams.get("tone") as Id<"tones"> | null;
+  const anchoredTopicId = searchParams.get("topic") as Id<"topics"> | null;
+
+  const [selectedAnchorItem, setSelectedAnchorItem] = useState<ItemDetails | null>(null);
+  const [isAnchorDrawerOpen, setIsAnchorDrawerOpen] = useState(false);
 
   const {
     likedQuestions,
@@ -251,6 +262,9 @@ export default function InfiniteScrollPage() {
         hiddenTones: hiddenTones ?? [],
         organizationId: activeWorkspace ?? undefined,
         randomSeed: Math.random(),
+        anchoredStyleId: anchoredStyleId ?? undefined,
+        anchoredToneId: anchoredToneId ?? undefined,
+        anchoredTopicId: anchoredTopicId ?? undefined,
       });
 
       // Check for staleness after await
@@ -305,7 +319,11 @@ export default function InfiniteScrollPage() {
         }
 
         try {
-          const generated = await generateAIQuestions({});
+          const generated = await generateAIQuestions({
+            anchoredStyleId: anchoredStyleId ?? undefined,
+            anchoredToneId: anchoredToneId ?? undefined,
+            anchoredTopicId: anchoredTopicId ?? undefined,
+          });
 
           // Check for staleness after generation await
           if (currentRequestId !== requestIdRef.current) return;
@@ -401,7 +419,16 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded]);
+  }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded, anchoredStyleId, anchoredToneId, anchoredTopicId]);
+
+  // Reset list when anchors change
+  useEffect(() => {
+    setQuestions([]);
+    setSeenIds(new Set());
+    setHasMore(true);
+    setShowAuthCTA(false);
+    setShowUpgradeCTA(false);
+  }, [anchoredStyleId, anchoredToneId, anchoredTopicId]);
 
   // Initial load
   useEffect(() => {
@@ -528,6 +555,25 @@ export default function InfiniteScrollPage() {
     });
   };
 
+  const handleAnchorItem = (item: ItemDetails) => {
+    const newParams = new URLSearchParams(searchParams);
+    const paramKey = item.type.toLowerCase();
+    const currentVal = newParams.get(paramKey);
+
+    if (currentVal === item.id) {
+      newParams.delete(paramKey);
+    } else {
+      newParams.set(paramKey, item.id);
+    }
+    setSearchParams(newParams);
+  };
+
+  const removeAnchor = (type: "style" | "tone" | "topic") => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete(type);
+    setSearchParams(newParams);
+  };
+
   // Smooth gradient transition logic
   const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
 
@@ -651,6 +697,26 @@ export default function InfiniteScrollPage() {
       <Header />
 
       <main className="z-10 flex-1 flex flex-col pb-32 pt-20">
+        <AnchorHeader
+          styleId={anchoredStyleId}
+          toneId={anchoredToneId}
+          topicId={anchoredTopicId}
+          onRemoveStyle={() => removeAnchor("style")}
+          onRemoveTone={() => removeAnchor("tone")}
+          onRemoveTopic={() => removeAnchor("topic")}
+          onOpenItem={(type, item) => {
+            setSelectedAnchorItem({
+              id: item._id,
+              slug: item.id,
+              name: item.name,
+              type,
+              description: item.description || "",
+              icon: (item.icon || "CircleHelp") as Icon,
+              color: item.color || "#888",
+            });
+            setIsAnchorDrawerOpen(true);
+          }}
+        />
         <div className="flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full">
           {(allStylesBlocked || allTonesBlocked) && (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-4 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20">
@@ -741,6 +807,10 @@ export default function InfiniteScrollPage() {
                     onHideTone={handleHideTone}
                     onRemixed={handleRemix}
                     topic={question.topicId ? topicsMap.get(question.topicId) : undefined}
+                    onAnchorItem={handleAnchorItem}
+                    anchoredStyleId={anchoredStyleId}
+                    anchoredToneId={anchoredToneId}
+                    anchoredTopicId={anchoredTopicId}
                   />
                 </div>
 
@@ -813,6 +883,18 @@ export default function InfiniteScrollPage() {
             </div>
           )}
         </div>
+        <ItemDetailDrawer
+          item={selectedAnchorItem}
+          isOpen={isAnchorDrawerOpen}
+          onOpenChange={setIsAnchorDrawerOpen}
+          onAnchorItem={handleAnchorItem}
+          isAnchored={
+            selectedAnchorItem?.type === "Style" ? anchoredStyleId === selectedAnchorItem.id :
+              selectedAnchorItem?.type === "Tone" ? anchoredToneId === selectedAnchorItem.id :
+                selectedAnchorItem?.type === "Topic" ? anchoredTopicId === selectedAnchorItem.id :
+                  false
+          }
+        />
       </main>
 
       {showTopButton && (

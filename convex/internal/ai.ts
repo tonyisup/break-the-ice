@@ -474,6 +474,8 @@ export const generateAIQuestionForUser = internalAction({
 		count: v.optional(v.number()),
 		bypassAIUsage: v.optional(v.boolean()),
 		topicId: v.optional(v.id("topics")),
+		anchoredStyleId: v.optional(v.id("styles")),
+		anchoredToneId: v.optional(v.id("tones")),
 	},
 	returns: v.array(v.union(v.any(), v.null())),
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
@@ -484,8 +486,12 @@ export const generateAIQuestionForUser = internalAction({
 		}
 		const count = args.count || 1;
 
-		const style = (await ctx.runQuery(api.core.styles.getRandomStyleForUser, { userId: user._id }));
-		const tone = (await ctx.runQuery(api.core.tones.getRandomToneForUser, { userId: user._id }));
+		const style = args.anchoredStyleId
+			? (await ctx.runQuery(api.core.styles.getStyleById, { id: args.anchoredStyleId }))
+			: (await ctx.runQuery(api.core.styles.getRandomStyleForUser, { userId: user._id }));
+		const tone = args.anchoredToneId
+			? (await ctx.runQuery(api.core.tones.getToneById, { id: args.anchoredToneId }))
+			: (await ctx.runQuery(api.core.tones.getRandomToneForUser, { userId: user._id }));
 		const topic = args.topicId ? (await ctx.runQuery(api.core.topics.getTopicById, { id: args.topicId })) : null;
 
 		if (!style || !tone) {

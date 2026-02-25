@@ -180,18 +180,18 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
     const handleSetRandomItem = (item: SelectorItem) => {
       if (!item) return;
       setHighlightedItem(item);
-      onRandomizeItem?.(item.id);
+      onRandomizeItem?.(item.slug);
       setTimeout(() => {
-        scrollToCenter(item.id);
+        scrollToCenter(item.slug);
       }, 100);
 
     };
 
     const handleRandomItem = () => {
       if (!items || items.length === 0) return;
-      const filteredItems = items.filter((item) => item.id !== selectedItem);
+      const filteredItems = items.filter((item) => item.slug !== selectedItem);
       const randomItem = filteredItems[Math.floor(Math.random() * filteredItems.length)];
-      // onSelectItem(randomItem.id);
+      // onSelectItem(randomItem.slug);
       handleSetRandomItem(randomItem);
     };
 
@@ -208,7 +208,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
       },
       confirmRandomizedItem: () => {
         if (!highlightedItem) return;
-        onSelectItem(highlightedItem.id);
+        onSelectItem(highlightedItem.slug);
         setHighlightedItem(null);
         onRandomizeItem?.(null);
       },
@@ -252,18 +252,18 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
             style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
           >
             {items && items.map((item) => {
-              const isSelected = selectedItem === item.id;
+              const isSelected = selectedItem === item.slug;
 
               return (
                 <div
-                  key={item.id}
+                  key={item.slug}
                   className="relative group"
                   ref={(el) => {
-                    buttonRefs.current[item.id] = el;
+                    buttonRefs.current[item.slug] = el;
                   }}
                 >
                   <button
-                    onClick={() => onClickItem(item.id)}
+                    onClick={() => onClickItem(item.slug)}
                     className={`flex items-center gap-2 px-4 h-10 rounded-full transition-all duration-200 ${isSelected
                         ? 'text-white shadow-lg'
                         : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
@@ -273,7 +273,7 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
                         ? {
                           backgroundColor: item.color
                         }
-                        : (highlightedItem?.id === item.id) ? {
+                        : (highlightedItem?.slug === item.slug) ? {
                           borderColor: item.color,
                           borderWidth: '4px'
                         } : {}
