@@ -17,8 +17,12 @@ vi.mock('../../../../convex/_generated/api', () => ({
       tones: { getTones: 'getTones' },
       topics: { getTopics: 'getTopics' },
       tags: { getTags: 'getTags' },
-      ai: { generateAIQuestions: 'generateAIQuestions' },
       questions: { saveAIQuestion: 'saveAIQuestion' },
+    },
+    admin: {
+      ai: { generateAIQuestions: 'generateAIQuestions' },
+      aiModels: { getModels: 'getModels' },
+      systemPrompts: { getPrompts: 'getPrompts' },
     }
   },
 }));
@@ -36,6 +40,8 @@ describe('GeneratorPage', () => {
   const mockTones = [{ _id: 't1', id: 'tone-1', name: 'Tone 1' }];
   const mockTopics = [{ _id: 'top1', id: 'topic-1', name: 'Topic 1' }];
   const mockTags = [{ _id: 'tag1', name: 'tag1', grouping: 'group1' }];
+  const mockModels = [{ _id: 'm1', name: 'GPT-4o', isDefault: true }];
+  const mockPrompts = [{ _id: 'p1', name: 'Standard', isDefault: true }];
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -44,6 +50,8 @@ describe('GeneratorPage', () => {
       if (queryFn === 'getTones') return mockTones;
       if (queryFn === 'getTopics') return mockTopics;
       if (queryFn === 'getTags') return mockTags;
+      if (queryFn === 'getModels') return mockModels;
+      if (queryFn === 'getPrompts') return mockPrompts;
       return undefined;
     });
     (useMutation as any).mockReturnValue(vi.fn());
