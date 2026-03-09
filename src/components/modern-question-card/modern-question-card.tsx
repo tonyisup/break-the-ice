@@ -31,6 +31,10 @@ interface ModernQuestionCardProps {
   disabled?: boolean;
   onRemixed?: (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => void;
   topic?: any;
+  onAnchorItem?: (item: ItemDetails) => void;
+  anchoredStyleId?: Id<"styles"> | null;
+  anchoredToneId?: Id<"tones"> | null;
+  anchoredTopicId?: Id<"topics"> | null;
 }
 
 export function ModernQuestionCard({
@@ -51,7 +55,11 @@ export function ModernQuestionCard({
   selectedTones,
   disabled = false,
   onRemixed,
-  topic
+  topic,
+  onAnchorItem,
+  anchoredStyleId,
+  anchoredToneId,
+  anchoredTopicId,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -110,6 +118,19 @@ export function ModernQuestionCard({
       description: style.description || "",
       icon: style.icon as Icon,
       color: style.color,
+    });
+    setIsDrawerOpen(true);
+  };
+  const handleOpenTopicDrawer = () => {
+    if (!topic) return;
+    setSelectedItemForDrawer({
+      id: topic._id,
+      slug: topic.id,
+      name: topic.name,
+      type: "Topic",
+      description: topic.description || "",
+      icon: (topic.icon || "CircleHelp") as Icon,
+      color: topic.color || "#888",
     });
     setIsDrawerOpen(true);
   };
@@ -178,6 +199,7 @@ export function ModernQuestionCard({
                 handleShare={() => void handleShare()}
                 onClickStyle={handleOpenStyleDrawer}
                 onClickTone={handleOpenToneDrawer}
+                  onClickTopic={handleOpenTopicDrawer}
                 containerRef={cardRef}
                 onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
                 topic={topic}
@@ -188,6 +210,13 @@ export function ModernQuestionCard({
                 onOpenChange={setIsDrawerOpen}
                 onHideItem={handleHideItem}
                 onAddFilter={onAddFilter}
+                  onAnchorItem={onAnchorItem}
+                  isAnchored={
+                    selectedItemForDrawer?.type === "Style" ? anchoredStyleId === selectedItemForDrawer.id :
+                    selectedItemForDrawer?.type === "Tone" ? anchoredToneId === selectedItemForDrawer.id :
+                    selectedItemForDrawer?.type === "Topic" ? anchoredTopicId === selectedItemForDrawer.id :
+                    false
+                  }
               />
               {isAuthenticated && style && tone && (
                 <RemixQuestionDrawer
@@ -239,6 +268,7 @@ interface QuestionContentProps {
   handleShare: () => void;
   onClickStyle?: () => void;
   onClickTone?: () => void;
+  onClickTopic?: () => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
   onRemix?: () => void;
   topic?: any;
@@ -257,6 +287,7 @@ const QuestionContent = ({
   handleShare,
   onClickStyle,
   onClickTone,
+  onClickTopic,
   containerRef,
   onRemix,
   topic: providedTopic
@@ -425,7 +456,12 @@ const QuestionContent = ({
         )}
       </div>
       {topic && (
-        <div className="mt-4 flex flex-row gap-2 justify-between items-center">
+        <button
+          type="button"
+          className="w-full mt-4 flex flex-row gap-2 justify-between items-center cursor-pointer bg-transparent border-none p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
+          onClick={onClickTopic}
+          aria-label={`Topic: ${topic.name}`}
+        >
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Topic: {topic.name}
           </p>
@@ -452,7 +488,7 @@ const QuestionContent = ({
               <IconComponent icon={safeIcon} size={24} color={topic.color} />
             </motion.div>
           </div>
-        </div>
+        </button>
       )}
     </div>
   );

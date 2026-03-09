@@ -3,7 +3,7 @@ import { GenericSelector, type GenericSelectorRef } from '../generic-selector';
 import { useStorageContext } from '../../hooks/useStorageContext';
 import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer';
 import { Icon } from '@/components/ui/icons/icon';
-import { Doc } from '../../../convex/_generated/dataModel';
+import { Doc, Id } from '../../../convex/_generated/dataModel';
 
 interface ToneSelectorProps {
   tones: Doc<"tones">[];
@@ -35,7 +35,7 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
     setIsHighlighting(highlightedItem !== null);
     if (onHighlightTone) {
       if (highlightedItem) {
-        const tone = tones.find(t => t.id === highlightedItem.id);
+        const tone = tones.find(t => t.id === highlightedItem.slug);
         onHighlightTone(tone ?? null);
       } else {
         onHighlightTone(null);
@@ -47,14 +47,15 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
     if (!item.id) return;
     if (item.type !== "Tone") return;
 
-    addHiddenTone(item.id);
+    addHiddenTone(item.id as Id<"tones">);
   };
 
   const handleOpenDrawer = (itemId: string) => {
     const tone = tones?.find(t => t.id === itemId);
     if (tone) {
       setSelectedItemForDrawer({
-        id: tone.id,
+        id: tone._id,
+        slug: tone.id,
         name: tone.name,
         type: "Tone",
         description: tone.description || "",
@@ -67,7 +68,7 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
 
   const handleSetHighlightedItem = (item: ItemDetails) => {
     setHighlightedItem(item);
-    genericSelectorRef.current?.scrollToCenter(item.id);
+    genericSelectorRef.current?.scrollToCenter(item.slug);
   };
 
   // Expose the randomizeTone function to parent components
@@ -96,9 +97,10 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
       <GenericSelector
         ref={genericSelectorRef}
         items={tones.map(tone => ({
-          id: tone.id,
+          id: tone._id,
+          slug: tone.id,
           name: tone.name,
-          type: "Tone",
+          type: "Tone" as const,
           description: tone.description || "",
           icon: tone.icon as Icon,
           color: tone.color

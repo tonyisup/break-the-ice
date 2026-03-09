@@ -161,9 +161,14 @@ export default function UserDetailsPage() {
                     )}
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">{user.name || "User Details"}</h1>
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Mail className="size-3" />
-                            {user.email || "No email"}
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Mail className="size-3" />
+                                {user.email || "No email"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                                ID: {user._id}
+                            </div>
                         </div>
                     </div>
                 </div>

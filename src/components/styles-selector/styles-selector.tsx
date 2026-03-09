@@ -3,7 +3,7 @@ import { GenericSelector, type GenericSelectorRef } from '../generic-selector';
 import { useStorageContext } from '../../hooks/useStorageContext';
 import { Icon } from '@/components/ui/icons/icon';
 import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer';
-import { Doc } from '../../../convex/_generated/dataModel';
+import { Doc, Id } from '../../../convex/_generated/dataModel';
 
 interface StyleSelectorProps {
   styles: Doc<"styles">[];
@@ -34,7 +34,7 @@ export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrde
     setIsHighlighting(highlightedItem !== null);
     if (onHighlightStyle) {
       if (highlightedItem) {
-        const style = styles.find(s => s.id === highlightedItem.id);
+        const style = styles.find(s => s.id === highlightedItem.slug);
         onHighlightStyle(style ?? null);
       } else {
         onHighlightStyle(null);
@@ -46,14 +46,15 @@ export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrde
     if (!item.id) return;
     if (item.type !== "Style") return;
 
-    addHiddenStyle(item.id);
+    addHiddenStyle(item.id as Id<"styles">);
   };
 
   const handleOpenDrawer = (itemId: string) => {
     const style = styles?.find(s => s.id === itemId);
     if (style) {
       setSelectedItemForDrawer({
-        id: style.id,
+        id: style._id,
+        slug: style.id,
         name: style.name,
         type: "Style",
         description: style.description || "",
@@ -66,7 +67,7 @@ export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrde
 
   const handleSetHighlightedItem = (item: ItemDetails) => {
     setHighlightedItem(item);
-    genericSelectorRef.current?.scrollToCenter(item.id);
+    genericSelectorRef.current?.scrollToCenter(item.slug);
   };
 
   // Expose the randomizeStyle function to parent components
@@ -94,9 +95,10 @@ export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrde
       <GenericSelector
         ref={genericSelectorRef}
         items={styles.map(style => ({
-          id: style.id,
+          id: style._id,
+          slug: style.id,
           name: style.name,
-          type: "Style",
+          type: "Style" as const,
           description: style.description || "",
           icon: style.icon as Icon,
           color: style.color

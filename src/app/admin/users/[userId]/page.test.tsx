@@ -77,7 +77,7 @@ describe('UserDetailsPage', () => {
     render(<UserDetailsPage />);
     expect(screen.getByText('Test User')).toBeInTheDocument();
     expect(screen.getByText('test@example.com')).toBeInTheDocument();
-    expect(screen.getByText('user123')).toBeInTheDocument();
+    expect(screen.getByText(/user123/)).toBeInTheDocument();
   });
 
   it('renders tabs and content', async () => {
