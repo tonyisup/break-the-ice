@@ -662,6 +662,7 @@ export const getRandomQuestionsInternal = internalQuery({
 		anchoredToneId: v.optional(v.id("tones")),
 		anchoredTopicId: v.optional(v.id("topics")),
 	},
+	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
 		const {
 			count,
@@ -682,7 +683,6 @@ export const getRandomQuestionsInternal = internalQuery({
 		const applyFilters = (q: any) => {
 			const conditions = [
 				q.neq(q.field("text"), undefined),
-				q.eq(q.field("status"), "public"),
 			];
 			if (organizationId) {
 				conditions.push(q.eq(q.field("organizationId"), organizationId));
@@ -695,28 +695,28 @@ export const getRandomQuestionsInternal = internalQuery({
 		// With ~300-1000 questions this is very efficient; the 1000-row cap
 		// protects against unbounded growth.
 		let candidates: any[] = [];
-		const hasAnchors = anchoredStyleId || anchoredToneId || anchoredTopicId;
+		const hasAnchors = !!(anchoredStyleId || anchoredToneId || anchoredTopicId);
 
 		if (hasAnchors) {
 			// Targeted fetch for anchored attributes to ensure "heavier weight"
 			const anchorMatchPool: any[] = [];
 			if (anchoredStyleId) {
 				const styleMatches = await ctx.db.query("questions")
-					.withIndex("by_style", (q) => q.eq("styleId", anchoredStyleId))
+					.withIndex("by_styleId_status", (q) => q.eq("styleId", anchoredStyleId).eq("status", "public"))
 					.filter(applyFilters)
 					.take(100);
 				anchorMatchPool.push(...styleMatches);
 			}
 			if (anchoredToneId) {
 				const toneMatches = await ctx.db.query("questions")
-					.withIndex("by_tone", (q) => q.eq("toneId", anchoredToneId))
+					.withIndex("by_toneId_status", (q) => q.eq("toneId", anchoredToneId).eq("status", "public"))
 					.filter(applyFilters)
 					.take(100);
 				anchorMatchPool.push(...toneMatches);
 			}
 			if (anchoredTopicId) {
 				const topicMatches = await ctx.db.query("questions")
-					.withIndex("by_topic", (q) => q.eq("topicId", anchoredTopicId))
+					.withIndex("by_topicId_status", (q) => q.eq("topicId", anchoredTopicId).eq("status", "public"))
 					.filter(applyFilters)
 					.take(100);
 				anchorMatchPool.push(...topicMatches);
@@ -747,8 +747,11 @@ export const getRandomQuestionsInternal = internalQuery({
 		// Fill with general public questions
 		const allPublic = await ctx.db
 			.query("questions")
+			.withIndex("by_status", (q) => q.eq("status", "public"))
 			.filter((q) => applyFilters(q))
 			.take(1000);
+
+		const candidateIds = hasAnchors ? new Set(candidates.map(c => c._id)) : null;
 
 		// Post-filter for seen, hidden, styles, and tones
 		const filteredGeneral = allPublic.filter((q) => {
@@ -757,7 +760,7 @@ export const getRandomQuestionsInternal = internalQuery({
 			if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
 			if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
 			// If we already have this in candidates from the anchor pool, skip
-			if (hasAnchors && candidates.some(cq => cq._id === q._id)) return false;
+			if (candidateIds?.has(q._id)) return false;
 			return true;
 		});
 
@@ -780,7 +783,7 @@ export const getRandomQuestionsInternal = internalQuery({
 
 			for (const topicId of takeoverTopicIds) {
 				const topicQs = await ctx.db.query("questions")
-					.withIndex("by_topic", (q) => q.eq("topicId", topicId))
+					.withIndex("by_topicId_status", (q) => q.eq("topicId", topicId).eq("status", "public"))
 					.filter((q) => applyFilters(q))
 					.collect();
 
@@ -822,7 +825,7 @@ export const getRandomQuestionsInternal = internalQuery({
 			const existingIds = new Set(filtered.map(q => q._id));
 			for (const activeTopic of activeTopics) {
 				const topicQuestions = await ctx.db.query("questions")
-					.withIndex("by_topic", (q) => q.eq("topicId", activeTopic._id))
+					.withIndex("by_topicId_status", (q) => q.eq("topicId", activeTopic._id).eq("status", "public"))
 					.filter((q) => applyFilters(q))
 					.take(10); // Take a few to find one that isn't filtered out
 

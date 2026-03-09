@@ -456,7 +456,12 @@ const QuestionContent = ({
         )}
       </div>
       {topic && (
-        <div className="mt-4 flex flex-row gap-2 justify-between items-center cursor-pointer" onClick={onClickTopic}>
+        <button
+          type="button"
+          className="w-full mt-4 flex flex-row gap-2 justify-between items-center cursor-pointer bg-transparent border-none p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
+          onClick={onClickTopic}
+          aria-label={`Topic: ${topic.name}`}
+        >
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Topic: {topic.name}
           </p>
@@ -483,7 +488,7 @@ const QuestionContent = ({
               <IconComponent icon={safeIcon} size={24} color={topic.color} />
             </motion.div>
           </div>
-        </div>
+        </button>
       )}
     </div>
   );

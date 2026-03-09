@@ -34,6 +34,8 @@ export default function InfiniteScrollPage() {
   const generateAIQuestions = useAction(api.core.ai.generateAIQuestionForFeed);
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // IDs from searchParams are intentionally cast to Id<...> without full client-side validation
+  // because the Convex backend validators will enforce correctness and reject invalid IDs.
   const anchoredStyleId = searchParams.get("style") as Id<"styles"> | null;
   const anchoredToneId = searchParams.get("tone") as Id<"tones"> | null;
   const anchoredTopicId = searchParams.get("topic") as Id<"topics"> | null;

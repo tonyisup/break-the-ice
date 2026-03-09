@@ -77,17 +77,27 @@ const AnchorChip = ({
   onClick: () => void;
 }) => (
   <div
-    className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 dark:bg-black/40 border border-white/20 shadow-sm transition-all hover:bg-white/20 cursor-pointer"
+    role="button"
+    tabIndex={0}
+    className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 dark:bg-black/40 border border-white/20 shadow-sm transition-all hover:bg-white/20 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
     onClick={onClick}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onClick();
+      }
+    }}
   >
     <IconComponent icon={icon} size={16} color={color} />
     <span className="text-xs font-bold text-white uppercase tracking-wider">{label}</span>
     <button
+      type="button"
       onClick={(e) => {
         e.stopPropagation();
         onRemove();
       }}
-      className="p-0.5 rounded-full hover:bg-white/20 text-white/60 hover:text-white"
+      className="p-0.5 rounded-full hover:bg-white/20 text-white/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+      aria-label={`Remove ${label} anchor`}
     >
       <X size={14} />
     </button>

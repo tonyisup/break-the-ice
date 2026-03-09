@@ -238,6 +238,7 @@ export const getNextRandomQuestions = action({
 		anchoredToneId: v.optional(v.id("tones")),
 		anchoredTopicId: v.optional(v.id("topics")),
 	},
+	returns: v.array(v.any()),
 	handler: async (ctx, args): Promise<any[]> => {
 		return await getNextRandomQuestionsInternal(ctx, args);
 	},

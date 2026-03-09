@@ -17,8 +17,10 @@ vi.mock('../../../../convex/_generated/api', () => ({
       tones: { getTones: 'getTones' },
       topics: { getTopics: 'getTopics' },
       tags: { getTags: 'getTags' },
-      ai: { generateAIQuestions: 'generateAIQuestions' },
       questions: { saveAIQuestion: 'saveAIQuestion' },
+    },
+    admin: {
+      ai: { generateAIQuestions: 'generateAIQuestions' },
     }
   },
 }));

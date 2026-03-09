@@ -191,7 +191,6 @@ export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorPro
       if (!items || items.length === 0) return;
       const filteredItems = items.filter((item) => item.slug !== selectedItem);
       const randomItem = filteredItems[Math.floor(Math.random() * filteredItems.length)];
-      // onSelectItem(randomItem.slug);
       handleSetRandomItem(randomItem);
     };
 

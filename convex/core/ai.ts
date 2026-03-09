@@ -348,6 +348,7 @@ export const generateAIQuestionForFeed = action({
 		anchoredToneId: v.optional(v.id("tones")),
 		anchoredTopicId: v.optional(v.id("topics")),
 	},
+	returns: v.array(v.nullable(v.any())),
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
 		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
 
