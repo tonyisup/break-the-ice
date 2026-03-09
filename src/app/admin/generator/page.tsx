@@ -99,8 +99,8 @@ export default function GeneratorPage() {
     }
 
     const handleGenerate = async () => {
-        if (selectedTags.length === 0) {
-            toast.error("Please select at least one tag")
+        if (selectedTags.length === 0 && !selectedTopicId) {
+            toast.error("Please select at least one tag or a topic")
             return
         }
 
@@ -455,11 +455,11 @@ export default function GeneratorPage() {
                                     </div>
                                     <div className="space-y-2">
                                         <p className="font-medium text-foreground">Ready to Generate</p>
-                                        <p className="text-sm">Select your preferences and tags, then click generate to create a new question.</p>
+                                        <p className="text-sm">Select your preferences, topic, or tags, then click generate to create a new question.</p>
                                     </div>
                                     <Button
                                         onClick={handleGenerate}
-                                        disabled={isGenerating || selectedTags.length === 0}
+                                        disabled={isGenerating || (selectedTags.length === 0 && !selectedTopicId)}
                                         className="w-full mt-4"
                                     >
                                         {isGenerating ? (
