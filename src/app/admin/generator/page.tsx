@@ -99,11 +99,6 @@ export default function GeneratorPage() {
     }
 
     const handleGenerate = async () => {
-        if (selectedTags.length === 0 && !selectedTopicId) {
-            toast.error("Please select at least one tag or a topic")
-            return
-        }
-
         setIsGenerating(true)
         try {
             if (!selectedStyleId || !selectedToneId) {
@@ -459,7 +454,7 @@ export default function GeneratorPage() {
                                     </div>
                                     <Button
                                         onClick={handleGenerate}
-                                        disabled={isGenerating || (selectedTags.length === 0 && !selectedTopicId)}
+                                        disabled={isGenerating || !selectedStyleId || !selectedToneId}
                                         className="w-full mt-4"
                                     >
                                         {isGenerating ? (
