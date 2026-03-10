@@ -454,7 +454,7 @@ export default function GeneratorPage() {
                                     </div>
                                     <Button
                                         onClick={handleGenerate}
-                                        disabled={isGenerating}
+                                        disabled={isGenerating || !selectedStyleId || !selectedToneId}
                                         className="w-full mt-4"
                                     >
                                         {isGenerating ? (
