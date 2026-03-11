@@ -35,6 +35,8 @@ interface ModernQuestionCardProps {
   anchoredStyleId?: Id<"styles"> | null;
   anchoredToneId?: Id<"tones"> | null;
   anchoredTopicId?: Id<"topics"> | null;
+  /** When provided, used for the question image and getQuestionImageUrl is not called. */
+  imageUrl?: string | null;
 }
 
 export function ModernQuestionCard({
@@ -60,6 +62,7 @@ export function ModernQuestionCard({
   anchoredStyleId,
   anchoredToneId,
   anchoredTopicId,
+  imageUrl,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -203,6 +206,7 @@ export function ModernQuestionCard({
                 containerRef={cardRef}
                 onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
                 topic={topic}
+                imageUrl={imageUrl}
               />
               <ItemDetailDrawer
                 item={selectedItemForDrawer}
@@ -272,6 +276,8 @@ interface QuestionContentProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   onRemix?: () => void;
   topic?: any;
+  /** When provided, used for the question image and getQuestionImageUrl is not called. */
+  imageUrl?: string | null;
 }
 
 const QuestionContent = ({
@@ -290,7 +296,8 @@ const QuestionContent = ({
   onClickTopic,
   containerRef,
   onRemix,
-  topic: providedTopic
+  topic: providedTopic,
+  imageUrl,
 }: QuestionContentProps) => {
   const { scrollYProgress } = useScroll({ target: containerRef });
   const scrollVelocity = useVelocity(scrollYProgress);
@@ -314,7 +321,12 @@ const QuestionContent = ({
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
-  const fetchedTopic = useQuery(api.core.topics.getTopicById, (!providedTopic && question.topicId) ? { id: question.topicId } : "skip")
+  const fetchedTopic = useQuery(api.core.topics.getTopicById, (!providedTopic && question?.topicId) ? { id: question.topicId } : "skip");
+  const questionImageUrlFromQuery = useQuery(
+    api.core.questions.getQuestionImageUrl,
+    (imageUrl === undefined || imageUrl === null) && question?._id && question?.imageStorageId ? { questionId: question._id } : "skip"
+  );
+  const questionImageUrl = imageUrl ?? questionImageUrlFromQuery ?? null;
   const topic = providedTopic || fetchedTopic;
   const safeIcon = (topic?.icon ? topic.icon : "CircleHelp") as Icon;
 
@@ -393,9 +405,14 @@ const QuestionContent = ({
         </div>
       </div>
 
+      {/* Question Image */}
+      {questionImageUrl && (<div className="w-full h-full flex items-center justify-center min-h-[120px]">
+        <img src={questionImageUrl} alt="Question" className="max-w-full max-h-full object-contain mt-8" />
+      </div>)}
+
       {/* Question Text */}
       <div className="py-8 flex-1 flex items-center justify-center text-center">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white leading-relaxed">
+        <h2 className={cn(questionImageUrl ? "text-xl" : "text-2xl","font-bold text-gray-900 dark:text-white leading-relaxed")}>
           {question.text ?? question.customText}
         </h2>
       </div>

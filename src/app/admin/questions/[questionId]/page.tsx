@@ -194,7 +194,9 @@ export default function QuestionDetailsPage() {
 	const topics = useQuery(api.admin.topics.getTopics)
 
 	const updateQuestion = useMutation(api.admin.questions.updateQuestion)
+	const deleteStorageId = useMutation(api.admin.questions.deleteStorageId)
 	const remixQuestion = useAction(api.admin.questions.remixQuestion)
+	const generateUploadUrl = useMutation(api.admin.questions.generateUploadUrl)
 
 	// ── Editing State ──
 	const [editText, setEditText] = useState("")
@@ -207,7 +209,9 @@ export default function QuestionDetailsPage() {
 
 	const [saving, setSaving] = useState(false)
 	const [remixing, setRemixing] = useState(false)
+	const [uploadingImage, setUploadingImage] = useState(false)
 	const [hasChanges, setHasChanges] = useState(false)
+	const imageInputRef = useRef<HTMLInputElement>(null)
 
 	const hasInitialized = useRef(false)
 
@@ -318,6 +322,56 @@ export default function QuestionDetailsPage() {
 			.map(t => t.trim())
 			.filter(t => t !== tag)
 		setEditTags(current.join(", "))
+	}
+
+	const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		if (!question) return
+		const file = e.target.files?.[0]
+		if (!file || !file.type.startsWith("image/")) {
+			toast.error("Please select an image file")
+			return
+		}
+		setUploadingImage(true)
+		let storageId: Id<"_storage"> | null = null
+		try {
+			const postUrl = await generateUploadUrl()
+			const result = await fetch(postUrl, {
+				method: "POST",
+				headers: { "Content-Type": file.type },
+				body: file,
+			})
+			if (!result.ok) throw new Error("Upload failed")
+			const body = await result.json()
+			storageId = body.storageId ?? null
+			if (!storageId) throw new Error("No storageId returned")
+			await updateQuestion({ id: question._id, imageStorageId: storageId })
+			toast.success("Question image updated")
+			imageInputRef.current?.form?.reset()
+		} catch (error) {
+			toast.error("Failed to upload image")
+			if (storageId) {
+				try {
+					await deleteStorageId({ storageId })
+				} catch {
+					// best-effort cleanup; ignore
+				}
+			}
+		} finally {
+			setUploadingImage(false)
+		}
+	}
+
+	const handleClearImage = async () => {
+		if (!question) return
+		setUploadingImage(true)
+		try {
+			await updateQuestion({ id: question._id, imageStorageId: null })
+			toast.success("Question image removed")
+		} catch (error) {
+			toast.error("Failed to remove image")
+		} finally {
+			setUploadingImage(false)
+		}
 	}
 
 	// ── Loading / Not Found ──
@@ -460,6 +514,70 @@ export default function QuestionDetailsPage() {
 						<p className="text-xs text-muted-foreground">
 							{editText.length} characters · Created {new Date(question._creationTime).toLocaleDateString()}
 						</p>
+					</div>
+
+					{/* Question Image */}
+					<div className="rounded-xl border bg-card p-6 space-y-4">
+						<h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+							<Image className="size-4 text-muted-foreground" />
+							Question Image
+						</h3>
+						{(question as { imageUrl?: string | null }).imageUrl ? (
+							<div className="space-y-3">
+								<div className="relative rounded-lg overflow-hidden border bg-muted/50 max-w-sm aspect-video flex items-center justify-center">
+									<img
+										src={(question as { imageUrl?: string | null }).imageUrl!}
+										alt="Question"
+										className="max-w-full max-h-full object-contain"
+									/>
+								</div>
+								<div className="flex gap-2">
+									<label className={cn(
+										"inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 cursor-pointer disabled:opacity-50",
+										uploadingImage && "opacity-50 pointer-events-none"
+									)}>
+										<input
+											ref={imageInputRef}
+											type="file"
+											accept="image/*"
+											className="sr-only"
+											onChange={handleUploadImage}
+											disabled={uploadingImage}
+										/>
+										{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
+										Replace image
+									</label>
+									<Button
+										variant="outline"
+										size="sm"
+										className="gap-2 text-destructive hover:text-destructive"
+										onClick={handleClearImage}
+										disabled={uploadingImage}
+									>
+										Remove image
+									</Button>
+								</div>
+							</div>
+						) : (
+							<div className="flex flex-col sm:flex-row items-start gap-3">
+								<label className={cn(
+									"inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 cursor-pointer disabled:opacity-50",
+									uploadingImage && "opacity-50 pointer-events-none"
+								)}>
+									<input
+										ref={imageInputRef}
+										type="file"
+										accept="image/*"
+										className="sr-only"
+										onChange={handleUploadImage}
+										disabled={uploadingImage}
+									/>
+									{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
+									Upload image
+								</label>
+								<p className="text-xs text-muted-foreground">Optional. Shown on the question card and OG share image.</p>
+							</div>
+						)}
 					</div>
 
 					{/* Classification Grid */}

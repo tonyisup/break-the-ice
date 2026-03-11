@@ -99,6 +99,7 @@ export default defineSchema({
       v.literal("available"),   // Ready for assignment to users
       v.literal("distributed")  // Already assigned to users
     )),
+    imageStorageId: v.optional(v.id("_storage")),
   })
     .index("by_last_posted_at", ["lastPostedAt"])
     .index("by_status_and_last_posted", ["status", "lastPostedAt"])

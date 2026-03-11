@@ -597,6 +597,21 @@ export const getQuestion = query({
 	},
 });
 
+function isQuestionPublic(status: string | undefined): boolean {
+	return status === "public" || status === "approved" || status === undefined;
+}
+
+export const getQuestionImageUrl = query({
+	args: { questionId: v.id("questions") },
+	returns: v.union(v.string(), v.null()),
+	handler: async (ctx, args) => {
+		const question = await ctx.db.get(args.questionId);
+		if (!question?.imageStorageId) return null;
+		if (!isQuestionPublic(question.status)) return null;
+		return await ctx.storage.getUrl(question.imageStorageId);
+	},
+});
+
 export const getQuestionForOgImage = query({
 	args: {
 		id: v.string(),
@@ -612,6 +627,7 @@ export const getQuestionForOgImage = query({
 			toneIcon: v.string(),
 			gradientStart: v.string(),
 			gradientEnd: v.string(),
+			imageUrl: v.optional(v.string()),
 		}),
 		v.null()
 	),
@@ -637,6 +653,11 @@ export const getQuestionForOgImage = query({
 			toneDoc = await ctx.db.query("tones").withIndex("by_my_id", (q) => q.eq("id", question.tone!)).unique();
 		}
 
+		const imageUrl =
+			question.imageStorageId && isQuestionPublic(question.status)
+				? await ctx.storage.getUrl(question.imageStorageId)
+				: undefined;
+
 		return {
 			text: question.text || question.customText,
 			styleName: styleDoc?.name || "General",
@@ -647,6 +668,7 @@ export const getQuestionForOgImage = query({
 			toneIcon: toneDoc?.icon || "CircleQuestionMark",
 			gradientStart: styleDoc?.color || "#f0f0f0",
 			gradientEnd: toneDoc?.color || "#d0d0d0",
+			imageUrl: imageUrl ?? undefined,
 		};
 	},
 });
