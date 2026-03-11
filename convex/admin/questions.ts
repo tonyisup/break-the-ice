@@ -79,6 +79,15 @@ export const createQuestion = mutation({
 	},
 });
 
+export const generateUploadUrl = mutation({
+	args: {},
+	returns: v.string(),
+	handler: async (ctx) => {
+		await ensureAdmin(ctx);
+		return await ctx.storage.generateUploadUrl();
+	},
+});
+
 export const updateQuestion = mutation({
 	args: {
 		id: v.id("questions"),
@@ -98,11 +107,12 @@ export const updateQuestion = mutation({
 			v.literal("pruning"),
 			v.literal("pruned")
 		)),
+		imageStorageId: v.optional(v.union(v.id("_storage"), v.null())),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
-		const { id, text, tags, style, tone, status, styleId, toneId, topic, topicId } = args;
+		const { id, text, tags, style, tone, status, styleId, toneId, topic, topicId, imageStorageId } = args;
 
 		const updateData: any = {};
 
@@ -154,6 +164,14 @@ export const updateQuestion = mutation({
 			updateData.status = status;
 		}
 
+		if (imageStorageId !== undefined) {
+			const existing = await ctx.db.get(id);
+			if (existing?.imageStorageId && imageStorageId !== existing.imageStorageId) {
+				await ctx.storage.delete(existing.imageStorageId);
+			}
+			updateData.imageStorageId = imageStorageId === null ? undefined : imageStorageId;
+		}
+
 		await ctx.db.patch(id, updateData);
 		if (
 			status !== undefined ||
@@ -177,10 +195,11 @@ export const getQuestionById = query({
 		const question = await ctx.db.get(args.id);
 		if (!question) return null;
 
-		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
+		const [styleDoc, toneDoc, topicDoc, imageUrl] = await Promise.all([
 			question.styleId ? ctx.db.get(question.styleId) : null,
 			question.toneId ? ctx.db.get(question.toneId) : null,
 			question.topicId ? ctx.db.get(question.topicId) : null,
+			question.imageStorageId ? ctx.storage.getUrl(question.imageStorageId) : null,
 		]);
 
 		return {
@@ -188,6 +207,7 @@ export const getQuestionById = query({
 			_style: styleDoc ? { _id: styleDoc._id, id: styleDoc.id, name: styleDoc.name, icon: styleDoc.icon, color: styleDoc.color } : null,
 			_tone: toneDoc ? { _id: toneDoc._id, id: toneDoc.id, name: toneDoc.name, icon: toneDoc.icon, color: toneDoc.color } : null,
 			_topic: topicDoc ? { _id: topicDoc._id, id: topicDoc.id, name: topicDoc.name, description: topicDoc.description } : null,
+			imageUrl: imageUrl ?? null,
 		};
 	},
 });

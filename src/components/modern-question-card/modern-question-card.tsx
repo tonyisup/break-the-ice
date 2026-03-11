@@ -314,7 +314,11 @@ const QuestionContent = ({
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
-  const fetchedTopic = useQuery(api.core.topics.getTopicById, (!providedTopic && question.topicId) ? { id: question.topicId } : "skip")
+  const fetchedTopic = useQuery(api.core.topics.getTopicById, (!providedTopic && question?.topicId) ? { id: question.topicId } : "skip");
+  const questionImageUrl = useQuery(
+    api.core.questions.getQuestionImageUrl,
+    question?._id && question?.imageStorageId ? { questionId: question._id } : "skip"
+  );
   const topic = providedTopic || fetchedTopic;
   const safeIcon = (topic?.icon ? topic.icon : "CircleHelp") as Icon;
 
@@ -393,9 +397,14 @@ const QuestionContent = ({
         </div>
       </div>
 
+      {/* Question Image */}
+      {questionImageUrl && (<div className="w-full h-full flex items-center justify-center min-h-[120px]">
+        <img src={questionImageUrl} alt="Question" className="max-w-full max-h-full object-contain mt-8" />
+      </div>)}
+
       {/* Question Text */}
       <div className="py-8 flex-1 flex items-center justify-center text-center">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white leading-relaxed">
+        <h2 className={cn(questionImageUrl ? "text-xl" : "text-2xl","font-bold text-gray-900 dark:text-white leading-relaxed")}>
           {question.text ?? question.customText}
         </h2>
       </div>

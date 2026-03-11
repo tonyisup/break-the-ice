@@ -44,7 +44,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       toneColor,
       toneIcon,
       gradientStart,
-      gradientEnd
+      gradientEnd,
+      imageUrl,
     } = questionInfo;
 
     // Look up raw SVG path data for icons (lucide-react components use forwardRef
@@ -227,6 +228,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 )
               )
             ),
+
+            // Question Image (when present)
+            ...(imageUrl
+              ? [
+                  React.createElement('div', {
+                    key: 'question-image',
+                    style: {
+                      display: 'flex',
+                      flex: 1,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minHeight: 200,
+                      maxHeight: 400,
+                      width: '100%',
+                    },
+                  }, React.createElement('img', {
+                    src: imageUrl,
+                    alt: '',
+                    style: {
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      objectFit: 'contain',
+                    },
+                  })),
+                ]
+              : []),
+
             // Main Text
             React.createElement(
               'div',
