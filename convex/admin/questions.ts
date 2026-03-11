@@ -83,8 +83,29 @@ export const generateUploadUrl = mutation({
 	args: {},
 	returns: v.string(),
 	handler: async (ctx) => {
-		await ensureAdmin(ctx);
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity?.email) {
+			throw new Error("Not authenticated");
+		}
+		const user = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", identity.email!))
+			.unique();
+		if (!user?.isAdmin) {
+			throw new Error("Not an admin");
+		}
 		return await ctx.storage.generateUploadUrl();
+	},
+});
+
+/** Admin-only: delete an orphaned storage blob (e.g. after failed updateQuestion). */
+export const deleteStorageId = mutation({
+	args: { storageId: v.id("_storage") },
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
+		await ctx.storage.delete(args.storageId);
+		return null;
 	},
 });
 

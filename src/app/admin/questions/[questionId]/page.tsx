@@ -194,6 +194,7 @@ export default function QuestionDetailsPage() {
 	const topics = useQuery(api.admin.topics.getTopics)
 
 	const updateQuestion = useMutation(api.admin.questions.updateQuestion)
+	const deleteStorageId = useMutation(api.admin.questions.deleteStorageId)
 	const remixQuestion = useAction(api.admin.questions.remixQuestion)
 	const generateUploadUrl = useMutation(api.admin.questions.generateUploadUrl)
 
@@ -331,6 +332,7 @@ export default function QuestionDetailsPage() {
 			return
 		}
 		setUploadingImage(true)
+		let storageId: Id<"_storage"> | null = null
 		try {
 			const postUrl = await generateUploadUrl()
 			const result = await fetch(postUrl, {
@@ -339,12 +341,21 @@ export default function QuestionDetailsPage() {
 				body: file,
 			})
 			if (!result.ok) throw new Error("Upload failed")
-			const { storageId } = await result.json()
+			const body = await result.json()
+			storageId = body.storageId ?? null
+			if (!storageId) throw new Error("No storageId returned")
 			await updateQuestion({ id: question._id, imageStorageId: storageId })
 			toast.success("Question image updated")
 			imageInputRef.current?.form?.reset()
 		} catch (error) {
 			toast.error("Failed to upload image")
+			if (storageId) {
+				try {
+					await deleteStorageId({ storageId })
+				} catch {
+					// best-effort cleanup; ignore
+				}
+			}
 		} finally {
 			setUploadingImage(false)
 		}
@@ -507,10 +518,10 @@ export default function QuestionDetailsPage() {
 
 					{/* Question Image */}
 					<div className="rounded-xl border bg-card p-6 space-y-4">
-						<label className="text-sm font-semibold text-foreground flex items-center gap-2">
+						<h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
 							<Image className="size-4 text-muted-foreground" />
 							Question Image
-						</label>
+						</h3>
 						{(question as { imageUrl?: string | null }).imageUrl ? (
 							<div className="space-y-3">
 								<div className="relative rounded-lg overflow-hidden border bg-muted/50 max-w-sm aspect-video flex items-center justify-center">

@@ -597,12 +597,17 @@ export const getQuestion = query({
 	},
 });
 
+function isQuestionPublic(status: string | undefined): boolean {
+	return status === "public" || status === "approved" || status === undefined;
+}
+
 export const getQuestionImageUrl = query({
 	args: { questionId: v.id("questions") },
 	returns: v.union(v.string(), v.null()),
 	handler: async (ctx, args) => {
 		const question = await ctx.db.get(args.questionId);
 		if (!question?.imageStorageId) return null;
+		if (!isQuestionPublic(question.status)) return null;
 		return await ctx.storage.getUrl(question.imageStorageId);
 	},
 });
@@ -648,9 +653,10 @@ export const getQuestionForOgImage = query({
 			toneDoc = await ctx.db.query("tones").withIndex("by_my_id", (q) => q.eq("id", question.tone!)).unique();
 		}
 
-		const imageUrl = question.imageStorageId
-			? await ctx.storage.getUrl(question.imageStorageId)
-			: undefined;
+		const imageUrl =
+			question.imageStorageId && isQuestionPublic(question.status)
+				? await ctx.storage.getUrl(question.imageStorageId)
+				: undefined;
 
 		return {
 			text: question.text || question.customText,
