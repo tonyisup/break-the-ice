@@ -12,9 +12,15 @@ import {
 export const GENERATION_MODEL = "@preset/break-the-ice-berg-default";
 export const GENERATION_PROVIDER = "openrouter";
 
+const OPEN_ROUTER_API_KEY = process.env.OPEN_ROUTER_API_KEY?.trim();
+
+if (!OPEN_ROUTER_API_KEY) {
+  throw new Error("OPEN_ROUTER_API_KEY is required for OpenAI/OpenRouter client");
+}
+
 export const openRouterClient = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPEN_ROUTER_API_KEY,
+  apiKey: OPEN_ROUTER_API_KEY,
   timeout: 30000,
   defaultHeaders: {
     "HTTP-Referer": "https://breaktheiceberg.com",
@@ -24,18 +30,47 @@ export const openRouterClient = new OpenAI({
 
 type GenerationPurpose = "feed" | "admin_preview" | "admin_accept" | "nightly_pool" | "newsletter" | "remix";
 
+type GenerationPrompt = {
+  batchSize: number;
+  systemPrompt: string;
+  userPrompt: string;
+  blueprint: {
+    _id: Id<"promptBlueprints">;
+    slug: string;
+    version: number;
+  };
+  style: {
+    _id: Id<"styles">;
+    slug: string;
+    version: number;
+    name: string;
+  };
+  tone: {
+    _id: Id<"tones">;
+    slug: string;
+    version: number;
+    name: string;
+  };
+  topic: {
+    _id: Id<"topics">;
+    slug: string;
+    version: number;
+    name: string;
+  } | null;
+};
+
 async function createRun(
   ctx: ActionCtx,
   args: {
     purpose: GenerationPurpose;
     requestedByUserId?: string;
-    prompt: Awaited<ReturnType<ActionCtx["runQuery"]>>;
+    prompt: GenerationPrompt;
     model: string;
     temperature: number;
     sourceQuestionId?: Id<"questions">;
   },
 ): Promise<Id<"generationRuns">> {
-  const prompt = args.prompt as any;
+  const { prompt } = args;
   return await ctx.runMutation(internal.internal.generation.createGenerationRun, {
     purpose: args.purpose,
     requestedByUserId: args.requestedByUserId,
@@ -80,7 +115,7 @@ export async function runPersistedQuestionGeneration(
   },
 ): Promise<{
   runId: Id<"generationRuns">;
-  prompt: any;
+  prompt: GenerationPrompt;
   rawResponse: string;
   saveResult: {
     insertedQuestionIds: Id<"questions">[];
@@ -141,7 +176,7 @@ export async function runPersistedQuestionGeneration(
       toneVersion: prompt.tone.version,
       topicVersion: prompt.topic?.version,
       candidates: parsedQuestions,
-      status: args.purpose === "nightly_pool" ? "public" : "public",
+      status: "public",
       poolDate: args.poolDate,
       poolStatus: args.poolStatus,
     });
@@ -191,7 +226,7 @@ export async function runPreviewQuestionGeneration(
   },
 ): Promise<{
   runId: Id<"generationRuns">;
-  prompt: any;
+  prompt: GenerationPrompt;
   rawResponse: string;
   previewText: string;
 }> {

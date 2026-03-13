@@ -1,4 +1,4 @@
-import { internalMutation, mutation, MutationCtx } from "./_generated/server";
+import { internalMutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import {
   defaultIdealPromptLength,
@@ -6,7 +6,7 @@ import {
   defaultToneAxesValue,
 } from "./lib/taxonomy";
 
-export const seedTakeover = mutation({
+export const seedTakeover = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();

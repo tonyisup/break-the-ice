@@ -1,7 +1,10 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { Doc } from "../_generated/dataModel";
 import { defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
+
+const TONE_BACKFILL_BATCH_SIZE = 100;
 
 const toneFields = v.object({
   _id: v.id("tones"),
@@ -43,7 +46,7 @@ const toneFields = v.object({
   }),
 });
 
-function mapTone(tone: any) {
+function mapTone(tone: Doc<"tones">) {
   const slug = tone.slug ?? tone.id;
   const promptGuidanceForAI = tone.promptGuidanceForAI ?? tone.aiGuidance ?? "";
   return {
@@ -109,7 +112,15 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
-    const questions = await ctx.db.query("questions").collect();
+    const questions = await ctx.db
+      .query("questions")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("toneId"), undefined),
+          q.neq(q.field("tone"), undefined),
+        ),
+      )
+      .take(TONE_BACKFILL_BATCH_SIZE);
     for (const question of questions) {
       if (!question.toneId && question.tone) {
         const tone = await ctx.db
@@ -123,6 +134,14 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
           });
         }
       }
+    }
+
+    if (questions.length === TONE_BACKFILL_BATCH_SIZE) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.internal.tones.updateQuestionsWithMissingToneIds,
+        {},
+      );
     }
     return null;
   },

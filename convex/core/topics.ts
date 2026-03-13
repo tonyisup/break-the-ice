@@ -1,7 +1,10 @@
 import { v } from "convex/values";
-import { query } from "../_generated/server";
+import { query, QueryCtx } from "../_generated/server";
+import { Doc, Id } from "../_generated/dataModel";
 import { defaultQualityRubric, latestActiveVersion } from "../lib/taxonomy";
 import { getActiveTakeoverTopicsHelper } from "../lib/takeover";
+
+const DEFAULT_TOPIC_LIMIT = 500;
 
 const publicTopicFields = {
   _id: v.id("topics"),
@@ -41,7 +44,7 @@ const publicTopicFields = {
   accessibilityNotes: v.optional(v.string()),
 };
 
-function mapTopic(topic: any) {
+function mapTopic(topic: Doc<"topics">) {
   const slug = topic.slug ?? topic.id;
   const promptGuidanceForAI = topic.promptGuidanceForAI ?? topic.aiGuidance ?? "";
   return {
@@ -75,22 +78,24 @@ function mapTopic(topic: any) {
   };
 }
 
-async function getLatestActiveTopicBySlug(ctx: any, slug: string) {
+async function getLatestActiveTopicBySlug(ctx: QueryCtx, slug: string) {
   const topics = await ctx.db
     .query("topics")
-    .withIndex("by_slug", (q: any) => q.eq("slug", slug))
+    .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
   return latestActiveVersion(topics);
 }
 
-async function getActiveTopics(ctx: any, organizationId?: string) {
-  const topics = await ctx.db.query("topics").collect();
-  const filtered = organizationId
-    ? topics.filter((topic: any) => topic.organizationId === organizationId)
-    : topics;
+async function getActiveTopics(ctx: QueryCtx, organizationId?: Id<"organizations">) {
+  const topics = organizationId
+    ? await ctx.db
+        .query("topics")
+        .filter((q) => q.eq(q.field("organizationId"), organizationId))
+        .take(DEFAULT_TOPIC_LIMIT)
+    : await ctx.db.query("topics").take(DEFAULT_TOPIC_LIMIT);
 
-  const bySlug = new Map<string, any[]>();
-  for (const topic of filtered) {
+  const bySlug = new Map<string, Doc<"topics">[]>();
+  for (const topic of topics) {
     const slug = topic.slug ?? topic.id;
     if (!bySlug.has(slug)) bySlug.set(slug, []);
     bySlug.get(slug)!.push(topic);
@@ -98,7 +103,7 @@ async function getActiveTopics(ctx: any, organizationId?: string) {
 
   return Array.from(bySlug.values())
     .map((docs) => latestActiveVersion(docs))
-    .filter(Boolean)
+    .filter((topic): topic is Doc<"topics"> => topic !== null)
     .map((topic) => mapTopic(topic))
     .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
 }
@@ -129,7 +134,9 @@ export const getActiveTakeoverTopics = query({
   returns: v.array(v.object(publicTopicFields)),
   handler: async (ctx) => {
     const topics = await getActiveTakeoverTopicsHelper(ctx);
-    return topics.map(mapTopic);
+    return topics
+      .filter((topic): topic is Doc<"topics"> => topic !== null)
+      .map(mapTopic);
   },
 });
 

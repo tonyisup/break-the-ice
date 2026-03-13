@@ -34,7 +34,7 @@ export default function GeneratorPage() {
     const tones = useQuery(api.core.tones.getTones, {})
     const topics = useQuery(api.core.topics.getTopics, {})
     const tags = useQuery(api.core.tags.getTags)
-    const promptBlueprints = useQuery(api.admin.promptBlueprints.listBlueprints)
+    const promptBlueprints = useQuery(api.admin.promptBlueprints.listBlueprints, { limit: 50 })
 
     const generateAIQuestions = useAction(api.admin.ai.generateAIQuestions)
     const saveAIQuestion = useMutation(api.core.questions.saveAIQuestion)
@@ -114,7 +114,6 @@ export default function GeneratorPage() {
             }
 
             const generatedQuestion = await generateAIQuestions({
-                count: 1,
                 selectedTags,
                 excludedQuestions: generatedQuestions.length > 0 ? generatedQuestions.map(question => question.text) : undefined,
                 styleId: selectedStyleId,
@@ -299,13 +298,15 @@ export default function GeneratorPage() {
                             <CardDescription>Select the active prompt architecture used for preview generation.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="flex flex-wrap gap-2">
-                                {promptBlueprints.map(blueprint => (
-                                    <div
+                                <div className="flex flex-wrap gap-2">
+                                    {promptBlueprints.map(blueprint => (
+                                    <button
                                         key={blueprint._id}
+                                        type="button"
                                         onClick={() => setSelectedBlueprintSlug(blueprint.slug)}
+                                        aria-pressed={selectedBlueprintSlug === blueprint.slug}
                                         className={`
-                                            cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
+                                            px-3 py-1.5 rounded-full text-sm font-medium border transition-all
                                             ${selectedBlueprintSlug === blueprint.slug
                                                 ? "bg-primary text-primary-foreground border-primary"
                                                 : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
@@ -313,7 +314,7 @@ export default function GeneratorPage() {
                                     >
                                         {blueprint.slug} v{blueprint.version}
                                         <span className="ml-2 text-xs opacity-70">{blueprint.status}</span>
-                                    </div>
+                                    </button>
                                 ))}
                             </div>
                         </CardContent>

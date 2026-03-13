@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { api, internal } from "../_generated/api";
-import { internalMutation, internalQuery } from "../_generated/server";
-import { Id } from "../_generated/dataModel";
+import { internalMutation, internalQuery, QueryCtx } from "../_generated/server";
+import { Doc, Id } from "../_generated/dataModel";
 import {
   DEFAULT_BLUEPRINT_SLUG,
   buildGenerationPrompts,
@@ -12,13 +12,33 @@ import {
 } from "../lib/promptArchitecture";
 
 async function getLatestActiveBySlug(
-  ctx: any,
+  ctx: QueryCtx,
+  table: "styles",
+  slug: string,
+): Promise<Doc<"styles">>;
+async function getLatestActiveBySlug(
+  ctx: QueryCtx,
+  table: "tones",
+  slug: string,
+): Promise<Doc<"tones">>;
+async function getLatestActiveBySlug(
+  ctx: QueryCtx,
+  table: "topics",
+  slug: string,
+): Promise<Doc<"topics">>;
+async function getLatestActiveBySlug(
+  ctx: QueryCtx,
+  table: "promptBlueprints",
+  slug: string,
+): Promise<Doc<"promptBlueprints">>;
+async function getLatestActiveBySlug(
+  ctx: QueryCtx,
   table: "styles" | "tones" | "topics" | "promptBlueprints",
   slug: string,
 ) {
   const docs = await ctx.db
     .query(table)
-    .withIndex("by_slug", (q: any) => q.eq("slug", slug))
+    .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
 
   const latest = docs
@@ -33,21 +53,36 @@ async function getLatestActiveBySlug(
 }
 
 async function getTaxonomyDoc(
-  ctx: any,
+  ctx: QueryCtx,
+  table: "styles",
+  args: { id?: Id<"styles">; slug?: string } | undefined,
+): Promise<Doc<"styles"> | null>;
+async function getTaxonomyDoc(
+  ctx: QueryCtx,
+  table: "tones",
+  args: { id?: Id<"tones">; slug?: string } | undefined,
+): Promise<Doc<"tones"> | null>;
+async function getTaxonomyDoc(
+  ctx: QueryCtx,
+  table: "topics",
+  args: { id?: Id<"topics">; slug?: string } | undefined,
+): Promise<Doc<"topics"> | null>;
+async function getTaxonomyDoc(
+  ctx: QueryCtx,
   table: "styles" | "tones" | "topics",
-  args: { id?: string; slug?: string } | undefined,
+  args: { id?: Id<"styles"> | Id<"tones"> | Id<"topics">; slug?: string } | undefined,
 ) {
   if (!args?.id && !args?.slug) {
     return null;
   }
 
   if (args?.id) {
-    const doc = await ctx.db.get(args.id);
+    const doc = await ctx.db.get(args.id as any);
     if (doc) return doc;
   }
 
   if (args?.slug) {
-    return await getLatestActiveBySlug(ctx, table, args.slug);
+    return await getLatestActiveBySlug(ctx, table as any, args.slug);
   }
 
   return null;
@@ -292,9 +327,12 @@ export const markAcceptedGenerationRun = internalMutation({
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId);
     if (!run) return null;
-    const resultQuestionIds = run.resultQuestionIds.includes(args.questionId)
+    const safeResultQuestionIds = Array.isArray(run.resultQuestionIds)
       ? run.resultQuestionIds
-      : [...run.resultQuestionIds, args.questionId];
+      : [];
+    const resultQuestionIds = safeResultQuestionIds.includes(args.questionId)
+      ? safeResultQuestionIds
+      : [...safeResultQuestionIds, args.questionId];
     await ctx.db.patch(args.runId, {
       acceptedQuestionId: args.questionId,
       resultQuestionIds,

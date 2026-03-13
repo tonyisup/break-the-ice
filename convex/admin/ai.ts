@@ -22,7 +22,6 @@ export const startDuplicateDetection = action({
 
 export const generateAIQuestions = action({
 	args: {
-		count: v.number(),
 		selectedTags: v.array(v.string()),
 		currentQuestion: v.optional(v.string()),
 		excludedQuestions: v.optional(v.array(v.string())),
@@ -53,7 +52,7 @@ export const generateAIQuestions = action({
 			userContext: args.selectedTags.length > 0 ? `Preferred tags: ${args.selectedTags.join(", ")}` : undefined,
 		});
 
-		if (!preview.previewText) {
+		if (!preview.previewText.trim()) {
 			throw new Error("No preview question generated");
 		}
 

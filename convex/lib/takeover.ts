@@ -23,6 +23,5 @@ export async function getActiveTakeoverTopicsHelper(ctx: QueryCtx) {
 
   return Array.from(grouped.values())
     .map((docs) => latestActiveVersion(docs))
-    .filter(Boolean)
-    .filter((topic) => (topic!.status ?? "active") === "active");
+    .filter(Boolean);
 }

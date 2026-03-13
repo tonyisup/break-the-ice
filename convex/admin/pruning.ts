@@ -140,7 +140,7 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 				const style = styleMap.get(question.styleId)!;
 				const styleEmbedding = styleEmbeddingMap.get(question.styleId);
 				if (styleEmbedding) {
-					const sim = cosineSimilarity(questionEmbedding as number[], styleEmbedding as number[]);
+					const sim = cosineSimilarity(questionEmbedding, styleEmbedding);
 					metrics.styleSimilarity = sim;
 					if (sim < s.minStyleSimilarity) {
 						reasons.push(`Style mismatch: ${sim.toFixed(2)} similarity to "${style.name}"`);
@@ -151,7 +151,7 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 				const tone = toneMap.get(question.toneId)!;
 				const toneEmbedding = toneEmbeddingMap.get(question.toneId);
 				if (toneEmbedding) {
-					const sim = cosineSimilarity(questionEmbedding as number[], toneEmbedding as number[]);
+					const sim = cosineSimilarity(questionEmbedding, toneEmbedding);
 					metrics.toneSimilarity = sim;
 					if (sim < s.minToneSimilarity) {
 						reasons.push(`Tone mismatch: ${sim.toFixed(2)} similarity to "${tone.name}"`);

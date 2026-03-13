@@ -1,6 +1,9 @@
 import { v } from "convex/values";
-import { query } from "../_generated/server";
+import { query, QueryCtx } from "../_generated/server";
+import { Doc, Id } from "../_generated/dataModel";
 import { defaultIdealPromptLength, defaultQualityRubric, latestActiveVersion } from "../lib/taxonomy";
+
+const STYLE_EXAMPLE_LIMIT = 50;
 
 const publicStyleFields = {
   _id: v.id("styles"),
@@ -77,22 +80,22 @@ function mapStyle(style: any) {
   };
 }
 
-async function getLatestActiveStyleBySlug(ctx: any, slug: string) {
+async function getLatestActiveStyleBySlug(ctx: QueryCtx, slug: string) {
   const styles = await ctx.db
     .query("styles")
-    .withIndex("by_slug", (q: any) => q.eq("slug", slug))
+    .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
 
   return latestActiveVersion(styles);
 }
 
-async function getActiveStyles(ctx: any, organizationId?: string) {
+async function getActiveStyles(ctx: QueryCtx, organizationId?: Id<"organizations">) {
   const styles = await ctx.db.query("styles").collect();
   const filtered = organizationId
-    ? styles.filter((style: any) => style.organizationId === organizationId)
+    ? styles.filter((style) => style.organizationId === organizationId)
     : styles;
 
-  const bySlug = new Map<string, any[]>();
+  const bySlug = new Map<string, Doc<"styles">[]>();
   for (const style of filtered) {
     const slug = style.slug ?? style.id;
     if (!bySlug.has(slug)) bySlug.set(slug, []);
@@ -136,14 +139,17 @@ export const getStylesWithExamples = query({
     v.null(),
   ),
   handler: async (ctx, args) => {
-    const style = (await getLatestActiveStyleBySlug(ctx, args.id)) as any;
+    const style = await getLatestActiveStyleBySlug(ctx, args.id);
     if (!style) return null;
 
-    const exampleQuestions = (await ctx.db.query("questions").collect()).filter(
-      (question: any) => (question.styleSlug ?? question.style) === (style.slug ?? style.id),
-    );
+    const exampleQuestions = await ctx.db
+      .query("questions")
+      .withIndex("by_styleId_status", (q) =>
+        q.eq("styleId", style._id).eq("status", "public"),
+      )
+      .take(STYLE_EXAMPLE_LIMIT);
     const examples = exampleQuestions
-      .map((question: any) => question.text)
+      .map((question) => question.text)
       .filter((text: string | undefined): text is string => text !== undefined);
 
     const base = mapStyle(style);

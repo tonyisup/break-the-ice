@@ -120,13 +120,16 @@ export const generateAIQuestionForFeed = action({
 
 export const generateAIQuestionForNewsletter = action({
 	args: {
-		userId: v.id("users"),
 		count: v.optional(v.number()),
 	},
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
+		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
+		if (!user) {
+			throw new Error("You must be logged in to generate newsletter questions.");
+		}
 		const count = args.count || 1;
 		return await ctx.runAction(internal.internal.ai.generateAIQuestionForUser, {
-			userId: args.userId,
+			userId: user._id,
 			count,
 			purpose: "newsletter",
 		});

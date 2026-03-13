@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, QueryCtx, action, ActionCtx, internalAction } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
+import { ensureAdmin } from "../auth";
 import { embed } from "../lib/retriever";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
@@ -697,12 +698,13 @@ export const saveAIQuestion = mutation({
 	},
 	returns: v.union(v.any(), v.null()),
 	handler: async (ctx, args) => {
+		await ensureAdmin(ctx);
 		const { text, tags, style, tone, topic, topicId } = args;
+		const fingerprint = fingerprintText(text);
 
-		// Check if a question with the same text already exists
 		const existingQuestion = await ctx.db
 			.query("questions")
-			.withIndex("by_text", (q) => q.eq("text", text))
+			.withIndex("by_fingerprint", (q) => q.eq("fingerprint", fingerprint))
 			.first();
 
 		if (existingQuestion) {
@@ -711,7 +713,7 @@ export const saveAIQuestion = mutation({
 
 		const id = await ctx.db.insert("questions", {
 			text,
-			fingerprint: fingerprintText(text),
+			fingerprint,
 			tags,
 			style,
 			styleId: args.styleId,
@@ -741,9 +743,12 @@ export const saveAIQuestion = mutation({
 		if (args.generationRunId) {
 			const run = await ctx.db.get(args.generationRunId);
 			if (run) {
-				const resultQuestionIds = run.resultQuestionIds.includes(id)
+				const safeResultQuestionIds = Array.isArray(run.resultQuestionIds)
 					? run.resultQuestionIds
-					: [...run.resultQuestionIds, id];
+					: [];
+				const resultQuestionIds = safeResultQuestionIds.includes(id)
+					? safeResultQuestionIds
+					: [...safeResultQuestionIds, id];
 				await ctx.db.patch(args.generationRunId, {
 					acceptedQuestionId: id,
 					resultQuestionIds,

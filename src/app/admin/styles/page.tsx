@@ -46,7 +46,7 @@ export default function StylesPage() {
 	const styles = useQuery(api.admin.styles.listStyles)
 	const createStyle = useMutation(api.admin.styles.createStyle)
 	const updateStyle = useMutation(api.admin.styles.updateStyle)
-	const deleteStyle = useMutation(api.admin.styles.deleteStyle)
+	const archiveStyle = useMutation(api.admin.styles.archiveStyle)
 	const activateStyleVersion = useMutation(api.admin.styles.activateStyleVersion)
 
 	const [search, setSearch] = React.useState("")
@@ -127,7 +127,7 @@ export default function StylesPage() {
 	const handleDelete = async (id: Id<"styles">) => {
 		if (!confirm("Archive this style version?")) return
 		try {
-			await deleteStyle({ id })
+			await archiveStyle({ id })
 			toast.success("Style version archived")
 		} catch (error) {
 			toast.error("Failed to delete style")

@@ -1,6 +1,10 @@
 import { v } from "convex/values";
-import { query } from "../_generated/server";
+import { query, QueryCtx } from "../_generated/server";
+import { Doc, Id } from "../_generated/dataModel";
 import { defaultQualityRubric, defaultToneAxesValue, latestActiveVersion } from "../lib/taxonomy";
+
+const DEFAULT_TONE_COLOR = "#6B7280";
+const DEFAULT_TONE_ICON = "MessageCircle";
 
 const publicToneFields = {
   _id: v.id("tones"),
@@ -41,7 +45,7 @@ const publicToneFields = {
   }),
 };
 
-function mapTone(tone: any) {
+function mapTone(tone: Doc<"tones">) {
   const slug = tone.slug ?? tone.id;
   const promptGuidanceForAI = tone.promptGuidanceForAI ?? tone.aiGuidance ?? "";
   return {
@@ -53,8 +57,8 @@ function mapTone(tone: any) {
     description: tone.description,
     promptGuidanceForAI,
     aiGuidance: tone.aiGuidance ?? promptGuidanceForAI,
-    color: tone.color,
-    icon: tone.icon,
+    color: tone.color ?? DEFAULT_TONE_COLOR,
+    icon: tone.icon ?? DEFAULT_TONE_ICON,
     order: tone.order,
     version: tone.version ?? 1,
     status: tone.status ?? "active",
@@ -69,21 +73,21 @@ function mapTone(tone: any) {
   };
 }
 
-async function getLatestActiveToneBySlug(ctx: any, slug: string) {
+async function getLatestActiveToneBySlug(ctx: QueryCtx, slug: string) {
   const tones = await ctx.db
     .query("tones")
-    .withIndex("by_slug", (q: any) => q.eq("slug", slug))
+    .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
   return latestActiveVersion(tones);
 }
 
-async function getActiveTones(ctx: any, organizationId?: string) {
+async function getActiveTones(ctx: QueryCtx, organizationId?: Id<"organizations">) {
   const tones = await ctx.db.query("tones").collect();
   const filtered = organizationId
-    ? tones.filter((tone: any) => tone.organizationId === organizationId)
+    ? tones.filter((tone) => tone.organizationId === organizationId)
     : tones;
 
-  const bySlug = new Map<string, any[]>();
+  const bySlug = new Map<string, Doc<"tones">[]>();
   for (const tone of filtered) {
     const slug = tone.slug ?? tone.id;
     if (!bySlug.has(slug)) bySlug.set(slug, []);
@@ -92,7 +96,7 @@ async function getActiveTones(ctx: any, organizationId?: string) {
 
   return Array.from(bySlug.values())
     .map((docs) => latestActiveVersion(docs))
-    .filter(Boolean)
+    .filter((tone): tone is Doc<"tones"> => tone !== null)
     .map((tone) => mapTone(tone))
     .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
 }

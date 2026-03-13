@@ -9,13 +9,15 @@ import {
 	MoreHorizontal,
 	Pencil,
 	Trash2,
+	Check,
 	X,
 	Search,
 	BookOpen,
 	Calendar,
 	LayoutGrid,
 	List,
-	Smile
+	Smile,
+	Sparkles,
 } from "lucide-react"
 import { IconComponent, Icon } from "@/components/ui/icons/icon"
 import { IconPicker } from "@/components/ui/icon-picker"

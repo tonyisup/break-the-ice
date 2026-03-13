@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
+import { latestVersion } from "../lib/taxonomy";
 
 const blueprintFields = {
   _id: v.id("promptBlueprints"),
@@ -16,16 +17,15 @@ const blueprintFields = {
   updatedAt: v.number(),
 };
 
-function latestVersion<T extends { version: number }>(docs: T[]) {
-  return [...docs].sort((a, b) => b.version - a.version)[0] ?? null;
-}
-
 export const listBlueprints = query({
-  args: {},
+  args: {
+    limit: v.optional(v.number()),
+  },
   returns: v.array(v.object(blueprintFields)),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const blueprints = await ctx.db.query("promptBlueprints").collect();
+    const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
+    const blueprints = await ctx.db.query("promptBlueprints").take(limit);
     const grouped = new Map<string, typeof blueprints>();
     for (const blueprint of blueprints) {
       if (!grouped.has(blueprint.slug)) grouped.set(blueprint.slug, []);

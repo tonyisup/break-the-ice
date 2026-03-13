@@ -1,7 +1,11 @@
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { internalMutation, mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
-import { defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
+import { internal } from "../_generated/api";
+import { Doc } from "../_generated/dataModel";
+import { defaultQualityRubric, defaultToneAxesValue, latestVersion } from "../lib/taxonomy";
+
+const USER_TONE_REASSIGN_BATCH_SIZE = 200;
 
 const toneFields = {
   _id: v.id("tones"),
@@ -42,7 +46,7 @@ const toneFields = {
   }),
 };
 
-function mapTone(tone: any) {
+function mapTone(tone: Doc<"tones">) {
   const slug = tone.slug ?? tone.id;
   const promptGuidanceForAI = tone.promptGuidanceForAI ?? tone.aiGuidance ?? "";
   return {
@@ -70,29 +74,22 @@ function mapTone(tone: any) {
   };
 }
 
-function latestVersion<T extends { version?: number }>(docs: T[]) {
-  return [...docs].sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0] ?? null;
-}
-
 export const listTones = query({
   args: {},
   returns: v.array(v.object(toneFields)),
   handler: async (ctx) => {
     await ensureAdmin(ctx);
     const tones = await ctx.db.query("tones").collect();
-    const grouped = new Map<string, any[]>();
-    for (const tone of tones) {
-      const slug = tone.slug ?? tone.id;
-      if (!grouped.has(slug)) grouped.set(slug, []);
-      grouped.get(slug)!.push(tone);
-    }
-
-    return Array.from(grouped.values())
-      .map((docs) => {
-        const active = docs.find((doc) => (doc.status ?? "active") === "active");
-        return mapTone(active ?? latestVersion(docs)!);
-      })
-      .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+    return tones
+      .map(mapTone)
+      .sort((a, b) => {
+        const orderDelta =
+          (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER);
+        if (orderDelta !== 0) return orderDelta;
+        const slugDelta = a.slug.localeCompare(b.slug);
+        if (slugDelta !== 0) return slugDelta;
+        return b.version - a.version;
+      });
   },
 });
 
@@ -301,16 +298,39 @@ export const activateToneVersion = mutation({
     const previousActive = siblings.find((tone) => tone.status === "active");
     if (previousActive && previousActive._id !== args.id) {
       await ctx.db.patch(previousActive._id, { status: "archived", updatedAt: Date.now() });
-
-      const userTones = await ctx.db
-        .query("userTones")
-        .withIndex("by_toneId", (q) => q.eq("toneId", previousActive._id))
-        .collect();
-      for (const userTone of userTones) {
-        await ctx.db.patch(userTone._id, { toneId: args.id, updatedAt: Date.now() });
-      }
+      await ctx.scheduler.runAfter(0, internal.admin.tones.reassignUserTonesBatch, {
+        previousToneId: previousActive._id,
+        nextToneId: args.id,
+      });
     }
     await ctx.db.patch(args.id, { status: "active", updatedAt: Date.now() });
+    return null;
+  },
+});
+
+export const reassignUserTonesBatch = internalMutation({
+  args: {
+    previousToneId: v.id("tones"),
+    nextToneId: v.id("tones"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userTones = await ctx.db
+      .query("userTones")
+      .withIndex("by_toneId", (q) => q.eq("toneId", args.previousToneId))
+      .take(USER_TONE_REASSIGN_BATCH_SIZE);
+
+    for (const userTone of userTones) {
+      await ctx.db.patch(userTone._id, {
+        toneId: args.nextToneId,
+        updatedAt: Date.now(),
+      });
+    }
+
+    if (userTones.length === USER_TONE_REASSIGN_BATCH_SIZE) {
+      await ctx.scheduler.runAfter(0, internal.admin.tones.reassignUserTonesBatch, args);
+    }
+
     return null;
   },
 });

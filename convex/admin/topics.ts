@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
-import { defaultQualityRubric } from "../lib/taxonomy";
+import { Doc } from "../_generated/dataModel";
+import { defaultQualityRubric, latestVersion } from "../lib/taxonomy";
 import { internal } from "../_generated/api";
 
 const topicFields = {
@@ -42,7 +43,7 @@ const topicFields = {
   accessibilityNotes: v.optional(v.string()),
 };
 
-function mapTopic(topic: any) {
+function mapTopic(topic: Doc<"topics">) {
   const slug = topic.slug ?? topic.id;
   const promptGuidanceForAI = topic.promptGuidanceForAI ?? topic.aiGuidance ?? "";
   return {
@@ -76,8 +77,31 @@ function mapTopic(topic: any) {
   };
 }
 
-function latestVersion<T extends { version?: number }>(docs: T[]) {
-  return [...docs].sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0] ?? null;
+function sortTopics<T extends { order?: number; slug: string; version: number }>(topics: T[]) {
+  return [...topics].sort((a, b) => {
+    const orderDelta = (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER);
+    if (orderDelta !== 0) return orderDelta;
+    const slugDelta = a.slug.localeCompare(b.slug);
+    if (slugDelta !== 0) return slugDelta;
+    return b.version - a.version;
+  });
+}
+
+function buildActiveTopicList(topics: Doc<"topics">[]) {
+  const grouped = new Map<string, Doc<"topics">[]>();
+  for (const topic of topics) {
+    const slug = topic.slug ?? topic.id;
+    if (!grouped.has(slug)) grouped.set(slug, []);
+    grouped.get(slug)!.push(topic);
+  }
+
+  return sortTopics(
+    Array.from(grouped.values())
+      .map((docs) => {
+        const active = docs.find((doc) => (doc.status ?? "active") === "active");
+        return mapTopic(active ?? latestVersion(docs)!);
+      }),
+  );
 }
 
 export const listTopics = query({
@@ -86,18 +110,7 @@ export const listTopics = query({
   handler: async (ctx) => {
     await ensureAdmin(ctx);
     const topics = await ctx.db.query("topics").collect();
-    const grouped = new Map<string, any[]>();
-    for (const topic of topics) {
-      const slug = topic.slug ?? topic.id;
-      if (!grouped.has(slug)) grouped.set(slug, []);
-      grouped.get(slug)!.push(topic);
-    }
-    return Array.from(grouped.values())
-      .map((docs) => {
-        const active = docs.find((doc) => (doc.status ?? "active") === "active");
-        return mapTopic(active ?? latestVersion(docs)!);
-      })
-      .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+    return sortTopics(topics.map(mapTopic));
   },
 });
 
@@ -120,18 +133,7 @@ export const getTopics = query({
   handler: async (ctx) => {
     await ensureAdmin(ctx);
     const topics = await ctx.db.query("topics").collect();
-    const grouped = new Map<string, any[]>();
-    for (const topic of topics) {
-      const slug = topic.slug ?? topic.id;
-      if (!grouped.has(slug)) grouped.set(slug, []);
-      grouped.get(slug)!.push(topic);
-    }
-    return Array.from(grouped.values())
-      .map((docs) => {
-        const active = docs.find((doc) => (doc.status ?? "active") === "active");
-        return mapTopic(active ?? latestVersion(docs)!);
-      })
-      .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+    return buildActiveTopicList(topics);
   },
 });
 

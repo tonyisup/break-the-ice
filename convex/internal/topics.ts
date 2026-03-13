@@ -1,7 +1,10 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
+import { Doc } from "../_generated/dataModel";
 import { defaultQualityRubric } from "../lib/taxonomy";
 import { getActiveTakeoverTopicsHelper } from "../lib/takeover";
+
+const TOPIC_SCAN_LIMIT = 200;
 
 const topicFields = v.object({
   _id: v.id("topics"),
@@ -41,7 +44,7 @@ const topicFields = v.object({
   accessibilityNotes: v.optional(v.string()),
 });
 
-function mapTopic(topic: any) {
+function mapTopic(topic: Doc<"topics">) {
   const slug = topic.slug ?? topic.id;
   const promptGuidanceForAI = topic.promptGuidanceForAI ?? topic.aiGuidance ?? "";
   return {
@@ -114,11 +117,17 @@ export const getTopCurrentTopic = internalQuery({
   returns: v.nullable(topicFields),
   handler: async (ctx) => {
     const now = Date.now();
-    const topics = await ctx.db.query("topics").collect();
+    const topics = await ctx.db
+      .query("topics")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "active"),
+          q.or(q.eq(q.field("startDate"), undefined), q.lte(q.field("startDate"), now)),
+          q.or(q.eq(q.field("endDate"), undefined), q.gte(q.field("endDate"), now)),
+        ),
+      )
+      .take(TOPIC_SCAN_LIMIT);
     const active = topics
-      .filter((topic) => (topic.status ?? "active") === "active")
-      .filter((topic) => topic.startDate === undefined || topic.startDate <= now)
-      .filter((topic) => topic.endDate === undefined || topic.endDate >= now)
       .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER))[0];
 
     return active ? mapTopic(active) : null;
@@ -130,6 +139,8 @@ export const getActiveTakeoverTopicsInternal = internalQuery({
   returns: v.array(topicFields),
   handler: async (ctx) => {
     const topics = await getActiveTakeoverTopicsHelper(ctx);
-    return topics.map(mapTopic);
+    return topics
+      .filter((topic): topic is Doc<"topics"> => topic !== null)
+      .map(mapTopic);
   },
 });

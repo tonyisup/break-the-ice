@@ -783,7 +783,7 @@ export const getRandomQuestionsInternal = internalQuery({
 					.map((t) => t._id);
 			let takeoverCandidates: any[] = [];
 
-			for (const topicId of takeoverTopicIds.filter(Boolean)) {
+			for (const topicId of takeoverTopicIds) {
 				const topicQs = await ctx.db.query("questions")
 					.withIndex("by_topicId_status", (q) => q.eq("topicId", topicId).eq("status", "public"))
 					.filter((q) => applyFilters(q))
