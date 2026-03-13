@@ -69,11 +69,14 @@ export function RemixQuestionDrawer({
 	const [selectedStyleId, setSelectedStyleId] = useState<Id<"styles"> | undefined>(styleId);
 	const [selectedToneId, setSelectedToneId] = useState<Id<"tones"> | undefined>(toneId);
 
-	const style = useQuery(api.core.styles.getStyleById, selectedStyleId && isOpen ? { id: selectedStyleId } : "skip");
-	const tone = useQuery(api.core.tones.getToneById, selectedToneId && isOpen ? { id: selectedToneId } : "skip");
-
-	const questionStyle = useQuery(api.core.styles.getStyleById, isOpen ? { id: styleId } : "skip");
-	const questionTone = useQuery(api.core.tones.getToneById, isOpen ? { id: toneId } : "skip");
+	const questionStyle = styles?.find((s) => s._id === styleId) ?? null;
+	const questionTone = tones?.find((t) => t._id === toneId) ?? null;
+	const style = selectedStyleId
+		? styles?.find((s) => s._id === selectedStyleId) ?? null
+		: questionStyle;
+	const tone = selectedToneId
+		? tones?.find((t) => t._id === selectedToneId) ?? null
+		: questionTone;
 
 	const currentUser = useQuery(api.core.users.getCurrentUser, isOpen ? {} : "skip");
 	const remixQuestion = useAction(api.core.questions.remixQuestionForUser);

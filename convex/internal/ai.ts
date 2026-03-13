@@ -391,8 +391,8 @@ export const generateAIQuestionForUser = internalAction({
 			? (await ctx.runQuery(api.core.styles.getStyleById, { id: args.anchoredStyleId }))
 			: (await ctx.runQuery(api.core.styles.getRandomStyleForUser, { userId: user._id }));
 		const tone = args.anchoredToneId
-			? (await ctx.runQuery(api.core.tones.getToneById, { id: args.anchoredToneId }))
-			: (await ctx.runQuery(api.core.tones.getRandomToneForUser, { userId: user._id }));
+			? (await ctx.runQuery(internal.internal.tones.getToneById, { id: args.anchoredToneId }))
+			: (await ctx.runQuery(api.core.tones.getRandomToneForUser, {}));
 		const topic = args.topicId ? (await ctx.runQuery(api.core.topics.getTopicById, { id: args.topicId })) : null;
 
 		if (!style || !tone) {

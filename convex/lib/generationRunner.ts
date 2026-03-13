@@ -223,6 +223,7 @@ export async function runPreviewQuestionGeneration(
     currentQuestion?: string;
     userContext?: string;
     temperature?: number;
+    batchSize?: number;
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -238,7 +239,7 @@ export async function runPreviewQuestionGeneration(
     toneSlug: args.toneSlug,
     topicId: args.topicId,
     topicSlug: args.topicSlug,
-    batchSize: 1,
+    batchSize: args.batchSize ?? 1,
     blueprintSlug: args.blueprintSlug,
     excludedQuestions: args.excludedQuestions,
     currentQuestion: args.currentQuestion,
@@ -265,8 +266,13 @@ export async function runPreviewQuestionGeneration(
     });
 
     const rawResponse = completion.choices[0]?.message?.content?.trim() ?? '{"questions":[]}';
-    const preview = parseQuestionObjects(rawResponse)[0];
+    const parsed = parseQuestionObjects(rawResponse);
+    const preview = parsed[0];
     const previewText = preview?.text ?? "";
+
+    if (!previewText) {
+      throw new Error("No preview questions parsed");
+    }
 
     await ctx.runMutation(internal.internal.generation.completeGenerationRun, {
       runId,

@@ -119,15 +119,16 @@ export const getTopCurrentTopic = internalQuery({
     const now = Date.now();
     const topics = await ctx.db
       .query("topics")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("status"), "active"),
-          q.or(q.eq(q.field("startDate"), undefined), q.lte(q.field("startDate"), now)),
-          q.or(q.eq(q.field("endDate"), undefined), q.gte(q.field("endDate"), now)),
-        ),
-      )
+      .withIndex("by_status", (q) => q.eq("status", "active"))
       .take(TOPIC_SCAN_LIMIT);
-    const active = topics
+
+    const activeCandidates = topics.filter((topic) => {
+      const startsOk = topic.startDate === undefined || topic.startDate <= now;
+      const endsOk = topic.endDate === undefined || topic.endDate >= now;
+      return startsOk && endsOk;
+    });
+
+    const active = activeCandidates
       .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER))[0];
 
     return active ? mapTopic(active) : null;

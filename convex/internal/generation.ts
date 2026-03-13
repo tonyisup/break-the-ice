@@ -327,6 +327,10 @@ export const markAcceptedGenerationRun = internalMutation({
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId);
     if (!run) return null;
+    const question = await ctx.db.get(args.questionId);
+    if (!question || question.generationRunId !== args.runId) {
+      return null;
+    }
     const safeResultQuestionIds = Array.isArray(run.resultQuestionIds)
       ? run.resultQuestionIds
       : [];
@@ -501,7 +505,9 @@ export const getGenerationRun = internalQuery({
       purpose: run.purpose,
       previewText: run.previewText,
       acceptedQuestionId: run.acceptedQuestionId,
-      resultQuestionIds: run.resultQuestionIds,
+      resultQuestionIds: Array.isArray(run.resultQuestionIds)
+        ? run.resultQuestionIds
+        : [],
     };
   },
 });

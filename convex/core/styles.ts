@@ -45,7 +45,7 @@ const publicStyleFields = {
   riskLevel: v.union(v.literal("low"), v.literal("medium")),
 };
 
-function mapStyle(style: any) {
+function mapStyle(style: Doc<"styles">) {
   const slug = style.slug ?? style.id;
   const promptGuidanceForAI = style.promptGuidanceForAI ?? style.aiGuidance ?? "";
   const structuralInstruction = style.structuralInstruction ?? style.structure ?? "";
@@ -89,8 +89,12 @@ async function getLatestActiveStyleBySlug(ctx: QueryCtx, slug: string) {
   return latestActiveVersion(styles);
 }
 
-async function getActiveStyles(ctx: QueryCtx, organizationId?: Id<"organizations">) {
-  const styles = await ctx.db.query("styles").collect();
+async function getActiveStyles(
+  ctx: QueryCtx,
+  organizationId?: Id<"organizations">,
+  limit = 200,
+) {
+  const styles = await ctx.db.query("styles").take(limit);
   const filtered = organizationId
     ? styles.filter((style) => style.organizationId === organizationId)
     : styles;

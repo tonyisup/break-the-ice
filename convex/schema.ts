@@ -85,7 +85,8 @@ export default defineSchema({
     .index("by_slug_version", ["slug", "version"])
     .index("by_status", ["status"])
     .index("by_name", ["name"])
-    .index("by_order", ["order"]),
+    .index("by_order", ["order"])
+    .index("by_organizationId", ["organizationId"]),
   topics: defineTable({
     id: v.string(), // slug
     name: v.string(),
@@ -109,7 +110,8 @@ export default defineSchema({
     .index("by_name", ["name"])
     .index("by_order", ["order"])
     .index("by_startDate_endDate_order", ["startDate", "endDate", "order"])
-    .index("by_takeoverStartDate_takeoverEndDate_order", ["takeoverStartDate", "takeoverEndDate", "order"]),
+    .index("by_takeoverStartDate_takeoverEndDate_order", ["takeoverStartDate", "takeoverEndDate", "order"])
+    .index("by_organizationId", ["organizationId"]),
   promptBlueprints: defineTable({
     slug: v.string(),
     version: v.number(),
@@ -225,6 +227,7 @@ export default defineSchema({
     .index("by_tone_and_last_shown", ["toneId", "lastShownAt"])
     .index("by_tone_and_total_likes", ["toneId", "totalLikes"])
     .index("by_style_and_tone", ["styleId", "toneId"])
+    .index("by_tone_text", ["tone"])
     .index("by_text", ["text"])
     .index("by_fingerprint", ["fingerprint"])
     .index("by_generationRun", ["generationRunId"])

@@ -227,15 +227,18 @@ export const getStyleEmbeddingsForIds = internalQuery({
 	args: { styleIds: v.array(v.id("styles")) },
 	returns: v.array(v.object({ styleId: v.id("styles"), embedding: v.array(v.number()) })),
 	handler: async (ctx, args) => {
-		const wantSet = new Set(args.styleIds);
-		const rows = await ctx.db.query("style_embeddings").collect();
-		const out: Array<{ styleId: Id<"styles">; embedding: Array<number> }> = [];
-		for (const row of rows) {
-			if (wantSet.has(row.styleId)) {
-				out.push({ styleId: row.styleId, embedding: row.embedding });
-			}
-		}
-		return out;
+    const wantSet = new Set(args.styleIds);
+    const out: Array<{ styleId: Id<"styles">; embedding: Array<number> }> = [];
+    for (const styleId of wantSet) {
+      const rows = await ctx.db
+        .query("style_embeddings")
+        .withIndex("by_styleId", (q) => q.eq("styleId", styleId))
+        .collect();
+      for (const row of rows) {
+        out.push({ styleId: row.styleId, embedding: row.embedding });
+      }
+    }
+    return out;
 	},
 });
 
@@ -243,15 +246,18 @@ export const getToneEmbeddingsForIds = internalQuery({
 	args: { toneIds: v.array(v.id("tones")) },
 	returns: v.array(v.object({ toneId: v.id("tones"), embedding: v.array(v.number()) })),
 	handler: async (ctx, args) => {
-		const wantSet = new Set(args.toneIds);
-		const rows = await ctx.db.query("tone_embeddings").collect();
-		const out: Array<{ toneId: Id<"tones">; embedding: Array<number> }> = [];
-		for (const row of rows) {
-			if (wantSet.has(row.toneId)) {
-				out.push({ toneId: row.toneId, embedding: row.embedding });
-			}
-		}
-		return out;
+    const wantSet = new Set(args.toneIds);
+    const out: Array<{ toneId: Id<"tones">; embedding: Array<number> }> = [];
+    for (const toneId of wantSet) {
+      const rows = await ctx.db
+        .query("tone_embeddings")
+        .withIndex("by_toneId", (q) => q.eq("toneId", toneId))
+        .collect();
+      for (const row of rows) {
+        out.push({ toneId: row.toneId, embedding: row.embedding });
+      }
+    }
+    return out;
 	},
 });
 

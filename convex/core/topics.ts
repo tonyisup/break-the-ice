@@ -90,7 +90,7 @@ async function getActiveTopics(ctx: QueryCtx, organizationId?: Id<"organizations
   const topics = organizationId
     ? await ctx.db
         .query("topics")
-        .filter((q) => q.eq(q.field("organizationId"), organizationId))
+        .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
         .take(DEFAULT_TOPIC_LIMIT)
     : await ctx.db.query("topics").take(DEFAULT_TOPIC_LIMIT);
 

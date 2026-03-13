@@ -101,7 +101,6 @@ export default function TonesPage() {
 		try {
 			await updateTone({
 				_id: t._id,
-				id: t.id,
 				name: t.name,
 				description: t.description,
 				color: t.color,
@@ -383,10 +382,7 @@ export default function TonesPage() {
 								<div className="grid grid-cols-2 gap-4">
 									<div className="grid gap-2">
 										<label className="text-sm font-medium">Tone ID (Slug)</label>
-										<Input
-											value={editingTone.id}
-											onChange={e => setEditingTone({ ...editingTone, id: e.target.value })}
-										/>
+									<Input value={editingTone.id} readOnly />
 									</div>
 									<div className="grid gap-2">
 										<label className="text-sm font-medium">Display Name</label>

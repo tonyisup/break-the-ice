@@ -3,6 +3,7 @@ import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
 import { defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
+import { DEFAULT_TONE_COLOR, DEFAULT_TONE_ICON } from "../core/tones";
 
 const TONE_BACKFILL_BATCH_SIZE = 100;
 
@@ -58,8 +59,8 @@ function mapTone(tone: Doc<"tones">) {
     description: tone.description,
     promptGuidanceForAI,
     aiGuidance: tone.aiGuidance ?? promptGuidanceForAI,
-    color: tone.color,
-    icon: tone.icon,
+    color: tone.color ?? DEFAULT_TONE_COLOR,
+    icon: tone.icon ?? DEFAULT_TONE_ICON,
     order: tone.order,
     organizationId: tone.organizationId,
     version: tone.version ?? 1,
@@ -114,12 +115,7 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
   handler: async (ctx) => {
     const questions = await ctx.db
       .query("questions")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("toneId"), undefined),
-          q.neq(q.field("tone"), undefined),
-        ),
-      )
+      .withIndex("by_tone_text", (q) => q)
       .take(TONE_BACKFILL_BATCH_SIZE);
     for (const question of questions) {
       if (!question.toneId && question.tone) {
@@ -128,7 +124,10 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
           .withIndex("by_slug", (q) => q.eq("slug", question.tone!))
           .first();
         if (tone) {
-          await ctx.db.patch(question._id, { toneId: tone._id, toneSlug: tone.slug ?? tone.id });
+          await ctx.db.patch(question._id, {
+            toneId: tone._id,
+            toneSlug: tone.slug ?? tone.id,
+          });
           await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
             questionId: question._id,
           });

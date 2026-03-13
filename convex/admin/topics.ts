@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { Doc } from "../_generated/dataModel";
-import { defaultQualityRubric, latestVersion } from "../lib/taxonomy";
+import { defaultQualityRubric, latestActiveVersion, latestVersion } from "../lib/taxonomy";
 import { internal } from "../_generated/api";
 
 const topicFields = {
@@ -95,13 +95,15 @@ function buildActiveTopicList(topics: Doc<"topics">[]) {
     grouped.get(slug)!.push(topic);
   }
 
-  return sortTopics(
-    Array.from(grouped.values())
-      .map((docs) => {
-        const active = docs.find((doc) => (doc.status ?? "active") === "active");
-        return mapTopic(active ?? latestVersion(docs)!);
-      }),
-  );
+  const mapped = Array.from(grouped.values())
+    .map((docs) => {
+      const active = docs.find((doc) => (doc.status ?? "active") === "active");
+      const latestActive = active ?? latestActiveVersion(docs);
+      return latestActive ? mapTopic(latestActive) : null;
+    })
+    .filter((topic): topic is ReturnType<typeof mapTopic> => topic !== null);
+
+  return sortTopics(mapped);
 }
 
 export const listTopics = query({

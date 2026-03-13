@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { latestVersion } from "../lib/taxonomy";
@@ -25,7 +26,7 @@ export const listBlueprints = query({
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
     const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
-    const blueprints = await ctx.db.query("promptBlueprints").take(limit);
+    const blueprints = await ctx.db.query("promptBlueprints").collect();
     const grouped = new Map<string, typeof blueprints>();
     for (const blueprint of blueprints) {
       if (!grouped.has(blueprint.slug)) grouped.set(blueprint.slug, []);
@@ -37,20 +38,40 @@ export const listBlueprints = query({
         const active = docs.find((doc) => doc.status === "active");
         return active ?? latestVersion(docs)!;
       })
-      .sort((a, b) => a.slug.localeCompare(b.slug));
+      .sort((a, b) => a.slug.localeCompare(b.slug))
+      .slice(0, limit);
   },
 });
 
 export const getBlueprintVersions = query({
-  args: { slug: v.string() },
-  returns: v.array(v.object(blueprintFields)),
+  args: {
+    slug: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: v.object({
+    page: v.array(v.object(blueprintFields)),
+    isDone: v.boolean(),
+    continueCursor: v.optional(v.string()),
+  }),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const blueprints = await ctx.db
+    const { slug, paginationOpts } = args;
+    const numItems = Math.min(Math.max(paginationOpts.numItems ?? 50, 1), 200);
+    const result = await ctx.db
       .query("promptBlueprints")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
-      .collect();
-    return blueprints.sort((a, b) => b.version - a.version);
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .paginate({
+        cursor: paginationOpts.cursor,
+        numItems,
+      });
+
+    const page = [...result.page].sort((a, b) => b.version - a.version);
+
+    return {
+      page,
+      isDone: result.isDone,
+      continueCursor: result.continueCursor,
+    };
   },
 });
 

@@ -22,6 +22,7 @@ export const startDuplicateDetection = action({
 
 export const generateAIQuestions = action({
 	args: {
+		count: v.optional(v.number()),
 		selectedTags: v.array(v.string()),
 		currentQuestion: v.optional(v.string()),
 		excludedQuestions: v.optional(v.array(v.string())),
@@ -39,6 +40,7 @@ export const generateAIQuestions = action({
 	}),
 	handler: async (ctx, args): Promise<{ text: string; runId: Id<"generationRuns"> }> => {
 		await ensureAdmin(ctx);
+		const count = args.count ?? 1;
 		const preview = await runPreviewQuestionGeneration(ctx, {
 			styleId: args.styleId,
 			styleSlug: args.style,
@@ -50,6 +52,7 @@ export const generateAIQuestions = action({
 			excludedQuestions: args.excludedQuestions,
 			currentQuestion: args.currentQuestion,
 			userContext: args.selectedTags.length > 0 ? `Preferred tags: ${args.selectedTags.join(", ")}` : undefined,
+			batchSize: count,
 		});
 
 		if (!preview.previewText.trim()) {

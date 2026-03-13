@@ -3,8 +3,8 @@ import { query, QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { defaultQualityRubric, defaultToneAxesValue, latestActiveVersion } from "../lib/taxonomy";
 
-const DEFAULT_TONE_COLOR = "#6B7280";
-const DEFAULT_TONE_ICON = "MessageCircle";
+export const DEFAULT_TONE_COLOR = "#6B7280";
+export const DEFAULT_TONE_ICON = "MessageCircle";
 
 const publicToneFields = {
   _id: v.id("tones"),
@@ -81,11 +81,17 @@ async function getLatestActiveToneBySlug(ctx: QueryCtx, slug: string) {
   return latestActiveVersion(tones);
 }
 
-async function getActiveTones(ctx: QueryCtx, organizationId?: Id<"organizations">) {
-  const tones = await ctx.db.query("tones").collect();
-  const filtered = organizationId
-    ? tones.filter((tone) => tone.organizationId === organizationId)
-    : tones;
+async function getActiveTones(
+  ctx: QueryCtx,
+  organizationId?: Id<"organizations">,
+  limit = 500,
+) {
+  const tones = organizationId
+    ? await ctx.db
+        .query("tones")
+        .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+        .take(limit)
+    : await ctx.db.query("tones").take(limit);
 
   const bySlug = new Map<string, Doc<"tones">[]>();
   for (const tone of filtered) {
@@ -106,15 +112,6 @@ export const getTone = query({
   returns: v.union(v.object(publicToneFields), v.null()),
   handler: async (ctx, args) => {
     const tone = await getLatestActiveToneBySlug(ctx, args.id);
-    return tone ? mapTone(tone) : null;
-  },
-});
-
-export const getToneById = query({
-  args: { id: v.id("tones") },
-  returns: v.union(v.object(publicToneFields), v.null()),
-  handler: async (ctx, args) => {
-    const tone = await ctx.db.get(args.id);
     return tone ? mapTone(tone) : null;
   },
 });
@@ -154,16 +151,24 @@ export const getRandomTone = query({
 });
 
 export const getRandomToneForUser = query({
-  args: { userId: v.id("users") },
+  args: {},
   returns: v.object(publicToneFields),
   handler: async (ctx, args) => {
-    const user = await ctx.db.get(args.userId);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
     if (!user) throw new Error("User not found");
 
     const tones = await getActiveTones(ctx);
     const userHiddenTones = await ctx.db
       .query("userTones")
-      .withIndex("by_userId_status", (q) => q.eq("userId", args.userId).eq("status", "hidden"))
+      .withIndex("by_userId_status", (q) => q.eq("userId", user._id).eq("status", "hidden"))
       .collect();
     const hiddenToneDocs = await Promise.all(userHiddenTones.map((entry: any) => ctx.db.get(entry.toneId)));
     const hiddenSlugs = new Set(hiddenToneDocs.filter(Boolean).map((tone: any) => tone.slug ?? tone.id));

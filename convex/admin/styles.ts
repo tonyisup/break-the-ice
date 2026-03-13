@@ -4,12 +4,14 @@ import { ensureAdmin } from "../auth";
 import { defaultIdealPromptLength, defaultQualityRubric, latestVersion } from "../lib/taxonomy";
 import { mapStyle, styleFields } from "../lib/styleHelpers";
 
+const MAX_STYLES = 500;
+
 export const listStyles = query({
   args: {},
   returns: v.array(v.object(styleFields)),
   handler: async (ctx) => {
     await ensureAdmin(ctx);
-    const styles = await ctx.db.query("styles").collect();
+    const styles = await ctx.db.query("styles").take(MAX_STYLES);
     const grouped = new Map<string, any[]>();
     for (const style of styles) {
       const slug = style.slug ?? style.id;

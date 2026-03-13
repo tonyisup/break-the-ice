@@ -116,7 +116,7 @@ export const embedTone = internalAction({
     toneId: v.id("tones"),
   },
   handler: async (ctx, args) => {
-    const tone = await ctx.runQuery(api.core.tones.getToneById, {
+    const tone = await ctx.runQuery(internal.internal.tones.getToneById, {
       id: args.toneId,
     });
     if (!tone) {

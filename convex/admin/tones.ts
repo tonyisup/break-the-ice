@@ -4,6 +4,7 @@ import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
 import { defaultQualityRubric, defaultToneAxesValue, latestVersion } from "../lib/taxonomy";
+import { DEFAULT_TONE_COLOR, DEFAULT_TONE_ICON } from "../core/tones";
 
 const USER_TONE_REASSIGN_BATCH_SIZE = 200;
 
@@ -58,8 +59,8 @@ function mapTone(tone: Doc<"tones">) {
     description: tone.description,
     promptGuidanceForAI,
     aiGuidance: tone.aiGuidance ?? promptGuidanceForAI,
-    color: tone.color,
-    icon: tone.icon,
+    color: tone.color ?? DEFAULT_TONE_COLOR,
+    icon: tone.icon ?? DEFAULT_TONE_ICON,
     order: tone.order,
     version: tone.version ?? 1,
     status: tone.status ?? "active",
@@ -185,7 +186,6 @@ export const createTone = mutation({
 export const updateTone = mutation({
   args: {
     _id: v.id("tones"),
-    id: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     promptGuidanceForAI: v.string(),
