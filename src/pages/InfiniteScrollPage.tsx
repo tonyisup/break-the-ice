@@ -194,14 +194,14 @@ export default function InfiniteScrollPage() {
     return () => {
       if (activeQuestionRef.current) {
         const duration = Date.now() - startTimeRef.current;
-        if (duration > 1000) {
-          void recordAnalytics({
-            questionId: activeQuestionRef.current._id,
-            event: "seen",
-            viewDuration: duration,
-            sessionId: user.sessionId ?? undefined,
-          }); // No catch here as it might run during unmount
+        void recordAnalytics({
+          questionId: activeQuestionRef.current._id,
+          event: "seen",
+          viewDuration: duration,
+          sessionId: user.sessionId ?? undefined,
+        }); // No catch here as it might run during unmount
 
+        if (duration > 1000) {
           addQuestionToHistory({
             question: activeQuestionRef.current,
             viewedAt: Date.now(),
