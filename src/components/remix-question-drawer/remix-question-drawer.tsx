@@ -69,8 +69,8 @@ export function RemixQuestionDrawer({
 	const [selectedStyleId, setSelectedStyleId] = useState<Id<"styles"> | undefined>(styleId);
 	const [selectedToneId, setSelectedToneId] = useState<Id<"tones"> | undefined>(toneId);
 
-	const questionStyle = styles?.find((s) => s._id === styleId) ?? null;
-	const questionTone = tones?.find((t) => t._id === toneId) ?? null;
+	const questionStyle = useQuery(api.core.styles.getStyleById, isOpen && styleId ? { id: styleId } : "skip");
+	const questionTone = useQuery(api.core.tones.getToneById, isOpen && toneId ? { id: toneId } : "skip");
 	const style = selectedStyleId
 		? styles?.find((s) => s._id === selectedStyleId) ?? null
 		: questionStyle;

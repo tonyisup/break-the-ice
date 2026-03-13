@@ -1,10 +1,13 @@
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { internalMutation, mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
+import { internal } from "../_generated/api";
+import { Doc } from "../_generated/dataModel";
 import { defaultIdealPromptLength, defaultQualityRubric, latestVersion } from "../lib/taxonomy";
 import { mapStyle, styleFields } from "../lib/styleHelpers";
 
 const MAX_STYLES = 500;
+const USER_STYLE_REASSIGN_BATCH_SIZE = 200;
 
 export const listStyles = query({
   args: {},
@@ -12,7 +15,7 @@ export const listStyles = query({
   handler: async (ctx) => {
     await ensureAdmin(ctx);
     const styles = await ctx.db.query("styles").take(MAX_STYLES);
-    const grouped = new Map<string, any[]>();
+    const grouped = new Map<string, Doc<"styles">[]>();
     for (const style of styles) {
       const slug = style.slug ?? style.id;
       if (!grouped.has(slug)) grouped.set(slug, []);
@@ -256,9 +259,15 @@ export const activateStyleVersion = mutation({
       const userStyles = await ctx.db
         .query("userStyles")
         .withIndex("by_styleId", (q) => q.eq("styleId", previousActive._id))
-        .collect();
+        .take(USER_STYLE_REASSIGN_BATCH_SIZE);
       for (const userStyle of userStyles) {
         await ctx.db.patch(userStyle._id, { styleId: args.id, updatedAt: Date.now() });
+      }
+      if (userStyles.length === USER_STYLE_REASSIGN_BATCH_SIZE) {
+        await ctx.scheduler.runAfter(0, internal.admin.styles.reassignUserStylesBatch, {
+          previousStyleId: previousActive._id,
+          nextStyleId: args.id,
+        });
       }
     }
 
@@ -275,6 +284,33 @@ export const archiveStyle = mutation({
     const style = await ctx.db.get(args.id);
     if (!style) throw new Error("Style not found");
     await ctx.db.patch(args.id, { status: "archived", updatedAt: Date.now() });
+    return null;
+  },
+});
+
+export const reassignUserStylesBatch = internalMutation({
+  args: {
+    previousStyleId: v.id("styles"),
+    nextStyleId: v.id("styles"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userStyles = await ctx.db
+      .query("userStyles")
+      .withIndex("by_styleId", (q) => q.eq("styleId", args.previousStyleId))
+      .take(USER_STYLE_REASSIGN_BATCH_SIZE);
+
+    for (const userStyle of userStyles) {
+      await ctx.db.patch(userStyle._id, {
+        styleId: args.nextStyleId,
+        updatedAt: Date.now(),
+      });
+    }
+
+    if (userStyles.length === USER_STYLE_REASSIGN_BATCH_SIZE) {
+      await ctx.scheduler.runAfter(0, internal.admin.styles.reassignUserStylesBatch, args);
+    }
+
     return null;
   },
 });

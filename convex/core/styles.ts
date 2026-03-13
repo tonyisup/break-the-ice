@@ -94,10 +94,10 @@ async function getActiveStyles(
   organizationId?: Id<"organizations">,
   limit = 200,
 ) {
-  const styles = await ctx.db.query("styles").take(limit);
-  const filtered = organizationId
-    ? styles.filter((style) => style.organizationId === organizationId)
-    : styles;
+  const styles = organizationId
+    ? await ctx.db.query("styles").withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId)).take(limit)
+    : await ctx.db.query("styles").take(limit);
+  const filtered = styles;
 
   const bySlug = new Map<string, Doc<"styles">[]>();
   for (const style of filtered) {
@@ -129,7 +129,8 @@ export const getStyleById = query({
   returns: v.union(v.object(publicStyleFields), v.null()),
   handler: async (ctx, args) => {
     const style = await ctx.db.get(args.id);
-    return style ? mapStyle(style) : null;
+    if (!style || (style.status ?? "active") !== "active") return null;
+    return mapStyle(style);
   },
 });
 
@@ -215,10 +216,18 @@ export const getRandomStyle = query({
 });
 
 export const getRandomStyleForUser = query({
-  args: { userId: v.id("users") },
+  args: {},
   returns: v.object(publicStyleFields),
-  handler: async (ctx, args) => {
-    const user = await ctx.db.get(args.userId);
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email))
+      .unique();
     if (!user) {
       throw new Error("User not found");
     }
@@ -226,11 +235,11 @@ export const getRandomStyleForUser = query({
     const styles = await getActiveStyles(ctx);
     const userHiddenStyles = await ctx.db
       .query("userStyles")
-      .withIndex("by_userId_status", (q) => q.eq("userId", args.userId).eq("status", "hidden"))
+      .withIndex("by_userId_status", (q) => q.eq("userId", user._id).eq("status", "hidden"))
       .collect();
 
-    const hiddenStyleDocs = await Promise.all(userHiddenStyles.map((entry: any) => ctx.db.get(entry.styleId)));
-    const hiddenSlugs = new Set(hiddenStyleDocs.filter(Boolean).map((style: any) => style.slug ?? style.id));
+    const hiddenStyleDocs = await Promise.all(userHiddenStyles.map((entry) => ctx.db.get(entry.styleId)));
+    const hiddenSlugs = new Set(hiddenStyleDocs.filter((s): s is Doc<"styles"> => s !== null).map((s) => s.slug ?? s.id));
     const visible = styles.filter((style) => !hiddenSlugs.has(style.slug));
 
     if (visible.length === 0) {

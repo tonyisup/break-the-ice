@@ -2,7 +2,7 @@
 
 import OpenAI from "openai";
 import { api, internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import {
   buildRemixPrompts,
@@ -302,9 +302,9 @@ export async function runRemixQuestion(
   args: {
     requestedByUserId?: string;
     questionText: string;
-    style?: any | null;
-    tone?: any | null;
-    topic?: any | null;
+    style?: Doc<"styles"> | null;
+    tone?: Doc<"tones"> | null;
+    topic?: Doc<"topics"> | null;
     sourceQuestionId?: Id<"questions">;
     temperature?: number;
   },

@@ -116,6 +116,15 @@ export const getTone = query({
   },
 });
 
+export const getToneById = query({
+  args: { id: v.id("tones") },
+  returns: v.union(v.object(publicToneFields), v.null()),
+  handler: async (ctx, args) => {
+    const tone = await ctx.db.get(args.id);
+    return tone ? mapTone(tone) : null;
+  },
+});
+
 export const getTones = query({
   args: {
     organizationId: v.optional(v.id("organizations")),
@@ -170,8 +179,8 @@ export const getRandomToneForUser = query({
       .query("userTones")
       .withIndex("by_userId_status", (q) => q.eq("userId", user._id).eq("status", "hidden"))
       .collect();
-    const hiddenToneDocs = await Promise.all(userHiddenTones.map((entry: any) => ctx.db.get(entry.toneId)));
-    const hiddenSlugs = new Set(hiddenToneDocs.filter(Boolean).map((tone: any) => tone.slug ?? tone.id));
+    const hiddenToneDocs = await Promise.all(userHiddenTones.map((entry) => ctx.db.get(entry.toneId)));
+    const hiddenSlugs = new Set(hiddenToneDocs.filter((tone): tone is Doc<"tones"> => tone !== null).map((tone) => tone.slug ?? tone.id));
     const visible = tones.filter((tone) => !hiddenSlugs.has(tone.slug));
     if (visible.length === 0) throw new Error("No tones available for user");
 

@@ -68,7 +68,8 @@ export default defineSchema({
     .index("by_slug_version", ["slug", "version"])
     .index("by_status", ["status"])
     .index("by_name", ["name"])
-    .index("by_order", ["order"]),
+    .index("by_order", ["order"])
+    .index("by_organizationId", ["organizationId"]),
   tones: defineTable({
     id: v.string(),
     name: v.string(),

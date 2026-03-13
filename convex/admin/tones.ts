@@ -75,12 +75,16 @@ function mapTone(tone: Doc<"tones">) {
   };
 }
 
+const DEFAULT_LIST_LIMIT = 100;
+const MAX_LIST_LIMIT = 1000;
+
 export const listTones = query({
-  args: {},
+  args: { limit: v.optional(v.number()) },
   returns: v.array(v.object(toneFields)),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const tones = await ctx.db.query("tones").collect();
+    const effectiveLimit = Math.min(args.limit ?? DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
+    const tones = await ctx.db.query("tones").take(effectiveLimit);
     return tones
       .map(mapTone)
       .sort((a, b) => {

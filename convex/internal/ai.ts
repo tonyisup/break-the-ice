@@ -286,8 +286,8 @@ export const generateNightlyQuestionPool = internalAction({
 					poolStatus: "available",
 				});
 				questionsGenerated += result.saveResult.insertedCount;
-			} catch (error: any) {
-				errors.push(`Combo ${(style.slug ?? style.id)}/${(tone.slug ?? tone.id)} failed: ${error.message}`);
+			} catch (error: unknown) {
+				errors.push(`Combo ${(style.slug ?? style.id)}/${(tone.slug ?? tone.id)} failed: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
 
@@ -389,7 +389,7 @@ export const generateAIQuestionForUser = internalAction({
 
 		const style = args.anchoredStyleId
 			? (await ctx.runQuery(api.core.styles.getStyleById, { id: args.anchoredStyleId }))
-			: (await ctx.runQuery(api.core.styles.getRandomStyleForUser, { userId: user._id }));
+			: (await ctx.runQuery(internal.internal.styles.getRandomStyleForUserId, { userId: user._id }));
 		const tone = args.anchoredToneId
 			? (await ctx.runQuery(internal.internal.tones.getToneById, { id: args.anchoredToneId }))
 			: (await ctx.runQuery(api.core.tones.getRandomToneForUser, {}));

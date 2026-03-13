@@ -42,8 +42,8 @@ async function getLatestActiveBySlug(
     .collect();
 
   const latest = docs
-    .filter((doc: any) => (doc.status ?? "active") === "active")
-    .sort((a: any, b: any) => (b.version ?? 1) - (a.version ?? 1))[0];
+    .filter((doc) => (doc.status ?? "active") === "active")
+    .sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0];
 
   if (!latest) {
     throw new ConvexError(`No active ${table} entry found for slug "${slug}".`);

@@ -25,8 +25,7 @@ export const AnchorHeader = ({
   onOpenItem
 }: AnchorHeaderProps) => {
   const style = useQuery(api.core.styles.getStyleById, styleId ? { id: styleId as Id<"styles"> } : "skip");
-  const tones = useQuery(api.core.tones.getTones, toneId ? { organizationId: undefined } : "skip");
-  const tone = toneId && tones ? tones.find((t) => t._id === toneId) ?? null : null;
+  const tone = useQuery(api.core.tones.getToneById, toneId ? { id: toneId as Id<"tones"> } : "skip");
   const topic = useQuery(api.core.topics.getTopicById, topicId ? { id: topicId as Id<"topics"> } : "skip");
 
   if (!styleId && !toneId && !topicId) return null;

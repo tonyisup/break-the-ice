@@ -345,9 +345,10 @@ export const activateTopicVersion = mutation({
       .query("topics")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .collect();
-    const previousActive = siblings.find((topic) => topic.status === "active");
-    if (previousActive && previousActive._id !== args._id) {
-      await ctx.db.patch(previousActive._id, { status: "archived", updatedAt: Date.now() });
+    for (const sibling of siblings) {
+      if (sibling._id !== args._id && (sibling.status ?? "active") === "active") {
+        await ctx.db.patch(sibling._id, { status: "archived", updatedAt: Date.now() });
+      }
     }
     await ctx.db.patch(args._id, { status: "active", updatedAt: Date.now() });
     return null;

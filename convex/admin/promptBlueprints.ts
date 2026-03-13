@@ -4,6 +4,8 @@ import { mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { latestVersion } from "../lib/taxonomy";
 
+const MAX_BLUEPRINT_SCAN = 1000;
+
 const blueprintFields = {
   _id: v.id("promptBlueprints"),
   _creationTime: v.number(),
@@ -26,7 +28,7 @@ export const listBlueprints = query({
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
     const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
-    const blueprints = await ctx.db.query("promptBlueprints").collect();
+    const blueprints = await ctx.db.query("promptBlueprints").withIndex("by_slug").take(MAX_BLUEPRINT_SCAN);
     const grouped = new Map<string, typeof blueprints>();
     for (const blueprint of blueprints) {
       if (!grouped.has(blueprint.slug)) grouped.set(blueprint.slug, []);
@@ -59,13 +61,14 @@ export const getBlueprintVersions = query({
     const numItems = Math.min(Math.max(paginationOpts.numItems ?? 50, 1), 200);
     const result = await ctx.db
       .query("promptBlueprints")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .withIndex("by_slug_version", (q) => q.eq("slug", slug))
+      .order("desc")
       .paginate({
         cursor: paginationOpts.cursor,
         numItems,
       });
 
-    const page = [...result.page].sort((a, b) => b.version - a.version);
+    const page = result.page;
 
     return {
       page,
