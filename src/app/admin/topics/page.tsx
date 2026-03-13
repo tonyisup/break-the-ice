@@ -42,10 +42,11 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 
 export default function TopicsPage() {
-	const topics = useQuery(api.admin.topics.getTopics)
+	const topics = useQuery(api.admin.topics.listTopics)
 	const createTopic = useMutation(api.admin.topics.createTopic)
 	const updateTopic = useMutation(api.admin.topics.updateTopic)
 	const deleteTopic = useMutation(api.admin.topics.deleteTopic)
+	const activateTopicVersion = useMutation(api.admin.topics.activateTopicVersion)
 
 	const [search, setSearch] = React.useState("")
 	const [editingTopic, setEditingTopic] = React.useState<Doc<"topics"> | null>(null)
@@ -130,12 +131,21 @@ export default function TopicsPage() {
 	}
 
 	const handleDelete = async (id: Id<"topics">) => {
-		if (!confirm("Are you sure you want to delete this topic?")) return
+		if (!confirm("Archive this topic version?")) return
 		try {
 			await deleteTopic({ _id: id })
-			toast.success("Topic deleted")
+			toast.success("Topic version archived")
 		} catch (error) {
 			toast.error("Failed to delete topic")
+		}
+	}
+
+	const handleActivate = async (id: Id<"topics">) => {
+		try {
+			await activateTopicVersion({ _id: id })
+			toast.success("Topic version activated")
+		} catch (error) {
+			toast.error("Failed to activate topic version")
 		}
 	}
 
@@ -305,7 +315,12 @@ export default function TopicsPage() {
 									</div>
 									<div>
 										<h3 className="font-bold text-lg">{topic.name}</h3>
-										<p className="text-xs text-muted-foreground font-mono">{topic.id}</p>
+										<div className="flex items-center gap-2">
+											<p className="text-xs text-muted-foreground font-mono">{topic.id}</p>
+											<Badge variant={topic.status === "active" ? "default" : "secondary"} className="text-[10px]">
+												{topic.status} v{topic.version}
+											</Badge>
+										</div>
 									</div>
 								</div>
 								<DropdownMenu>
@@ -319,9 +334,15 @@ export default function TopicsPage() {
 											<Pencil className="size-3.5" />
 											Edit Topic
 										</DropdownMenuItem>
+										{topic.status !== "active" && (
+											<DropdownMenuItem className="gap-2" onClick={() => handleActivate(topic._id)}>
+												<Check className="size-3.5" />
+												Activate Version
+											</DropdownMenuItem>
+										)}
 										<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={() => handleDelete(topic._id)}>
 											<Trash2 className="size-3.5" />
-											Delete
+											Archive
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
@@ -400,6 +421,7 @@ export default function TopicsPage() {
 											<div className="flex flex-col">
 												<span className="font-bold">{topic.name}</span>
 												<span className="text-[10px] text-muted-foreground font-mono">{topic.id}</span>
+												<span className="text-[10px] text-muted-foreground">{topic.status} v{topic.version}</span>
 											</div>
 										</div>
 									</td>
@@ -425,6 +447,11 @@ export default function TopicsPage() {
 									</td>
 									<td className="px-6 py-4 text-right">
 										<div className="flex items-center justify-end gap-1">
+											{topic.status !== "active" && (
+												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={() => handleActivate(topic._id)}>
+													<Check className="size-3.5" />
+												</Button>
+											)}
 											<Button variant="ghost" size="icon" className="size-8" onClick={() => setEditingTopic(topic)}>
 												<Pencil className="size-3.5" />
 											</Button>

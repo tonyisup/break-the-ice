@@ -43,10 +43,11 @@ import { IconPicker } from "@/components/ui/icon-picker"
 import { toast } from "sonner"
 
 export default function StylesPage() {
-	const styles = useQuery(api.core.styles.getStyles, {})
+	const styles = useQuery(api.admin.styles.listStyles)
 	const createStyle = useMutation(api.admin.styles.createStyle)
 	const updateStyle = useMutation(api.admin.styles.updateStyle)
 	const deleteStyle = useMutation(api.admin.styles.deleteStyle)
+	const activateStyleVersion = useMutation(api.admin.styles.activateStyleVersion)
 
 	const [search, setSearch] = React.useState("")
 	const [editingStyle, setEditingStyle] = React.useState<Doc<"styles"> | null>(null)
@@ -124,12 +125,21 @@ export default function StylesPage() {
 	}
 
 	const handleDelete = async (id: Id<"styles">) => {
-		if (!confirm("Are you sure you want to delete this style? This might affect existing questions.")) return
+		if (!confirm("Archive this style version?")) return
 		try {
 			await deleteStyle({ id })
-			toast.success("Style deleted")
+			toast.success("Style version archived")
 		} catch (error) {
 			toast.error("Failed to delete style")
+		}
+	}
+
+	const handleActivate = async (id: Id<"styles">) => {
+		try {
+			await activateStyleVersion({ id })
+			toast.success("Style version activated")
+		} catch (error) {
+			toast.error("Failed to activate style version")
 		}
 	}
 
@@ -291,7 +301,12 @@ export default function StylesPage() {
 									</div>
 									<div>
 										<h3 className="font-bold text-lg">{style.name}</h3>
-										<p className="text-xs text-muted-foreground font-mono">{style.id}</p>
+										<div className="flex items-center gap-2">
+											<p className="text-xs text-muted-foreground font-mono">{style.id}</p>
+											<Badge variant={style.status === "active" ? "default" : "secondary"} className="text-[10px]">
+												{style.status} v{style.version}
+											</Badge>
+										</div>
 									</div>
 								</div>
 								<DropdownMenu>
@@ -305,9 +320,15 @@ export default function StylesPage() {
 											<Pencil className="size-3.5" />
 											Edit Style
 										</DropdownMenuItem>
+										{style.status !== "active" && (
+											<DropdownMenuItem className="gap-2" onClick={() => handleActivate(style._id)}>
+												<Check className="size-3.5" />
+												Activate Version
+											</DropdownMenuItem>
+										)}
 										<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={() => handleDelete(style._id)}>
 											<Trash2 className="size-3.5" />
-											Delete
+											Archive
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
@@ -355,6 +376,7 @@ export default function StylesPage() {
 										<div className="flex flex-col">
 											<span className="font-bold">{style.name}</span>
 											<span className="text-[10px] text-muted-foreground font-mono">{style.id}</span>
+											<span className="text-[10px] text-muted-foreground">{style.status} v{style.version}</span>
 										</div>
 									</td>
 									<td className="px-6 py-4">
@@ -365,6 +387,11 @@ export default function StylesPage() {
 									</td>
 									<td className="px-6 py-4 text-right">
 										<div className="flex items-center justify-end gap-1">
+											{style.status !== "active" && (
+												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={() => handleActivate(style._id)}>
+													<Check className="size-3.5" />
+												</Button>
+											)}
 											<Button variant="ghost" size="icon" className="size-8" onClick={() => setEditingStyle(style)}>
 												<Pencil className="size-3.5" />
 											</Button>

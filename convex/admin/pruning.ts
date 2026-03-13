@@ -78,9 +78,9 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 		ctx.runQuery(internal.admin.pruning.getStyleEmbeddingsForIds, { styleIds }),
 		ctx.runQuery(internal.admin.pruning.getToneEmbeddingsForIds, { toneIds }),
 	]);
-	const questionEmbeddingMap = new Map(questionEmbList.map((e) => [e.questionId, e.embedding]));
-	const styleEmbeddingMap = new Map(styleEmbList.map((e) => [e.styleId, e.embedding]));
-	const toneEmbeddingMap = new Map(toneEmbList.map((e) => [e.toneId, e.embedding]));
+	const questionEmbeddingMap = new Map(questionEmbList.map((e: { questionId: Id<"questions">; embedding: number[] }) => [e.questionId, e.embedding] as const));
+	const styleEmbeddingMap = new Map(styleEmbList.map((e: { styleId: Id<"styles">; embedding: number[] }) => [e.styleId, e.embedding] as const));
+	const toneEmbeddingMap = new Map(toneEmbList.map((e: { toneId: Id<"tones">; embedding: number[] }) => [e.toneId, e.embedding] as const));
 
 	// Fallback defaults if no settings record exists
 	const s = settings || {
@@ -140,7 +140,7 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 				const style = styleMap.get(question.styleId)!;
 				const styleEmbedding = styleEmbeddingMap.get(question.styleId);
 				if (styleEmbedding) {
-					const sim = cosineSimilarity(questionEmbedding, styleEmbedding);
+					const sim = cosineSimilarity(questionEmbedding as number[], styleEmbedding as number[]);
 					metrics.styleSimilarity = sim;
 					if (sim < s.minStyleSimilarity) {
 						reasons.push(`Style mismatch: ${sim.toFixed(2)} similarity to "${style.name}"`);
@@ -151,7 +151,7 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 				const tone = toneMap.get(question.toneId)!;
 				const toneEmbedding = toneEmbeddingMap.get(question.toneId);
 				if (toneEmbedding) {
-					const sim = cosineSimilarity(questionEmbedding, toneEmbedding);
+					const sim = cosineSimilarity(questionEmbedding as number[], toneEmbedding as number[]);
 					metrics.toneSimilarity = sim;
 					if (sim < s.minToneSimilarity) {
 						reasons.push(`Tone mismatch: ${sim.toFixed(2)} similarity to "${tone.name}"`);

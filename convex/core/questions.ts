@@ -4,6 +4,7 @@ import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
 import { embed } from "../lib/retriever";
 import { calculateAverageEmbedding } from "../lib/embeddings";
+import { fingerprintText } from "../lib/promptArchitecture";
 
 export const discardQuestion = mutation({
 	args: {
@@ -273,7 +274,7 @@ async function getNearestQuestionsByEmbeddingInternal(
 	const idsRaw = await ctx.runQuery(internal.internal.questions.getQuestionIdsByEmbeddingRowIds, {
 		embeddingRowIds,
 	});
-	const ids = idsRaw.filter((id): id is Id<"questions"> => id !== null);
+	const ids = idsRaw.filter((id: Id<"questions"> | null): id is Id<"questions"> => id !== null);
 	if (ids.length === 0) return [];
 
 	const questions = (await ctx.runQuery(api.core.questions.getQuestionsByIds, { ids })) as any[];
@@ -684,6 +685,15 @@ export const saveAIQuestion = mutation({
 		toneId: v.id("tones"),
 		topic: v.optional(v.string()),
 		topicId: v.optional(v.id("topics")),
+		styleSlug: v.optional(v.string()),
+		toneSlug: v.optional(v.string()),
+		topicSlug: v.optional(v.string()),
+		styleVersion: v.optional(v.number()),
+		toneVersion: v.optional(v.number()),
+		topicVersion: v.optional(v.number()),
+		generationRunId: v.optional(v.id("generationRuns")),
+		source: v.optional(v.union(v.literal("ai"), v.literal("seed"), v.literal("editor"))),
+		moderationNotes: v.optional(v.string()),
 	},
 	returns: v.union(v.any(), v.null()),
 	handler: async (ctx, args) => {
@@ -701,6 +711,7 @@ export const saveAIQuestion = mutation({
 
 		const id = await ctx.db.insert("questions", {
 			text,
+			fingerprint: fingerprintText(text),
 			tags,
 			style,
 			styleId: args.styleId,
@@ -708,6 +719,17 @@ export const saveAIQuestion = mutation({
 			toneId: args.toneId,
 			topic,
 			topicId,
+			styleSlug: args.styleSlug ?? style,
+			toneSlug: args.toneSlug ?? tone,
+			topicSlug: args.topicSlug ?? topic,
+			styleVersion: args.styleVersion,
+			toneVersion: args.toneVersion,
+			topicVersion: args.topicVersion,
+			generationRunId: args.generationRunId,
+			source: args.source ?? "ai",
+			safetyFlags: [],
+			moderationNotes: args.moderationNotes,
+			quality: {},
 			status: "public",
 			isAIGenerated: true,
 			lastShownAt: 0,
@@ -716,6 +738,18 @@ export const saveAIQuestion = mutation({
 			totalShows: 0,
 			averageViewDuration: 0,
 		});
+		if (args.generationRunId) {
+			const run = await ctx.db.get(args.generationRunId);
+			if (run) {
+				const resultQuestionIds = run.resultQuestionIds.includes(id)
+					? run.resultQuestionIds
+					: [...run.resultQuestionIds, id];
+				await ctx.db.patch(args.generationRunId, {
+					acceptedQuestionId: id,
+					resultQuestionIds,
+				});
+			}
+		}
 		await ctx.scheduler.runAfter(0, internal.lib.retriever.embedQuestion, {
 			questionId: id,
 		});
@@ -793,7 +827,7 @@ export const remixQuestionForUser = action({
 
 		const topicIdToUse = args.topicId || question.topicId;
 		const takeoverTopics = await ctx.runQuery(api.core.topics.getActiveTakeoverTopics);
-		const isTakeover = takeoverTopics.some(t => t._id === topicIdToUse);
+		const isTakeover = takeoverTopics.some((t: { _id: Id<"topics"> }) => t._id === topicIdToUse);
 
 		let usageIncremented = false;
 		try {

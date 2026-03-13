@@ -1,5 +1,37 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import {
+  baseTaxonomyFields,
+  lifecycleStatus,
+  promptExample,
+  qualityRubric,
+  questionQualitySnapshot,
+  styleVersionFields,
+  toneVersionFields,
+  topicVersionFields,
+} from "./lib/taxonomy";
+
+const questionSource = v.union(
+  v.literal("ai"),
+  v.literal("seed"),
+  v.literal("editor"),
+);
+
+const generationRunStatus = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("succeeded"),
+  v.literal("failed"),
+);
+
+const generationRunPurpose = v.union(
+  v.literal("feed"),
+  v.literal("admin_preview"),
+  v.literal("admin_accept"),
+  v.literal("nightly_pool"),
+  v.literal("newsletter"),
+  v.literal("remix"),
+);
 
 export default defineSchema({
   analytics: defineTable({
@@ -29,7 +61,12 @@ export default defineSchema({
     example: v.optional(v.string()),
     order: v.optional(v.number()),
     organizationId: v.optional(v.id("organizations")),
+    ...baseTaxonomyFields,
+    ...styleVersionFields,
   }).index("by_my_id", ["id"])
+    .index("by_slug", ["slug"])
+    .index("by_slug_version", ["slug", "version"])
+    .index("by_status", ["status"])
     .index("by_name", ["name"])
     .index("by_order", ["order"]),
   tones: defineTable({
@@ -41,7 +78,12 @@ export default defineSchema({
     promptGuidanceForAI: v.string(),
     order: v.optional(v.number()),
     organizationId: v.optional(v.id("organizations")),
+    ...baseTaxonomyFields,
+    ...toneVersionFields,
   }).index("by_my_id", ["id"])
+    .index("by_slug", ["slug"])
+    .index("by_slug_version", ["slug", "version"])
+    .index("by_status", ["status"])
     .index("by_name", ["name"])
     .index("by_order", ["order"]),
   topics: defineTable({
@@ -58,11 +100,61 @@ export default defineSchema({
     endDate: v.optional(v.number()),
     takeoverStartDate: v.optional(v.number()),
     takeoverEndDate: v.optional(v.number()),
+    ...baseTaxonomyFields,
+    ...topicVersionFields,
   }).index("by_my_id", ["id"])
+    .index("by_slug", ["slug"])
+    .index("by_slug_version", ["slug", "version"])
+    .index("by_status", ["status"])
     .index("by_name", ["name"])
     .index("by_order", ["order"])
     .index("by_startDate_endDate_order", ["startDate", "endDate", "order"])
     .index("by_takeoverStartDate_takeoverEndDate_order", ["takeoverStartDate", "takeoverEndDate", "order"]),
+  promptBlueprints: defineTable({
+    slug: v.string(),
+    version: v.number(),
+    status: lifecycleStatus,
+    systemInstruction: v.string(),
+    safetyChecklist: v.array(v.string()),
+    qualityChecklist: v.array(v.string()),
+    outputFormatInstruction: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_slug_version", ["slug", "version"])
+    .index("by_status", ["status"]),
+  generationRuns: defineTable({
+    status: generationRunStatus,
+    purpose: generationRunPurpose,
+    requestedByUserId: v.optional(v.string()),
+    blueprintId: v.id("promptBlueprints"),
+    styleId: v.optional(v.id("styles")),
+    toneId: v.optional(v.id("tones")),
+    topicId: v.optional(v.id("topics")),
+    styleSlug: v.optional(v.string()),
+    toneSlug: v.optional(v.string()),
+    topicSlug: v.optional(v.string()),
+    styleVersion: v.optional(v.number()),
+    toneVersion: v.optional(v.number()),
+    topicVersion: v.optional(v.number()),
+    batchSize: v.number(),
+    model: v.string(),
+    provider: v.optional(v.string()),
+    temperature: v.number(),
+    assembledPrompt: v.string(),
+    rawResponse: v.optional(v.string()),
+    error: v.optional(v.string()),
+    previewText: v.optional(v.string()),
+    acceptedQuestionId: v.optional(v.id("questions")),
+    sourceQuestionId: v.optional(v.id("questions")),
+    resultQuestionIds: v.array(v.id("questions")),
+    createdAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  })
+    .index("by_status", ["status"])
+    .index("by_purpose", ["purpose"])
+    .index("by_style_tone_topic", ["styleSlug", "toneSlug", "topicSlug"]),
   questions: defineTable({
     organizationId: v.optional(v.id("organizations")),
     averageViewDuration: v.number(),
@@ -79,6 +171,18 @@ export default defineSchema({
     toneId: v.optional(v.id("tones")),
     topic: v.optional(v.string()),
     topicId: v.optional(v.id("topics")),
+    fingerprint: v.optional(v.string()),
+    source: v.optional(questionSource),
+    styleSlug: v.optional(v.string()),
+    toneSlug: v.optional(v.string()),
+    topicSlug: v.optional(v.string()),
+    styleVersion: v.optional(v.number()),
+    toneVersion: v.optional(v.number()),
+    topicVersion: v.optional(v.number()),
+    generationRunId: v.optional(v.id("generationRuns")),
+    safetyFlags: v.optional(v.array(v.string())),
+    moderationNotes: v.optional(v.string()),
+    quality: v.optional(questionQualitySnapshot),
     authorId: v.optional(v.string()),
     customText: v.optional(v.string()),
     status: v.optional(
@@ -122,6 +226,8 @@ export default defineSchema({
     .index("by_tone_and_total_likes", ["toneId", "totalLikes"])
     .index("by_style_and_tone", ["styleId", "toneId"])
     .index("by_text", ["text"])
+    .index("by_fingerprint", ["fingerprint"])
+    .index("by_generationRun", ["generationRunId"])
     .index("by_author", ["authorId", "status"])
     .index("by_prunedAt_status_text", ["prunedAt", "status", "text"])
     .index("by_poolDate_and_poolStatus", ["poolDate", "poolStatus"]),

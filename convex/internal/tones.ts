@@ -1,97 +1,146 @@
 import { v } from "convex/values";
-import { internalQuery, internalMutation } from "../_generated/server";
+import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
 
-const publicToneFields = {
-	_id: v.id("tones"),
-	_creationTime: v.number(),
-	id: v.string(),
-	name: v.string(),
-	description: v.optional(v.string()),
-	promptGuidanceForAI: v.string(),
-	color: v.string(),
-	icon: v.string(),
-	order: v.optional(v.float64()),
-	organizationId: v.optional(v.id("organizations")),
-};
+const toneFields = v.object({
+  _id: v.id("tones"),
+  _creationTime: v.number(),
+  id: v.string(),
+  slug: v.string(),
+  name: v.string(),
+  description: v.optional(v.string()),
+  promptGuidanceForAI: v.string(),
+  aiGuidance: v.string(),
+  color: v.string(),
+  icon: v.string(),
+  order: v.optional(v.float64()),
+  organizationId: v.optional(v.id("organizations")),
+  version: v.number(),
+  status: v.union(v.literal("draft"), v.literal("active"), v.literal("archived")),
+  commonFailureModes: v.array(v.string()),
+  distinctFrom: v.array(v.string()),
+  examples: v.array(v.object({ text: v.string(), note: v.optional(v.string()) })),
+  antiExamples: v.array(v.object({ text: v.string(), note: v.optional(v.string()) })),
+  quality: v.object({
+    distinctness: v.number(),
+    generativity: v.number(),
+    readability: v.number(),
+    pairability: v.number(),
+    storyYield: v.number(),
+    safety: v.number(),
+    embeddingValue: v.number(),
+  }),
+  languageCues: v.array(v.string()),
+  avoidCues: v.array(v.string()),
+  emotionalAxes: v.object({
+    warmth: v.number(),
+    playfulness: v.number(),
+    seriousness: v.number(),
+    surrealness: v.number(),
+    sharpness: v.number(),
+    intimacy: v.number(),
+  }),
+});
+
+function mapTone(tone: any) {
+  const slug = tone.slug ?? tone.id;
+  const promptGuidanceForAI = tone.promptGuidanceForAI ?? tone.aiGuidance ?? "";
+  return {
+    _id: tone._id,
+    _creationTime: tone._creationTime,
+    id: slug,
+    slug,
+    name: tone.name,
+    description: tone.description,
+    promptGuidanceForAI,
+    aiGuidance: tone.aiGuidance ?? promptGuidanceForAI,
+    color: tone.color,
+    icon: tone.icon,
+    order: tone.order,
+    organizationId: tone.organizationId,
+    version: tone.version ?? 1,
+    status: tone.status ?? "active",
+    commonFailureModes: tone.commonFailureModes ?? [],
+    distinctFrom: tone.distinctFrom ?? [],
+    examples: tone.examples ?? [],
+    antiExamples: tone.antiExamples ?? [],
+    quality: tone.quality ?? defaultQualityRubric(),
+    languageCues: tone.languageCues ?? [],
+    avoidCues: tone.avoidCues ?? [],
+    emotionalAxes: tone.emotionalAxes ?? defaultToneAxesValue(),
+  };
+}
 
 export const getTonesWithMissingEmbeddings = internalQuery({
-	args: {},
-	returns: v.array(v.object(publicToneFields)),
-	handler: async (ctx) => {
-		const withEmbeddingIds = new Set(
-			(await ctx.db.query("tone_embeddings").collect()).map((e) => e.toneId)
-		);
-		const tones = await ctx.db.query("tones").collect();
-		return tones.filter((t) => !withEmbeddingIds.has(t._id));
-	},
+  args: {},
+  returns: v.array(toneFields),
+  handler: async (ctx) => {
+    const withEmbeddingIds = new Set((await ctx.db.query("tone_embeddings").collect()).map((e) => e.toneId));
+    const tones = await ctx.db.query("tones").collect();
+    return tones.filter((tone) => !withEmbeddingIds.has(tone._id)).map(mapTone);
+  },
 });
 
 export const addToneEmbedding = internalMutation({
-	args: {
-		toneId: v.id("tones"),
-		embedding: v.array(v.float64()),
-	},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		const existing = await ctx.db
-			.query("tone_embeddings")
-			.withIndex("by_toneId", (q) => q.eq("toneId", args.toneId))
-			.first();
-		if (existing) {
-			await ctx.db.patch(existing._id, { embedding: args.embedding });
-		} else {
-			await ctx.db.insert("tone_embeddings", {
-				toneId: args.toneId,
-				embedding: args.embedding,
-			});
-		}
-		return null;
-	},
+  args: {
+    toneId: v.id("tones"),
+    embedding: v.array(v.float64()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("tone_embeddings")
+      .withIndex("by_toneId", (q) => q.eq("toneId", args.toneId))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { embedding: args.embedding });
+    } else {
+      await ctx.db.insert("tone_embeddings", {
+        toneId: args.toneId,
+        embedding: args.embedding,
+      });
+    }
+    return null;
+  },
 });
 
 export const updateQuestionsWithMissingToneIds = internalMutation({
-	args: {},
-	returns: v.null(),
-	handler: async (ctx) => {
-		const questions = await ctx.db.query("questions").collect();
-		for (const q of questions) {
-			if (!q.toneId && q.tone) {
-				const tone = await ctx.db.query("tones").withIndex("by_my_id", (t) => t.eq("id", q.tone!)).first();
-				if (tone) {
-					await ctx.db.patch(q._id, { toneId: tone._id });
-					await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
-						questionId: q._id,
-					});
-				}
-			}
-		}
-		return null;
-	},
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const questions = await ctx.db.query("questions").collect();
+    for (const question of questions) {
+      if (!question.toneId && question.tone) {
+        const tone = await ctx.db
+          .query("tones")
+          .withIndex("by_slug", (q) => q.eq("slug", question.tone!))
+          .first();
+        if (tone) {
+          await ctx.db.patch(question._id, { toneId: tone._id, toneSlug: tone.slug ?? tone.id });
+          await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
+            questionId: question._id,
+          });
+        }
+      }
+    }
+    return null;
+  },
 });
 
 export const getToneById = internalQuery({
-	args: { id: v.id("tones") },
-	returns: v.nullable(v.object({
-		_id: v.id("tones"),
-		_creationTime: v.number(),
-		id: v.string(),
-		name: v.string(),
-		description: v.optional(v.string()),
-		color: v.string(),
-		icon: v.string(),
-		promptGuidanceForAI: v.string(),
-		order: v.optional(v.number()),
-		organizationId: v.optional(v.id("organizations")),
-	})),
-	handler: async (ctx, args) => {
-		return await ctx.db.get(args.id);
-	},
+  args: { id: v.id("tones") },
+  returns: v.nullable(toneFields),
+  handler: async (ctx, args) => {
+    const tone = await ctx.db.get(args.id);
+    return tone ? mapTone(tone) : null;
+  },
 });
+
 export const getAllTonesInternal = internalQuery({
-	args: {},
-	returns: v.array(v.object(publicToneFields)),
-	handler: async (ctx) => {
-		return await ctx.db.query("tones").collect();
-	},
+  args: {},
+  returns: v.array(toneFields),
+  handler: async (ctx) => {
+    return (await ctx.db.query("tones").collect()).map(mapTone);
+  },
 });

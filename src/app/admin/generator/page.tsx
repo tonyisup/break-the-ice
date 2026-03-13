@@ -24,11 +24,17 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
+type GeneratedPreview = {
+    text: string
+    runId: Id<"generationRuns">
+}
+
 export default function GeneratorPage() {
     const styles = useQuery(api.core.styles.getStyles, {})
     const tones = useQuery(api.core.tones.getTones, {})
     const topics = useQuery(api.core.topics.getTopics, {})
     const tags = useQuery(api.core.tags.getTags)
+    const promptBlueprints = useQuery(api.admin.promptBlueprints.listBlueprints)
 
     const generateAIQuestions = useAction(api.admin.ai.generateAIQuestions)
     const saveAIQuestion = useMutation(api.core.questions.saveAIQuestion)
@@ -38,10 +44,11 @@ export default function GeneratorPage() {
     const [selectedStyleId, setSelectedStyleId] = React.useState<Id<"styles"> | null>(null)
     const [selectedToneId, setSelectedToneId] = React.useState<Id<"tones"> | null>(null)
     const [selectedTopicId, setSelectedTopicId] = React.useState<Id<"topics"> | null>(null)
+    const [selectedBlueprintSlug, setSelectedBlueprintSlug] = React.useState("icebreaker-default")
     const [isGenerating, setIsGenerating] = React.useState(false)
     const [isSaving, setIsSaving] = React.useState(false)
     const [expandedTagGroupings, setExpandedTagGroupings] = React.useState<Set<string>>(new Set())
-    const [generatedQuestions, setGeneratedQuestions] = React.useState<string[]>([])
+    const [generatedQuestions, setGeneratedQuestions] = React.useState<GeneratedPreview[]>([])
     const [activeTabIndex, setActiveTabIndex] = React.useState<string>("0")
 
     // Convenience for active question
@@ -51,7 +58,7 @@ export default function GeneratorPage() {
     React.useEffect(() => {
         setGeneratedQuestions([])
         setActiveTabIndex("0")
-    }, [selectedStyleId, selectedToneId, selectedTopicId])
+    }, [selectedStyleId, selectedToneId, selectedTopicId, selectedBlueprintSlug])
 
     const handleTagToggle = (tagName: string) => {
         setGeneratedQuestions([]) // Reset on tag change too
@@ -109,12 +116,13 @@ export default function GeneratorPage() {
             const generatedQuestion = await generateAIQuestions({
                 count: 1,
                 selectedTags,
-                excludedQuestions: generatedQuestions.length > 0 ? generatedQuestions : undefined,
+                excludedQuestions: generatedQuestions.length > 0 ? generatedQuestions.map(question => question.text) : undefined,
                 styleId: selectedStyleId,
                 toneId: selectedToneId,
-                topicId: selectedTopicId || undefined
+                topicId: selectedTopicId || undefined,
+                blueprintSlug: selectedBlueprintSlug,
             })
-            if (generatedQuestion) {
+            if (generatedQuestion?.text) {
                 const newQuestions = [...generatedQuestions, generatedQuestion]
                 setGeneratedQuestions(newQuestions)
                 setActiveTabIndex((newQuestions.length - 1).toString())
@@ -145,14 +153,21 @@ export default function GeneratorPage() {
             const selectedTopic = topics?.find(t => t._id === selectedTopicId)
 
             const result = await saveAIQuestion({
-                text: activeQuestion,
+                text: activeQuestion.text,
                 tags: selectedTags,
                 styleId: selectedStyleId,
-                style: selectedStyle?.id,
+                style: selectedStyle?.slug,
                 toneId: selectedToneId,
-                tone: selectedTone?.id,
+                tone: selectedTone?.slug,
                 topicId: selectedTopicId || undefined,
-                topic: selectedTopic?.id,
+                topic: selectedTopic?.slug,
+                styleSlug: selectedStyle?.slug,
+                toneSlug: selectedTone?.slug,
+                topicSlug: selectedTopic?.slug,
+                styleVersion: selectedStyle?.version,
+                toneVersion: selectedTone?.version,
+                topicVersion: selectedTopic?.version,
+                generationRunId: activeQuestion.runId,
             })
 
             if (result === null) {
@@ -174,7 +189,7 @@ export default function GeneratorPage() {
 
     const tagGroupings = tags ? Array.from(new Set(tags.map(tag => tag.grouping))).sort() : []
 
-    if (!styles || !tones || !tags || !topics) {
+    if (!styles || !tones || !tags || !topics || !promptBlueprints) {
         return (
             <div className="flex items-center justify-center h-full p-12">
                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -272,6 +287,32 @@ export default function GeneratorPage() {
                                         `}
                                     >
                                         {topic.name}
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Prompt Blueprint</CardTitle>
+                            <CardDescription>Select the active prompt architecture used for preview generation.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex flex-wrap gap-2">
+                                {promptBlueprints.map(blueprint => (
+                                    <div
+                                        key={blueprint._id}
+                                        onClick={() => setSelectedBlueprintSlug(blueprint.slug)}
+                                        className={`
+                                            cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
+                                            ${selectedBlueprintSlug === blueprint.slug
+                                                ? "bg-primary text-primary-foreground border-primary"
+                                                : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
+                                        `}
+                                    >
+                                        {blueprint.slug} v{blueprint.version}
+                                        <span className="ml-2 text-xs opacity-70">{blueprint.status}</span>
                                     </div>
                                 ))}
                             </div>
@@ -411,8 +452,9 @@ export default function GeneratorPage() {
                                             className="flex-1 mt-0 flex flex-col justify-between space-y-6 animate-in fade-in zoom-in duration-300"
                                         >
                                             <div className="space-y-4">
-                                                <p className="text-xl font-medium leading-relaxed">{q}</p>
+                                                <p className="text-xl font-medium leading-relaxed">{q.text}</p>
                                                 <div className="flex flex-wrap gap-2">
+                                                    <Badge variant="outline">run {q.runId.slice(-6)}</Badge>
                                                     {selectedTags.map(tag => (
                                                         <Badge key={tag} variant="secondary" className="text-xs">
                                                             {tag}
