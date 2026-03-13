@@ -565,7 +565,7 @@ export const assignPoolQuestionsToUsers = internalAction({
 				const poolIds = userQuestions.map((q) => q._id);
 				const embMap = new Map(
 					(await ctx.runQuery(internal.internal.questions.getEmbeddingsByQuestionIds, { questionIds: poolIds })).map(
-						(e) => [e.questionId, e.embedding]
+						(e: { questionId: Id<"questions">; embedding: number[] }) => [e.questionId, e.embedding] as const
 					)
 				);
 				if (userEmb && userEmb.length > 0) {
@@ -573,8 +573,8 @@ export const assignPoolQuestionsToUsers = internalAction({
 						const embA = embMap.get(a._id);
 						const embB = embMap.get(b._id);
 						if (!embA || !embB) return 0;
-						const simA = cosineSimilarity(userEmb, embA);
-						const simB = cosineSimilarity(userEmb, embB);
+						const simA = cosineSimilarity(userEmb as number[], embA as number[]);
+						const simB = cosineSimilarity(userEmb as number[], embB as number[]);
 						return simB - simA;
 					});
 				} else {
@@ -777,8 +777,10 @@ export const getRandomQuestionsInternal = internalQuery({
 
 		const activeTakeoverTopics = await getActiveTakeoverTopicsHelper(ctx);
 
-		if (activeTakeoverTopics.length > 0) {
-			const takeoverTopicIds = activeTakeoverTopics.map(t => t._id);
+			if (activeTakeoverTopics.length > 0) {
+				const takeoverTopicIds = activeTakeoverTopics
+					.filter((t): t is NonNullable<typeof t> => t !== null)
+					.map((t) => t._id);
 			let takeoverCandidates: any[] = [];
 
 			for (const topicId of takeoverTopicIds) {

@@ -242,7 +242,7 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 			return embedding;
 		}));
 
-		const validEmbeddings = userQuestionEmbeddings.filter((e): e is number[] => e !== null && e.length > 0);
+		const validEmbeddings = userQuestionEmbeddings.filter((e: number[] | null): e is number[] => e !== null && e.length > 0);
 		const averageEmbedding = calculateAverageEmbedding(validEmbeddings);
 
 		if (averageEmbedding.length > 0) {

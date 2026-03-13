@@ -1,21 +1,11 @@
 "use node";
 
 import { v } from "convex/values";
-import { action, internalAction, ActionCtx } from "../_generated/server";
-import OpenAI from "openai";
+import { internalAction, ActionCtx } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { createPopulateMissingEmbeddingsEmail, createPopulateMissingStyleEmbeddingsEmail, createPopulateMissingToneEmbeddingsEmail } from "../lib/emails";
-
-const openai = new OpenAI({
-	baseURL: 'https://openrouter.ai/api/v1',
-	apiKey: process.env.OPEN_ROUTER_API_KEY,
-	timeout: 30000, // 30 second timeout
-	defaultHeaders: {
-		'HTTP-Referer': 'https://breaktheiceberg.com',
-		'X-Title': 'Break the ice(berg)',
-	},
-});
+import { runPersistedQuestionGeneration, runRemixQuestion } from "../lib/generationRunner";
 
 export const populateMissingEmbeddings = internalAction({
 	args: {
@@ -285,92 +275,19 @@ export const generateNightlyQuestionPool = internalAction({
 		for (const { style, tone } of selectedCombinations) {
 			combinationsProcessed++;
 			try {
-				// We call the AI ONCE per combo to get a batch
-				const completion = await openai.chat.completions.create({
-					model: "@preset/break-the-ice-berg-default",
-					messages: [
-						{
-							role: "system",
-							content: `You are a world-class creative writer specializing in social psychology and ice-breakers.
-                            
-                            TASK: Generate exactly ${targetCount} unique questions.
-                            FORMAT: A JSON array of strings: ["Question 1", "Question 2", ...].
-                            STYLE STRUCTURE: You MUST follow this template: "${style.structure}"
-                            
-                            CONSTRAINTS:
-                            - Avoid repeating nouns or verbs across the batch.
-                            - Ensure each question explores a different life niche (e.g., social, digital, physical, career).
-                            - Do not use the words "Valentine" or "Love" literally unless essential; evoke the feeling instead.`
-						},
-						{
-							role: "user",
-							content: `Generate ${targetCount} questions.
-                            Style: ${style.name} (${style.description})
-                            Tone: ${tone.name} (${tone.description})
-                            Topic Focus: ${topic?.name ?? 'General'} (${topic?.description ?? ''})
-                            AI Guidance: ${style.promptGuidanceForAI} ${tone.promptGuidanceForAI} ${topic?.promptGuidanceForAI ?? ''}`
-						}
-					],
-					response_format: { type: "json_object" }, // Ensures valid JSON
-					temperature: 0.85, // Balanced for structure vs creativity
-					max_tokens: 150 * targetCount,
+				const result = await runPersistedQuestionGeneration(ctx, {
+					purpose: "nightly_pool",
+					styleId: style._id,
+					toneId: tone._id,
+					topicId: topic?._id,
+					batchSize: targetCount,
+					temperature: 0.85,
+					poolDate: today,
+					poolStatus: "available",
 				});
-
-				const content = completion.choices[0]?.message?.content ?? "{}";
-				let parsed;
-				try {
-					parsed = JSON.parse(content);
-				} catch (e) {
-					console.error("Failed to parse AI response:", content);
-					throw new Error("Invalid JSON from AI");
-				}
-
-				let batch: string[] = [];
-				if (Array.isArray(parsed)) {
-					if (parsed.every(item => typeof item === "string")) {
-						batch = parsed;
-					}
-				} else if (typeof parsed === "object" && parsed !== null) {
-					const firstValue = Object.values(parsed)[0];
-					if (Array.isArray(firstValue) && firstValue.every(item => typeof item === "string")) {
-						batch = firstValue;
-					}
-				}
-
-				if (batch.length === 0) {
-					console.warn("AI returned an empty or invalid batch format:", parsed);
-				}
-
-				for (const text of batch) {
-					const cleanedText = text.replace(/^["']|["']$/g, '').trim();
-
-					// 1. Exact Match Check (O(1) via Index)
-					const isDuplicate = await ctx.runQuery(internal.internal.questions.checkExactDuplicate, { text: cleanedText });
-					if (isDuplicate) continue;
-
-					// 2. Vector Similarity Check (Semantic redundancy)
-					const isSimilar = await ctx.runAction(internal.internal.questions.checkSimilarity, { text: cleanedText });
-					if (isSimilar) continue;
-
-					const savedId = await ctx.runMutation(internal.internal.questions.savePoolQuestion, {
-						text: cleanedText,
-						styleId: style._id,
-						style: style.id,
-						toneId: tone._id,
-						tone: tone.id,
-						poolDate: today,
-					});
-
-					if (savedId) {
-						questionsGenerated++;
-						await ctx.scheduler.runAfter(0, internal.lib.retriever.embedQuestion, { questionId: savedId });
-					}
-				}
-				// Small delay to respect rate limits between combo batches
-				await new Promise(r => setTimeout(r, 500));
-
-			} catch (error: any) {
-				errors.push(`Combo ${style.id}/${tone.id} failed: ${error.message}`);
+				questionsGenerated += result.saveResult.insertedCount;
+			} catch (error: unknown) {
+				errors.push(`Combo ${(style.slug ?? style.id)}/${(tone.slug ?? tone.id)} failed: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
 
@@ -385,6 +302,8 @@ const remixQuestionHelper = async (
 		styleId?: Id<"styles">;
 		toneId?: Id<"tones">;
 		topicId?: Id<"topics">;
+		requestedByUserId?: string;
+		sourceQuestionId?: Id<"questions">;
 	}
 ): Promise<string> => {
 	const { questionText, styleId, toneId, topicId } = args;
@@ -395,40 +314,15 @@ const remixQuestionHelper = async (
 		topicId ? ctx.runQuery(internal.internal.topics.getTopicById, { id: topicId }) : null,
 	]);
 
-	const completion = await openai.chat.completions.create({
-		model: "@preset/break-the-ice-berg-default",
-		messages: [
-			{
-				role: "system",
-				content: `You are a world-class creative writer specializing in social psychology and ice-breakers.
-				
-				TASK: "Remix" the user's question. Change the words and phrasing completely.
-				FORMAT: Return ONLY the new question text as a plain string. No quotes, no JSON, no prefixes.
-				
-				STYLE STRUCTURE: Use this as your base: "${style?.structure ?? "Direct and engaging"}"
-				TONE GUIDE: Use this as your base: "${tone?.promptGuidanceForAI ?? "KEEP the tone of the original text"}"
-				TOPIC FOCUS: Use this as your base: "${topic?.promptGuidanceForAI ?? "KEEP the topic of the original text"}"
-				`
-			},
-			{
-				role: "user",
-				content: `Remix this question: "${questionText}"
-				
-				Context:
-				Style: ${style?.name ?? "General"} (${style?.description ?? ""})
-				Tone: ${tone?.name ?? "General"} (${tone?.description ?? ""})${topic ? `\n\t\t\t\t\tTopic Focus: ${topic.name} (${topic.description ?? ""})` : ""}`
-			}
-		],
-		temperature: 0.9,
-		max_tokens: 150,
+	const result = await runRemixQuestion(ctx, {
+		requestedByUserId: args.requestedByUserId,
+		questionText,
+		style,
+		tone,
+		topic,
+		sourceQuestionId: args.sourceQuestionId,
 	});
-
-	const remixedText = completion.choices[0]?.message?.content?.trim() ?? "";
-	if (!remixedText) {
-		throw new Error("AI failed to generate a remix");
-	}
-
-	return remixedText.replace(/^["']|["']$/g, '').trim();
+	return result.text;
 };
 
 // Remix a single question and allow changing style and tone
@@ -463,6 +357,7 @@ export const remixQuestion = internalAction({
 			styleId: question.styleId,
 			toneId: question.toneId,
 			topicId: question.topicId,
+			sourceQuestionId: question._id,
 		});
 	},
 });
@@ -476,6 +371,12 @@ export const generateAIQuestionForUser = internalAction({
 		topicId: v.optional(v.id("topics")),
 		anchoredStyleId: v.optional(v.id("styles")),
 		anchoredToneId: v.optional(v.id("tones")),
+		purpose: v.optional(
+			v.union(
+				v.literal("feed"),
+				v.literal("newsletter"),
+			),
+		),
 	},
 	returns: v.array(v.union(v.any(), v.null())),
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
@@ -488,42 +389,20 @@ export const generateAIQuestionForUser = internalAction({
 
 		const style = args.anchoredStyleId
 			? (await ctx.runQuery(api.core.styles.getStyleById, { id: args.anchoredStyleId }))
-			: (await ctx.runQuery(api.core.styles.getRandomStyleForUser, { userId: user._id }));
+			: (await ctx.runQuery(internal.internal.styles.getRandomStyleForUserId, { userId: user._id }));
 		const tone = args.anchoredToneId
-			? (await ctx.runQuery(api.core.tones.getToneById, { id: args.anchoredToneId }))
-			: (await ctx.runQuery(api.core.tones.getRandomToneForUser, { userId: user._id }));
+			? (await ctx.runQuery(internal.internal.tones.getToneById, { id: args.anchoredToneId }))
+			: (await ctx.runQuery(internal.internal.tones.getRandomToneForUserId, { userId: user._id }));
 		const topic = args.topicId ? (await ctx.runQuery(api.core.topics.getTopicById, { id: args.topicId })) : null;
 
 		if (!style || !tone) {
 			throw new Error("Failed to generate AI question: No style or tone found for user");
 		}
 
-		let prompt = `Style: ${style.name} (${style.description || ""}). Structure: ${style.structure}. ${style.promptGuidanceForAI || ""}`;
-		prompt += `\nTone: ${tone.name} (${tone.description || ""}). ${tone.promptGuidanceForAI || ""}`;
-
-		if (topic) {
-			prompt += `\nTopic Focus: ${topic.name} (${topic.description || ""})`;
-			if (topic.promptGuidanceForAI) {
-				prompt += `\nAI Guidance for Topic: ${topic.promptGuidanceForAI}`;
-			}
-		}
-
 		const recentlySeenQuestions = await ctx.runQuery(internal.internal.users.getRecentlySeenQuestions, { userId: user._id });
 		const recentlySeen = recentlySeenQuestions.filter((q: string) => q !== undefined);
-		if (recentlySeen.length > 0) {
-			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these recently seen questions:\n- ${recentlySeen.join('\n- ')}`;
-		}
 
 		const blockedQuestions = await ctx.runQuery(internal.internal.users.getBlockedQuestions, { userId: user._id });
-		if (blockedQuestions.length > 0) {
-			prompt += `\n\nCRITICAL: Avoid topics, patterns, or phrasing similar to these blocked questions:\n- ${blockedQuestions.join('\n- ')}`;
-		}
-
-		// Retry logic for AI generation
-		let attempts = 0;
-		const maxAttempts = 3;
-		let generatedContent = "";
-
 		let userContext = "";
 
 		let usageIncremented = false;
@@ -549,197 +428,17 @@ export const generateAIQuestionForUser = internalAction({
 				}
 			}
 
-		while (attempts < maxAttempts && !generatedContent) {
-			try {
-				attempts++;
-				const completion = await openai.chat.completions.create({
-					model: "@preset/break-the-ice-berg-default",
-					messages: [
-						{
-							role: "system",
-							content: `You are clever, well travelled, emotionally and socially intelligent. You will provide guidance and suggestions to help people break the ice in social settings. You will be providing unique questions that would be perfect for starting conversations. You will be able to combine a provided STYLE (question structure) with a TONE (vibe/color).
-    
-    CRITICAL: You must ALWAYS respond with ONLY a valid JSON array of objects.
-    - Do not include any text before or after the JSON.
-    - Do not use markdown formatting (no \`\`\`json wrappers).
-    - Do not include explanations or comments.
-    - Do not number the items in the array (e.g. no "1. {...}").
-		- DO NOT provide your own examples of any generated content. No dashes, no lists.
-    
-    Example format: [{"text": "Question 1"}]
-    
-    Requirements:
-    - Return exactly 1 question
-    - Each question should be an object in the JSON array
-    - Avoid questions too similar to existing ones
-    - Make questions engaging and conversation-starting
-		- Avoid being verbose; keep it short and sweet.
-    - Only ONE question per text. There should only be one question mark at the end of the text.`
-						},
-						{
-							role: "user",
-							content: `Generate 1 ice-breaker question with these parameters:
-    ${prompt}
-    
-    ${userContext}
-    
-    Response with a JSON array of objects, each containing the following properties:
-    - text: The question text
-    For example:
-    [
-      {
-        "text": "Would you rather have a pet dragon that only eats ice cream or a pet unicorn that only eats tacos?"
-      }
-    ]`
-						}
-					],
-					max_tokens: 200,
-					temperature: 0.7,
-				});
-
-				generatedContent = completion.choices[0]?.message?.content?.trim() || "";
-
-				if (!generatedContent) {
-					console.log(`Attempt ${attempts}: No content generated`);
-					if (attempts < maxAttempts) {
-						const waitTime = 1000 * Math.pow(2, attempts - 1);
-						console.log(`No content generated. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
-						await new Promise(resolve => setTimeout(resolve, waitTime));
-						continue;
-					}
-					throw new Error("Failed to generate question after multiple attempts");
-				}
-
-				// Validate that we have a reasonable response length
-				if (generatedContent.length < 10) {
-					console.log(`Attempt ${attempts}: Response too short (${generatedContent.length} chars):`, generatedContent);
-					if (attempts < maxAttempts) {
-						generatedContent = "";
-						const waitTime = 1000 * Math.pow(2, attempts - 1);
-						console.log(`Response too short. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
-						await new Promise(resolve => setTimeout(resolve, waitTime));
-						continue;
-					}
-					throw new Error("AI response too short");
-				}
-
-				// If we get here, we have content, so break out of the retry loop
-				break;
-
-			} catch (error: any) {
-				const isRateLimit = error.status === 429 || error.message?.includes("429");
-				console.error(`Attempt ${attempts} failed (${isRateLimit ? "Rate Limit" : "Error"}):`, error);
-
-				if (attempts >= maxAttempts) {
-					throw error;
-				}
-
-				let waitTime = 1000 * Math.pow(2, attempts - 1); // Exponential backoff by default
-				if (error.status === 429) {
-					const retryAfter = error.headers?.['retry-after'];
-					if (retryAfter) {
-						const seconds = parseInt(retryAfter);
-						if (!isNaN(seconds)) {
-							waitTime = seconds * 1000;
-						} else {
-							// Could be a date string
-							const retryDate = new Date(retryAfter).getTime();
-							if (!isNaN(retryDate)) {
-								waitTime = Math.max(1000, retryDate - Date.now());
-							}
-						}
-					}
-					console.log(`Respecting 429 Rate Limit. Waiting ${waitTime}ms before retry ${attempts + 1}/${maxAttempts}...`);
-				}
-
-				await new Promise(resolve => setTimeout(resolve, waitTime));
-			}
-		}
-
-		if (!generatedContent) {
-			throw new Error("Failed to generate question after all attempts");
-		}
-
-		// Try to clean and parse the response
-		// Remove markdown code blocks if present
-		let cleanedContent = generatedContent
-			.replace(/^```json\s*/, "")
-			.replace(/^```\s*/, "")
-			.replace(/\s*```$/, "");
-
-		let parsedContent: { text: string; }[] = [];
-
-		try {
-			let parsed = JSON.parse(cleanedContent);
-			parsedContent = Array.isArray(parsed) ? parsed : [parsed];
-		} catch (firstError) {
-			// Retry after stripping trailing garbage (e.g. extra `}` after the array)
-			try {
-				const trimmed = cleanedContent.replace(/\]\s*\}+\s*$/, "]");
-				if (trimmed !== cleanedContent) {
-					const parsed = JSON.parse(trimmed);
-					parsedContent = Array.isArray(parsed) ? parsed : [parsed];
-				} else {
-					throw firstError;
-				}
-			} catch {
-				console.log("Failed to parse JSON, attempting fallback parsing for numbered list...");
-			// Fallback parsing for numbered lists (e.g., "1. Question\n2. Question")
-			const lines = cleanedContent.split('\n');
-			const regex = /^\d+\.\s*(.+)/;
-
-			for (const line of lines) {
-				const match = line.match(regex);
-				if (match && match[1]) {
-					parsedContent.push({
-						text: match[1].trim(),
-					});
-				}
-			}
-
-			if (parsedContent.length === 0) {
-				console.error("Failed to parse AI response. Content was:", generatedContent);
-				console.error("Cleaned content was:", cleanedContent);
-				console.error("Parse error:", firstError);
-				throw firstError;
-			}
-			}
-		}
-
-		const normalize = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
-		const normalizedRecentlySeen = recentlySeen.map((q: string) => normalize(q));
-
-		const newQuestions: (Doc<"questions"> | null)[] = [];
-		for (const question of parsedContent) {
-			try {
-				// Simple dedupe check
-				const normalizedText = normalize(question.text);
-				const isDuplicate = normalizedRecentlySeen.some((seen: string) =>
-					normalizedText.includes(seen) || seen.includes(normalizedText)
-				);
-
-				if (isDuplicate) {
-					console.log(`Skipping duplicate/similar question: ${question.text}`);
-					continue;
-				}
-
-				const newQuestion = await ctx.runMutation(api.core.questions.saveAIQuestion, {
-					text: question.text,
-					style: style.id,
-					styleId: style._id,
-					tone: tone.id,
-					toneId: tone._id,
-					topic: topic?.id,
-					topicId: topic?._id,
-					tags: [],
-				});
-				newQuestions.push(newQuestion);
-			} catch (error) {
-				console.error(`Failed to save question: "${question.text}"`, error);
-				// Continue with other questions even if one fails
-			}
-		}
-			return newQuestions;
+			const result = await runPersistedQuestionGeneration(ctx, {
+				purpose: args.purpose ?? "feed",
+				requestedByUserId: user._id.toString(),
+				styleId: style._id,
+				toneId: tone._id,
+				topicId: topic?._id,
+				batchSize: count,
+				excludedQuestions: [...recentlySeen, ...blockedQuestions],
+				userContext,
+			});
+			return result.questions as (Doc<"questions"> | null)[];
 		} catch (error) {
 			if (usageIncremented) {
 				await ctx.runMutation(internal.internal.users.decrementAIUsage, { userId: user._id });

@@ -119,6 +119,7 @@ export const getQuestionForUser = internalAction({
 					{
 						userId: user._id,
             bypassAIUsage: true,
+						purpose: "newsletter",
 					}
 				);
 				if (questions.length === 0) {

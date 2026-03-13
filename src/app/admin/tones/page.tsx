@@ -42,10 +42,11 @@ import { IconPicker } from "@/components/ui/icon-picker"
 import { toast } from "sonner"
 
 export default function TonesPage() {
-	const tones = useQuery(api.core.tones.getTones, {})
+	const tones = useQuery(api.admin.tones.listTones)
 	const createTone = useMutation(api.admin.tones.createTone)
 	const updateTone = useMutation(api.admin.tones.updateTone)
 	const deleteTone = useMutation(api.admin.tones.deleteTone)
+	const activateToneVersion = useMutation(api.admin.tones.activateToneVersion)
 
 	const [search, setSearch] = React.useState("")
 	const [editingTone, setEditingTone] = React.useState<Doc<"tones"> | null>(null)
@@ -100,7 +101,6 @@ export default function TonesPage() {
 		try {
 			await updateTone({
 				_id: t._id,
-				id: t.id,
 				name: t.name,
 				description: t.description,
 				color: t.color,
@@ -116,12 +116,21 @@ export default function TonesPage() {
 	}
 
 	const handleDelete = async (id: Id<"tones">) => {
-		if (!confirm("Are you sure you want to delete this tone? This might affect existing questions.")) return
+		if (!confirm("Archive this tone version?")) return
 		try {
 			await deleteTone({ id })
-			toast.success("Tone deleted")
+			toast.success("Tone version archived")
 		} catch (error) {
 			toast.error("Failed to delete tone")
+		}
+	}
+
+	const handleActivate = async (id: Id<"tones">) => {
+		try {
+			await activateToneVersion({ id })
+			toast.success("Tone version activated")
+		} catch (error) {
+			toast.error("Failed to activate tone version")
 		}
 	}
 
@@ -262,7 +271,12 @@ export default function TonesPage() {
 									</div>
 									<div>
 										<h3 className="font-bold text-lg">{tone.name}</h3>
-										<p className="text-xs text-muted-foreground font-mono">{tone.id}</p>
+										<div className="flex items-center gap-2">
+											<p className="text-xs text-muted-foreground font-mono">{tone.id}</p>
+											<Badge variant={tone.status === "active" ? "default" : "secondary"} className="text-[10px]">
+												{tone.status} v{tone.version}
+											</Badge>
+										</div>
 									</div>
 								</div>
 								<DropdownMenu>
@@ -276,9 +290,15 @@ export default function TonesPage() {
 											<Pencil className="size-3.5" />
 											Edit Tone
 										</DropdownMenuItem>
+										{tone.status !== "active" && (
+											<DropdownMenuItem className="gap-2" onClick={() => handleActivate(tone._id)}>
+												<Check className="size-3.5" />
+												Activate Version
+											</DropdownMenuItem>
+										)}
 										<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={() => handleDelete(tone._id)}>
 											<Trash2 className="size-3.5" />
-											Delete
+											Archive
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
@@ -321,6 +341,7 @@ export default function TonesPage() {
 										<div className="flex flex-col">
 											<span className="font-bold">{tone.name}</span>
 											<span className="text-[10px] text-muted-foreground font-mono">{tone.id}</span>
+											<span className="text-[10px] text-muted-foreground">{tone.status} v{tone.version}</span>
 										</div>
 									</td>
 									<td className="px-6 py-4">
@@ -328,6 +349,11 @@ export default function TonesPage() {
 									</td>
 									<td className="px-6 py-4 text-right">
 										<div className="flex items-center justify-end gap-1">
+											{tone.status !== "active" && (
+												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={() => handleActivate(tone._id)}>
+													<Check className="size-3.5" />
+												</Button>
+											)}
 											<Button variant="ghost" size="icon" className="size-8" onClick={() => setEditingTone(tone)}>
 												<Pencil className="size-3.5" />
 											</Button>
@@ -356,10 +382,7 @@ export default function TonesPage() {
 								<div className="grid grid-cols-2 gap-4">
 									<div className="grid gap-2">
 										<label className="text-sm font-medium">Tone ID (Slug)</label>
-										<Input
-											value={editingTone.id}
-											onChange={e => setEditingTone({ ...editingTone, id: e.target.value })}
-										/>
+									<Input value={editingTone.id} readOnly />
 									</div>
 									<div className="grid gap-2">
 										<label className="text-sm font-medium">Display Name</label>
@@ -414,5 +437,3 @@ export default function TonesPage() {
 		</div>
 	)
 }
-
-

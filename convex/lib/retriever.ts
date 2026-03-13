@@ -4,6 +4,11 @@ import { action, internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
 import OpenAI from "openai";
+import {
+  buildEmbeddingTextForStyle,
+  buildEmbeddingTextForTone,
+  buildEmbeddingTextForTopic,
+} from "./promptArchitecture";
 
 const OPEN_ROUTER_API_KEY = process.env.OPEN_ROUTER_API_KEY;
 if (!OPEN_ROUTER_API_KEY) {
@@ -75,13 +80,7 @@ export const embedTopic = internalAction({
     if (!topic) {
       return null;
     }
-
-    // Construct text to embed: name + description + promptGuidanceForAI
-    const textParts = [topic.name];
-    if (topic.description) textParts.push(topic.description);
-    if (topic.promptGuidanceForAI) textParts.push(topic.promptGuidanceForAI);
-
-    const textToEmbed = textParts.join(". ");
+    const textToEmbed = buildEmbeddingTextForTopic(topic);
 
     const vector = await embed(textToEmbed);
     await ctx.runMutation(internal.internal.topics.addTopicEmbedding, {
@@ -102,13 +101,7 @@ export const embedStyle = internalAction({
     if (!style) {
       return;
     }
-
-    // Construct text to embed: name + description + promptGuidanceForAI
-    const textParts = [style.name];
-    if (style.description) textParts.push(style.description);
-    if (style.promptGuidanceForAI) textParts.push(style.promptGuidanceForAI);
-
-    const textToEmbed = textParts.join(". ");
+    const textToEmbed = buildEmbeddingTextForStyle(style);
 
     const vector = await embed(textToEmbed);
     await ctx.runMutation(internal.internal.styles.addStyleEmbedding, {
@@ -123,14 +116,13 @@ export const embedTone = internalAction({
     toneId: v.id("tones"),
   },
   handler: async (ctx, args) => {
-    const tone = await ctx.runQuery(api.core.tones.getTone, {
+    const tone = await ctx.runQuery(internal.internal.tones.getToneById, {
       id: args.toneId,
     });
     if (!tone) {
       return;
     }
-    // Only embed if there is text
-    const textToEmbed = tone.name;
+    const textToEmbed = buildEmbeddingTextForTone(tone);
     if (!textToEmbed) return;
 
     const vector = await embed(textToEmbed);
