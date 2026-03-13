@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
+import { normalizeSelectionSeed } from "../lib/random";
 import { defaultQualityRubric, defaultToneAxesValue, latestActiveVersion } from "../lib/taxonomy";
 import { DEFAULT_TONE_COLOR, DEFAULT_TONE_ICON } from "../core/tones";
 
@@ -164,7 +165,10 @@ export const getAllTonesInternal = internalQuery({
 });
 
 export const getRandomToneForUserId = internalQuery({
-  args: { userId: v.id("users") },
+  args: {
+    userId: v.id("users"),
+    seed: v.optional(v.number()),
+  },
   returns: v.nullable(toneFields),
   handler: async (ctx, args) => {
     const tones = await ctx.db.query("tones").take(200);
@@ -199,7 +203,8 @@ export const getRandomToneForUserId = internalQuery({
       return null;
     }
 
-    const index = Math.floor(Math.random() * visible.length) % visible.length;
+    const seed = normalizeSelectionSeed(args.seed);
+    const index = Math.floor(seed * visible.length) % visible.length;
     return visible[index];
   },
 });

@@ -6,6 +6,7 @@ import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { createPopulateMissingEmbeddingsEmail, createPopulateMissingStyleEmbeddingsEmail, createPopulateMissingToneEmbeddingsEmail } from "../lib/emails";
 import { runPersistedQuestionGeneration, runRemixQuestion } from "../lib/generationRunner";
+import { normalizeSelectionSeed } from "../lib/random";
 
 export const populateMissingEmbeddings = internalAction({
 	args: {
@@ -371,6 +372,7 @@ export const generateAIQuestionForUser = internalAction({
 		topicId: v.optional(v.id("topics")),
 		anchoredStyleId: v.optional(v.id("styles")),
 		anchoredToneId: v.optional(v.id("tones")),
+		seed: v.optional(v.number()),
 		purpose: v.optional(
 			v.union(
 				v.literal("feed"),
@@ -386,13 +388,20 @@ export const generateAIQuestionForUser = internalAction({
 			throw new Error("Could not find user.");
 		}
 		const count = args.count || 1;
+		const selectionSeed = normalizeSelectionSeed(args.seed);
 
 		const style = args.anchoredStyleId
 			? (await ctx.runQuery(api.core.styles.getStyleById, { id: args.anchoredStyleId }))
-			: (await ctx.runQuery(internal.internal.styles.getRandomStyleForUserId, { userId: user._id }));
+			: (await ctx.runQuery(internal.internal.styles.getRandomStyleForUserId, {
+				userId: user._id,
+				seed: selectionSeed,
+			}));
 		const tone = args.anchoredToneId
 			? (await ctx.runQuery(internal.internal.tones.getToneById, { id: args.anchoredToneId }))
-			: (await ctx.runQuery(internal.internal.tones.getRandomToneForUserId, { userId: user._id }));
+			: (await ctx.runQuery(internal.internal.tones.getRandomToneForUserId, {
+				userId: user._id,
+				seed: selectionSeed,
+			}));
 		const topic = args.topicId ? (await ctx.runQuery(api.core.topics.getTopicById, { id: args.topicId })) : null;
 
 		if (!style || !tone) {

@@ -3,6 +3,7 @@ import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { styleFields, mapStyle } from "../lib/styleHelpers";
 import { Doc } from "../_generated/dataModel";
+import { normalizeSelectionSeed } from "../lib/random";
 import { latestActiveVersion } from "../lib/taxonomy";
 
 const STYLE_BACKFILL_BATCH_SIZE = 100;
@@ -102,7 +103,10 @@ export const getAllStylesInternal = internalQuery({
 });
 
 export const getRandomStyleForUserId = internalQuery({
-  args: { userId: v.id("users") },
+  args: {
+    userId: v.id("users"),
+    seed: v.optional(v.number()),
+  },
   returns: v.nullable(v.object(styleFields)),
   handler: async (ctx, args) => {
     const styles = await ctx.db.query("styles").take(200);
@@ -126,7 +130,8 @@ export const getRandomStyleForUserId = internalQuery({
     const hiddenSlugs = new Set(hiddenStyleDocs.filter((s): s is Doc<"styles"> => s !== null).map((s) => s.slug ?? s.id));
     const visible = active.filter((s) => !hiddenSlugs.has(s.slug));
     if (visible.length === 0) return null;
-    const index = Math.floor(Math.random() * visible.length) % visible.length;
+    const seed = normalizeSelectionSeed(args.seed);
+    const index = Math.floor(seed * visible.length) % visible.length;
     return visible[index];
   },
 });
