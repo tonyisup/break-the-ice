@@ -102,7 +102,10 @@ export const getAllStylesInternal = internalQuery({
 });
 
 export const getRandomStyleForUserId = internalQuery({
-  args: { userId: v.id("users") },
+  args: {
+    userId: v.id("users"),
+    seed: v.optional(v.number()),
+  },
   returns: v.nullable(v.object(styleFields)),
   handler: async (ctx, args) => {
     const styles = await ctx.db.query("styles").take(200);
@@ -126,7 +129,8 @@ export const getRandomStyleForUserId = internalQuery({
     const hiddenSlugs = new Set(hiddenStyleDocs.filter((s): s is Doc<"styles"> => s !== null).map((s) => s.slug ?? s.id));
     const visible = active.filter((s) => !hiddenSlugs.has(s.slug));
     if (visible.length === 0) return null;
-    const index = Math.floor(Math.random() * visible.length) % visible.length;
+    const seed = args.seed ?? Math.random();
+    const index = Math.floor(seed * visible.length) % visible.length;
     return visible[index];
   },
 });

@@ -164,7 +164,10 @@ export const getAllTonesInternal = internalQuery({
 });
 
 export const getRandomToneForUserId = internalQuery({
-  args: { userId: v.id("users") },
+  args: {
+    userId: v.id("users"),
+    seed: v.optional(v.number()),
+  },
   returns: v.nullable(toneFields),
   handler: async (ctx, args) => {
     const tones = await ctx.db.query("tones").take(200);
@@ -199,7 +202,8 @@ export const getRandomToneForUserId = internalQuery({
       return null;
     }
 
-    const index = Math.floor(Math.random() * visible.length) % visible.length;
+    const seed = args.seed ?? Math.random();
+    const index = Math.floor(seed * visible.length) % visible.length;
     return visible[index];
   },
 });
