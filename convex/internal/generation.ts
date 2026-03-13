@@ -455,8 +455,20 @@ export const insertGeneratedQuestions = internalMutation({
     }
 
     if (args.runId) {
+      const run = await ctx.db.get(args.runId);
+      const existingIds = Array.isArray(run?.resultQuestionIds)
+        ? run.resultQuestionIds
+        : [];
+      const seen = new Set(existingIds);
+      const mergedIds = [...existingIds];
+      for (const id of insertedQuestionIds) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          mergedIds.push(id);
+        }
+      }
       await ctx.db.patch(args.runId, {
-        resultQuestionIds: insertedQuestionIds,
+        resultQuestionIds: mergedIds,
       });
     }
 

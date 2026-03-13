@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
-import { defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
+import { defaultQualityRubric, defaultToneAxesValue, latestActiveVersion } from "../lib/taxonomy";
 import { DEFAULT_TONE_COLOR, DEFAULT_TONE_ICON } from "../core/tones";
 
 const TONE_BACKFILL_BATCH_SIZE = 100;
@@ -160,5 +160,46 @@ export const getAllTonesInternal = internalQuery({
   returns: v.array(toneFields),
   handler: async (ctx) => {
     return (await ctx.db.query("tones").collect()).map(mapTone);
+  },
+});
+
+export const getRandomToneForUserId = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.nullable(toneFields),
+  handler: async (ctx, args) => {
+    const tones = await ctx.db.query("tones").take(200);
+    const bySlug = new Map<string, Doc<"tones">[]>();
+    for (const tone of tones) {
+      const slug = tone.slug ?? tone.id;
+      if (!bySlug.has(slug)) bySlug.set(slug, []);
+      bySlug.get(slug)!.push(tone);
+    }
+
+    const active = Array.from(bySlug.values())
+      .map((docs) => latestActiveVersion(docs))
+      .filter((tone): tone is Doc<"tones"> => tone !== null)
+      .map(mapTone)
+      .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+
+    const userHiddenTones = await ctx.db
+      .query("userTones")
+      .withIndex("by_userId_status", (q) => q.eq("userId", args.userId).eq("status", "hidden"))
+      .collect();
+    const hiddenToneDocs = await Promise.all(
+      userHiddenTones.map((entry) => ctx.db.get(entry.toneId)),
+    );
+    const hiddenSlugs = new Set(
+      hiddenToneDocs
+        .filter((tone): tone is Doc<"tones"> => tone !== null)
+        .map((tone) => tone.slug ?? tone.id),
+    );
+    const visible = active.filter((tone) => !hiddenSlugs.has(tone.slug));
+
+    if (visible.length === 0) {
+      return null;
+    }
+
+    const index = Math.floor(Math.random() * visible.length) % visible.length;
+    return visible[index];
   },
 });
