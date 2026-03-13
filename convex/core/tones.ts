@@ -94,7 +94,7 @@ async function getActiveTones(
     : await ctx.db.query("tones").take(limit);
 
   const bySlug = new Map<string, Doc<"tones">[]>();
-  for (const tone of filtered) {
+  for (const tone of tones) {
     const slug = tone.slug ?? tone.id;
     if (!bySlug.has(slug)) bySlug.set(slug, []);
     bySlug.get(slug)!.push(tone);
