@@ -168,7 +168,7 @@ test("fixExistingQuestions processes one batch and schedules continuation", asyn
     };
   });
 
-  expect(result).toEqual({ totalQuestions: 100, fixedCount: 100 });
+  expect(result).toEqual({ processedCount: 100, fixedCount: 100, hasMore: true });
   expect(state.backfilledCount).toBe(100);
   expect(state.remainingCount).toBe(1);
   expect(state.scheduledCount).toBe(1);

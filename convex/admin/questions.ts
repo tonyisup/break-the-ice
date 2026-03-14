@@ -341,8 +341,9 @@ export const deleteQuestion = mutation({
 export const fixExistingQuestions = mutation({
 	args: {},
 	returns: v.object({
-		totalQuestions: v.number(),
+		processedCount: v.number(),
 		fixedCount: v.number(),
+		hasMore: v.boolean(),
 	}),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
@@ -367,16 +368,18 @@ async function fixExistingQuestionsBatchHelper(ctx: MutationCtx) {
 	}
 
 	return {
-		totalQuestions: questions.length,
+		processedCount: questions.length,
 		fixedCount: questions.length,
+		hasMore: questions.length === FIX_EXISTING_QUESTIONS_BATCH_SIZE,
 	};
 }
 
 export const fixExistingQuestionsBatch = internalMutation({
 	args: {},
 	returns: v.object({
-		totalQuestions: v.number(),
+		processedCount: v.number(),
 		fixedCount: v.number(),
+		hasMore: v.boolean(),
 	}),
 	handler: async (ctx) => {
 		return await fixExistingQuestionsBatchHelper(ctx);
