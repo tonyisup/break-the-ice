@@ -1,12 +1,12 @@
 import { v } from "convex/values";
-import { mutation, query, action, internalMutation } from "../_generated/server";
+import { mutation, query, action, internalMutation, MutationCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 
 const FIX_EXISTING_QUESTIONS_BATCH_SIZE = 100;
 
-async function getOldestQuestion(ctx: any) {
+async function getOldestQuestion(ctx: MutationCtx) {
 	return await ctx.db
 		.query("questions")
 		.withIndex("by_creation_time")
@@ -350,10 +350,10 @@ export const fixExistingQuestions = mutation({
 	},
 });
 
-async function fixExistingQuestionsBatchHelper(ctx: any) {
+async function fixExistingQuestionsBatchHelper(ctx: MutationCtx) {
 	const questions = await ctx.db
 		.query("questions")
-		.withIndex("by_last_shown_at", (q: any) => q.eq("lastShownAt", undefined))
+		.withIndex("by_last_shown_at", (q) => q.eq("lastShownAt", undefined))
 		.take(FIX_EXISTING_QUESTIONS_BATCH_SIZE);
 
 	for (const question of questions) {
