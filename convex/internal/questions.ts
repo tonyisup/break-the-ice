@@ -685,10 +685,6 @@ export const getRandomQuestionsInternal = internalQuery({
 		const applyFilters = (q: any) => {
 			const conditions = [
 				q.neq(q.field("text"), undefined),
-				q.or(
-					q.eq(q.field("lastShownAt"), undefined),
-					q.lt(q.field("lastShownAt"), sevenDaysAgo)
-				),
 			];
 			if (organizationId) {
 				conditions.push(q.eq(q.field("organizationId"), organizationId));
@@ -696,11 +692,41 @@ export const getRandomQuestionsInternal = internalQuery({
 			return q.and(...conditions);
 		};
 
+		const wasShownRecently = (question: { lastShownAt?: number }) =>
+			question.lastShownAt !== undefined && question.lastShownAt >= sevenDaysAgo;
+
+		const isVisible = (question: any, excludedIds?: Set<any>) => {
+			if (seenIds.has(question._id)) return false;
+			if (hiddenIds.has(question._id)) return false;
+			if (excludedIds?.has(question._id)) return false;
+			if (question.styleId && hiddenStyleIds.has(question.styleId)) return false;
+			if (question.toneId && hiddenToneIds.has(question.toneId)) return false;
+			return true;
+		};
+
+		const partitionByRecency = (questions: any[], excludedIds?: Set<any>) => {
+			const preferred: any[] = [];
+			const fallback: any[] = [];
+
+			for (const question of questions) {
+				if (!isVisible(question, excludedIds)) continue;
+				if (wasShownRecently(question)) {
+					fallback.push(question);
+				} else {
+					preferred.push(question);
+				}
+			}
+
+			return { preferred, fallback };
+		};
+
 		// Collect all public questions so we can sample across the full set
 		// rather than always returning the oldest rows via _creationTime order.
 		// With ~300-1000 questions this is very efficient; the 1000-row cap
 		// protects against unbounded growth.
-		let candidates: any[] = [];
+		let preferredCandidates: any[] = [];
+		let fallbackCandidates: any[] = [];
+		let anchoredCandidateIds: Set<any> | undefined;
 		const hasAnchors = !!(anchoredStyleId || anchoredToneId || anchoredTopicId);
 
 		if (hasAnchors) {
@@ -730,24 +756,21 @@ export const getRandomQuestionsInternal = internalQuery({
 
 			// De-duplicate anchored matches
 			const uniqueAnchored = Array.from(new Map(anchorMatchPool.map(q => [q._id, q])).values());
+			anchoredCandidateIds = new Set(uniqueAnchored.map((question) => question._id));
 
-			// Filter seen/hidden
-			const filteredAnchored = uniqueAnchored.filter((q) => {
-				if (seenIds.has(q._id)) return false;
-				if (hiddenIds.has(q._id)) return false;
-				if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
-				if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
-				return true;
-			});
+			const { preferred, fallback } = partitionByRecency(uniqueAnchored);
 
-			// Shuffle anchored matches
-			for (let i = filteredAnchored.length - 1; i > 0; i--) {
+			for (let i = preferred.length - 1; i > 0; i--) {
 				const j = Math.floor(Math.random() * (i + 1));
-				[filteredAnchored[i], filteredAnchored[j]] = [filteredAnchored[j], filteredAnchored[i]];
+				[preferred[i], preferred[j]] = [preferred[j], preferred[i]];
+			}
+			for (let i = fallback.length - 1; i > 0; i--) {
+				const j = Math.floor(Math.random() * (i + 1));
+				[fallback[i], fallback[j]] = [fallback[j], fallback[i]];
 			}
 
-			// We want most of the results to be anchored if available
-			candidates = filteredAnchored.slice(0, count * 5);
+			preferredCandidates = preferred.slice(0, count * 5);
+			fallbackCandidates = fallback.slice(0, count * 5);
 		}
 
 		// Fill with general public questions
@@ -757,29 +780,25 @@ export const getRandomQuestionsInternal = internalQuery({
 			.filter((q) => applyFilters(q))
 			.take(1000);
 
-		const candidateIds = hasAnchors ? new Set(candidates.map(c => c._id)) : null;
-
-		// Post-filter for seen, hidden, styles, and tones
-		const filteredGeneral = allPublic.filter((q) => {
-			if (seenIds.has(q._id)) return false;
-			if (hiddenIds.has(q._id)) return false;
-			if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
-			if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
-			// If we already have this in candidates from the anchor pool, skip
-			if (candidateIds?.has(q._id)) return false;
-			return true;
-		});
+		const filteredGeneral = partitionByRecency(allPublic, anchoredCandidateIds);
 
 		// Shuffle general questions
-		for (let i = filteredGeneral.length - 1; i > 0; i--) {
+		for (let i = filteredGeneral.preferred.length - 1; i > 0; i--) {
 			const j = Math.floor(Math.random() * (i + 1));
-			[filteredGeneral[i], filteredGeneral[j]] = [filteredGeneral[j], filteredGeneral[i]];
+			[filteredGeneral.preferred[i], filteredGeneral.preferred[j]] = [filteredGeneral.preferred[j], filteredGeneral.preferred[i]];
+		}
+		for (let i = filteredGeneral.fallback.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[filteredGeneral.fallback[i], filteredGeneral.fallback[j]] = [filteredGeneral.fallback[j], filteredGeneral.fallback[i]];
 		}
 
 		// Combine pools: Anchored first, then general
-		candidates = [...candidates, ...filteredGeneral];
-
-		const filtered = candidates;
+		const filtered = [
+			...preferredCandidates,
+			...filteredGeneral.preferred,
+			...fallbackCandidates,
+			...filteredGeneral.fallback,
+		];
 
 		const activeTakeoverTopics = await getActiveTakeoverTopicsHelper(ctx);
 
@@ -798,22 +817,19 @@ export const getRandomQuestionsInternal = internalQuery({
 				takeoverCandidates = takeoverCandidates.concat(topicQs);
 			}
 
-			// Filter takeover candidates
-			const filteredTakeover = takeoverCandidates.filter((q) => {
-				if (seenIds.has(q._id)) return false;
-				if (hiddenIds.has(q._id)) return false;
-				if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
-				if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
-				return true;
-			});
+			const filteredTakeover = partitionByRecency(takeoverCandidates);
 
 			// Shuffle takeover candidates
-			for (let i = filteredTakeover.length - 1; i > 0; i--) {
+			for (let i = filteredTakeover.preferred.length - 1; i > 0; i--) {
 				const j = Math.floor(Math.random() * (i + 1));
-				[filteredTakeover[i], filteredTakeover[j]] = [filteredTakeover[j], filteredTakeover[i]];
+				[filteredTakeover.preferred[i], filteredTakeover.preferred[j]] = [filteredTakeover.preferred[j], filteredTakeover.preferred[i]];
+			}
+			for (let i = filteredTakeover.fallback.length - 1; i > 0; i--) {
+				const j = Math.floor(Math.random() * (i + 1));
+				[filteredTakeover.fallback[i], filteredTakeover.fallback[j]] = [filteredTakeover.fallback[j], filteredTakeover.fallback[i]];
 			}
 
-			return filteredTakeover.slice(0, count + 10);
+			return [...filteredTakeover.preferred, ...filteredTakeover.fallback].slice(0, count + 10);
 		}
 
 		// Return enough candidates to fill the requested count after the
@@ -837,12 +853,8 @@ export const getRandomQuestionsInternal = internalQuery({
 					.filter((q) => applyFilters(q))
 					.take(10); // Take a few to find one that isn't filtered out
 
-				const validTopicQuestion = topicQuestions.find(q => {
-					if (hiddenIds.has(q._id)) return false;
-					if (q.styleId && hiddenStyleIds.has(q.styleId)) return false;
-					if (q.toneId && hiddenToneIds.has(q.toneId)) return false;
-					return true;
-				});
+				const prioritizedTopicQuestions = partitionByRecency(topicQuestions, existingIds);
+				const validTopicQuestion = [...prioritizedTopicQuestions.preferred, ...prioritizedTopicQuestions.fallback][0];
 
 				if (validTopicQuestion) {
 					filtered.push(validTopicQuestion);

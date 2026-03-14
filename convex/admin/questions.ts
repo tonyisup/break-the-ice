@@ -1,10 +1,12 @@
 import { v } from "convex/values";
-import { mutation, query, action } from "../_generated/server";
+import { mutation, query, action, internalMutation, MutationCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 
-async function getOldestQuestion(ctx: any) {
+const FIX_EXISTING_QUESTIONS_BATCH_SIZE = 100;
+
+async function getOldestQuestion(ctx: MutationCtx) {
 	return await ctx.db
 		.query("questions")
 		.withIndex("by_creation_time")
@@ -339,25 +341,49 @@ export const deleteQuestion = mutation({
 export const fixExistingQuestions = mutation({
 	args: {},
 	returns: v.object({
-		totalQuestions: v.number(),
+		processedCount: v.number(),
 		fixedCount: v.number(),
+		hasMore: v.boolean(),
 	}),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
-		const allQuestions = await ctx.db.query("questions").collect();
-		const now = Date.now();
-		let fixedCount = 0;
+		return await fixExistingQuestionsBatchHelper(ctx);
+	},
+});
 
-		for (const question of allQuestions) {
-			if (question.lastShownAt === undefined) {
-				await ctx.db.patch(question._id, {
-					lastShownAt: now - Math.random() * 10000000
-				});
-				fixedCount++;
-			}
-		}
+async function fixExistingQuestionsBatchHelper(ctx: MutationCtx) {
+	const questions = await ctx.db
+		.query("questions")
+		.withIndex("by_last_shown_at", (q) => q.eq("lastShownAt", undefined))
+		.order("asc")
+		.take(FIX_EXISTING_QUESTIONS_BATCH_SIZE);
 
-		return { totalQuestions: allQuestions.length, fixedCount };
+	for (const question of questions) {
+		await ctx.db.patch(question._id, {
+			lastShownAt: 0,
+		});
+	}
+
+	if (questions.length === FIX_EXISTING_QUESTIONS_BATCH_SIZE) {
+		await ctx.scheduler.runAfter(0, internal.admin.questions.fixExistingQuestionsBatch, {});
+	}
+
+	return {
+		processedCount: questions.length,
+		fixedCount: questions.length,
+		hasMore: questions.length === FIX_EXISTING_QUESTIONS_BATCH_SIZE,
+	};
+}
+
+export const fixExistingQuestionsBatch = internalMutation({
+	args: {},
+	returns: v.object({
+		processedCount: v.number(),
+		fixedCount: v.number(),
+		hasMore: v.boolean(),
+	}),
+	handler: async (ctx) => {
+		return await fixExistingQuestionsBatchHelper(ctx);
 	},
 });
 
