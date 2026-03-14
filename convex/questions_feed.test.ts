@@ -78,17 +78,73 @@ test("feed query prioritizes questions not shown in the last seven days", async 
   expect(results.some((question) => question._id === ids.recentQuestion)).toBe(true);
 });
 
-test("fixExistingQuestions backfills missing lastShownAt to zero", async () => {
+test("anchored candidates are capped without re-entering through the general pool", async () => {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+  const now = Date.now();
 
-  const questionId = await t.run(async (ctx) => {
-    return await ctx.db.insert("questions", {
-      text: "Needs backfill?",
+  const styleId = await t.run(async (ctx) => {
+    return await ctx.db.insert("styles", {
+      id: "anchored-style",
+      name: "Anchored Style",
+      structure: "Ask something specific",
+      color: "#000000",
+      icon: "sparkles",
+      status: "active",
+      version: 1,
+      slug: "anchored-style",
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 8; index++) {
+      await ctx.db.insert("questions", {
+        text: `Anchored question ${index}?`,
+        status: "public",
+        styleId,
+        totalLikes: 0,
+        totalShows: 0,
+        averageViewDuration: 0,
+        lastShownAt: now - 10 * 24 * 60 * 60 * 1000,
+      });
+    }
+
+    await ctx.db.insert("questions", {
+      text: "General question?",
       status: "public",
       totalLikes: 0,
       totalShows: 0,
       averageViewDuration: 0,
+      lastShownAt: now - 10 * 24 * 60 * 60 * 1000,
     });
+  });
+
+  const results = await t.query(internal.internal.questions.getRandomQuestionsInternal, {
+    count: 1,
+    seen: [],
+    hidden: [],
+    hiddenStyles: [],
+    hiddenTones: [],
+    anchoredStyleId: styleId,
+  });
+
+  expect(results.filter((question) => question.styleId === styleId)).toHaveLength(5);
+});
+
+test("fixExistingQuestions processes one batch and schedules continuation", async () => {
+  const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 101; index++) {
+      await ctx.db.insert("questions", {
+        text: `Needs backfill ${index}?`,
+        status: "public",
+        totalLikes: 0,
+        totalShows: 0,
+        averageViewDuration: 0,
+      });
+    }
   });
 
   const result = await t.withIdentity({ metadata: { isAdmin: "true" } }).mutation(
@@ -96,8 +152,19 @@ test("fixExistingQuestions backfills missing lastShownAt to zero", async () => {
     {}
   );
 
-  const question = await t.run(async (ctx) => ctx.db.get(questionId));
+  const state = await t.run(async (ctx) => {
+    const questions = await ctx.db.query("questions").collect();
+    const scheduled = await ctx.db.system.query("_scheduled_functions").collect();
 
-  expect(result.fixedCount).toBe(1);
-  expect(question?.lastShownAt).toBe(0);
+    return {
+      backfilledCount: questions.filter((question) => question.lastShownAt === 0).length,
+      remainingCount: questions.filter((question) => question.lastShownAt === undefined).length,
+      scheduledCount: scheduled.length,
+    };
+  });
+
+  expect(result).toEqual({ totalQuestions: 100, fixedCount: 100 });
+  expect(state.backfilledCount).toBe(100);
+  expect(state.remainingCount).toBe(1);
+  expect(state.scheduledCount).toBe(1);
 });

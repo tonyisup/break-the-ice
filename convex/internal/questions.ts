@@ -726,6 +726,7 @@ export const getRandomQuestionsInternal = internalQuery({
 		// protects against unbounded growth.
 		let preferredCandidates: any[] = [];
 		let fallbackCandidates: any[] = [];
+		let anchoredCandidateIds: Set<any> | undefined;
 		const hasAnchors = !!(anchoredStyleId || anchoredToneId || anchoredTopicId);
 
 		if (hasAnchors) {
@@ -755,6 +756,7 @@ export const getRandomQuestionsInternal = internalQuery({
 
 			// De-duplicate anchored matches
 			const uniqueAnchored = Array.from(new Map(anchorMatchPool.map(q => [q._id, q])).values());
+			anchoredCandidateIds = new Set(uniqueAnchored.map((question) => question._id));
 
 			const { preferred, fallback } = partitionByRecency(uniqueAnchored);
 
@@ -778,10 +780,7 @@ export const getRandomQuestionsInternal = internalQuery({
 			.filter((q) => applyFilters(q))
 			.take(1000);
 
-		const candidateIds = hasAnchors
-			? new Set([...preferredCandidates, ...fallbackCandidates].map((candidate) => candidate._id))
-			: undefined;
-		const filteredGeneral = partitionByRecency(allPublic, candidateIds);
+		const filteredGeneral = partitionByRecency(allPublic, anchoredCandidateIds);
 
 		// Shuffle general questions
 		for (let i = filteredGeneral.preferred.length - 1; i > 0; i--) {

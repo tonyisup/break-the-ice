@@ -1,8 +1,10 @@
 import { v } from "convex/values";
-import { mutation, query, action } from "../_generated/server";
+import { mutation, query, action, internalMutation } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
+
+const FIX_EXISTING_QUESTIONS_BATCH_SIZE = 100;
 
 async function getOldestQuestion(ctx: any) {
 	return await ctx.db
@@ -344,19 +346,40 @@ export const fixExistingQuestions = mutation({
 	}),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
-		const allQuestions = await ctx.db.query("questions").collect();
-		let fixedCount = 0;
+		return await fixExistingQuestionsBatchHelper(ctx);
+	},
+});
 
-		for (const question of allQuestions) {
-			if (question.lastShownAt === undefined) {
-				await ctx.db.patch(question._id, {
-					lastShownAt: 0
-				});
-				fixedCount++;
-			}
-		}
+async function fixExistingQuestionsBatchHelper(ctx: any) {
+	const questions = await ctx.db
+		.query("questions")
+		.withIndex("by_last_shown_at", (q: any) => q.eq("lastShownAt", undefined))
+		.take(FIX_EXISTING_QUESTIONS_BATCH_SIZE);
 
-		return { totalQuestions: allQuestions.length, fixedCount };
+	for (const question of questions) {
+		await ctx.db.patch(question._id, {
+			lastShownAt: 0,
+		});
+	}
+
+	if (questions.length === FIX_EXISTING_QUESTIONS_BATCH_SIZE) {
+		await ctx.scheduler.runAfter(0, internal.admin.questions.fixExistingQuestionsBatch, {});
+	}
+
+	return {
+		totalQuestions: questions.length,
+		fixedCount: questions.length,
+	};
+}
+
+export const fixExistingQuestionsBatch = internalMutation({
+	args: {},
+	returns: v.object({
+		totalQuestions: v.number(),
+		fixedCount: v.number(),
+	}),
+	handler: async (ctx) => {
+		return await fixExistingQuestionsBatchHelper(ctx);
 	},
 });
 
