@@ -680,9 +680,15 @@ export const getRandomQuestionsInternal = internalQuery({
 		const hiddenStyleIds = new Set(hiddenStyles);
 		const hiddenToneIds = new Set(hiddenTones);
 
+		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
 		const applyFilters = (q: any) => {
 			const conditions = [
 				q.neq(q.field("text"), undefined),
+				q.or(
+					q.eq(q.field("lastShownAt"), undefined),
+					q.lt(q.field("lastShownAt"), sevenDaysAgo)
+				),
 			];
 			if (organizationId) {
 				conditions.push(q.eq(q.field("organizationId"), organizationId));

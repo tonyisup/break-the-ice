@@ -21,6 +21,7 @@ vi.mock('../../../../convex/_generated/api', () => ({
     },
     admin: {
       ai: { generateAIQuestions: 'generateAIQuestions' },
+      promptBlueprints: { listBlueprints: 'listBlueprints' },
     }
   },
 }));
@@ -46,6 +47,7 @@ describe('GeneratorPage', () => {
       if (queryFn === 'getTones') return mockTones;
       if (queryFn === 'getTopics') return mockTopics;
       if (queryFn === 'getTags') return mockTags;
+      if (queryFn === 'listBlueprints') return [];
       return undefined;
     });
     (useMutation as any).mockReturnValue(vi.fn());
