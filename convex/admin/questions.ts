@@ -355,6 +355,7 @@ async function fixExistingQuestionsBatchHelper(ctx: MutationCtx) {
 	const questions = await ctx.db
 		.query("questions")
 		.withIndex("by_last_shown_at", (q) => q.eq("lastShownAt", undefined))
+		.order("asc")
 		.take(FIX_EXISTING_QUESTIONS_BATCH_SIZE);
 
 	for (const question of questions) {
