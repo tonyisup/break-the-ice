@@ -345,13 +345,12 @@ export const fixExistingQuestions = mutation({
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
 		const allQuestions = await ctx.db.query("questions").collect();
-		const now = Date.now();
 		let fixedCount = 0;
 
 		for (const question of allQuestions) {
 			if (question.lastShownAt === undefined) {
 				await ctx.db.patch(question._id, {
-					lastShownAt: now - Math.random() * 10000000
+					lastShownAt: 0
 				});
 				fixedCount++;
 			}
