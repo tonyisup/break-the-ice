@@ -209,23 +209,34 @@ export default function QuestionDetailsPage() {
 	const [editTags, setEditTags] = useState("")
 	const [tagInput, setTagInput] = useState("")
 	const [additionalGuidance, setAdditionalGuidance] = useState("")
+	const [isEditingImage, setIsEditingImage] = useState(false)
+	const [draftImageStorageId, setDraftImageStorageId] = useState<Id<"_storage"> | null | undefined>(undefined)
+	const [draftImageUrl, setDraftImageUrl] = useState<string | null>(null)
+	const [committedImageOverrideUrl, setCommittedImageOverrideUrl] = useState<string | null | undefined>(undefined)
+	const [committedImageOverrideStorageId, setCommittedImageOverrideStorageId] = useState<Id<"_storage"> | null | undefined>(undefined)
 
 	const [saving, setSaving] = useState(false)
 	const [remixing, setRemixing] = useState(false)
 	const [uploadingImage, setUploadingImage] = useState(false)
 	const [hasChanges, setHasChanges] = useState(false)
 	const imageInputRef = useRef<HTMLInputElement>(null)
+	const draftImageObjectUrlRef = useRef<string | null>(null)
+	const committedImageObjectUrlRef = useRef<string | null>(null)
+	const draftImageStorageIdRef = useRef<Id<"_storage"> | null | undefined>(undefined)
+	const preservedDraftStorageIdRef = useRef<Id<"_storage"> | null>(null)
 
 	const hasInitialized = useRef(false)
 
-	const handleReset = () => {
+	const handleReset = async () => {
 		if (question) {
 			setEditText(question.text || question.customText || "")
-			setEditStyle(question.style || "")
-			setEditTone(question.tone || "")
-			setEditTopic(question.topic || "")
+			setEditStyle(question.styleId || question.style || "")
+			setEditTone(question.toneId || question.tone || "")
+			setEditTopic(question.topicId || question.topic || "")
 			setEditStatus(question.status || "public")
 			setEditTags((question.tags || []).join(", "))
+			await resetDraftImage()
+			setIsEditingImage(false)
 			toast.info("Form reset to database version")
 		}
 	}
@@ -234,9 +245,9 @@ export default function QuestionDetailsPage() {
 	useEffect(() => {
 		if (question && !hasInitialized.current) {
 			setEditText(question.text || question.customText || "")
-			setEditStyle(question.style || "")
-			setEditTone(question.tone || "")
-			setEditTopic(question.topic || "")
+			setEditStyle(question.styleId || question.style || "")
+			setEditTone(question.toneId || question.tone || "")
+			setEditTopic(question.topicId || question.topic || "")
 			setEditStatus(question.status || "public")
 			setEditTags((question.tags || []).join(", "))
 			hasInitialized.current = true
@@ -248,9 +259,9 @@ export default function QuestionDetailsPage() {
 		if (!question) return
 		const original = {
 			text: question.text || question.customText || "",
-			style: question.style || "",
-			tone: question.tone || "",
-			topic: question.topic || "",
+			style: question.styleId || question.style || "",
+			tone: question.toneId || question.tone || "",
+			topic: question.topicId || question.topic || "",
 			status: question.status || "public",
 			tags: (question.tags || []).join(", "),
 		}
@@ -260,9 +271,62 @@ export default function QuestionDetailsPage() {
 			editTone !== original.tone ||
 			editTopic !== original.topic ||
 			editStatus !== original.status ||
-			editTags !== original.tags
+			editTags !== original.tags ||
+			draftImageStorageId !== undefined
 		setHasChanges(changed)
-	}, [editText, editStyle, editTone, editTopic, editStatus, editTags, question])
+	}, [editText, editStyle, editTone, editTopic, editStatus, editTags, draftImageStorageId, question])
+
+	useEffect(() => {
+		draftImageStorageIdRef.current = draftImageStorageId
+	}, [draftImageStorageId])
+
+	useEffect(() => {
+		return () => {
+			if (draftImageObjectUrlRef.current) {
+				URL.revokeObjectURL(draftImageObjectUrlRef.current)
+			}
+			if (committedImageObjectUrlRef.current) {
+				URL.revokeObjectURL(committedImageObjectUrlRef.current)
+			}
+			const currentDraftImageStorageId = draftImageStorageIdRef.current
+			if (currentDraftImageStorageId && currentDraftImageStorageId !== preservedDraftStorageIdRef.current) {
+				void deleteUploadedStorage(currentDraftImageStorageId)
+			}
+		}
+	}, [])
+
+	const clearDraftPreviewUrl = () => {
+		if (draftImageObjectUrlRef.current) {
+			URL.revokeObjectURL(draftImageObjectUrlRef.current)
+			draftImageObjectUrlRef.current = null
+		}
+	}
+
+	const clearCommittedPreviewUrl = () => {
+		if (committedImageObjectUrlRef.current) {
+			URL.revokeObjectURL(committedImageObjectUrlRef.current)
+			committedImageObjectUrlRef.current = null
+		}
+	}
+
+	const resetDraftImage = async () => {
+		if (draftImageStorageId) {
+			await deleteUploadedStorage(draftImageStorageId)
+		}
+		clearDraftPreviewUrl()
+		setDraftImageStorageId(undefined)
+		setDraftImageUrl(null)
+	}
+
+	useEffect(() => {
+		if (committedImageOverrideStorageId === undefined || !question) return
+		const serverImageStorageId = question.imageStorageId ?? null
+		if (serverImageStorageId !== committedImageOverrideStorageId) return
+
+		clearCommittedPreviewUrl()
+		setCommittedImageOverrideUrl(undefined)
+		setCommittedImageOverrideStorageId(undefined)
+	}, [committedImageOverrideStorageId, question])
 
 	const handleSave = async () => {
 		if (!question) return
@@ -276,12 +340,27 @@ export default function QuestionDetailsPage() {
 			await updateQuestion({
 				id: question._id,
 				text: editText || undefined,
-				style: editStyle || undefined,
-				tone: editTone || undefined,
-				topic: editTopic || undefined,
+				style: selectedStyle?.slug || undefined,
+				styleId: selectedStyle?._id,
+				tone: selectedTone?.slug || undefined,
+				toneId: selectedTone?._id,
+				topic: selectedTopic?.slug || undefined,
+				topicId: selectedTopic?._id,
 				status: (editStatus as any) || undefined,
 				tags,
+				imageStorageId: draftImageStorageId !== undefined ? draftImageStorageId : undefined,
 			})
+			if (draftImageStorageId !== undefined) {
+				preservedDraftStorageIdRef.current = draftImageStorageId
+				clearCommittedPreviewUrl()
+				setCommittedImageOverrideUrl(draftImageUrl ?? null)
+				setCommittedImageOverrideStorageId(draftImageStorageId)
+				committedImageObjectUrlRef.current = draftImageObjectUrlRef.current
+				draftImageObjectUrlRef.current = null
+				setDraftImageStorageId(undefined)
+				setDraftImageUrl(null)
+				setIsEditingImage(false)
+			}
 			toast.success("Question updated successfully")
 			setHasChanges(false)
 		} catch (error) {
@@ -315,6 +394,27 @@ export default function QuestionDetailsPage() {
 		}
 	}
 
+	const stageDraftImage = async (storageId: Id<"_storage"> | null, previewUrl: string | null) => {
+		if (draftImageStorageId) {
+			await deleteUploadedStorage(draftImageStorageId)
+		}
+		clearDraftPreviewUrl()
+		draftImageObjectUrlRef.current = previewUrl
+		setDraftImageStorageId(storageId)
+		setDraftImageUrl(previewUrl)
+		setIsEditingImage(true)
+	}
+
+	const handleStartImageEdit = () => {
+		setIsEditingImage(true)
+	}
+
+	const handleCancelImageEdit = async () => {
+		await resetDraftImage()
+		setIsEditingImage(false)
+		toast.info("Restored the original image")
+	}
+
 	const handleGenerateImage = async () => {
 		if (!question) return
 		setUploadingImage(true)
@@ -340,14 +440,9 @@ export default function QuestionDetailsPage() {
 			const body = await result.json()
 			storageId = body.storageId ?? null
 			if (!storageId) throw new Error("No storageId returned")
-			try {
-				await updateQuestion({ id: question._id, imageStorageId: storageId })
-			} catch (error) {
-				await deleteUploadedStorage(storageId)
-				storageId = null
-				throw error
-			}
-			toast.success("Question image generated and saved!")
+			const previewUrl = URL.createObjectURL(blob)
+			await stageDraftImage(storageId, previewUrl)
+			toast.success("Illustration ready. Save changes to apply it.")
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			toast.error(`Image generation failed: ${message}`)
@@ -396,8 +491,9 @@ export default function QuestionDetailsPage() {
 			const body = await result.json()
 			storageId = body.storageId ?? null
 			if (!storageId) throw new Error("No storageId returned")
-			await updateQuestion({ id: question._id, imageStorageId: storageId })
-			toast.success("Question image updated")
+			const previewUrl = URL.createObjectURL(file)
+			await stageDraftImage(storageId, previewUrl)
+			toast.success("Replacement image staged. Save changes to apply it.")
 			imageInputRef.current?.form?.reset()
 		} catch (error) {
 			toast.error("Failed to upload image")
@@ -411,15 +507,8 @@ export default function QuestionDetailsPage() {
 
 	const handleClearImage = async () => {
 		if (!question) return
-		setUploadingImage(true)
-		try {
-			await updateQuestion({ id: question._id, imageStorageId: null })
-			toast.success("Question image removed")
-		} catch (error) {
-			toast.error("Failed to remove image")
-		} finally {
-			setUploadingImage(false)
-		}
+		await stageDraftImage(null, null)
+		toast.success("Image removal staged. Save changes to apply it.")
 	}
 
 	// ── Loading / Not Found ──
@@ -450,10 +539,19 @@ export default function QuestionDetailsPage() {
 		.map(t => t.trim())
 		.filter(Boolean)
 
+	const selectedStyle = styles?.find((style) => style._id === editStyle || style.slug === editStyle || style.id === editStyle) ?? null
+	const selectedTone = tones?.find((tone) => tone._id === editTone || tone.slug === editTone || tone.id === editTone) ?? null
+	const selectedTopic = topics?.find((topic) => topic._id === editTopic || topic.slug === editTopic || topic.id === editTopic) ?? null
 	const styleMeta = question._style
 	const toneMeta = question._tone
 	const topicMeta = question._topic
-	const questionImageUrl = (question as { imageUrl?: string | null }).imageUrl ?? null
+	const serverImageUrl = (question as { imageUrl?: string | null }).imageUrl ?? null
+	const activeImageUrl = committedImageOverrideUrl !== undefined ? committedImageOverrideUrl : serverImageUrl
+	const hasExistingImage = Boolean(activeImageUrl)
+	const hasDraftImageChange = draftImageStorageId !== undefined
+	const imageEditingEnabled = !hasExistingImage || isEditingImage
+	const questionImageUrl = draftImageUrl ?? activeImageUrl
+	const primaryImageUrl = hasExistingImage && isEditingImage ? activeImageUrl : questionImageUrl
 
 	const likeRate = question.totalShows > 0 ? ((question.totalLikes / question.totalShows) * 100).toFixed(1) : "0"
 
@@ -573,46 +671,101 @@ export default function QuestionDetailsPage() {
 						</h3>
 						<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
 							<div className="space-y-3">
-								<div className="relative rounded-lg overflow-hidden border bg-muted/50 max-w-sm aspect-video flex items-center justify-center">
-									{questionImageUrl ? (
-										<img
-											src={questionImageUrl}
-											alt="Question"
-											className="max-w-full max-h-full object-contain"
-										/>
-									) : (
-										<div className="flex flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
-											<Image className="size-8" />
-											<p className="text-sm font-medium">No question image yet</p>
-											<p className="text-xs">Upload one or generate an illustration for the card and OG share image.</p>
+								<div className={cn("grid gap-3", hasExistingImage && isEditingImage ? "sm:grid-cols-2" : "max-w-sm")}>
+									<div className="space-y-2">
+										<p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+											{hasExistingImage && isEditingImage ? "Original image" : "Current image"}
+										</p>
+										<div className="relative rounded-lg overflow-hidden border bg-muted/50 aspect-video flex items-center justify-center">
+											{primaryImageUrl ? (
+												<img
+													src={primaryImageUrl}
+													alt="Question"
+													className="max-w-full max-h-full object-contain"
+												/>
+											) : (
+												<div className="flex flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
+													<Image className="size-8" />
+													<p className="text-sm font-medium">No question image yet</p>
+													<p className="text-xs">Upload one or generate an illustration for the card and OG share image.</p>
+												</div>
+											)}
 										</div>
-									)}
+									</div>
+
+									{hasExistingImage && isEditingImage ? (
+										<div className="space-y-2">
+											<p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">New image</p>
+											<div className="relative rounded-lg overflow-hidden border bg-muted/50 aspect-video flex items-center justify-center">
+												{draftImageStorageId === null ? (
+													<div className="flex flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
+														<p className="text-sm font-medium">Image removal staged</p>
+														<p className="text-xs">Save changes to remove the current image.</p>
+													</div>
+												) : draftImageUrl ? (
+													<div className="flex h-full w-full flex-col">
+														<div className="flex-1 flex items-center justify-center">
+															<img
+																src={draftImageUrl}
+																alt="New question"
+																className="max-w-full max-h-full object-contain"
+															/>
+														</div>
+														<div className="border-t bg-background/80 px-3 py-2 text-[11px] text-muted-foreground">
+															This staged image will replace the original when you save changes.
+														</div>
+													</div>
+												) : (
+													<div className="flex flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
+														<Image className="size-8" />
+														<p className="text-sm font-medium">No replacement selected</p>
+														<p className="text-xs">Upload or generate a new image to compare it against the original.</p>
+													</div>
+												)}
+											</div>
+										</div>
+									) : null}
 								</div>
 								<div className="flex flex-wrap gap-2">
-									<label className={cn(
-										"inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 cursor-pointer disabled:opacity-50",
-										uploadingImage && "opacity-50 pointer-events-none"
-									)}>
+									{hasExistingImage && !isEditingImage ? (
+											<Button variant="outline" size="sm" className="gap-2" onClick={handleStartImageEdit}>
+												Edit image
+											</Button>
+										) : null}
+										{hasDraftImageChange ? (
+											<Button variant="secondary" size="sm" className="gap-2" disabled>
+												New image staged
+											</Button>
+										) : null}
+										<label className={cn(
+											"inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 cursor-pointer disabled:opacity-50",
+											(!imageEditingEnabled || uploadingImage) && "opacity-50 pointer-events-none"
+										)}>
 										<input
 											ref={imageInputRef}
 											type="file"
 											accept="image/*"
 											className="sr-only"
-											onChange={handleUploadImage}
-											disabled={uploadingImage}
-										/>
-										{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
-										{questionImageUrl ? "Replace image" : "Upload image"}
-									</label>
-									{questionImageUrl ? (
-										<Button
+												onChange={handleUploadImage}
+												disabled={!imageEditingEnabled || uploadingImage}
+											/>
+											{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
+											{hasDraftImageChange ? "Upload different image" : hasExistingImage ? "Replace image" : "Upload image"}
+										</label>
+										{hasExistingImage || hasDraftImageChange ? (
+											<Button
 											variant="outline"
 											size="sm"
 											className="gap-2 text-destructive hover:text-destructive"
 											onClick={handleClearImage}
-											disabled={uploadingImage}
+											disabled={!imageEditingEnabled || uploadingImage}
 										>
 											Remove image
+										</Button>
+									) : null}
+									{isEditingImage || hasDraftImageChange ? (
+										<Button variant="ghost" size="sm" className="gap-2" onClick={handleCancelImageEdit} disabled={uploadingImage}>
+											Cancel edit
 										</Button>
 									) : null}
 								</div>
@@ -633,13 +786,18 @@ export default function QuestionDetailsPage() {
 									<p className="text-xs text-muted-foreground">
 										Optional. Sent to Quiver as extra style or formatting instructions for the illustration.
 									</p>
+									{hasExistingImage && !isEditingImage ? (
+										<p className="text-xs text-muted-foreground">
+											Click <span className="font-medium text-foreground">Edit image</span> to stage a replacement while keeping the original visible for comparison.
+										</p>
+									) : null}
 								</div>
 
 								<Button
 									variant="outline"
 									className="w-full gap-2 text-purple-500 hover:text-purple-600"
 									onClick={handleGenerateImage}
-									disabled={uploadingImage}
+									disabled={!imageEditingEnabled || uploadingImage}
 								>
 									{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
 									Generate Illustration
@@ -660,17 +818,25 @@ export default function QuestionDetailsPage() {
 							>
 								<option value="">No Style</option>
 								{styles?.map(s => (
-									<option key={s.id} value={s.id}>{s.name}</option>
+									<option key={s._id} value={s._id}>{s.name}</option>
 								))}
 							</select>
-							{styleMeta && (
+							{(selectedStyle ?? styleMeta) && (
 								<Badge
 									variant="outline"
 									className="gap-1.5 font-medium py-1"
-									style={{ borderColor: `${styleMeta.color}40`, backgroundColor: `${styleMeta.color}10`, color: styleMeta.color }}
+									style={{
+										borderColor: `${(selectedStyle ?? styleMeta)!.color}40`,
+										backgroundColor: `${(selectedStyle ?? styleMeta)!.color}10`,
+										color: (selectedStyle ?? styleMeta)!.color,
+									}}
 								>
-									<IconComponent icon={styleMeta.icon as Icon} size={14} color={styleMeta.color} />
-									{styleMeta.name}
+									<IconComponent
+										icon={(selectedStyle ?? styleMeta)!.icon as Icon}
+										size={14}
+										color={(selectedStyle ?? styleMeta)!.color}
+									/>
+									{(selectedStyle ?? styleMeta)!.name}
 								</Badge>
 							)}
 						</div>
@@ -685,17 +851,25 @@ export default function QuestionDetailsPage() {
 							>
 								<option value="">No Tone</option>
 								{tones?.map(t => (
-									<option key={t.id} value={t.id}>{t.name}</option>
+									<option key={t._id} value={t._id}>{t.name}</option>
 								))}
 							</select>
-							{toneMeta && (
+							{(selectedTone ?? toneMeta) && (
 								<Badge
 									variant="outline"
 									className="gap-1.5 font-medium py-1"
-									style={{ borderColor: `${toneMeta.color}40`, backgroundColor: `${toneMeta.color}10`, color: toneMeta.color }}
+									style={{
+										borderColor: `${(selectedTone ?? toneMeta)!.color}40`,
+										backgroundColor: `${(selectedTone ?? toneMeta)!.color}10`,
+										color: (selectedTone ?? toneMeta)!.color,
+									}}
 								>
-									<IconComponent icon={toneMeta.icon as Icon} size={14} color={toneMeta.color} />
-									{toneMeta.name}
+									<IconComponent
+										icon={(selectedTone ?? toneMeta)!.icon as Icon}
+										size={14}
+										color={(selectedTone ?? toneMeta)!.color}
+									/>
+									{(selectedTone ?? toneMeta)!.name}
 								</Badge>
 							)}
 						</div>
@@ -710,12 +884,12 @@ export default function QuestionDetailsPage() {
 							>
 								<option value="">No Topic</option>
 								{topics?.map(t => (
-									<option key={t.id} value={t.id}>{t.name}</option>
+									<option key={t._id} value={t._id}>{t.name}</option>
 								))}
 							</select>
-							{topicMeta && (
+							{(selectedTopic ?? topicMeta) && (
 								<Badge variant="secondary" className="gap-1.5 font-medium py-1">
-									{topicMeta.name}
+									{(selectedTopic ?? topicMeta)!.name}
 								</Badge>
 							)}
 						</div>
