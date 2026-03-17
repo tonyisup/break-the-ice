@@ -8,7 +8,114 @@ import { Id } from "../_generated/dataModel";
 import { runPreviewQuestionGeneration } from "../lib/generationRunner";
 import { extractQuiverSvg } from "../../src/lib/quiver-svg";
 
-const QUIVER_TIMEOUT_MS = 10_000;
+const DEFAULT_QUIVER_TIMEOUT_MS = 30_000;
+const DEFAULT_QUIVER_MAX_ATTEMPTS = 2;
+const MAX_NODE_TIMEOUT_MS = 2_147_483_647;
+
+function parsePositiveInteger(value: string | undefined, fallback: number, maxValue = Number.MAX_SAFE_INTEGER): number {
+	const trimmed = value?.trim() ?? "";
+	if (!/^\d+$/.test(trimmed)) {
+		return fallback;
+	}
+
+	const parsed = Number.parseInt(trimmed, 10);
+	return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, maxValue) : fallback;
+}
+
+function getQuiverTimeoutMs(): number {
+	return parsePositiveInteger(process.env.QUIVERAI_TIMEOUT_MS, DEFAULT_QUIVER_TIMEOUT_MS, MAX_NODE_TIMEOUT_MS);
+}
+
+function getQuiverMaxAttempts(): number {
+	return parsePositiveInteger(process.env.QUIVERAI_MAX_ATTEMPTS, DEFAULT_QUIVER_MAX_ATTEMPTS, Number.MAX_SAFE_INTEGER);
+}
+
+function shouldRetryQuiverStatus(status: number): boolean {
+	return status === 408 || status === 429 || status >= 500;
+}
+
+async function sleep(ms: number): Promise<void> {
+	await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestQuiverSvg(questionText: string, apiKey: string): Promise<string> {
+	const timeoutMs = getQuiverTimeoutMs();
+	const maxAttempts = getQuiverMaxAttempts();
+	let lastError: Error | null = null;
+
+	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+		try {
+			const response = await fetch("https://api.quiver.ai/v1/svgs/generations", {
+				method: "POST",
+				headers: {
+					"Authorization": `Bearer ${apiKey}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					model: "arrow-preview",
+					prompt: questionText,
+					n: 1,
+					stream: false,
+				}),
+				signal: controller.signal,
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json().catch(() => ({}));
+				const error = new Error(`QuiverAI API error: ${response.status} ${response.statusText} ${JSON.stringify(errorData)}`);
+
+				if (attempt < maxAttempts && shouldRetryQuiverStatus(response.status)) {
+					lastError = error;
+					await sleep(300 * attempt);
+					continue;
+				}
+
+				if (!shouldRetryQuiverStatus(response.status)) {
+					(error as Error & { nonRetryable?: boolean }).nonRetryable = true;
+				}
+
+				throw error;
+			}
+
+			const data = await response.json();
+			const svg = extractQuiverSvg(data);
+			if (!svg) {
+				const error = new Error(`QuiverAI API returned no SVG payload: ${JSON.stringify(data)}`);
+				(error as Error & { nonRetryable?: boolean }).nonRetryable = true;
+				throw error;
+			}
+
+			return svg;
+		} catch (error) {
+			if (error instanceof Error && error.name === "AbortError") {
+				lastError = new Error(
+					attempt < maxAttempts
+						? `QuiverAI API request timed out after ${timeoutMs}ms on attempt ${attempt} of ${maxAttempts}`
+						: `QuiverAI API request timed out after ${timeoutMs}ms across ${maxAttempts} attempt${maxAttempts === 1 ? "" : "s"}`
+				);
+			} else if (error instanceof Error && (error as Error & { nonRetryable?: boolean }).nonRetryable === true) {
+				throw error;
+			} else if (error instanceof Error) {
+				lastError = error;
+			} else {
+				lastError = new Error(String(error));
+			}
+
+			if (attempt >= maxAttempts) {
+				throw lastError;
+			}
+
+			await sleep(300 * attempt);
+		} finally {
+			clearTimeout(timeout);
+		}
+	}
+
+	throw lastError ?? new Error("QuiverAI request failed");
+}
 
 export const startDuplicateDetection = action({
 	args: {
@@ -36,46 +143,7 @@ export const generateQuestionImage = action({
 			throw new Error("QUIVERAI_API_KEY is not configured");
 		}
 
-		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), QUIVER_TIMEOUT_MS);
-
-		let response: Response;
-		try {
-			response = await fetch("https://api.quiver.ai/v1/svgs/generations", {
-				method: "POST",
-				headers: {
-					"Authorization": `Bearer ${apiKey}`,
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({
-					model: "arrow-preview",
-					prompt: args.questionText,
-					n: 1,
-					stream: false,
-				}),
-				signal: controller.signal,
-			});
-		} catch (error) {
-			if (error instanceof Error && error.name === "AbortError") {
-				throw new Error(`QuiverAI API request timed out after ${QUIVER_TIMEOUT_MS}ms`);
-			}
-			throw error;
-		} finally {
-			clearTimeout(timeout);
-		}
-
-		if (!response.ok) {
-			const errorData = await response.json().catch(() => ({}));
-			throw new Error(`QuiverAI API error: ${response.statusText} ${JSON.stringify(errorData)}`);
-		}
-
-		const data = await response.json();
-		const svg = extractQuiverSvg(data);
-		if (!svg) {
-			throw new Error(`QuiverAI API returned no SVG payload: ${JSON.stringify(data)}`);
-		}
-
-		return svg;
+		return await requestQuiverSvg(args.questionText, apiKey);
 	},
 });
 
