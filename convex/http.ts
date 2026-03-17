@@ -16,6 +16,13 @@ http.route({
 });
 
 export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
+	const authHeader = request.headers.get("Authorization");
+	const expectedToken = process.env.N8N_WEBHOOK_SECRET;
+
+	if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
+		return new Response("Unauthorized", { status: 401 });
+	}
+
 	const { email } = await request.json();
 
 	if (!email) {
