@@ -6,6 +6,9 @@ import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
 import { runPreviewQuestionGeneration } from "../lib/generationRunner";
+import { extractQuiverSvg } from "../../src/lib/quiver-svg";
+
+const QUIVER_TIMEOUT_MS = 10_000;
 
 export const startDuplicateDetection = action({
 	args: {
@@ -17,6 +20,62 @@ export const startDuplicateDetection = action({
 		return await ctx.runAction(internal.internal.ai.detectDuplicateQuestionsStreaming, {
 			threshold: args.threshold,
 		}) as Id<"duplicateDetectionProgress">;
+	},
+});
+
+export const generateQuestionImage = action({
+	args: {
+		questionText: v.string(),
+	},
+	returns: v.string(),
+	handler: async (ctx, args): Promise<string> => {
+		await ensureAdmin(ctx);
+
+		const apiKey = process.env.QUIVERAI_API_KEY;
+		if (!apiKey) {
+			throw new Error("QUIVERAI_API_KEY is not configured");
+		}
+
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), QUIVER_TIMEOUT_MS);
+
+		let response: Response;
+		try {
+			response = await fetch("https://api.quiver.ai/v1/svgs/generations", {
+				method: "POST",
+				headers: {
+					"Authorization": `Bearer ${apiKey}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					model: "arrow-preview",
+					prompt: args.questionText,
+					n: 1,
+					stream: false,
+				}),
+				signal: controller.signal,
+			});
+		} catch (error) {
+			if (error instanceof Error && error.name === "AbortError") {
+				throw new Error(`QuiverAI API request timed out after ${QUIVER_TIMEOUT_MS}ms`);
+			}
+			throw error;
+		} finally {
+			clearTimeout(timeout);
+		}
+
+		if (!response.ok) {
+			const errorData = await response.json().catch(() => ({}));
+			throw new Error(`QuiverAI API error: ${response.statusText} ${JSON.stringify(errorData)}`);
+		}
+
+		const data = await response.json();
+		const svg = extractQuiverSvg(data);
+		if (!svg) {
+			throw new Error(`QuiverAI API returned no SVG payload: ${JSON.stringify(data)}`);
+		}
+
+		return svg;
 	},
 });
 

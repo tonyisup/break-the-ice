@@ -196,6 +196,7 @@ export default function QuestionDetailsPage() {
 	const updateQuestion = useMutation(api.admin.questions.updateQuestion)
 	const deleteStorageId = useMutation(api.admin.questions.deleteStorageId)
 	const remixQuestion = useAction(api.admin.questions.remixQuestion)
+	const generateQuestionImage = useAction(api.admin.ai.generateQuestionImage)
 	const generateUploadUrl = useMutation(api.admin.questions.generateUploadUrl)
 
 	// ── Editing State ──
@@ -304,6 +305,51 @@ export default function QuestionDetailsPage() {
 		}
 	}
 
+	const deleteUploadedStorage = async (storageId: Id<"_storage">) => {
+		try {
+			await deleteStorageId({ storageId })
+		} catch {
+			// best-effort cleanup; ignore
+		}
+	}
+
+	const handleGenerateImage = async () => {
+		if (!question) return
+		setUploadingImage(true)
+		let storageId: Id<"_storage"> | null = null
+		try {
+			const svgContent = await generateQuestionImage({ questionText: editText })
+			if (!svgContent) {
+				toast.error("No SVG image data found in response")
+				return
+			}
+			const blob = new Blob([svgContent], { type: "image/svg+xml" })
+			const postUrl = await generateUploadUrl()
+			const result = await fetch(postUrl, {
+				method: "POST",
+				headers: { "Content-Type": "image/svg+xml" },
+				body: blob,
+			})
+			if (!result.ok) throw new Error("Upload failed")
+			const body = await result.json()
+			storageId = body.storageId ?? null
+			if (!storageId) throw new Error("No storageId returned")
+			try {
+				await updateQuestion({ id: question._id, imageStorageId: storageId })
+			} catch (error) {
+				await deleteUploadedStorage(storageId)
+				storageId = null
+				throw error
+			}
+			toast.success("Question image generated and saved!")
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			toast.error(`Image generation failed: ${message}`)
+		} finally {
+			setUploadingImage(false)
+		}
+	}
+
 	const handleAddTag = () => {
 		if (!tagInput.trim()) return
 		const current = editTags
@@ -350,11 +396,7 @@ export default function QuestionDetailsPage() {
 		} catch (error) {
 			toast.error("Failed to upload image")
 			if (storageId) {
-				try {
-					await deleteStorageId({ storageId })
-				} catch {
-					// best-effort cleanup; ignore
-				}
+				await deleteUploadedStorage(storageId)
 			}
 		} finally {
 			setUploadingImage(false)
@@ -440,6 +482,17 @@ export default function QuestionDetailsPage() {
 							View Image
 						</Button>
 					</a>
+
+					<Button
+						variant="outline"
+						size="sm"
+						className="gap-2 text-purple-500 hover:text-purple-600"
+						onClick={handleGenerateImage}
+						disabled={uploadingImage}
+					>
+						{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
+						Generate Image
+					</Button>
 
 					<Button
 						variant="outline"
