@@ -114,4 +114,21 @@ describe("admin ai image generation", () => {
 
 		expect(mockFetch).toHaveBeenCalledTimes(1);
 	});
+
+	test("clamps oversized timeout env values to the Node timer maximum", async () => {
+		const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+		process.env.QUIVERAI_TIMEOUT_MS = "999999999999999999999";
+		process.env.QUIVERAI_MAX_ATTEMPTS = "1";
+
+		const mockFetch = vi.fn().mockRejectedValue(createAbortError());
+		global.fetch = mockFetch as typeof fetch;
+
+		await expect(
+			t.withIdentity({ metadata: { isAdmin: "true" } }).action(api.admin.ai.generateQuestionImage, {
+				questionText: "Draw a penguin holding coffee",
+			})
+		).rejects.toThrow("QuiverAI API request timed out after 2147483647ms across 1 attempt");
+
+		expect(mockFetch).toHaveBeenCalledTimes(1);
+	});
 });

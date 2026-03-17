@@ -10,23 +10,24 @@ import { extractQuiverSvg } from "../../src/lib/quiver-svg";
 
 const DEFAULT_QUIVER_TIMEOUT_MS = 30_000;
 const DEFAULT_QUIVER_MAX_ATTEMPTS = 2;
+const MAX_NODE_TIMEOUT_MS = 2_147_483_647;
 
-function parsePositiveInteger(value: string | undefined, fallback: number): number {
+function parsePositiveInteger(value: string | undefined, fallback: number, maxValue = Number.MAX_SAFE_INTEGER): number {
 	const trimmed = value?.trim() ?? "";
 	if (!/^\d+$/.test(trimmed)) {
 		return fallback;
 	}
 
 	const parsed = Number.parseInt(trimmed, 10);
-	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+	return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, maxValue) : fallback;
 }
 
 function getQuiverTimeoutMs(): number {
-	return parsePositiveInteger(process.env.QUIVERAI_TIMEOUT_MS, DEFAULT_QUIVER_TIMEOUT_MS);
+	return parsePositiveInteger(process.env.QUIVERAI_TIMEOUT_MS, DEFAULT_QUIVER_TIMEOUT_MS, MAX_NODE_TIMEOUT_MS);
 }
 
 function getQuiverMaxAttempts(): number {
-	return parsePositiveInteger(process.env.QUIVERAI_MAX_ATTEMPTS, DEFAULT_QUIVER_MAX_ATTEMPTS);
+	return parsePositiveInteger(process.env.QUIVERAI_MAX_ATTEMPTS, DEFAULT_QUIVER_MAX_ATTEMPTS, Number.MAX_SAFE_INTEGER);
 }
 
 function shouldRetryQuiverStatus(status: number): boolean {
