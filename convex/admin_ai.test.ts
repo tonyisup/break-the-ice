@@ -74,6 +74,7 @@ describe("admin ai image generation", () => {
 
 		const svg = await t.withIdentity({ metadata: { isAdmin: "true" } }).action(api.admin.ai.generateQuestionImage, {
 			questionText: "Draw a penguin holding coffee",
+			additionalGuidance: "Use a flat monochrome style with clean geometry.",
 		});
 
 		expect(svg).toBe("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
@@ -82,6 +83,7 @@ describe("admin ai image generation", () => {
 			model: "arrow-preview",
 			n: 1,
 			prompt: "Draw a penguin holding coffee",
+			instructions: "Use a flat monochrome style with clean geometry.",
 			stream: true,
 		});
 	});

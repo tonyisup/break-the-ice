@@ -30,6 +30,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Icon, IconComponent } from "@/components/ui/icons/icon"
 import { cn } from "@/lib/utils"
@@ -207,6 +208,7 @@ export default function QuestionDetailsPage() {
 	const [editStatus, setEditStatus] = useState("")
 	const [editTags, setEditTags] = useState("")
 	const [tagInput, setTagInput] = useState("")
+	const [additionalGuidance, setAdditionalGuidance] = useState("")
 
 	const [saving, setSaving] = useState(false)
 	const [remixing, setRemixing] = useState(false)
@@ -318,7 +320,11 @@ export default function QuestionDetailsPage() {
 		setUploadingImage(true)
 		let storageId: Id<"_storage"> | null = null
 		try {
-			const svgContent = await generateQuestionImage({ questionText: editText })
+			const guidance = additionalGuidance.trim()
+			const svgContent = await generateQuestionImage({
+				questionText: editText,
+				additionalGuidance: guidance || undefined,
+			})
 			if (!svgContent) {
 				toast.error("No SVG image data found in response")
 				return
@@ -447,6 +453,7 @@ export default function QuestionDetailsPage() {
 	const styleMeta = question._style
 	const toneMeta = question._tone
 	const topicMeta = question._topic
+	const questionImageUrl = (question as { imageUrl?: string | null }).imageUrl ?? null
 
 	const likeRate = question.totalShows > 0 ? ((question.totalLikes / question.totalShows) * 100).toFixed(1) : "0"
 
@@ -482,17 +489,6 @@ export default function QuestionDetailsPage() {
 							View Image
 						</Button>
 					</a>
-
-					<Button
-						variant="outline"
-						size="sm"
-						className="gap-2 text-purple-500 hover:text-purple-600"
-						onClick={handleGenerateImage}
-						disabled={uploadingImage}
-					>
-						{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
-						Generate Image
-					</Button>
 
 					<Button
 						variant="outline"
@@ -575,16 +571,24 @@ export default function QuestionDetailsPage() {
 							<Image className="size-4 text-muted-foreground" />
 							Question Image
 						</h3>
-						{(question as { imageUrl?: string | null }).imageUrl ? (
+						<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
 							<div className="space-y-3">
 								<div className="relative rounded-lg overflow-hidden border bg-muted/50 max-w-sm aspect-video flex items-center justify-center">
-									<img
-										src={(question as { imageUrl?: string | null }).imageUrl!}
-										alt="Question"
-										className="max-w-full max-h-full object-contain"
-									/>
+									{questionImageUrl ? (
+										<img
+											src={questionImageUrl}
+											alt="Question"
+											className="max-w-full max-h-full object-contain"
+										/>
+									) : (
+										<div className="flex flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
+											<Image className="size-8" />
+											<p className="text-sm font-medium">No question image yet</p>
+											<p className="text-xs">Upload one or generate an illustration for the card and OG share image.</p>
+										</div>
+									)}
 								</div>
-								<div className="flex gap-2">
+								<div className="flex flex-wrap gap-2">
 									<label className={cn(
 										"inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 cursor-pointer disabled:opacity-50",
 										uploadingImage && "opacity-50 pointer-events-none"
@@ -598,39 +602,50 @@ export default function QuestionDetailsPage() {
 											disabled={uploadingImage}
 										/>
 										{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
-										Replace image
+										{questionImageUrl ? "Replace image" : "Upload image"}
 									</label>
-									<Button
-										variant="outline"
-										size="sm"
-										className="gap-2 text-destructive hover:text-destructive"
-										onClick={handleClearImage}
-										disabled={uploadingImage}
-									>
-										Remove image
-									</Button>
+									{questionImageUrl ? (
+										<Button
+											variant="outline"
+											size="sm"
+											className="gap-2 text-destructive hover:text-destructive"
+											onClick={handleClearImage}
+											disabled={uploadingImage}
+										>
+											Remove image
+										</Button>
+									) : null}
 								</div>
 							</div>
-						) : (
-							<div className="flex flex-col sm:flex-row items-start gap-3">
-								<label className={cn(
-									"inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 cursor-pointer disabled:opacity-50",
-									uploadingImage && "opacity-50 pointer-events-none"
-								)}>
-									<input
-										ref={imageInputRef}
-										type="file"
-										accept="image/*"
-										className="sr-only"
-										onChange={handleUploadImage}
-										disabled={uploadingImage}
+
+							<div className="rounded-lg border bg-muted/20 p-4 space-y-4">
+								<div className="space-y-2">
+									<label htmlFor="additional-guidance" className="text-sm font-medium text-foreground">
+										Additional Guidance
+									</label>
+									<Textarea
+										id="additional-guidance"
+										value={additionalGuidance}
+										onChange={(e) => setAdditionalGuidance(e.target.value)}
+										placeholder="Optional style or composition guidance for Quiver..."
+										className="min-h-[140px] resize-y"
 									/>
+									<p className="text-xs text-muted-foreground">
+										Optional. Sent to Quiver as extra style or formatting instructions for the illustration.
+									</p>
+								</div>
+
+								<Button
+									variant="outline"
+									className="w-full gap-2 text-purple-500 hover:text-purple-600"
+									onClick={handleGenerateImage}
+									disabled={uploadingImage}
+								>
 									{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
-									Upload image
-								</label>
-								<p className="text-xs text-muted-foreground">Optional. Shown on the question card and OG share image.</p>
+									Generate Illustration
+								</Button>
 							</div>
-						)}
+						</div>
 					</div>
 
 					{/* Classification Grid */}
