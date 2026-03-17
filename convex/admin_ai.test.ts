@@ -175,6 +175,8 @@ describe("admin ai image generation", () => {
 			t.withIdentity({ metadata: { isAdmin: "true" } }).action(api.admin.ai.generateQuestionImage, {
 				questionText: "Draw a penguin holding coffee",
 			})
-		).rejects.toThrow("QuiverAI API stream returned no final SVG payload");
+		).rejects.toThrow("QuiverAI stream contained no final content SVG");
+
+		expect(mockFetch).toHaveBeenCalledTimes(1);
 	});
 });

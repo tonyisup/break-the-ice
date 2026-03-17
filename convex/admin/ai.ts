@@ -42,6 +42,12 @@ function readQuiverError(data: unknown): string {
 	return JSON.stringify(data);
 }
 
+function createNonRetryableQuiverError(message: string): Error & { nonRetryable: true } {
+	const error = new Error(message) as Error & { nonRetryable: true };
+	error.nonRetryable = true;
+	return error;
+}
+
 function isContentStreamEvent(value: unknown): value is { type: "content" } {
 	return (
 		typeof value === "object"
@@ -56,7 +62,7 @@ async function readQuiverSvgStream(
 	resetTimeout: () => void,
 ): Promise<string> {
 	if (!response.body) {
-		throw new Error("QuiverAI API returned no stream body");
+		throw createNonRetryableQuiverError("QuiverAI API returned no stream body");
 	}
 
 	const reader = response.body.getReader();
@@ -158,7 +164,9 @@ async function readQuiverSvgStream(
 	}
 
 	if (!finalSvg) {
-		throw new Error(`QuiverAI API stream returned no final SVG payload${sawDone ? "" : " before the connection closed"}`);
+		throw createNonRetryableQuiverError(
+			`QuiverAI stream contained no final content SVG${sawDone ? "" : " before the connection closed"}`
+		);
 	}
 
 	return finalSvg;
@@ -215,9 +223,7 @@ async function requestQuiverSvg(questionText: string, apiKey: string): Promise<s
 				? await readQuiverSvgStream(response, resetTimeout)
 				: extractQuiverSvg(await response.json());
 			if (!svg) {
-				const error = new Error("QuiverAI API returned no SVG payload");
-				(error as Error & { nonRetryable?: boolean }).nonRetryable = true;
-				throw error;
+				throw createNonRetryableQuiverError("QuiverAI API returned no SVG payload");
 			}
 
 			return svg;
