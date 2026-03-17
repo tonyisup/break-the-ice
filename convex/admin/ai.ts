@@ -7,6 +7,50 @@ import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
 import { runPreviewQuestionGeneration } from "../lib/generationRunner";
 
+function looksLikeSvgMarkup(value: string): boolean {
+	return value.trim().startsWith("<svg") || value.trim().startsWith("<?xml");
+}
+
+function extractQuiverSvg(value: unknown): string | null {
+	if (typeof value === "string") {
+		const trimmed = value.trim();
+		if (!trimmed) return null;
+		if (looksLikeSvgMarkup(trimmed)) return trimmed;
+		try {
+			return extractQuiverSvg(JSON.parse(trimmed));
+		} catch {
+			return null;
+		}
+	}
+
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			const svg = extractQuiverSvg(entry);
+			if (svg) return svg;
+		}
+		return null;
+	}
+
+	if (value && typeof value === "object") {
+		const objectValue = value as Record<string, unknown>;
+		if (typeof objectValue.svg === "string" && looksLikeSvgMarkup(objectValue.svg)) {
+			return objectValue.svg;
+		}
+		if (typeof objectValue.data === "string" && looksLikeSvgMarkup(objectValue.data)) {
+			return objectValue.data;
+		}
+		if (objectValue.data) {
+			const svg = extractQuiverSvg(objectValue.data);
+			if (svg) return svg;
+		}
+		if (objectValue.generations) {
+			return extractQuiverSvg(objectValue.generations);
+		}
+	}
+
+	return null;
+}
+
 export const startDuplicateDetection = action({
 	args: {
 		threshold: v.optional(v.number()),
@@ -17,6 +61,48 @@ export const startDuplicateDetection = action({
 		return await ctx.runAction(internal.internal.ai.detectDuplicateQuestionsStreaming, {
 			threshold: args.threshold,
 		}) as Id<"duplicateDetectionProgress">;
+	},
+});
+
+export const generateQuestionImage = action({
+	args: {
+		questionText: v.string(),
+	},
+	returns: v.string(),
+	handler: async (ctx, args): Promise<string> => {
+		await ensureAdmin(ctx);
+
+		const apiKey = process.env.QUIVERAI_API_KEY;
+		if (!apiKey) {
+			throw new Error("QUIVERAI_API_KEY is not configured");
+		}
+
+		const response = await fetch("https://api.quiver.ai/v1/svgs/generations", {
+			method: "POST",
+			headers: {
+				"Authorization": `Bearer ${apiKey}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				model: "arrow-preview",
+				prompt: args.questionText,
+				n: 1,
+				stream: false,
+			}),
+		});
+
+		if (!response.ok) {
+			const errorData = await response.json().catch(() => ({}));
+			throw new Error(`QuiverAI API error: ${response.statusText} ${JSON.stringify(errorData)}`);
+		}
+
+		const data = await response.json();
+		const svg = extractQuiverSvg(data);
+		if (!svg) {
+			throw new Error(`QuiverAI API returned no SVG payload: ${JSON.stringify(data)}`);
+		}
+
+		return svg;
 	},
 });
 
