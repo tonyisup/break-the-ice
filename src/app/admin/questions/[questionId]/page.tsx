@@ -222,6 +222,7 @@ export default function QuestionDetailsPage() {
 	const imageInputRef = useRef<HTMLInputElement>(null)
 	const draftImageObjectUrlRef = useRef<string | null>(null)
 	const committedImageObjectUrlRef = useRef<string | null>(null)
+	const draftImageStorageIdRef = useRef<Id<"_storage"> | null | undefined>(undefined)
 	const preservedDraftStorageIdRef = useRef<Id<"_storage"> | null>(null)
 
 	const hasInitialized = useRef(false)
@@ -276,6 +277,10 @@ export default function QuestionDetailsPage() {
 	}, [editText, editStyle, editTone, editTopic, editStatus, editTags, draftImageStorageId, question])
 
 	useEffect(() => {
+		draftImageStorageIdRef.current = draftImageStorageId
+	}, [draftImageStorageId])
+
+	useEffect(() => {
 		return () => {
 			if (draftImageObjectUrlRef.current) {
 				URL.revokeObjectURL(draftImageObjectUrlRef.current)
@@ -283,11 +288,12 @@ export default function QuestionDetailsPage() {
 			if (committedImageObjectUrlRef.current) {
 				URL.revokeObjectURL(committedImageObjectUrlRef.current)
 			}
-			if (draftImageStorageId && draftImageStorageId !== preservedDraftStorageIdRef.current) {
-				void deleteUploadedStorage(draftImageStorageId)
+			const currentDraftImageStorageId = draftImageStorageIdRef.current
+			if (currentDraftImageStorageId && currentDraftImageStorageId !== preservedDraftStorageIdRef.current) {
+				void deleteUploadedStorage(currentDraftImageStorageId)
 			}
 		}
-	}, [draftImageStorageId])
+	}, [])
 
 	const clearDraftPreviewUrl = () => {
 		if (draftImageObjectUrlRef.current) {
