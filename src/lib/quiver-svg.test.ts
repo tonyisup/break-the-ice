@@ -16,6 +16,16 @@ describe("extractQuiverSvg", () => {
     expect(extractQuiverSvg(payload)).toBe("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
   });
 
+  it("extracts svg markup from stringified JSON entries in the data array", () => {
+    const payload = {
+      data: [
+        "{\"svg\":\"<svg xmlns=\\\"http://www.w3.org/2000/svg\\\"></svg>\",\"mime_type\":\"image/svg+xml\"}",
+      ],
+    };
+
+    expect(extractQuiverSvg(payload)).toBe("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+  });
+
   it("extracts svg markup from a JSON string payload", () => {
     const payload = JSON.stringify({
       generations: [

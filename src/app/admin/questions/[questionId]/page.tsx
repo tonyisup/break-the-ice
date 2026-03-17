@@ -306,9 +306,18 @@ export default function QuestionDetailsPage() {
 		}
 	}
 
+	const deleteUploadedStorage = async (storageId: Id<"_storage">) => {
+		try {
+			await deleteStorageId({ storageId })
+		} catch {
+			// best-effort cleanup; ignore
+		}
+	}
+
 	const handleGenerateImage = async () => {
 		if (!question) return
 		setUploadingImage(true)
+		let storageId: Id<"_storage"> | null = null
 		try {
 			const response = await generateQuestionImage({ questionText: editText })
 			const svgContent = extractQuiverSvg(response)
@@ -325,12 +334,19 @@ export default function QuestionDetailsPage() {
 			})
 			if (!result.ok) throw new Error("Upload failed")
 			const body = await result.json()
-			const storageId = body.storageId ?? null
+			storageId = body.storageId ?? null
 			if (!storageId) throw new Error("No storageId returned")
-			await updateQuestion({ id: question._id, imageStorageId: storageId })
+			try {
+				await updateQuestion({ id: question._id, imageStorageId: storageId })
+			} catch (error) {
+				await deleteUploadedStorage(storageId)
+				storageId = null
+				throw error
+			}
 			toast.success("Question image generated and saved!")
 		} catch (error) {
-			toast.error(`Image generation failed: ${error}`)
+			const message = error instanceof Error ? error.message : String(error)
+			toast.error(`Image generation failed: ${message}`)
 		} finally {
 			setUploadingImage(false)
 		}
@@ -382,11 +398,7 @@ export default function QuestionDetailsPage() {
 		} catch (error) {
 			toast.error("Failed to upload image")
 			if (storageId) {
-				try {
-					await deleteStorageId({ storageId })
-				} catch {
-					// best-effort cleanup; ignore
-				}
+				await deleteUploadedStorage(storageId)
 			}
 		} finally {
 			setUploadingImage(false)

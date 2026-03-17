@@ -6,50 +6,9 @@ import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
 import { runPreviewQuestionGeneration } from "../lib/generationRunner";
+import { extractQuiverSvg } from "../../src/lib/quiver-svg";
 
-function looksLikeSvgMarkup(value: string): boolean {
-	return value.trim().startsWith("<svg") || value.trim().startsWith("<?xml");
-}
-
-function extractQuiverSvg(value: unknown): string | null {
-	if (typeof value === "string") {
-		const trimmed = value.trim();
-		if (!trimmed) return null;
-		if (looksLikeSvgMarkup(trimmed)) return trimmed;
-		try {
-			return extractQuiverSvg(JSON.parse(trimmed));
-		} catch {
-			return null;
-		}
-	}
-
-	if (Array.isArray(value)) {
-		for (const entry of value) {
-			const svg = extractQuiverSvg(entry);
-			if (svg) return svg;
-		}
-		return null;
-	}
-
-	if (value && typeof value === "object") {
-		const objectValue = value as Record<string, unknown>;
-		if (typeof objectValue.svg === "string" && looksLikeSvgMarkup(objectValue.svg)) {
-			return objectValue.svg;
-		}
-		if (typeof objectValue.data === "string" && looksLikeSvgMarkup(objectValue.data)) {
-			return objectValue.data;
-		}
-		if (objectValue.data) {
-			const svg = extractQuiverSvg(objectValue.data);
-			if (svg) return svg;
-		}
-		if (objectValue.generations) {
-			return extractQuiverSvg(objectValue.generations);
-		}
-	}
-
-	return null;
-}
+const QUIVER_TIMEOUT_MS = 10_000;
 
 export const startDuplicateDetection = action({
 	args: {
@@ -77,19 +36,33 @@ export const generateQuestionImage = action({
 			throw new Error("QUIVERAI_API_KEY is not configured");
 		}
 
-		const response = await fetch("https://api.quiver.ai/v1/svgs/generations", {
-			method: "POST",
-			headers: {
-				"Authorization": `Bearer ${apiKey}`,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				model: "arrow-preview",
-				prompt: args.questionText,
-				n: 1,
-				stream: false,
-			}),
-		});
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), QUIVER_TIMEOUT_MS);
+
+		let response: Response;
+		try {
+			response = await fetch("https://api.quiver.ai/v1/svgs/generations", {
+				method: "POST",
+				headers: {
+					"Authorization": `Bearer ${apiKey}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					model: "arrow-preview",
+					prompt: args.questionText,
+					n: 1,
+					stream: false,
+				}),
+				signal: controller.signal,
+			});
+		} catch (error) {
+			if (error instanceof Error && error.name === "AbortError") {
+				throw new Error(`QuiverAI API request timed out after ${QUIVER_TIMEOUT_MS}ms`);
+			}
+			throw error;
+		} finally {
+			clearTimeout(timeout);
+		}
 
 		if (!response.ok) {
 			const errorData = await response.json().catch(() => ({}));

@@ -10,8 +10,13 @@ function extractFromObject(value: Record<string, unknown>): string | null {
   }
 
   const data = value.data;
-  if (typeof data === "string" && looksLikeSvgMarkup(data)) {
-    return data;
+  if (typeof data === "string") {
+    if (looksLikeSvgMarkup(data)) {
+      return data;
+    }
+
+    const svg = extractQuiverSvg(data);
+    if (svg) return svg;
   }
   if (Array.isArray(data)) {
     for (const entry of data) {
