@@ -16,6 +16,15 @@ function createAbortError(): Error {
 	return error;
 }
 
+function restoreEnvVar(key: "QUIVERAI_API_KEY" | "QUIVERAI_TIMEOUT_MS" | "QUIVERAI_MAX_ATTEMPTS", value: string | undefined): void {
+	if (value === undefined) {
+		delete process.env[key];
+		return;
+	}
+
+	process.env[key] = value;
+}
+
 describe("admin ai image generation", () => {
 	beforeEach(() => {
 		process.env.QUIVERAI_API_KEY = "test-quiver-key";
@@ -25,9 +34,9 @@ describe("admin ai image generation", () => {
 
 	afterEach(() => {
 		global.fetch = originalFetch;
-		process.env.QUIVERAI_API_KEY = originalApiKey;
-		process.env.QUIVERAI_TIMEOUT_MS = originalTimeout;
-		process.env.QUIVERAI_MAX_ATTEMPTS = originalMaxAttempts;
+		restoreEnvVar("QUIVERAI_API_KEY", originalApiKey);
+		restoreEnvVar("QUIVERAI_TIMEOUT_MS", originalTimeout);
+		restoreEnvVar("QUIVERAI_MAX_ATTEMPTS", originalMaxAttempts);
 	});
 
 	test("retries once after a timeout and returns the svg", async () => {
@@ -64,6 +73,44 @@ describe("admin ai image generation", () => {
 				questionText: "Draw a penguin holding coffee",
 			})
 		).rejects.toThrow("QuiverAI API request timed out after 1500ms across 1 attempt");
+
+		expect(mockFetch).toHaveBeenCalledTimes(1);
+	});
+
+	test("does not retry non-retryable upstream errors", async () => {
+		const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+		process.env.QUIVERAI_MAX_ATTEMPTS = "2";
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 400,
+			statusText: "Bad Request",
+			json: async () => ({ error: "bad prompt" }),
+		});
+		global.fetch = mockFetch as typeof fetch;
+
+		await expect(
+			t.withIdentity({ metadata: { isAdmin: "true" } }).action(api.admin.ai.generateQuestionImage, {
+				questionText: "Draw a penguin holding coffee",
+			})
+		).rejects.toThrow("QuiverAI API error: 400 Bad Request");
+
+		expect(mockFetch).toHaveBeenCalledTimes(1);
+	});
+
+	test("falls back to the default timeout when the env value is not a whole number", async () => {
+		const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+		process.env.QUIVERAI_TIMEOUT_MS = "1500ms";
+		process.env.QUIVERAI_MAX_ATTEMPTS = "1";
+
+		const mockFetch = vi.fn().mockRejectedValue(createAbortError());
+		global.fetch = mockFetch as typeof fetch;
+
+		await expect(
+			t.withIdentity({ metadata: { isAdmin: "true" } }).action(api.admin.ai.generateQuestionImage, {
+				questionText: "Draw a penguin holding coffee",
+			})
+		).rejects.toThrow("QuiverAI API request timed out after 30000ms across 1 attempt");
 
 		expect(mockFetch).toHaveBeenCalledTimes(1);
 	});

@@ -12,7 +12,12 @@ const DEFAULT_QUIVER_TIMEOUT_MS = 30_000;
 const DEFAULT_QUIVER_MAX_ATTEMPTS = 2;
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
-	const parsed = Number.parseInt(value ?? "", 10);
+	const trimmed = value?.trim() ?? "";
+	if (!/^\d+$/.test(trimmed)) {
+		return fallback;
+	}
+
+	const parsed = Number.parseInt(trimmed, 10);
 	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
@@ -67,13 +72,19 @@ async function requestQuiverSvg(questionText: string, apiKey: string): Promise<s
 					continue;
 				}
 
+				if (!shouldRetryQuiverStatus(response.status)) {
+					(error as Error & { nonRetryable?: boolean }).nonRetryable = true;
+				}
+
 				throw error;
 			}
 
 			const data = await response.json();
 			const svg = extractQuiverSvg(data);
 			if (!svg) {
-				throw new Error(`QuiverAI API returned no SVG payload: ${JSON.stringify(data)}`);
+				const error = new Error(`QuiverAI API returned no SVG payload: ${JSON.stringify(data)}`);
+				(error as Error & { nonRetryable?: boolean }).nonRetryable = true;
+				throw error;
 			}
 
 			return svg;
@@ -84,6 +95,8 @@ async function requestQuiverSvg(questionText: string, apiKey: string): Promise<s
 						? `QuiverAI API request timed out after ${timeoutMs}ms on attempt ${attempt} of ${maxAttempts}`
 						: `QuiverAI API request timed out after ${timeoutMs}ms across ${maxAttempts} attempt${maxAttempts === 1 ? "" : "s"}`
 				);
+			} else if (error instanceof Error && (error as Error & { nonRetryable?: boolean }).nonRetryable === true) {
+				throw error;
 			} else if (error instanceof Error) {
 				lastError = error;
 			} else {
