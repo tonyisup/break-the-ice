@@ -16,6 +16,18 @@ http.route({
 });
 
 export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
+	const authHeader = request.headers.get("Authorization");
+	const expectedToken = process.env.N8N_WEBHOOK_SECRET;
+
+	if (!expectedToken) {
+		console.error("N8N_WEBHOOK_SECRET is not configured for /get-question-for-user");
+		return new Response("Server misconfiguration", { status: 500 });
+	}
+
+	if (authHeader !== `Bearer ${expectedToken}`) {
+		return new Response("Unauthorized", { status: 401 });
+	}
+
 	const { email } = await request.json();
 
 	if (!email) {
