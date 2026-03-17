@@ -25,6 +25,23 @@ function restoreEnvVar(key: "QUIVERAI_API_KEY" | "QUIVERAI_TIMEOUT_MS" | "QUIVER
 	process.env[key] = value;
 }
 
+function createSseResponse(chunks: string[]): Response {
+	const encoder = new TextEncoder();
+
+	return new Response(new ReadableStream<Uint8Array>({
+		start(controller) {
+			for (const chunk of chunks) {
+				controller.enqueue(encoder.encode(chunk));
+			}
+			controller.close();
+		},
+	}), {
+		headers: {
+			"Content-Type": "text/event-stream",
+		},
+	});
+}
+
 describe("admin ai image generation", () => {
 	beforeEach(() => {
 		process.env.QUIVERAI_API_KEY = "test-quiver-key";
@@ -44,12 +61,15 @@ describe("admin ai image generation", () => {
 		const mockFetch = vi
 			.fn()
 			.mockRejectedValueOnce(createAbortError())
-			.mockResolvedValueOnce({
-				ok: true,
-				json: async () => ({
-					data: [{ svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>" }],
-				}),
-			});
+			.mockResolvedValueOnce(createSseResponse([
+				"event: reasoning\n",
+				"data: {\"type\":\"reasoning\",\"id\":\"svg-abc123\",\"svg\":\"\",\"text\":\"Sketching a playful penguin...\"}\n\n",
+				"event: draft\n",
+				"data: {\"type\":\"draft\",\"id\":\"svg-abc123\",\"svg\":\"<svg xmlns=\\\"http://www.w3.org/2000/svg\\\"><circle cx=\\\"12\\\" cy=\\\"12\\\" r=\\\"10\\\"/>\"}\n\n",
+				"event: content\n",
+				"data: {\"type\":\"content\",\"id\":\"svg-abc123\",\"svg\":\"<svg xmlns=\\\"http://www.w3.org/2000/svg\\\"></svg>\",\"usage\":{\"total_tokens\":100,\"input_tokens\":40,\"output_tokens\":60}}\n\n",
+				"data: [DONE]\n\n",
+			]));
 		global.fetch = mockFetch as typeof fetch;
 
 		const svg = await t.withIdentity({ metadata: { isAdmin: "true" } }).action(api.admin.ai.generateQuestionImage, {
@@ -58,6 +78,12 @@ describe("admin ai image generation", () => {
 
 		expect(svg).toBe("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
 		expect(mockFetch).toHaveBeenCalledTimes(2);
+		expect(JSON.parse(String(mockFetch.mock.calls[1]?.[1]?.body))).toMatchObject({
+			model: "arrow-preview",
+			n: 1,
+			prompt: "Draw a penguin holding coffee",
+			stream: true,
+		});
 	});
 
 	test("surfaces the configured timeout after exhausting retries", async () => {
@@ -81,12 +107,13 @@ describe("admin ai image generation", () => {
 		const t = convexTest(schema, import.meta.glob("./**/*.ts"));
 		process.env.QUIVERAI_MAX_ATTEMPTS = "2";
 
-		const mockFetch = vi.fn().mockResolvedValue({
-			ok: false,
+		const mockFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "bad prompt" }), {
 			status: 400,
 			statusText: "Bad Request",
-			json: async () => ({ error: "bad prompt" }),
-		});
+			headers: {
+				"Content-Type": "application/json",
+			},
+		}));
 		global.fetch = mockFetch as typeof fetch;
 
 		await expect(
@@ -130,5 +157,24 @@ describe("admin ai image generation", () => {
 		).rejects.toThrow("QuiverAI API request timed out after 2147483647ms across 1 attempt");
 
 		expect(mockFetch).toHaveBeenCalledTimes(1);
+	});
+
+	test("rejects a stream that never emits a final content svg", async () => {
+		const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+
+		const mockFetch = vi.fn().mockResolvedValue(createSseResponse([
+			"event: reasoning\n",
+			"data: {\"type\":\"reasoning\",\"id\":\"svg-abc123\",\"svg\":\"\",\"text\":\"Thinking...\"}\n\n",
+			"event: draft\n",
+			"data: {\"type\":\"draft\",\"id\":\"svg-abc123\",\"svg\":\"<svg xmlns=\\\"http://www.w3.org/2000/svg\\\"></svg>\"}\n\n",
+			"data: [DONE]\n\n",
+		]));
+		global.fetch = mockFetch as typeof fetch;
+
+		await expect(
+			t.withIdentity({ metadata: { isAdmin: "true" } }).action(api.admin.ai.generateQuestionImage, {
+				questionText: "Draw a penguin holding coffee",
+			})
+		).rejects.toThrow("QuiverAI API stream returned no final SVG payload");
 	});
 });

@@ -38,6 +38,132 @@ async function sleep(ms: number): Promise<void> {
 	await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function readQuiverError(data: unknown): string {
+	return JSON.stringify(data);
+}
+
+function isContentStreamEvent(value: unknown): value is { type: "content" } {
+	return (
+		typeof value === "object"
+		&& value !== null
+		&& "type" in value
+		&& value.type === "content"
+	);
+}
+
+async function readQuiverSvgStream(
+	response: Response,
+	resetTimeout: () => void,
+): Promise<string> {
+	if (!response.body) {
+		throw new Error("QuiverAI API returned no stream body");
+	}
+
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = "";
+	let dataLines: string[] = [];
+	let finalSvg: string | null = null;
+	let sawDone = false;
+
+	const flushEvent = (): boolean => {
+		if (dataLines.length === 0) {
+			return false;
+		}
+
+		const data = dataLines.join("\n").trim();
+		dataLines = [];
+		if (!data) {
+			return false;
+		}
+		if (data === "[DONE]") {
+			sawDone = true;
+			return true;
+		}
+
+		let payload: unknown = data;
+		try {
+			payload = JSON.parse(data);
+		} catch {
+			payload = data;
+		}
+
+		const svg = extractQuiverSvg(payload);
+		if (svg && isContentStreamEvent(payload)) {
+			finalSvg = svg;
+		}
+
+		return false;
+	};
+
+	const processLine = (line: string): boolean => {
+		if (line === "") {
+			return flushEvent();
+		}
+		if (line.startsWith(":")) {
+			return false;
+		}
+		if (line.startsWith("data:")) {
+			dataLines.push(line.slice(5).trimStart());
+		}
+		return false;
+	};
+
+	const processBufferedLines = (): boolean => {
+		let newlineIndex = buffer.indexOf("\n");
+		while (newlineIndex >= 0) {
+			let line = buffer.slice(0, newlineIndex);
+			if (line.endsWith("\r")) {
+				line = line.slice(0, -1);
+			}
+			buffer = buffer.slice(newlineIndex + 1);
+			if (processLine(line)) {
+				return true;
+			}
+			newlineIndex = buffer.indexOf("\n");
+		}
+		return false;
+	};
+
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) {
+				break;
+			}
+
+			resetTimeout();
+			buffer += decoder.decode(value, { stream: true });
+			if (processBufferedLines()) {
+				await reader.cancel();
+				break;
+			}
+		}
+
+		buffer += decoder.decode();
+		if (buffer.length > 0) {
+			for (const trailingLine of buffer.split("\n")) {
+				let line = trailingLine;
+				if (line.endsWith("\r")) {
+					line = line.slice(0, -1);
+				}
+				if (processLine(line)) {
+					break;
+				}
+			}
+		}
+		flushEvent();
+	} finally {
+		reader.releaseLock();
+	}
+
+	if (!finalSvg) {
+		throw new Error(`QuiverAI API stream returned no final SVG payload${sawDone ? "" : " before the connection closed"}`);
+	}
+
+	return finalSvg;
+}
+
 async function requestQuiverSvg(questionText: string, apiKey: string): Promise<string> {
 	const timeoutMs = getQuiverTimeoutMs();
 	const maxAttempts = getQuiverMaxAttempts();
@@ -45,7 +171,11 @@ async function requestQuiverSvg(questionText: string, apiKey: string): Promise<s
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), timeoutMs);
+		let timeout = setTimeout(() => controller.abort(), timeoutMs);
+		const resetTimeout = (): void => {
+			clearTimeout(timeout);
+			timeout = setTimeout(() => controller.abort(), timeoutMs);
+		};
 
 		try {
 			const response = await fetch("https://api.quiver.ai/v1/svgs/generations", {
@@ -58,14 +188,14 @@ async function requestQuiverSvg(questionText: string, apiKey: string): Promise<s
 					model: "arrow-preview",
 					prompt: questionText,
 					n: 1,
-					stream: false,
+					stream: true,
 				}),
 				signal: controller.signal,
 			});
 
 			if (!response.ok) {
 				const errorData = await response.json().catch(() => ({}));
-				const error = new Error(`QuiverAI API error: ${response.status} ${response.statusText} ${JSON.stringify(errorData)}`);
+				const error = new Error(`QuiverAI API error: ${response.status} ${response.statusText} ${readQuiverError(errorData)}`);
 
 				if (attempt < maxAttempts && shouldRetryQuiverStatus(response.status)) {
 					lastError = error;
@@ -80,10 +210,12 @@ async function requestQuiverSvg(questionText: string, apiKey: string): Promise<s
 				throw error;
 			}
 
-			const data = await response.json();
-			const svg = extractQuiverSvg(data);
+			const contentType = response.headers.get("content-type") ?? "";
+			const svg = contentType.includes("text/event-stream") || (contentType === "" && response.body)
+				? await readQuiverSvgStream(response, resetTimeout)
+				: extractQuiverSvg(await response.json());
 			if (!svg) {
-				const error = new Error(`QuiverAI API returned no SVG payload: ${JSON.stringify(data)}`);
+				const error = new Error("QuiverAI API returned no SVG payload");
 				(error as Error & { nonRetryable?: boolean }).nonRetryable = true;
 				throw error;
 			}
