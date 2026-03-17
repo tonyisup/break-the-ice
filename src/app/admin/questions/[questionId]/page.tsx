@@ -33,7 +33,6 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Icon, IconComponent } from "@/components/ui/icons/icon"
 import { cn } from "@/lib/utils"
-import { extractQuiverSvg } from "@/lib/quiver-svg"
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
@@ -319,8 +318,7 @@ export default function QuestionDetailsPage() {
 		setUploadingImage(true)
 		let storageId: Id<"_storage"> | null = null
 		try {
-			const response = await generateQuestionImage({ questionText: editText })
-			const svgContent = extractQuiverSvg(response)
+			const svgContent = await generateQuestionImage({ questionText: editText })
 			if (!svgContent) {
 				toast.error("No SVG image data found in response")
 				return
