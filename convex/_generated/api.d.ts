@@ -55,6 +55,7 @@ import type * as lib_emails from "../lib/emails.js";
 import type * as lib_embeddings from "../lib/embeddings.js";
 import type * as lib_generationRunner from "../lib/generationRunner.js";
 import type * as lib_promptArchitecture from "../lib/promptArchitecture.js";
+import type * as lib_random from "../lib/random.js";
 import type * as lib_retriever from "../lib/retriever.js";
 import type * as lib_styleHelpers from "../lib/styleHelpers.js";
 import type * as lib_takeover from "../lib/takeover.js";
@@ -117,6 +118,7 @@ declare const fullApi: ApiFromModules<{
   "lib/embeddings": typeof lib_embeddings;
   "lib/generationRunner": typeof lib_generationRunner;
   "lib/promptArchitecture": typeof lib_promptArchitecture;
+  "lib/random": typeof lib_random;
   "lib/retriever": typeof lib_retriever;
   "lib/styleHelpers": typeof lib_styleHelpers;
   "lib/takeover": typeof lib_takeover;
