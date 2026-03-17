@@ -222,10 +222,11 @@ export default function QuestionDetailsPage() {
 	const imageInputRef = useRef<HTMLInputElement>(null)
 	const draftImageObjectUrlRef = useRef<string | null>(null)
 	const committedImageObjectUrlRef = useRef<string | null>(null)
+	const preservedDraftStorageIdRef = useRef<Id<"_storage"> | null>(null)
 
 	const hasInitialized = useRef(false)
 
-	const handleReset = () => {
+	const handleReset = async () => {
 		if (question) {
 			setEditText(question.text || question.customText || "")
 			setEditStyle(question.styleId || question.style || "")
@@ -233,6 +234,8 @@ export default function QuestionDetailsPage() {
 			setEditTopic(question.topicId || question.topic || "")
 			setEditStatus(question.status || "public")
 			setEditTags((question.tags || []).join(", "))
+			await resetDraftImage()
+			setIsEditingImage(false)
 			toast.info("Form reset to database version")
 		}
 	}
@@ -280,8 +283,11 @@ export default function QuestionDetailsPage() {
 			if (committedImageObjectUrlRef.current) {
 				URL.revokeObjectURL(committedImageObjectUrlRef.current)
 			}
+			if (draftImageStorageId && draftImageStorageId !== preservedDraftStorageIdRef.current) {
+				void deleteUploadedStorage(draftImageStorageId)
+			}
 		}
-	}, [])
+	}, [draftImageStorageId])
 
 	const clearDraftPreviewUrl = () => {
 		if (draftImageObjectUrlRef.current) {
@@ -329,16 +335,17 @@ export default function QuestionDetailsPage() {
 				id: question._id,
 				text: editText || undefined,
 				style: selectedStyle?.slug || undefined,
-				styleId: editStyle ? editStyle as Id<"styles"> : undefined,
+				styleId: selectedStyle?._id,
 				tone: selectedTone?.slug || undefined,
-				toneId: editTone ? editTone as Id<"tones"> : undefined,
+				toneId: selectedTone?._id,
 				topic: selectedTopic?.slug || undefined,
-				topicId: editTopic ? editTopic as Id<"topics"> : undefined,
+				topicId: selectedTopic?._id,
 				status: (editStatus as any) || undefined,
 				tags,
 				imageStorageId: draftImageStorageId !== undefined ? draftImageStorageId : undefined,
 			})
 			if (draftImageStorageId !== undefined) {
+				preservedDraftStorageIdRef.current = draftImageStorageId
 				clearCommittedPreviewUrl()
 				setCommittedImageOverrideUrl(draftImageUrl ?? null)
 				setCommittedImageOverrideStorageId(draftImageStorageId)
@@ -389,6 +396,7 @@ export default function QuestionDetailsPage() {
 		draftImageObjectUrlRef.current = previewUrl
 		setDraftImageStorageId(storageId)
 		setDraftImageUrl(previewUrl)
+		setIsEditingImage(true)
 	}
 
 	const handleStartImageEdit = () => {
@@ -428,7 +436,6 @@ export default function QuestionDetailsPage() {
 			if (!storageId) throw new Error("No storageId returned")
 			const previewUrl = URL.createObjectURL(blob)
 			await stageDraftImage(storageId, previewUrl)
-			setIsEditingImage(Boolean(activeImageUrl))
 			toast.success("Illustration ready. Save changes to apply it.")
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
@@ -480,7 +487,6 @@ export default function QuestionDetailsPage() {
 			if (!storageId) throw new Error("No storageId returned")
 			const previewUrl = URL.createObjectURL(file)
 			await stageDraftImage(storageId, previewUrl)
-			setIsEditingImage(Boolean(activeImageUrl))
 			toast.success("Replacement image staged. Save changes to apply it.")
 			imageInputRef.current?.form?.reset()
 		} catch (error) {
@@ -740,7 +746,7 @@ export default function QuestionDetailsPage() {
 											{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
 											{hasDraftImageChange ? "Upload different image" : hasExistingImage ? "Replace image" : "Upload image"}
 										</label>
-										{hasExistingImage ? (
+										{hasExistingImage || hasDraftImageChange ? (
 											<Button
 											variant="outline"
 											size="sm"
@@ -751,7 +757,7 @@ export default function QuestionDetailsPage() {
 											Remove image
 										</Button>
 									) : null}
-									{isEditingImage ? (
+									{isEditingImage || hasDraftImageChange ? (
 										<Button variant="ghost" size="sm" className="gap-2" onClick={handleCancelImageEdit} disabled={uploadingImage}>
 											Cancel edit
 										</Button>
