@@ -172,7 +172,7 @@ async function readQuiverSvgStream(
 	return finalSvg;
 }
 
-async function requestQuiverSvg(questionText: string, apiKey: string): Promise<string> {
+async function requestQuiverSvg(questionText: string, apiKey: string, instructions?: string): Promise<string> {
 	const timeoutMs = getQuiverTimeoutMs();
 	const maxAttempts = getQuiverMaxAttempts();
 	let lastError: Error | null = null;
@@ -195,6 +195,7 @@ async function requestQuiverSvg(questionText: string, apiKey: string): Promise<s
 				body: JSON.stringify({
 					model: "arrow-preview",
 					prompt: questionText,
+					...(instructions ? { instructions } : {}),
 					n: 1,
 					stream: true,
 				}),
@@ -271,6 +272,7 @@ export const startDuplicateDetection = action({
 export const generateQuestionImage = action({
 	args: {
 		questionText: v.string(),
+		additionalGuidance: v.optional(v.string()),
 	},
 	returns: v.string(),
 	handler: async (ctx, args): Promise<string> => {
@@ -281,7 +283,7 @@ export const generateQuestionImage = action({
 			throw new Error("QUIVERAI_API_KEY is not configured");
 		}
 
-		return await requestQuiverSvg(args.questionText, apiKey);
+		return await requestQuiverSvg(args.questionText, apiKey, args.additionalGuidance);
 	},
 });
 
