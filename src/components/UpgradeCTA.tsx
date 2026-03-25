@@ -31,11 +31,11 @@ export function UpgradeCTA({ bgGradient, title, description, onUpgrade }: Upgrad
           className="w-full bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white rounded-full py-6 text-lg font-bold shadow-lg transition-all hover:scale-105 hover:shadow-xl group"
         >
           <Sparkles className="w-5 h-5 mr-2 group-hover:animate-pulse" />
-          Upgrade to Casual
+          Start Team Plan
         </Button>
 
         <p className="text-xs text-gray-500 dark:text-gray-500 italic">
-          Get up to {import.meta.env.VITE_MAX_CASUAL_AIGEN} AI generations per month and help support the project!
+          Unlock shared workspaces, collections, invites, and up to {import.meta.env.VITE_MAX_TEAM_AIGEN || import.meta.env.VITE_MAX_CASUAL_AIGEN} AI generations each cycle.
         </p>
       </div>
     </div>

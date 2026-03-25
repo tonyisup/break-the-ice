@@ -4,10 +4,12 @@ import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
 import { ERROR_MESSAGES, ERROR_CODES } from "../constants";
 import { calculateAverageEmbedding } from "../lib/embeddings";
+import { getEffectivePlanForUser } from "../auth";
 
 export const userValidator = v.object({
 	_id: v.id("users"),
 	_creationTime: v.number(),
+	clerkId: v.optional(v.string()),
 	email: v.optional(v.string()),
 	emailVerificationTime: v.optional(v.number()),
 	image: v.optional(v.string()),
@@ -17,7 +19,16 @@ export const userValidator = v.object({
 	isAdmin: v.optional(v.boolean()),
 	defaultStyle: v.optional(v.string()),
 	defaultTone: v.optional(v.string()),
-	subscriptionTier: v.optional(v.union(v.literal("free"), v.literal("casual"))),
+	billingSubjectType: v.optional(v.union(v.literal("user"), v.literal("organization"))),
+	billingStatus: v.optional(v.union(
+		v.literal("inactive"),
+		v.literal("active"),
+		v.literal("past_due"),
+		v.literal("canceled"),
+		v.literal("trialing")
+	)),
+	clerkCustomerId: v.optional(v.string()),
+	clerkSubscriptionId: v.optional(v.string()),
 	aiUsage: v.optional(v.object({
 		count: v.number(),
 		cycleStart: v.number(),
@@ -49,7 +60,6 @@ export const updateUserFromClerk = internalMutation({
 		email: v.optional(v.string()),
 		name: v.string(),
 		image: v.optional(v.string()),
-		subscriptionTier: v.union(v.literal("free"), v.literal("casual")),
 	},
 	handler: async (ctx, args) => {
 		const user = await ctx.db
@@ -59,16 +69,17 @@ export const updateUserFromClerk = internalMutation({
 
 		if (user) {
 			await ctx.db.patch(user._id, {
+				clerkId: args.clerkId,
 				name: args.name,
 				image: args.image,
-				subscriptionTier: args.subscriptionTier,
 			});
 		} else if (args.email) {
 			await ctx.db.insert("users", {
+				clerkId: args.clerkId,
 				name: args.name,
 				email: args.email,
 				image: args.image,
-				subscriptionTier: args.subscriptionTier,
+				billingStatus: "inactive",
 				aiUsage: { count: 0, cycleStart: Date.now() },
 			});
 		}
@@ -94,9 +105,82 @@ export const setNewsletterStatus = internalMutation({
 	},
 });
 
+export const syncOrganizationSubscription = internalMutation({
+	args: {
+		clerkOrganizationId: v.string(),
+		billingStatus: v.union(
+			v.literal("inactive"),
+			v.literal("active"),
+			v.literal("past_due"),
+			v.literal("canceled"),
+			v.literal("trialing")
+		),
+		planTier: v.union(v.literal("free"), v.literal("team")),
+		clerkCustomerId: v.optional(v.string()),
+		clerkSubscriptionId: v.optional(v.string()),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const organization = await ctx.db
+			.query("organizations")
+			.withIndex("by_clerkOrganizationId", (q) => q.eq("clerkOrganizationId", args.clerkOrganizationId))
+			.unique();
+
+		if (!organization) {
+			return null;
+		}
+
+		await ctx.db.patch(organization._id, {
+			billingStatus: args.billingStatus,
+			planTier: args.planTier,
+			clerkCustomerId: args.clerkCustomerId,
+			clerkSubscriptionId: args.clerkSubscriptionId,
+		});
+
+		return null;
+	},
+});
+
+export const syncUserSubscription = internalMutation({
+	args: {
+		clerkUserId: v.string(),
+		billingStatus: v.union(
+			v.literal("inactive"),
+			v.literal("active"),
+			v.literal("past_due"),
+			v.literal("canceled"),
+			v.literal("trialing")
+		),
+		billingSubjectType: v.optional(v.union(v.literal("user"), v.literal("organization"))),
+		clerkCustomerId: v.optional(v.string()),
+		clerkSubscriptionId: v.optional(v.string()),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const user = await ctx.db
+			.query("users")
+			.withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkUserId))
+			.unique();
+
+		if (!user) {
+			return null;
+		}
+
+		await ctx.db.patch(user._id, {
+			billingStatus: args.billingStatus,
+			billingSubjectType: args.billingSubjectType,
+			clerkCustomerId: args.clerkCustomerId,
+			clerkSubscriptionId: args.clerkSubscriptionId,
+		});
+
+		return null;
+	},
+});
+
 export const checkAndIncrementAIUsage = internalMutation({
 	args: {
 		userId: v.id("users"),
+		organizationId: v.optional(v.id("organizations")),
 	},
 	returns: v.number(),
 	handler: async (ctx, args) => {
@@ -111,7 +195,10 @@ export const checkAndIncrementAIUsage = internalMutation({
 		if (now - aiUsage.cycleStart > cycleLength) {
 			aiUsage = { count: 0, cycleStart: now };
 		}
-		const limit = user.subscriptionTier === "casual" ? parseInt(process.env.MAX_CASUAL_AIGEN ?? "100") : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
+		const effectivePlan = await getEffectivePlanForUser(ctx, user._id, args.organizationId);
+		const limit = effectivePlan.planTier === "team"
+			? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
+			: parseInt(process.env.MAX_FREE_AIGEN ?? "10");
 
 		const remaining = limit - aiUsage.count;
 		if (remaining <= 0) {

@@ -75,7 +75,9 @@ export default function InfiniteScrollPage() {
   const allTones = useQuery(api.core.tones.getTones, {
     organizationId: activeWorkspace ?? undefined,
   });
-  const currentUser = useQuery(api.core.users.getCurrentUser, {});
+  const currentUser = useQuery(api.core.users.getCurrentUser, {
+    organizationId: activeWorkspace ?? undefined,
+  });
   const allTopics = useQuery(api.core.topics.getTopics, {
     organizationId: activeWorkspace ?? undefined,
   });
@@ -321,10 +323,11 @@ export default function InfiniteScrollPage() {
         }
 
         try {
-          const generated = await generateAIQuestions({
-            anchoredStyleId: anchoredStyleId ?? undefined,
-            anchoredToneId: anchoredToneId ?? undefined,
-            anchoredTopicId: anchoredTopicId ?? undefined,
+        const generated = await generateAIQuestions({
+          organizationId: activeWorkspace ?? undefined,
+          anchoredStyleId: anchoredStyleId ?? undefined,
+          anchoredToneId: anchoredToneId ?? undefined,
+          anchoredTopicId: anchoredTopicId ?? undefined,
           });
 
           // Check for staleness after generation await
@@ -862,13 +865,12 @@ export default function InfiniteScrollPage() {
             <UpgradeCTA
               bgGradient={bgGradient}
               title="Generation Limit Reached"
-              description={currentUser?.subscriptionTier === 'casual'
-                ? `You've reached your monthly ${import.meta.env.VITE_MAX_CASUAL_AIGEN} limit for the Casual plan. Contact support if you need more!`
-                : `You've used all ${import.meta.env.VITE_MAX_FREE_AIGEN} of your free AI generations for this month.`
+              description={currentUser?.planTier === 'team'
+                ? `You've reached your current Team workspace AI limit for this cycle.`
+                : `You've used all ${import.meta.env.VITE_MAX_FREE_AIGEN} free AI generations for this cycle.`
               }
               onUpgrade={() => {
-                // Link to upgrade flow or settings
-                window.location.href = "/settings";
+                window.location.href = "/pricing?source=ai_limit";
               }}
             />
           )}

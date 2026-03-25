@@ -42,7 +42,7 @@ export default function AdminDashboard() {
     {
       title: "Active Users",
       value: stats.users.total,
-      description: `${stats.users.casual} Casual Plan Users`,
+      description: `${stats.users.team} Team Workspaces`,
       icon: Users,
       color: "text-purple-600",
       bgBase: "bg-purple-500/10",
