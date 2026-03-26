@@ -9,13 +9,13 @@ export const getEffectiveEntitlements = query({
   returns: v.union(v.null(), v.any()),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity?.email) {
+    if (!identity?.tokenIdentifier) {
       return null;
     }
 
     const user = await ctx.db
       .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email))
+      .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
       .unique();
 
     if (!user) {
@@ -38,6 +38,9 @@ export const getEffectiveEntitlements = query({
   },
 });
 
+// TODO: This mutation accepts clerkOrganizationId, name, and role from the client
+// without server-side verification against Clerk. Consider converting to internalMutation
+// invoked only from a webhook, or call Clerk's server-side API to verify membership and role.
 export const syncOrganizationFromClerk = mutation({
   args: {
     clerkOrganizationId: v.string(),
@@ -47,18 +50,19 @@ export const syncOrganizationFromClerk = mutation({
   returns: v.id("organizations"),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity?.email) {
+    if (!identity?.tokenIdentifier) {
       throw new Error("Not authenticated");
     }
 
     let user = await ctx.db
       .query("users")
-      .withIndex("email", (q) => q.eq("email", identity.email))
+      .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
       .unique();
 
     if (!user) {
       const userId = await ctx.db.insert("users", {
         clerkId: identity.subject,
+        tokenIdentifier: identity.tokenIdentifier,
         email: identity.email,
         name: identity.name ?? identity.email,
         image: identity.pictureUrl,
@@ -66,8 +70,8 @@ export const syncOrganizationFromClerk = mutation({
         aiUsage: { count: 0, cycleStart: Date.now() },
       });
       user = await ctx.db.get(userId);
-    } else if (user.clerkId !== identity.subject) {
-      await ctx.db.patch(user._id, { clerkId: identity.subject });
+    } else if (user.tokenIdentifier !== identity.tokenIdentifier) {
+      await ctx.db.patch(user._id, { tokenIdentifier: identity.tokenIdentifier });
       user = await ctx.db.get(user._id);
     }
 

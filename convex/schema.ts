@@ -243,6 +243,7 @@ export default defineSchema({
     .index("by_grouping", ["grouping"]),
   users: defineTable({
     clerkId: v.optional(v.string()),
+    tokenIdentifier: v.optional(v.string()),
     email: v.optional(v.string()),
     emailVerificationTime: v.optional(v.float64()),
     image: v.optional(v.string()),
@@ -270,6 +271,7 @@ export default defineSchema({
     newsletterSubscriptionStatus: v.optional(v.union(v.literal("subscribed"), v.literal("unsubscribed"))),
   })
     .index("by_clerkId", ["clerkId"])
+    .index("by_tokenIdentifier", ["tokenIdentifier"])
     .index("email", ["email"])
     .index("phone", ["phone"])
     .index("by_newsletterSubscriptionStatus", ["newsletterSubscriptionStatus"]),

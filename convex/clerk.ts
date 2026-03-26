@@ -92,7 +92,7 @@ export const usersWebhook = httpAction(async (ctx, request) => {
 			const subscription = event.data;
 			const activeItem = subscription?.subscriptionItems?.find((item: any) =>
 				["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
-			) ?? subscription?.subscriptionItems?.[0];
+			);
 
 			const planTier = resolvePlanTier(subscription);
 			const billingStatus = normalizeBillingStatus(subscription);

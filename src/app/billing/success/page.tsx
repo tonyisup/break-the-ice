@@ -6,16 +6,18 @@ import { CheckCircle2 } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/../convex/_generated/api";
+import { Id } from "@/../convex/_generated/dataModel";
 
 export default function BillingSuccessPage() {
   const { orgId } = useAuth();
   const { organization, isLoaded } = useOrganization();
   const syncOrganization = useMutation(api.core.billing.syncOrganizationFromClerk);
-  const [syncedOrganizationId, setSyncedOrganizationId] = useState<string | null>(null);
+  const [syncedOrganizationId, setSyncedOrganizationId] = useState<Id<"organizations"> | null>(null);
   const hasTrackedRef = useRef(false);
+  const lastOrgKeyRef = useRef<string | null>(null);
   const entitlements = useQuery(
     api.core.billing.getEffectiveEntitlements,
-    syncedOrganizationId ? { organizationId: syncedOrganizationId as any } : "skip"
+    syncedOrganizationId ? { organizationId: syncedOrganizationId } : "skip"
   );
 
   useEffect(() => {
@@ -23,12 +25,22 @@ export default function BillingSuccessPage() {
       return;
     }
 
+    // Deduplication guard to avoid concurrent duplicate mutations
+    const syncKey = `${orgId}:${organization.name}`;
+    if (lastOrgKeyRef.current === syncKey) {
+      return;
+    }
+
+    lastOrgKeyRef.current = syncKey;
+
     void syncOrganization({
       clerkOrganizationId: orgId,
       name: organization.name,
       role: undefined,
     }).then((organizationId) => {
       setSyncedOrganizationId(organizationId);
+    }).catch(() => {
+      lastOrgKeyRef.current = null;
     });
   }, [isLoaded, orgId, organization, syncOrganization]);
 

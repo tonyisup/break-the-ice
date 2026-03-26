@@ -787,6 +787,8 @@ export const getAdminStats = query({
 		users: v.object({
 			total: v.number(),
 			admins: v.number(),
+		}),
+		organizations: v.object({
 			team: v.number(),
 		}),
 		feedback: v.object({
@@ -828,6 +830,8 @@ export const getAdminStats = query({
 			users: {
 				total: users.length,
 				admins: users.filter(u => u.isAdmin).length,
+			},
+			organizations: {
 				team: organizations.filter(o => o.planTier === "team" && (o.billingStatus === "active" || o.billingStatus === "trialing")).length,
 			},
 			feedback: {

@@ -33,6 +33,11 @@ const CollectionsSettings = () => {
       return;
     }
 
+    // Wait for entitlements to load
+    if (entitlements === undefined) {
+      return;
+    }
+
     if (!entitlements?.canUseTeamFeatures) {
       posthog.capture("collections_gate_hit", { source: "settings_collections" });
       return;
@@ -59,7 +64,13 @@ const CollectionsSettings = () => {
               </div>
             ))}
 
-            {!entitlements?.canUseTeamFeatures ? (
+            {entitlements === undefined ? (
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                <p className="text-sm text-black/60 dark:text-white/60">
+                  Loading entitlements...
+                </p>
+              </div>
+            ) : !entitlements?.canUseTeamFeatures ? (
               <div className="rounded-3xl border border-dashed border-amber-400/30 bg-amber-300/10 p-5">
                 <h3 className="font-semibold dark:text-white text-black">Collections are part of Team</h3>
                 <p className="mt-2 text-sm text-black/70 dark:text-white/70">

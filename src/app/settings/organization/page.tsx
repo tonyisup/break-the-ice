@@ -59,13 +59,19 @@ const OrganizationSettings = () => {
                     {organization?.name ?? "Workspace"}
                   </h3>
                   <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-                    {entitlements?.canUseTeamFeatures
+                    {entitlements === undefined
+                      ? "Loading billing status..."
+                      : entitlements?.canUseTeamFeatures
                       ? "Team billing is active. Invites and shared collections are unlocked."
                       : "This workspace is still on the free plan. Upgrade before inviting collaborators or saving shared collections."}
                   </p>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  {entitlements?.canUseTeamFeatures ? (
+                  {entitlements === undefined ? (
+                    <Button disabled className="bg-amber-400/50 text-slate-950">
+                      Loading...
+                    </Button>
+                  ) : entitlements?.canUseTeamFeatures ? (
                     <SubscriptionDetailsButton for="organization">
                       <Button
                         onClick={() => posthog.capture("billing_portal_opened", { payer: "organization" })}
@@ -87,7 +93,13 @@ const OrganizationSettings = () => {
               </div>
             </div>
 
-            {entitlements?.canUseTeamFeatures ? (
+            {entitlements === undefined ? (
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                <p className="text-sm text-black/60 dark:text-white/60">
+                  Loading workspace features...
+                </p>
+              </div>
+            ) : entitlements?.canUseTeamFeatures ? (
               <div className="rounded-3xl border border-white/10 bg-white/5 p-3">
                 <SignedIn>
                   <OrganizationProfile />

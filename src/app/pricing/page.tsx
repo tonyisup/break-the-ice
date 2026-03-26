@@ -157,10 +157,7 @@ export default function PricingPage() {
                       Billing opens for your active organization. When checkout completes you will return to the app with team features enabled.
                     </p>
                   </div>
-                  <div
-                    onClick={() => posthog.capture("upgrade_clicked", { source, payer: "organization" })}
-                    className="rounded-3xl border border-white/10 bg-slate-950/50 p-4"
-                  >
+                  <div className="rounded-3xl border border-white/10 bg-slate-950/50 p-4">
                     <PricingTable
                       for="organization"
                       collapseFeatures={false}

@@ -111,6 +111,23 @@ export const getEffectivePlanForUser = async (
   organizationId: Id<"organizations"> | null;
 }> => {
   if (organizationId) {
+    // Verify membership before checking billing
+    const membership = await ctx.db
+      .query("organization_members")
+      .withIndex("by_userId_organizationId", (q: any) =>
+        q.eq("userId", userId).eq("organizationId", organizationId)
+      )
+      .unique();
+
+    // If not a member, return free plan
+    if (!membership) {
+      return {
+        planTier: "free",
+        billingStatus: "inactive",
+        organizationId: null,
+      };
+    }
+
     const isPaid = await isOrganizationPaid(ctx, organizationId);
     const organization = await ctx.db.get(organizationId);
 
