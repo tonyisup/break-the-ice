@@ -21,6 +21,24 @@ export default function BillingSuccessPage() {
     syncedOrganizationId ? { organizationId: syncedOrganizationId } : "skip"
   );
 
+  const performSync = (clerkOrganizationId: string, name: string) => {
+    const syncKey = `${clerkOrganizationId}:${name}`;
+    lastOrgKeyRef.current = syncKey;
+    setSyncError(false);
+
+    void syncOrganization({
+      clerkOrganizationId,
+      name,
+      role: undefined,
+    }).then((organizationId) => {
+      setSyncedOrganizationId(organizationId);
+      setSyncError(false);
+    }).catch(() => {
+      lastOrgKeyRef.current = null;
+      setSyncError(true);
+    });
+  };
+
   useEffect(() => {
     if (!orgId || !isLoaded || !organization) {
       return;
@@ -32,20 +50,7 @@ export default function BillingSuccessPage() {
       return;
     }
 
-    lastOrgKeyRef.current = syncKey;
-    setSyncError(false);
-
-    void syncOrganization({
-      clerkOrganizationId: orgId,
-      name: organization.name,
-      role: undefined,
-    }).then((organizationId) => {
-      setSyncedOrganizationId(organizationId);
-      setSyncError(false);
-    }).catch(() => {
-      lastOrgKeyRef.current = null;
-      setSyncError(true);
-    });
+    performSync(orgId, organization.name);
   }, [isLoaded, orgId, organization, syncOrganization]);
 
   useEffect(() => {
@@ -60,21 +65,7 @@ export default function BillingSuccessPage() {
   const handleRetrySync = () => {
     if (!orgId || !organization) return;
 
-    const syncKey = `${orgId}:${organization.name}`;
-    lastOrgKeyRef.current = syncKey;
-    setSyncError(false);
-
-    void syncOrganization({
-      clerkOrganizationId: orgId,
-      name: organization.name,
-      role: undefined,
-    }).then((organizationId) => {
-      setSyncedOrganizationId(organizationId);
-      setSyncError(false);
-    }).catch(() => {
-      lastOrgKeyRef.current = null;
-      setSyncError(true);
-    });
+    performSync(orgId, organization.name);
   };
 
   if (!entitlements?.canUseTeamFeatures) {
