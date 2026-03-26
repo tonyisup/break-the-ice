@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, useOrganization } from "@clerk/clerk-react";
 import posthog from "posthog-js";
@@ -21,7 +21,7 @@ export default function BillingSuccessPage() {
     syncedOrganizationId ? { organizationId: syncedOrganizationId } : "skip"
   );
 
-  const performSync = (clerkOrganizationId: string, name: string) => {
+  const performSync = useCallback((clerkOrganizationId: string, name: string) => {
     const syncKey = `${clerkOrganizationId}:${name}`;
     lastOrgKeyRef.current = syncKey;
     setSyncError(false);
@@ -37,7 +37,7 @@ export default function BillingSuccessPage() {
       lastOrgKeyRef.current = null;
       setSyncError(true);
     });
-  };
+  }, [lastOrgKeyRef, setSyncError, syncOrganization, setSyncedOrganizationId]);
 
   useEffect(() => {
     if (!orgId || !isLoaded || !organization) {
@@ -51,7 +51,7 @@ export default function BillingSuccessPage() {
     }
 
     performSync(orgId, organization.name);
-  }, [isLoaded, orgId, organization, syncOrganization]);
+  }, [isLoaded, orgId, organization, performSync]);
 
   useEffect(() => {
     if (!entitlements?.canUseTeamFeatures || hasTrackedRef.current) {
