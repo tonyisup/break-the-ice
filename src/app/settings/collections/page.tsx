@@ -29,7 +29,8 @@ const CollectionsSettings = () => {
   }
 
   const handleCreateCollection = async () => {
-    if (!newCollectionName.trim() || !activeWorkspace) {
+    const normalized = newCollectionName.trim();
+    if (!normalized || !activeWorkspace) {
       return;
     }
 
@@ -43,7 +44,7 @@ const CollectionsSettings = () => {
       return;
     }
 
-    await createCollection({ name: newCollectionName, organizationId: activeWorkspace });
+    await createCollection({ name: normalized, organizationId: activeWorkspace });
     setNewCollectionName("");
   };
 

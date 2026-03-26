@@ -13,6 +13,7 @@ export default function BillingSuccessPage() {
   const { organization, isLoaded } = useOrganization();
   const syncOrganization = useMutation(api.core.billing.syncOrganizationFromClerk);
   const [syncedOrganizationId, setSyncedOrganizationId] = useState<Id<"organizations"> | null>(null);
+  const [syncError, setSyncError] = useState(false);
   const hasTrackedRef = useRef(false);
   const lastOrgKeyRef = useRef<string | null>(null);
   const entitlements = useQuery(
@@ -32,6 +33,7 @@ export default function BillingSuccessPage() {
     }
 
     lastOrgKeyRef.current = syncKey;
+    setSyncError(false);
 
     void syncOrganization({
       clerkOrganizationId: orgId,
@@ -39,8 +41,10 @@ export default function BillingSuccessPage() {
       role: undefined,
     }).then((organizationId) => {
       setSyncedOrganizationId(organizationId);
+      setSyncError(false);
     }).catch(() => {
       lastOrgKeyRef.current = null;
+      setSyncError(true);
     });
   }, [isLoaded, orgId, organization, syncOrganization]);
 
@@ -53,6 +57,26 @@ export default function BillingSuccessPage() {
     hasTrackedRef.current = true;
   }, [entitlements?.canUseTeamFeatures]);
 
+  const handleRetrySync = () => {
+    if (!orgId || !organization) return;
+
+    const syncKey = `${orgId}:${organization.name}`;
+    lastOrgKeyRef.current = syncKey;
+    setSyncError(false);
+
+    void syncOrganization({
+      clerkOrganizationId: orgId,
+      name: organization.name,
+      role: undefined,
+    }).then((organizationId) => {
+      setSyncedOrganizationId(organizationId);
+      setSyncError(false);
+    }).catch(() => {
+      lastOrgKeyRef.current = null;
+      setSyncError(true);
+    });
+  };
+
   if (!entitlements?.canUseTeamFeatures) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
@@ -61,7 +85,17 @@ export default function BillingSuccessPage() {
           <p className="mt-3 text-slate-300">
             We are waiting for Clerk billing state to sync to your workspace before showing success.
           </p>
+          {syncError && (
+            <p className="mt-2 text-sm text-red-400">
+              Sync failed. Please try again.
+            </p>
+          )}
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            {syncError && (
+              <Button onClick={handleRetrySync} className="bg-emerald-400 text-slate-950 hover:bg-emerald-300">
+                Retry Sync
+              </Button>
+            )}
             <Button asChild className="bg-amber-400 text-slate-950 hover:bg-amber-300">
               <Link to="/pricing?source=success_pending">Return to pricing</Link>
             </Button>
