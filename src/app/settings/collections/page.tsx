@@ -19,7 +19,7 @@ const CollectionsSettings = () => {
   );
   const entitlements = useQuery(
     api.core.billing.getEffectiveEntitlements,
-    activeWorkspace ? { organizationId: activeWorkspace } : {}
+    activeWorkspace ? { organizationId: activeWorkspace } : "skip"
   );
   const createCollection = useMutation(api.core.collections.createCollection);
   const [newCollectionName, setNewCollectionName] = useState("");

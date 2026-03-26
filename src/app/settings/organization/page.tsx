@@ -17,7 +17,7 @@ const OrganizationSettings = () => {
   const { activeWorkspace } = useWorkspace();
   const entitlements = useQuery(
     api.core.billing.getEffectiveEntitlements,
-    activeWorkspace ? { organizationId: activeWorkspace } : {}
+    activeWorkspace ? { organizationId: activeWorkspace } : "skip"
   );
 
   useEffect(() => {

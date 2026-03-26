@@ -91,6 +91,15 @@ export const generateAIQuestionForFeed = action({
 	},
 	returns: v.array(v.nullable(v.any())),
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
+		if (args.organizationId) {
+			const organizations = await ctx.runQuery(api.core.organizations.getOrganizations, {});
+			const isMember = organizations.some((organization: { _id: Id<"organizations"> }) => organization._id === args.organizationId);
+
+			if (!isMember) {
+				throw new Error("Not a member of this organization.");
+			}
+		}
+
 		const user = await ctx.runQuery(api.core.users.getCurrentUser, {
 			organizationId: args.organizationId,
 		});

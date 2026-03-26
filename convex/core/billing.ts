@@ -109,7 +109,11 @@ export const syncOrganizationFromClerk = mutation({
         ? "admin"
         : args.role === "org:member" || args.role === "member"
           ? "member"
-          : "manager";
+          : "member";
+
+    if (args.role && !["org:admin", "admin", "org:member", "member"].includes(args.role)) {
+      console.warn(`Unexpected Clerk organization role "${args.role}", defaulting to member.`);
+    }
 
     if (!existingMembership) {
       await ctx.db.insert("organization_members", {

@@ -224,6 +224,7 @@ export const checkAndIncrementAIUsage = internalMutation({
 export const decrementAIUsage = internalMutation({
 	args: {
 		userId: v.id("users"),
+		organizationId: v.optional(v.id("organizations")),
 	},
 	handler: async (ctx, args) => {
 		const user = await ctx.db.get(args.userId);

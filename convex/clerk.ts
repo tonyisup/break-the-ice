@@ -5,6 +5,12 @@ import { internal } from "./_generated/api";
 import { Webhook } from "svix";
 
 const normalizeBillingStatus = (subscription: any) => {
+	switch (subscription?.status) {
+		case "canceled":
+		case "ended":
+			return "canceled" as const;
+	}
+
 	const hasFreeTrial = Array.isArray(subscription?.subscriptionItems) &&
 		subscription.subscriptionItems.some((item: any) => item?.isFreeTrial);
 
@@ -17,9 +23,6 @@ const normalizeBillingStatus = (subscription: any) => {
 			return "active" as const;
 		case "past_due":
 			return "past_due" as const;
-		case "canceled":
-		case "ended":
-			return "canceled" as const;
 		default:
 			return "inactive" as const;
 	}
@@ -28,7 +31,11 @@ const normalizeBillingStatus = (subscription: any) => {
 const resolvePlanTier = (subscription: any) => {
 	const activeItem = subscription?.subscriptionItems?.find((item: any) =>
 		["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
-	) ?? subscription?.subscriptionItems?.[0];
+	);
+
+	if (!activeItem) {
+		return "free" as const;
+	}
 
 	if (activeItem?.plan?.isDefault) {
 		return "free" as const;

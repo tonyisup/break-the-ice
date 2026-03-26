@@ -1,13 +1,66 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth, useOrganization } from "@clerk/clerk-react";
 import posthog from "posthog-js";
 import { CheckCircle2 } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
+import { api } from "@/../convex/_generated/api";
 
 export default function BillingSuccessPage() {
+  const { orgId } = useAuth();
+  const { organization, isLoaded } = useOrganization();
+  const syncOrganization = useMutation(api.core.billing.syncOrganizationFromClerk);
+  const [syncedOrganizationId, setSyncedOrganizationId] = useState<string | null>(null);
+  const hasTrackedRef = useRef(false);
+  const entitlements = useQuery(
+    api.core.billing.getEffectiveEntitlements,
+    syncedOrganizationId ? { organizationId: syncedOrganizationId as any } : "skip"
+  );
+
   useEffect(() => {
+    if (!orgId || !isLoaded || !organization) {
+      return;
+    }
+
+    void syncOrganization({
+      clerkOrganizationId: orgId,
+      name: organization.name,
+      role: undefined,
+    }).then((organizationId) => {
+      setSyncedOrganizationId(organizationId);
+    });
+  }, [isLoaded, orgId, organization, syncOrganization]);
+
+  useEffect(() => {
+    if (!entitlements?.canUseTeamFeatures || hasTrackedRef.current) {
+      return;
+    }
+
     posthog.capture("team_checkout_completed");
-  }, []);
+    hasTrackedRef.current = true;
+  }, [entitlements?.canUseTeamFeatures]);
+
+  if (!entitlements?.canUseTeamFeatures) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
+        <div className="w-full max-w-xl rounded-[2rem] border border-white/10 bg-white/5 p-8 text-center">
+          <h1 className="text-3xl font-black">Checking workspace billing</h1>
+          <p className="mt-3 text-slate-300">
+            We are waiting for Clerk billing state to sync to your workspace before showing success.
+          </p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <Button asChild className="bg-amber-400 text-slate-950 hover:bg-amber-300">
+              <Link to="/pricing?source=success_pending">Return to pricing</Link>
+            </Button>
+            <Button asChild variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10">
+              <Link to="/settings?expand=subscription,organization">Open settings</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">

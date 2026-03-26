@@ -45,6 +45,7 @@ export const addQuestionToCollection = mutation({
 export const getCollectionsByOrganization = query({
 	args: {
 		organizationId: v.id("organizations"),
+		limit: v.optional(v.number()),
 	},
 	returns: v.array(v.object({
 		_id: v.id("collections"),
@@ -54,12 +55,13 @@ export const getCollectionsByOrganization = query({
 	})),
 	handler: async (ctx, args) => {
 		await ensureOrgMember(ctx, args.organizationId);
+		const limit = Math.min(args.limit ?? 100, 250);
 
 		return ctx.db
 			.query("collections")
 			.withIndex("by_organizationId", (q) =>
 				q.eq("organizationId", args.organizationId)
 			)
-			.collect();
+			.take(limit);
 	},
 });

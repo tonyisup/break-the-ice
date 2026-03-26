@@ -803,7 +803,7 @@ export const getAdminStats = query({
 
 		const questions = await ctx.db.query("questions").collect();
 		const users = await ctx.db.query("users").collect();
-		const organizations = await ctx.db.query("organizations").collect();
+		const organizations = await ctx.db.query("organizations").take(500);
 		const feedback = await ctx.db.query("feedback").collect();
 		// Use index for pending duplicates
 		const duplicates = await ctx.db.query("duplicateDetections")

@@ -124,9 +124,13 @@ export const getEffectivePlanForUser = async (
   const memberships = await ctx.db
     .query("organization_members")
     .withIndex("by_userId", (q: any) => q.eq("userId", userId))
-    .collect();
+    .take(100);
 
-  for (const membership of memberships) {
+  const membershipsByMostRecentJoin = memberships
+    .slice()
+    .sort((a, b) => b._creationTime - a._creationTime);
+
+  for (const membership of membershipsByMostRecentJoin) {
     const organization = await ctx.db.get(membership.organizationId);
     if (organization?.planTier === "team" && isBillingActiveStatus(organization.billingStatus)) {
       return {

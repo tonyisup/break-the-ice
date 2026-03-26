@@ -433,7 +433,7 @@ export default function InfiniteScrollPage() {
     setHasMore(true);
     setShowAuthCTA(false);
     setShowUpgradeCTA(false);
-  }, [anchoredStyleId, anchoredToneId, anchoredTopicId]);
+  }, [anchoredStyleId, anchoredToneId, anchoredTopicId, activeWorkspace]);
 
   // Initial load
   useEffect(() => {
@@ -446,8 +446,11 @@ export default function InfiniteScrollPage() {
     if (allStylesBlocked || allTonesBlocked) {
       setQuestions([]);
       setSeenIds(new Set());
+      setHasMore(true);
+      setShowAuthCTA(false);
+      setShowUpgradeCTA(false);
     }
-  }, [allStylesBlocked, allTonesBlocked]);
+  }, [allStylesBlocked, allTonesBlocked, activeWorkspace]);
 
   // Infinite scroll handler
   useEffect(() => {

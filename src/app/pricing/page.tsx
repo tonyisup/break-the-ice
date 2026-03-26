@@ -1,4 +1,13 @@
-import { SignedIn, SignedOut, SignInButton, CreateOrganization, PricingTable, useAuth } from "@clerk/clerk-react";
+import {
+  SignedIn,
+  SignedOut,
+  SignInButton,
+  CreateOrganization,
+  PricingTable,
+  OrganizationSwitcher,
+  useAuth,
+  useUser,
+} from "@clerk/clerk-react";
 import { useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import posthog from "posthog-js";
@@ -7,8 +16,11 @@ import { Button } from "@/components/ui/button";
 
 export default function PricingPage() {
   const { orgId } = useAuth();
+  const { user, isLoaded } = useUser();
   const [searchParams] = useSearchParams();
   const source = searchParams.get("source") ?? "direct";
+  const organizationMemberships = ((user as any)?.organizationMemberships ?? []) as unknown[];
+  const hasMemberships = organizationMemberships.length > 0;
 
   useEffect(() => {
     posthog.capture("pricing_viewed", { source });
@@ -106,7 +118,26 @@ export default function PricingPage() {
             </SignedOut>
 
             <SignedIn>
-              {!orgId ? (
+              {!orgId && !isLoaded ? (
+                <div className="space-y-4">
+                  <h2 className="text-2xl font-bold">Loading workspaces</h2>
+                  <p className="text-sm text-slate-300">
+                    Checking your organization memberships before we open checkout.
+                  </p>
+                </div>
+              ) : !orgId && hasMemberships ? (
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-2xl font-bold">Select a workspace first</h2>
+                    <p className="mt-2 text-sm text-slate-300">
+                      You already belong to at least one organization. Pick the workspace you want to bill before opening checkout.
+                    </p>
+                  </div>
+                  <div className="rounded-3xl border border-white/10 bg-slate-950/50 p-4">
+                    <OrganizationSwitcher />
+                  </div>
+                </div>
+              ) : !orgId ? (
                 <div className="space-y-4">
                   <div>
                     <h2 className="text-2xl font-bold">Create a workspace first</h2>
