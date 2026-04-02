@@ -58,26 +58,30 @@ const axisLabels: Record<AxisType, string> = {
   topic: "Topic",
 };
 
-/** Map a visible matrix (ySlug × xSlug) to style/tone/topic for generation (third axis optional). */
+/** Map a visible matrix (ySlug × xSlug) to style/tone/topic for generation. Third axis topic is controlled globally. */
 function generationSlugsForMatrixCell(
   axisY: AxisType,
   axisX: AxisType,
   ySlug: string,
   xSlug: string,
+  topicSlug: string | undefined,
   styleList: Array<{ slug: string }> | undefined,
   toneList: Array<{ slug: string }> | undefined,
 ): { styleSlug: string; toneSlug: string; topicSlug?: string } {
   let styleSlug: string | undefined;
   let toneSlug: string | undefined;
-  let topicSlug: string | undefined;
+  let matrixTopicSlug: string | undefined;
 
   if (axisY === "style") styleSlug = ySlug;
   else if (axisY === "tone") toneSlug = ySlug;
-  else topicSlug = ySlug;
+  else matrixTopicSlug = ySlug;
 
   if (axisX === "style") styleSlug = xSlug;
   else if (axisX === "tone") toneSlug = xSlug;
-  else topicSlug = xSlug;
+  else matrixTopicSlug = xSlug;
+
+  // topicSlug from the global control always takes precedence
+  const resolvedTopic = topicSlug ?? (matrixTopicSlug ?? undefined);
 
   const defaultStyle = styleList?.[0]?.slug;
   const defaultTone = toneList?.[0]?.slug;
@@ -94,7 +98,7 @@ function generationSlugsForMatrixCell(
     toneSlug = defaultTone;
   }
 
-  return { styleSlug, toneSlug, topicSlug };
+  return { styleSlug, toneSlug, topicSlug: resolvedTopic };
 }
 
 // ──────────────────────────────────────────────
@@ -371,6 +375,18 @@ const questionPool = useQuery(
   const [axisX, setAxisX] = React.useState<AxisType>("tone");
   const [axisYSelected, setAxisYSelected] = React.useState<Set<string>>(new Set());
   const [axisXSelected, setAxisXSelected] = React.useState<Set<string>>(new Set());
+
+  /* --- Third axis control: "Topic" — global vs random per cell --- */
+  type TopicPolicy = "global" | "random";
+  const [topicPolicy, setTopicPolicy] = React.useState<TopicPolicy>("random");
+  const [globalTopicId, setGlobalTopicId] = React.useState<string | undefined>();
+  /* Resolve the effective topic slug used for generating questions */
+  const effectiveTopicSlug = React.useMemo(() => {
+    if (topicPolicy === "global" && topics) {
+      return topics.find(t => t.id === globalTopicId)?.slug;
+    }
+    return undefined; // random
+  }, [topicPolicy, globalTopicId, topics]);
 
   /* --- Auto-seed 5 random items per axis on first data load --- */
   const MAX_AXIS_ITEMS = 5;
@@ -811,6 +827,7 @@ const questionPool = useQuery(
             axisX,
             y.slug,
             x.slug,
+            effectiveTopicSlug,
             styles,
             tones,
           );
@@ -819,7 +836,6 @@ const questionPool = useQuery(
             xSlug: x.slug,
             styleSlug: gen.styleSlug,
             toneSlug: gen.toneSlug,
-            ...(gen.topicSlug !== undefined ? { topicSlug: gen.topicSlug } : {}),
           };
         }),
       );
@@ -827,6 +843,7 @@ const questionPool = useQuery(
       const result = await fillEmptyCellsAction({
         axisY,
         axisX,
+        topicSlug: effectiveTopicSlug,
         cells,
       });
 
@@ -853,6 +870,7 @@ const questionPool = useQuery(
         axisX,
         ySlug,
         xSlug,
+        effectiveTopicSlug,
         styles,
         tones,
       );
@@ -1099,6 +1117,62 @@ const questionPool = useQuery(
 
               <Separator />
 
+              {/* Third axis: Topic mode */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Third axis (topic per cell)
+                </label>
+                <div className="flex gap-1">
+                  {(["global", "random"] as TopicPolicy[]).map((m) => (
+                    <Button
+                      key={m}
+                      variant={topicPolicy === m ? "default" : "outline"}
+                      size="sm"
+                      className="flex-1 text-xs px-1 capitalize"
+                      onClick={() => setTopicPolicy(m)}
+                    >
+                      {m === "global" ? "One topic" : "Random"}
+                    </Button>
+                  ))}
+                </div>
+                {topicPolicy === "global" && topics && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="w-full justify-start text-sm font-normal h-8">
+                        {globalTopicId
+                          ? (topics.find(t => t.id === globalTopicId)?.name ?? "Select topic")
+                          : "Select topic"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-52 p-2" align="start">
+                      <ScrollArea className="h-48">
+                        <div className="space-y-1">
+                          {topics.map((t) => (
+                            <button
+                              key={t.id}
+                              onClick={() => setGlobalTopicId(t.id)}
+                              className={cn(
+                                "w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent truncate",
+                                globalTopicId === t.id && "bg-accent"
+                              )}
+                            >
+                              {t.name as string}
+                            </button>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
+                )}
+                {topicPolicy === "random" && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Each cell gets a random topic from the available pool.
+                  </p>
+                )}
+              </div>
+
+              <Separator />
+
               <Button
                 variant="outline"
                 size="sm"
@@ -1111,7 +1185,7 @@ const questionPool = useQuery(
 
               <Separator />
 
-              {/* Generate Week button */}
+              {/* Generate section */}
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Generate</p>
                 <Button

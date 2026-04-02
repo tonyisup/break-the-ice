@@ -23,6 +23,20 @@ function questionMatchesMatrixCell(
 	return qY === ySlug && qX === xSlug;
 }
 
+function questionMatchesMatrixCellWithTopic(
+	q: { style?: string | null; tone?: string | null; topic?: string | null },
+	axisY: "style" | "tone" | "topic",
+	axisX: "style" | "tone" | "topic",
+	topicSlug: string | undefined,
+	ySlug: string,
+	xSlug: string,
+): boolean {
+	if (!questionMatchesMatrixCell(q, axisY, axisX, ySlug, xSlug)) return false;
+	// If a topic is specified, also match topic
+	if (topicSlug && topicSlug !== (q.topic ?? "")) return false;
+	return true;
+}
+
 /** Helper: check if a cell (styleSlug × toneSlug × topicSlug) already has >= maxCount public questions */
 async function cellHasEnough(
 	ctx: any,
@@ -51,7 +65,7 @@ async function cellHasEnough(
 /**
  * Fill empty cells on the 2D schedule matrix (one generation per visible cell).
  * Each entry matches how the UI buckets questions: same axis-Y slug and axis-X slug,
- * regardless of the third taxonomy dimension.
+ * with a shared topic for ALL cells (or random if topicSlug is omitted).
  */
 export const fillEmptyCells = action({
 	args: {
@@ -63,17 +77,18 @@ export const fillEmptyCells = action({
 				xSlug: v.string(),
 				styleSlug: v.string(),
 				toneSlug: v.string(),
-				topicSlug: v.optional(v.string()),
 			}),
 		),
+		/** Optional: one topic applied to EVERY cell. If omitted, each cell gets a random topic. */
+		topicSlug: v.optional(v.string()),
 		countPerCell: v.optional(v.number()),
 	},
 	returns: v.object({
 		totalCells: v.number(),
 		filledCells: v.number(),
 		totalQuestionsGenerated: v.number(),
-		skippedExisting: v.number(),       // cell already has questions
-		skippedInvalidTaxonomy: v.number(), // slug doesn't resolve to active entry
+		skippedExisting: v.number(),
+		skippedInvalidTaxonomy: v.number(),
 	}),
 	handler: async (ctx, args) => {
 		const countPerCell = args.countPerCell ?? 1;
@@ -91,8 +106,10 @@ export const fillEmptyCells = action({
 		for (const cell of args.cells) {
 			totalCells++;
 
+			const effectiveTopic = args.topicSlug;
+
 			const hasAnyInCell = allPublic.some((q) =>
-				questionMatchesMatrixCell(q, args.axisY, args.axisX, cell.ySlug, cell.xSlug),
+				questionMatchesMatrixCellWithTopic(q, args.axisY, args.axisX, effectiveTopic, cell.ySlug, cell.xSlug),
 			);
 			if (hasAnyInCell) {
 				skippedExisting++;
@@ -104,7 +121,7 @@ export const fillEmptyCells = action({
 					purpose: "feed",
 					styleSlug: cell.styleSlug,
 					toneSlug: cell.toneSlug,
-					topicSlug: cell.topicSlug,
+					topicSlug: effectiveTopic,
 					batchSize: countPerCell,
 				});
 
@@ -112,7 +129,7 @@ export const fillEmptyCells = action({
 					filledCells++;
 					totalGenerated += result.saveResult.insertedCount;
 					console.log(
-						`Filled matrix cell (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug}) → ${result.saveResult.insertedCount} questions`,
+						`Filled matrix cell (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug}, topic=${effectiveTopic ?? "random"}) → ${result.saveResult.insertedCount} questions`,
 					);
 				} else {
 					skippedExisting++;
@@ -145,7 +162,7 @@ export const fillEmptyCells = action({
 
 /**
  * Generate questions for a single cell.
- * Guarded: skips if the cell already has 5+ questions.
+ * Guarded: skips if the cell already has questions.
  */
 export const fillSingleCell = action({
 	args: {
@@ -159,9 +176,20 @@ export const fillSingleCell = action({
 		questionIds: v.array(v.id("questions")),
 	}),
 	handler: async (ctx, args) => {
-		// Hard guard: don't generate if cell already has 5+ questions
-		if (await cellHasEnough(ctx, args.styleSlug, args.toneSlug, args.topicSlug, 5)) {
-			return { count: 0, questionIds: [] };
+		// Guard: don't generate if this exact cell (style×tone×topic) already has questions
+		const allPublic = await ctx.runQuery(
+			api.core.questions.getPublicQuestions,
+			{ limit: 5000 }
+		);
+		const comboKey = `${args.styleSlug}|${args.toneSlug}|${args.topicSlug ?? ""}`;
+		const existingCount = allPublic.filter(
+			(q) => `${q.style ?? ""}|${q.tone ?? ""}|${q.topic ?? ""}` === comboKey
+		).length;
+
+		if (existingCount >= 1) {
+			return { count: 0, questionIds: allPublic.filter(
+				(q) => `${q.style ?? ""}|${q.tone ?? ""}|${q.topic ?? ""}` === comboKey
+			).map(q => q._id) };
 		}
 
 		const result = await runPersistedQuestionGeneration(ctx, {
@@ -169,7 +197,7 @@ export const fillSingleCell = action({
 			styleSlug: args.styleSlug,
 			toneSlug: args.toneSlug,
 			topicSlug: args.topicSlug,
-			batchSize: args.count ?? 3,
+			batchSize: args.count ?? 1,
 		});
 
 		return {
