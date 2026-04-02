@@ -4,6 +4,29 @@ import { mutation, query } from "../_generated/server";
 import { ensureOrgMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 
+/** Full schedule row as returned from the database (matches `schedules` table + system fields). */
+const scheduleDocValidator = v.object({
+  _id: v.id("schedules"),
+  _creationTime: v.number(),
+  organizationId: v.id("organizations"),
+  weekStart: v.string(),
+  weekEnd: v.string(),
+  status: v.union(v.literal("draft"), v.literal("published"), v.literal("completed")),
+  weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
+  axisY: v.optional(v.union(v.literal("style"), v.literal("tone"), v.literal("topic"))),
+  axisYSlugs: v.optional(v.array(v.string())),
+  axisX: v.optional(v.union(v.literal("style"), v.literal("tone"), v.literal("topic"))),
+  axisXSlugs: v.optional(v.array(v.string())),
+  axisOverall: v.optional(v.union(
+    v.literal("style"), v.literal("tone"), v.literal("topic"), v.literal("random")
+  )),
+  axisOverallSlug: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  publishedAt: v.optional(v.number()),
+  createdBy: v.optional(v.id("users")),
+});
+
 // ──────────────────────────────────────────────
 // Queries
 // ──────────────────────────────────────────────
@@ -13,17 +36,7 @@ export const listSchedules = query({
   args: {
     organizationId: v.id("organizations"),
   },
-  returns: v.array(v.object({
-    _id: v.id("schedules"),
-    _creationTime: v.number(),
-    weekStart: v.string(),
-    weekEnd: v.string(),
-    status: v.union(v.literal("draft"), v.literal("published"), v.literal("completed")),
-    weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
-    updatedAt: v.number(),
-    publishedAt: v.optional(v.number()),
-    organizationId: v.id("organizations"),
-  })),
+  returns: v.array(scheduleDocValidator),
   handler: async (ctx, args) => {
     await ensureOrgMember(ctx, args.organizationId);
     return ctx.db
@@ -37,17 +50,7 @@ export const listSchedules = query({
 /** List all schedules for any org the current user is a member of */
 export const listSchedulesForUser = query({
   args: {},
-  returns: v.array(v.object({
-    _id: v.id("schedules"),
-    _creationTime: v.number(),
-    weekStart: v.string(),
-    weekEnd: v.string(),
-    status: v.union(v.literal("draft"), v.literal("published"), v.literal("completed")),
-    weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
-    updatedAt: v.number(),
-    publishedAt: v.optional(v.number()),
-    organizationId: v.id("organizations"),
-  })),
+  returns: v.array(scheduleDocValidator),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
@@ -68,7 +71,7 @@ export const listSchedulesForUser = query({
     if (memberships.length === 0) return [];
 
     const orgIdSet = new Set(memberships.map((m) => m.organizationId));
-    const allSchedules: any[] = [];
+    const allSchedules = [];
 
     for (const orgId of orgIdSet) {
       const orgSchedules = await ctx.db
@@ -103,27 +106,7 @@ type AssignmentEntry = {
 export const getSchedule = query({
   args: { scheduleId: v.id("schedules") },
   returns: v.object({
-    schedule: v.object({
-      _id: v.id("schedules"),
-      _creationTime: v.number(),
-      organizationId: v.id("organizations"),
-      weekStart: v.string(),
-      weekEnd: v.string(),
-      status: v.union(v.literal("draft"), v.literal("published"), v.literal("completed")),
-      weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
-      axisY: v.optional(v.union(v.literal("style"), v.literal("tone"), v.literal("topic"))),
-      axisYSlugs: v.optional(v.array(v.string())),
-      axisX: v.optional(v.union(v.literal("style"), v.literal("tone"), v.literal("topic"))),
-      axisXSlugs: v.optional(v.array(v.string())),
-      axisOverall: v.optional(v.union(
-        v.literal("style"), v.literal("tone"), v.literal("topic"), v.literal("random")
-      )),
-      axisOverallSlug: v.optional(v.string()),
-      createdAt: v.number(),
-      updatedAt: v.number(),
-      publishedAt: v.optional(v.number()),
-      createdBy: v.optional(v.id("users")),
-    }),
+    schedule: scheduleDocValidator,
     assignments: v.array(v.object({
       _id: v.id("scheduledQuestions"),
       dayOfWeek: v.union(

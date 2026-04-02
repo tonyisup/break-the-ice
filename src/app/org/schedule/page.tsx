@@ -132,7 +132,9 @@ function AxisMultiSelect({
 // ──────────────────────────────────────────────
 
 interface DaySlotProps {
-  day: typeof DAYS_DISPLAY[number];
+  dayKey: (typeof DAYS_DISPLAY)[number]["key"];
+  dayLabel: string;
+  dayAbbr: string;
   date: Date;
   assignment:
     | {
@@ -150,7 +152,7 @@ interface DaySlotProps {
   isTarget: boolean;
 }
 
-function DaySlot({ day, date, assignment, canEdit, onAssignClick, onUnassign, isTarget }: DaySlotProps) {
+function DaySlot({ dayKey, dayLabel, dayAbbr, date, assignment, canEdit, onAssignClick, onUnassign, isTarget }: DaySlotProps) {
   const isToday = new Date().toDateString() === date.toDateString();
 
   return (
@@ -165,7 +167,7 @@ function DaySlot({ day, date, assignment, canEdit, onAssignClick, onUnassign, is
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {day.abbr}
+            {dayAbbr}
           </span>
           {isToday && (
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Today</Badge>
@@ -208,7 +210,7 @@ function DaySlot({ day, date, assignment, canEdit, onAssignClick, onUnassign, is
                 variant="ghost"
                 size="sm"
                 className="h-8 text-muted-foreground hover:text-foreground"
-                onClick={() => onAssignClick(day.key)}
+                onClick={() => onAssignClick(dayKey)}
               >
                 <Plus className="size-3.5 mr-1" /> Assign
               </Button>
@@ -373,17 +375,24 @@ export default function OrgWeeklyCurationPage() {
     return map;
   }, [scheduleDetail]);
 
-  /* Build day rows with dates */
+  /* Build day rows with dates — labels rotate with week start */
   const dayRows = React.useMemo(() => {
-    const rows: { key: typeof DAYS_DISPLAY[number]["key"]; date: Date }[] = [];
+    const rows: { key: typeof DAYS_DISPLAY[number]["key"]; date: Date; label: string; abbr: string }[] = [];
+    const orderedDays = weekStartDay === "monday"
+      ? DAYS_DISPLAY
+      : DAYS_DISPLAY.slice().sort((a, b) => {
+          const order = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+          return order.indexOf(a.key) - order.indexOf(b.key);
+        });
+
     for (let i = 0; i < 7; i++) {
       const d = new Date(week.start);
       d.setDate(d.getDate() + i);
-      const dayObj = DAYS_DISPLAY[i];
-      rows.push({ key: dayObj.key, date: d });
+      const dayObj = orderedDays[i];
+      rows.push({ key: dayObj.key, date: d, label: dayObj.label, abbr: dayObj.abbr });
     }
     return rows;
-  }, [week]);
+  }, [week, weekStartDay]);
 
   /* Filtered pool based on axis selections */
   const filteredPool = React.useMemo(() => {
@@ -438,6 +447,9 @@ export default function OrgWeeklyCurationPage() {
     [axisX, styles, tones, topics]
   );
 
+  /* Week auto-assign from filter selections */
+  const [isGenerating, setIsGenerating] = React.useState(false);
+
   /* Handlers */
   const handleCreateWeek = async () => {
     if (!orgId) return;
@@ -450,6 +462,56 @@ export default function OrgWeeklyCurationPage() {
       toast.success(`Schedule created for ${week.label}`);
     } catch (e: any) {
       toast.error(e.message ?? "Failed to create schedule");
+    }
+  };
+
+  const handleGenerateWeek = async () => {
+    if (!orgId) return;
+    setIsGenerating(true);
+    try {
+      // Create schedule if needed
+      let sched = currentSchedule;
+      if (!sched) {
+        const newId = await createSchedule({
+          organizationId: orgId,
+          weekStart: week.isoStart,
+          weekStartDay,
+        });
+        toast.success(`Created week of ${week.label}`);
+        sched = { _id: newId } as typeof currentSchedule;
+      }
+      if (!sched) {
+        toast.error("Could not create or find schedule for this week");
+        return;
+      }
+
+      // Try axis-aware fill: filter by selected axis values
+      const axisFilters: { axisYSlugs?: string[]; axisXSlugs?: string[] } = {};
+      if (axisYSelected.size > 0) {
+        const lookup = new Map(
+          (axisY === "style" ? styles : axisY === "tone" ? tones : topics)?.map((t) => [
+            t.id, t.slug,
+          ]) ?? []
+        );
+        axisFilters.axisYSlugs = [...axisYSelected].map(id => lookup.get(id)).filter(Boolean) as string[];
+      }
+      if (axisXSelected.size > 0) {
+        const lookup = new Map(
+          (axisX === "style" ? styles : axisX === "tone" ? tones : topics)?.map((t) => [
+            t.id, t.slug,
+          ]) ?? []
+        );
+        axisFilters.axisXSlugs = [...axisXSelected].map(id => lookup.get(id)).filter(Boolean) as string[];
+      }
+
+      // For now use the existing autoSchedule which shuffles public questions
+      // Future: pass axis filters to a filtered autoSchedule mutation
+      await autoSchedule({ scheduleId: sched._id });
+      toast.success("Week auto-filled!");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to generate");
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -474,15 +536,30 @@ export default function OrgWeeklyCurationPage() {
   };
 
   const handleAssign = async (dayKey: string, questionId: string) => {
-    if (!currentSchedule) return;
     try {
+      // Auto-create schedule if missing
+      let sched = currentSchedule;
+      if (!sched && orgId) {
+        const newId = await createSchedule({
+          organizationId: orgId,
+          weekStart: week.isoStart,
+          weekStartDay,
+        });
+        toast.success("Created schedule, assigning…");
+        sched = { _id: newId } as typeof currentSchedule;
+      }
+      if (!sched) {
+        toast.error("Create a week schedule first");
+        return;
+      }
+
       await assignQuestion({
-        scheduleId: currentSchedule._id,
+        scheduleId: sched._id,
         dayOfWeek: dayKey as any,
         questionId: questionId as Id<"questions">,
       });
       setAssignTargetDay(null);
-      toast.success("Assigned");
+      toast.success("Assigned to " + (DAYS_DISPLAY.find(d => d.key === dayKey)?.label ?? dayKey));
     } catch (e: any) {
       toast.error(e.message ?? "Failed to assign");
     }
@@ -741,21 +818,20 @@ export default function OrgWeeklyCurationPage() {
 
               <Separator />
 
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{filteredPool.length} questions</span>
-                {filteredPool.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-xs px-2"
-                    onClick={() => {
-                      setAxisYSelected(new Set());
-                      setAxisXSelected(new Set());
-                    }}
-                  >
-                    Clear filters
-                  </Button>
-                )}
+              {/* Generate Week button */}
+              <Separator />
+
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Generate</p>
+                <Button
+                  size="sm"
+                  className="w-full"
+                  disabled={isGenerating}
+                  onClick={handleGenerateWeek}
+                >
+                  <Sparkles className="mr-1.5 size-3.5" />
+                  {isGenerating ? "Generating…" : "Generate Week"}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -770,7 +846,9 @@ export default function OrgWeeklyCurationPage() {
               {dayRows.map((row) => (
                 <DaySlot
                   key={row.key}
-                  day={DAYS_DISPLAY[row.key === "sunday" ? 6 : DAYS_DISPLAY.findIndex((d) => d.key === row.key)]}
+                  dayKey={row.key}
+                  dayLabel={row.label}
+                  dayAbbr={row.abbr}
                   date={row.date}
                   assignment={assignmentsByDay[row.key]}
                   canEdit={canEdit}
@@ -784,10 +862,10 @@ export default function OrgWeeklyCurationPage() {
             </div>
           </section>
 
-          {/* Question pool */}
+          {/* Question pool — axisY rows × axisX cols matrix */}
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold">Question Pool</h2>
+              <h2 className="text-lg font-semibold">Question Matrix</h2>
               {assignTargetDay && (
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">
@@ -827,66 +905,93 @@ export default function OrgWeeklyCurationPage() {
                   Clear filters
                 </Button>
               </Card>
-            ) : (
-              <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredPool.map((q) => {
-                  const alreadyAssigned = assignedIds.has(q._id);
-                  return (
-                    <Card
-                      key={q._id}
-                      className={cn(
-                        "cursor-pointer transition-all hover:border-primary/40 hover:shadow-sm",
-                        assignTargetDay && !alreadyAssigned && "ring-1 ring-primary/20",
-                        alreadyAssigned && "opacity-50"
-                      )}
-                      onClick={() => {
-                        if (assignTargetDay && !alreadyAssigned && canEdit) {
-                          handleAssign(assignTargetDay, q._id);
-                        }
-                      }}
+            ) : (() => {
+              /* Build the axis matrix: rows = axisY values, cols = axisX values */
+              const yItems = axisYSelected.size > 0
+                ? axisYItems.filter(t => axisYSelected.has(t.id))
+                : axisYItems;
+              const xItems = axisXSelected.size > 0
+                ? axisXItems.filter(t => axisXSelected.has(t.id))
+                : axisXItems;
+
+              const ySlugField = axisY === "style" ? "style" : axisY === "tone" ? "tone" : "topic";
+              const xSlugField = axisX === "style" ? "style" : axisX === "tone" ? "tone" : "topic";
+
+              // Matrix: [yIdx][xIdx] = questions[]
+              const matrix: typeof questionPool[][] = yItems.map(() => xItems.map(() => []));
+
+              // Bucket questions into matrix cells
+              for (const q of filteredPool) {
+                const ySlug = (q as any)[ySlugField];
+                const xSlug = (q as any)[xSlugField];
+                const yIdx = yItems.findIndex(t => t.slug === ySlug);
+                const xIdx = xItems.findIndex(t => t.slug === xSlug);
+                if (yIdx >= 0 && xIdx >= 0) {
+                  matrix[yIdx][xIdx].push(q);
+                }
+              }
+
+              return (
+                <div className="overflow-auto rounded-xl border">
+                  {/* Header row */}
+                  <div className="grid gap-[1px] bg-border"
+                    style={{ gridTemplateColumns: `140px repeat(${xItems.length}, 1fr)` }}
+                  >
+                    <div className="p-2 text-xs font-semibold text-muted-foreground capitalize bg-background" />
+                    {xItems.map(x => (
+                      <div key={x.id} className="p-2 text-xs font-semibold text-center capitalize bg-background truncate px-1" title={x.name}>
+                        {x.name}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Body rows */}
+                  {yItems.map((y, yIndex) => (
+                    <div key={y.id}
+                      className="grid gap-[1px] bg-border border-t border-border"
+                      style={{ gridTemplateColumns: `140px repeat(${xItems.length}, 1fr)` }}
                     >
-                      <CardContent className="p-3 space-y-2">
-                        <p className="text-sm leading-snug line-clamp-3">
-                          {q.text ?? <em className="text-muted-foreground">No text</em>}
-                        </p>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {q.style && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                              {q.style}
-                            </Badge>
-                          )}
-                          {q.tone && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                              {q.tone}
-                            </Badge>
-                          )}
-                          {q.topic && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                              {q.topic}
-                            </Badge>
-                          )}
-                          {q.isAIGenerated && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                              AI
-                            </Badge>
-                          )}
-                          {alreadyAssigned && (
-                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                              Assigned
-                            </Badge>
-                          )}
-                          {assignTargetDay && !alreadyAssigned && canEdit && (
-                            <Badge variant="default" className="text-[10px] px-1.5 py-0">
-                              Click to assign
-                            </Badge>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
+                      <div className="p-2 text-xs font-medium flex items-center bg-background px-2">{y.name}</div>
+                      {xItems.map((x, xIndex) => {
+                        const cellQs = matrix[yIndex][xIndex] ?? [];
+                        return (
+                          <div key={`${y.id}-${x.id}`} className="min-h-[60px] bg-background p-1.5 space-y-1.5">
+                            {cellQs.map(q => {
+                              const alreadyAssigned = assignedIds.has(q._id);
+                              return (
+                                <div key={q._id} className="space-y-1">
+                                  <p className="text-xs leading-snug line-clamp-3">
+                                    {q.text ?? <em className="text-muted-foreground/50">No text</em>}
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {q.isAIGenerated && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">AI</Badge>
+                                    )}
+                                    {alreadyAssigned && (
+                                      <Badge variant="destructive" className="text-[9px] px-1 py-0 h-3.5">Used</Badge>
+                                    )}
+                                  </div>
+                                  {assignTargetDay && !alreadyAssigned && canEdit && (
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      className="w-full h-6 text-xs px-1"
+                                      onClick={() => handleAssign(assignTargetDay, q._id)}
+                                    >
+                                      Assign
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </section>
         </div>
       </div>
