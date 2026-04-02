@@ -79,6 +79,18 @@ function computeWeekRange(weekStartDay: "monday" | "sunday", offset = 0) {
   };
 }
 
+/** Deterministic shuffle so each matrix cell gets a fresh order when remix runs. */
+function shuffleArrayWithSeed<T>(items: T[], seed: number): T[] {
+  const arr = [...items];
+  let s = seed >>> 0;
+  for (let i = arr.length - 1; i > 0; i--) {
+    s = (Math.imul(s, 1103515245) + 12345) >>> 0;
+    const j = s % (i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 // ──────────────────────────────────────────────
 // Multi-select axis picker
 // ──────────────────────────────────────────────
@@ -457,10 +469,65 @@ export default function OrgWeeklyCurationPage() {
     [axisX, styles, tones, topics]
   );
 
+  const [matrixRemixGeneration, setMatrixRemixGeneration] = React.useState(0);
+
   /* Week auto-assign from filter selections */
   const [isGenerating, setIsGenerating] = React.useState(false);
 
+  type PoolRow = (typeof filteredPool)[number];
+  const questionMatrix = React.useMemo(() => {
+    if (filteredPool.length === 0) return null;
+    const yItems =
+      axisYSelected.size > 0 ? axisYItems.filter((t) => axisYSelected.has(t.id)) : axisYItems;
+    const xItems =
+      axisXSelected.size > 0 ? axisXItems.filter((t) => axisXSelected.has(t.id)) : axisXItems;
+    if (yItems.length === 0 || xItems.length === 0) return null;
+
+    const matrix: PoolRow[][][] = yItems.map(() =>
+      xItems.map(() => [] as PoolRow[])
+    );
+
+    for (const q of filteredPool) {
+      const ySlug = axisY === "style" ? q.style : axisY === "tone" ? q.tone : q.topic;
+      const xSlug = axisX === "style" ? q.style : axisX === "tone" ? q.tone : q.topic;
+      const yIdx = yItems.findIndex((t) => t.slug === ySlug);
+      const xIdx = xItems.findIndex((t) => t.slug === xSlug);
+      if (yIdx >= 0 && xIdx >= 0) {
+        matrix[yIdx][xIdx].push(q);
+      }
+    }
+
+    if (matrixRemixGeneration > 0) {
+      for (let yi = 0; yi < yItems.length; yi++) {
+        for (let xi = 0; xi < xItems.length; xi++) {
+          const seed = matrixRemixGeneration * 1_000_000 + yi * 1_000 + xi;
+          matrix[yi][xi] = shuffleArrayWithSeed(matrix[yi][xi], seed);
+        }
+      }
+    }
+
+    return { yItems, xItems, matrix };
+  }, [
+    filteredPool,
+    axisY,
+    axisX,
+    axisYSelected,
+    axisXSelected,
+    axisYItems,
+    axisXItems,
+    matrixRemixGeneration,
+  ]);
+
   /* Handlers */
+  const handleRemixGridQuestions = () => {
+    if (filteredPool.length === 0) {
+      toast.message("No questions match the current filters.");
+      return;
+    }
+    setMatrixRemixGeneration((g) => g + 1);
+    toast.success("Remixed question order in the matrix");
+  };
+
   const handleCreateWeek = async () => {
     if (!orgId) return;
     try {
@@ -731,7 +798,7 @@ export default function OrgWeeklyCurationPage() {
                 title={weekIsFull ? "Every day already has a question" : undefined}
                 onClick={handleAutoSchedule}
               >
-                <Sparkles className="size-4 mr-1" /> Auto-fill
+                <CalendarDays className="size-4 mr-1" /> Auto-fill
               </Button>
               <Button size="sm" onClick={handlePublish}>
                 <Crown className="size-4 mr-1" /> Publish
@@ -842,11 +909,26 @@ export default function OrgWeeklyCurationPage() {
                 <Button
                   size="sm"
                   className="w-full"
+                  variant="secondary"
+                  disabled={
+                    isGenerating ||
+                    questionPool === undefined ||
+                    filteredPool.length === 0 ||
+                    !questionMatrix
+                  }
+                  onClick={handleRemixGridQuestions}
+                >
+                  <Shuffle className="mr-1.5 size-3.5" />
+                  Shuffle Grid Questions
+                </Button>
+                <Button
+                  size="sm"
+                  className="w-full"
                   disabled={isGenerating || weekIsFull}
                   onClick={handleGenerateWeek}
                 >
                   <CalendarDays className="mr-1.5 size-3.5" />
-                  {isGenerating ? "Generating…" : "Auto-fill Week"}
+                  {isGenerating ? "Scheduling…" : "Auto-fill Week"}
                 </Button>
               </div>
             </CardContent>
@@ -921,40 +1003,18 @@ export default function OrgWeeklyCurationPage() {
                   Clear filters
                 </Button>
               </Card>
-            ) : (() => {
-              /* Build the axis matrix: rows = axisY values, cols = axisX values */
-              const yItems = axisYSelected.size > 0
-                ? axisYItems.filter(t => axisYSelected.has(t.id))
-                : axisYItems;
-              const xItems = axisXSelected.size > 0
-                ? axisXItems.filter(t => axisXSelected.has(t.id))
-                : axisXItems;
-
-              const ySlugField = axisY === "style" ? "style" : axisY === "tone" ? "tone" : "topic";
-              const xSlugField = axisX === "style" ? "style" : axisX === "tone" ? "tone" : "topic";
-
-              // Matrix: [yIdx][xIdx] = questions[]
-              const matrix: typeof questionPool[][] = yItems.map(() => xItems.map(() => []));
-
-              // Bucket questions into matrix cells
-              for (const q of filteredPool) {
-                const ySlug = (q as any)[ySlugField];
-                const xSlug = (q as any)[xSlugField];
-                const yIdx = yItems.findIndex(t => t.slug === ySlug);
-                const xIdx = xItems.findIndex(t => t.slug === xSlug);
-                if (yIdx >= 0 && xIdx >= 0) {
-                  matrix[yIdx][xIdx].push(q);
-                }
-              }
-
-              return (
+            ) : !questionMatrix ? (
+              <Card className="p-8 text-center">
+                <p className="text-sm text-muted-foreground">Loading matrix…</p>
+              </Card>
+            ) : (
                 <div className="overflow-auto rounded-xl border">
                   {/* Header row */}
                   <div className="grid gap-[1px] bg-border"
-                    style={{ gridTemplateColumns: `140px repeat(${xItems.length}, 1fr)` }}
+                    style={{ gridTemplateColumns: `140px repeat(${questionMatrix.xItems.length}, 1fr)` }}
                   >
                     <div className="p-2 text-xs font-semibold text-muted-foreground capitalize bg-background" />
-                    {xItems.map(x => (
+                    {questionMatrix.xItems.map(x => (
                       <div key={x.id} className="p-2 text-xs font-semibold text-center capitalize bg-background truncate px-1" title={x.name}>
                         <span className="truncate max-w-[80px]">
                           <IconComponent icon={x.icon} size={12} color={x.color} className="inline-block mr-2"/>
@@ -965,17 +1025,17 @@ export default function OrgWeeklyCurationPage() {
                   </div>
 
                   {/* Body rows */}
-                  {yItems.map((y, yIndex) => (
+                  {questionMatrix.yItems.map((y, yIndex) => (
                     <div key={y.id}
                       className="grid gap-[1px] bg-border border-t border-border"
-                      style={{ gridTemplateColumns: `140px repeat(${xItems.length}, 1fr)` }}
+                      style={{ gridTemplateColumns: `140px repeat(${questionMatrix.xItems.length}, 1fr)` }}
                     >
                       <div className="p-2 text-xs font-medium flex items-center bg-background px-2">
                         <IconComponent icon={y.icon} size={12} color={y.color} className="inline-block mr-2"/>
                         {y.name}
                       </div>
-                      {xItems.map((x, xIndex) => {
-                        const cellQs = matrix[yIndex][xIndex] ?? [];
+                      {questionMatrix.xItems.map((x, xIndex) => {
+                        const cellQs = questionMatrix.matrix[yIndex][xIndex] ?? [];
                         return (
                           <div key={`${y.id}-${x.id}`} className="min-h-[60px] bg-background p-1.5 space-y-1.5">
                             {cellQs.map(q => {
@@ -1012,8 +1072,7 @@ export default function OrgWeeklyCurationPage() {
                     </div>
                   ))}
                 </div>
-              );
-            })()}
+            )}
           </section>
         </div>
       </div>
