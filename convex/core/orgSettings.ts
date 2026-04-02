@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
+import { ensureOrgMember } from "../auth";
 
 // ──────────────────────────────────────────────
 // Queries
@@ -64,7 +64,7 @@ export const upsertOrgSettings = mutation({
   },
   returns: v.id("orgSettings"),
   handler: async (ctx, args) => {
-    await ensurePaidOrganizationMember(ctx, args.organizationId, ["admin", "manager"]);
+    await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
 
     const existing = await ctx.db
       .query("orgSettings")
