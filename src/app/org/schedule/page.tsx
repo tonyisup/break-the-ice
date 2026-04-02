@@ -33,6 +33,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { Icon, IconComponent } from "@/components/ui/icons/icon";
 
 const DAYS_DISPLAY: {
   key: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
@@ -394,6 +395,11 @@ export default function OrgWeeklyCurationPage() {
     return rows;
   }, [week, weekStartDay]);
 
+  const weekIsFull = React.useMemo(
+    () => dayRows.length > 0 && dayRows.every((row) => assignmentsByDay[row.key] != null),
+    [dayRows, assignmentsByDay]
+  );
+
   /* Filtered pool based on axis selections */
   const filteredPool = React.useMemo(() => {
     if (!questionPool) return [];
@@ -434,6 +440,8 @@ export default function OrgWeeklyCurationPage() {
         id: t.id,
         name: t.name as string,
         slug: t.slug as string,
+        icon: t.icon as Icon,
+        color: t.color as string,
       })) ?? [],
     [axisY, styles, tones, topics]
   );
@@ -443,6 +451,8 @@ export default function OrgWeeklyCurationPage() {
         id: t.id,
         name: t.name as string,
         slug: t.slug as string,
+        icon: t.icon as Icon,
+        color: t.color as string,
       })) ?? [],
     [axisX, styles, tones, topics]
   );
@@ -714,7 +724,13 @@ export default function OrgWeeklyCurationPage() {
 
           {currentSchedule?.status === "draft" && (
             <>
-              <Button variant="outline" size="sm" onClick={handleAutoSchedule}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={weekIsFull}
+                title={weekIsFull ? "Every day already has a question" : undefined}
+                onClick={handleAutoSchedule}
+              >
                 <Sparkles className="size-4 mr-1" /> Auto-fill
               </Button>
               <Button size="sm" onClick={handlePublish}>
@@ -826,11 +842,11 @@ export default function OrgWeeklyCurationPage() {
                 <Button
                   size="sm"
                   className="w-full"
-                  disabled={isGenerating}
+                  disabled={isGenerating || weekIsFull}
                   onClick={handleGenerateWeek}
                 >
-                  <Sparkles className="mr-1.5 size-3.5" />
-                  {isGenerating ? "Generating…" : "Generate Week"}
+                  <CalendarDays className="mr-1.5 size-3.5" />
+                  {isGenerating ? "Generating…" : "Auto-fill Week"}
                 </Button>
               </div>
             </CardContent>
@@ -940,7 +956,10 @@ export default function OrgWeeklyCurationPage() {
                     <div className="p-2 text-xs font-semibold text-muted-foreground capitalize bg-background" />
                     {xItems.map(x => (
                       <div key={x.id} className="p-2 text-xs font-semibold text-center capitalize bg-background truncate px-1" title={x.name}>
-                        {x.name}
+                        <span className="truncate max-w-[80px]">
+                          <IconComponent icon={x.icon} size={12} color={x.color} className="inline-block mr-2"/>
+                          {x.name}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -951,7 +970,10 @@ export default function OrgWeeklyCurationPage() {
                       className="grid gap-[1px] bg-border border-t border-border"
                       style={{ gridTemplateColumns: `140px repeat(${xItems.length}, 1fr)` }}
                     >
-                      <div className="p-2 text-xs font-medium flex items-center bg-background px-2">{y.name}</div>
+                      <div className="p-2 text-xs font-medium flex items-center bg-background px-2">
+                        <IconComponent icon={y.icon} size={12} color={y.color} className="inline-block mr-2"/>
+                        {y.name}
+                      </div>
                       {xItems.map((x, xIndex) => {
                         const cellQs = matrix[yIndex][xIndex] ?? [];
                         return (
