@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { ensureOrgMember } from "../auth";
+import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
 
 export const createOrganization = mutation({
 	args: {
@@ -48,7 +48,7 @@ export const inviteMember = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ensureOrgMember(ctx, args.organizationId, "admin");
+		await ensurePaidOrganizationMember(ctx, args.organizationId, "admin");
 
 		await ctx.db.insert("invitations", {
 			email: args.email,

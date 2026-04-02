@@ -787,7 +787,9 @@ export const getAdminStats = query({
 		users: v.object({
 			total: v.number(),
 			admins: v.number(),
-			casual: v.number(),
+		}),
+		organizations: v.object({
+			team: v.number(),
 		}),
 		feedback: v.object({
 			total: v.number(),
@@ -803,6 +805,7 @@ export const getAdminStats = query({
 
 		const questions = await ctx.db.query("questions").collect();
 		const users = await ctx.db.query("users").collect();
+		const organizations = await ctx.db.query("organizations").take(500);
 		const feedback = await ctx.db.query("feedback").collect();
 		// Use index for pending duplicates
 		const duplicates = await ctx.db.query("duplicateDetections")
@@ -827,7 +830,9 @@ export const getAdminStats = query({
 			users: {
 				total: users.length,
 				admins: users.filter(u => u.isAdmin).length,
-				casual: users.filter(u => u.subscriptionTier === "casual").length,
+			},
+			organizations: {
+				team: organizations.filter(o => o.planTier === "team" && (o.billingStatus === "active" || o.billingStatus === "trialing")).length,
 			},
 			feedback: {
 				total: feedback.length,

@@ -176,10 +176,10 @@ export default function UsersPage() {
 								</td>
 								<td className="px-6 py-4">
 									<Badge
-										variant={user.subscriptionTier === 'casual' ? 'default' : 'secondary'}
-										className={`h-5 text-[10px] uppercase tracking-wide ${user.subscriptionTier === 'casual' ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
+										variant={user.billingStatus === 'active' || user.billingStatus === 'trialing' ? 'default' : 'secondary'}
+										className={`h-5 text-[10px] uppercase tracking-wide ${(user.billingStatus === 'active' || user.billingStatus === 'trialing') ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
 									>
-										{user.subscriptionTier || "free"}
+										{user.billingStatus === 'active' || user.billingStatus === 'trialing' ? 'team' : 'free'}
 									</Badge>
 								</td>
 								<td className="px-6 py-4 text-right">

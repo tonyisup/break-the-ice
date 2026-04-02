@@ -40,9 +40,9 @@ export default function AdminDashboard() {
       link: "/admin/questions"
     },
     {
-      title: "Active Users",
-      value: stats.users.total,
-      description: `${stats.users.casual} Casual Plan Users`,
+      title: "Team Workspaces",
+      value: stats.organizations.team,
+      description: `${stats.users.total} Active Users`,
       icon: Users,
       color: "text-purple-600",
       bgBase: "bg-purple-500/10",

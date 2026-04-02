@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 type RemixState = "idle" | "remixing" | "remixed";
 
@@ -52,6 +53,7 @@ export function RemixQuestionDrawer({
 	const [tags, setTags] = useState<string[]>([]);
 	const [saveFailed, setSaveFailed] = useState(false);
 	const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
+	const { activeWorkspace } = useWorkspace();
 
 	const styles = useQuery(api.core.styles.getStyles, isOpen ? {} : "skip");
 	const tones = useQuery(api.core.tones.getTones, isOpen ? {} : "skip");
@@ -78,7 +80,10 @@ export function RemixQuestionDrawer({
 		? tones?.find((t) => t._id === selectedToneId) ?? null
 		: questionTone;
 
-	const currentUser = useQuery(api.core.users.getCurrentUser, isOpen ? {} : "skip");
+	const currentUser = useQuery(
+		api.core.users.getCurrentUser,
+		isOpen ? { organizationId: activeWorkspace ?? undefined } : "skip"
+	);
 	const remixQuestion = useAction(api.core.questions.remixQuestionForUser);
 	const addPersonalQuestion = useMutation(api.core.questions.addPersonalQuestion);
 	const updatePersonalQuestion = useMutation(api.core.questions.updatePersonalQuestion);
@@ -300,12 +305,12 @@ export function RemixQuestionDrawer({
 								)} /> 
 								{currentUser.isAiLimitReached ? <Badge 
 																			onClick={() => {
-																				toast.info("Upgrade flow coming soon!");
+																				window.location.href = "/pricing?source=remix_limit";
 																			}}
 																			variant="outline"
 																			className="cursor-pointer"
 																			>
-																				Upgrade to continue
+																				Start Team plan
 																			</Badge> : "AI generations"}
 							</span>
 						)}

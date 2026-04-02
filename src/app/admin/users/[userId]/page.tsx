@@ -208,8 +208,11 @@ export default function UserDetailsPage() {
                                      <div className="grid grid-cols-3 gap-4 border-b pb-2">
                                         <div className="font-medium text-muted-foreground">Tier</div>
                                         <div className="col-span-2">
-                                            <Badge variant={user.subscriptionTier === 'casual' ? 'default' : 'secondary'} className="uppercase">
-                                                {user.subscriptionTier || 'free'}
+                                            <Badge
+                                                variant={user.billingStatus === 'active' || user.billingStatus === 'trialing' ? 'default' : 'secondary'}
+                                                className="uppercase"
+                                            >
+                                                {user.billingStatus === 'active' || user.billingStatus === 'trialing' ? 'team' : 'free'}
                                             </Badge>
                                         </div>
                                     </div>

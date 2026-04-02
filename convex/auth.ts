@@ -1,6 +1,17 @@
 import { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 
+export type BillingStatus =
+  | "inactive"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "trialing";
+
+export type EffectivePlanTier = "free" | "team";
+
+const ACTIVE_BILLING_STATUSES = new Set<BillingStatus>(["active", "trialing"]);
+
 /**
  * Helper function to ensure the current user is an admin.
  * Works with Clerk authentication via ConvexProviderWithClerk.
@@ -58,4 +69,98 @@ export const ensureOrgMember = async (
   }
 
   return membership;
+};
+
+export const isBillingActiveStatus = (status?: BillingStatus | null) =>
+  !!status && ACTIVE_BILLING_STATUSES.has(status);
+
+export const isOrganizationPaid = async (
+  ctx: QueryCtx | MutationCtx,
+  organizationId: Id<"organizations">
+) => {
+  const organization = await ctx.db.get(organizationId);
+  if (!organization) {
+    return false;
+  }
+
+  return organization.planTier === "team" && isBillingActiveStatus(organization.billingStatus);
+};
+
+export const ensurePaidOrganizationMember = async (
+  ctx: QueryCtx | MutationCtx,
+  organizationId: Id<"organizations">,
+  requiredRole?: "admin" | "manager" | "member" | ("admin" | "manager" | "member")[]
+) => {
+  const membership = await ensureOrgMember(ctx, organizationId, requiredRole);
+  const isPaid = await isOrganizationPaid(ctx, organizationId);
+
+  if (!isPaid) {
+    throw new Error("This feature requires an active Team workspace.");
+  }
+
+  return membership;
+};
+
+export const getEffectivePlanForUser = async (
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  organizationId?: Id<"organizations">
+): Promise<{
+  planTier: EffectivePlanTier;
+  billingStatus: BillingStatus;
+  organizationId: Id<"organizations"> | null;
+}> => {
+  if (organizationId) {
+    // Verify membership before checking billing
+    const membership = await ctx.db
+      .query("organization_members")
+      .withIndex("by_userId_organizationId", (q: any) =>
+        q.eq("userId", userId).eq("organizationId", organizationId)
+      )
+      .unique();
+
+    // If not a member, return free plan
+    if (!membership) {
+      return {
+        planTier: "free",
+        billingStatus: "inactive",
+        organizationId: null,
+      };
+    }
+
+    const isPaid = await isOrganizationPaid(ctx, organizationId);
+    const organization = await ctx.db.get(organizationId);
+
+    return {
+      planTier: isPaid ? "team" : "free",
+      billingStatus: organization?.billingStatus ?? "inactive",
+      organizationId,
+    };
+  }
+
+  const memberships = await ctx.db
+    .query("organization_members")
+    .withIndex("by_userId", (q: any) => q.eq("userId", userId))
+    .take(100);
+
+  const membershipsByMostRecentJoin = memberships
+    .slice()
+    .sort((a, b) => b._creationTime - a._creationTime);
+
+  for (const membership of membershipsByMostRecentJoin) {
+    const organization = await ctx.db.get(membership.organizationId);
+    if (organization?.planTier === "team" && isBillingActiveStatus(organization.billingStatus)) {
+      return {
+        planTier: "team",
+        billingStatus: organization.billingStatus ?? "inactive",
+        organizationId: organization._id,
+      };
+    }
+  }
+
+  return {
+    planTier: "free",
+    billingStatus: "inactive",
+    organizationId: null,
+  };
 };

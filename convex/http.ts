@@ -15,6 +15,12 @@ http.route({
 	handler: usersWebhook,
 });
 
+http.route({
+	path: "/clerk-billing-webhook",
+	method: "POST",
+	handler: usersWebhook,
+});
+
 export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
 	const authHeader = request.headers.get("Authorization");
 	const expectedToken = process.env.N8N_WEBHOOK_SECRET;

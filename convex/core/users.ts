@@ -1,6 +1,7 @@
 import { Doc } from "../_generated/dataModel";
 import { MutationCtx, mutation, query } from "../_generated/server";
 import { v } from "convex/values";
+import { getEffectivePlanForUser } from "../auth";
 
 // Helper to ensure user exists
 export async function getUserOrCreate(ctx: MutationCtx) {
@@ -19,18 +20,22 @@ export async function getUserOrCreate(ctx: MutationCtx) {
 	}
 
 	const userId = await ctx.db.insert("users", {
+		clerkId: identity.subject,
 		name: identity.name!,
 		email: identity.email,
 		image: identity.pictureUrl,
+		billingStatus: "inactive",
 	});
 
 	return (await ctx.db.get(userId))!;
 }
 
 export const getCurrentUser = query({
-	args: {},
+	args: {
+		organizationId: v.optional(v.id("organizations")),
+	},
 	returns: v.union(v.null(), v.any()),
-	handler: async (ctx): Promise<any> => {
+	handler: async (ctx, args): Promise<any> => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			return null;
@@ -45,10 +50,16 @@ export const getCurrentUser = query({
 			return null;
 		}
 
-		const limit = user.subscriptionTier === "casual" ? parseInt(process.env.MAX_CASUAL_AIGEN ?? "100") : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
+		const effectivePlan = await getEffectivePlanForUser(ctx, user._id, args.organizationId);
+		const limit = effectivePlan.planTier === "team"
+			? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
+			: parseInt(process.env.MAX_FREE_AIGEN ?? "10");
 
 		return {
 			...user,
+			planTier: effectivePlan.planTier,
+			billingStatus: effectivePlan.billingStatus,
+			activeOrganizationId: effectivePlan.organizationId,
 			aiLimit: limit,
 			isAiLimitReached: (user.aiUsage?.count ?? 0) >= limit,
 		};
@@ -123,17 +134,22 @@ export const store = mutation({
 
 		if (user !== null) {
 			// If we've seen this identity before but the name has changed, patch the value.
-			if (user.name !== identity.name) {
-				await ctx.db.patch(user._id, { name: identity.name });
+			if (user.name !== identity.name || user.clerkId !== identity.subject) {
+				await ctx.db.patch(user._id, {
+					name: identity.name,
+					clerkId: identity.subject,
+				});
 			}
 			return user._id;
 		}
 
 		// If it's a new identity, create a new user.
 		return await ctx.db.insert("users", {
+			clerkId: identity.subject,
 			name: identity.name!,
 			email: identity.email,
 			image: identity.pictureUrl,
+			billingStatus: "inactive",
 		});
 	},
 });

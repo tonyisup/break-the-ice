@@ -242,6 +242,8 @@ export default defineSchema({
   })
     .index("by_grouping", ["grouping"]),
   users: defineTable({
+    clerkId: v.optional(v.string()),
+    tokenIdentifier: v.optional(v.string()),
     email: v.optional(v.string()),
     emailVerificationTime: v.optional(v.float64()),
     image: v.optional(v.string()),
@@ -252,13 +254,24 @@ export default defineSchema({
     defaultStyle: v.optional(v.string()),
     defaultTone: v.optional(v.string()),
     dismissedRefineCTA: v.optional(v.boolean()),
-    subscriptionTier: v.optional(v.union(v.literal("free"), v.literal("casual"))),
+    billingSubjectType: v.optional(v.union(v.literal("user"), v.literal("organization"))),
+    billingStatus: v.optional(v.union(
+      v.literal("inactive"),
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("canceled"),
+      v.literal("trialing")
+    )),
+    clerkCustomerId: v.optional(v.string()),
+    clerkSubscriptionId: v.optional(v.string()),
     aiUsage: v.optional(v.object({
       count: v.number(),
       cycleStart: v.number(),
     })),
     newsletterSubscriptionStatus: v.optional(v.union(v.literal("subscribed"), v.literal("unsubscribed"))),
   })
+    .index("by_clerkId", ["clerkId"])
+    .index("by_tokenIdentifier", ["tokenIdentifier"])
     .index("email", ["email"])
     .index("phone", ["phone"])
     .index("by_newsletterSubscriptionStatus", ["newsletterSubscriptionStatus"]),
@@ -369,7 +382,18 @@ export default defineSchema({
     .index("by_questionId_and_status", ["questionId", "status"]),
   organizations: defineTable({
     name: v.string(),
-  }),
+    clerkOrganizationId: v.optional(v.string()),
+    clerkCustomerId: v.optional(v.string()),
+    clerkSubscriptionId: v.optional(v.string()),
+    billingStatus: v.optional(v.union(
+      v.literal("inactive"),
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("canceled"),
+      v.literal("trialing")
+    )),
+    planTier: v.optional(v.union(v.literal("free"), v.literal("team"))),
+  }).index("by_clerkOrganizationId", ["clerkOrganizationId"]),
   organization_members: defineTable({
     userId: v.id("users"),
     organizationId: v.id("organizations"),

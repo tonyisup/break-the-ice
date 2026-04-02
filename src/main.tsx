@@ -36,6 +36,9 @@ import DataRetentionPage from "./app/data-retention/page";
 import CookiePolicyPage from "./app/cookies/page";
 import AboutPage from "./app/about/page";
 import ContactPage from "./app/contact/page";
+import PricingPage from "./app/pricing/page";
+import BillingSuccessPage from "./app/billing/success/page";
+import BillingCancelPage from "./app/billing/cancel/page";
 import FeedbackButton from "./components/FeedbackButton";
 import { AnalyticsManager } from "./components/AnalyticsManager";
 import GeneratorPage from "./app/admin/generator/page.tsx";
@@ -61,6 +64,9 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/liked" element={<LikedQuestionsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/history" element={<HistoryPage />} />
+                <Route path="/pricing" element={<PricingPage />} />
+                <Route path="/billing/success" element={<BillingSuccessPage />} />
+                <Route path="/billing/cancel" element={<BillingCancelPage />} />
                 <Route path="/unsubscribe" element={<UnsubscribePage />} />
                 <Route path="/verify-subscription" element={<VerifySubscriptionPage />} />
                 <Route path="/add-question" element={<AddQuestionPage />} />

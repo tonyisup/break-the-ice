@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { ensureOrgMember } from "../auth";
+import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
 
 export const createCollection = mutation({
 	args: {
@@ -9,7 +9,7 @@ export const createCollection = mutation({
 	},
 	returns: v.id("collections"),
 	handler: async (ctx, args) => {
-		await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
+		await ensurePaidOrganizationMember(ctx, args.organizationId, ["admin", "manager"]);
 
 		const collectionId = await ctx.db.insert("collections", {
 			name: args.name,
@@ -31,7 +31,7 @@ export const addQuestionToCollection = mutation({
 		if (!collection) {
 			throw new Error("Collection not found");
 		}
-		await ensureOrgMember(ctx, collection.organizationId, ["admin", "manager"]);
+		await ensurePaidOrganizationMember(ctx, collection.organizationId, ["admin", "manager"]);
 
 		await ctx.db.insert("question_collections", {
 			questionId: args.questionId,
@@ -45,6 +45,7 @@ export const addQuestionToCollection = mutation({
 export const getCollectionsByOrganization = query({
 	args: {
 		organizationId: v.id("organizations"),
+		limit: v.optional(v.number()),
 	},
 	returns: v.array(v.object({
 		_id: v.id("collections"),
@@ -54,12 +55,13 @@ export const getCollectionsByOrganization = query({
 	})),
 	handler: async (ctx, args) => {
 		await ensureOrgMember(ctx, args.organizationId);
+		const limit = Math.min(args.limit ?? 100, 250);
 
 		return ctx.db
 			.query("collections")
 			.withIndex("by_organizationId", (q) =>
 				q.eq("organizationId", args.organizationId)
 			)
-			.collect();
+			.take(limit);
 	},
 });

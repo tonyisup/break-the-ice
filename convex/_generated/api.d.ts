@@ -24,6 +24,7 @@ import type * as auth from "../auth.js";
 import type * as clerk from "../clerk.js";
 import type * as constants from "../constants.js";
 import type * as core_ai from "../core/ai.js";
+import type * as core_billing from "../core/billing.js";
 import type * as core_collections from "../core/collections.js";
 import type * as core_feedback from "../core/feedback.js";
 import type * as core_newsletter from "../core/newsletter.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   clerk: typeof clerk;
   constants: typeof constants;
   "core/ai": typeof core_ai;
+  "core/billing": typeof core_billing;
   "core/collections": typeof core_collections;
   "core/feedback": typeof core_feedback;
   "core/newsletter": typeof core_newsletter;

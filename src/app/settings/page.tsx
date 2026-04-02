@@ -17,6 +17,7 @@ import WorkspaceSwitcher from "@/app/settings/organization/WorkspaceSwitcher";
 import CollectionsSettings from "@/app/settings/collections/page";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@clerk/clerk-react";
+import { SubscriptionDetailsButton } from "@clerk/clerk-react/experimental";
 import { MAX_ANON_BLOCKED } from "../../hooks/useStorage";
 import { SignInCTA } from "@/components/SignInCTA";
 import { Link, useSearchParams } from "react-router-dom";
@@ -35,7 +36,12 @@ const SettingsPage = () => {
     api.core.tones.getTones,
     { organizationId: activeWorkspace ?? undefined }
   );
-  const currentUser = useQuery(api.core.users.getCurrentUser, {});
+  const currentUser = useQuery(api.core.users.getCurrentUser, {
+    organizationId: activeWorkspace ?? undefined,
+  });
+  const entitlements = useQuery(api.core.billing.getEffectiveEntitlements, {
+    organizationId: activeWorkspace ?? undefined,
+  });
 
   const [searchParams] = useSearchParams();
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
@@ -195,13 +201,13 @@ const SettingsPage = () => {
                     <div>
                       <p className="text-sm text-gray-400">Current Plan</p>
                       <p className="text-xl font-bold capitalize text-white">
-                        {currentUser.subscriptionTier || 'Free'}
+                        {currentUser.planTier || 'free'}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-400">Usage this cycle</p>
                       <p className="text-xl font-bold text-white">
-                        {currentUser.aiUsage?.count ?? 0} / {currentUser.subscriptionTier === 'casual' ? import.meta.env.VITE_MAX_CASUAL_AIGEN : import.meta.env.VITE_MAX_FREE_AIGEN}
+                        {currentUser.aiUsage?.count ?? 0} / {currentUser.aiLimit}
                       </p>
                     </div>
                   </div>
@@ -210,26 +216,38 @@ const SettingsPage = () => {
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-400">AI Generations Progress</span>
                       <span className="text-white font-medium">
-                        {Math.round(((currentUser.aiUsage?.count ?? 0) / (currentUser.subscriptionTier === 'casual' ? Number(import.meta.env.VITE_MAX_CASUAL_AIGEN) : Number(import.meta.env.VITE_MAX_FREE_AIGEN))) * 100)}%
+                        {Math.round(((currentUser.aiUsage?.count ?? 0) / Math.max(1, Number(currentUser.aiLimit))) * 100)}%
                       </span>
                     </div>
                     <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
                       <div
                         className="bg-gradient-to-r from-blue-500 to-purple-600 h-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, ((currentUser.aiUsage?.count ?? 0) / (currentUser.subscriptionTier === 'casual' ? Number(import.meta.env.VITE_MAX_CASUAL_AIGEN) : Number(import.meta.env.VITE_MAX_FREE_AIGEN))) * 100)}%` }}
+                        style={{ width: `${Math.min(100, ((currentUser.aiUsage?.count ?? 0) / Math.max(1, Number(currentUser.aiLimit))) * 100)}%` }}
                       />
                     </div>
                   </div>
 
-                  {currentUser.subscriptionTier !== 'casual' && (
-                    <button
-                      onClick={() => {
-                        toast.info("Upgrade flow coming soon!");
-                      }}
-                      className="w-full bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105"
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-sm text-gray-300">
+                      {entitlements?.canUseTeamFeatures
+                        ? "Team billing is active for this workspace. Use Clerk to manage payment methods, upgrades, or cancellation."
+                        : "Free accounts can still use the personal app. Team unlocks shared workspaces, invites, collections, and higher AI limits."}
+                    </p>
+                  </div>
+
+                  {entitlements?.canUseTeamFeatures ? (
+                    <SubscriptionDetailsButton for="organization">
+                      <button className="w-full bg-gradient-to-r from-slate-100 to-white text-slate-950 rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-[1.01]">
+                        Manage Team Billing
+                      </button>
+                    </SubscriptionDetailsButton>
+                  ) : (
+                    <Link
+                      to="/pricing?source=settings"
+                      className="block w-full bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105 text-center"
                     >
-                      Upgrade to Casual Plan
-                    </button>
+                      Start Team Plan
+                    </Link>
                   )}
                 </div>
               </CollapsibleSection>

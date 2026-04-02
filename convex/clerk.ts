@@ -4,6 +4,46 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Webhook } from "svix";
 
+const normalizeBillingStatus = (subscription: any) => {
+	switch (subscription?.status) {
+		case "canceled":
+		case "ended":
+			return "canceled" as const;
+	}
+
+	const hasFreeTrial = Array.isArray(subscription?.subscriptionItems) &&
+		subscription.subscriptionItems.some((item: any) => item?.isFreeTrial);
+
+	if (hasFreeTrial) {
+		return "trialing" as const;
+	}
+
+	switch (subscription?.status) {
+		case "active":
+			return "active" as const;
+		case "past_due":
+			return "past_due" as const;
+		default:
+			return "inactive" as const;
+	}
+};
+
+const resolvePlanTier = (subscription: any) => {
+	const activeItem = subscription?.subscriptionItems?.find((item: any) =>
+		["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
+	);
+
+	if (!activeItem) {
+		return "free" as const;
+	}
+
+	if (activeItem?.plan?.isDefault) {
+		return "free" as const;
+	}
+
+	return "team" as const;
+};
+
 export const usersWebhook = httpAction(async (ctx, request) => {
 	const payloadString = await request.text();
 	const headerPayload = request.headers;
@@ -36,18 +76,45 @@ export const usersWebhook = httpAction(async (ctx, request) => {
 		console.log(`Received Clerk webhook: ${eventType}`);
 
 		if (eventType === "user.created" || eventType === "user.updated") {
-			const { id, email_addresses, first_name, last_name, image_url, public_metadata } = event.data;
+			const { id, email_addresses, first_name, last_name, image_url } = event.data;
 			const email = email_addresses[0]?.email_address;
 			const name = `${first_name || ""} ${last_name || ""}`.trim();
-			const subscriptionTier = public_metadata?.subscriptionTier || "free";
 
 			await ctx.runMutation(internal.internal.users.updateUserFromClerk, {
 				clerkId: id,
 				email,
 				name,
 				image: image_url,
-				subscriptionTier,
 			});
+		}
+
+		if (eventType.startsWith("subscription.")) {
+			const subscription = event.data;
+			const activeItem = subscription?.subscriptionItems?.find((item: any) =>
+				["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
+			);
+
+			const planTier = resolvePlanTier(subscription);
+			const billingStatus = normalizeBillingStatus(subscription);
+			const payerType = activeItem?.plan?.forPayerType;
+
+			if (payerType === "org" && subscription?.payerId) {
+				await ctx.runMutation(internal.internal.users.syncOrganizationSubscription, {
+					clerkOrganizationId: subscription.payerId,
+					planTier,
+					billingStatus,
+					clerkCustomerId: subscription.customerId,
+					clerkSubscriptionId: subscription.id,
+				});
+			} else if (payerType === "user" && subscription?.payerId) {
+				await ctx.runMutation(internal.internal.users.syncUserSubscription, {
+					clerkUserId: subscription.payerId,
+					billingStatus,
+					billingSubjectType: "user",
+					clerkCustomerId: subscription.customerId,
+					clerkSubscriptionId: subscription.id,
+				});
+			}
 		}
 
 		return new Response("Webhook processed", { status: 200 });

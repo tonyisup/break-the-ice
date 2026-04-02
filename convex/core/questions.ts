@@ -839,6 +839,7 @@ export const remixQuestionForUser = action({
 			if (!isTakeover) {
 				await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
 					userId: user._id,
+					organizationId: question.organizationId,
 				});
 				usageIncremented = true;
 			}

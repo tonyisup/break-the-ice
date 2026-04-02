@@ -368,6 +368,7 @@ export const generateAIQuestionForUser = internalAction({
 	args: {
 		userId: v.id("users"),
 		count: v.optional(v.number()),
+		organizationId: v.optional(v.id("organizations")),
 		bypassAIUsage: v.optional(v.boolean()),
 		topicId: v.optional(v.id("topics")),
 		anchoredStyleId: v.optional(v.id("styles")),
@@ -419,6 +420,7 @@ export const generateAIQuestionForUser = internalAction({
 			if (!args.bypassAIUsage) {
 				await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
 					userId: user._id,
+					organizationId: args.organizationId,
 				});
 				usageIncremented = true;
 			}
@@ -450,7 +452,10 @@ export const generateAIQuestionForUser = internalAction({
 			return result.questions as (Doc<"questions"> | null)[];
 		} catch (error) {
 			if (usageIncremented) {
-				await ctx.runMutation(internal.internal.users.decrementAIUsage, { userId: user._id });
+				await ctx.runMutation(internal.internal.users.decrementAIUsage, {
+					userId: user._id,
+					organizationId: args.organizationId,
+				});
 			}
 			throw error;
 		}
