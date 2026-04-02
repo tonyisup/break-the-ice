@@ -350,3 +350,18 @@ export const deleteTone = mutation({
     return null;
   },
 });
+
+// need to update tones with null slugs and valid ids
+export const updateTonesWithNullSlugsAndValidIds = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const tones = await ctx.db.query("tones").collect();
+    for (const tone of tones) {
+      if (!tone.slug && tone.id) {
+        await ctx.db.patch(tone._id, { slug: tone.id });
+      }
+    }
+    return null;
+  },
+});

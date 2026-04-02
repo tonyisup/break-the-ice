@@ -20,6 +20,7 @@ import type * as admin_tags from "../admin/tags.js";
 import type * as admin_tones from "../admin/tones.js";
 import type * as admin_topics from "../admin/topics.js";
 import type * as admin_users from "../admin/users.js";
+import type * as admin_zombieSlugs from "../admin/zombieSlugs.js";
 import type * as auth from "../auth.js";
 import type * as clerk from "../clerk.js";
 import type * as constants from "../constants.js";
@@ -92,6 +93,7 @@ declare const fullApi: ApiFromModules<{
   "admin/tones": typeof admin_tones;
   "admin/topics": typeof admin_topics;
   "admin/users": typeof admin_users;
+  "admin/zombieSlugs": typeof admin_zombieSlugs;
   auth: typeof auth;
   clerk: typeof clerk;
   constants: typeof constants;

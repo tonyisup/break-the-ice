@@ -45,6 +45,15 @@ crons.interval(
   internal.internal.tones.updateQuestionsWithMissingToneIds
 );
 
+// Nightly zombie slug scan: finds style/tone/topic slugs on questions
+// that no longer resolve to active taxonomy entries
+crons.interval(
+  "scan zombie taxonomy slugs",
+  { hours: 24 },
+  internal.admin.zombieSlugs.runZombieSlugScan,
+  {}
+);
+
 // Nightly question pool generation - generates fresh AI questions for daily use
 // crons.cron(
 //   "generate nightly question pool",

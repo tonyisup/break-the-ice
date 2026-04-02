@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { internalMutation, mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { Doc } from "../_generated/dataModel";
 import { defaultQualityRubric, latestActiveVersion, latestVersion } from "../lib/taxonomy";
@@ -365,6 +365,21 @@ export const deleteTopic = mutation({
     const topic = await ctx.db.get(args._id);
     if (!topic) throw new Error("Topic not found");
     await ctx.db.patch(args._id, { status: "archived", updatedAt: Date.now() });
+    return null;
+  },
+});
+
+// need to update topics with null slugs and valid ids
+export const updateTopicsWithNullSlugsAndValidIds = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const topics = await ctx.db.query("topics").collect();
+    for (const topic of topics) {
+      if (!topic.slug && topic.id) {
+        await ctx.db.patch(topic._id, { slug: topic.id });
+      }
+    }
     return null;
   },
 });

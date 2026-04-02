@@ -577,4 +577,16 @@ export default defineSchema({
     .index("by_question", ["questionId"])
     .index("by_coach_schedule", ["coachId", "scheduleId"])
     .index("by_schedule_question", ["scheduleId", "questionId"]),
+
+  // ---- Zombie slug reports ----
+  zombieSlugReports: defineTable({
+    scanTime: v.number(),
+    totalZombieSlugs: v.number(),
+    totalAffectedQuestions: v.number(),
+    details: v.array(v.object({
+      slug: v.string(),
+      type: v.string(),
+      count: v.number(),
+    })),
+  }),
 });

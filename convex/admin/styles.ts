@@ -314,3 +314,18 @@ export const reassignUserStylesBatch = internalMutation({
     return null;
   },
 });
+
+// need to update styles with null slugs and valid ids
+export const updateStylesWithNullSlugsAndValidIds = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const styles = await ctx.db.query("styles").collect();
+    for (const style of styles) {
+      if (!style.slug && style.id) {
+        await ctx.db.patch(style._id, { slug: style.id });
+      }
+    }
+    return null;
+  },
+});

@@ -58,6 +58,45 @@ const axisLabels: Record<AxisType, string> = {
   topic: "Topic",
 };
 
+/** Map a visible matrix (ySlug × xSlug) to style/tone/topic for generation (third axis optional). */
+function generationSlugsForMatrixCell(
+  axisY: AxisType,
+  axisX: AxisType,
+  ySlug: string,
+  xSlug: string,
+  styleList: Array<{ slug: string }> | undefined,
+  toneList: Array<{ slug: string }> | undefined,
+): { styleSlug: string; toneSlug: string; topicSlug?: string } {
+  let styleSlug: string | undefined;
+  let toneSlug: string | undefined;
+  let topicSlug: string | undefined;
+
+  if (axisY === "style") styleSlug = ySlug;
+  else if (axisY === "tone") toneSlug = ySlug;
+  else topicSlug = ySlug;
+
+  if (axisX === "style") styleSlug = xSlug;
+  else if (axisX === "tone") toneSlug = xSlug;
+  else topicSlug = xSlug;
+
+  const defaultStyle = styleList?.[0]?.slug;
+  const defaultTone = toneList?.[0]?.slug;
+  if (!styleSlug) {
+    if (!defaultStyle) {
+      throw new Error("At least one style is required to generate questions");
+    }
+    styleSlug = defaultStyle;
+  }
+  if (!toneSlug) {
+    if (!defaultTone) {
+      throw new Error("At least one tone is required to generate questions");
+    }
+    toneSlug = defaultTone;
+  }
+
+  return { styleSlug, toneSlug, topicSlug };
+}
+
 // ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
@@ -80,7 +119,7 @@ function computeWeekRange(weekStartDay: "monday" | "sunday", offset = 0) {
   };
 }
 
-/** Deterministic shuffle so each matrix cell gets a fresh order when remix runs. */
+/** Deterministic shuffle so each cell can pick a stable random question; Remix bumps the seed. */
 function shuffleArrayWithSeed<T>(items: T[], seed: number): T[] {
   const arr = [...items];
   let s = seed >>> 0;
@@ -515,7 +554,6 @@ const questionPool = useQuery(
 
   type PoolRow = (typeof filteredPool)[number];
   const questionMatrix = React.useMemo(() => {
-    if (filteredPool.length === 0) return null;
     const yItems =
       axisYSelected.size > 0 ? axisYItems.filter((t) => axisYSelected.has(t.id)) : axisYItems;
     const xItems =
@@ -536,12 +574,13 @@ const questionPool = useQuery(
       }
     }
 
-    if (matrixRemixGeneration > 0) {
-      for (let yi = 0; yi < yItems.length; yi++) {
-        for (let xi = 0; xi < xItems.length; xi++) {
-          const seed = matrixRemixGeneration * 1_000_000 + yi * 1_000 + xi;
-          matrix[yi][xi] = shuffleArrayWithSeed(matrix[yi][xi], seed);
-        }
+    // One question per cell: seeded pick so it stays stable until pool or Remix changes.
+    for (let yi = 0; yi < yItems.length; yi++) {
+      for (let xi = 0; xi < xItems.length; xi++) {
+        const bucket = matrix[yi][xi];
+        if (bucket.length <= 1) continue;
+        const seed = matrixRemixGeneration * 1_000_000 + yi * 1_000 + xi;
+        matrix[yi][xi] = [shuffleArrayWithSeed(bucket, seed)[0]];
       }
     }
 
@@ -564,7 +603,7 @@ const questionPool = useQuery(
       return;
     }
     setMatrixRemixGeneration((g) => g + 1);
-    toast.success("Remixed question order in the matrix");
+    toast.success("New random question per cell");
   };
 
   const handleCreateWeek = async () => {
@@ -765,36 +804,37 @@ const questionPool = useQuery(
     setIsFillingOrRegen(true);
     setIsFillingEmpty(true);
     try {
-      const styleSlugs = questionMatrix.yItems.map(y => y.slug);
-      const toneSlugs = questionMatrix.xItems.map(x => x.slug);
-      // If topic is the third axis, we need topicSlugs — for now use empty to mean "all topics"
-      // Determine which axis is the "third" one (not Y, not X)
-      const remainingAxis = (["style", "tone", "topic"] as AxisType[]).find(a => a !== axisY && a !== axisX);
-      let topicSlugs: string[] = [];
-      if (remainingAxis === "topic" && topics && topics.length > 0) {
-        topicSlugs = topics.map(t => t.slug as string);
-      } else if (remainingAxis) {
-        // The third axis is style or tone — just use all of them
-        const allItems = remainingAxis === "style" ? styles : tones;
-        topicSlugs = (allItems ?? []).map(t => t.slug as string);
-      }
-
-      // Ensure we have at least one value for each axis
-      if (styleSlugs.length === 0 || toneSlugs.length === 0) {
-        toast.error("Need axes selected to fill empty cells");
-        return;
-      }
+      const cells = questionMatrix.yItems.flatMap((y) =>
+        questionMatrix.xItems.map((x) => {
+          const gen = generationSlugsForMatrixCell(
+            axisY,
+            axisX,
+            y.slug,
+            x.slug,
+            styles,
+            tones,
+          );
+          return {
+            ySlug: y.slug,
+            xSlug: x.slug,
+            styleSlug: gen.styleSlug,
+            toneSlug: gen.toneSlug,
+            ...(gen.topicSlug !== undefined ? { topicSlug: gen.topicSlug } : {}),
+          };
+        }),
+      );
 
       const result = await fillEmptyCellsAction({
-        styleSlugs,
-        toneSlugs,
-        topicSlugs,
-        countPerCell: 3,
+        axisY,
+        axisX,
+        cells,
       });
 
-      toast.success(
-        `Filled ${result.filledCells}/${result.totalCells} cells (${result.totalQuestionsGenerated} questions generated)`
-      );
+      let msg = `Filled ${result.filledCells}/${result.totalCells} cells (${result.totalQuestionsGenerated} questions)`;
+      if (result.skippedInvalidTaxonomy > 0) {
+        msg += ` · ${result.skippedInvalidTaxonomy} skipped (deleted taxonomy)`;
+      }
+      toast.success(msg);
       setForceRefreshKey(k => k + 1);
     } catch (e: any) {
       toast.error(e.message ?? "Failed to fill empty cells");
@@ -804,15 +844,23 @@ const questionPool = useQuery(
     }
   };
 
-  const handleFillSingleCell = async (styleSlug: string, toneSlug: string, topicSlug?: string) => {
-    const cellKey = `${styleSlug}-${toneSlug}-${topicSlug ?? ""}`;
+  const handleFillSingleCell = async (ySlug: string, xSlug: string) => {
+    const cellKey = `${ySlug}-${xSlug}`;
     setFillingCellKey(cellKey);
     try {
+      const { styleSlug, toneSlug, topicSlug } = generationSlugsForMatrixCell(
+        axisY,
+        axisX,
+        ySlug,
+        xSlug,
+        styles,
+        tones,
+      );
       const result = await fillSingleCellAction({
         styleSlug,
         toneSlug,
         topicSlug,
-        count: 3,
+        count: 1,
       });
 
       toast.success(`Generated ${result.count} question${result.count !== 1 ? "s" : ""} for this cell`);
@@ -1169,25 +1217,9 @@ const questionPool = useQuery(
                   <Card key={i} className="h-[100px] animate-pulse bg-muted/30" />
                 ))}
               </div>
-            ) : filteredPool.length === 0 ? (
-              <Card className="p-8 text-center">
-                <p className="text-sm text-muted-foreground">
-                  No questions match the current filters.
-                </p>
-                <Button
-                  variant="link"
-                  className="mt-2"
-                  onClick={() => {
-                    setAxisYSelected(new Set());
-                    setAxisXSelected(new Set());
-                  }}
-                >
-                  Clear filters
-                </Button>
-              </Card>
             ) : !questionMatrix ? (
               <Card className="p-8 text-center">
-                <p className="text-sm text-muted-foreground">Loading matrix…</p>
+                <p className="text-sm text-muted-foreground">Select axis values to build the matrix.</p>
               </Card>
             ) : (
                 <div className="overflow-auto rounded-xl border">
@@ -1231,6 +1263,7 @@ const questionPool = useQuery(
                                     {q.text ?? <em className="text-muted-foreground/50">No text</em>}
                                   </p>
                                   <div className="flex flex-wrap gap-1">
+                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">{q.topic ? q.topic : q.tone ? q.tone : q.style ? q.style : "Unknown"}</Badge>
                                     {q.isAIGenerated && (
                                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">AI</Badge>
                                     )}
@@ -1265,7 +1298,13 @@ const questionPool = useQuery(
                                     variant="outline"
                                     size="sm"
                                     className="h-6 w-full text-[10px] px-1"
-                                    onClick={() => handleFillSingleCell(y.slug, x.slug)}
+                                    onClick={() => {
+                                      setFillingCellKey(cellKey);
+                                      handleFillSingleCell(y.slug, x.slug).finally(() => {
+                                        setFillingCellKey(null);
+                                      });
+                                    }}
+                                    disabled={fillingCellKey !== null}
                                   >
                                     <Sparkles className="mr-1 size-2.5" />
                                     Generate

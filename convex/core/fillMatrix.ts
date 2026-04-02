@@ -3,86 +3,132 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api } from "../_generated/api";
-import { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration } from "../lib/generationRunner";
 
+const axisValidator = v.union(
+	v.literal("style"),
+	v.literal("tone"),
+	v.literal("topic"),
+);
+
+function questionMatchesMatrixCell(
+	q: { style?: string | null; tone?: string | null; topic?: string | null },
+	axisY: "style" | "tone" | "topic",
+	axisX: "style" | "tone" | "topic",
+	ySlug: string,
+	xSlug: string,
+): boolean {
+	const qY = axisY === "style" ? q.style : axisY === "tone" ? q.tone : q.topic;
+	const qX = axisX === "style" ? q.style : axisX === "tone" ? q.tone : q.topic;
+	return qY === ySlug && qX === xSlug;
+}
+
+/** Helper: check if a cell (styleSlug × toneSlug × topicSlug) already has >= maxCount public questions */
+async function cellHasEnough(
+	ctx: any,
+	styleSlug: string,
+	toneSlug: string,
+	topicSlug: string | undefined,
+	maxCount: number,
+): Promise<boolean> {
+	const comboKey = `${styleSlug}|${toneSlug}|${topicSlug ?? ""}`;
+	let found = 0;
+	// Scan public questions in batches (limit 5000 per call, should cover most setups)
+	const allPublic = await ctx.runQuery(
+		api.core.questions.getPublicQuestions,
+		{ limit: 5000 }
+	);
+	for (const q of allPublic) {
+		const qKey = `${q.style ?? ""}|${q.tone ?? ""}|${q.topic ?? ""}`;
+		if (qKey === comboKey) {
+			found++;
+			if (found >= maxCount) return true;
+		}
+	}
+	return false;
+}
+
 /**
- * Fill all empty cells in the axis matrix by generating AI questions.
- * Each cell = one style × tone × topic combination.
- * Only generates for combos that have zero public questions.
+ * Fill empty cells on the 2D schedule matrix (one generation per visible cell).
+ * Each entry matches how the UI buckets questions: same axis-Y slug and axis-X slug,
+ * regardless of the third taxonomy dimension.
  */
 export const fillEmptyCells = action({
 	args: {
-		styleSlugs: v.array(v.string()),
-		toneSlugs: v.array(v.string()),
-		topicSlugs: v.array(v.string()),
+		axisY: axisValidator,
+		axisX: axisValidator,
+		cells: v.array(
+			v.object({
+				ySlug: v.string(),
+				xSlug: v.string(),
+				styleSlug: v.string(),
+				toneSlug: v.string(),
+				topicSlug: v.optional(v.string()),
+			}),
+		),
 		countPerCell: v.optional(v.number()),
 	},
 	returns: v.object({
 		totalCells: v.number(),
 		filledCells: v.number(),
 		totalQuestionsGenerated: v.number(),
-		skippedCells: v.number(),
+		skippedExisting: v.number(),       // cell already has questions
+		skippedInvalidTaxonomy: v.number(), // slug doesn't resolve to active entry
 	}),
 	handler: async (ctx, args) => {
-		const countPerCell = args.countPerCell ?? 3;
+		const countPerCell = args.countPerCell ?? 1;
 		let totalCells = 0;
 		let filledCells = 0;
-		let skippedCells = 0;
+		let skippedExisting = 0;
+		let skippedInvalidTaxonomy = 0;
 		let totalGenerated = 0;
 
-		// Fetch ALL public questions ONCE, then build a lookup set.
-		// This avoids the N+1 limit=1 bug where a random question
-		// could belong to a different cell.
 		const allPublic = await ctx.runQuery(
 			api.core.questions.getPublicQuestions,
-			{ limit: 1000 }
+			{ limit: 5000 }
 		);
 
-		// Build a Set of existing combos: "styleSlug|toneSlug|topicSlug"
-		const existingCombos = new Set<string>();
-		for (const q of allPublic) {
-			const key = `${q.style ?? ""}|${q.tone ?? ""}|${q.topic ?? ""}`;
-			existingCombos.add(key);
-		}
+		for (const cell of args.cells) {
+			totalCells++;
 
-		for (const styleSlug of args.styleSlugs) {
-			for (const toneSlug of args.toneSlugs) {
-				for (const topicSlug of args.topicSlugs) {
-					totalCells++;
+			const hasAnyInCell = allPublic.some((q) =>
+				questionMatchesMatrixCell(q, args.axisY, args.axisX, cell.ySlug, cell.xSlug),
+			);
+			if (hasAnyInCell) {
+				skippedExisting++;
+				continue;
+			}
 
-					const comboKey = `${styleSlug}|${toneSlug}|${topicSlug}`;
-					if (existingCombos.has(comboKey)) {
-						skippedCells++;
-						continue;
-					}
+			try {
+				const result = await runPersistedQuestionGeneration(ctx, {
+					purpose: "feed",
+					styleSlug: cell.styleSlug,
+					toneSlug: cell.toneSlug,
+					topicSlug: cell.topicSlug,
+					batchSize: countPerCell,
+				});
 
-					try {
-						const result = await runPersistedQuestionGeneration(ctx, {
-							purpose: "feed",
-							styleSlug,
-							toneSlug,
-							topicSlug,
-							batchSize: countPerCell,
-						});
-
-						if (result.saveResult.insertedCount > 0) {
-							filledCells++;
-							totalGenerated += result.saveResult.insertedCount;
-
-							// Mark this combo as filled so we don't double-generate
-							existingCombos.add(comboKey);
-
-							console.log(
-								`Filled cell: ${styleSlug} × ${toneSlug} × ${topicSlug} → ${result.saveResult.insertedCount} questions`
-							);
-						} else {
-							skippedCells++;
-						}
-					} catch (err) {
-						console.error(`Failed to fill cell: ${styleSlug} × ${toneSlug} × ${topicSlug}`, err);
-						skippedCells++;
-					}
+				if (result.saveResult.insertedCount > 0) {
+					filledCells++;
+					totalGenerated += result.saveResult.insertedCount;
+					console.log(
+						`Filled matrix cell (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug}) → ${result.saveResult.insertedCount} questions`,
+					);
+				} else {
+					skippedExisting++;
+				}
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				if (msg.includes("No active") && msg.includes("entry found for slug")) {
+					skippedInvalidTaxonomy++;
+					console.warn(
+						`Skipped (invalid taxonomy): (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug}) — ${msg}`,
+					);
+				} else {
+					console.error(
+						`Failed to fill cell: (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug})`,
+						err,
+					);
 				}
 			}
 		}
@@ -91,14 +137,15 @@ export const fillEmptyCells = action({
 			totalCells,
 			filledCells,
 			totalQuestionsGenerated: totalGenerated,
-			skippedCells,
+			skippedExisting,
+			skippedInvalidTaxonomy,
 		};
 	},
 });
 
 /**
- * Generate questions for a single empty cell.
- * Used when a user clicks "Generate" on an individual empty matrix cell.
+ * Generate questions for a single cell.
+ * Guarded: skips if the cell already has 5+ questions.
  */
 export const fillSingleCell = action({
 	args: {
@@ -112,6 +159,11 @@ export const fillSingleCell = action({
 		questionIds: v.array(v.id("questions")),
 	}),
 	handler: async (ctx, args) => {
+		// Hard guard: don't generate if cell already has 5+ questions
+		if (await cellHasEnough(ctx, args.styleSlug, args.toneSlug, args.topicSlug, 5)) {
+			return { count: 0, questionIds: [] };
+		}
+
 		const result = await runPersistedQuestionGeneration(ctx, {
 			purpose: "feed",
 			styleSlug: args.styleSlug,
