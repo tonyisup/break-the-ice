@@ -321,6 +321,27 @@ export default function OrgWeeklyCurationPage() {
   const [axisYSelected, setAxisYSelected] = React.useState<Set<string>>(new Set());
   const [axisXSelected, setAxisXSelected] = React.useState<Set<string>>(new Set());
 
+  /* --- Auto-seed 5 random items per axis on first data load --- */
+  const MAX_AXIS_ITEMS = 5;
+  const axisYSeededRef = React.useRef(false);
+  const axisXSeededRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!axisYSeededRef.current && styles && styles.length > 5 && axisY === "style") {
+      const shuffled = [...styles].sort(() => Math.random() - 0.5).slice(0, MAX_AXIS_ITEMS);
+      setAxisYSelected(new Set(shuffled.map(s => s.id)));
+      axisYSeededRef.current = true;
+    }
+  }, [styles, axisY]);
+
+  React.useEffect(() => {
+    if (!axisXSeededRef.current && tones && tones.length > 5 && axisX === "tone") {
+      const shuffled = [...tones].sort(() => Math.random() - 0.5).slice(0, MAX_AXIS_ITEMS);
+      setAxisXSelected(new Set(shuffled.map(t => t.id)));
+      axisXSeededRef.current = true;
+    }
+  }, [tones, axisX]);
+
   /* --- UI state --- */
   const [assignTargetDay, setAssignTargetDay] = React.useState<string | null>(null);
 
@@ -679,16 +700,46 @@ export default function OrgWeeklyCurationPage() {
 
   const toggleY = (id: string) =>
     setAxisYSelected((prev) => {
+      if (prev.has(id)) {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      }
+      if (prev.size >= MAX_AXIS_ITEMS) return prev; // cap at 5
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.add(id);
       return next;
     });
+
   const toggleX = (id: string) =>
     setAxisXSelected((prev) => {
+      if (prev.has(id)) {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      }
+      if (prev.size >= MAX_AXIS_ITEMS) return prev;
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.add(id);
       return next;
     });
+
+  const remixAxes = () => {
+    const allY = axisY === "style" ? styles : axisY === "tone" ? tones : topics;
+    const allX = axisX === "style" ? styles : axisX === "tone" ? tones : topics;
+
+    if (allY && allY.length > 0) {
+      const shuffled = [...allY].sort(() => Math.random() - 0.5).slice(0, MAX_AXIS_ITEMS);
+      setAxisYSelected(new Set(shuffled.map(t => t.id)));
+      axisYSeededRef.current = true;
+    }
+    if (allX && allX.length > 0) {
+      const shuffled = [...allX].sort(() => Math.random() - 0.5).slice(0, MAX_AXIS_ITEMS);
+      setAxisXSelected(new Set(shuffled.map(t => t.id)));
+      axisXSeededRef.current = true;
+    }
+    toast.success("Axes reshuffled");
+  };
 
   /* Already-assigned question IDs */
   const assignedIds = React.useMemo(
@@ -853,7 +904,15 @@ export default function OrgWeeklyCurationPage() {
                       className="flex-1 text-xs px-1"
                       onClick={() => {
                         setAxisY(t);
-                        setAxisYSelected(new Set());
+                        // Auto-seed 5 random from the new axis type
+                        const allItems = t === "style" ? styles : t === "tone" ? tones : topics;
+                        if (allItems && allItems.length > 0) {
+                          const shuffled = [...allItems].sort(() => Math.random() - 0.5).slice(0, MAX_AXIS_ITEMS);
+                          setAxisYSelected(new Set(shuffled.map(item => item.id)));
+                          axisYSeededRef.current = true;
+                        } else {
+                          setAxisYSelected(new Set());
+                        }
                       }}
                     >
                       {axisLabels[t]}
@@ -884,7 +943,15 @@ export default function OrgWeeklyCurationPage() {
                       className="flex-1 text-xs px-1"
                       onClick={() => {
                         setAxisX(t);
-                        setAxisXSelected(new Set());
+                        // Auto-seed 5 random from the new axis type
+                        const allItems = t === "style" ? styles : t === "tone" ? tones : topics;
+                        if (allItems && allItems.length > 0) {
+                          const shuffled = [...allItems].sort(() => Math.random() - 0.5).slice(0, MAX_AXIS_ITEMS);
+                          setAxisXSelected(new Set(shuffled.map(item => item.id)));
+                          axisXSeededRef.current = true;
+                        } else {
+                          setAxisXSelected(new Set());
+                        }
                       }}
                     >
                       {axisLabels[t]}
@@ -901,9 +968,19 @@ export default function OrgWeeklyCurationPage() {
 
               <Separator />
 
-              {/* Generate Week button */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                onClick={remixAxes}
+              >
+                <Shuffle className="mr-1.5 size-3.5" />
+                Shuffle Axes
+              </Button>
+
               <Separator />
 
+              {/* Generate Week button */}
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Generate</p>
                 <Button
