@@ -1,6 +1,42 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { getEffectivePlanForUser } from "../auth";
+import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
+
+type OrganizationRole = "admin" | "manager" | "member";
+
+const normalizeClerkRole = (role?: string | null): OrganizationRole | null =>
+  role === "org:admin" || role === "admin"
+    ? "admin"
+    : role === "org:manager" || role === "manager"
+      ? "manager"
+      : role === "org:member" || role === "member"
+        ? "member"
+        : null;
+
+const getActiveClerkOrganization = (identity: Record<string, unknown>) => {
+  const orgClaim = identity.o;
+  const nestedOrg = orgClaim && typeof orgClaim === "object" && !Array.isArray(orgClaim)
+    ? orgClaim as Record<string, unknown>
+    : null;
+
+  const organizationId = typeof identity.org_id === "string"
+    ? identity.org_id
+    : typeof nestedOrg?.id === "string"
+      ? nestedOrg.id
+      : null;
+
+  const roleValue = typeof identity.org_role === "string"
+    ? identity.org_role
+    : typeof nestedOrg?.rol === "string"
+      ? nestedOrg.rol
+      : null;
+
+  return {
+    clerkOrganizationId: organizationId,
+    role: normalizeClerkRole(roleValue),
+  };
+};
 
 export const getEffectiveEntitlements = query({
   args: {
@@ -13,10 +49,11 @@ export const getEffectiveEntitlements = query({
       return null;
     }
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
+    const user = await findCanonicalUser(ctx, {
+      clerkId: identity.subject,
+      tokenIdentifier: identity.tokenIdentifier,
+      email: identity.email,
+    });
 
     if (!user) {
       return null;
@@ -38,14 +75,9 @@ export const getEffectiveEntitlements = query({
   },
 });
 
-// TODO: This mutation accepts clerkOrganizationId, name, and role from the client
-// without server-side verification against Clerk. Consider converting to internalMutation
-// invoked only from a webhook, or call Clerk's server-side API to verify membership and role.
 export const syncOrganizationFromClerk = mutation({
   args: {
-    clerkOrganizationId: v.string(),
     name: v.string(),
-    role: v.optional(v.string()),
   },
   returns: v.id("organizations"),
   handler: async (ctx, args) => {
@@ -54,26 +86,20 @@ export const syncOrganizationFromClerk = mutation({
       throw new Error("Not authenticated");
     }
 
-    let user = await ctx.db
-      .query("users")
-      .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
-
-    if (!user) {
-      const userId = await ctx.db.insert("users", {
-        clerkId: identity.subject,
-        tokenIdentifier: identity.tokenIdentifier,
-        email: identity.email,
-        name: identity.name ?? identity.email,
-        image: identity.pictureUrl,
-        billingStatus: "inactive",
-        aiUsage: { count: 0, cycleStart: Date.now() },
-      });
-      user = await ctx.db.get(userId);
-    } else if (user.tokenIdentifier !== identity.tokenIdentifier) {
-      await ctx.db.patch(user._id, { tokenIdentifier: identity.tokenIdentifier });
-      user = await ctx.db.get(user._id);
+    const activeOrganization = getActiveClerkOrganization(identity as Record<string, unknown>);
+    if (!activeOrganization.clerkOrganizationId || !activeOrganization.role) {
+      throw new Error("No active Clerk organization found for this user");
     }
+    const clerkOrganizationId = activeOrganization.clerkOrganizationId;
+    const organizationRole = activeOrganization.role;
+
+    const user = await getOrCreateCanonicalUser(ctx, {
+      clerkId: identity.subject,
+      tokenIdentifier: identity.tokenIdentifier,
+      email: identity.email,
+      name: identity.name ?? identity.email,
+      image: identity.pictureUrl,
+    });
 
     if (!user) {
       throw new Error("Failed to sync current user");
@@ -81,13 +107,13 @@ export const syncOrganizationFromClerk = mutation({
 
     let organization = await ctx.db
       .query("organizations")
-      .withIndex("by_clerkOrganizationId", (q) => q.eq("clerkOrganizationId", args.clerkOrganizationId))
+      .withIndex("by_clerkOrganizationId", (q) => q.eq("clerkOrganizationId", clerkOrganizationId))
       .unique();
 
     if (!organization) {
       const organizationId = await ctx.db.insert("organizations", {
         name: args.name,
-        clerkOrganizationId: args.clerkOrganizationId,
+        clerkOrganizationId,
         planTier: "free",
         billingStatus: "inactive",
       });
@@ -108,25 +134,14 @@ export const syncOrganizationFromClerk = mutation({
       )
       .unique();
 
-    const normalizedRole =
-      args.role === "org:admin" || args.role === "admin"
-        ? "admin"
-        : args.role === "org:member" || args.role === "member"
-          ? "member"
-          : "member";
-
-    if (args.role && !["org:admin", "admin", "org:member", "member"].includes(args.role)) {
-      console.warn(`Unexpected Clerk organization role "${args.role}", defaulting to member.`);
-    }
-
     if (!existingMembership) {
       await ctx.db.insert("organization_members", {
         userId: user._id,
         organizationId: organization._id,
-        role: normalizedRole,
+        role: organizationRole,
       });
-    } else if (existingMembership.role !== normalizedRole) {
-      await ctx.db.patch(existingMembership._id, { role: normalizedRole });
+    } else if (existingMembership.role !== organizationRole) {
+      await ctx.db.patch(existingMembership._id, { role: organizationRole });
     }
 
     return organization._id;

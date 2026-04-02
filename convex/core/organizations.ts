@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
+import { findCanonicalUser } from "../lib/users";
 
 export const createOrganization = mutation({
 	args: {
@@ -13,10 +14,11 @@ export const createOrganization = mutation({
 			throw new Error("Called createOrganization without authentication.");
 		}
 
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
+		const user = await findCanonicalUser(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
 
 		if (!user) {
 			throw new Error("User not found");
@@ -71,10 +73,11 @@ export const acceptInvitation = mutation({
 			throw new Error("Called acceptInvitation without authentication.");
 		}
 
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
+		const user = await findCanonicalUser(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
 
 		if (!user) {
 			throw new Error("User not found");
@@ -121,10 +124,11 @@ export const getOrganizations = query({
 			return [];
 		}
 
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
+		const user = await findCanonicalUser(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
 
 		if (!user) {
 			return [];

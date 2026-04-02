@@ -1,5 +1,6 @@
 import { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { findCanonicalUser } from "./lib/users";
 
 export type BillingStatus =
   | "inactive"
@@ -37,10 +38,11 @@ export const ensureOrgMember = async (
     throw new Error("Not authenticated");
   }
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("email", (q: any) => q.eq("email", identity.email))
-    .unique();
+  const user = await findCanonicalUser(ctx, {
+    clerkId: identity.subject,
+    tokenIdentifier: identity.tokenIdentifier,
+    email: identity.email,
+  });
 
   if (!user) {
     throw new Error("User not found");

@@ -494,4 +494,87 @@ export default defineSchema({
     userId: v.id("users"),
     embedding: v.array(v.float64()),
   }).index("by_userId", ["userId"]),
+
+  // ---- B2B Weekly Curation (new) ----
+  orgSettings: defineTable({
+    organizationId: v.id("organizations"),
+    weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
+    defaultAxisY: v.optional(v.union(
+      v.literal("style"), v.literal("tone"), v.literal("topic")
+    )),
+    defaultAxisX: v.optional(v.union(
+      v.literal("style"), v.literal("tone"), v.literal("topic")
+    )),
+  })
+    .index("by_org", ["organizationId"]),
+
+  schedules: defineTable({
+    organizationId: v.id("organizations"),
+    weekStart: v.string(),       // ISO date, e.g. "2026-04-06"
+    weekEnd: v.string(),         // ISO date, computed from weekStart + 6
+    status: v.union(
+      v.literal("draft"),
+      v.literal("published"),
+      v.literal("completed")
+    ),
+    weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
+    axisY: v.optional(v.union(
+      v.literal("style"), v.literal("tone"), v.literal("topic")
+    )),
+    axisYSlugs: v.optional(v.array(v.string())),
+    axisX: v.optional(v.union(
+      v.literal("style"), v.literal("tone"), v.literal("topic")
+    )),
+    axisXSlugs: v.optional(v.array(v.string())),
+    axisOverall: v.optional(v.union(
+      v.literal("style"), v.literal("tone"), v.literal("topic"), v.literal("random")
+    )),
+    axisOverallSlug: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    publishedAt: v.optional(v.number()),
+    createdBy: v.optional(v.id("users")),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_weekStart", ["organizationId", "weekStart"])
+    .index("by_org_status", ["organizationId", "status"]),
+
+  scheduledQuestions: defineTable({
+    scheduleId: v.id("schedules"),
+    dayOfWeek: v.union(
+      v.literal("monday"), v.literal("tuesday"), v.literal("wednesday"),
+      v.literal("thursday"), v.literal("friday"), v.literal("saturday"), v.literal("sunday")
+    ),
+    questionId: v.id("questions"),
+    slotOrder: v.number(),
+    assignedAt: v.number(),
+    assignedBy: v.optional(v.id("users")),
+    generationRunId: v.optional(v.id("generationRuns")),
+  })
+    .index("by_schedule", ["scheduleId"])
+    .index("by_schedule_day", ["scheduleId", "dayOfWeek"])
+    .index("by_question", ["questionId"])
+    .index("by_schedule_day_order", ["scheduleId", "dayOfWeek", "slotOrder"]),
+
+  coachFeedback: defineTable({
+    scheduleId: v.id("schedules"),
+    scheduledQuestionId: v.id("scheduledQuestions"),
+    questionId: v.id("questions"),
+    coachId: v.id("users"),
+    dayOfWeek: v.union(
+      v.literal("monday"), v.literal("tuesday"), v.literal("wednesday"),
+      v.literal("thursday"), v.literal("friday"), v.literal("saturday"), v.literal("sunday")
+    ),
+    landedWell: v.optional(v.boolean()),
+    fellFlat: v.optional(v.boolean()),
+    wrongVibe: v.optional(v.boolean()),
+    timingOff: v.optional(v.boolean()),
+    notes: v.optional(v.string()),
+    submittedAt: v.number(),
+  })
+    .index("by_schedule", ["scheduleId"])
+    .index("by_coach", ["coachId"])
+    .index("by_question", ["questionId"])
+    .index("by_coach_schedule", ["coachId", "scheduleId"])
+    .index("by_schedule_question", ["scheduleId", "questionId"]),
 });

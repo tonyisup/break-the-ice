@@ -1,10 +1,10 @@
 import { v, ConvexError } from "convex/values";
 import { internalMutation, internalQuery, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
-import { Doc } from "../_generated/dataModel";
 import { ERROR_MESSAGES, ERROR_CODES } from "../constants";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { getEffectivePlanForUser } from "../auth";
+import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
 
 export const userValidator = v.object({
 	_id: v.id("users"),
@@ -47,10 +47,7 @@ export const getUserById = internalQuery({
 export const getUserByEmail = internalQuery({
 	args: { email: v.string() },
 	handler: async (ctx, args) => {
-		return await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", args.email))
-			.unique();
+		return await findCanonicalUser(ctx, { email: args.email });
 	},
 });
 
@@ -62,27 +59,12 @@ export const updateUserFromClerk = internalMutation({
 		image: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", args.email))
-			.unique();
-
-		if (user) {
-			await ctx.db.patch(user._id, {
-				clerkId: args.clerkId,
-				name: args.name,
-				image: args.image,
-			});
-		} else if (args.email) {
-			await ctx.db.insert("users", {
-				clerkId: args.clerkId,
-				name: args.name,
-				email: args.email,
-				image: args.image,
-				billingStatus: "inactive",
-				aiUsage: { count: 0, cycleStart: Date.now() },
-			});
-		}
+		await getOrCreateCanonicalUser(ctx, {
+			clerkId: args.clerkId,
+			email: args.email,
+			name: args.name,
+			image: args.image,
+		});
 	},
 });
 
@@ -92,10 +74,7 @@ export const setNewsletterStatus = internalMutation({
 		status: v.union(v.literal("subscribed"), v.literal("unsubscribed")),
 	},
 	handler: async (ctx, args) => {
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", args.email))
-			.unique();
+		const user = await findCanonicalUser(ctx, { email: args.email });
 
 		if (user) {
 			await ctx.db.patch(user._id, {

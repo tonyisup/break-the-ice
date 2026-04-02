@@ -41,9 +41,7 @@ export function ClerkSyncManager() {
     lastOrgKeyRef.current = syncKey;
 
     void syncOrganization({
-      clerkOrganizationId: orgId,
       name: organization.name,
-      role: orgRole ?? undefined,
     }).then((organizationId) => {
       setActiveWorkspace(organizationId);
     }).catch(() => {
