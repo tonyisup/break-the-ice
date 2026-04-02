@@ -940,7 +940,7 @@ export default function OrgWeeklyCurationPage() {
           {/* Weekly schedule grid */}
           <section>
             <h2 className="text-lg font-semibold mb-3">Weekly Schedule</h2>
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
               {dayRows.map((row) => (
                 <DaySlot
                   key={row.key}
