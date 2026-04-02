@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -306,9 +307,20 @@ export default function OrgWeeklyCurationPage() {
     currentSchedule ? { scheduleId: currentSchedule._id } : "skip"
   );
 
-  const questionPool = useQuery(
+  /* --- Polling: refetch pool questions every 2s while filling to show updates --- */
+const [forceRefreshKey, setForceRefreshKey] = React.useState(0);
+const [isFillingOrRegen, setIsFillingOrRegen] = React.useState(false);
+React.useEffect(() => {
+    if (!isFillingOrRegen) return;
+    const interval = setInterval(() => {
+      setForceRefreshKey((k) => k + 1);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isFillingOrRegen]);
+
+const questionPool = useQuery(
     api.core.questions.getPublicQuestions,
-    isSignedIn ? { limit: 200 } : "skip"
+    isSignedIn ? { limit: 200, generationKey: forceRefreshKey } : "skip"
   );
 
   /* --- Axis filter state --- */
@@ -354,6 +366,12 @@ export default function OrgWeeklyCurationPage() {
   const upsertSettings = useMutation(api.core.orgSettings.upsertOrgSettings);
   const syncOrg = useMutation(api.core.billing.syncOrganizationFromClerk);
   const syncOrgViaClerkApi = useAction(api.core.billingSyncAction.syncOrganizationViaClerkApi);
+  const fillEmptyCellsAction = useAction(api.core.fillMatrix.fillEmptyCells);
+  const fillSingleCellAction = useAction(api.core.fillMatrix.fillSingleCell);
+
+  /* Generation state */
+  const [isFillingEmpty, setIsFillingEmpty] = React.useState(false);
+  const [fillingCellKey, setFillingCellKey] = React.useState<string | null>(null);
 
   /* Clerk → Convex sync when session has an org but workspace id is not set yet */
   React.useEffect(() => {
@@ -741,6 +759,71 @@ export default function OrgWeeklyCurationPage() {
     toast.success("Axes reshuffled");
   };
 
+  /* --- Fill empty cells in the matrix --- */
+  const handleFillEmptyCells = async () => {
+    if (!questionMatrix) return;
+    setIsFillingOrRegen(true);
+    setIsFillingEmpty(true);
+    try {
+      const styleSlugs = questionMatrix.yItems.map(y => y.slug);
+      const toneSlugs = questionMatrix.xItems.map(x => x.slug);
+      // If topic is the third axis, we need topicSlugs — for now use empty to mean "all topics"
+      // Determine which axis is the "third" one (not Y, not X)
+      const remainingAxis = (["style", "tone", "topic"] as AxisType[]).find(a => a !== axisY && a !== axisX);
+      let topicSlugs: string[] = [];
+      if (remainingAxis === "topic" && topics && topics.length > 0) {
+        topicSlugs = topics.map(t => t.slug as string);
+      } else if (remainingAxis) {
+        // The third axis is style or tone — just use all of them
+        const allItems = remainingAxis === "style" ? styles : tones;
+        topicSlugs = (allItems ?? []).map(t => t.slug as string);
+      }
+
+      // Ensure we have at least one value for each axis
+      if (styleSlugs.length === 0 || toneSlugs.length === 0) {
+        toast.error("Need axes selected to fill empty cells");
+        return;
+      }
+
+      const result = await fillEmptyCellsAction({
+        styleSlugs,
+        toneSlugs,
+        topicSlugs,
+        countPerCell: 3,
+      });
+
+      toast.success(
+        `Filled ${result.filledCells}/${result.totalCells} cells (${result.totalQuestionsGenerated} questions generated)`
+      );
+      setForceRefreshKey(k => k + 1);
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to fill empty cells");
+    } finally {
+      setIsFillingEmpty(false);
+      setIsFillingOrRegen(false);
+    }
+  };
+
+  const handleFillSingleCell = async (styleSlug: string, toneSlug: string, topicSlug?: string) => {
+    const cellKey = `${styleSlug}-${toneSlug}-${topicSlug ?? ""}`;
+    setFillingCellKey(cellKey);
+    try {
+      const result = await fillSingleCellAction({
+        styleSlug,
+        toneSlug,
+        topicSlug,
+        count: 3,
+      });
+
+      toast.success(`Generated ${result.count} question${result.count !== 1 ? "s" : ""} for this cell`);
+      setForceRefreshKey(k => k + 1);
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to generate for this cell");
+    } finally {
+      setFillingCellKey(null);
+    }
+  };
+
   /* Already-assigned question IDs */
   const assignedIds = React.useMemo(
     () => new Set(Object.values(assignmentsByDay).filter(Boolean).map((a) => a!.questionId)),
@@ -1037,25 +1120,47 @@ export default function OrgWeeklyCurationPage() {
             </div>
           </section>
 
-          {/* Question pool — axisY rows × axisX cols matrix */}
+          {/* Question pool — axis matrix */}
           <section>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold">Question Matrix</h2>
-              {assignTargetDay && (
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline">
-                    Assigning to {DAYS_DISPLAY.find((d) => d.key === assignTargetDay)?.label}
-                  </Badge>
+              <div className="flex items-center gap-2">
+                {questionMatrix && (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="h-6 px-2 text-xs"
-                    onClick={() => setAssignTargetDay(null)}
+                    disabled={isFillingEmpty}
+                    onClick={handleFillEmptyCells}
                   >
-                    <X className="size-3 mr-1" /> Cancel
+                    {isFillingEmpty ? (
+                      <>
+                        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                        Filling…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-1.5 size-3.5" />
+                        Fill Empty Cells
+                      </>
+                    )}
                   </Button>
-                </div>
-              )}
+                )}
+                {assignTargetDay && (
+                  <>
+                    <Badge variant="outline">
+                      Assigning to {DAYS_DISPLAY.find((d) => d.key === assignTargetDay)?.label}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setAssignTargetDay(null)}
+                    >
+                      <X className="size-3 mr-1" /> Cancel
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
 
             {questionPool === undefined ? (
@@ -1113,6 +1218,9 @@ export default function OrgWeeklyCurationPage() {
                       </div>
                       {questionMatrix.xItems.map((x, xIndex) => {
                         const cellQs = questionMatrix.matrix[yIndex][xIndex] ?? [];
+                        const cellKey = `${y.slug}-${x.slug}`;
+                        const isCellFilling = fillingCellKey === cellKey;
+
                         return (
                           <div key={`${y.id}-${x.id}`} className="min-h-[60px] bg-background p-1.5 space-y-1.5">
                             {cellQs.map(q => {
@@ -1143,6 +1251,28 @@ export default function OrgWeeklyCurationPage() {
                                 </div>
                               );
                             })}
+
+                            {/* Empty cell — show Generate button or loading */}
+                            {cellQs.length === 0 && (
+                              <div className="flex flex-col items-center justify-center min-h-[40px] gap-1">
+                                {isCellFilling ? (
+                                  <>
+                                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                                    <span className="text-[9px] text-muted-foreground">Generating…</span>
+                                  </>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 w-full text-[10px] px-1"
+                                    onClick={() => handleFillSingleCell(y.slug, x.slug)}
+                                  >
+                                    <Sparkles className="mr-1 size-2.5" />
+                                    Generate
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}

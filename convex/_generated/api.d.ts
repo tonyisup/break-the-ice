@@ -29,6 +29,7 @@ import type * as core_billingSyncAction from "../core/billingSyncAction.js";
 import type * as core_coachFeedback from "../core/coachFeedback.js";
 import type * as core_collections from "../core/collections.js";
 import type * as core_feedback from "../core/feedback.js";
+import type * as core_fillMatrix from "../core/fillMatrix.js";
 import type * as core_newsletter from "../core/newsletter.js";
 import type * as core_orgSettings from "../core/orgSettings.js";
 import type * as core_organizations from "../core/organizations.js";
@@ -100,6 +101,7 @@ declare const fullApi: ApiFromModules<{
   "core/coachFeedback": typeof core_coachFeedback;
   "core/collections": typeof core_collections;
   "core/feedback": typeof core_feedback;
+  "core/fillMatrix": typeof core_fillMatrix;
   "core/newsletter": typeof core_newsletter;
   "core/orgSettings": typeof core_orgSettings;
   "core/organizations": typeof core_organizations;

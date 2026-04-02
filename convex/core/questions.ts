@@ -465,6 +465,7 @@ export const getQuestionsByIds = query({
 export const getPublicQuestions = query({
 	args: {
 		limit: v.optional(v.number()),
+		generationKey: v.optional(v.number()),
 	},
 	returns: v.array(v.object({
 		_id: v.id("questions"),
