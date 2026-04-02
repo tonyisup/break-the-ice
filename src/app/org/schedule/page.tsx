@@ -29,6 +29,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -551,14 +552,26 @@ export default function OrgWeeklyCurationPage() {
   if (!orgId) {
     if (orgContextLoading) {
       return (
-        <div className="flex flex-col items-center justify-center py-24 gap-4">
+        <div className="relative flex flex-col items-center justify-center py-24 gap-4">
+          <div className="absolute top-0 right-0">
+            <ThemeToggle
+              className="shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+              showLabel={false}
+            />
+          </div>
           <CalendarDays className="size-12 text-muted-foreground/30 animate-pulse" />
           <p className="text-sm text-muted-foreground">Loading workspace…</p>
         </div>
       );
     }
     return (
-      <div className="space-y-6 max-w-lg mx-auto py-12">
+      <div className="relative space-y-6 max-w-lg mx-auto py-12">
+        <div className="absolute top-0 right-0">
+          <ThemeToggle
+            className="shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+            showLabel={false}
+          />
+        </div>
         <div className="text-center">
           <CalendarDays className="size-12 mx-auto opacity-20 mb-4" />
           <h1 className="text-2xl font-bold tracking-tight">No organization found</h1>
@@ -577,7 +590,7 @@ export default function OrgWeeklyCurationPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -586,7 +599,11 @@ export default function OrgWeeklyCurationPage() {
             Set and preview ice-breaker questions for the week.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <ThemeToggle
+            className="shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+            showLabel={false}
+          />
           {/* Week nav */}
           <div className="flex items-center gap-1">
             <Button
