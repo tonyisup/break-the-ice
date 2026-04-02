@@ -1,6 +1,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import { api } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 
 test("syncOrganizationFromClerk uses active Clerk org claims for membership role", async () => {
@@ -24,10 +25,10 @@ test("syncOrganizationFromClerk uses active Clerk org claims for membership role
     },
   };
 
-  const organizationId = await t.withIdentity(identity).mutation(
+  const organizationId = (await t.withIdentity(identity).mutation(
     api.core.billing.syncOrganizationFromClerk,
     { name: "Acme Workspace" },
-  );
+  )) as Id<"organizations">;
 
   await t.run(async (ctx) => {
     const user = await ctx.db.get(userId);
@@ -35,7 +36,7 @@ test("syncOrganizationFromClerk uses active Clerk org claims for membership role
     const membership = await ctx.db
       .query("organization_members")
       .withIndex("by_userId_organizationId", (q) =>
-        q.eq("userId", userId).eq("organizationId", organizationId),
+        q.eq("userId", userId).eq("organizationId", organizationId!),
       )
       .unique();
 
@@ -46,16 +47,47 @@ test("syncOrganizationFromClerk uses active Clerk org claims for membership role
   });
 });
 
-test("syncOrganizationFromClerk rejects users without an active Clerk organization", async () => {
+test("syncOrganizationFromClerk defaults role to member when org claim has no rol", async () => {
   const t = convexTest(schema);
 
-  await expect(
-    t.withIdentity({
-      subject: "user_456",
-      tokenIdentifier: "https://clerk.example|user_456",
-      email: "user@example.com",
-    }).mutation(api.core.billing.syncOrganizationFromClerk, {
-      name: "No Org Workspace",
-    }),
-  ).rejects.toThrow("No active Clerk organization found for this user");
+  const organizationId = await t.withIdentity({
+    subject: "user_roleless",
+    tokenIdentifier: "https://clerk.example|user_roleless",
+    email: "roleless@example.com",
+    name: "Roleless User",
+    o: {
+      id: "org_no_role",
+    },
+  }).mutation(api.core.billing.syncOrganizationFromClerk, { name: "No Role Org" });
+
+  expect(organizationId).not.toBeNull();
+
+  await t.run(async (ctx) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", "user_roleless"))
+      .unique();
+    expect(user).not.toBeNull();
+    const membership = await ctx.db
+      .query("organization_members")
+      .withIndex("by_userId_organizationId", (q) =>
+        q.eq("userId", user!._id).eq("organizationId", organizationId!),
+      )
+      .unique();
+    expect(membership?.role).toBe("member");
+  });
+});
+
+test("syncOrganizationFromClerk returns null when user has no active Clerk organization", async () => {
+  const t = convexTest(schema);
+
+  const result = await t.withIdentity({
+    subject: "user_456",
+    tokenIdentifier: "https://clerk.example|user_456",
+    email: "user@example.com",
+  }).mutation(api.core.billing.syncOrganizationFromClerk, {
+    name: "No Org Workspace",
+  });
+
+  expect(result).toBe(null);
 });

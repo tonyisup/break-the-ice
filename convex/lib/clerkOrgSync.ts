@@ -1,0 +1,89 @@
+import type { MutationCtx } from "../_generated/server";
+import type { Id } from "../_generated/dataModel";
+import { getOrCreateCanonicalUser } from "./users";
+
+export type OrganizationRole = "admin" | "manager" | "member";
+
+/** Map Clerk session / API role strings to our stored role. */
+export function normalizeClerkApiRole(role?: string | null): OrganizationRole | null {
+  return role === "org:admin" || role === "admin"
+    ? "admin"
+    : role === "org:manager" || role === "manager"
+      ? "manager"
+      : role === "org:member" || role === "member"
+        ? "member"
+        : null;
+}
+
+/**
+ * Create or update the Convex organization row and membership for a Clerk org.
+ * Used by JWT-based sync and by Clerk API–verified sync when org claims are missing from the Convex token.
+ */
+export async function upsertClerkLinkedOrganization(
+  ctx: MutationCtx,
+  params: {
+    clerkUserId: string;
+    tokenIdentifier: string;
+    email?: string;
+    displayName?: string;
+    pictureUrl?: string;
+    clerkOrganizationId: string;
+    organizationName: string;
+    organizationRole: OrganizationRole;
+  }
+): Promise<Id<"organizations">> {
+  const user = await getOrCreateCanonicalUser(ctx, {
+    clerkId: params.clerkUserId,
+    tokenIdentifier: params.tokenIdentifier,
+    email: params.email,
+    name: params.displayName ?? params.email,
+    image: params.pictureUrl,
+  });
+
+  if (!user) {
+    throw new Error("Failed to sync current user");
+  }
+
+  let organization = await ctx.db
+    .query("organizations")
+    .withIndex("by_clerkOrganizationId", (q) =>
+      q.eq("clerkOrganizationId", params.clerkOrganizationId)
+    )
+    .unique();
+
+  if (!organization) {
+    const organizationId = await ctx.db.insert("organizations", {
+      name: params.organizationName,
+      clerkOrganizationId: params.clerkOrganizationId,
+      planTier: "free",
+      billingStatus: "inactive",
+    });
+    organization = await ctx.db.get(organizationId);
+  } else if (organization.name !== params.organizationName) {
+    await ctx.db.patch(organization._id, { name: params.organizationName });
+    organization = await ctx.db.get(organization._id);
+  }
+
+  if (!organization) {
+    throw new Error("Failed to sync organization");
+  }
+
+  const existingMembership = await ctx.db
+    .query("organization_members")
+    .withIndex("by_userId_organizationId", (q) =>
+      q.eq("userId", user._id).eq("organizationId", organization._id)
+    )
+    .unique();
+
+  if (!existingMembership) {
+    await ctx.db.insert("organization_members", {
+      userId: user._id,
+      organizationId: organization._id,
+      role: params.organizationRole,
+    });
+  } else if (existingMembership.role !== params.organizationRole) {
+    await ctx.db.patch(existingMembership._id, { role: params.organizationRole });
+  }
+
+  return organization._id;
+}

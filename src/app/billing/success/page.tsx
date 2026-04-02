@@ -29,7 +29,9 @@ export default function BillingSuccessPage() {
     void syncOrganization({
       name,
     }).then((organizationId) => {
-      setSyncedOrganizationId(organizationId);
+      if (organizationId) {
+        setSyncedOrganizationId(organizationId);
+      }
       setSyncError(false);
     }).catch(() => {
       lastOrgKeyRef.current = null;

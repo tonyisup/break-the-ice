@@ -1,40 +1,39 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { getEffectivePlanForUser } from "../auth";
-import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
-
-type OrganizationRole = "admin" | "manager" | "member";
-
-const normalizeClerkRole = (role?: string | null): OrganizationRole | null =>
-  role === "org:admin" || role === "admin"
-    ? "admin"
-    : role === "org:manager" || role === "manager"
-      ? "manager"
-      : role === "org:member" || role === "member"
-        ? "member"
-        : null;
+import { findCanonicalUser } from "../lib/users";
+import { normalizeClerkApiRole, upsertClerkLinkedOrganization } from "../lib/clerkOrgSync";
 
 const getActiveClerkOrganization = (identity: Record<string, unknown>) => {
   const orgClaim = identity.o;
-  const nestedOrg = orgClaim && typeof orgClaim === "object" && !Array.isArray(orgClaim)
-    ? orgClaim as Record<string, unknown>
-    : null;
-
-  const organizationId = typeof identity.org_id === "string"
-    ? identity.org_id
-    : typeof nestedOrg?.id === "string"
-      ? nestedOrg.id
+  const nestedOrg =
+    orgClaim && typeof orgClaim === "object" && !Array.isArray(orgClaim)
+      ? (orgClaim as Record<string, unknown>)
       : null;
 
-  const roleValue = typeof identity.org_role === "string"
-    ? identity.org_role
-    : typeof nestedOrg?.rol === "string"
-      ? nestedOrg.rol
-      : null;
+  const organizationId =
+    typeof identity.org_id === "string"
+      ? identity.org_id
+      : typeof nestedOrg?.id === "string"
+        ? nestedOrg.id
+        : typeof identity.organization_id === "string"
+          ? identity.organization_id
+          : typeof identity.organizationId === "string"
+            ? identity.organizationId
+            : null;
+
+  const roleValue =
+    typeof identity.org_role === "string"
+      ? identity.org_role
+      : typeof nestedOrg?.rol === "string"
+        ? nestedOrg.rol
+        : typeof identity.orgRole === "string"
+          ? identity.orgRole
+          : null;
 
   return {
     clerkOrganizationId: organizationId,
-    role: normalizeClerkRole(roleValue),
+    role: normalizeClerkApiRole(roleValue),
   };
 };
 
@@ -60,9 +59,10 @@ export const getEffectiveEntitlements = query({
     }
 
     const effectivePlan = await getEffectivePlanForUser(ctx, user._id, args.organizationId);
-    const aiLimit = effectivePlan.planTier === "team"
-      ? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
-      : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
+    const aiLimit =
+      effectivePlan.planTier === "team"
+        ? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
+        : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
 
     return {
       userId: user._id,
@@ -77,9 +77,9 @@ export const getEffectiveEntitlements = query({
 
 export const syncOrganizationFromClerk = mutation({
   args: {
-    name: v.string(),
+    name: v.optional(v.string()),
   },
-  returns: v.id("organizations"),
+  returns: v.union(v.id("organizations"), v.null()),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity?.tokenIdentifier) {
@@ -87,63 +87,23 @@ export const syncOrganizationFromClerk = mutation({
     }
 
     const activeOrganization = getActiveClerkOrganization(identity as Record<string, unknown>);
-    if (!activeOrganization.clerkOrganizationId || !activeOrganization.role) {
-      throw new Error("No active Clerk organization found for this user");
+    if (!activeOrganization.clerkOrganizationId) {
+      return null;
     }
     const clerkOrganizationId = activeOrganization.clerkOrganizationId;
-    const organizationRole = activeOrganization.role;
+    const organizationRole =
+      activeOrganization.role ?? "member";
+    const name = args.name ?? "Team";
 
-    const user = await getOrCreateCanonicalUser(ctx, {
-      clerkId: identity.subject,
+    return await upsertClerkLinkedOrganization(ctx, {
+      clerkUserId: identity.subject,
       tokenIdentifier: identity.tokenIdentifier,
       email: identity.email,
-      name: identity.name ?? identity.email,
-      image: identity.pictureUrl,
+      displayName: identity.name,
+      pictureUrl: identity.pictureUrl,
+      clerkOrganizationId,
+      organizationName: name,
+      organizationRole,
     });
-
-    if (!user) {
-      throw new Error("Failed to sync current user");
-    }
-
-    let organization = await ctx.db
-      .query("organizations")
-      .withIndex("by_clerkOrganizationId", (q) => q.eq("clerkOrganizationId", clerkOrganizationId))
-      .unique();
-
-    if (!organization) {
-      const organizationId = await ctx.db.insert("organizations", {
-        name: args.name,
-        clerkOrganizationId,
-        planTier: "free",
-        billingStatus: "inactive",
-      });
-      organization = await ctx.db.get(organizationId);
-    } else if (organization.name !== args.name) {
-      await ctx.db.patch(organization._id, { name: args.name });
-      organization = await ctx.db.get(organization._id);
-    }
-
-    if (!organization) {
-      throw new Error("Failed to sync organization");
-    }
-
-    const existingMembership = await ctx.db
-      .query("organization_members")
-      .withIndex("by_userId_organizationId", (q) =>
-        q.eq("userId", user._id).eq("organizationId", organization._id)
-      )
-      .unique();
-
-    if (!existingMembership) {
-      await ctx.db.insert("organization_members", {
-        userId: user._id,
-        organizationId: organization._id,
-        role: organizationRole,
-      });
-    } else if (existingMembership.role !== organizationRole) {
-      await ctx.db.patch(existingMembership._id, { role: organizationRole });
-    }
-
-    return organization._id;
   },
 });

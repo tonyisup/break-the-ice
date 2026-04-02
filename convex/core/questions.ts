@@ -461,6 +461,47 @@ export const getQuestionsByIds = query({
 	},
 });
 
+/** List public/approved questions that orgs can assign to schedules */
+export const getPublicQuestions = query({
+	args: {
+		limit: v.optional(v.number()),
+	},
+	returns: v.array(v.object({
+		_id: v.id("questions"),
+		text: v.optional(v.string()),
+		style: v.optional(v.string()),
+		tone: v.optional(v.string()),
+		topic: v.optional(v.string()),
+		isAIGenerated: v.optional(v.boolean()),
+		totalLikes: v.number(),
+		status: v.optional(v.union(
+			v.literal("pending"),
+			v.literal("approved"),
+			v.literal("public"),
+			v.literal("private"),
+			v.literal("pruning"),
+			v.literal("pruned")
+		)),
+	})),
+	handler: async (ctx, args) => {
+		const limit = args.limit ?? 200;
+		const rows = await ctx.db
+			.query("questions")
+			.withIndex("by_status", (q) => q.eq("status", "public"))
+			.take(limit);
+		return rows.map((q) => ({
+			_id: q._id,
+			text: q.text,
+			style: q.style,
+			tone: q.tone,
+			topic: q.topic,
+			isAIGenerated: q.isAIGenerated,
+			totalLikes: q.totalLikes,
+			status: q.status,
+		}));
+	},
+});
+
 export const getUserLikedAndPreferredEmbedding = query({
 	args: {},
 	returns: v.array(v.number()),
