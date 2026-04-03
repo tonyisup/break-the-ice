@@ -357,20 +357,12 @@ export default function OrgWeeklyCurationPage() {
     currentSchedule ? { scheduleId: currentSchedule._id } : "skip"
   );
 
-  /* --- Polling: refetch pool questions every 2s while filling to show updates --- */
-const [forceRefreshKey, setForceRefreshKey] = React.useState(0);
+  /* --- Question pool updates via real-time subscription --- */
 const [isFillingOrRegen, setIsFillingOrRegen] = React.useState(false);
-React.useEffect(() => {
-    if (!isFillingOrRegen) return;
-    const interval = setInterval(() => {
-      setForceRefreshKey((k) => k + 1);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [isFillingOrRegen]);
 
 const questionPool = useQuery(
     api.core.questions.getPublicQuestions,
-    isSignedIn ? { limit: 200, generationKey: forceRefreshKey } : "skip"
+    isSignedIn ? { limit: 200 } : "skip"
   );
 
   /* --- Axis filter state --- */
@@ -908,7 +900,6 @@ const questionPool = useQuery(
       });
 
       toast.success(`Generated ${result.count} question${result.count !== 1 ? "s" : ""} for this cell`);
-      setForceRefreshKey(k => k + 1);
     } catch (e: any) {
       toast.error(e.message ?? "Failed to generate for this cell");
     } finally {
@@ -1401,10 +1392,7 @@ const questionPool = useQuery(
                                     size="sm"
                                     className="h-6 w-full text-[10px] px-1"
                                     onClick={() => {
-                                      setFillingCellKey(cellKey);
-                                      handleFillSingleCell(y.slug, x.slug).finally(() => {
-                                        setFillingCellKey(null);
-                                      });
+                                      handleFillSingleCell(y.slug, x.slug);
                                     }}
                                     disabled={fillingCellKey !== null}
                                   >

@@ -1184,12 +1184,11 @@ export const pageQuestionsMatchingSlugTriple = internalQuery({
 			.withIndex("by_status", (q) => q.eq("status", args.status))
 			.order("asc")
 			.paginate(args.paginationOpts);
-		const topicNeedle = args.topicSlug ?? "";
 		const found = r.page.some(
 			(q) =>
 				(q.style ?? "") === args.styleSlug &&
 				(q.tone ?? "") === args.toneSlug &&
-				(q.topic ?? "") === topicNeedle,
+				(args.topicSlug == null || (q.topic ?? "") === args.topicSlug),
 		);
 		return {
 			found,

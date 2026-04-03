@@ -21,7 +21,7 @@ export const scanZombieSlugs = internalQuery({
 		const questions = await ctx.db
 			.query("questions")
 			.withIndex("by_status", (q) => q.eq("status", "public"))
-			.collect();
+			.take(10000);
 
 		const slugSet = new Map<string, { type: "style" | "tone" | "topic"; count: number }>();
 
@@ -187,7 +187,7 @@ export const getLatestZombieReport = internalQuery({
 		v.null()
 	),
 	handler: async (ctx) => {
-		const report = await ctx.db.query("zombieSlugReports").first();
+		const report = await ctx.db.query("zombieSlugReports").order("desc").first();
 		if (!report) return null;
 		const details = await ctx.db
 			.query("zombieSlugReportDetails")

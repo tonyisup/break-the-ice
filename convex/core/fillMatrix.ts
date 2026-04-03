@@ -13,6 +13,9 @@ const axisValidator = v.union(
 );
 
 const PAGE_SIZE = 256;
+const MAX_CELLS_PER_REQUEST = 50;
+const MAX_COUNT_PER_CELL = 10;
+const MIN_COUNT = 1;
 
 type MatrixKeysPage = {
 	keys: string[];
@@ -119,11 +122,16 @@ export const fillEmptyCells = action({
 		if (!identity?.tokenIdentifier) {
 			throw new Error("Not authenticated");
 		}
-		await ctx.runQuery(api.core.organizations.assertOrgMembershipForCurrentUser, {
+		await ctx.runQuery(internal.core.organizations.assertOrgMembershipForCurrentUser, {
 			organizationId: args.organizationId,
 		});
 
-		const countPerCell = args.countPerCell ?? 1;
+		// Input validation
+		if (args.cells.length > MAX_CELLS_PER_REQUEST) {
+			throw new Error(`Too many cells requested. Maximum is ${MAX_CELLS_PER_REQUEST}.`);
+		}
+
+		const countPerCell = Math.max(MIN_COUNT, Math.min(args.countPerCell ?? 1, MAX_COUNT_PER_CELL));
 		let totalCells = 0;
 		let filledCells = 0;
 		let skippedExisting = 0;
@@ -217,7 +225,7 @@ export const fillSingleCell = action({
 		if (!identity?.tokenIdentifier) {
 			throw new Error("Not authenticated");
 		}
-		await ctx.runQuery(api.core.organizations.assertOrgMembershipForCurrentUser, {
+		await ctx.runQuery(internal.core.organizations.assertOrgMembershipForCurrentUser, {
 			organizationId: args.organizationId,
 		});
 
@@ -225,12 +233,15 @@ export const fillSingleCell = action({
 			return { count: 0, questionIds: [] };
 		}
 
+		// Clamp count to safe bounds
+		const clampedCount = Math.max(MIN_COUNT, Math.min(args.count ?? 1, MAX_COUNT_PER_CELL));
+
 		const result = await runPersistedQuestionGeneration(ctx, {
 			purpose: "feed",
 			styleSlug: args.styleSlug,
 			toneSlug: args.toneSlug,
 			topicSlug: args.topicSlug,
-			batchSize: args.count ?? 1,
+			batchSize: clampedCount,
 		});
 
 		return {

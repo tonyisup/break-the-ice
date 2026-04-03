@@ -37,28 +37,45 @@ export const syncOrganizationViaClerkApi = action({
     );
     url.searchParams.set("limit", "100");
 
-    const res = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${secret}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const allMemberships = [];
+    let hasMore = true;
 
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("Clerk API organization_memberships failed:", res.status, text);
-      return null;
+    while (hasMore) {
+      const res = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("Clerk API organization_memberships failed:", res.status, text);
+        return null;
+      }
+
+      const json = (await res.json()) as {
+        data?: Array<{
+          role?: string;
+          organization?: { id?: string };
+        }>;
+        total_count?: number;
+      };
+
+      const memberships = json.data ?? [];
+      allMemberships.push(...memberships);
+
+      // Check if we need to fetch more pages
+      if (memberships.length < 100) {
+        hasMore = false;
+      } else {
+        // Update offset for next page
+        const currentOffset = parseInt(url.searchParams.get("offset") ?? "0");
+        url.searchParams.set("offset", String(currentOffset + 100));
+      }
     }
 
-    const json = (await res.json()) as {
-      data?: Array<{
-        role?: string;
-        organization?: { id?: string };
-      }>;
-    };
-
-    const memberships = json.data ?? [];
-    const match = memberships.find((m) => m.organization?.id === args.clerkOrganizationId);
+    const match = allMemberships.find((m) => m.organization?.id === args.clerkOrganizationId);
     if (!match) {
       return null;
     }

@@ -32,11 +32,6 @@ export default function CoachDailyViewPage() {
   const { activeWorkspace } = useWorkspace();
   const orgId = activeWorkspace;
 
-  const todayAssignment = useQuery(
-    api.core.schedules.getCurrentWeekSchedule,
-    orgId ? { organizationId: orgId } : "skip"
-  );
-
   const coachToday = useQuery(
     api.core.coachFeedback.getCoachTodayAssignment,
     orgId ? { organizationId: orgId } : "skip"
@@ -44,8 +39,8 @@ export default function CoachDailyViewPage() {
 
   const feedbackReport = useQuery(
     api.core.coachFeedback.getWeeklyFeedbackReport,
-    todayAssignment?.scheduleId
-      ? { scheduleId: todayAssignment.scheduleId }
+    coachToday?.scheduleId
+      ? { scheduleId: coachToday.scheduleId }
       : "skip"
   );
 
@@ -61,8 +56,8 @@ export default function CoachDailyViewPage() {
   const [notes, setNotes] = React.useState("");
   const [submittedLocal, setSubmittedLocal] = React.useState(false);
 
-  const todaySqId = todayAssignment?.todayAssignment?._id;
-  const scheduleKey = todayAssignment?.scheduleId;
+  const todaySqId = coachToday?.scheduledQuestionId;
+  const scheduleKey = coachToday?.scheduleId;
 
   React.useEffect(() => {
     setSubmittedLocal(false);
@@ -78,7 +73,6 @@ export default function CoachDailyViewPage() {
   const feedbackAlreadySent =
     coachToday !== undefined &&
     todaySqId != null &&
-    coachToday.scheduledQuestionId === todaySqId &&
     coachToday.hasSubmittedFeedback;
 
   const submitted = submittedLocal || feedbackAlreadySent;
@@ -88,10 +82,10 @@ export default function CoachDailyViewPage() {
   };
 
   const handleSubmit = async () => {
-    if (!todayAssignment?.todayAssignment) return;
+    if (!coachToday?.scheduledQuestionId) return;
     try {
       await submitFeedback({
-        scheduledQuestionId: todayAssignment.todayAssignment._id,
+        scheduledQuestionId: coachToday.scheduledQuestionId,
         ...signals,
         notes: notes.trim() || undefined,
       });
@@ -117,7 +111,7 @@ export default function CoachDailyViewPage() {
     );
   }
 
-  if (todayAssignment === undefined) {
+  if (coachToday === undefined) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-spin size-6 border-2 border-primary border-t-transparent rounded-full" />
@@ -125,7 +119,7 @@ export default function CoachDailyViewPage() {
     );
   }
 
-  const assignment = todayAssignment.todayAssignment;
+  const assignment = coachToday.question;
 
   if (!assignment) {
     return (
@@ -146,10 +140,7 @@ export default function CoachDailyViewPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Today's Ice-Breaker</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {todayAssignment.weekStart && (
-            <span>Week of {todayAssignment.weekStart}</span>
-          )}
-          {assignment && <span className="ml-2">· {assignment.dayOfWeek}</span>}
+          {coachToday.dayOfWeek && <span className="ml-2">· {coachToday.dayOfWeek}</span>}
         </p>
       </div>
 

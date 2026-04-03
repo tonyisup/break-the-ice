@@ -4,6 +4,8 @@ import { mutation, query } from "../_generated/server";
 import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 
+const MAX_FEEDBACK_PER_SCHEDULE = 10000;
+
 type DayOfWeek =
   | "monday"
   | "tuesday"
@@ -182,7 +184,7 @@ export const getWeeklyFeedbackReport = query({
     const feedbacks = await ctx.db
       .query("coachFeedback")
       .withIndex("by_schedule", (q) => q.eq("scheduleId", args.scheduleId))
-      .collect();
+      .take(MAX_FEEDBACK_PER_SCHEDULE);
 
     const sqMap = new Map<string, GenericId<"questions"> | undefined>();
     for (const day of ALL_DAYS) {

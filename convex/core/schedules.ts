@@ -379,7 +379,7 @@ export const autoSchedule = mutation({
     let candidates = await ctx.db
       .query("questions")
       .withIndex("by_status", (q) => q.eq("status", "public"))
-      .collect();
+      .take(500);
 
     if (candidates.length === 0) {
       throw new Error("No public questions available. Generate some via the admin AI generator.");

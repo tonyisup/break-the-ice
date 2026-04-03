@@ -75,8 +75,9 @@ export function ClerkSyncManager() {
           }
         });
       })
-      .catch(() => {
+      .catch((error) => {
         lastOrgKeyRef.current = null;
+        console.error("Failed to sync organization from Clerk:", error);
       });
   }, [
     authLoaded,

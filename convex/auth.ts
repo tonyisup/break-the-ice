@@ -62,6 +62,9 @@ export const ensureOrgMember = async (
         left._creationTime - right._creationTime,
     );
 
+  let foundAllowed = false;
+  let firstMembership = null;
+
   for (const user of sorted) {
     const membership = await ctx.db
       .query("organization_members")
@@ -74,18 +77,28 @@ export const ensureOrgMember = async (
       continue;
     }
 
-    if (requiredRole) {
-      const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
-      if (!roles.includes(membership.role)) {
-        throw new Error(
-          `User does not have the required role. Required: ${roles.join(
-            ", ",
-          )}, but user has ${membership.role}`,
-        );
-      }
+    if (!firstMembership) {
+      firstMembership = membership;
     }
 
-    return membership;
+    if (requiredRole) {
+      const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
+      if (roles.includes(membership.role)) {
+        foundAllowed = true;
+        return membership;
+      }
+    } else {
+      return membership;
+    }
+  }
+
+  if (firstMembership && requiredRole) {
+    const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
+    throw new Error(
+      `User does not have the required role. Required: ${roles.join(
+        ", ",
+      )}, but user has ${firstMembership.role}`,
+    );
   }
 
   throw new Error("Not a member of this organization");
@@ -123,47 +136,56 @@ export const ensurePaidOrganizationMember = async (
 
 export const getEffectivePlanForUser = async (
   ctx: QueryCtx | MutationCtx,
-  userId: Id<"users">,
+  userIds: Id<"users"> | Id<"users">[],
   organizationId?: Id<"organizations">
 ): Promise<{
   planTier: EffectivePlanTier;
   billingStatus: BillingStatus;
   organizationId: Id<"organizations"> | null;
 }> => {
-  if (organizationId) {
-    // Verify membership before checking billing
-    const membership = await ctx.db
-      .query("organization_members")
-      .withIndex("by_userId_organizationId", (q: any) =>
-        q.eq("userId", userId).eq("organizationId", organizationId)
-      )
-      .unique();
+  const candidateIds = Array.isArray(userIds) ? userIds : [userIds];
 
-    // If not a member, return free plan
-    if (!membership) {
-      return {
-        planTier: "free",
-        billingStatus: "inactive",
-        organizationId: null,
-      };
+  if (organizationId) {
+    // Verify membership before checking billing - check all candidate IDs
+    for (const userId of candidateIds) {
+      const membership = await ctx.db
+        .query("organization_members")
+        .withIndex("by_userId_organizationId", (q: any) =>
+          q.eq("userId", userId).eq("organizationId", organizationId)
+        )
+        .unique();
+
+      if (membership) {
+        const isPaid = await isOrganizationPaid(ctx, organizationId);
+        const organization = await ctx.db.get(organizationId);
+
+        return {
+          planTier: isPaid ? "team" : "free",
+          billingStatus: organization?.billingStatus ?? "inactive",
+          organizationId,
+        };
+      }
     }
 
-    const isPaid = await isOrganizationPaid(ctx, organizationId);
-    const organization = await ctx.db.get(organizationId);
-
+    // No candidate is a member
     return {
-      planTier: isPaid ? "team" : "free",
-      billingStatus: organization?.billingStatus ?? "inactive",
-      organizationId,
+      planTier: "free",
+      billingStatus: "inactive",
+      organizationId: null,
     };
   }
 
-  const memberships = await ctx.db
-    .query("organization_members")
-    .withIndex("by_userId", (q: any) => q.eq("userId", userId))
-    .take(100);
+  // Check all candidate user IDs for paid memberships
+  const allMemberships = [];
+  for (const userId of candidateIds) {
+    const memberships = await ctx.db
+      .query("organization_members")
+      .withIndex("by_userId", (q: any) => q.eq("userId", userId))
+      .take(100);
+    allMemberships.push(...memberships);
+  }
 
-  const membershipsByMostRecentJoin = memberships
+  const membershipsByMostRecentJoin = allMemberships
     .slice()
     .sort((a, b) => b._creationTime - a._creationTime);
 

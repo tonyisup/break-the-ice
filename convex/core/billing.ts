@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { getEffectivePlanForUser } from "../auth";
-import { findCanonicalUser } from "../lib/users";
+import { collectUserCandidates } from "../lib/users";
 import { normalizeClerkApiRole, upsertClerkLinkedOrganization } from "../lib/clerkOrgSync";
 
 const getActiveClerkOrganization = (identity: Record<string, unknown>) => {
@@ -60,17 +60,20 @@ export const getEffectiveEntitlements = query({
       return null;
     }
 
-    const user = await findCanonicalUser(ctx, {
+    const { candidates } = await collectUserCandidates(ctx, {
       clerkId: identity.subject,
       tokenIdentifier: identity.tokenIdentifier,
       email: identity.email,
     });
 
-    if (!user) {
+    if (candidates.length === 0) {
       return null;
     }
 
-    const effectivePlan = await getEffectivePlanForUser(ctx, user._id, args.organizationId);
+    const user = candidates[0];
+    const candidateIds = candidates.map(c => c._id);
+
+    const effectivePlan = await getEffectivePlanForUser(ctx, candidateIds, args.organizationId);
     const aiLimit =
       effectivePlan.planTier === "team"
         ? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")

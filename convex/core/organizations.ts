@@ -1,10 +1,10 @@
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { internalQuery, mutation, query } from "../_generated/server";
 import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 
 /** Used from actions (e.g. matrix fill) to verify the caller belongs to the org. */
-export const assertOrgMembershipForCurrentUser = query({
+export const assertOrgMembershipForCurrentUser = internalQuery({
 	args: { organizationId: v.id("organizations") },
 	returns: v.null(),
 	handler: async (ctx, args) => {
