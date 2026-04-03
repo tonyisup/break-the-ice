@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useAuth } from "@clerk/clerk-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -30,7 +31,12 @@ const SIGNALS = [
 
 export default function CoachDailyViewPage() {
   const { activeWorkspace, workspaceHydrated } = useWorkspace();
+  const { orgRole, isLoaded: clerkAuthLoaded } = useAuth();
   const orgId = activeWorkspace;
+
+  const isOrgAdmin =
+    clerkAuthLoaded &&
+    (orgRole === "org:admin" || orgRole === "admin");
 
   const coachToday = useQuery(
     api.core.coachFeedback.getCoachTodayAssignment,
@@ -39,7 +45,7 @@ export default function CoachDailyViewPage() {
 
   const feedbackReport = useQuery(
     api.core.coachFeedback.getWeeklyFeedbackReport,
-    coachToday?.scheduleId
+    coachToday?.scheduleId && isOrgAdmin
       ? { scheduleId: coachToday.scheduleId }
       : "skip"
   );

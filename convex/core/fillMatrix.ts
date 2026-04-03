@@ -169,6 +169,15 @@ export const fillEmptyCells = action({
 				continue;
 			}
 
+			const claim = await ctx.runMutation(
+				internal.internal.matrixFillLocks.claimMatrixFillCell,
+				{ organizationId: args.organizationId, cellKey },
+			);
+			if (!claim.claimed) {
+				skippedExisting++;
+				continue;
+			}
+
 			try {
 				const result = await runPersistedQuestionGeneration(ctx, {
 					purpose: "feed",
@@ -201,6 +210,11 @@ export const fillEmptyCells = action({
 						err,
 					);
 				}
+			} finally {
+				await ctx.runMutation(internal.internal.matrixFillLocks.releaseMatrixFillCell, {
+					organizationId: args.organizationId,
+					cellKey,
+				});
 			}
 		}
 
@@ -257,20 +271,36 @@ export const fillSingleCell = action({
 			return { count: 0, questionIds: [] };
 		}
 
-		// Clamp count to safe bounds
-		const clampedCount = Math.max(MIN_COUNT, Math.min(args.count ?? 1, MAX_COUNT_PER_CELL));
+		const cellKey = `${args.styleSlug}|${args.toneSlug}|${effectiveTopic}`;
+		const claim = await ctx.runMutation(
+			internal.internal.matrixFillLocks.claimMatrixFillCell,
+			{ organizationId: args.organizationId, cellKey },
+		);
+		if (!claim.claimed) {
+			return { count: 0, questionIds: [] };
+		}
 
-		const result = await runPersistedQuestionGeneration(ctx, {
-			purpose: "feed",
-			styleSlug: args.styleSlug,
-			toneSlug: args.toneSlug,
-			topicSlug: effectiveTopic,
-			batchSize: clampedCount,
-		});
+		try {
+			// Clamp count to safe bounds
+			const clampedCount = Math.max(MIN_COUNT, Math.min(args.count ?? 1, MAX_COUNT_PER_CELL));
 
-		return {
-			count: result.saveResult.insertedCount,
-			questionIds: result.saveResult.insertedQuestionIds,
-		};
+			const result = await runPersistedQuestionGeneration(ctx, {
+				purpose: "feed",
+				styleSlug: args.styleSlug,
+				toneSlug: args.toneSlug,
+				topicSlug: effectiveTopic,
+				batchSize: clampedCount,
+			});
+
+			return {
+				count: result.saveResult.insertedCount,
+				questionIds: result.saveResult.insertedQuestionIds,
+			};
+		} finally {
+			await ctx.runMutation(internal.internal.matrixFillLocks.releaseMatrixFillCell, {
+				organizationId: args.organizationId,
+				cellKey,
+			});
+		}
 	},
 });

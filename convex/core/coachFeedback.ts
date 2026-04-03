@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { type GenericId } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
+import { ensureOrgMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 
 const MAX_FEEDBACK_PER_SCHEDULE = 10000;
@@ -71,7 +71,7 @@ export const getCoachTodayAssignment = query({
 
     const schedule = await ctx.db
       .query("schedules")
-      .withIndex("by_org_status", (q) =>
+      .withIndex("by_organizationId_and_status", (q) =>
         q.eq("organizationId", args.organizationId).eq("status", "published")
       )
       .filter((q) =>
@@ -113,14 +113,12 @@ export const getCoachTodayAssignment = query({
 
     const existingFeedback = await ctx.db
       .query("coachFeedback")
-      .withIndex("by_coach_schedule", (q) =>
-        q.eq("coachId", user._id).eq("scheduleId", schedule._id)
-      )
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("questionId"), sq.questionId),
-          q.eq(q.field("dayOfWeek"), dayLabel)
-        )
+      .withIndex("by_coach_schedule_question_day", (q) =>
+        q
+          .eq("coachId", user._id)
+          .eq("scheduleId", schedule._id)
+          .eq("questionId", sq.questionId)
+          .eq("dayOfWeek", dayLabel)
       )
       .unique();
 
@@ -301,14 +299,12 @@ export const submitCoachFeedback = mutation({
     // Check if coach already submitted for this schedule+question+day combo
     const existing = await ctx.db
       .query("coachFeedback")
-      .withIndex("by_coach_schedule", (q) =>
-        q.eq("coachId", user._id).eq("scheduleId", sq.scheduleId)
-      )
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("questionId"), sq.questionId),
-          q.eq(q.field("dayOfWeek"), sq.dayOfWeek)
-        )
+      .withIndex("by_coach_schedule_question_day", (q) =>
+        q
+          .eq("coachId", user._id)
+          .eq("scheduleId", sq.scheduleId)
+          .eq("questionId", sq.questionId)
+          .eq("dayOfWeek", sq.dayOfWeek)
       )
       .unique();
 

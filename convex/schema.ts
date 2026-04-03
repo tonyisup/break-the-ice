@@ -538,9 +538,9 @@ export default defineSchema({
     publishedAt: v.optional(v.number()),
     createdBy: v.optional(v.id("users")),
   })
-    .index("by_org", ["organizationId"])
-    .index("by_org_weekStart", ["organizationId", "weekStart"])
-    .index("by_org_status", ["organizationId", "status"]),
+    .index("by_organizationId", ["organizationId"])
+    .index("by_organizationId_and_weekStart", ["organizationId", "weekStart"])
+    .index("by_organizationId_and_status", ["organizationId", "status"]),
 
   scheduledQuestions: defineTable({
     scheduleId: v.id("schedules"),
@@ -580,7 +580,19 @@ export default defineSchema({
     .index("by_coach", ["coachId"])
     .index("by_question", ["questionId"])
     .index("by_coach_schedule", ["coachId", "scheduleId"])
-    .index("by_schedule_question", ["scheduleId", "questionId"]),
+    .index("by_schedule_question", ["scheduleId", "questionId"])
+    .index("by_coach_schedule_question_day", [
+      "coachId",
+      "scheduleId",
+      "questionId",
+      "dayOfWeek",
+    ]),
+
+  /** In-flight matrix fill coordination (best-effort mutex per org + cell key). */
+  matrixFillCellLocks: defineTable({
+    organizationId: v.id("organizations"),
+    cellKey: v.string(),
+  }).index("by_organizationId_and_cellKey", ["organizationId", "cellKey"]),
 
   // ---- Zombie slug reports ----
   zombieSlugReports: defineTable({

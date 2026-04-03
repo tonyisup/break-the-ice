@@ -17,8 +17,6 @@ const organizationRoleValidator = v.union(
  */
 export const applyOrganizationSync = internalMutation({
   args: {
-    clerkUserId: v.string(),
-    tokenIdentifier: v.string(),
     email: v.optional(v.string()),
     displayName: v.optional(v.string()),
     pictureUrl: v.optional(v.string()),
@@ -29,8 +27,6 @@ export const applyOrganizationSync = internalMutation({
   returns: v.id("organizations"),
   handler: async (ctx, args) => {
     return await upsertClerkLinkedOrganization(ctx, {
-      clerkUserId: args.clerkUserId,
-      tokenIdentifier: args.tokenIdentifier,
       email: args.email,
       displayName: args.displayName,
       pictureUrl: args.pictureUrl,

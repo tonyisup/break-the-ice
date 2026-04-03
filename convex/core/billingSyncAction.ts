@@ -84,8 +84,6 @@ export const syncOrganizationViaClerkApi = action({
     const organizationRole: OrganizationRole = normalized ?? "member";
 
     return await ctx.runMutation(internal.internal.billing.applyOrganizationSync, {
-      clerkUserId: userId,
-      tokenIdentifier: identity.tokenIdentifier,
       email: identity.email,
       displayName: identity.name,
       pictureUrl: identity.pictureUrl,

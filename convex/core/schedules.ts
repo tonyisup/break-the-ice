@@ -47,7 +47,7 @@ export const listSchedules = query({
     const cap = Math.min(args.limit ?? 200, 500);
     return ctx.db
       .query("schedules")
-      .withIndex("by_org_weekStart", (q) => q.eq("organizationId", args.organizationId))
+      .withIndex("by_organizationId_and_weekStart", (q) => q.eq("organizationId", args.organizationId))
       .order("desc")
       .take(cap);
   },
@@ -86,7 +86,7 @@ export const listSchedulesForUser = query({
     for (const orgId of orgIdSet) {
       const orgSchedules = await ctx.db
         .query("schedules")
-        .withIndex("by_org_weekStart", (q) => q.eq("organizationId", orgId))
+        .withIndex("by_organizationId_and_weekStart", (q) => q.eq("organizationId", orgId))
         .order("desc")
         .take(perOrgCap);
       allSchedules.push(...orgSchedules);
@@ -145,7 +145,7 @@ export const getSchedule = query({
     const assignments = await ctx.db
       .query("scheduledQuestions")
       .withIndex("by_schedule", (q) => q.eq("scheduleId", args.scheduleId))
-      .collect();
+      .take(50);
 
     const enriched: AssignmentEntry[] = [];
     for (const a of assignments) {
@@ -203,7 +203,7 @@ export const getCurrentWeekSchedule = query({
 
     const schedule = await ctx.db
       .query("schedules")
-      .withIndex("by_org_weekStart", (q) =>
+      .withIndex("by_organizationId_and_weekStart", (q) =>
         q.eq("organizationId", args.organizationId)
       )
       .filter((q) =>
@@ -279,7 +279,7 @@ export const createSchedule = mutation({
 
     const existing = await ctx.db
       .query("schedules")
-      .withIndex("by_org_weekStart", (q) =>
+      .withIndex("by_organizationId_and_weekStart", (q) =>
         q.eq("organizationId", args.organizationId).eq("weekStart", args.weekStart)
       )
       .unique();
@@ -508,9 +508,18 @@ const DAYS_ORDERED: DayOfWeek[] = [
 ];
 
 function computeWeekEnd(weekStart: string, _weekStartDay: string): string {
-  const start = new Date(weekStart + "T00:00:00");
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(weekStart.trim());
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    const d = Number(m[3]);
+    const end = new Date(Date.UTC(y, mo, d));
+    end.setUTCDate(end.getUTCDate() + 6);
+    return end.toISOString().slice(0, 10);
+  }
+  const start = new Date(`${weekStart.trim()}T00:00:00.000Z`);
   const end = new Date(start);
-  end.setDate(end.getDate() + 6);
+  end.setUTCDate(end.getUTCDate() + 6);
   return end.toISOString().slice(0, 10);
 }
 

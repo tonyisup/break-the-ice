@@ -70,8 +70,6 @@ export function normalizeClerkApiRole(role?: string | null): OrganizationRole | 
 export async function upsertClerkLinkedOrganization(
   ctx: MutationCtx,
   params: {
-    clerkUserId: string;
-    tokenIdentifier: string;
     email?: string;
     displayName?: string;
     pictureUrl?: string;
@@ -80,9 +78,23 @@ export async function upsertClerkLinkedOrganization(
     organizationRole: OrganizationRole;
   }
 ): Promise<Id<"organizations">> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity?.subject || !identity.tokenIdentifier) {
+    throw new Error("Not authenticated");
+  }
+
+  const clerkOrganizationId = params.clerkOrganizationId.trim();
+  const organizationName = params.organizationName.trim();
+  if (!clerkOrganizationId) {
+    throw new Error("Invalid Clerk organization id");
+  }
+  if (!organizationName) {
+    throw new Error("Invalid organization name");
+  }
+
   const user = await getOrCreateCanonicalUser(ctx, {
-    clerkId: params.clerkUserId,
-    tokenIdentifier: params.tokenIdentifier,
+    clerkId: identity.subject,
+    tokenIdentifier: identity.tokenIdentifier,
     email: params.email,
     name: params.displayName ?? params.email,
     image: params.pictureUrl,
@@ -91,20 +103,20 @@ export async function upsertClerkLinkedOrganization(
   let organization = await ctx.db
     .query("organizations")
     .withIndex("by_clerkOrganizationId", (q) =>
-      q.eq("clerkOrganizationId", params.clerkOrganizationId)
+      q.eq("clerkOrganizationId", clerkOrganizationId)
     )
     .unique();
 
   if (!organization) {
     const organizationId = await ctx.db.insert("organizations", {
-      name: params.organizationName,
-      clerkOrganizationId: params.clerkOrganizationId,
+      name: organizationName,
+      clerkOrganizationId,
       planTier: "free",
       billingStatus: "inactive",
     });
     organization = await ctx.db.get(organizationId);
-  } else if (organization.name !== params.organizationName) {
-    await ctx.db.patch(organization._id, { name: params.organizationName });
+  } else if (organization.name !== organizationName) {
+    await ctx.db.patch(organization._id, { name: organizationName });
     organization = await ctx.db.get(organization._id);
   }
 

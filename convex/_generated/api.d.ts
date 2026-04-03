@@ -50,6 +50,7 @@ import type * as instagram from "../instagram.js";
 import type * as internal_ai from "../internal/ai.js";
 import type * as internal_billing from "../internal/billing.js";
 import type * as internal_generation from "../internal/generation.js";
+import type * as internal_matrixFillLocks from "../internal/matrixFillLocks.js";
 import type * as internal_migrations from "../internal/migrations.js";
 import type * as internal_newsletter from "../internal/newsletter.js";
 import type * as internal_qa from "../internal/qa.js";
@@ -123,6 +124,7 @@ declare const fullApi: ApiFromModules<{
   "internal/ai": typeof internal_ai;
   "internal/billing": typeof internal_billing;
   "internal/generation": typeof internal_generation;
+  "internal/matrixFillLocks": typeof internal_matrixFillLocks;
   "internal/migrations": typeof internal_migrations;
   "internal/newsletter": typeof internal_newsletter;
   "internal/qa": typeof internal_qa;

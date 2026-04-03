@@ -293,7 +293,7 @@ function DaySlot({ dayKey, dayLabel, dayAbbr, date, assignment, canEdit, onAssig
 // ──────────────────────────────────────────────
 
 export default function OrgWeeklyCurationPage() {
-  const { activeWorkspace, setActiveWorkspace } = useWorkspace();
+  const { activeWorkspace, setActiveWorkspace, workspaceHydrated } = useWorkspace();
   const { isSignedIn, isLoaded: authLoaded, orgId: clerkOrgId } = useAuth();
   const { organization: clerkOrganization, isLoaded: clerkOrgLoaded } = useOrganization();
 
@@ -317,6 +317,7 @@ export default function OrgWeeklyCurationPage() {
 
   /* --- Auto-connect: prefer an org that has schedules, else any membership --- */
   React.useEffect(() => {
+    if (!workspaceHydrated) return;
     if (activeWorkspace) return;
     if (allSchedules && allSchedules.length > 0) {
       setActiveWorkspace(allSchedules[0].organizationId);
@@ -328,7 +329,7 @@ export default function OrgWeeklyCurationPage() {
       );
       setActiveWorkspace(sorted[0]._id);
     }
-  }, [allSchedules, myOrganizations, activeWorkspace, setActiveWorkspace]);
+  }, [workspaceHydrated, allSchedules, myOrganizations, activeWorkspace, setActiveWorkspace]);
 
   const orgId = activeWorkspace;
   const schedules = useQuery(
@@ -434,40 +435,6 @@ const questionPool = useQuery(
   /* Generation state */
   const [isFillingEmpty, setIsFillingEmpty] = React.useState(false);
   const [fillingCellKey, setFillingCellKey] = React.useState<string | null>(null);
-
-  /* Clerk → Convex sync when session has an org but workspace id is not set yet */
-  React.useEffect(() => {
-    if (!isSignedIn || !authLoaded || !clerkOrgLoaded || activeWorkspace) return;
-    if (!clerkOrgId || !clerkOrganization?.name) return;
-    let cancelled = false;
-    void syncOrg({})
-      .then((id) => {
-        if (cancelled || id) {
-          if (id) setActiveWorkspace(id);
-          return;
-        }
-        return syncOrgViaClerkApi({
-          clerkOrganizationId: clerkOrgId,
-          organizationName: clerkOrganization.name,
-        }).then((cid) => {
-          if (!cancelled && cid) setActiveWorkspace(cid);
-        });
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    isSignedIn,
-    authLoaded,
-    clerkOrgLoaded,
-    activeWorkspace,
-    clerkOrgId,
-    clerkOrganization?.name,
-    syncOrg,
-    syncOrgViaClerkApi,
-    setActiveWorkspace,
-  ]);
 
   /* --- Derived --- */
   const canEdit = !currentSchedule || currentSchedule.status === "draft";
@@ -796,10 +763,16 @@ const questionPool = useQuery(
     } catch {}
   };
 
-  // Trigger org sync when Clerk org changes
+  // Trigger org sync after Clerk org creation (JWT path, then API fallback like ClerkSyncManager)
   const handleOrgReady = async (name: string) => {
     try {
-      const orgDocId = await syncOrg({ name });
+      let orgDocId = await syncOrg({});
+      if (!orgDocId && clerkOrgId) {
+        orgDocId = await syncOrgViaClerkApi({
+          clerkOrganizationId: clerkOrgId,
+          organizationName: name,
+        });
+      }
       if (orgDocId) {
         setActiveWorkspace(orgDocId);
         toast.success(`Connected to ${name}`);

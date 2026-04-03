@@ -81,8 +81,6 @@ export const syncOrganizationFromClerk = mutation({
       activeOrganization.organizationName?.trim() || "Team";
 
     return await upsertClerkLinkedOrganization(ctx, {
-      clerkUserId: identity.subject,
-      tokenIdentifier: identity.tokenIdentifier,
       email: identity.email,
       displayName: identity.name,
       pictureUrl: identity.pictureUrl,

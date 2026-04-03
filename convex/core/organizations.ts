@@ -174,6 +174,8 @@ export const getOrganizations = query({
 	},
 });
 
+const INVITATIONS_PAGE_CAP = 100;
+
 export const getInvitations = query({
 	args: {},
 	returns: v.array(v.any()),
@@ -186,23 +188,28 @@ export const getInvitations = query({
 		return ctx.db
 			.query("invitations")
 			.withIndex("by_email", (q) => q.eq("email", identity.email!))
-			.collect();
+			.take(INVITATIONS_PAGE_CAP);
 	},
 });
+
+const DEFAULT_MEMBERS_LIMIT = 200;
 
 export const getMembers = query({
 	args: {
 		organizationId: v.id("organizations"),
+		limit: v.optional(v.number()),
 	},
 	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
 		await ensureOrgMember(ctx, args.organizationId);
+
+		const cap = Math.min(args.limit ?? DEFAULT_MEMBERS_LIMIT, 500);
 
 		return ctx.db
 			.query("organization_members")
 			.withIndex("by_organizationId", (q) =>
 				q.eq("organizationId", args.organizationId)
 			)
-			.collect();
+			.take(cap);
 	},
 });
