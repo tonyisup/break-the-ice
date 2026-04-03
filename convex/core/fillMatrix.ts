@@ -3,7 +3,16 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration } from "../lib/generationRunner";
+
+/** Shape used for matrix / public-pool checks (matches getPublicQuestions projection). */
+type PublicQuestionRow = {
+	_id: Id<"questions">;
+	style?: string | null;
+	tone?: string | null;
+	topic?: string | null;
+};
 
 const axisValidator = v.union(
 	v.literal("style"),
@@ -35,31 +44,6 @@ function questionMatchesMatrixCellWithTopic(
 	// If a topic is specified, also match topic
 	if (topicSlug && topicSlug !== (q.topic ?? "")) return false;
 	return true;
-}
-
-/** Helper: check if a cell (styleSlug × toneSlug × topicSlug) already has >= maxCount public questions */
-async function cellHasEnough(
-	ctx: any,
-	styleSlug: string,
-	toneSlug: string,
-	topicSlug: string | undefined,
-	maxCount: number,
-): Promise<boolean> {
-	const comboKey = `${styleSlug}|${toneSlug}|${topicSlug ?? ""}`;
-	let found = 0;
-	// Scan public questions in batches (limit 5000 per call, should cover most setups)
-	const allPublic = await ctx.runQuery(
-		api.core.questions.getPublicQuestions,
-		{ limit: 5000 }
-	);
-	for (const q of allPublic) {
-		const qKey = `${q.style ?? ""}|${q.tone ?? ""}|${q.topic ?? ""}`;
-		if (qKey === comboKey) {
-			found++;
-			if (found >= maxCount) return true;
-		}
-	}
-	return false;
 }
 
 /**
@@ -98,9 +82,9 @@ export const fillEmptyCells = action({
 		let skippedInvalidTaxonomy = 0;
 		let totalGenerated = 0;
 
-		const allPublic = await ctx.runQuery(
+		const allPublic: PublicQuestionRow[] = await ctx.runQuery(
 			api.core.questions.getPublicQuestions,
-			{ limit: 5000 }
+			{ limit: 5000 },
 		);
 
 		for (const cell of args.cells) {
@@ -175,21 +159,24 @@ export const fillSingleCell = action({
 		count: v.number(),
 		questionIds: v.array(v.id("questions")),
 	}),
-	handler: async (ctx, args) => {
-		// Guard: don't generate if this exact cell (style×tone×topic) already has questions
-		const allPublic = await ctx.runQuery(
+	handler: async (
+		ctx,
+		args,
+	): Promise<{ count: number; questionIds: Id<"questions">[] }> => {
+		const allPublic: PublicQuestionRow[] = await ctx.runQuery(
 			api.core.questions.getPublicQuestions,
-			{ limit: 5000 }
+			{ limit: 5000 },
 		);
 		const comboKey = `${args.styleSlug}|${args.toneSlug}|${args.topicSlug ?? ""}`;
-		const existingCount = allPublic.filter(
-			(q) => `${q.style ?? ""}|${q.tone ?? ""}|${q.topic ?? ""}` === comboKey
-		).length;
+		const comboMatch = (q: PublicQuestionRow) =>
+			`${q.style ?? ""}|${q.tone ?? ""}|${q.topic ?? ""}` === comboKey;
+		const existingCount = allPublic.filter(comboMatch).length;
 
 		if (existingCount >= 1) {
-			return { count: 0, questionIds: allPublic.filter(
-				(q) => `${q.style ?? ""}|${q.tone ?? ""}|${q.topic ?? ""}` === comboKey
-			).map(q => q._id) };
+			return {
+				count: 0,
+				questionIds: allPublic.filter(comboMatch).map((q) => q._id),
+			};
 		}
 
 		const result = await runPersistedQuestionGeneration(ctx, {
