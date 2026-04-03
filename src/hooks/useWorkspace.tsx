@@ -12,30 +12,40 @@ type WorkspaceContextType = {
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
-  const { orgId: clerkOrgId } = useAuth();
-  const [activeWorkspace, _setActiveWorkspace] = useState<Id<"organizations"> | null>(() => {
-    try {
-      const stored = localStorage.getItem(LS_KEY);
-      return stored ? (stored as Id<"organizations">) : null;
-    } catch {
-      return null;
-    }
-  });
+  const { userId } = useAuth();
+  const [activeWorkspace, _setActiveWorkspace] = useState<Id<"organizations"> | null>(null);
 
-  // Persist to localStorage
+  // Hydrate only after we know which Clerk user this is (avoids cross-account workspace bleed).
   useEffect(() => {
+    if (!userId) {
+      _setActiveWorkspace(null);
+      return;
+    }
     try {
-      if (activeWorkspace) {
-        localStorage.setItem(LS_KEY, activeWorkspace);
-      } else {
-        localStorage.removeItem(LS_KEY);
-      }
-    } catch {}
-  }, [activeWorkspace]);
+      const stored = localStorage.getItem(`${LS_KEY}:${userId}`);
+      _setActiveWorkspace(stored ? (stored as Id<"organizations">) : null);
+    } catch {
+      /* ignore localStorage errors */
+      _setActiveWorkspace(null);
+    }
+  }, [userId]);
 
-  // DON'T clear workspace when there's no Clerk org.
-  // The org might need to be selected/created on this page.
-  // Only clear on explicit sign out.
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
+    try {
+      const key = `${LS_KEY}:${userId}`;
+      if (activeWorkspace) {
+        localStorage.setItem(key, activeWorkspace);
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      /* ignore localStorage errors */
+      void 0;
+    }
+  }, [activeWorkspace, userId]);
 
   const setActiveWorkspace = (id: Id<"organizations"> | null) => {
     _setActiveWorkspace(id);

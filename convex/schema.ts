@@ -65,6 +65,7 @@ export default defineSchema({
     ...styleVersionFields,
   }).index("by_my_id", ["id"])
     .index("by_slug", ["slug"])
+    .index("by_slug_status", ["slug", "status"])
     .index("by_slug_version", ["slug", "version"])
     .index("by_status", ["status"])
     .index("by_name", ["name"])
@@ -83,6 +84,7 @@ export default defineSchema({
     ...toneVersionFields,
   }).index("by_my_id", ["id"])
     .index("by_slug", ["slug"])
+    .index("by_slug_status", ["slug", "status"])
     .index("by_slug_version", ["slug", "version"])
     .index("by_status", ["status"])
     .index("by_name", ["name"])
@@ -106,6 +108,7 @@ export default defineSchema({
     ...topicVersionFields,
   }).index("by_my_id", ["id"])
     .index("by_slug", ["slug"])
+    .index("by_slug_status", ["slug", "status"])
     .index("by_slug_version", ["slug", "version"])
     .index("by_status", ["status"])
     .index("by_name", ["name"])
@@ -583,10 +586,11 @@ export default defineSchema({
     scanTime: v.number(),
     totalZombieSlugs: v.number(),
     totalAffectedQuestions: v.number(),
-    details: v.array(v.object({
-      slug: v.string(),
-      type: v.string(),
-      count: v.number(),
-    })),
   }),
+  zombieSlugReportDetails: defineTable({
+    reportId: v.id("zombieSlugReports"),
+    slug: v.string(),
+    type: v.string(),
+    count: v.number(),
+  }).index("by_reportId", ["reportId"]),
 });

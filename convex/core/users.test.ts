@@ -1,10 +1,11 @@
 import { convexTest } from "convex-test";
-import { expect, test, beforeEach } from "vitest";
+import { expect, test } from "vitest";
 import { api } from "../_generated/api";
 import schema from "../schema";
+import { convexFunctionModules } from "../../vitestConvexModules";
 
 test("getUserInteractionStats and dismissRefineCTA", async () => {
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
 
   // Set up a user
   const userId = await t.run(async (ctx) => {
@@ -72,7 +73,7 @@ test("getUserInteractionStats and dismissRefineCTA", async () => {
 });
 
 test("store reuses an existing email user and patches Clerk identifiers", async () => {
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
 
   const existingUserId = await t.run(async (ctx) => {
     return await ctx.db.insert("users", {
@@ -102,18 +103,18 @@ test("store reuses an existing email user and patches Clerk identifiers", async 
   });
 });
 
-test("getCurrentUser returns a canonical user when duplicate email rows exist", async () => {
-  const t = convexTest(schema);
+test("getCurrentUser prefers tokenIdentifier-linked row when duplicate emails exist", async () => {
+  const t = convexTest(schema, convexFunctionModules);
 
-  const canonicalUserId = await t.run(async (ctx) => {
-    return await ctx.db.insert("users", {
-      name: "Canonical User",
+  await t.run(async (ctx) => {
+    await ctx.db.insert("users", {
+      name: "Email-only older row",
       email: "dupe@example.com",
     });
   });
 
-  await t.run(async (ctx) => {
-    await ctx.db.insert("users", {
+  const tokenUserId = await t.run(async (ctx) => {
+    return await ctx.db.insert("users", {
       name: "Token Duplicate",
       email: "dupe@example.com",
       tokenIdentifier: "https://clerk.example|dupe",
@@ -126,5 +127,5 @@ test("getCurrentUser returns a canonical user when duplicate email rows exist", 
     email: "dupe@example.com",
   }).query(api.core.users.getCurrentUser, {});
 
-  expect(currentUser?._id).toBe(canonicalUserId);
+  expect(currentUser?._id).toBe(tokenUserId);
 });

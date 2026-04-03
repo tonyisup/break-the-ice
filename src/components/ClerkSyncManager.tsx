@@ -47,11 +47,15 @@ export function ClerkSyncManager() {
     }
 
     lastOrgKeyRef.current = syncKey;
+    const currentKey = syncKey;
 
     void syncOrganization({
       name: organization.name,
     })
       .then((convexOrgId) => {
+        if (lastOrgKeyRef.current !== currentKey) {
+          return;
+        }
         if (convexOrgId) {
           setActiveWorkspace(convexOrgId);
           return;
@@ -61,7 +65,14 @@ export function ClerkSyncManager() {
           clerkOrganizationId: orgId,
           organizationName: organization.name,
         }).then((id) => {
-          if (id) setActiveWorkspace(id);
+          if (lastOrgKeyRef.current !== currentKey) {
+            return;
+          }
+          if (id) {
+            setActiveWorkspace(id);
+          } else {
+            lastOrgKeyRef.current = null;
+          }
         });
       })
       .catch(() => {

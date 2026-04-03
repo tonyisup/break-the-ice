@@ -1,18 +1,10 @@
 "use node";
 
 import { v } from "convex/values";
-import { action } from "../_generated/server";
-import { api } from "../_generated/api";
+import { action, type ActionCtx } from "../_generated/server";
+import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration } from "../lib/generationRunner";
-
-/** Shape used for matrix / public-pool checks (matches getPublicQuestions projection). */
-type PublicQuestionRow = {
-	_id: Id<"questions">;
-	style?: string | null;
-	tone?: string | null;
-	topic?: string | null;
-};
 
 const axisValidator = v.union(
 	v.literal("style"),
@@ -20,30 +12,77 @@ const axisValidator = v.union(
 	v.literal("topic"),
 );
 
-function questionMatchesMatrixCell(
-	q: { style?: string | null; tone?: string | null; topic?: string | null },
-	axisY: "style" | "tone" | "topic",
-	axisX: "style" | "tone" | "topic",
-	ySlug: string,
-	xSlug: string,
-): boolean {
-	const qY = axisY === "style" ? q.style : axisY === "tone" ? q.tone : q.topic;
-	const qX = axisX === "style" ? q.style : axisX === "tone" ? q.tone : q.topic;
-	return qY === ySlug && qX === xSlug;
-}
+const PAGE_SIZE = 256;
 
-function questionMatchesMatrixCellWithTopic(
-	q: { style?: string | null; tone?: string | null; topic?: string | null },
+type MatrixKeysPage = {
+	keys: string[];
+	isDone: boolean;
+	continueCursor: string | null;
+};
+
+type SlugTriplePage = {
+	found: boolean;
+	isDone: boolean;
+	continueCursor: string | null;
+};
+
+async function collectMatrixOccupiedKeys(
+	ctx: ActionCtx,
 	axisY: "style" | "tone" | "topic",
 	axisX: "style" | "tone" | "topic",
 	topicSlug: string | undefined,
-	ySlug: string,
-	xSlug: string,
-): boolean {
-	if (!questionMatchesMatrixCell(q, axisY, axisX, ySlug, xSlug)) return false;
-	// If a topic is specified, also match topic
-	if (topicSlug && topicSlug !== (q.topic ?? "")) return false;
-	return true;
+): Promise<Set<string>> {
+	const occupied = new Set<string>();
+	for (const status of ["public", "approved"] as const) {
+		let cursor: string | null = null;
+		let done = false;
+		do {
+			const page: MatrixKeysPage = await ctx.runQuery(
+				internal.core.questions.pageQuestionMatrixCellKeys,
+				{
+					status,
+					axisY,
+					axisX,
+					topicSlug,
+					paginationOpts: { numItems: PAGE_SIZE, cursor },
+				},
+			);
+			for (const k of page.keys) {
+				occupied.add(k);
+			}
+			done = page.isDone;
+			cursor = page.continueCursor;
+		} while (!done);
+	}
+	return occupied;
+}
+
+async function publicSlugTripleExists(
+	ctx: ActionCtx,
+	args: { styleSlug: string; toneSlug: string; topicSlug?: string },
+): Promise<boolean> {
+	for (const status of ["public", "approved"] as const) {
+		let cursor: string | null = null;
+		let done = false;
+		do {
+			const page: SlugTriplePage = await ctx.runQuery(
+				internal.core.questions.pageQuestionsMatchingSlugTriple,
+				{
+					status,
+					styleSlug: args.styleSlug,
+					toneSlug: args.toneSlug,
+					topicSlug: args.topicSlug,
+					paginationOpts: { numItems: PAGE_SIZE, cursor },
+				},
+			);
+			if (page.found) {
+				return true;
+			}
+			done = page.isDone;
+			cursor = page.continueCursor;
+		} while (!done);
+	}
+	return false;
 }
 
 /**
@@ -53,6 +92,7 @@ function questionMatchesMatrixCellWithTopic(
  */
 export const fillEmptyCells = action({
 	args: {
+		organizationId: v.id("organizations"),
 		axisY: axisValidator,
 		axisX: axisValidator,
 		cells: v.array(
@@ -75,6 +115,14 @@ export const fillEmptyCells = action({
 		skippedInvalidTaxonomy: v.number(),
 	}),
 	handler: async (ctx, args) => {
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity?.tokenIdentifier) {
+			throw new Error("Not authenticated");
+		}
+		await ctx.runQuery(api.core.organizations.assertOrgMembershipForCurrentUser, {
+			organizationId: args.organizationId,
+		});
+
 		const countPerCell = args.countPerCell ?? 1;
 		let totalCells = 0;
 		let filledCells = 0;
@@ -82,9 +130,11 @@ export const fillEmptyCells = action({
 		let skippedInvalidTaxonomy = 0;
 		let totalGenerated = 0;
 
-		const allPublic: PublicQuestionRow[] = await ctx.runQuery(
-			api.core.questions.getPublicQuestions,
-			{ limit: 5000 },
+		const occupied = await collectMatrixOccupiedKeys(
+			ctx,
+			args.axisY,
+			args.axisX,
+			args.topicSlug,
 		);
 
 		for (const cell of args.cells) {
@@ -92,10 +142,8 @@ export const fillEmptyCells = action({
 
 			const effectiveTopic = args.topicSlug;
 
-			const hasAnyInCell = allPublic.some((q) =>
-				questionMatchesMatrixCellWithTopic(q, args.axisY, args.axisX, effectiveTopic, cell.ySlug, cell.xSlug),
-			);
-			if (hasAnyInCell) {
+			const cellKey = `${cell.ySlug}|${cell.xSlug}`;
+			if (occupied.has(cellKey)) {
 				skippedExisting++;
 				continue;
 			}
@@ -112,6 +160,7 @@ export const fillEmptyCells = action({
 				if (result.saveResult.insertedCount > 0) {
 					filledCells++;
 					totalGenerated += result.saveResult.insertedCount;
+					occupied.add(cellKey);
 					console.log(
 						`Filled matrix cell (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug}, topic=${effectiveTopic ?? "random"}) → ${result.saveResult.insertedCount} questions`,
 					);
@@ -150,6 +199,7 @@ export const fillEmptyCells = action({
  */
 export const fillSingleCell = action({
 	args: {
+		organizationId: v.id("organizations"),
 		styleSlug: v.string(),
 		toneSlug: v.string(),
 		topicSlug: v.optional(v.string()),
@@ -163,20 +213,16 @@ export const fillSingleCell = action({
 		ctx,
 		args,
 	): Promise<{ count: number; questionIds: Id<"questions">[] }> => {
-		const allPublic: PublicQuestionRow[] = await ctx.runQuery(
-			api.core.questions.getPublicQuestions,
-			{ limit: 5000 },
-		);
-		const comboKey = `${args.styleSlug}|${args.toneSlug}|${args.topicSlug ?? ""}`;
-		const comboMatch = (q: PublicQuestionRow) =>
-			`${q.style ?? ""}|${q.tone ?? ""}|${q.topic ?? ""}` === comboKey;
-		const existingCount = allPublic.filter(comboMatch).length;
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity?.tokenIdentifier) {
+			throw new Error("Not authenticated");
+		}
+		await ctx.runQuery(api.core.organizations.assertOrgMembershipForCurrentUser, {
+			organizationId: args.organizationId,
+		});
 
-		if (existingCount >= 1) {
-			return {
-				count: 0,
-				questionIds: allPublic.filter(comboMatch).map((q) => q._id),
-			};
+		if (await publicSlugTripleExists(ctx, args)) {
+			return { count: 0, questionIds: [] };
 		}
 
 		const result = await runPersistedQuestionGeneration(ctx, {

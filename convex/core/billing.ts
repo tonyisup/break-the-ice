@@ -31,9 +31,21 @@ const getActiveClerkOrganization = (identity: Record<string, unknown>) => {
           ? identity.orgRole
           : null;
 
+  const organizationName =
+    typeof nestedOrg?.name === "string"
+      ? nestedOrg.name
+      : typeof nestedOrg?.nam === "string"
+        ? nestedOrg.nam
+        : typeof identity.org_name === "string"
+          ? (identity.org_name as string)
+          : typeof identity.organization_name === "string"
+            ? (identity.organization_name as string)
+            : null;
+
   return {
     clerkOrganizationId: organizationId,
     role: normalizeClerkApiRole(roleValue),
+    organizationName,
   };
 };
 
@@ -77,10 +89,11 @@ export const getEffectiveEntitlements = query({
 
 export const syncOrganizationFromClerk = mutation({
   args: {
+    /** @deprecated Ignored; org name comes from Clerk JWT/org claims only. */
     name: v.optional(v.string()),
   },
   returns: v.union(v.id("organizations"), v.null()),
-  handler: async (ctx, args) => {
+  handler: async (ctx, _args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity?.tokenIdentifier) {
       throw new Error("Not authenticated");
@@ -93,7 +106,8 @@ export const syncOrganizationFromClerk = mutation({
     const clerkOrganizationId = activeOrganization.clerkOrganizationId;
     const organizationRole =
       activeOrganization.role ?? "member";
-    const name = args.name ?? "Team";
+    const name =
+      activeOrganization.organizationName?.trim() || "Team";
 
     return await upsertClerkLinkedOrganization(ctx, {
       clerkUserId: identity.subject,

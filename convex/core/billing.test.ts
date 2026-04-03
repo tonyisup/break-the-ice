@@ -3,9 +3,10 @@ import { expect, test } from "vitest";
 import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { convexFunctionModules } from "../../vitestConvexModules";
 
 test("syncOrganizationFromClerk uses active Clerk org claims for membership role", async () => {
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
 
   const userId = await t.run(async (ctx) => {
     return await ctx.db.insert("users", {
@@ -22,12 +23,13 @@ test("syncOrganizationFromClerk uses active Clerk org claims for membership role
     o: {
       id: "org_123",
       rol: "admin",
+      name: "Acme Workspace",
     },
   };
 
   const organizationId = (await t.withIdentity(identity).mutation(
     api.core.billing.syncOrganizationFromClerk,
-    { name: "Acme Workspace" },
+    {},
   )) as Id<"organizations">;
 
   await t.run(async (ctx) => {
@@ -43,12 +45,13 @@ test("syncOrganizationFromClerk uses active Clerk org claims for membership role
     expect(user?.clerkId).toBe("user_123");
     expect(user?.tokenIdentifier).toBe("https://clerk.example|user_123");
     expect(organization?.clerkOrganizationId).toBe("org_123");
+    expect(organization?.name).toBe("Acme Workspace");
     expect(membership?.role).toBe("admin");
   });
 });
 
 test("syncOrganizationFromClerk defaults role to member when org claim has no rol", async () => {
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
 
   const organizationId = await t.withIdentity({
     subject: "user_roleless",
@@ -57,8 +60,9 @@ test("syncOrganizationFromClerk defaults role to member when org claim has no ro
     name: "Roleless User",
     o: {
       id: "org_no_role",
+      name: "No Role Org",
     },
-  }).mutation(api.core.billing.syncOrganizationFromClerk, { name: "No Role Org" });
+  }).mutation(api.core.billing.syncOrganizationFromClerk, {});
 
   expect(organizationId).not.toBeNull();
 
@@ -68,6 +72,8 @@ test("syncOrganizationFromClerk defaults role to member when org claim has no ro
       .withIndex("by_clerkId", (q) => q.eq("clerkId", "user_roleless"))
       .unique();
     expect(user).not.toBeNull();
+    const org = await ctx.db.get(organizationId!);
+    expect(org?.name).toBe("No Role Org");
     const membership = await ctx.db
       .query("organization_members")
       .withIndex("by_userId_organizationId", (q) =>
@@ -79,15 +85,13 @@ test("syncOrganizationFromClerk defaults role to member when org claim has no ro
 });
 
 test("syncOrganizationFromClerk returns null when user has no active Clerk organization", async () => {
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
 
   const result = await t.withIdentity({
     subject: "user_456",
     tokenIdentifier: "https://clerk.example|user_456",
     email: "user@example.com",
-  }).mutation(api.core.billing.syncOrganizationFromClerk, {
-    name: "No Org Workspace",
-  });
+  }).mutation(api.core.billing.syncOrganizationFromClerk, {});
 
   expect(result).toBe(null);
 });

@@ -1,6 +1,6 @@
 import { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
-import { findCanonicalUser } from "./lib/users";
+import { collectUserCandidates, userScore } from "./lib/users";
 
 export type BillingStatus =
   | "inactive"
@@ -38,39 +38,57 @@ export const ensureOrgMember = async (
     throw new Error("Not authenticated");
   }
 
-  const user = await findCanonicalUser(ctx, {
+  const { candidates, normalizedEmail } = await collectUserCandidates(ctx, {
     clerkId: identity.subject,
     tokenIdentifier: identity.tokenIdentifier,
     email: identity.email,
   });
 
-  if (!user) {
+  if (candidates.length === 0) {
     throw new Error("User not found");
   }
 
-  const membership = await ctx.db
-    .query("organization_members")
-    .withIndex("by_userId_organizationId", (q: any) =>
-      q.eq("userId", user._id).eq("organizationId", organizationId)
-    )
-    .unique();
+  const scoredLookup = {
+    tokenIdentifier: identity.tokenIdentifier ?? "",
+    clerkId: identity.subject ?? "",
+    email: normalizedEmail ?? "",
+  };
 
-  if (!membership) {
-    throw new Error("Not a member of this organization");
-  }
+  const sorted = candidates
+    .slice()
+    .sort(
+      (left, right) =>
+        userScore(right, scoredLookup) - userScore(left, scoredLookup) ||
+        left._creationTime - right._creationTime,
+    );
 
-  if (requiredRole) {
-    const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
-    if (!roles.includes(membership.role)) {
-      throw new Error(
-        `User does not have the required role. Required: ${roles.join(
-          ", "
-        )}, but user has ${membership.role}`
-      );
+  for (const user of sorted) {
+    const membership = await ctx.db
+      .query("organization_members")
+      .withIndex("by_userId_organizationId", (q: any) =>
+        q.eq("userId", user._id).eq("organizationId", organizationId),
+      )
+      .unique();
+
+    if (!membership) {
+      continue;
     }
+
+    if (requiredRole) {
+      const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
+      if (!roles.includes(membership.role)) {
+        throw new Error(
+          `User does not have the required role. Required: ${roles.join(
+            ", ",
+          )}, but user has ${membership.role}`,
+        );
+      }
+    }
+
+    return membership;
   }
 
-  return membership;
+  throw new Error("Not a member of this organization");
 };
 
 export const isBillingActiveStatus = (status?: BillingStatus | null) =>

@@ -74,9 +74,13 @@ export const setNewsletterStatus = internalMutation({
 		status: v.union(v.literal("subscribed"), v.literal("unsubscribed")),
 	},
 	handler: async (ctx, args) => {
-		const user = await findCanonicalUser(ctx, { email: args.email });
+		const normalized = args.email.trim().toLowerCase();
+		const matches = await ctx.db
+			.query("users")
+			.withIndex("email", (q) => q.eq("email", normalized))
+			.collect();
 
-		if (user) {
+		for (const user of matches) {
 			await ctx.db.patch(user._id, {
 				newsletterSubscriptionStatus: args.status,
 			});

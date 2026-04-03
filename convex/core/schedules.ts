@@ -35,23 +35,27 @@ const scheduleDocValidator = v.object({
 export const listSchedules = query({
   args: {
     organizationId: v.id("organizations"),
+    limit: v.optional(v.number()),
   },
   returns: v.array(scheduleDocValidator),
   handler: async (ctx, args) => {
     await ensureOrgMember(ctx, args.organizationId);
+    const cap = Math.min(args.limit ?? 200, 500);
     return ctx.db
       .query("schedules")
       .withIndex("by_org_weekStart", (q) => q.eq("organizationId", args.organizationId))
       .order("desc")
-      .collect();
+      .take(cap);
   },
 });
 
 /** List all schedules for any org the current user is a member of */
 export const listSchedulesForUser = query({
-  args: {},
+  args: {
+    limitPerOrg: v.optional(v.number()),
+  },
   returns: v.array(scheduleDocValidator),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 
@@ -73,11 +77,13 @@ export const listSchedulesForUser = query({
     const orgIdSet = new Set(memberships.map((m) => m.organizationId));
     const allSchedules = [];
 
+    const perOrgCap = Math.min(args.limitPerOrg ?? 50, 200);
     for (const orgId of orgIdSet) {
       const orgSchedules = await ctx.db
         .query("schedules")
-        .withIndex("by_org", (q) => q.eq("organizationId", orgId))
-        .collect();
+        .withIndex("by_org_weekStart", (q) => q.eq("organizationId", orgId))
+        .order("desc")
+        .take(perOrgCap);
       allSchedules.push(...orgSchedules);
     }
 
@@ -255,8 +261,11 @@ export const createSchedule = mutation({
   returns: v.id("schedules"),
   handler: async (ctx, args) => {
     await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
+    const identity = await ctx.auth.getUserIdentity();
     const user = await findCanonicalUser(ctx, {
-      clerkId: (await ctx.auth.getUserIdentity())?.subject,
+      clerkId: identity?.subject,
+      tokenIdentifier: identity?.tokenIdentifier,
+      email: identity?.email,
     });
 
     const weekStartDay = args.weekStartDay ?? "monday";
@@ -300,6 +309,16 @@ export const assignQuestion = mutation({
     if (!schedule) throw new Error("Schedule not found");
     await ensureOrgMember(ctx, schedule.organizationId, ["admin", "manager"]);
     if (schedule.status !== "draft") throw new Error("Cannot modify a published schedule");
+
+    const existing = await ctx.db
+      .query("scheduledQuestions")
+      .withIndex("by_schedule_day", (q) =>
+        q.eq("scheduleId", args.scheduleId).eq("dayOfWeek", args.dayOfWeek),
+      )
+      .first();
+    if (existing) {
+      await ctx.db.delete(existing._id);
+    }
 
     await ctx.db.insert("scheduledQuestions", {
       scheduleId: args.scheduleId,
@@ -380,10 +399,20 @@ export const autoSchedule = mutation({
     candidates.sort(() => Math.random() - 0.5);
 
     for (let i = 0; i < 7; i++) {
+      const day = daysOfWeek[i];
+      const existingDay = await ctx.db
+        .query("scheduledQuestions")
+        .withIndex("by_schedule_day", (q) =>
+          q.eq("scheduleId", args.scheduleId).eq("dayOfWeek", day),
+        )
+        .first();
+      if (existingDay) {
+        await ctx.db.delete(existingDay._id);
+      }
       const q = candidates[i % candidates.length];
       await ctx.db.insert("scheduledQuestions", {
         scheduleId: args.scheduleId,
-        dayOfWeek: daysOfWeek[i],
+        dayOfWeek: day,
         questionId: q._id,
         slotOrder: 0,
         assignedAt: now,

@@ -37,6 +37,11 @@ export default function CoachDailyViewPage() {
     orgId ? { organizationId: orgId } : "skip"
   );
 
+  const coachToday = useQuery(
+    api.core.coachFeedback.getCoachTodayAssignment,
+    orgId ? { organizationId: orgId } : "skip"
+  );
+
   const feedbackReport = useQuery(
     api.core.coachFeedback.getWeeklyFeedbackReport,
     todayAssignment?.scheduleId
@@ -54,7 +59,29 @@ export default function CoachDailyViewPage() {
     timingOff: false,
   });
   const [notes, setNotes] = React.useState("");
-  const [submitted, setSubmitted] = React.useState(todayAssignment?.todayAssignment ? false : true);
+  const [submittedLocal, setSubmittedLocal] = React.useState(false);
+
+  const todaySqId = todayAssignment?.todayAssignment?._id;
+  const scheduleKey = todayAssignment?.scheduleId;
+
+  React.useEffect(() => {
+    setSubmittedLocal(false);
+    setNotes("");
+    setSignals({
+      landedWell: false,
+      fellFlat: false,
+      wrongVibe: false,
+      timingOff: false,
+    });
+  }, [todaySqId, scheduleKey]);
+
+  const feedbackAlreadySent =
+    coachToday !== undefined &&
+    todaySqId != null &&
+    coachToday.scheduledQuestionId === todaySqId &&
+    coachToday.hasSubmittedFeedback;
+
+  const submitted = submittedLocal || feedbackAlreadySent;
 
   const toggleSignal = (key: string) => {
     setSignals((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -68,7 +95,7 @@ export default function CoachDailyViewPage() {
         ...signals,
         notes: notes.trim() || undefined,
       });
-      setSubmitted(true);
+      setSubmittedLocal(true);
       toast.success("Feedback submitted");
     } catch (e: any) {
       toast.error(e.message ?? "Failed to submit feedback");
@@ -212,7 +239,7 @@ export default function CoachDailyViewPage() {
             </div>
 
             <div className="flex justify-end">
-              <Button onClick={handleSubmit}>
+              <Button onClick={() => void handleSubmit()}>
                 Submit Feedback
               </Button>
             </div>

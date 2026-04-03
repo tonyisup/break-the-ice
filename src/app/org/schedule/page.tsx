@@ -58,16 +58,21 @@ const axisLabels: Record<AxisType, string> = {
   topic: "Topic",
 };
 
-/** Map a visible matrix (ySlug × xSlug) to style/tone/topic for generation. Third axis topic is controlled globally. */
+/** Map a visible matrix (ySlug × xSlug) to style/tone/topic for generation. */
 function generationSlugsForMatrixCell(
   axisY: AxisType,
   axisX: AxisType,
   ySlug: string,
   xSlug: string,
-  topicSlug: string | undefined,
+  /** Applied only when neither visible axis is "topic" (matrix topic comes from rows/cols otherwise). */
+  globalTopicSlug: string | undefined,
   styleList: Array<{ slug: string }> | undefined,
   toneList: Array<{ slug: string }> | undefined,
 ): { styleSlug: string; toneSlug: string; topicSlug?: string } {
+  if (axisY === axisX) {
+    throw new Error("Primary and secondary axes must be different taxonomies.");
+  }
+
   let styleSlug: string | undefined;
   let toneSlug: string | undefined;
   let matrixTopicSlug: string | undefined;
@@ -80,8 +85,10 @@ function generationSlugsForMatrixCell(
   else if (axisX === "tone") toneSlug = xSlug;
   else matrixTopicSlug = xSlug;
 
-  // topicSlug from the global control always takes precedence
-  const resolvedTopic = topicSlug ?? (matrixTopicSlug ?? undefined);
+  const resolvedTopic =
+    axisY === "topic" || axisX === "topic"
+      ? matrixTopicSlug
+      : globalTopicSlug ?? matrixTopicSlug;
 
   const defaultStyle = styleList?.[0]?.slug;
   const defaultTone = toneList?.[0]?.slug;
@@ -388,6 +395,10 @@ const questionPool = useQuery(
     return undefined; // random
   }, [topicPolicy, globalTopicId, topics]);
 
+  /** Global topic for generation/pool only when topic is not already a visible matrix axis. */
+  const globalTopicSlugForMatrix =
+    axisY !== "topic" && axisX !== "topic" ? effectiveTopicSlug : undefined;
+
   /* --- Auto-seed 5 random items per axis on first data load --- */
   const MAX_AXIS_ITEMS = 5;
   const axisYSeededRef = React.useRef(false);
@@ -536,8 +547,11 @@ const questionPool = useQuery(
         return val && slugs.has(val);
       });
     }
+    if (globalTopicSlugForMatrix) {
+      filtered = filtered.filter((q) => (q.topic ?? "") === globalTopicSlugForMatrix);
+    }
     return filtered;
-  }, [questionPool, axisY, axisX, axisYSelected, axisXSelected, styles, tones, topics]);
+  }, [questionPool, axisY, axisX, axisYSelected, axisXSelected, styles, tones, topics, globalTopicSlugForMatrix]);
 
   /* Taxonomy items for the axis dropdowns */
   const axisYItems = React.useMemo(
@@ -575,6 +589,7 @@ const questionPool = useQuery(
     const xItems =
       axisXSelected.size > 0 ? axisXItems.filter((t) => axisXSelected.has(t.id)) : axisXItems;
     if (yItems.length === 0 || xItems.length === 0) return null;
+    if (axisY === axisX) return null;
 
     const matrix: PoolRow[][][] = yItems.map(() =>
       xItems.map(() => [] as PoolRow[])
@@ -827,7 +842,7 @@ const questionPool = useQuery(
             axisX,
             y.slug,
             x.slug,
-            effectiveTopicSlug,
+            globalTopicSlugForMatrix,
             styles,
             tones,
           );
@@ -840,10 +855,16 @@ const questionPool = useQuery(
         }),
       );
 
+      if (!orgId) {
+        toast.error("Select an organization to fill the matrix");
+        return;
+      }
+
       const result = await fillEmptyCellsAction({
+        organizationId: orgId,
         axisY,
         axisX,
-        topicSlug: effectiveTopicSlug,
+        topicSlug: globalTopicSlugForMatrix,
         cells,
       });
 
@@ -865,16 +886,21 @@ const questionPool = useQuery(
     const cellKey = `${ySlug}-${xSlug}`;
     setFillingCellKey(cellKey);
     try {
+      if (!orgId) {
+        toast.error("Select an organization to generate");
+        return;
+      }
       const { styleSlug, toneSlug, topicSlug } = generationSlugsForMatrixCell(
         axisY,
         axisX,
         ySlug,
         xSlug,
-        effectiveTopicSlug,
+        globalTopicSlugForMatrix,
         styles,
         tones,
       );
       const result = await fillSingleCellAction({
+        organizationId: orgId,
         styleSlug,
         toneSlug,
         topicSlug,
@@ -1051,6 +1077,7 @@ const questionPool = useQuery(
                       variant={axisY === t ? "default" : "outline"}
                       size="sm"
                       className="flex-1 text-xs px-1"
+                      disabled={t === axisX}
                       onClick={() => {
                         setAxisY(t);
                         // Auto-seed 5 random from the new axis type
@@ -1090,6 +1117,7 @@ const questionPool = useQuery(
                       variant={axisX === t ? "default" : "outline"}
                       size="sm"
                       className="flex-1 text-xs px-1"
+                      disabled={t === axisY}
                       onClick={() => {
                         setAxisX(t);
                         // Auto-seed 5 random from the new axis type

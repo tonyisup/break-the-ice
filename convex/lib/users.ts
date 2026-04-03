@@ -14,21 +14,27 @@ type UserUpsert = UserLookup & {
 
 const normalizeEmail = (email?: string | null) => email?.trim().toLowerCase();
 
-const userScore = (user: Doc<"users">, lookup: Required<UserLookup>) => {
+/** Exported for auth: same ranking as findCanonicalUser (Clerk id > token > email). */
+export const userScore = (user: Doc<"users">, lookup: Required<UserLookup>) => {
   const clerkMatch = lookup.clerkId && user.clerkId === lookup.clerkId ? 1 : 0;
-  const emailMatch = lookup.email && normalizeEmail(user.email) === lookup.email ? 1 : 0;
   const tokenMatch =
     !clerkMatch &&
-    !emailMatch &&
     lookup.tokenIdentifier &&
     user.tokenIdentifier === lookup.tokenIdentifier
       ? 1
       : 0;
+  const emailMatch =
+    !clerkMatch &&
+    !tokenMatch &&
+    lookup.email &&
+    normalizeEmail(user.email) === lookup.email
+      ? 1
+      : 0;
 
-  return clerkMatch * 1000 + emailMatch * 100 + tokenMatch * 10;
+  return clerkMatch * 1000 + tokenMatch * 100 + emailMatch * 10;
 };
 
-async function collectUserCandidates(ctx: QueryCtx | MutationCtx, lookup: UserLookup) {
+export async function collectUserCandidates(ctx: QueryCtx | MutationCtx, lookup: UserLookup) {
   const normalizedEmail = normalizeEmail(lookup.email);
   const candidates = new Map<string, Doc<"users">>();
 

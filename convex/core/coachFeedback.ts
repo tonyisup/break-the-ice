@@ -56,7 +56,11 @@ export const getCoachTodayAssignment = query({
     await ensureOrgMember(ctx, args.organizationId);
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
-    const user = await findCanonicalUser(ctx, { clerkId: identity.subject });
+    const user = await findCanonicalUser(ctx, {
+      clerkId: identity.subject,
+      tokenIdentifier: identity.tokenIdentifier,
+      email: identity.email,
+    });
     if (!user) throw new Error("User not found");
 
     const now = new Date();
@@ -278,11 +282,19 @@ export const submitCoachFeedback = mutation({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
-    const user = await findCanonicalUser(ctx, { clerkId: identity.subject });
+    const user = await findCanonicalUser(ctx, {
+      clerkId: identity.subject,
+      tokenIdentifier: identity.tokenIdentifier,
+      email: identity.email,
+    });
     if (!user) throw new Error("User not found");
 
     const sq = await ctx.db.get(args.scheduledQuestionId);
     if (!sq) throw new Error("Scheduled question not found");
+
+    const schedule = await ctx.db.get(sq.scheduleId);
+    if (!schedule) throw new Error("Schedule not found");
+    await ensureOrgMember(ctx, schedule.organizationId);
 
     // Check if coach already submitted for this schedule+question+day combo
     const existing = await ctx.db

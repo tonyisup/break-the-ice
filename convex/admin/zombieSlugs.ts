@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 
 type ZombieEntry = {
 	slug: string;
@@ -51,20 +52,23 @@ export const scanZombieSlugs = internalQuery({
 			if (info.type === "style") {
 				active = await ctx.db
 					.query("styles")
-					.withIndex("by_slug", (q) => q.eq("slug", slug))
-					.filter((q) => q.eq(q.field("status"), "active"))
+					.withIndex("by_slug_status", (q) =>
+						q.eq("slug", slug).eq("status", "active"),
+					)
 					.first();
 			} else if (info.type === "tone") {
 				active = await ctx.db
 					.query("tones")
-					.withIndex("by_slug", (q) => q.eq("slug", slug))
-					.filter((q) => q.eq(q.field("status"), "active"))
+					.withIndex("by_slug_status", (q) =>
+						q.eq("slug", slug).eq("status", "active"),
+					)
 					.first();
 			} else {
 				active = await ctx.db
 					.query("topics")
-					.withIndex("by_slug", (q) => q.eq("slug", slug))
-					.filter((q) => q.eq(q.field("status"), "active"))
+					.withIndex("by_slug_status", (q) =>
+						q.eq("slug", slug).eq("status", "active"),
+					)
 					.first();
 			}
 
@@ -131,14 +135,36 @@ export const storeReport = internalMutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const existing = await ctx.db
-			.query("zombieSlugReports")
-			.first();
+		const { details, ...summary } = args;
+		const existing = await ctx.db.query("zombieSlugReports").first();
+
+		let reportId: Id<"zombieSlugReports">;
 
 		if (existing) {
-			await ctx.db.patch(existing._id, args);
+			while (true) {
+				const batch = await ctx.db
+					.query("zombieSlugReportDetails")
+					.withIndex("by_reportId", (q) => q.eq("reportId", existing._id))
+					.take(100);
+				if (batch.length === 0) break;
+				for (const row of batch) {
+					await ctx.db.delete(row._id);
+				}
+			}
+			// replace (not patch) drops legacy embedded `details` on the summary row
+			await ctx.db.replace(existing._id, summary);
+			reportId = existing._id;
 		} else {
-			await ctx.db.insert("zombieSlugReports", args);
+			reportId = await ctx.db.insert("zombieSlugReports", summary);
+		}
+
+		for (const d of details) {
+			await ctx.db.insert("zombieSlugReportDetails", {
+				reportId,
+				slug: d.slug,
+				type: d.type,
+				count: d.count,
+			});
 		}
 		return null;
 	},
@@ -161,8 +187,21 @@ export const getLatestZombieReport = internalQuery({
 		v.null()
 	),
 	handler: async (ctx) => {
-		return await ctx.db
-			.query("zombieSlugReports")
-			.first();
+		const report = await ctx.db.query("zombieSlugReports").first();
+		if (!report) return null;
+		const details = await ctx.db
+			.query("zombieSlugReportDetails")
+			.withIndex("by_reportId", (q) => q.eq("reportId", report._id))
+			.take(5000);
+		return {
+			scanTime: report.scanTime,
+			totalZombieSlugs: report.totalZombieSlugs,
+			totalAffectedQuestions: report.totalAffectedQuestions,
+			details: details.map((d) => ({
+				slug: d.slug,
+				type: d.type,
+				count: d.count,
+			})),
+		};
 	},
 });
