@@ -313,13 +313,15 @@ export const submitCoachFeedback = mutation({
       .unique();
 
     if (existing) {
+      const now = Date.now();
       await ctx.db.patch(existing._id, {
         landedWell: args.landedWell,
         fellFlat: args.fellFlat,
         wrongVibe: args.wrongVibe,
         timingOff: args.timingOff,
         notes: args.notes,
-        submittedAt: Date.now(),
+        submittedAt: now,
+        updatedAt: now,
       });
     } else {
       await ctx.db.insert("coachFeedback", {

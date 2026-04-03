@@ -6,6 +6,8 @@ const LS_KEY = "break-the-ice:activeWorkspace";
 
 type WorkspaceContextType = {
   activeWorkspace: Id<"organizations"> | null;
+  /** False until localStorage has been read for the current Clerk user. */
+  workspaceHydrated: boolean;
   setActiveWorkspace: (workspace: Id<"organizations"> | null) => void;
 };
 
@@ -14,11 +16,13 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   const { userId } = useAuth();
   const [activeWorkspace, _setActiveWorkspace] = useState<Id<"organizations"> | null>(null);
+  const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
 
   // Hydrate only after we know which Clerk user this is (avoids cross-account workspace bleed).
   useEffect(() => {
     if (!userId) {
       _setActiveWorkspace(null);
+      setWorkspaceHydrated(true);
       return;
     }
     try {
@@ -27,6 +31,8 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       /* ignore localStorage errors */
       _setActiveWorkspace(null);
+    } finally {
+      setWorkspaceHydrated(true);
     }
   }, [userId]);
 
@@ -52,7 +58,9 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <WorkspaceContext.Provider value={{ activeWorkspace, setActiveWorkspace }}>
+    <WorkspaceContext.Provider
+      value={{ activeWorkspace, workspaceHydrated, setActiveWorkspace }}
+    >
       {children}
     </WorkspaceContext.Provider>
   );

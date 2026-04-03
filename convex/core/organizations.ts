@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
 import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
-import { findCanonicalUser } from "../lib/users";
+import { collectUserCandidates, findCanonicalUser } from "../lib/users";
 
 const MEMBERSHIPS_QUERY_CAP = 100;
 
@@ -136,24 +137,38 @@ export const getOrganizations = query({
 			return [];
 		}
 
-		const user = await findCanonicalUser(ctx, {
+		const { candidates } = await collectUserCandidates(ctx, {
 			clerkId: identity.subject,
 			tokenIdentifier: identity.tokenIdentifier,
 			email: identity.email,
 		});
 
-		if (!user) {
+		if (candidates.length === 0) {
 			return [];
 		}
 
-		const memberships = await ctx.db
-			.query("organization_members")
-			.withIndex("by_userId", (q) => q.eq("userId", user._id))
-			.take(MEMBERSHIPS_QUERY_CAP);
+		const membershipRows: Doc<"organization_members">[] = [];
+		for (const user of candidates) {
+			const rows = await ctx.db
+				.query("organization_members")
+				.withIndex("by_userId", (q) => q.eq("userId", user._id))
+				.order("desc")
+				.take(MEMBERSHIPS_QUERY_CAP);
+			membershipRows.push(...rows);
+		}
 
-		const organizations = await Promise.all(
-			memberships.map((m) => ctx.db.get(m.organizationId))
-		);
+		membershipRows.sort((a, b) => b._creationTime - a._creationTime);
+		const seenOrg = new Set<string>();
+		const orgIds: Id<"organizations">[] = [];
+		for (const m of membershipRows) {
+			const key = m.organizationId as string;
+			if (seenOrg.has(key)) continue;
+			seenOrg.add(key);
+			orgIds.push(m.organizationId);
+			if (orgIds.length >= MEMBERSHIPS_QUERY_CAP) break;
+		}
+
+		const organizations = await Promise.all(orgIds.map((id) => ctx.db.get(id)));
 
 		return organizations.filter((o) => o !== null);
 	},

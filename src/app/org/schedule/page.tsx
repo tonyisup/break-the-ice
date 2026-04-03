@@ -398,16 +398,20 @@ const questionPool = useQuery(
 
   React.useEffect(() => {
     if (!axisYSeededRef.current && styles && styles.length > 5 && axisY === "style") {
-      const shuffled = [...styles].sort(() => Math.random() - 0.5).slice(0, MAX_AXIS_ITEMS);
-      setAxisYSelected(new Set(shuffled.map(s => s.id)));
+      const picked = [...styles]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .slice(0, MAX_AXIS_ITEMS);
+      setAxisYSelected(new Set(picked.map(s => s.id)));
       axisYSeededRef.current = true;
     }
   }, [styles, axisY]);
 
   React.useEffect(() => {
     if (!axisXSeededRef.current && tones && tones.length > 5 && axisX === "tone") {
-      const shuffled = [...tones].sort(() => Math.random() - 0.5).slice(0, MAX_AXIS_ITEMS);
-      setAxisXSelected(new Set(shuffled.map(t => t.id)));
+      const picked = [...tones]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .slice(0, MAX_AXIS_ITEMS);
+      setAxisXSelected(new Set(picked.map(t => t.id)));
       axisXSeededRef.current = true;
     }
   }, [tones, axisX]);
@@ -436,7 +440,7 @@ const questionPool = useQuery(
     if (!isSignedIn || !authLoaded || !clerkOrgLoaded || activeWorkspace) return;
     if (!clerkOrgId || !clerkOrganization?.name) return;
     let cancelled = false;
-    void syncOrg({ name: clerkOrganization.name })
+    void syncOrg({})
       .then((id) => {
         if (cancelled || id) {
           if (id) setActiveWorkspace(id);
@@ -682,9 +686,13 @@ const questionPool = useQuery(
         axisFilters.axisXSlugs = [...axisXSelected].map(id => lookup.get(id)).filter(Boolean) as string[];
       }
 
-      // For now use the existing autoSchedule which shuffles public questions
-      // Future: pass axis filters to a filtered autoSchedule mutation
-      await autoSchedule({ scheduleId: sched._id });
+      await autoSchedule({
+        scheduleId: sched._id,
+        axisY,
+        axisX,
+        axisYSlugs: axisFilters.axisYSlugs,
+        axisXSlugs: axisFilters.axisXSlugs,
+      });
       toast.success("Week auto-filled!");
     } catch (e: any) {
       toast.error(e.message ?? "Failed to generate");
@@ -696,7 +704,30 @@ const questionPool = useQuery(
   const handleAutoSchedule = async () => {
     if (!currentSchedule) return;
     try {
-      await autoSchedule({ scheduleId: currentSchedule._id });
+      const axisFilters: { axisYSlugs?: string[]; axisXSlugs?: string[] } = {};
+      if (axisYSelected.size > 0) {
+        const lookup = new Map(
+          (axisY === "style" ? styles : axisY === "tone" ? tones : topics)?.map((t) => [
+            t.id, t.slug,
+          ]) ?? []
+        );
+        axisFilters.axisYSlugs = [...axisYSelected].map(id => lookup.get(id)).filter(Boolean) as string[];
+      }
+      if (axisXSelected.size > 0) {
+        const lookup = new Map(
+          (axisX === "style" ? styles : axisX === "tone" ? tones : topics)?.map((t) => [
+            t.id, t.slug,
+          ]) ?? []
+        );
+        axisFilters.axisXSlugs = [...axisXSelected].map(id => lookup.get(id)).filter(Boolean) as string[];
+      }
+      await autoSchedule({
+        scheduleId: currentSchedule._id,
+        axisY,
+        axisX,
+        axisYSlugs: axisFilters.axisYSlugs,
+        axisXSlugs: axisFilters.axisXSlugs,
+      });
       toast.success("Week auto-filled!");
     } catch (e: any) {
       toast.error(e.message ?? "Auto-schedule failed");
@@ -733,7 +764,7 @@ const questionPool = useQuery(
 
       await assignQuestion({
         scheduleId: sched._id,
-        dayOfWeek: dayKey as any,
+        dayOfWeek: dayKey as (typeof DAYS_DISPLAY)[number]["key"],
         questionId: questionId as Id<"questions">,
       });
       setAssignTargetDay(null);

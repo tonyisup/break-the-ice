@@ -39,21 +39,25 @@ export const scanZombieSlugs = internalQuery({
 			slugSet.get(key)!.count++;
 		};
 
-		let cursor: string | null = null;
-		let done = false;
-		do {
-			const r = await ctx.db
-				.query("questions")
-				.withIndex("by_status", (q) => q.eq("status", "public"))
-				.paginate({ numItems: PUBLIC_QUESTION_PAGE_SIZE, cursor });
-			for (const row of r.page) {
-				bumpSlug(row.style, "style");
-				bumpSlug(row.tone, "tone");
-				bumpSlug(row.topic, "topic");
-			}
-			done = r.isDone;
-			cursor = r.continueCursor;
-		} while (!done);
+		const scanStatuses = ["public", "approved", null] as const;
+		for (const status of scanStatuses) {
+			const statusFilter = status === null ? undefined : status;
+			let cursor: string | null = null;
+			let done = false;
+			do {
+				const r = await ctx.db
+					.query("questions")
+					.withIndex("by_status", (q) => q.eq("status", statusFilter))
+					.paginate({ numItems: PUBLIC_QUESTION_PAGE_SIZE, cursor });
+				for (const row of r.page) {
+					bumpSlug(row.style, "style");
+					bumpSlug(row.tone, "tone");
+					bumpSlug(row.topic, "topic");
+				}
+				done = r.isDone;
+				cursor = r.continueCursor;
+			} while (!done);
+		}
 
 		const zombies: ZombieEntry[] = [];
 
@@ -104,21 +108,24 @@ export const scanZombieSlugs = internalQuery({
 				zombieKeys.has(`topic:${row.topic}`));
 
 		const uniqueAffected = new Set<Id<"questions">>();
-		cursor = null;
-		done = false;
-		do {
-			const r = await ctx.db
-				.query("questions")
-				.withIndex("by_status", (q) => q.eq("status", "public"))
-				.paginate({ numItems: PUBLIC_QUESTION_PAGE_SIZE, cursor });
-			for (const row of r.page) {
-				if (touchesZombie(row)) {
-					uniqueAffected.add(row._id);
+		for (const status of scanStatuses) {
+			const statusFilter = status === null ? undefined : status;
+			let cursor: string | null = null;
+			let done = false;
+			do {
+				const r = await ctx.db
+					.query("questions")
+					.withIndex("by_status", (q) => q.eq("status", statusFilter))
+					.paginate({ numItems: PUBLIC_QUESTION_PAGE_SIZE, cursor });
+				for (const row of r.page) {
+					if (touchesZombie(row)) {
+						uniqueAffected.add(row._id);
+					}
 				}
-			}
-			done = r.isDone;
-			cursor = r.continueCursor;
-		} while (!done);
+				done = r.isDone;
+				cursor = r.continueCursor;
+			} while (!done);
+		}
 
 		return {
 			zombies,

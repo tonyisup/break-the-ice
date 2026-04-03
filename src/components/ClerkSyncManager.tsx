@@ -70,11 +70,13 @@ export function ClerkSyncManager() {
             setActiveWorkspace(id);
           } else {
             lastOrgKeyRef.current = null;
+            setActiveWorkspace(null);
           }
         });
       })
       .catch((error) => {
         lastOrgKeyRef.current = null;
+        setActiveWorkspace(null);
         console.error("Failed to sync organization from Clerk:", error);
       });
   }, [

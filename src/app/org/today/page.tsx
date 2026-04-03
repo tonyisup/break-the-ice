@@ -29,7 +29,7 @@ const SIGNALS = [
 ];
 
 export default function CoachDailyViewPage() {
-  const { activeWorkspace } = useWorkspace();
+  const { activeWorkspace, workspaceHydrated } = useWorkspace();
   const orgId = activeWorkspace;
 
   const coachToday = useQuery(
@@ -95,6 +95,14 @@ export default function CoachDailyViewPage() {
       toast.error(e.message ?? "Failed to submit feedback");
     }
   };
+
+  if (!workspaceHydrated) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin size-6 border-2 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   if (!orgId) {
     return (

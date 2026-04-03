@@ -88,10 +88,6 @@ export async function upsertClerkLinkedOrganization(
     image: params.pictureUrl,
   });
 
-  if (!user) {
-    throw new Error("Failed to sync current user");
-  }
-
   let organization = await ctx.db
     .query("organizations")
     .withIndex("by_clerkOrganizationId", (q) =>

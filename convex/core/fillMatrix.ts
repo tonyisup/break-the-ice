@@ -6,6 +6,16 @@ import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration } from "../lib/generationRunner";
 
+async function pickRandomActiveTopicSlug(ctx: ActionCtx): Promise<string> {
+	const topics = await ctx.runQuery(api.core.topics.getTopics, {});
+	if (topics.length === 0) {
+		throw new Error(
+			"No active topics in the catalog. Add a topic in admin or pick a global topic in the UI.",
+		);
+	}
+	return topics[Math.floor(Math.random() * topics.length)]!.slug;
+}
+
 const axisValidator = v.union(
 	v.literal("style"),
 	v.literal("tone"),
@@ -148,7 +158,10 @@ export const fillEmptyCells = action({
 		for (const cell of args.cells) {
 			totalCells++;
 
-			const effectiveTopic = args.topicSlug;
+			const effectiveTopic =
+				args.topicSlug !== undefined && args.topicSlug !== ""
+					? args.topicSlug
+					: await pickRandomActiveTopicSlug(ctx);
 
 			const cellKey = `${cell.ySlug}|${cell.xSlug}`;
 			if (occupied.has(cellKey)) {
@@ -229,7 +242,18 @@ export const fillSingleCell = action({
 			organizationId: args.organizationId,
 		});
 
-		if (await publicSlugTripleExists(ctx, args)) {
+		const effectiveTopic =
+			args.topicSlug !== undefined && args.topicSlug !== ""
+				? args.topicSlug
+				: await pickRandomActiveTopicSlug(ctx);
+
+		if (
+			await publicSlugTripleExists(ctx, {
+				styleSlug: args.styleSlug,
+				toneSlug: args.toneSlug,
+				topicSlug: effectiveTopic,
+			})
+		) {
 			return { count: 0, questionIds: [] };
 		}
 
@@ -240,7 +264,7 @@ export const fillSingleCell = action({
 			purpose: "feed",
 			styleSlug: args.styleSlug,
 			toneSlug: args.toneSlug,
-			topicSlug: args.topicSlug,
+			topicSlug: effectiveTopic,
 			batchSize: clampedCount,
 		});
 

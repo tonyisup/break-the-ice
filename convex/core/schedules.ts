@@ -1,6 +1,7 @@
 import type { GenericId } from "convex/values";
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
+import type { Doc } from "../_generated/dataModel";
 import { ensureOrgMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 
@@ -73,6 +74,7 @@ export const listSchedulesForUser = query({
     const memberships = await ctx.db
       .query("organization_members")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .order("desc")
       .take(MEMBERSHIPS_LIST_CAP);
 
     if (memberships.length === 0) return [];
@@ -366,9 +368,43 @@ export const publishSchedule = mutation({
   },
 });
 
-/** Auto-fill a week with shuffled public questions */
+const POOL_QUERY_LIMIT = 500;
+
+function questionMatchesAxisSlugs(
+  q: Doc<"questions">,
+  axisY: "style" | "tone" | "topic" | undefined,
+  axisYSlugs: string[] | undefined,
+  axisX: "style" | "tone" | "topic" | undefined,
+  axisXSlugs: string[] | undefined,
+): boolean {
+  if (axisY && axisYSlugs && axisYSlugs.length > 0) {
+    const val = q[axisY];
+    if (!val || !axisYSlugs.includes(val)) {
+      return false;
+    }
+  }
+  if (axisX && axisXSlugs && axisXSlugs.length > 0) {
+    const val = q[axisX];
+    if (!val || !axisXSlugs.includes(val)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Auto-fill a week with shuffled public-equivalent questions (public, approved, legacy) */
 export const autoSchedule = mutation({
-  args: { scheduleId: v.id("schedules") },
+  args: {
+    scheduleId: v.id("schedules"),
+    axisY: v.optional(
+      v.union(v.literal("style"), v.literal("tone"), v.literal("topic")),
+    ),
+    axisX: v.optional(
+      v.union(v.literal("style"), v.literal("tone"), v.literal("topic")),
+    ),
+    axisYSlugs: v.optional(v.array(v.string())),
+    axisXSlugs: v.optional(v.array(v.string())),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
@@ -379,13 +415,44 @@ export const autoSchedule = mutation({
     const daysOfWeek = getDaysOfWeek(schedule.weekStart, schedule.weekStartDay);
     const now = Date.now();
 
-    let candidates = await ctx.db
-      .query("questions")
-      .withIndex("by_status", (q) => q.eq("status", "public"))
-      .take(500);
+    const [pubRows, apprRows, legacyRows] = await Promise.all([
+      ctx.db
+        .query("questions")
+        .withIndex("by_status", (q) => q.eq("status", "public"))
+        .take(POOL_QUERY_LIMIT),
+      ctx.db
+        .query("questions")
+        .withIndex("by_status", (q) => q.eq("status", "approved"))
+        .take(POOL_QUERY_LIMIT),
+      ctx.db
+        .query("questions")
+        .withIndex("by_status", (q) => q.eq("status", undefined))
+        .take(POOL_QUERY_LIMIT),
+    ]);
+    const byId = new Map<string, Doc<"questions">>();
+    for (const row of pubRows) {
+      byId.set(row._id, row);
+    }
+    for (const row of apprRows) {
+      byId.set(row._id, row);
+    }
+    for (const row of legacyRows) {
+      byId.set(row._id, row);
+    }
+    let candidates = [...byId.values()].filter((q) =>
+      questionMatchesAxisSlugs(
+        q,
+        args.axisY,
+        args.axisYSlugs,
+        args.axisX,
+        args.axisXSlugs,
+      ),
+    );
 
     if (candidates.length === 0) {
-      throw new Error("No public questions available. Generate some via the admin AI generator.");
+      throw new Error(
+        "No matching questions in the pool. Generate some via admin or relax axis filters.",
+      );
     }
 
     const existingAssignments = await ctx.db
@@ -396,7 +463,7 @@ export const autoSchedule = mutation({
     candidates = candidates.filter((q) => !assignedQIds.has(q._id));
 
     if (candidates.length === 0) {
-      throw new Error("All public questions are already assigned this week.");
+      throw new Error("All eligible questions are already assigned this week.");
     }
 
     candidates.sort(() => Math.random() - 0.5);
@@ -453,5 +520,5 @@ function getDaysOfWeek(_weekStart: string, weekStartDay: "monday" | "sunday"): D
 }
 
 function getDayOfWeekLabel(date: Date): DayOfWeek {
-  return DAYS_ORDERED[date.getDay()];
+  return DAYS_ORDERED[date.getUTCDay()];
 }

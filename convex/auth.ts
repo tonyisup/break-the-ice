@@ -181,6 +181,7 @@ export const getEffectivePlanForUser = async (
     const memberships = await ctx.db
       .query("organization_members")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .order("desc")
       .take(100);
     allMemberships.push(...memberships);
   }

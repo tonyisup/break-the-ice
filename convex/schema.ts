@@ -574,6 +574,7 @@ export default defineSchema({
     timingOff: v.optional(v.boolean()),
     notes: v.optional(v.string()),
     submittedAt: v.number(),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_schedule", ["scheduleId"])
     .index("by_coach", ["coachId"])
