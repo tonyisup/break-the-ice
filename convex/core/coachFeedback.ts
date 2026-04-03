@@ -26,7 +26,7 @@ const DAYS_ORDERED_BY_INDEX = [
 ] as const;
 
 function idxToDay(date: Date): DayOfWeek {
-  return DAYS_ORDERED_BY_INDEX[date.getDay()]!;
+  return DAYS_ORDERED_BY_INDEX[date.getUTCDay()]!;
 }
 
 // ──────────────────────────────────────────────
@@ -129,7 +129,7 @@ export const getCoachTodayAssignment = query({
       scheduleId: schedule._id,
       question: question ? {
         _id: question._id,
-        text: question.text,
+        text: question.text ?? question.customText,
         style: question.style,
         tone: question.tone,
         topic: question.topic,
@@ -179,7 +179,7 @@ export const getWeeklyFeedbackReport = query({
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
-    await ensureOrgMember(ctx, schedule.organizationId);
+    await ensureOrgMember(ctx, schedule.organizationId, "admin");
 
     const feedbacks = await ctx.db
       .query("coachFeedback")
@@ -222,7 +222,7 @@ export const getWeeklyFeedbackReport = query({
     const allQuestionIds = new Set(Object.values(sqMap).filter(Boolean) as GenericId<"questions">[]);
     for (const qid of allQuestionIds) {
       const q = await ctx.db.get(qid);
-      questionTextCache.set(qid, q?.text);
+      questionTextCache.set(qid, q?.text ?? q?.customText);
     }
 
     const byDay = ALL_DAYS.map(day => {

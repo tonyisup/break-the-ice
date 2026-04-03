@@ -36,7 +36,7 @@ async function collectMatrixOccupiedKeys(
 	topicSlug: string | undefined,
 ): Promise<Set<string>> {
 	const occupied = new Set<string>();
-	for (const status of ["public", "approved"] as const) {
+	for (const status of ["public", "approved", null] as const) {
 		let cursor: string | null = null;
 		let done = false;
 		do {
@@ -64,7 +64,7 @@ async function publicSlugTripleExists(
 	ctx: ActionCtx,
 	args: { styleSlug: string; toneSlug: string; topicSlug?: string },
 ): Promise<boolean> {
-	for (const status of ["public", "approved"] as const) {
+	for (const status of ["public", "approved", null] as const) {
 		let cursor: string | null = null;
 		let done = false;
 		do {

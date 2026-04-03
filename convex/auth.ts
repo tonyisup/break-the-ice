@@ -68,7 +68,7 @@ export const ensureOrgMember = async (
   for (const user of sorted) {
     const membership = await ctx.db
       .query("organization_members")
-      .withIndex("by_userId_organizationId", (q: any) =>
+      .withIndex("by_userId_organizationId", (q) =>
         q.eq("userId", user._id).eq("organizationId", organizationId),
       )
       .unique();
@@ -150,7 +150,7 @@ export const getEffectivePlanForUser = async (
     for (const userId of candidateIds) {
       const membership = await ctx.db
         .query("organization_members")
-        .withIndex("by_userId_organizationId", (q: any) =>
+        .withIndex("by_userId_organizationId", (q) =>
           q.eq("userId", userId).eq("organizationId", organizationId)
         )
         .unique();
@@ -180,7 +180,7 @@ export const getEffectivePlanForUser = async (
   for (const userId of candidateIds) {
     const memberships = await ctx.db
       .query("organization_members")
-      .withIndex("by_userId", (q: any) => q.eq("userId", userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .take(100);
     allMemberships.push(...memberships);
   }

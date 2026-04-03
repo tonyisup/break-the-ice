@@ -4,6 +4,9 @@ import { mutation, query } from "../_generated/server";
 import { ensureOrgMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 
+/** Cap org memberships loaded per user when listing cross-org schedules. */
+const MEMBERSHIPS_LIST_CAP = 100;
+
 /** Full schedule row as returned from the database (matches `schedules` table + system fields). */
 const scheduleDocValidator = v.object({
   _id: v.id("schedules"),
@@ -70,7 +73,7 @@ export const listSchedulesForUser = query({
     const memberships = await ctx.db
       .query("organization_members")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
+      .take(MEMBERSHIPS_LIST_CAP);
 
     if (memberships.length === 0) return [];
 

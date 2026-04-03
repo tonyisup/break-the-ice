@@ -151,14 +151,14 @@ export default function CoachDailyViewPage() {
       )}>
         <CardContent className="p-8 space-y-4">
           <AnimatePresence mode="wait">
-            {assignment.question.text ? (
+            {assignment.text ? (
               <motion.p
                 key="question"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="text-xl font-medium leading-relaxed"
               >
-                {assignment.question.text}
+                {assignment.text}
               </motion.p>
             ) : (
               <motion.p
@@ -172,16 +172,16 @@ export default function CoachDailyViewPage() {
             )}
           </AnimatePresence>
 
-          {(assignment.question.style || assignment.question.tone || assignment.question.topic) && (
+          {(assignment.style || assignment.tone || assignment.topic) && (
             <div className="flex flex-wrap gap-2 pt-2">
-              {assignment.question.style && (
-                <Badge variant="secondary">{assignment.question.style}</Badge>
+              {assignment.style && (
+                <Badge variant="secondary">{assignment.style}</Badge>
               )}
-              {assignment.question.tone && (
-                <Badge variant="secondary">{assignment.question.tone}</Badge>
+              {assignment.tone && (
+                <Badge variant="secondary">{assignment.tone}</Badge>
               )}
-              {assignment.question.topic && (
-                <Badge variant="secondary">{assignment.question.topic}</Badge>
+              {assignment.topic && (
+                <Badge variant="secondary">{assignment.topic}</Badge>
               )}
             </div>
           )}

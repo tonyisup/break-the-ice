@@ -495,7 +495,7 @@ export const getPublicQuestions = query({
 	})),
 	handler: async (ctx, args) => {
 		const limit = args.limit ?? 200;
-		const [pubRows, apprRows] = await Promise.all([
+		const [pubRows, apprRows, legacyRows] = await Promise.all([
 			ctx.db
 				.query("questions")
 				.withIndex("by_status", (q) => q.eq("status", "public"))
@@ -504,12 +504,19 @@ export const getPublicQuestions = query({
 				.query("questions")
 				.withIndex("by_status", (q) => q.eq("status", "approved"))
 				.take(limit),
+			ctx.db
+				.query("questions")
+				.withIndex("by_status", (q) => q.eq("status", undefined))
+				.take(limit),
 		]);
 		const byId = new Map<Id<"questions">, Doc<"questions">>();
 		for (const q of pubRows) {
 			byId.set(q._id, q);
 		}
 		for (const q of apprRows) {
+			byId.set(q._id, q);
+		}
+		for (const q of legacyRows) {
 			byId.set(q._id, q);
 		}
 		const merged = [...byId.values()].sort(
@@ -1113,7 +1120,7 @@ const matrixAxisValidator = v.union(
 /** Paginate questions by status and emit matrix cell keys for occupancy checks (fill matrix). */
 export const pageQuestionMatrixCellKeys = internalQuery({
 	args: {
-		status: v.union(v.literal("public"), v.literal("approved")),
+		status: v.union(v.literal("public"), v.literal("approved"), v.null()),
 		axisY: matrixAxisValidator,
 		axisX: matrixAxisValidator,
 		topicSlug: v.optional(v.string()),
@@ -1125,9 +1132,10 @@ export const pageQuestionMatrixCellKeys = internalQuery({
 		continueCursor: v.union(v.string(), v.null()),
 	}),
 	handler: async (ctx, args) => {
+		const statusFilter = args.status === null ? undefined : args.status;
 		const r = await ctx.db
 			.query("questions")
-			.withIndex("by_status", (q) => q.eq("status", args.status))
+			.withIndex("by_status", (q) => q.eq("status", statusFilter))
 			.order("asc")
 			.paginate(args.paginationOpts);
 		const keys: string[] = [];
@@ -1167,7 +1175,7 @@ export const pageQuestionMatrixCellKeys = internalQuery({
 /** Paginate until we find a question matching style/tone/topic slugs (public or approved). */
 export const pageQuestionsMatchingSlugTriple = internalQuery({
 	args: {
-		status: v.union(v.literal("public"), v.literal("approved")),
+		status: v.union(v.literal("public"), v.literal("approved"), v.null()),
 		styleSlug: v.string(),
 		toneSlug: v.string(),
 		topicSlug: v.optional(v.string()),
@@ -1179,9 +1187,10 @@ export const pageQuestionsMatchingSlugTriple = internalQuery({
 		continueCursor: v.union(v.string(), v.null()),
 	}),
 	handler: async (ctx, args) => {
+		const statusFilter = args.status === null ? undefined : args.status;
 		const r = await ctx.db
 			.query("questions")
-			.withIndex("by_status", (q) => q.eq("status", args.status))
+			.withIndex("by_status", (q) => q.eq("status", statusFilter))
 			.order("asc")
 			.paginate(args.paginationOpts);
 		const found = r.page.some(

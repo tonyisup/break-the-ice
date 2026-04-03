@@ -865,7 +865,6 @@ const questionPool = useQuery(
         msg += ` · ${result.skippedInvalidTaxonomy} skipped (deleted taxonomy)`;
       }
       toast.success(msg);
-      setForceRefreshKey(k => k + 1);
     } catch (e: any) {
       toast.error(e.message ?? "Failed to fill empty cells");
     } finally {

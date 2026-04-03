@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 
 type ZombieEntry = {
 	slug: string;
@@ -9,23 +9,25 @@ type ZombieEntry = {
 	count: number;
 };
 
+const PUBLIC_QUESTION_PAGE_SIZE = 1000;
+
+const zombieEntryValidator = v.object({
+	slug: v.string(),
+	type: v.union(v.literal("style"), v.literal("tone"), v.literal("topic")),
+	count: v.number(),
+});
+
 /** Internal query: scan all public questions for orphan slugs */
 export const scanZombieSlugs = internalQuery({
 	args: {},
-	returns: v.array(v.object({
-		slug: v.string(),
-		type: v.union(v.literal("style"), v.literal("tone"), v.literal("topic")),
-		count: v.number(),
-	})),
+	returns: v.object({
+		zombies: v.array(zombieEntryValidator),
+		uniqueAffectedQuestions: v.number(),
+	}),
 	handler: async (ctx) => {
-		const questions = await ctx.db
-			.query("questions")
-			.withIndex("by_status", (q) => q.eq("status", "public"))
-			.take(10000);
-
 		const slugSet = new Map<string, { type: "style" | "tone" | "topic"; count: number }>();
 
-		const collect = (
+		const bumpSlug = (
 			slug: string | undefined,
 			type: "style" | "tone" | "topic",
 		) => {
@@ -37,11 +39,21 @@ export const scanZombieSlugs = internalQuery({
 			slugSet.get(key)!.count++;
 		};
 
-		for (const q of questions) {
-			collect(q.style, "style");
-			collect(q.tone, "tone");
-			collect(q.topic, "topic");
-		}
+		let cursor: string | null = null;
+		let done = false;
+		do {
+			const r = await ctx.db
+				.query("questions")
+				.withIndex("by_status", (q) => q.eq("status", "public"))
+				.paginate({ numItems: PUBLIC_QUESTION_PAGE_SIZE, cursor });
+			for (const row of r.page) {
+				bumpSlug(row.style, "style");
+				bumpSlug(row.tone, "tone");
+				bumpSlug(row.topic, "topic");
+			}
+			done = r.isDone;
+			cursor = r.continueCursor;
+		} while (!done);
 
 		const zombies: ZombieEntry[] = [];
 
@@ -78,7 +90,40 @@ export const scanZombieSlugs = internalQuery({
 		}
 
 		zombies.sort((a, b) => b.count - a.count);
-		return zombies;
+
+		const zombieKeys = new Set(zombies.map((z) => `${z.type}:${z.slug}`));
+		const touchesZombie = (row: Doc<"questions">) =>
+			(row.style !== undefined &&
+				row.style !== "" &&
+				zombieKeys.has(`style:${row.style}`)) ||
+			(row.tone !== undefined &&
+				row.tone !== "" &&
+				zombieKeys.has(`tone:${row.tone}`)) ||
+			(row.topic !== undefined &&
+				row.topic !== "" &&
+				zombieKeys.has(`topic:${row.topic}`));
+
+		const uniqueAffected = new Set<Id<"questions">>();
+		cursor = null;
+		done = false;
+		do {
+			const r = await ctx.db
+				.query("questions")
+				.withIndex("by_status", (q) => q.eq("status", "public"))
+				.paginate({ numItems: PUBLIC_QUESTION_PAGE_SIZE, cursor });
+			for (const row of r.page) {
+				if (touchesZombie(row)) {
+					uniqueAffected.add(row._id);
+				}
+			}
+			done = r.isDone;
+			cursor = r.continueCursor;
+		} while (!done);
+
+		return {
+			zombies,
+			uniqueAffectedQuestions: uniqueAffected.size,
+		};
 	},
 });
 
@@ -87,19 +132,17 @@ export const runZombieSlugScan = internalAction({
 	args: {},
 	returns: v.null(),
 	handler: async (ctx) => {
-		const zombies = await ctx.runQuery(
+		const { zombies, uniqueAffectedQuestions } = await ctx.runQuery(
 			internal.admin.zombieSlugs.scanZombieSlugs,
 			{}
 		);
-
-		const totalAffected = zombies.reduce((sum: number, z: { count: number }) => sum + z.count, 0);
 
 		await ctx.runMutation(
 			internal.admin.zombieSlugs.storeReport,
 			{
 				scanTime: Date.now(),
 				totalZombieSlugs: zombies.length,
-				totalAffectedQuestions: totalAffected,
+				totalAffectedQuestions: uniqueAffectedQuestions,
 				details: zombies.map((z: { slug: string; type: string; count: number }) => ({
 					slug: z.slug,
 					type: z.type,
@@ -110,8 +153,8 @@ export const runZombieSlugScan = internalAction({
 
 		if (zombies.length > 0) {
 			console.warn(
-				`🧟 ${zombies.length} zombie slugs detected (${totalAffected} questions affected):\n` +
-				zombies.map((z: { slug: string; type: string; count: number }) => `  • ${z.slug} (${z.type}) → ${z.count} questions`).join("\n")
+				`🧟 ${zombies.length} zombie slug kinds (${uniqueAffectedQuestions} unique questions with at least one orphan slug):\n` +
+				zombies.map((z: { slug: string; type: string; count: number }) => `  • ${z.slug} (${z.type}) → ${z.count} references`).join("\n")
 			);
 		} else {
 			console.log("✅ Zombie slug scan: no orphans found");

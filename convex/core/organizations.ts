@@ -3,6 +3,8 @@ import { internalQuery, mutation, query } from "../_generated/server";
 import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 
+const MEMBERSHIPS_QUERY_CAP = 100;
+
 /** Used from actions (e.g. matrix fill) to verify the caller belongs to the org. */
 export const assertOrgMembershipForCurrentUser = internalQuery({
 	args: { organizationId: v.id("organizations") },
@@ -147,7 +149,7 @@ export const getOrganizations = query({
 		const memberships = await ctx.db
 			.query("organization_members")
 			.withIndex("by_userId", (q) => q.eq("userId", user._id))
-			.collect();
+			.take(MEMBERSHIPS_QUERY_CAP);
 
 		const organizations = await Promise.all(
 			memberships.map((m) => ctx.db.get(m.organizationId))

@@ -4,6 +4,54 @@ import { getOrCreateCanonicalUser } from "./users";
 
 export type OrganizationRole = "admin" | "manager" | "member";
 
+/** Normalized org fields from Clerk JWT / identity claims (before role mapping). */
+export type ParsedClerkIdentityClaims = {
+  clerkOrganizationId: string | null;
+  roleValue: string | null;
+  organizationName: string | null;
+};
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+/**
+ * Parse Clerk organization claims from a Convex user identity / JWT payload.
+ * Handles nested `o` object and common Clerk claim key variants.
+ */
+export function parseClerkIdentityClaims(
+  identity: Record<string, unknown>,
+): ParsedClerkIdentityClaims {
+  const orgClaim = identity.o;
+  const nestedOrg =
+    orgClaim && typeof orgClaim === "object" && !Array.isArray(orgClaim)
+      ? (orgClaim as Record<string, unknown>)
+      : null;
+
+  const clerkOrganizationId =
+    readString(identity.org_id) ??
+    (nestedOrg ? readString(nestedOrg.id) : null) ??
+    readString(identity.organization_id) ??
+    readString(identity.organizationId);
+
+  const roleValue =
+    readString(identity.org_role) ??
+    (nestedOrg ? readString(nestedOrg.rol) : null) ??
+    readString(identity.orgRole);
+
+  const organizationName =
+    (nestedOrg ? readString(nestedOrg.name) : null) ??
+    (nestedOrg ? readString(nestedOrg.nam) : null) ??
+    readString(identity.org_name) ??
+    readString(identity.organization_name);
+
+  return {
+    clerkOrganizationId,
+    roleValue,
+    organizationName,
+  };
+}
+
 /** Map Clerk session / API role strings to our stored role. */
 export function normalizeClerkApiRole(role?: string | null): OrganizationRole | null {
   return role === "org:admin" || role === "admin"
