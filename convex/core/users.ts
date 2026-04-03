@@ -1,7 +1,7 @@
-import { Doc } from "../_generated/dataModel";
 import { MutationCtx, mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { getEffectivePlanForUser } from "../auth";
+import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
 
 // Helper to ensure user exists
 export async function getUserOrCreate(ctx: MutationCtx) {
@@ -10,24 +10,13 @@ export async function getUserOrCreate(ctx: MutationCtx) {
 		throw new Error("Not authenticated");
 	}
 
-	const user = await ctx.db
-		.query("users")
-		.withIndex("email", (q) => q.eq("email", identity.email))
-		.unique();
-
-	if (user) {
-		return user;
-	}
-
-	const userId = await ctx.db.insert("users", {
+	return await getOrCreateCanonicalUser(ctx, {
 		clerkId: identity.subject,
-		name: identity.name!,
+		tokenIdentifier: identity.tokenIdentifier,
 		email: identity.email,
+		name: identity.name,
 		image: identity.pictureUrl,
-		billingStatus: "inactive",
 	});
-
-	return (await ctx.db.get(userId))!;
 }
 
 export const getCurrentUser = query({
@@ -41,10 +30,11 @@ export const getCurrentUser = query({
 			return null;
 		}
 
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
+		const user = await findCanonicalUser(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
 
 		if (!user) {
 			return null;
@@ -74,10 +64,11 @@ export const getUserInteractionStats = query({
 			return { totalSeen: 0, totalLikes: 0, dismissedRefineCTA: false };
 		}
 
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
+		const user = await findCanonicalUser(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
 
 		if (!user) {
 			return { totalSeen: 0, totalLikes: 0, dismissedRefineCTA: false };
@@ -127,29 +118,14 @@ export const store = mutation({
 		}
 
 		// Check if we've already stored this identity before.
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
-
-		if (user !== null) {
-			// If we've seen this identity before but the name has changed, patch the value.
-			if (user.name !== identity.name || user.clerkId !== identity.subject) {
-				await ctx.db.patch(user._id, {
-					name: identity.name,
-					clerkId: identity.subject,
-				});
-			}
-			return user._id;
-		}
-
-		// If it's a new identity, create a new user.
-		return await ctx.db.insert("users", {
+		const user = await getOrCreateCanonicalUser(ctx, {
 			clerkId: identity.subject,
-			name: identity.name!,
+			tokenIdentifier: identity.tokenIdentifier,
 			email: identity.email,
+			name: identity.name,
 			image: identity.pictureUrl,
-			billingStatus: "inactive",
 		});
+
+		return user._id;
 	},
 });

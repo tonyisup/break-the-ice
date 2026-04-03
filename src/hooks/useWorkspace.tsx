@@ -1,20 +1,66 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useAuth } from "@clerk/clerk-react";
 import { Id } from "@/../convex/_generated/dataModel";
+
+const LS_KEY = "break-the-ice:activeWorkspace";
 
 type WorkspaceContextType = {
   activeWorkspace: Id<"organizations"> | null;
+  /** False until localStorage has been read for the current Clerk user. */
+  workspaceHydrated: boolean;
   setActiveWorkspace: (workspace: Id<"organizations"> | null) => void;
 };
 
-const WorkspaceContext = createContext<WorkspaceContextType | undefined>(
-  undefined
-);
+const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
-  const [activeWorkspace, setActiveWorkspace] = useState<Id<"organizations"> | null>(null);
+  const { userId } = useAuth();
+  const [activeWorkspace, _setActiveWorkspace] = useState<Id<"organizations"> | null>(null);
+  const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
+
+  // Hydrate only after we know which Clerk user this is (avoids cross-account workspace bleed).
+  useEffect(() => {
+    if (!userId) {
+      _setActiveWorkspace(null);
+      setWorkspaceHydrated(true);
+      return;
+    }
+    try {
+      const stored = localStorage.getItem(`${LS_KEY}:${userId}`);
+      _setActiveWorkspace(stored ? (stored as Id<"organizations">) : null);
+    } catch {
+      /* ignore localStorage errors */
+      _setActiveWorkspace(null);
+    } finally {
+      setWorkspaceHydrated(true);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
+    try {
+      const key = `${LS_KEY}:${userId}`;
+      if (activeWorkspace) {
+        localStorage.setItem(key, activeWorkspace);
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      /* ignore localStorage errors */
+      void 0;
+    }
+  }, [activeWorkspace, userId]);
+
+  const setActiveWorkspace = (id: Id<"organizations"> | null) => {
+    _setActiveWorkspace(id);
+  };
 
   return (
-    <WorkspaceContext.Provider value={{ activeWorkspace, setActiveWorkspace }}>
+    <WorkspaceContext.Provider
+      value={{ activeWorkspace, workspaceHydrated, setActiveWorkspace }}
+    >
       {children}
     </WorkspaceContext.Provider>
   );

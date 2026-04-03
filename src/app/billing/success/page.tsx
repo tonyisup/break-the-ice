@@ -9,7 +9,7 @@ import { api } from "@/../convex/_generated/api";
 import { Id } from "@/../convex/_generated/dataModel";
 
 export default function BillingSuccessPage() {
-  const { orgId } = useAuth();
+  const { orgId, orgRole } = useAuth();
   const { organization, isLoaded } = useOrganization();
   const syncOrganization = useMutation(api.core.billing.syncOrganizationFromClerk);
   const [syncedOrganizationId, setSyncedOrganizationId] = useState<Id<"organizations"> | null>(null);
@@ -21,17 +21,17 @@ export default function BillingSuccessPage() {
     syncedOrganizationId ? { organizationId: syncedOrganizationId } : "skip"
   );
 
-  const performSync = useCallback((clerkOrganizationId: string, name: string) => {
-    const syncKey = `${clerkOrganizationId}:${name}`;
+  const performSync = useCallback((clerkOrganizationId: string, name: string, role?: string | null) => {
+    const syncKey = `${clerkOrganizationId}:${name}:${role ?? "member"}`;
     lastOrgKeyRef.current = syncKey;
     setSyncError(false);
 
     void syncOrganization({
-      clerkOrganizationId,
       name,
-      role: undefined,
     }).then((organizationId) => {
-      setSyncedOrganizationId(organizationId);
+      if (organizationId) {
+        setSyncedOrganizationId(organizationId);
+      }
       setSyncError(false);
     }).catch(() => {
       lastOrgKeyRef.current = null;
@@ -45,13 +45,13 @@ export default function BillingSuccessPage() {
     }
 
     // Deduplication guard to avoid concurrent duplicate mutations
-    const syncKey = `${orgId}:${organization.name}`;
+    const syncKey = `${orgId}:${organization.name}:${orgRole ?? "member"}`;
     if (lastOrgKeyRef.current === syncKey) {
       return;
     }
 
-    performSync(orgId, organization.name);
-  }, [isLoaded, orgId, organization, performSync]);
+    performSync(orgId, organization.name, orgRole);
+  }, [isLoaded, orgId, orgRole, organization, performSync]);
 
   useEffect(() => {
     if (!entitlements?.canUseTeamFeatures || hasTrackedRef.current) {
@@ -65,7 +65,7 @@ export default function BillingSuccessPage() {
   const handleRetrySync = () => {
     if (!orgId || !organization) return;
 
-    performSync(orgId, organization.name);
+    performSync(orgId, organization.name, orgRole);
   };
 
   if (!entitlements?.canUseTeamFeatures) {

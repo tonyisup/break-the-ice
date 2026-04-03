@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
@@ -347,6 +348,37 @@ export const deleteTone = mutation({
     const tone = await ctx.db.get(args.id);
     if (!tone) throw new Error("Tone not found");
     await ctx.db.patch(args.id, { status: "archived", updatedAt: Date.now() });
+    return null;
+  },
+});
+
+const SLUG_BACKFILL_PAGE_SIZE = 200;
+
+// need to update tones with null slugs and valid ids
+export const updateTonesWithNullSlugsAndValidIds = internalMutation({
+  args: {
+    paginationOpts: v.optional(paginationOptsValidator),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const paginationOpts = args.paginationOpts ?? {
+      numItems: SLUG_BACKFILL_PAGE_SIZE,
+      cursor: null,
+    };
+    const result = await ctx.db.query("tones").order("asc").paginate(paginationOpts);
+    for (const tone of result.page) {
+      if (!tone.slug && tone.id) {
+        await ctx.db.patch(tone._id, { slug: tone.id });
+      }
+    }
+    if (!result.isDone) {
+      await ctx.scheduler.runAfter(0, internal.admin.tones.updateTonesWithNullSlugsAndValidIds, {
+        paginationOpts: {
+          numItems: paginationOpts.numItems,
+          cursor: result.continueCursor,
+        },
+      });
+    }
     return null;
   },
 });

@@ -1,6 +1,20 @@
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { internalQuery, mutation, query } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
 import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
+import { collectUserCandidates, findCanonicalUser } from "../lib/users";
+
+const MEMBERSHIPS_QUERY_CAP = 100;
+
+/** Used from actions (e.g. matrix fill) to verify the caller belongs to the org. */
+export const assertOrgMembershipForCurrentUser = internalQuery({
+	args: { organizationId: v.id("organizations") },
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		await ensureOrgMember(ctx, args.organizationId, ["admin", "manager", "member"]);
+		return null;
+	},
+});
 
 export const createOrganization = mutation({
 	args: {
@@ -13,10 +27,11 @@ export const createOrganization = mutation({
 			throw new Error("Called createOrganization without authentication.");
 		}
 
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
+		const user = await findCanonicalUser(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
 
 		if (!user) {
 			throw new Error("User not found");
@@ -71,10 +86,11 @@ export const acceptInvitation = mutation({
 			throw new Error("Called acceptInvitation without authentication.");
 		}
 
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
+		const user = await findCanonicalUser(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
 
 		if (!user) {
 			throw new Error("User not found");
@@ -121,27 +137,44 @@ export const getOrganizations = query({
 			return [];
 		}
 
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
+		const { candidates } = await collectUserCandidates(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
 
-		if (!user) {
+		if (candidates.length === 0) {
 			return [];
 		}
 
-		const memberships = await ctx.db
-			.query("organization_members")
-			.withIndex("by_userId", (q) => q.eq("userId", user._id))
-			.collect();
+		const membershipRows: Doc<"organization_members">[] = [];
+		for (const user of candidates) {
+			const rows = await ctx.db
+				.query("organization_members")
+				.withIndex("by_userId", (q) => q.eq("userId", user._id))
+				.order("desc")
+				.take(MEMBERSHIPS_QUERY_CAP);
+			membershipRows.push(...rows);
+		}
 
-		const organizations = await Promise.all(
-			memberships.map((m) => ctx.db.get(m.organizationId))
-		);
+		membershipRows.sort((a, b) => b._creationTime - a._creationTime);
+		const seenOrg = new Set<string>();
+		const orgIds: Id<"organizations">[] = [];
+		for (const m of membershipRows) {
+			const key = m.organizationId as string;
+			if (seenOrg.has(key)) continue;
+			seenOrg.add(key);
+			orgIds.push(m.organizationId);
+			if (orgIds.length >= MEMBERSHIPS_QUERY_CAP) break;
+		}
+
+		const organizations = await Promise.all(orgIds.map((id) => ctx.db.get(id)));
 
 		return organizations.filter((o) => o !== null);
 	},
 });
+
+const INVITATIONS_PAGE_CAP = 100;
 
 export const getInvitations = query({
 	args: {},
@@ -155,23 +188,28 @@ export const getInvitations = query({
 		return ctx.db
 			.query("invitations")
 			.withIndex("by_email", (q) => q.eq("email", identity.email!))
-			.collect();
+			.take(INVITATIONS_PAGE_CAP);
 	},
 });
+
+const DEFAULT_MEMBERS_LIMIT = 200;
 
 export const getMembers = query({
 	args: {
 		organizationId: v.id("organizations"),
+		limit: v.optional(v.number()),
 	},
 	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
 		await ensureOrgMember(ctx, args.organizationId);
+
+		const cap = Math.min(args.limit ?? DEFAULT_MEMBERS_LIMIT, 500);
 
 		return ctx.db
 			.query("organization_members")
 			.withIndex("by_organizationId", (q) =>
 				q.eq("organizationId", args.organizationId)
 			)
-			.collect();
+			.take(cap);
 	},
 });

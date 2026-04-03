@@ -1,5 +1,6 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { internalMutation, mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { Doc } from "../_generated/dataModel";
 import { defaultQualityRubric, latestActiveVersion, latestVersion } from "../lib/taxonomy";
@@ -365,6 +366,37 @@ export const deleteTopic = mutation({
     const topic = await ctx.db.get(args._id);
     if (!topic) throw new Error("Topic not found");
     await ctx.db.patch(args._id, { status: "archived", updatedAt: Date.now() });
+    return null;
+  },
+});
+
+const SLUG_BACKFILL_PAGE_SIZE = 200;
+
+// need to update topics with null slugs and valid ids
+export const updateTopicsWithNullSlugsAndValidIds = internalMutation({
+  args: {
+    paginationOpts: v.optional(paginationOptsValidator),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const paginationOpts = args.paginationOpts ?? {
+      numItems: SLUG_BACKFILL_PAGE_SIZE,
+      cursor: null,
+    };
+    const result = await ctx.db.query("topics").order("asc").paginate(paginationOpts);
+    for (const topic of result.page) {
+      if (!topic.slug && topic.id) {
+        await ctx.db.patch(topic._id, { slug: topic.id });
+      }
+    }
+    if (!result.isDone) {
+      await ctx.scheduler.runAfter(0, internal.admin.topics.updateTopicsWithNullSlugsAndValidIds, {
+        paginationOpts: {
+          numItems: paginationOpts.numItems,
+          cursor: result.continueCursor,
+        },
+      });
+    }
     return null;
   },
 });

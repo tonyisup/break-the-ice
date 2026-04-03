@@ -1,5 +1,14 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { mutation, query, QueryCtx, action, ActionCtx, internalAction } from "../_generated/server";
+import {
+	mutation,
+	query,
+	QueryCtx,
+	action,
+	ActionCtx,
+	internalAction,
+	internalQuery,
+} from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
 import { ensureAdmin } from "../auth";
@@ -458,6 +467,72 @@ export const getQuestionsByIds = query({
 			validIds.map((id) => ctx.db.get(id))
 		);
 		return questions.filter((q): q is Doc<"questions"> => q !== null);
+	},
+});
+
+/** List public/approved questions that orgs can assign to schedules */
+export const getPublicQuestions = query({
+	args: {
+		limit: v.optional(v.number()),
+		generationKey: v.optional(v.number()),
+	},
+	returns: v.array(v.object({
+		_id: v.id("questions"),
+		text: v.optional(v.string()),
+		style: v.optional(v.string()),
+		tone: v.optional(v.string()),
+		topic: v.optional(v.string()),
+		isAIGenerated: v.optional(v.boolean()),
+		totalLikes: v.number(),
+		status: v.optional(v.union(
+			v.literal("pending"),
+			v.literal("approved"),
+			v.literal("public"),
+			v.literal("private"),
+			v.literal("pruning"),
+			v.literal("pruned")
+		)),
+	})),
+	handler: async (ctx, args) => {
+		const limit = args.limit ?? 200;
+		const [pubRows, apprRows, legacyRows] = await Promise.all([
+			ctx.db
+				.query("questions")
+				.withIndex("by_status", (q) => q.eq("status", "public"))
+				.take(limit),
+			ctx.db
+				.query("questions")
+				.withIndex("by_status", (q) => q.eq("status", "approved"))
+				.take(limit),
+			ctx.db
+				.query("questions")
+				.withIndex("by_status", (q) => q.eq("status", undefined))
+				.take(limit),
+		]);
+		const byId = new Map<Id<"questions">, Doc<"questions">>();
+		for (const q of pubRows) {
+			byId.set(q._id, q);
+		}
+		for (const q of apprRows) {
+			byId.set(q._id, q);
+		}
+		for (const q of legacyRows) {
+			byId.set(q._id, q);
+		}
+		const merged = [...byId.values()].sort(
+			(a, b) => a._creationTime - b._creationTime,
+		);
+		const rows = merged.slice(0, limit);
+		return rows.map((q) => ({
+			_id: q._id,
+			text: q.text ?? q.customText,
+			style: q.style,
+			tone: q.tone,
+			topic: q.topic,
+			isAIGenerated: q.isAIGenerated,
+			totalLikes: q.totalLikes,
+			status: q.status,
+		}));
 	},
 });
 
@@ -1033,5 +1108,101 @@ export const getNextQuestionsByEmbedding = action({
 			embedding: averageEmbedding,
 			count: count,
 		});
+	},
+});
+
+const matrixAxisValidator = v.union(
+	v.literal("style"),
+	v.literal("tone"),
+	v.literal("topic"),
+);
+
+/** Paginate questions by status and emit matrix cell keys for occupancy checks (fill matrix). */
+export const pageQuestionMatrixCellKeys = internalQuery({
+	args: {
+		status: v.union(v.literal("public"), v.literal("approved"), v.null()),
+		axisY: matrixAxisValidator,
+		axisX: matrixAxisValidator,
+		topicSlug: v.optional(v.string()),
+		paginationOpts: paginationOptsValidator,
+	},
+	returns: v.object({
+		keys: v.array(v.string()),
+		isDone: v.boolean(),
+		continueCursor: v.union(v.string(), v.null()),
+	}),
+	handler: async (ctx, args) => {
+		const statusFilter = args.status === null ? undefined : args.status;
+		const r = await ctx.db
+			.query("questions")
+			.withIndex("by_status", (q) => q.eq("status", statusFilter))
+			.order("asc")
+			.paginate(args.paginationOpts);
+		const keys: string[] = [];
+		for (const q of r.page) {
+			const y =
+				args.axisY === "style"
+					? q.style
+					: args.axisY === "tone"
+						? q.tone
+						: q.topic;
+			const x =
+				args.axisX === "style"
+					? q.style
+					: args.axisX === "tone"
+						? q.tone
+						: q.topic;
+			if (y == null || x == null || y === "" || x === "") {
+				continue;
+			}
+			if (
+				args.topicSlug !== undefined &&
+				args.topicSlug !== "" &&
+				(q.topic ?? "") !== args.topicSlug
+			) {
+				continue;
+			}
+			keys.push(`${y}|${x}`);
+		}
+		return {
+			keys,
+			isDone: r.isDone,
+			continueCursor: r.continueCursor,
+		};
+	},
+});
+
+/** Paginate until we find a question matching style/tone/topic slugs (public or approved). */
+export const pageQuestionsMatchingSlugTriple = internalQuery({
+	args: {
+		status: v.union(v.literal("public"), v.literal("approved"), v.null()),
+		styleSlug: v.string(),
+		toneSlug: v.string(),
+		topicSlug: v.optional(v.string()),
+		paginationOpts: paginationOptsValidator,
+	},
+	returns: v.object({
+		found: v.boolean(),
+		isDone: v.boolean(),
+		continueCursor: v.union(v.string(), v.null()),
+	}),
+	handler: async (ctx, args) => {
+		const statusFilter = args.status === null ? undefined : args.status;
+		const r = await ctx.db
+			.query("questions")
+			.withIndex("by_status", (q) => q.eq("status", statusFilter))
+			.order("asc")
+			.paginate(args.paginationOpts);
+		const found = r.page.some(
+			(q) =>
+				(q.style ?? "") === args.styleSlug &&
+				(q.tone ?? "") === args.toneSlug &&
+				(args.topicSlug == null || (q.topic ?? "") === args.topicSlug),
+		);
+		return {
+			found,
+			isDone: r.isDone,
+			continueCursor: r.continueCursor,
+		};
 	},
 });

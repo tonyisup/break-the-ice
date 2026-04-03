@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
@@ -311,6 +312,37 @@ export const reassignUserStylesBatch = internalMutation({
       await ctx.scheduler.runAfter(0, internal.admin.styles.reassignUserStylesBatch, args);
     }
 
+    return null;
+  },
+});
+
+const SLUG_BACKFILL_PAGE_SIZE = 200;
+
+// need to update styles with null slugs and valid ids
+export const updateStylesWithNullSlugsAndValidIds = internalMutation({
+  args: {
+    paginationOpts: v.optional(paginationOptsValidator),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const paginationOpts = args.paginationOpts ?? {
+      numItems: SLUG_BACKFILL_PAGE_SIZE,
+      cursor: null,
+    };
+    const result = await ctx.db.query("styles").order("asc").paginate(paginationOpts);
+    for (const style of result.page) {
+      if (!style.slug && style.id) {
+        await ctx.db.patch(style._id, { slug: style.id });
+      }
+    }
+    if (!result.isDone) {
+      await ctx.scheduler.runAfter(0, internal.admin.styles.updateStylesWithNullSlugsAndValidIds, {
+        paginationOpts: {
+          numItems: paginationOpts.numItems,
+          cursor: result.continueCursor,
+        },
+      });
+    }
     return null;
   },
 });

@@ -1,13 +1,14 @@
 import { useEffect, useRef } from "react";
 import { useAuth, useOrganization } from "@clerk/clerk-react";
-import { useMutation } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useWorkspace } from "@/hooks/useWorkspace";
 
 export function ClerkSyncManager() {
-  const { isSignedIn, orgId, orgRole } = useAuth();
-  const { organization, isLoaded } = useOrganization();
+  const { isSignedIn, isLoaded: authLoaded, orgId, orgRole } = useAuth();
+  const { organization, isLoaded: orgLoaded } = useOrganization();
   const syncOrganization = useMutation(api.core.billing.syncOrganizationFromClerk);
+  const syncOrganizationViaClerkApi = useAction(api.core.billingSyncAction.syncOrganizationViaClerkApi);
   const storeUser = useMutation(api.core.users.store);
   const { setActiveWorkspace } = useWorkspace();
   const lastOrgKeyRef = useRef<string | null>(null);
@@ -23,13 +24,20 @@ export function ClerkSyncManager() {
   }, [isSignedIn, setActiveWorkspace, storeUser]);
 
   useEffect(() => {
+    if (!authLoaded) return;
+
+    if (!isSignedIn) {
+      return;
+    }
+
     if (!orgId) {
-      setActiveWorkspace(null);
+      // Do not clear activeWorkspace here: Clerk may still be resolving the
+      // session, and Convex membership / localStorage can still be valid for /org.
       lastOrgKeyRef.current = null;
       return;
     }
 
-    if (!isLoaded || !organization) {
+    if (!orgLoaded || !organization) {
       return;
     }
 
@@ -39,17 +47,49 @@ export function ClerkSyncManager() {
     }
 
     lastOrgKeyRef.current = syncKey;
+    const currentKey = syncKey;
 
-    void syncOrganization({
-      clerkOrganizationId: orgId,
-      name: organization.name,
-      role: orgRole ?? undefined,
-    }).then((organizationId) => {
-      setActiveWorkspace(organizationId);
-    }).catch(() => {
-      lastOrgKeyRef.current = null;
-    });
-  }, [isLoaded, orgId, orgRole, organization, setActiveWorkspace, syncOrganization]);
+    void syncOrganization()
+      .then((convexOrgId) => {
+        if (lastOrgKeyRef.current !== currentKey) {
+          return;
+        }
+        if (convexOrgId) {
+          setActiveWorkspace(convexOrgId);
+          return;
+        }
+        // Convex JWT often omits org claims; verify via Clerk API (needs CLERK_SECRET_KEY in Convex).
+        return syncOrganizationViaClerkApi({
+          clerkOrganizationId: orgId,
+          organizationName: organization.name,
+        }).then((id) => {
+          if (lastOrgKeyRef.current !== currentKey) {
+            return;
+          }
+          if (id) {
+            setActiveWorkspace(id);
+          } else {
+            lastOrgKeyRef.current = null;
+            setActiveWorkspace(null);
+          }
+        });
+      })
+      .catch((error) => {
+        lastOrgKeyRef.current = null;
+        setActiveWorkspace(null);
+        console.error("Failed to sync organization from Clerk:", error);
+      });
+  }, [
+    authLoaded,
+    isSignedIn,
+    orgLoaded,
+    orgId,
+    orgRole,
+    organization,
+    setActiveWorkspace,
+    syncOrganization,
+    syncOrganizationViaClerkApi,
+  ]);
 
   return null;
 }

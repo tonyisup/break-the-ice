@@ -136,13 +136,6 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
       }
     }
 
-    if (questions.length === TONE_BACKFILL_BATCH_SIZE) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.internal.tones.updateQuestionsWithMissingToneIds,
-        {},
-      );
-    }
     return null;
   },
 });

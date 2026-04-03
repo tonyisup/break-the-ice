@@ -45,6 +45,9 @@ import GeneratorPage from "./app/admin/generator/page.tsx";
 import { Toaster } from "sonner";
 import UserDetailsPage from "./app/admin/users/[userId]/page.tsx";
 import QuestionDetailsPage from "./app/admin/questions/[questionId]/page.tsx";
+import OrgWeeklyCurationPage from "./app/org/schedule/page.tsx";
+import CoachDailyViewPage from "./app/org/today/page.tsx";
+import { ClerkSyncManager } from "./components/ClerkSyncManager";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -57,6 +60,7 @@ createRoot(document.getElementById("root")!).render(
           <AnalyticsManager />
           <WorkspaceProvider>
             <BrowserRouter>
+              <ClerkSyncManager />
               <Routes>
                 <Route path="/" element={<Root />} />
                 <Route path="/app" element={<App />} />
@@ -70,6 +74,9 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/unsubscribe" element={<UnsubscribePage />} />
                 <Route path="/verify-subscription" element={<VerifySubscriptionPage />} />
                 <Route path="/add-question" element={<AddQuestionPage />} />
+                <Route path="/org" element={<OrgWeeklyCurationPage />} />
+            <Route path="/org/schedule" element={<OrgWeeklyCurationPage />} />
+                <Route path="/org/today" element={<CoachDailyViewPage />} />
                 <Route element={<AdminLayout />}>
                   <Route path="/admin" element={<AdminPage />} />
                   <Route path="/admin/questions" element={<QuestionsPage />} />
