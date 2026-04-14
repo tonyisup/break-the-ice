@@ -55,7 +55,7 @@ const SIGNALS = [
 ];
 
 const themeToggleClass =
-  "shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground";
+  "shrink-0 self-start border border-input bg-background hover:bg-accent hover:text-accent-foreground";
 
 interface TodayStateShellProps {
   children: React.ReactNode;

@@ -30,11 +30,11 @@ const SettingsPage = () => {
 
   const allStyles = useQuery(
     api.core.styles.getStyles,
-    { organizationId: activeWorkspace ?? undefined }
+    isSignedIn ? { organizationId: activeWorkspace ?? undefined } : "skip"
   );
   const allTones = useQuery(
     api.core.tones.getTones,
-    { organizationId: activeWorkspace ?? undefined }
+    isSignedIn ? { organizationId: activeWorkspace ?? undefined } : "skip"
   );
   const currentUser = useQuery(api.core.users.getCurrentUser, {
     organizationId: activeWorkspace ?? undefined,
@@ -167,8 +167,9 @@ const SettingsPage = () => {
   const visibleToneCount = allTones?.filter(t => !hiddenTones?.includes(t._id)).length;
   const hiddenToneCount = allTones?.filter(t => hiddenTones?.includes(t._id)).length;
 
-  const gradientLight = ["#667EEA", "#A064DE"];
-  const gradientDark = ["#3B2554", "#262D54"];
+  const gradientLight: [string, string] = ["#667EEA", "#A064DE"];
+  const gradientDark: [string, string] = ["#3B2554", "#262D54"];
+  const bgGradient = effectiveTheme === 'dark' ? gradientDark : gradientLight;
   return (
     <div
       className="min-h-screen transition-colors overflow-hidden"
@@ -336,7 +337,7 @@ const SettingsPage = () => {
               <div className="p-4">
                 <p className="dark:text-white/70 text-black/70 mb-4">Sign in to manage your style preferences.</p>
                 <SignInCTA
-                  bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
+                  bgGradient={bgGradient}
                   title="Sign In to Customize Styles"
                   featureHighlight={{
                     pre: "Personalize your",
@@ -409,7 +410,7 @@ const SettingsPage = () => {
               <div className="p-4">
                 <p className="dark:text-white/70 text-black/70 mb-4">Sign in to manage your tone preferences.</p>
                 <SignInCTA
-                  bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
+                  bgGradient={bgGradient}
                   title="Sign In to Customize Tones"
                   featureHighlight={{
                     pre: "Personalize your",
@@ -475,7 +476,7 @@ const SettingsPage = () => {
           {!isSignedIn && hiddenQuestions.length >= MAX_ANON_BLOCKED && (
             <div className="mb-6">
               <SignInCTA
-                bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
+                bgGradient={bgGradient}
                 title="Hidden Question Limit Reached"
                 featureHighlight={{
                   pre: "Sign in to hide",
