@@ -201,7 +201,7 @@ export default function CoachDailyViewPage() {
           <h1 className="text-2xl font-bold tracking-tight">Today's Ice-Breaker</h1>
           {coachToday.dayOfWeek && (
             <p className="text-muted-foreground text-sm mt-1">
-              <span className="ml-2">· {coachToday.dayOfWeek}</span>
+              {coachToday.dayOfWeek}
             </p>
           )}
         </div>

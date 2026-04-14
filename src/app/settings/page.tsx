@@ -334,7 +334,7 @@ const SettingsPage = () => {
           >
             {typeof allStyles === 'undefined' ? (
               <div className="flex items-center justify-center p-8">
-                <div className="animate-spin size-6 border-2 border-white/20 dark:border-black/20 border-t-white dark:border-t-black rounded-full" />
+                <div className="animate-spin size-6 border-2 border-white/20 dark:border-white/20 border-t-white dark:border-t-white rounded-full" />
               </div>
             ) : allStyles.length === 0 ? (
               <p className="dark:text-white/70 text-black/70">No styles available to manage.</p>
@@ -394,7 +394,7 @@ const SettingsPage = () => {
           >
             {typeof allTones === 'undefined' ? (
               <div className="flex items-center justify-center p-8">
-                <div className="animate-spin size-6 border-2 border-white/20 dark:border-black/20 border-t-white dark:border-t-black rounded-full" />
+                <div className="animate-spin size-6 border-2 border-white/20 dark:border-white/20 border-t-white dark:border-t-white rounded-full" />
               </div>
             ) : allTones.length === 0 ? (
               <p className="dark:text-white/70 text-black/70">No tones available to manage.</p>
