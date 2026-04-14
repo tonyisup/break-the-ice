@@ -57,6 +57,23 @@ const SIGNALS = [
 const themeToggleClass =
   "shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground";
 
+interface TodayStateShellProps {
+  children: React.ReactNode;
+  className?: string;
+  themeToggleClassName?: string;
+}
+
+function TodayStateShell({ children, className = "relative flex items-center justify-center min-h-[60vh] px-4", themeToggleClassName = themeToggleClass }: TodayStateShellProps) {
+  return (
+    <div className={className}>
+      <div className="absolute top-0 right-4">
+        <ThemeToggle className={themeToggleClassName} showLabel={false} />
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function CoachDailyViewPage() {
   const { activeWorkspace, workspaceHydrated } = useWorkspace();
   const { orgRole, isLoaded: clerkAuthLoaded } = useAuth();
@@ -132,21 +149,15 @@ export default function CoachDailyViewPage() {
 
   if (!workspaceHydrated) {
     return (
-      <div className="relative flex items-center justify-center min-h-[60vh] px-4">
-        <div className="absolute top-0 right-4">
-          <ThemeToggle className={themeToggleClass} showLabel={false} />
-        </div>
+      <TodayStateShell>
         <div className="animate-spin size-6 border-2 border-primary border-t-transparent rounded-full" />
-      </div>
+      </TodayStateShell>
     );
   }
 
   if (!orgId) {
     return (
-      <div className="relative flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4">
-        <div className="absolute top-0 right-4">
-          <ThemeToggle className={themeToggleClass} showLabel={false} />
-        </div>
+      <TodayStateShell className="relative flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4">
         <CalendarDays className="size-14 opacity-20" />
         <h2 className="text-xl font-semibold">No organization selected</h2>
         <p className="text-muted-foreground text-center max-w-md text-sm">
@@ -155,18 +166,15 @@ export default function CoachDailyViewPage() {
         <Button asChild variant="outline">
           <Link to="/settings">Go to Settings</Link>
         </Button>
-      </div>
+      </TodayStateShell>
     );
   }
 
   if (coachToday === undefined) {
     return (
-      <div className="relative flex items-center justify-center min-h-[60vh] px-4">
-        <div className="absolute top-0 right-4">
-          <ThemeToggle className={themeToggleClass} showLabel={false} />
-        </div>
+      <TodayStateShell>
         <div className="animate-spin size-6 border-2 border-primary border-t-transparent rounded-full" />
-      </div>
+      </TodayStateShell>
     );
   }
 
@@ -174,17 +182,14 @@ export default function CoachDailyViewPage() {
 
   if (!assignment) {
     return (
-      <div className="relative flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4 text-center">
-        <div className="absolute top-0 right-4">
-          <ThemeToggle className={themeToggleClass} showLabel={false} />
-        </div>
+      <TodayStateShell className="relative flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4 text-center">
         <CalendarDays className="size-14 opacity-20" />
         <h2 className="text-xl font-semibold">No question for today</h2>
         <p className="text-muted-foreground max-w-md text-sm">
           Your organization hasn't assigned a question for today yet.
           Ask your admin to set up the weekly schedule.
         </p>
-      </div>
+      </TodayStateShell>
     );
   }
 
@@ -194,9 +199,11 @@ export default function CoachDailyViewPage() {
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Today's Ice-Breaker</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {coachToday.dayOfWeek && <span className="ml-2">· {coachToday.dayOfWeek}</span>}
-          </p>
+          {coachToday.dayOfWeek && (
+            <p className="text-muted-foreground text-sm mt-1">
+              <span className="ml-2">· {coachToday.dayOfWeek}</span>
+            </p>
+          )}
         </div>
         <ThemeToggle className={themeToggleClass} showLabel={false} />
       </div>

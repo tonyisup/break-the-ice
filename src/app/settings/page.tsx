@@ -332,7 +332,13 @@ const SettingsPage = () => {
             visibleCount={visibleStyleCount}
             hiddenCount={hiddenStyleCount}
           >
-            {allStyles && allStyles.length > 0 ? (
+            {typeof allStyles === 'undefined' ? (
+              <div className="flex items-center justify-center p-8">
+                <div className="animate-spin size-6 border-2 border-white/20 dark:border-black/20 border-t-white dark:border-t-black rounded-full" />
+              </div>
+            ) : allStyles.length === 0 ? (
+              <p className="dark:text-white/70 text-black/70">No styles available to manage.</p>
+            ) : (
               <>
                 <div className="flex space-x-2 mb-4">
                   <button
@@ -358,7 +364,7 @@ const SettingsPage = () => {
                           <span className="dark:text-white text-black">{style.name}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button onClick={() => handleShowInfo(style, "Style")} className="p-1">
+                          <button onClick={() => handleShowInfo(style, "Style")} className="p-1" aria-label={`Show info about ${style.name}`}>
                             <DynamicIcon name="info" size={18} />
                           </button>
                           <button
@@ -377,8 +383,6 @@ const SettingsPage = () => {
                   })}
                 </ul>
               </>
-            ) : (
-              <p className="dark:text-white/70 text-black/70">No styles available to manage.</p>
             )}
           </CollapsibleSection>
           <CollapsibleSection
@@ -388,7 +392,13 @@ const SettingsPage = () => {
             visibleCount={visibleToneCount}
             hiddenCount={hiddenToneCount}
           >
-            {allTones && allTones.length > 0 ? (
+            {typeof allTones === 'undefined' ? (
+              <div className="flex items-center justify-center p-8">
+                <div className="animate-spin size-6 border-2 border-white/20 dark:border-black/20 border-t-white dark:border-t-black rounded-full" />
+              </div>
+            ) : allTones.length === 0 ? (
+              <p className="dark:text-white/70 text-black/70">No tones available to manage.</p>
+            ) : (
               <>
                 <div className="flex space-x-2 mb-4">
                   <button
@@ -414,7 +424,7 @@ const SettingsPage = () => {
                           <span className="dark:text-white text-black">{tone.name}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button onClick={() => handleShowInfo(tone, "Tone")} className="p-1">
+                          <button onClick={() => handleShowInfo(tone, "Tone")} className="p-1" aria-label={`Show info about ${tone.name}`}>
                             <DynamicIcon name="info" size={18} />
                           </button>
                           <button
@@ -433,8 +443,6 @@ const SettingsPage = () => {
                   })}
                 </ul>
               </>
-            ) : (
-              <p className="dark:text-white/70 text-black/70">No tones available to manage.</p>
             )}
           </CollapsibleSection>
 

@@ -19,7 +19,7 @@ vi.mock("@clerk/clerk-react/experimental", () => ({
   SubscriptionDetailsButton: ({ children }: any) => <>{children}</>,
 }));
 
-vi.mock("@/hooks/useTheme", () => ({
+vi.mock("../../hooks/useTheme", () => ({
   useTheme: () => ({ effectiveTheme: "light" }),
 }));
 
@@ -27,7 +27,7 @@ vi.mock("@/hooks/useWorkspace", () => ({
   useWorkspace: () => ({ activeWorkspace: null }),
 }));
 
-vi.mock("@/hooks/useStorageContext", () => ({
+vi.mock("../../hooks/useStorageContext", () => ({
   useStorageContext: () => mockUseStorageContext(),
 }));
 
