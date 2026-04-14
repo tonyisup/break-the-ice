@@ -332,9 +332,22 @@ const SettingsPage = () => {
             visibleCount={visibleStyleCount}
             hiddenCount={hiddenStyleCount}
           >
-            {typeof allStyles === 'undefined' ? (
+            {!isSignedIn ? (
+              <div className="p-4">
+                <p className="dark:text-white/70 text-black/70 mb-4">Sign in to manage your style preferences.</p>
+                <SignInCTA
+                  bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
+                  title="Sign In to Customize Styles"
+                  featureHighlight={{
+                    pre: "Personalize your",
+                    highlight: "style preferences",
+                    post: "with an account."
+                  }}
+                />
+              </div>
+            ) : typeof allStyles === 'undefined' ? (
               <div className="flex items-center justify-center p-8">
-                <div className="animate-spin size-6 border-2 border-white/20 dark:border-white/20 border-t-white dark:border-t-white rounded-full" />
+                <div className="animate-spin size-6 border-2 border-gray-200 dark:border-white/20 border-t-gray-500 dark:border-t-white rounded-full" />
               </div>
             ) : allStyles.length === 0 ? (
               <p className="dark:text-white/70 text-black/70">No styles available to manage.</p>
@@ -392,9 +405,22 @@ const SettingsPage = () => {
             visibleCount={visibleToneCount}
             hiddenCount={hiddenToneCount}
           >
-            {typeof allTones === 'undefined' ? (
+            {!isSignedIn ? (
+              <div className="p-4">
+                <p className="dark:text-white/70 text-black/70 mb-4">Sign in to manage your tone preferences.</p>
+                <SignInCTA
+                  bgGradient={((effectiveTheme === 'dark' ? gradientDark : gradientLight) as unknown) as [string, string]}
+                  title="Sign In to Customize Tones"
+                  featureHighlight={{
+                    pre: "Personalize your",
+                    highlight: "tone preferences",
+                    post: "with an account."
+                  }}
+                />
+              </div>
+            ) : typeof allTones === 'undefined' ? (
               <div className="flex items-center justify-center p-8">
-                <div className="animate-spin size-6 border-2 border-white/20 dark:border-white/20 border-t-white dark:border-t-white rounded-full" />
+                <div className="animate-spin size-6 border-2 border-gray-200 dark:border-white/20 border-t-gray-500 dark:border-t-white rounded-full" />
               </div>
             ) : allTones.length === 0 ? (
               <p className="dark:text-white/70 text-black/70">No tones available to manage.</p>

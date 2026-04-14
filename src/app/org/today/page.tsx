@@ -65,7 +65,7 @@ interface TodayStateShellProps {
 
 function TodayStateShell({ children, className = "relative flex items-center justify-center min-h-[60vh] px-4", themeToggleClassName = themeToggleClass }: TodayStateShellProps) {
   return (
-    <div className={className}>
+    <div className={cn("relative", className)}>
       <div className="absolute top-0 right-4">
         <ThemeToggle className={themeToggleClassName} showLabel={false} />
       </div>
