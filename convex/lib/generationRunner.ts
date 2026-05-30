@@ -28,6 +28,17 @@ export const openRouterClient = new OpenAI({
   },
 });
 
+function getChatCompletionContent(completion: OpenAI.Chat.Completions.ChatCompletion): string {
+  const content = completion.choices?.[0]?.message?.content?.trim();
+  if (!content) {
+    const finishReason = completion.choices?.[0]?.finish_reason ?? "unknown";
+    throw new Error(
+      `AI provider returned an empty completion (model=${completion.model}, finish_reason=${finishReason})`,
+    );
+  }
+  return content;
+}
+
 type GenerationPurpose = "feed" | "admin_preview" | "admin_accept" | "nightly_pool" | "newsletter" | "remix";
 
 type GenerationPrompt = {
@@ -161,7 +172,7 @@ export async function runPersistedQuestionGeneration(
       ],
     });
 
-    const rawResponse = completion.choices[0]?.message?.content?.trim() ?? '{"questions":[]}';
+    const rawResponse = getChatCompletionContent(completion);
     const parsedQuestions = parseQuestionObjects(rawResponse).slice(0, prompt.batchSize);
 
     const saveResult = await ctx.runMutation(internal.internal.generation.insertGeneratedQuestions, {
@@ -265,7 +276,7 @@ export async function runPreviewQuestionGeneration(
       ],
     });
 
-    const rawResponse = completion.choices[0]?.message?.content?.trim() ?? '{"questions":[]}';
+    const rawResponse = getChatCompletionContent(completion);
     const parsed = parseQuestionObjects(rawResponse);
     const preview = parsed[0];
     const previewText = preview?.text ?? "";
@@ -353,14 +364,15 @@ export async function runRemixQuestion(
       max_tokens: 150,
     });
 
-    const remixedText = completion.choices[0]?.message?.content?.trim()?.replace(/^["']|["']$/g, "").trim() ?? "";
+    const rawResponse = getChatCompletionContent(completion);
+    const remixedText = rawResponse.replace(/^["']|["']$/g, "").trim();
     if (!remixedText) {
       throw new Error("AI failed to generate a remix");
     }
 
     await ctx.runMutation(internal.internal.generation.completeGenerationRun, {
       runId,
-      rawResponse: completion.choices[0]?.message?.content ?? "",
+      rawResponse,
       previewText: remixedText,
       resultQuestionIds: [],
     });
