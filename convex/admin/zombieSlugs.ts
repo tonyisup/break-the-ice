@@ -1,15 +1,13 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Id } from "../_generated/dataModel";
 
 type ZombieEntry = {
 	slug: string;
 	type: "style" | "tone" | "topic";
 	count: number;
 };
-
-const PUBLIC_QUESTION_PAGE_SIZE = 1000;
 
 const zombieEntryValidator = v.object({
 	slug: v.string(),
@@ -39,24 +37,30 @@ export const scanZombieSlugs = internalQuery({
 			slugSet.get(key)!.count++;
 		};
 
+		const questionRefs: Array<{
+			_id: Id<"questions">;
+			style?: string;
+			tone?: string;
+			topic?: string;
+		}> = [];
+
 		const scanStatuses = ["public", "approved", null] as const;
 		for (const status of scanStatuses) {
 			const statusFilter = status === null ? undefined : status;
-			let cursor: string | null = null;
-			let done = false;
-			do {
-				const r = await ctx.db
-					.query("questions")
-					.withIndex("by_status", (q) => q.eq("status", statusFilter))
-					.paginate({ numItems: PUBLIC_QUESTION_PAGE_SIZE, cursor });
-				for (const row of r.page) {
-					bumpSlug(row.style, "style");
-					bumpSlug(row.tone, "tone");
-					bumpSlug(row.topic, "topic");
-				}
-				done = r.isDone;
-				cursor = r.continueCursor;
-			} while (!done);
+			const rows = ctx.db
+				.query("questions")
+				.withIndex("by_status", (q) => q.eq("status", statusFilter));
+			for await (const row of rows) {
+				bumpSlug(row.style, "style");
+				bumpSlug(row.tone, "tone");
+				bumpSlug(row.topic, "topic");
+				questionRefs.push({
+					_id: row._id,
+					style: row.style,
+					tone: row.tone,
+					topic: row.topic,
+				});
+			}
 		}
 
 		const zombies: ZombieEntry[] = [];
@@ -96,7 +100,11 @@ export const scanZombieSlugs = internalQuery({
 		zombies.sort((a, b) => b.count - a.count);
 
 		const zombieKeys = new Set(zombies.map((z) => `${z.type}:${z.slug}`));
-		const touchesZombie = (row: Doc<"questions">) =>
+		const touchesZombie = (row: {
+			style?: string;
+			tone?: string;
+			topic?: string;
+		}) =>
 			(row.style !== undefined &&
 				row.style !== "" &&
 				zombieKeys.has(`style:${row.style}`)) ||
@@ -108,23 +116,10 @@ export const scanZombieSlugs = internalQuery({
 				zombieKeys.has(`topic:${row.topic}`));
 
 		const uniqueAffected = new Set<Id<"questions">>();
-		for (const status of scanStatuses) {
-			const statusFilter = status === null ? undefined : status;
-			let cursor: string | null = null;
-			let done = false;
-			do {
-				const r = await ctx.db
-					.query("questions")
-					.withIndex("by_status", (q) => q.eq("status", statusFilter))
-					.paginate({ numItems: PUBLIC_QUESTION_PAGE_SIZE, cursor });
-				for (const row of r.page) {
-					if (touchesZombie(row)) {
-						uniqueAffected.add(row._id);
-					}
-				}
-				done = r.isDone;
-				cursor = r.continueCursor;
-			} while (!done);
+		for (const row of questionRefs) {
+			if (touchesZombie(row)) {
+				uniqueAffected.add(row._id);
+			}
 		}
 
 		return {

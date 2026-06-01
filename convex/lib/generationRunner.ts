@@ -1,6 +1,6 @@
 "use node";
 
-import OpenAI from "openai";
+import OpenAI, { APIError } from "openai";
 import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
@@ -11,6 +11,8 @@ import {
 
 export const GENERATION_MODEL = "@preset/break-the-ice-berg-default";
 export const GENERATION_PROVIDER = "openrouter";
+
+const DEFAULT_OPENROUTER_MAX_ATTEMPTS = 3;
 
 const OPEN_ROUTER_API_KEY = process.env.OPEN_ROUTER_API_KEY?.trim();
 
@@ -27,6 +29,95 @@ export const openRouterClient = new OpenAI({
     "X-Title": "Break the ice(berg)",
   },
 });
+
+function parsePositiveInteger(
+  value: string | undefined,
+  fallback: number,
+  maxValue = Number.MAX_SAFE_INTEGER,
+): number {
+  const trimmed = value?.trim() ?? "";
+  if (!/^\d+$/.test(trimmed)) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, maxValue) : fallback;
+}
+
+function getOpenRouterMaxAttempts(): number {
+  return parsePositiveInteger(
+    process.env.OPENROUTER_MAX_ATTEMPTS,
+    DEFAULT_OPENROUTER_MAX_ATTEMPTS,
+    Number.MAX_SAFE_INTEGER,
+  );
+}
+
+function shouldRetryOpenRouterError(error: unknown): boolean {
+  if (error instanceof APIError) {
+    const status = error.status;
+    return status === 408 || status === 429 || (status !== undefined && status >= 500);
+  }
+
+  if (error instanceof Error) {
+    return /\b(408|429|5\d{2})\b/.test(error.message);
+  }
+
+  return false;
+}
+
+function getOpenRouterRetryDelayMs(error: unknown, attempt: number): number {
+  const baseDelayMs = 300 * attempt;
+
+  if (!(error instanceof APIError)) {
+    return baseDelayMs;
+  }
+
+  const headers = error.headers;
+  const retryAfter =
+    headers instanceof Headers
+      ? headers.get("retry-after")
+      : typeof headers === "object" && headers !== null && "retry-after" in headers
+        ? String((headers as Record<string, string>)["retry-after"])
+        : null;
+
+  if (!retryAfter) {
+    return baseDelayMs;
+  }
+
+  const retryAfterSeconds = Number.parseInt(retryAfter, 10);
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+    return baseDelayMs;
+  }
+
+  return Math.max(baseDelayMs, retryAfterSeconds * 1000);
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function createChatCompletionWithRetry(
+  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  const maxAttempts = getOpenRouterMaxAttempts();
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await openRouterClient.chat.completions.create(params);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (attempt >= maxAttempts || !shouldRetryOpenRouterError(error)) {
+        throw lastError;
+      }
+
+      await sleep(getOpenRouterRetryDelayMs(error, attempt));
+    }
+  }
+
+  throw lastError ?? new Error("OpenRouter chat completion failed");
+}
 
 function getChatCompletionContent(completion: OpenAI.Chat.Completions.ChatCompletion): string {
   const content = completion.choices?.[0]?.message?.content?.trim();
@@ -162,7 +253,7 @@ export async function runPersistedQuestionGeneration(
   });
 
   try {
-    const completion = await openRouterClient.chat.completions.create({
+    const completion = await createChatCompletionWithRetry({
       model: GENERATION_MODEL,
       temperature,
       response_format: { type: "json_object" },
@@ -266,7 +357,7 @@ export async function runPreviewQuestionGeneration(
   });
 
   try {
-    const completion = await openRouterClient.chat.completions.create({
+    const completion = await createChatCompletionWithRetry({
       model: GENERATION_MODEL,
       temperature,
       response_format: { type: "json_object" },
@@ -354,7 +445,7 @@ export async function runRemixQuestion(
   });
 
   try {
-    const completion = await openRouterClient.chat.completions.create({
+    const completion = await createChatCompletionWithRetry({
       model: GENERATION_MODEL,
       temperature: args.temperature ?? 0.9,
       messages: [
