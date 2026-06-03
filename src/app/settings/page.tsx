@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useStorageContext } from "../../hooks/useStorageContext";
 import { toast } from "sonner";
 import { useQuery } from "convex/react";
@@ -22,6 +22,7 @@ import { MAX_ANON_BLOCKED } from "../../hooks/useStorage";
 import { SignInCTA } from "@/components/SignInCTA";
 import { Link, useSearchParams } from "react-router-dom";
 import { Link as LinkIcon, ExternalLink } from "lucide-react";
+import { ModernQuestionCard } from "@/components/modern-question-card/modern-question-card";
 
 const SettingsPage = () => {
   const { isSignedIn } = useAuth();
@@ -114,6 +115,27 @@ const SettingsPage = () => {
   const unhideQuestion = (questionId: Id<"questions">) => {
     removeHiddenQuestion(questionId);
   };
+
+  // Build style/tone lookup maps for card rendering
+  const stylesMap = useMemo(() => {
+    const map = new Map<string, Doc<"styles">>();
+    if (!allStyles) return map;
+    allStyles.forEach(s => {
+      map.set(s.id, s as unknown as Doc<"styles">);
+      map.set(s._id, s as unknown as Doc<"styles">);
+    });
+    return map;
+  }, [allStyles]);
+
+  const tonesMap = useMemo(() => {
+    const map = new Map<string, Doc<"tones">>();
+    if (!allTones) return map;
+    allTones.forEach(t => {
+      map.set(t.id, t as unknown as Doc<"tones">);
+      map.set(t._id, t as unknown as Doc<"tones">);
+    });
+    return map;
+  }, [allTones]);
   const hiddenQuestionObjects = useQuery(api.core.questions.getQuestionsByIds, { ids: hiddenQuestions });
 
   // prevent flickering when unhiding questions
@@ -501,19 +523,33 @@ const SettingsPage = () => {
                 >
                   Clear All
                 </button>
-                <ul className="space-y-2">
-                  {questionsToDisplay.map(question => (
-                    question && <li key={question._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                      <span className="dark:text-white text-black">{question.text}</span>
-                      <button
-                        onClick={() => unhideQuestion(question._id)}
-                        className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
-                      >
-                        Unhide
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                  {questionsToDisplay.map(question => {
+                    const style = stylesMap.get(question.styleId || (question.style as string) || "");
+                    const tone = tonesMap.get(question.toneId || (question.tone as string) || "");
+                    const styleColor = style?.color || "#667EEA";
+                    const toneColor = tone?.color || "#764BA2";
+                    const cardGradient = [styleColor, toneColor];
+
+                    return (
+                      <div key={question._id}>
+                        <ModernQuestionCard
+                          question={question}
+                          isGenerating={false}
+                          isFavorite={false}
+                          isHidden={true}
+                          gradient={cardGradient}
+                          style={style}
+                          tone={tone}
+                          onToggleFavorite={() => {}}
+                          onToggleHidden={() => unhideQuestion(question._id)}
+                          onHideStyle={(styleId) => handleToggleStyle(styleId)}
+                          onHideTone={(toneId) => handleToggleTone(toneId)}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </>
             ) : (
               <p className="dark:text-white/70 text-black/70">You have no hidden questions.</p>

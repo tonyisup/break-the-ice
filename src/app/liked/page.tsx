@@ -9,7 +9,7 @@ import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { FilterControls } from "@/components/filter-controls/filter-controls";
 import { useFilter } from "@/hooks/useFilter";
 import { AddPersonalQuestionDialog } from "@/components/add-personal-question-dialog/AddPersonalQuestionDialog";
-import { QuestionGrid } from "@/components/question-grid/QuestionGrid";
+import { ModernQuestionCard } from "@/components/modern-question-card/modern-question-card";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
 
 import { cn, isColorDark } from "@/lib/utils";
@@ -52,6 +52,27 @@ function LikedQuestionsPageContent() {
   const tones = useQuery(api.core.tones.getTones, {});
 
   const filteredQuestions = useFilter(questions || [], searchText, selectedStyles, selectedTones);
+
+  // Build style/tone lookup maps for card rendering
+  const stylesMap = useMemo(() => {
+    const map = new Map<string, Doc<"styles">>();
+    if (!styles) return map;
+    styles.forEach(s => {
+      map.set(s.id, s as unknown as Doc<"styles">);
+      map.set(s._id, s as unknown as Doc<"styles">);
+    });
+    return map;
+  }, [styles]);
+
+  const tonesMap = useMemo(() => {
+    const map = new Map<string, Doc<"tones">>();
+    if (!tones) return map;
+    tones.forEach(t => {
+      map.set(t.id, t as unknown as Doc<"tones">);
+      map.set(t._id, t as unknown as Doc<"tones">);
+    });
+    return map;
+  }, [tones]);
 
   // Clean up invalid question IDs automatically
   useEffect(() => {
@@ -138,7 +159,7 @@ function LikedQuestionsPageContent() {
         toast.success("Question hidden");
       }
     } catch (error) {
-      console.error("Error toggling hide:", error);
+      console.error("Error hiding question:", error);
       toast.error("Failed to hide question.");
     }
   };
@@ -162,6 +183,30 @@ function LikedQuestionsPageContent() {
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradient = ["#3B2554", "#262D54"];
   const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
+
+  const renderCard = (question: Doc<"questions">) => {
+    const style = stylesMap.get(question.styleId || (question.style as string) || "");
+    const tone = tonesMap.get(question.toneId || (question.tone as string) || "");
+    const styleColor = style?.color || "#667EEA";
+    const toneColor = tone?.color || "#764BA2";
+    const cardGradient = [styleColor, toneColor];
+
+    return (
+      <ModernQuestionCard
+        question={question}
+        isGenerating={false}
+        isFavorite={likedQuestions.includes(question._id)}
+        isHidden={hiddenQuestions.includes(question._id)}
+        gradient={cardGradient}
+        style={style}
+        tone={tone}
+        onToggleFavorite={() => handleToggleLike(question._id)}
+        onToggleHidden={() => toggleHide(question._id)}
+        onHideStyle={(styleId) => addHiddenStyle(styleId)}
+        onHideTone={(toneId) => addHiddenTone(toneId)}
+      />
+    );
+  };
 
   return (
     <div
@@ -203,17 +248,13 @@ function LikedQuestionsPageContent() {
               isOpen={isPersonalOpen}
               onOpenChange={setIsPersonalOpen}
             >
-              <QuestionGrid
-                questions={myQuestions as Doc<"questions">[]}
-                styles={styles || []}
-                tones={tones || []}
-                likedQuestions={likedQuestions}
-                hiddenQuestions={hiddenQuestions}
-                onToggleLike={handleToggleLike}
-                onRemoveItem={toggleHide}
-                onMakePublic={handleMakePublic}
-                variant="condensed"
-              />
+              <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                {myQuestions.map((question) => (
+                  <div key={question._id}>
+                    {renderCard(question as Doc<"questions">)}
+                  </div>
+                ))}
+              </div>
             </CollapsibleSection>
           )}
         </div>
@@ -266,16 +307,13 @@ function LikedQuestionsPageContent() {
               isOpen={isLikedOpen}
               onOpenChange={setIsLikedOpen}
             >
-              <QuestionGrid
-                questions={filteredQuestions as Doc<"questions">[]}
-                styles={styles || []}
-                tones={tones || []}
-                likedQuestions={likedQuestions}
-                hiddenQuestions={hiddenQuestions}
-                onToggleLike={handleToggleLike}
-                onRemoveItem={toggleHide}
-                variant="condensed"
-              />
+              <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                {filteredQuestions.map((question) => (
+                  <div key={question._id}>
+                    {renderCard(question)}
+                  </div>
+                ))}
+              </div>
             </CollapsibleSection>
           </div>
         )}

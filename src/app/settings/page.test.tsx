@@ -73,6 +73,16 @@ vi.mock("@/components/SignInCTA", () => ({
   SignInCTA: () => <div>Sign In CTA</div>,
 }));
 
+vi.mock("@/components/modern-question-card/modern-question-card", () => ({
+  ModernQuestionCard: ({ question, style, tone }: any) => (
+    <div data-testid="modern-question-card">
+      <span>{question?.text}</span>
+      {style && <span>{style.name}</span>}
+      {tone && <span>{tone.name}</span>}
+    </div>
+  ),
+}));
+
 vi.mock("lucide-react", () => ({
   Link: () => <span aria-hidden="true">link</span>,
   ExternalLink: () => <span aria-hidden="true">external</span>,
