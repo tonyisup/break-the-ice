@@ -253,9 +253,8 @@ export default function InfiniteScrollPage() {
     setLoadError(null);
 
     try {
-      const BATCH_SIZE = 5;
-
       const isFirstPull = questionsRef.current.length === 0;
+      const BATCH_SIZE = isFirstPull ? 10 : 5;
 
       // 1. Try to get from DB
       const dbQuestions = await convex.action(api.core.questions.getNextRandomQuestions, {
