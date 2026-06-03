@@ -15,7 +15,7 @@ const OrganizationSettings = () => {
   const { isSignedIn, orgId } = useAuth();
   const { organization } = useOrganization();
   const { activeWorkspace } = useWorkspace();
-  const [orgOpen, setOrgOpen] = useState(true);
+  const [orgOpen, setOrgOpen] = useState(false);
   const entitlements = useQuery(
     api.core.billing.getEffectiveEntitlements,
     isSignedIn && activeWorkspace

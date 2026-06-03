@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 const CollectionsSettings = () => {
   const { isSignedIn } = useAuth();
   const { activeWorkspace } = useWorkspace();
-  const [collectionsOpen, setCollectionsOpen] = useState(true);
+  const [collectionsOpen, setCollectionsOpen] = useState(false);
   const collections = useQuery(
     api.core.collections.getCollectionsByOrganization,
     activeWorkspace ? { organizationId: activeWorkspace } : "skip"
