@@ -86,12 +86,16 @@ async function getActiveTones(
   organizationId?: Id<"organizations">,
   limit = 500,
 ) {
-  const tones = organizationId
-    ? await ctx.db
-        .query("tones")
-        .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
-        .take(limit)
-    : await ctx.db.query("tones").take(limit);
+  let tones: Doc<"tones">[];
+  if (organizationId) {
+    const [orgTones, globalTones] = await Promise.all([
+      ctx.db.query("tones").withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId)).take(limit),
+      ctx.db.query("tones").withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any)).take(limit),
+    ]);
+    tones = [...orgTones, ...globalTones];
+  } else {
+    tones = await ctx.db.query("tones").take(limit);
+  }
 
   const bySlug = new Map<string, Doc<"tones">[]>();
   for (const tone of tones) {

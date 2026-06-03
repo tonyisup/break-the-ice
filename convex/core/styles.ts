@@ -94,9 +94,16 @@ async function getActiveStyles(
   organizationId?: Id<"organizations">,
   limit = 200,
 ) {
-  const styles = organizationId
-    ? await ctx.db.query("styles").withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId)).take(limit)
-    : await ctx.db.query("styles").take(limit);
+  let styles: Doc<"styles">[];
+  if (organizationId) {
+    const [orgStyles, globalStyles] = await Promise.all([
+      ctx.db.query("styles").withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId)).take(limit),
+      ctx.db.query("styles").withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any)).take(limit),
+    ]);
+    styles = [...orgStyles, ...globalStyles];
+  } else {
+    styles = await ctx.db.query("styles").take(limit);
+  }
   const filtered = styles;
 
   const bySlug = new Map<string, Doc<"styles">[]>();

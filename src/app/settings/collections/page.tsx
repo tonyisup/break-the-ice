@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 const CollectionsSettings = () => {
   const { isSignedIn } = useAuth();
   const { activeWorkspace } = useWorkspace();
+  const [collectionsOpen, setCollectionsOpen] = useState(true);
   const collections = useQuery(
     api.core.collections.getCollectionsByOrganization,
     activeWorkspace ? { organizationId: activeWorkspace } : "skip"
@@ -49,7 +50,7 @@ const CollectionsSettings = () => {
   };
 
   return (
-    <CollapsibleSection title="Shared Collections" isOpen={true}>
+    <CollapsibleSection title="Shared Collections" isOpen={collectionsOpen} onOpenChange={setCollectionsOpen}>
       <div className="space-y-4">
         {!activeWorkspace ? (
           <p className="text-sm text-black/60 dark:text-white/60">

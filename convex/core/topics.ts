@@ -87,12 +87,16 @@ async function getLatestActiveTopicBySlug(ctx: QueryCtx, slug: string) {
 }
 
 async function getActiveTopics(ctx: QueryCtx, organizationId?: Id<"organizations">) {
-  const topics = organizationId
-    ? await ctx.db
-        .query("topics")
-        .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
-        .take(DEFAULT_TOPIC_LIMIT)
-    : await ctx.db.query("topics").take(DEFAULT_TOPIC_LIMIT);
+  let topics: Doc<"topics">[];
+  if (organizationId) {
+    const [orgTopics, globalTopics] = await Promise.all([
+      ctx.db.query("topics").withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId)).take(DEFAULT_TOPIC_LIMIT),
+      ctx.db.query("topics").withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any)).take(DEFAULT_TOPIC_LIMIT),
+    ]);
+    topics = [...orgTopics, ...globalTopics];
+  } else {
+    topics = await ctx.db.query("topics").take(DEFAULT_TOPIC_LIMIT);
+  }
 
   const bySlug = new Map<string, Doc<"topics">[]>();
   for (const topic of topics) {

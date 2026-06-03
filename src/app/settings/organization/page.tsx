@@ -2,7 +2,7 @@
 
 import { CreateOrganization, OrganizationProfile, SignedIn, useAuth, useOrganization } from "@clerk/clerk-react";
 import { SubscriptionDetailsButton } from "@clerk/clerk-react/experimental";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import posthog from "posthog-js";
 import { useQuery } from "convex/react";
@@ -15,6 +15,7 @@ const OrganizationSettings = () => {
   const { isSignedIn, orgId } = useAuth();
   const { organization } = useOrganization();
   const { activeWorkspace } = useWorkspace();
+  const [orgOpen, setOrgOpen] = useState(true);
   const entitlements = useQuery(
     api.core.billing.getEffectiveEntitlements,
     isSignedIn && activeWorkspace
@@ -33,7 +34,7 @@ const OrganizationSettings = () => {
   }
 
   return (
-    <CollapsibleSection title="Organization Management" isOpen={true}>
+    <CollapsibleSection title="Organization Management" isOpen={orgOpen} onOpenChange={setOrgOpen}>
       <div className="space-y-5">
         {!orgId ? (
           <div className="space-y-4">
