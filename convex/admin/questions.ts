@@ -51,13 +51,13 @@ export const createQuestion = mutation({
 
 		let styleId = args.styleId;
 		if (args.style && !styleId) {
-			const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", q => q.eq("id", args.style!)).unique();
+			const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", q => q.eq("id", args.style!)).first();
 			if (styleDoc) styleId = styleDoc._id;
 		}
 
 		let toneId = args.toneId;
 		if (args.tone && !toneId) {
-			const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", q => q.eq("id", args.tone!)).unique();
+			const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", q => q.eq("id", args.tone!)).first();
 			if (toneDoc) toneId = toneDoc._id;
 		}
 
@@ -150,7 +150,7 @@ export const updateQuestion = mutation({
 		if (style !== undefined) {
 			updateData.style = style;
 			if (!styleId) {
-				const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", q => q.eq("id", style)).unique();
+				const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", q => q.eq("id", style)).first();
 				if (styleDoc) updateData.styleId = styleDoc._id;
 			}
 		}
@@ -162,7 +162,7 @@ export const updateQuestion = mutation({
 		if (tone !== undefined) {
 			updateData.tone = tone;
 			if (!toneId) {
-				const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", q => q.eq("id", tone)).unique();
+				const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", q => q.eq("id", tone)).first();
 				if (toneDoc) updateData.toneId = toneDoc._id;
 			}
 		}
@@ -174,7 +174,7 @@ export const updateQuestion = mutation({
 		if (topic !== undefined) {
 			updateData.topic = topic;
 			if (!topicId) {
-				const topicDoc = await ctx.db.query("topics").withIndex("by_my_id", q => q.eq("id", topic)).unique();
+				const topicDoc = await ctx.db.query("topics").withIndex("by_my_id", q => q.eq("id", topic)).first();
 				if (topicDoc) updateData.topicId = topicDoc._id;
 			}
 		}
@@ -409,11 +409,11 @@ export const updateCategories = mutation({
 				let styleId: Id<"styles"> | undefined;
 				let toneId: Id<"tones"> | undefined;
 				if (update.style !== undefined) {
-					const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", (q) => q.eq("id", update.style!)).unique();
+					const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", (q) => q.eq("id", update.style!)).first();
 					if (styleDoc) styleId = styleDoc._id;
 				}
 				if (update.tone !== undefined) {
-					const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", (q) => q.eq("id", update.tone!)).unique();
+					const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", (q) => q.eq("id", update.tone!)).first();
 					if (toneDoc) toneId = toneDoc._id;
 				}
 				await ctx.db.patch(update.id, {

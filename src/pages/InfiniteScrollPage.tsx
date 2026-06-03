@@ -359,8 +359,10 @@ export default function InfiniteScrollPage() {
               return next;
             });
           } else if (dbQuestions.length === 0) {
-            // If both DB and AI returned nothing, we're likely at the end
-            setHasMore(false);
+            // DB returned nothing — likely the seen set covers the whole pool.
+            // Reset seen IDs so the next scroll can re-sample, instead of
+            // permanently killing hasMore.
+            setSeenIds(new Set());
           }
         } catch (err) {
           console.error("AI Generation failed:", err);
@@ -383,9 +385,11 @@ export default function InfiniteScrollPage() {
             setShowUpgradeCTA(true);
             setHasMore(false);
           } else if (dbQuestions.length === 0) {
-            // Generic failure but no DB questions left, stop trying to load more
-            setHasMore(false);
-            toast.error("Failed to generate more questions.");
+            // Generic AI failure and no DB questions — reset seen IDs so
+            // the next scroll attempt can re-sample the pool instead of
+            // permanently stopping.
+            setSeenIds(new Set());
+            toast.error("Failed to generate more questions. Scroll to retry.");
           }
 
           // If AI failed and it was first pull, show what we have from DB
