@@ -46,7 +46,7 @@ function HistoryPageContent() {
 
   const questions = useMemo(() => history.map(entry => entry.question), [history]);
   // ... (keep existing useFilter)
-  const filteredHistory = useFilter(history, searchText, selectedStyles, selectedTones) as HistoryEntry[];
+  const filteredHistory = useFilter(history, searchText, selectedStyles, selectedTones);
 
   // ... (keep existing color memoization)
   const styleColors = useMemo(() => {

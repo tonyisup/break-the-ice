@@ -6,14 +6,14 @@ function isHistoryEntry(item: any): item is HistoryEntry {
   return (item as HistoryEntry).question !== undefined;
 }
 
-export const useFilter = (
-  items: (Doc<"questions"> | HistoryEntry)[],
+export const useFilter = <T extends Doc<"questions"> | HistoryEntry>(
+  items: T[],
   searchText: string,
   selectedStyles: string[],
   selectedTones: string[]
-) => {
-  const filteredItems = useMemo(() => {
-    if (!items) return [];
+): T[] => {
+  const filteredItems = useMemo((): T[] => {
+    if (!items) return [] as T[];
     return items.filter(
       (item) => {
         const question = isHistoryEntry(item) ? item.question : item;

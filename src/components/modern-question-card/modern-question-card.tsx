@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { motion, useScroll, useTransform, useSpring, useVelocity } from 'framer-motion';
-import { Heart, Share2, ThumbsDown } from '@/components/ui/icons/icons';
+import { Heart, Share2, ThumbsDown, TrashIcon } from '@/components/ui/icons/icons';
 import { Sparkles } from 'lucide-react';
 import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
@@ -37,6 +37,8 @@ interface ModernQuestionCardProps {
   anchoredTopicId?: Id<"topics"> | null;
   /** When provided, used for the question image and getQuestionImageUrl is not called. */
   imageUrl?: string | null;
+  /** When provided, renders a delete button on the card. */
+  onDelete?: () => void;
 }
 
 export function ModernQuestionCard({
@@ -63,6 +65,7 @@ export function ModernQuestionCard({
   anchoredToneId,
   anchoredTopicId,
   imageUrl,
+  onDelete,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -207,6 +210,7 @@ export function ModernQuestionCard({
                 onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
                 topic={topic}
                 imageUrl={imageUrl}
+                onDelete={onDelete}
               />
               <ItemDetailDrawer
                 item={selectedItemForDrawer}
@@ -278,6 +282,7 @@ interface QuestionContentProps {
   topic?: any;
   /** When provided, used for the question image and getQuestionImageUrl is not called. */
   imageUrl?: string | null;
+  onDelete?: () => void;
 }
 
 const QuestionContent = ({
@@ -298,6 +303,7 @@ const QuestionContent = ({
   onRemix,
   topic: providedTopic,
   imageUrl,
+  onDelete,
 }: QuestionContentProps) => {
   const { scrollYProgress } = useScroll({ target: containerRef });
   const scrollVelocity = useVelocity(scrollYProgress);
@@ -469,6 +475,18 @@ const QuestionContent = ({
             title="Remix question"
           >
             <Sparkles size={24} className="text-gray-600 dark:text-gray-400" />
+          </button>
+        )}
+
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={disabled}
+            className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-red-500/20 dark:hover:bg-red-500/20 transition-colors disabled:opacity-50"
+            title="Delete question"
+          >
+            <TrashIcon size={24} className="text-gray-600 dark:text-gray-400 hover:text-red-500" />
           </button>
         )}
       </div>

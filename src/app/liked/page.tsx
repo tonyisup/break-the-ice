@@ -51,7 +51,12 @@ function LikedQuestionsPageContent() {
   const styles = useQuery(api.core.styles.getStyles, {});
   const tones = useQuery(api.core.tones.getTones, {});
 
-  const filteredQuestions = useFilter(questions || [], searchText, selectedStyles, selectedTones);
+  const filteredQuestions = useFilter<Doc<"questions">>(
+    questions ?? [],
+    searchText,
+    selectedStyles,
+    selectedTones
+  );
 
   // Build style/tone lookup maps for card rendering
   const stylesMap = useMemo(() => {
@@ -180,11 +185,23 @@ function LikedQuestionsPageContent() {
     clearLikedQuestions();
   };
 
+  const deletePersonalQuestion = useMutation(api.core.questions.deletePersonalQuestion);
+
+  const handleDeletePersonalQuestion = async (questionId: Id<"questions">) => {
+    try {
+      await deletePersonalQuestion({ questionId });
+      toast.success("Question deleted");
+    } catch (error) {
+      console.error("Error deleting question:", error);
+      toast.error("Failed to delete question.");
+    }
+  };
+
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradient = ["#3B2554", "#262D54"];
   const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
 
-  const renderCard = (question: Doc<"questions">) => {
+  const renderCard = (question: Doc<"questions">, onDelete?: () => void) => {
     const style = stylesMap.get(question.styleId || (question.style as string) || "");
     const tone = tonesMap.get(question.toneId || (question.tone as string) || "");
     const styleColor = style?.color || "#667EEA";
@@ -204,6 +221,7 @@ function LikedQuestionsPageContent() {
         onToggleHidden={() => toggleHide(question._id)}
         onHideStyle={(styleId) => addHiddenStyle(styleId)}
         onHideTone={(toneId) => addHiddenTone(toneId)}
+        onDelete={onDelete}
       />
     );
   };
@@ -251,7 +269,7 @@ function LikedQuestionsPageContent() {
               <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 {myQuestions.map((question) => (
                   <div key={question._id}>
-                    {renderCard(question as Doc<"questions">)}
+                    {renderCard(question as Doc<"questions">, () => handleDeletePersonalQuestion(question._id))}
                   </div>
                 ))}
               </div>
