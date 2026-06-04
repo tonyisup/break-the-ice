@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { ClerkProvider, useAuth } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";
+import { ClerkProviderWithTheme } from "./components/ClerkProviderWithTheme";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -55,7 +56,7 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}>
+    <ClerkProviderWithTheme>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <StorageProvider>
           <AnalyticsManager />
@@ -112,6 +113,6 @@ createRoot(document.getElementById("root")!).render(
           </WorkspaceProvider>
         </StorageProvider>
       </ConvexProviderWithClerk>
-    </ClerkProvider>
+    </ClerkProviderWithTheme>
   </StrictMode>,
 );

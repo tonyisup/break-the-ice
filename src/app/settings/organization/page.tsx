@@ -10,46 +10,7 @@ import { api } from "@/../convex/_generated/api";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/hooks/useWorkspace";
-
-/** Clerk profile shells default to viewport height; shrink for inline settings embed. */
-const embeddedOrganizationProfileAppearance = {
-  elements: {
-    rootBox: {
-      width: "100%",
-      maxWidth: "100%",
-      minHeight: "auto",
-      height: "auto",
-    },
-    cardBox: {
-      width: "100%",
-      maxWidth: "100%",
-      minHeight: "auto",
-      height: "auto",
-      boxShadow: "none",
-    },
-    card: {
-      width: "100%",
-      maxWidth: "100%",
-      minHeight: "auto",
-      height: "auto",
-    },
-    scrollBox: {
-      width: "100%",
-      maxWidth: "100%",
-      minHeight: "auto",
-      height: "auto",
-    },
-    pageScrollBox: {
-      width: "100%",
-      maxWidth: "100%",
-      minHeight: "auto",
-      height: "auto",
-    },
-    navbar: {
-      maxWidth: "100%",
-    },
-  },
-};
+import { embeddedOrganizationProfileAppearance } from "@/lib/clerkAppearance";
 
 const OrganizationSettings = () => {
   const { isSignedIn, orgId } = useAuth();

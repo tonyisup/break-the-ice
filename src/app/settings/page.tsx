@@ -259,18 +259,7 @@ const SettingsPage = () => {
                   </div>
 
                   {entitlements?.canUseTeamFeatures ? (
-                    <SubscriptionDetailsButton
-                      for="organization"
-                      subscriptionDetailsProps={{
-                        appearance: {
-                          elements: {
-                            drawerBackdrop: { zIndex: 100 },
-                            drawerRoot: { zIndex: 101, paddingTop: "5rem" },
-                            drawerContent: { marginTop: "0.5rem" },
-                          },
-                        },
-                      }}
-                    >
+                    <SubscriptionDetailsButton for="organization">
                       <button className="w-full bg-gradient-to-r from-slate-100 to-white text-slate-950 rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-[1.01]">
                         Manage Team Billing
                       </button>
