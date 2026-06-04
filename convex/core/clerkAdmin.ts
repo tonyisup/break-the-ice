@@ -35,14 +35,26 @@ async function clerkFetch(path: string, init?: RequestInit) {
  * Tries multiple Clerk API approaches since the exact endpoint varies by Clerk version.
  */
 async function fetchOrgSubscriptions(clerkOrganizationId: string): Promise<any[]> {
-  // Approach 1: Try the organization endpoint which may include subscription data
+  // Approach 1: Use the organization's billing/subscription endpoint (most reliable)
+  // Returns the subscription object directly: { id, status, subscription_items, ... }
+  try {
+    const subData = (await clerkFetch(
+      `/organizations/${encodeURIComponent(clerkOrganizationId)}/billing/subscription`
+    )) as any;
+    if (subData?.id && subData?.status) {
+      return [subData];
+    }
+  } catch {
+    // Continue to fallback
+  }
+
+  // Approach 2: Try the organization endpoint which may include subscription data
   try {
     const orgData = (await clerkFetch(
       `/organizations/${encodeURIComponent(clerkOrganizationId)}`
     )) as any;
     if (orgData?.subscription) return [orgData.subscription];
     if (orgData?.subscriptions) return orgData.subscriptions;
-    // Some Clerk versions include subscription_items on the org
     if (orgData?.subscription_items) {
       return [{ subscriptionItems: orgData.subscription_items, status: orgData.subscription_status ?? "inactive" }];
     }
@@ -50,38 +62,17 @@ async function fetchOrgSubscriptions(clerkOrganizationId: string): Promise<any[]
     // Continue to fallback
   }
 
-  // Approach 2: Try listing subscriptions with payer filter
-  try {
-    const data = (await clerkFetch(
-      `/subscriptions?payer_id=${encodeURIComponent(clerkOrganizationId)}&limit=100`
-    )) as { data?: any[] };
-    if (data.data?.length) return data.data;
-  } catch {
-    // Continue to fallback
-  }
-
-  // Approach 3: Try the organization's billing endpoint
-  try {
-    const billingData = (await clerkFetch(
-      `/organizations/${encodeURIComponent(clerkOrganizationId)}/billing/subscriptions`
-    )) as any;
-    if (billingData) return Array.isArray(billingData) ? billingData : [billingData];
-  } catch {
-    // Continue to fallback
-  }
-
-  // Approach 4: List all subscriptions and filter by organization
+  // Approach 3: List all subscriptions and filter by organization_id
   try {
     const data = (await clerkFetch(`/subscriptions?limit=100`)) as { data?: any[] };
-    const filtered = (data.data ?? []).filter(
-      (s: any) =>
-        s.payer_id === clerkOrganizationId ||
-        s.organization_id === clerkOrganizationId ||
-        s.payer?.id === clerkOrganizationId
-    );
+    const allSubs = data.data ?? [];
+    const filtered = allSubs.filter((s: any) => {
+      const orgRef = s.organization_id ?? s.org_id ?? s.payer_id ?? s.payer?.id;
+      return orgRef === clerkOrganizationId;
+    });
     if (filtered.length) return filtered;
   } catch {
-    // Fall through to empty
+    // Fall through
   }
 
   return [];
@@ -131,12 +122,12 @@ export const getOrgSubscriptionStatus = action({
       };
     }
 
-    const activeItem = activeSub.subscriptionItems?.find((item: any) =>
+    const activeItem = activeSub.subscription_items?.find((item: any) =>
       ["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
     );
 
     const isTeam =
-      activeItem?.plan?.isDefault === false &&
+      activeItem?.plan?.is_default === false &&
       activeItem?.plan?.slug !== "free";
 
     let billingStatus: "active" | "past_due" | "trialing" | "inactive" = "inactive";
@@ -185,13 +176,14 @@ export const forceSyncOrgSubscription = action({
       );
 
       if (activeSub) {
-        const activeItem = activeSub.subscriptionItems?.find((item: any) =>
+        const activeItem = activeSub.subscription_items?.find((item: any) =>
           ["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
         );
-        planTier = activeItem?.plan?.isDefault === false ? "team" : "free";
+        planTier = activeItem?.plan?.is_default === false ? "team" : "free";
+
         if (activeSub.status === "active") billingStatus = "active";
         else if (activeSub.status === "past_due") billingStatus = "past_due";
-        else if (activeSub.subscriptionItems?.some((item: any) => item?.isFreeTrial)) {
+        else if (activeSub.subscription_items?.some((item: any) => item?.isFreeTrial)) {
           billingStatus = "trialing";
         }
         clerkCustomerId = activeSub.customerId;
@@ -279,14 +271,14 @@ export const adminListOrganizations = action({
           let billingStatus: "inactive" | "active" | "past_due" | "canceled" | "trialing" = "inactive";
 
           if (activeSub) {
-            const activeItem = activeSub.subscriptionItems?.find((item: any) =>
+            const activeItem = activeSub.subscription_items?.find((item: any) =>
               ["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
             );
-            planTier = activeItem?.plan?.isDefault === false ? "team" : "free";
+            planTier = activeItem?.plan?.is_default === false ? "team" : "free";
 
             if (activeSub.status === "active") billingStatus = "active";
             else if (activeSub.status === "past_due") billingStatus = "past_due";
-            else if (activeSub.subscriptionItems?.some((item: any) => item?.isFreeTrial)) {
+            else if (activeSub.subscription_items?.some((item: any) => item?.isFreeTrial)) {
               billingStatus = "trialing";
             }
           }
@@ -329,6 +321,7 @@ export const adminGetOrgSubscription = action({
   },
   returns: v.object({
     planTier: v.union(v.literal("free"), v.literal("team")),
+    planName: v.string(),
     billingStatus: v.union(
       v.literal("inactive"),
       v.literal("active"),
@@ -350,17 +343,16 @@ export const adminGetOrgSubscription = action({
   }),
   handler: async (_ctx, args) => {
     // Clerk API: get organization's subscription
-    // Try the organization-specific subscription endpoint first
+    // The /billing/subscription endpoint returns the subscription object directly
+    let rawSubData: any = null;
     let subs: any[] = [];
     try {
-      const orgData = (await clerkFetch(
-        `/organizations/${encodeURIComponent(args.clerkOrganizationId)}`
+      rawSubData = (await clerkFetch(
+        `/organizations/${encodeURIComponent(args.clerkOrganizationId)}/billing/subscription`
       )) as any;
-      // The org response may include subscription info
-      if (orgData?.subscription) {
-        subs = [orgData.subscription];
-      } else if (orgData?.subscriptions) {
-        subs = orgData.subscriptions;
+      // Response is the subscription object itself (not wrapped)
+      if (rawSubData?.id && rawSubData?.status) {
+        subs = [rawSubData];
       }
     } catch {
       // Fallback: try listing all subscriptions and filtering
@@ -382,32 +374,37 @@ export const adminGetOrgSubscription = action({
     let billingStatus: "inactive" | "active" | "past_due" | "canceled" | "trialing" = "inactive";
 
     if (activeSub) {
-      const activeItem = activeSub.subscriptionItems?.find((item: any) =>
+      const activeItem = activeSub.subscription_items?.find((item: any) =>
         ["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
       );
-      planTier = activeItem?.plan?.isDefault === false ? "team" : "free";
+      planTier = activeItem?.plan?.is_default === false ? "team" : "free";
 
       if (activeSub.status === "active") billingStatus = "active";
       else if (activeSub.status === "past_due") billingStatus = "past_due";
-      else if (activeSub.subscriptionItems?.some((item: any) => item?.isFreeTrial)) {
+      else if (activeSub.subscription_items?.some((item: any) => item?.isFreeTrial)) {
         billingStatus = "trialing";
       }
     }
 
     const subscriptions = subs.map((s: any) => {
-      const item = s.subscriptionItems?.[0];
+      const item = s.subscription_items?.[0];
       return {
         id: s.id,
         status: s.status,
         planName: item?.plan?.name ?? "Unknown",
         planSlug: item?.plan?.slug ?? "unknown",
         createdAt: s.created_at ?? 0,
-        periodStart: s.current_period_start,
-        periodEnd: s.current_period_end,
+        periodStart: item?.period_start,
+        periodEnd: item?.period_end,
       };
     });
 
-    return { planTier, billingStatus, subscriptions };
+    const activeItem = activeSub?.subscriptionItems?.find((item: any) =>
+      ["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
+    );
+    const planName = activeItem?.plan?.name ?? (planTier === "team" ? "Team" : "Free");
+
+    return { planTier, planName, billingStatus, subscriptions };
   },
 });
 

@@ -117,7 +117,7 @@ function OrgDetailModal({
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Plan</span>
                 <Badge variant={data.planTier === "team" ? "default" : "secondary"}>
-                  {data.planTier}
+                  {data.planName}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
