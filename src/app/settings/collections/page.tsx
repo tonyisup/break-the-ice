@@ -2,8 +2,8 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/../convex/_generated/api";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import posthog from "posthog-js";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -13,7 +13,19 @@ import { Button } from "@/components/ui/button";
 const CollectionsSettings = () => {
   const { isSignedIn } = useAuth();
   const { activeWorkspace } = useWorkspace();
+  const [searchParams] = useSearchParams();
   const [collectionsOpen, setCollectionsOpen] = useState(false);
+
+  useEffect(() => {
+    const expand = searchParams.get("expand");
+    const tab = searchParams.get("tab");
+    const shouldExpand =
+      tab === "collections" ||
+      expand?.split(",").some((section) => section.trim() === "collections");
+    if (shouldExpand) {
+      setCollectionsOpen(true);
+    }
+  }, [searchParams]);
   const collections = useQuery(
     api.core.collections.getCollectionsByOrganization,
     activeWorkspace ? { organizationId: activeWorkspace } : "skip"
@@ -59,11 +71,22 @@ const CollectionsSettings = () => {
         ) : (
           <>
             {collections?.map((collection) => (
-              <div key={collection._id} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                <h3 className="text-lg font-semibold dark:text-white text-black">
-                  {collection.name}
-                </h3>
-              </div>
+              <Link
+                key={collection._id}
+                to={`/settings/collections/${collection._id}`}
+                className="block rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition-colors hover:bg-white/10"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-lg font-semibold dark:text-white text-black">
+                    {collection.name}
+                  </h3>
+                  <span className="shrink-0 text-sm text-black/60 dark:text-white/60">
+                    {collection.questionCount === 1
+                      ? "1 question"
+                      : `${collection.questionCount} questions`}
+                  </span>
+                </div>
+              </Link>
             ))}
 
             {entitlements === undefined ? (
@@ -87,7 +110,7 @@ const CollectionsSettings = () => {
                 </Button>
               </div>
             ) : (
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex flex-col gap-2 items-center sm:flex-row">
                 <input
                   type="text"
                   placeholder="New Collection Name"

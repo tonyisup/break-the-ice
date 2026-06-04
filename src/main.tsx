@@ -14,6 +14,7 @@ import LikedQuestionsPage from "./app/liked/page";
 import QuestionsPage from "./app/admin/questions/page";
 import TagsPage from "./app/admin/tags/page";
 import SettingsPage from "./app/settings/page";
+import CollectionManagePage from "./app/settings/collections/[collectionId]/page";
 import StylesPage from "./app/admin/styles/page";
 import TonesPage from "./app/admin/tones/page";
 import FeedbackPage from "./app/admin/feedback/page";
@@ -69,6 +70,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/question/:id" element={<QuestionPage />} />
                 <Route path="/liked" element={<LikedQuestionsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/settings/collections/:collectionId" element={<CollectionManagePage />} />
                 <Route path="/history" element={<HistoryPage />} />
                 <Route path="/pricing" element={<PricingPage />} />
                 <Route path="/billing/success" element={<BillingSuccessPage />} />

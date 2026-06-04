@@ -11,6 +11,7 @@ import { useFilter } from "@/hooks/useFilter";
 import { AddPersonalQuestionDialog } from "@/components/add-personal-question-dialog/AddPersonalQuestionDialog";
 import { ModernQuestionCard } from "@/components/modern-question-card/modern-question-card";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
+import { AddToCollectionMenu } from "@/components/add-to-collection-menu/AddToCollectionMenu";
 
 import { cn, isColorDark } from "@/lib/utils";
 
@@ -205,6 +206,8 @@ function LikedQuestionsPageContent() {
   const gradient = ["#3B2554", "#262D54"];
   const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
 
+  const showCollectionActions = isSignedIn && !!activeWorkspace;
+
   const renderCard = (question: Doc<"questions">, onDelete?: () => void) => {
     const style = stylesMap.get(question.styleId || (question.style as string) || "");
     const tone = tonesMap.get(question.toneId || (question.tone as string) || "");
@@ -213,20 +216,27 @@ function LikedQuestionsPageContent() {
     const cardGradient = [styleColor, toneColor];
 
     return (
-      <ModernQuestionCard
-        question={question}
-        isGenerating={false}
-        isFavorite={likedQuestions.includes(question._id)}
-        isHidden={hiddenQuestions.includes(question._id)}
-        gradient={cardGradient}
-        style={style}
-        tone={tone}
-        onToggleFavorite={() => handleToggleLike(question._id)}
-        onToggleHidden={() => toggleHide(question._id)}
-        onHideStyle={(styleId) => addHiddenStyle(styleId)}
-        onHideTone={(toneId) => addHiddenTone(toneId)}
-        onDelete={onDelete}
-      />
+      <div className="relative h-full">
+        {showCollectionActions && (
+          <div className="absolute top-3 right-3 z-10">
+            <AddToCollectionMenu questionId={question._id} />
+          </div>
+        )}
+        <ModernQuestionCard
+          question={question}
+          isGenerating={false}
+          isFavorite={likedQuestions.includes(question._id)}
+          isHidden={hiddenQuestions.includes(question._id)}
+          gradient={cardGradient}
+          style={style}
+          tone={tone}
+          onToggleFavorite={() => handleToggleLike(question._id)}
+          onToggleHidden={() => toggleHide(question._id)}
+          onHideStyle={(styleId) => addHiddenStyle(styleId)}
+          onHideTone={(toneId) => addHiddenTone(toneId)}
+          onDelete={onDelete}
+        />
+      </div>
     );
   };
 

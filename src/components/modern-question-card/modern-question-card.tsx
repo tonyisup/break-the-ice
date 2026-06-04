@@ -368,48 +368,61 @@ const QuestionContent = ({
     onToggleHidden();
   };
 
+  const styleSlug =
+    typeof question.style === "string" ? question.style.trim() : "";
+  const toneSlug =
+    typeof question.tone === "string" ? question.tone.trim() : "";
+  const hasStyle = !!style || styleSlug.length > 0;
+  const hasTone = !!tone || toneSlug.length > 0;
+
   return (
     <div className="w-full h-full flex flex-col justify-between min-h-[300px]">
       {/* Category Badge */}
-      <div className="flex flex-row gap-2 justify-between">
-        <div className="border-t-2 border-l-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
-          style={{
-            borderTopColor: gradient[0],
-            borderLeftColor: gradient[0]
-          }}
-        >
-          <div
-            title={style && style.name || "style"}
-            className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
-            onClick={handleClickStyle}
-          >
-            {style && <IconComponent icon={style.icon as Icon} size={24} color={style.color} />}
-            <span className="hidden md:block">
-              {style && style.name}
-            </span>
-            {!style && question.style}
-          </div>
-        </div>
+      {(hasStyle || hasTone) && (
+        <div className="flex flex-row gap-2 justify-between">
+          {hasStyle && (
+            <div className="border-t-2 border-l-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
+              style={{
+                borderTopColor: gradient[0],
+                borderLeftColor: gradient[0]
+              }}
+            >
+              <div
+                title={style?.name || styleSlug || "style"}
+                className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
+                onClick={handleClickStyle}
+              >
+                {style && <IconComponent icon={style.icon as Icon} size={24} color={style.color} />}
+                <span className="hidden md:block">
+                  {style?.name}
+                </span>
+                {!style && styleSlug}
+              </div>
+            </div>
+          )}
 
-        <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
-          style={{
-            borderBottomColor: gradient[1],
-            borderRightColor: gradient[1]
-          }}
-        >
-          <div
-            title={tone && tone.name || "tone"}
-            className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
-            onClick={handleClickTone}
-          >
-            {tone && <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />}
-            <span className="hidden md:block">
-              {tone && tone.name}
-            </span>
-            {!tone && question.tone}
-          </div>
+          {hasTone && (
+            <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
+              style={{
+                borderBottomColor: gradient[1],
+                borderRightColor: gradient[1]
+              }}
+            >
+              <div
+                title={tone?.name || toneSlug || "tone"}
+                className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
+                onClick={handleClickTone}
+              >
+                {tone && <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />}
+                <span className="hidden md:block">
+                  {tone?.name}
+                </span>
+                {!tone && toneSlug}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Question Image */}
       {questionImageUrl && (<div className="w-full h-full flex items-center justify-center min-h-[120px]">
