@@ -5,6 +5,7 @@ import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@clerk/clerk-react";
 import { Heart, History, Home } from "@/components/ui/icons/icons";
 import { useStorageContext } from "@/hooks/useStorageContext";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { UserMenu } from "./UserMenu";
 
 interface HeaderProps {
@@ -13,7 +14,10 @@ interface HeaderProps {
 
 export const Header = ({ homeLinkSlot }: HeaderProps) => {
   const { isSignedIn } = useAuth();
-  const customQuestions = useQuery(api.core.questions.getCustomQuestions, {});
+  const { activeWorkspace } = useWorkspace();
+  const customQuestions = useQuery(api.core.questions.getCustomQuestions, {
+    organizationId: activeWorkspace ?? undefined,
+  });
   const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
 
   const { likedQuestions, likedLimit, hiddenQuestions, hiddenLimit } = useStorageContext();

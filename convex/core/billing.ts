@@ -7,6 +7,7 @@ import {
   parseClerkIdentityClaims,
   upsertClerkLinkedOrganization,
 } from "../lib/clerkOrgSync";
+/** @see ../lib/billingSubjects.ts — personal billing on users, team billing on organizations */
 
 const getActiveClerkOrganization = (identity: Record<string, unknown>) => {
   const parsed = parseClerkIdentityClaims(identity);
@@ -54,6 +55,8 @@ export const getEffectiveEntitlements = query({
       organizationId: effectivePlan.organizationId,
       aiLimit,
       canUseTeamFeatures: effectivePlan.planTier === "team",
+      /** "user" = personal Clerk subscription on users row; org plan uses organizations.billingStatus */
+      billingSubjectType: user.billingSubjectType ?? "user",
     };
   },
 });

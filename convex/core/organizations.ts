@@ -106,14 +106,17 @@ export const acceptInvitation = mutation({
 			throw new Error("This invitation is for a different email address.");
 		}
 
-		// check if user is already a member of an organization
 		const existingMembership = await ctx.db
 			.query("organization_members")
-			.withIndex("by_userId", (q) => q.eq("userId", user._id))
+			.withIndex("by_userId_organizationId", (q) =>
+				q
+					.eq("userId", user._id)
+					.eq("organizationId", invitation.organizationId),
+			)
 			.unique();
 
 		if (existingMembership) {
-			throw new Error("User is already a member of an organization.");
+			throw new Error("User is already a member of this organization.");
 		}
 
 		await ctx.db.insert("organization_members", {

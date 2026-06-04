@@ -19,9 +19,11 @@ import { toast } from "sonner";
 import { SignInCTA } from "@/components/SignInCTA";
 import { Button } from "@/components/ui/button";
 import { useAuth, useClerk } from "@clerk/clerk-react";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 function LikedQuestionsPageContent() {
   const { isSignedIn } = useAuth();
+  const { activeWorkspace } = useWorkspace();
   const { openSignIn } = useClerk();
   const { effectiveTheme } = useTheme();
   const [searchText, setSearchText] = useState("");
@@ -36,7 +38,9 @@ function LikedQuestionsPageContent() {
   const [isLikedOpen, setIsLikedOpen] = useState(true);
 
   // Filter out invalid question IDs to prevent errors
-  const myQuestions = useQuery(api.core.questions.getCustomQuestions, {});
+  const myQuestions = useQuery(api.core.questions.getCustomQuestions, {
+    organizationId: activeWorkspace ?? undefined,
+  });
 
 
   const validLikedQuestions = useMemo(() => {

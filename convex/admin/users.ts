@@ -48,17 +48,41 @@ export const updateUser = mutation({
 		if (aiUsageCount !== undefined) {
 			if (aiUsageCount < 0) throw new Error("AI usage count cannot be negative");
 			if (!Number.isInteger(aiUsageCount)) throw new Error("AI usage count must be an integer");
+			const cycleStart = user.aiUsage?.cycleStart ?? Date.now();
 			updates.aiUsage = {
-				...(user.aiUsage ?? { cycleStart: Date.now() }),
+				cycleStart,
 				count: aiUsageCount,
 			};
+
+			const personalUsage = await ctx.db
+				.query("userAiUsage")
+				.withIndex("by_userId_organizationId", (q) =>
+					q.eq("userId", userId).eq("organizationId", undefined),
+				)
+				.unique();
+
+			if (personalUsage) {
+				await ctx.db.patch(personalUsage._id, {
+					count: aiUsageCount,
+					cycleStart,
+				});
+			} else {
+				await ctx.db.insert("userAiUsage", {
+					userId,
+					organizationId: undefined,
+					count: aiUsageCount,
+					cycleStart,
+				});
+			}
 		}
 
 		if (newsletterSubscriptionStatus !== undefined) {
 			updates.newsletterSubscriptionStatus = newsletterSubscriptionStatus;
 		}
 
-		await ctx.db.patch(userId, updates);
+		if (Object.keys(updates).length > 0) {
+			await ctx.db.patch(userId, updates);
+		}
 		return null;
 	},
 });

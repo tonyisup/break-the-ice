@@ -82,7 +82,9 @@ export default function InfiniteScrollPage() {
     organizationId: activeWorkspace ?? undefined,
   });
   const activeTakeoverTopics = useQuery(api.core.topics.getActiveTakeoverTopics);
-  const interactionStats = useQuery(api.core.users.getUserInteractionStats, {});
+  const interactionStats = useQuery(api.core.users.getUserInteractionStats, {
+    organizationId: activeWorkspace ?? undefined,
+  });
   const dismissRefineCTA = useMutation(api.core.users.dismissRefineCTA);
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
 

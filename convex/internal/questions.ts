@@ -693,6 +693,8 @@ export const getRandomQuestionsInternal = internalQuery({
 						q.eq(q.field("organizationId"), undefined),
 					),
 				);
+			} else {
+				conditions.push(q.eq(q.field("organizationId"), undefined));
 			}
 			return q.and(...conditions);
 		};

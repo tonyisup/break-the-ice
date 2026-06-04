@@ -58,9 +58,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ClerkProviderWithTheme>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-        <StorageProvider>
-          <AnalyticsManager />
-          <WorkspaceProvider>
+        <WorkspaceProvider>
+          <StorageProvider>
+            <AnalyticsManager />
             <BrowserRouter>
               <ClerkSyncManager />
               <Routes>
@@ -110,8 +110,8 @@ createRoot(document.getElementById("root")!).render(
               <FeedbackButton />
               <Toaster position="bottom-left" richColors />
             </BrowserRouter>
-          </WorkspaceProvider>
-        </StorageProvider>
+          </StorageProvider>
+        </WorkspaceProvider>
       </ConvexProviderWithClerk>
     </ClerkProviderWithTheme>
   </StrictMode>,

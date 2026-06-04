@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Settings, User, Moon, Sun, Computer, LogIn, LogOut } from "@/components/ui/icons/icons";
 import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
+import { WorkspaceMenuSub } from "./WorkspaceMenuItems";
 
 interface UserMenuProps {
 	showSettingsBadge?: boolean;
@@ -83,6 +84,10 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 						)}
 					</Link>
 				</DropdownMenuItem>
+
+				<Authenticated>
+					<WorkspaceMenuSub />
+				</Authenticated>
 
 				<DropdownMenuSub>
 					<DropdownMenuSubTrigger className="cursor-pointer focus:bg-white/10">

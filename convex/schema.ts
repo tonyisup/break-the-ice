@@ -237,7 +237,8 @@ export default defineSchema({
     .index("by_generationRun", ["generationRunId"])
     .index("by_author", ["authorId", "status"])
     .index("by_prunedAt_status_text", ["prunedAt", "status", "text"])
-    .index("by_poolDate_and_poolStatus", ["poolDate", "poolStatus"]),
+    .index("by_poolDate_and_poolStatus", ["poolDate", "poolStatus"])
+    .index("by_organizationId", ["organizationId"]),
   tags: defineTable({
     name: v.string(),
     grouping: v.string(),
@@ -278,8 +279,16 @@ export default defineSchema({
     .index("email", ["email"])
     .index("phone", ["phone"])
     .index("by_newsletterSubscriptionStatus", ["newsletterSubscriptionStatus"]),
+  userAiUsage: defineTable({
+    userId: v.id("users"),
+    organizationId: v.optional(v.id("organizations")),
+    count: v.number(),
+    cycleStart: v.number(),
+  })
+    .index("by_userId_organizationId", ["userId", "organizationId"]),
   userQuestions: defineTable({
     userId: v.id("users"),
+    organizationId: v.optional(v.id("organizations")),
     questionId: v.id("questions"),
     status: v.union(
       v.literal("unseen"),
@@ -298,9 +307,21 @@ export default defineSchema({
     .index("by_userId_status", ["userId", "status"])
     .index("by_userId_status_updatedAt", ["userId", "status", "updatedAt"])
     .index("by_questionIdAndStatus", ["questionId", "status"])
-    .index("by_userIdAndQuestionId", ["userId", "questionId"]),
+    .index("by_userIdAndQuestionId", ["userId", "questionId"])
+    .index("by_userId_organizationId_status_updatedAt", [
+      "userId",
+      "organizationId",
+      "status",
+      "updatedAt",
+    ])
+    .index("by_userId_organizationId_and_questionId", [
+      "userId",
+      "organizationId",
+      "questionId",
+    ]),
   userStyles: defineTable({
     userId: v.id("users"),
+    organizationId: v.optional(v.id("organizations")),
     styleId: v.id("styles"),
     status: v.union(
       v.literal("preferred"),
@@ -312,10 +333,17 @@ export default defineSchema({
     .index("by_styleId", ["styleId"])
     .index("by_status", ["status"])
     .index("by_userId_status", ["userId", "status"])
-    .index("by_userIdAndStyleId", ["userId", "styleId"]),
+    .index("by_userIdAndStyleId", ["userId", "styleId"])
+    .index("by_userId_organizationId_status", ["userId", "organizationId", "status"])
+    .index("by_userId_organizationId_and_styleId", [
+      "userId",
+      "organizationId",
+      "styleId",
+    ]),
 
   userTones: defineTable({
     userId: v.id("users"),
+    organizationId: v.optional(v.id("organizations")),
     toneId: v.id("tones"),
     status: v.union(
       v.literal("preferred"),
@@ -327,7 +355,13 @@ export default defineSchema({
     .index("by_toneId", ["toneId"])
     .index("by_status", ["status"])
     .index("by_userId_status", ["userId", "status"])
-    .index("by_userIdAndToneId", ["userId", "toneId"]),
+    .index("by_userIdAndToneId", ["userId", "toneId"])
+    .index("by_userId_organizationId_status", ["userId", "organizationId", "status"])
+    .index("by_userId_organizationId_and_toneId", [
+      "userId",
+      "organizationId",
+      "toneId",
+    ]),
   duplicateDetections: defineTable({
     questionIds: v.array(v.id("questions")),
     uniqueKey: v.optional(v.string()), // Combined ID of the questions (sorted) to prevent duplicate entries

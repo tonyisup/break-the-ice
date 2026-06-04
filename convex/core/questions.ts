@@ -11,7 +11,7 @@ import {
 } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
-import { ensureAdmin } from "../auth";
+import { ensureAdmin, ensureOrgMember } from "../auth";
 import { embed } from "../lib/retriever";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
@@ -56,9 +56,13 @@ export const addPersonalQuestion = mutation({
 		toneId: v.optional(v.id("tones")),
 		topicId: v.optional(v.id("topics")),
 		tags: v.optional(v.array(v.string())),
+		organizationId: v.optional(v.id("organizations")),
 	},
 	returns: v.union(v.id("questions"), v.null()),
 	handler: async (ctx, args) => {
+		if (args.organizationId) {
+			await ensureOrgMember(ctx, args.organizationId);
+		}
 		let userId;
 		if (args.authorId) {
 			userId = args.authorId;
@@ -105,6 +109,7 @@ export const addPersonalQuestion = mutation({
 			topicId: args.topicId,
 			topic: topicDoc?.id,
 			tags: args.tags,
+			organizationId: args.organizationId,
 		});
 	},
 });
@@ -841,11 +846,16 @@ export const addCustomQuestion = mutation({
 	args: {
 		customText: v.string(),
 		isPublic: v.boolean(),
+		organizationId: v.optional(v.id("organizations")),
 	},
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			throw new Error("You must be logged in to add a custom question.");
+		}
+
+		if (args.organizationId) {
+			await ensureOrgMember(ctx, args.organizationId);
 		}
 
 		const user = await ctx.db
@@ -857,7 +867,7 @@ export const addCustomQuestion = mutation({
 			throw new Error("User not found.");
 		}
 
-		const { customText, isPublic } = args;
+		const { customText, isPublic, organizationId } = args;
 		if (customText.trim().length === 0) {
 			return;
 		}
@@ -869,6 +879,7 @@ export const addCustomQuestion = mutation({
 			totalThumbsDown: 0,
 			totalShows: 0,
 			averageViewDuration: 0,
+			organizationId,
 		});
 	},
 });

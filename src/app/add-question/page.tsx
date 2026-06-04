@@ -6,10 +6,12 @@ import { toast } from 'sonner';
 import { Header } from "@/components/header";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 export default function AddQuestionPage() {
   const [questionText, setQuestionText] = useState("");
   const [isPublic, setIsPublic] = useState(true);
+  const { activeWorkspace } = useWorkspace();
   const addCustomQuestion = useMutation(api.core.questions.addCustomQuestion);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -20,7 +22,11 @@ export default function AddQuestionPage() {
     }
 
     try {
-      await addCustomQuestion({ customText: questionText, isPublic });
+      await addCustomQuestion({
+        customText: questionText,
+        isPublic,
+        organizationId: activeWorkspace ?? undefined,
+      });
       setQuestionText("");
       if (isPublic) {
         toast.success("Question submitted for review!");

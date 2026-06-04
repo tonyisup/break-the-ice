@@ -1,6 +1,7 @@
 import { MutationCtx, mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { getEffectivePlanForUser } from "../auth";
+import { getAiUsageForWorkspace } from "../lib/aiUsageWorkspace";
 import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
 
 // Helper to ensure user exists
@@ -40,10 +41,12 @@ export const getCurrentUser = query({
 			return null;
 		}
 
-		const effectivePlan = await getEffectivePlanForUser(ctx, user._id, args.organizationId);
+		const organizationId = args.organizationId;
+		const effectivePlan = await getEffectivePlanForUser(ctx, user._id, organizationId);
 		const limit = effectivePlan.planTier === "team"
 			? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
 			: parseInt(process.env.MAX_FREE_AIGEN ?? "10");
+		const aiUsage = await getAiUsageForWorkspace(ctx, user._id, organizationId);
 
 		return {
 			...user,
@@ -51,14 +54,17 @@ export const getCurrentUser = query({
 			billingStatus: effectivePlan.billingStatus,
 			activeOrganizationId: effectivePlan.organizationId,
 			aiLimit: limit,
-			isAiLimitReached: (user.aiUsage?.count ?? 0) >= limit,
+			aiUsage: { count: aiUsage.count, cycleStart: aiUsage.cycleStart },
+			isAiLimitReached: aiUsage.count >= limit,
 		};
 	},
 });
 
 export const getUserInteractionStats = query({
-	args: {},
-	handler: async (ctx) => {
+	args: {
+		organizationId: v.optional(v.id("organizations")),
+	},
+	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			return { totalSeen: 0, totalLikes: 0, dismissedRefineCTA: false };
@@ -74,19 +80,23 @@ export const getUserInteractionStats = query({
 			return { totalSeen: 0, totalLikes: 0, dismissedRefineCTA: false };
 		}
 
-		// Check if user has any likes
+		const organizationId = args.organizationId;
+
 		const firstLike = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userId_status", (q) =>
-				q.eq("userId", user._id).eq("status", "liked")
+			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
+				q
+					.eq("userId", user._id)
+					.eq("organizationId", organizationId)
+					.eq("status", "liked"),
 			)
 			.first();
 
-		// Count seen questions (up to 50 for efficiency)
-		// We count anything that is not "unseen" (so seen, liked, hidden)
 		const seenQuestions = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userId", (q) => q.eq("userId", user._id))
+			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
+				q.eq("userId", user._id).eq("organizationId", organizationId),
+			)
 			.filter((q) => q.neq(q.field("status"), "unseen"))
 			.take(50);
 

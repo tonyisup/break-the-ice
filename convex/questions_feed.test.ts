@@ -137,6 +137,89 @@ test("anchored candidates are capped without re-entering through the general poo
   expect(results.filter((question) => question.styleId === styleId).length).toBeLessThanOrEqual(reasonableAnchoredCap);
 });
 
+test("personal feed excludes organization-tagged questions", async () => {
+  const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+
+  const { globalId, orgOnlyId } = await t.run(async (ctx) => {
+    const organizationId = await ctx.db.insert("organizations", {
+      name: "Test Org",
+    });
+
+    const globalId = await ctx.db.insert("questions", {
+      text: "Global pool question?",
+      status: "public",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+
+    const orgOnlyId = await ctx.db.insert("questions", {
+      text: "Org-only question?",
+      status: "public",
+      organizationId,
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+
+    return { globalId, orgOnlyId };
+  });
+
+  const results = await t.query(internal.internal.questions.getRandomQuestionsInternal, {
+    count: 10,
+    seen: [],
+    hidden: [],
+    hiddenStyles: [],
+    hiddenTones: [],
+  });
+
+  const resultIds = new Set(results.map((q) => q._id));
+  expect(resultIds.has(globalId)).toBe(true);
+  expect(resultIds.has(orgOnlyId)).toBe(false);
+});
+
+test("organization feed includes org-tagged and global questions", async () => {
+  const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+
+  const { organizationId, globalId, orgOnlyId } = await t.run(async (ctx) => {
+    const organizationId = await ctx.db.insert("organizations", {
+      name: "Test Org",
+    });
+
+    const globalId = await ctx.db.insert("questions", {
+      text: "Global pool question?",
+      status: "public",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+
+    const orgOnlyId = await ctx.db.insert("questions", {
+      text: "Org-only question?",
+      status: "public",
+      organizationId,
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+
+    return { organizationId, globalId, orgOnlyId };
+  });
+
+  const results = await t.query(internal.internal.questions.getRandomQuestionsInternal, {
+    count: 10,
+    seen: [],
+    hidden: [],
+    hiddenStyles: [],
+    hiddenTones: [],
+    organizationId,
+  });
+
+  const resultIds = new Set(results.map((q) => q._id));
+  expect(resultIds.has(globalId)).toBe(true);
+  expect(resultIds.has(orgOnlyId)).toBe(true);
+});
+
 test("fixExistingQuestions processes one batch and schedules continuation", async () => {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
 

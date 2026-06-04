@@ -184,6 +184,7 @@ export function RemixQuestionDrawer({
 					toneId: selectedToneId,
 					topicId: question.topicId,
 					tags,
+					organizationId: activeWorkspace ?? undefined,
 				});
 				if (id) {
 					setNewQuestionId(id);

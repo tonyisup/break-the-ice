@@ -94,7 +94,10 @@ async function getActiveTones(
     ]);
     tones = [...orgTones, ...globalTones];
   } else {
-    tones = await ctx.db.query("tones").take(limit);
+    tones = await ctx.db
+      .query("tones")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
+      .take(limit);
   }
 
   const bySlug = new Map<string, Doc<"tones">[]>();

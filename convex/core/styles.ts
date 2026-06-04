@@ -102,7 +102,10 @@ async function getActiveStyles(
     ]);
     styles = [...orgStyles, ...globalStyles];
   } else {
-    styles = await ctx.db.query("styles").take(limit);
+    styles = await ctx.db
+      .query("styles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
+      .take(limit);
   }
   const filtered = styles;
 

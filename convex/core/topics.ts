@@ -95,7 +95,10 @@ async function getActiveTopics(ctx: QueryCtx, organizationId?: Id<"organizations
     ]);
     topics = [...orgTopics, ...globalTopics];
   } else {
-    topics = await ctx.db.query("topics").take(DEFAULT_TOPIC_LIMIT);
+    topics = await ctx.db
+      .query("topics")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
+      .take(DEFAULT_TOPIC_LIMIT);
   }
 
   const bySlug = new Map<string, Doc<"topics">[]>();

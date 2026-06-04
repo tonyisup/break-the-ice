@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 const LandingPage = () => {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(245,158,11,0.12),_transparent_28%),linear-gradient(180deg,#08111f_0%,#101a2d_48%,#f5f0e8_48%,#f5f0e8_100%)] text-white">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(245,158,11,0.12),_transparent_28%),linear-gradient(180deg,#08111f_0%,#101a2d_48%,#3f3a31_48%,#3f3a31_100%)] text-white">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
         <div className="text-sm font-semibold uppercase tracking-[0.28em] text-amber-200/80">
           Break the Ice

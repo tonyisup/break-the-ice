@@ -10,7 +10,7 @@ export function ClerkSyncManager() {
   const syncOrganization = useMutation(api.core.billing.syncOrganizationFromClerk);
   const syncOrganizationViaClerkApi = useAction(api.core.billingSyncAction.syncOrganizationViaClerkApi);
   const storeUser = useMutation(api.core.users.store);
-  const { setActiveWorkspace } = useWorkspace();
+  const { workspaceHydrated, setActiveWorkspace } = useWorkspace();
   const lastOrgKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export function ClerkSyncManager() {
   }, [isSignedIn, setActiveWorkspace, storeUser]);
 
   useEffect(() => {
-    if (!authLoaded) return;
+    if (!authLoaded || !workspaceHydrated) return;
 
     if (!isSignedIn) {
       return;
@@ -32,7 +32,8 @@ export function ClerkSyncManager() {
 
     if (!orgId) {
       // Do not clear activeWorkspace here: Clerk may still be resolving the
-      // session, and Convex membership / localStorage can still be valid for /org.
+      // session. When the user explicitly chose personal, activeWorkspace is
+      // already null and localStorage was cleared — leave it that way.
       lastOrgKeyRef.current = null;
       return;
     }
@@ -89,6 +90,7 @@ export function ClerkSyncManager() {
     setActiveWorkspace,
     syncOrganization,
     syncOrganizationViaClerkApi,
+    workspaceHydrated,
   ]);
 
   return null;

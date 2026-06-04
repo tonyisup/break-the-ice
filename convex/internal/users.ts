@@ -1,10 +1,13 @@
-import { v, ConvexError } from "convex/values";
+import { v } from "convex/values";
 import { internalMutation, internalQuery, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
-import { ERROR_MESSAGES, ERROR_CODES } from "../constants";
 import { calculateAverageEmbedding } from "../lib/embeddings";
-import { getEffectivePlanForUser } from "../auth";
 import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
+import {
+	checkAndIncrementAiUsageForWorkspace,
+	decrementAiUsageForWorkspace,
+} from "../lib/aiUsageWorkspace";
+import { PERSONAL_BILLING_SUBJECT } from "../lib/billingSubjects";
 
 export const userValidator = v.object({
 	_id: v.id("users"),
@@ -159,7 +162,7 @@ export const syncUserSubscription = internalMutation({
 
 		await ctx.db.patch(user._id, {
 			billingStatus: args.billingStatus,
-			billingSubjectType: args.billingSubjectType,
+			billingSubjectType: args.billingSubjectType ?? PERSONAL_BILLING_SUBJECT,
 			clerkCustomerId: args.clerkCustomerId,
 			clerkSubscriptionId: args.clerkSubscriptionId,
 		});
@@ -178,37 +181,11 @@ export const checkAndIncrementAIUsage = internalMutation({
 		const user = await ctx.db.get(args.userId);
 		if (!user) throw new Error("User not found");
 
-		const now = Date.now();
-		const cycleLength = 30 * 24 * 60 * 60 * 1000; // 30 days
-		let aiUsage = user.aiUsage || { count: 0, cycleStart: now };
-
-		// Reset cycle if needed
-		if (now - aiUsage.cycleStart > cycleLength) {
-			aiUsage = { count: 0, cycleStart: now };
-		}
-		const effectivePlan = await getEffectivePlanForUser(ctx, user._id, args.organizationId);
-		const limit = effectivePlan.planTier === "team"
-			? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
-			: parseInt(process.env.MAX_FREE_AIGEN ?? "10");
-
-		const remaining = limit - aiUsage.count;
-		if (remaining <= 0) {
-			throw new ConvexError({
-				code: ERROR_CODES.AI_LIMIT_REACHED,
-				message: ERROR_MESSAGES.AI_LIMIT_REACHED,
-			});
-		}
-
-		const actualCount = Math.min(1, remaining);
-
-		await ctx.db.patch(user._id, {
-			aiUsage: {
-				count: aiUsage.count + actualCount,
-				cycleStart: aiUsage.cycleStart,
-			},
-		});
-
-		return actualCount;
+		return await checkAndIncrementAiUsageForWorkspace(
+			ctx,
+			args.userId,
+			args.organizationId,
+		);
 	},
 });
 
@@ -218,15 +195,7 @@ export const decrementAIUsage = internalMutation({
 		organizationId: v.optional(v.id("organizations")),
 	},
 	handler: async (ctx, args) => {
-		const user = await ctx.db.get(args.userId);
-		if (!user || !user.aiUsage) return;
-
-		await ctx.db.patch(user._id, {
-			aiUsage: {
-				count: Math.max(0, user.aiUsage.count - 1),
-				cycleStart: user.aiUsage.cycleStart,
-			},
-		});
+		await decrementAiUsageForWorkspace(ctx, args.userId, args.organizationId);
 	},
 });
 
