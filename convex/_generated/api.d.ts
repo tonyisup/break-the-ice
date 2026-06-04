@@ -27,6 +27,7 @@ import type * as constants from "../constants.js";
 import type * as core_ai from "../core/ai.js";
 import type * as core_billing from "../core/billing.js";
 import type * as core_billingSyncAction from "../core/billingSyncAction.js";
+import type * as core_clerkAdmin from "../core/clerkAdmin.js";
 import type * as core_coachFeedback from "../core/coachFeedback.js";
 import type * as core_collections from "../core/collections.js";
 import type * as core_feedback from "../core/feedback.js";
@@ -101,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   "core/ai": typeof core_ai;
   "core/billing": typeof core_billing;
   "core/billingSyncAction": typeof core_billingSyncAction;
+  "core/clerkAdmin": typeof core_clerkAdmin;
   "core/coachFeedback": typeof core_coachFeedback;
   "core/collections": typeof core_collections;
   "core/feedback": typeof core_feedback;

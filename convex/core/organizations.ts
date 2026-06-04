@@ -213,3 +213,20 @@ export const getMembers = query({
 			.take(cap);
 	},
 });
+
+/** Look up an organization by its Clerk organization ID. Used by billing success page. */
+export const getOrganizationByClerkId = query({
+	args: {
+		clerkOrganizationId: v.string(),
+	},
+	returns: v.union(v.id("organizations"), v.null()),
+	handler: async (ctx, args) => {
+		const org = await ctx.db
+			.query("organizations")
+			.withIndex("by_clerkOrganizationId", (q) =>
+				q.eq("clerkOrganizationId", args.clerkOrganizationId)
+			)
+			.unique();
+		return org?._id ?? null;
+	},
+});

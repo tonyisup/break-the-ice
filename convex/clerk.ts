@@ -117,6 +117,22 @@ export const usersWebhook = httpAction(async (ctx, request) => {
 			}
 		}
 
+		if (eventType === "organization.checkout.confirmed") {
+			const checkout = event.data;
+			const clerkOrganizationId = checkout?.organization_id;
+			const organizationName = checkout?.organization_name;
+			if (clerkOrganizationId) {
+				await ctx.runMutation(internal.internal.users.syncOrganizationSubscription, {
+					clerkOrganizationId,
+					planTier: "team",
+					billingStatus: "active",
+					clerkCustomerId: checkout?.payment_method_id ?? undefined,
+					clerkSubscriptionId: checkout?.session_id ?? undefined,
+				});
+				console.log(`Synced org ${clerkOrganizationId} (${organizationName}) to team plan from checkout.confirmed`);
+			}
+		}
+
 		return new Response("Webhook processed", { status: 200 });
 	} catch (err) {
 		console.error("Webhook processing failed", err);

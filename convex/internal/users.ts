@@ -104,21 +104,29 @@ export const syncOrganizationSubscription = internalMutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const organization = await ctx.db
+		let organization = await ctx.db
 			.query("organizations")
 			.withIndex("by_clerkOrganizationId", (q) => q.eq("clerkOrganizationId", args.clerkOrganizationId))
 			.unique();
 
 		if (!organization) {
-			return null;
+			const orgId = await ctx.db.insert("organizations", {
+				name: "Team",
+				clerkOrganizationId: args.clerkOrganizationId,
+				planTier: args.planTier,
+				billingStatus: args.billingStatus,
+				clerkCustomerId: args.clerkCustomerId,
+				clerkSubscriptionId: args.clerkSubscriptionId,
+			});
+			organization = await ctx.db.get(orgId);
+		} else {
+			await ctx.db.patch(organization._id, {
+				billingStatus: args.billingStatus,
+				planTier: args.planTier,
+				clerkCustomerId: args.clerkCustomerId,
+				clerkSubscriptionId: args.clerkSubscriptionId,
+			});
 		}
-
-		await ctx.db.patch(organization._id, {
-			billingStatus: args.billingStatus,
-			planTier: args.planTier,
-			clerkCustomerId: args.clerkCustomerId,
-			clerkSubscriptionId: args.clerkSubscriptionId,
-		});
 
 		return null;
 	},

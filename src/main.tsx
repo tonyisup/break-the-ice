@@ -45,6 +45,7 @@ import GeneratorPage from "./app/admin/generator/page.tsx";
 import { Toaster } from "sonner";
 import UserDetailsPage from "./app/admin/users/[userId]/page.tsx";
 import QuestionDetailsPage from "./app/admin/questions/[questionId]/page.tsx";
+import AdminOrganizationsPage from "./app/admin/organizations/page.tsx";
 import OrgWeeklyCurationPage from "./app/org/schedule/page.tsx";
 import CoachDailyViewPage from "./app/org/today/page.tsx";
 import { ClerkSyncManager } from "./components/ClerkSyncManager";
@@ -94,6 +95,7 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/admin/pool" element={<PoolPage />} />
                   <Route path="/admin/generator" element={<GeneratorPage />} />
                   <Route path="/admin/users/:userId" element={<UserDetailsPage />} />
+                  <Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
                 </Route>
 
 

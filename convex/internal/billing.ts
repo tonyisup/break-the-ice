@@ -36,3 +36,77 @@ export const applyOrganizationSync = internalMutation({
     });
   },
 });
+
+/**
+ * Force-apply subscription status to an organization.
+ * Creates the org if it doesn't exist, then updates plan/billing.
+ * Called from admin actions that query Clerk's REST API directly.
+ */
+export const forceApplyOrgSubscription = internalMutation({
+  args: {
+    clerkOrganizationId: v.string(),
+    organizationName: v.string(),
+    planTier: v.union(v.literal("free"), v.literal("team")),
+    billingStatus: v.union(
+      v.literal("inactive"),
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("canceled"),
+      v.literal("trialing")
+    ),
+    clerkCustomerId: v.optional(v.string()),
+    clerkSubscriptionId: v.optional(v.string()),
+    clerkUserId: v.string(),
+  },
+  returns: v.union(v.id("organizations"), v.null()),
+  handler: async (ctx, args) => {
+    // Find or create the organization
+    let organization = await ctx.db
+      .query("organizations")
+      .withIndex("by_clerkOrganizationId", (q) =>
+        q.eq("clerkOrganizationId", args.clerkOrganizationId)
+      )
+      .unique();
+
+    if (!organization) {
+      // Create the org
+      const orgId = await ctx.db.insert("organizations", {
+        name: args.organizationName,
+        clerkOrganizationId: args.clerkOrganizationId,
+        planTier: args.planTier,
+        billingStatus: args.billingStatus,
+        clerkCustomerId: args.clerkCustomerId,
+        clerkSubscriptionId: args.clerkSubscriptionId,
+      });
+      organization = (await ctx.db.get(orgId)) ?? null;
+
+      // Also create membership for the user
+      if (organization) {
+        const user = await ctx.db
+          .query("users")
+          .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkUserId))
+          .first();
+        if (user) {
+          await ctx.db.insert("organization_members", {
+            userId: user._id,
+            organizationId: organization._id,
+            role: "admin",
+          });
+        }
+      }
+    } else {
+      // Update existing org
+      await ctx.db.patch(organization._id, {
+        planTier: args.planTier,
+        billingStatus: args.billingStatus,
+        clerkCustomerId: args.clerkCustomerId,
+        clerkSubscriptionId: args.clerkSubscriptionId,
+        ...(args.organizationName !== "Team" && args.organizationName !== organization.name
+          ? { name: args.organizationName }
+          : {}),
+      });
+    }
+
+    return organization?._id ?? null;
+  },
+});

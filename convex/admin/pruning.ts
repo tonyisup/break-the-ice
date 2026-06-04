@@ -78,9 +78,9 @@ export async function gatherPruningTargetsImpl(ctx: ActionCtx): Promise<{ target
 		ctx.runQuery(internal.admin.pruning.getStyleEmbeddingsForIds, { styleIds }),
 		ctx.runQuery(internal.admin.pruning.getToneEmbeddingsForIds, { toneIds }),
 	]);
-	const questionEmbeddingMap = new Map(questionEmbList.map((e: { questionId: Id<"questions">; embedding: number[] }) => [e.questionId, e.embedding] as const));
-	const styleEmbeddingMap = new Map(styleEmbList.map((e: { styleId: Id<"styles">; embedding: number[] }) => [e.styleId, e.embedding] as const));
-	const toneEmbeddingMap = new Map(toneEmbList.map((e: { toneId: Id<"tones">; embedding: number[] }) => [e.toneId, e.embedding] as const));
+	const questionEmbeddingMap = new Map<Id<"questions">, number[]>(questionEmbList.map((e: { questionId: Id<"questions">; embedding: number[] }) => [e.questionId, e.embedding]));
+	const styleEmbeddingMap = new Map<Id<"styles">, number[]>(styleEmbList.map((e: { styleId: Id<"styles">; embedding: number[] }) => [e.styleId, e.embedding]));
+	const toneEmbeddingMap = new Map<Id<"tones">, number[]>(toneEmbList.map((e: { toneId: Id<"tones">; embedding: number[] }) => [e.toneId, e.embedding]));
 
 	// Fallback defaults if no settings record exists
 	const s = settings || {

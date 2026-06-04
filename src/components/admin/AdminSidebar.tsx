@@ -13,6 +13,7 @@ import {
 	ShieldCheck,
 	Box,
 	Sparkles,
+	Building2,
 } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
@@ -72,6 +73,11 @@ const items = [
 		title: "Users",
 		url: "/admin/users",
 		icon: User,
+	},
+	{
+		title: "Organizations",
+		url: "/admin/organizations",
+		icon: Building2,
 	},
 	{
 		title: "Feedback",
