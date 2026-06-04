@@ -11,6 +11,46 @@ import { CollapsibleSection } from "@/components/collapsible-section/Collapsible
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/hooks/useWorkspace";
 
+/** Clerk profile shells default to viewport height; shrink for inline settings embed. */
+const embeddedOrganizationProfileAppearance = {
+  elements: {
+    rootBox: {
+      width: "100%",
+      maxWidth: "100%",
+      minHeight: "auto",
+      height: "auto",
+    },
+    cardBox: {
+      width: "100%",
+      maxWidth: "100%",
+      minHeight: "auto",
+      height: "auto",
+      boxShadow: "none",
+    },
+    card: {
+      width: "100%",
+      maxWidth: "100%",
+      minHeight: "auto",
+      height: "auto",
+    },
+    scrollBox: {
+      width: "100%",
+      maxWidth: "100%",
+      minHeight: "auto",
+      height: "auto",
+    },
+    pageScrollBox: {
+      width: "100%",
+      maxWidth: "100%",
+      minHeight: "auto",
+      height: "auto",
+    },
+    navbar: {
+      maxWidth: "100%",
+    },
+  },
+};
+
 const OrganizationSettings = () => {
   const { isSignedIn, orgId } = useAuth();
   const { organization } = useOrganization();
@@ -35,7 +75,7 @@ const OrganizationSettings = () => {
 
   return (
     <CollapsibleSection title="Organization Management" isOpen={orgOpen} onOpenChange={setOrgOpen}>
-      <div className="space-y-5">
+      <div className="min-w-0 space-y-5">
         {!orgId ? (
           <div className="space-y-4">
             <div>
@@ -103,9 +143,9 @@ const OrganizationSettings = () => {
                 </p>
               </div>
             ) : entitlements?.canUseTeamFeatures ? (
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-3">
+              <div className="settings-organization-profile w-full min-w-0 overflow-x-auto rounded-3xl border border-white/10 bg-white/5 p-3">
                 <SignedIn>
-                  <OrganizationProfile />
+                  <OrganizationProfile appearance={embeddedOrganizationProfileAppearance} />
                 </SignedIn>
               </div>
             ) : (

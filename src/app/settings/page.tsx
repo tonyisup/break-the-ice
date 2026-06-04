@@ -194,7 +194,7 @@ const SettingsPage = () => {
   const bgGradient = effectiveTheme === 'dark' ? gradientDark : gradientLight;
   return (
     <div
-      className="min-h-screen transition-colors overflow-hidden"
+      className="min-h-screen transition-colors overflow-x-clip"
       style={{
         background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradientDark[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradientDark[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
       }}
@@ -259,7 +259,18 @@ const SettingsPage = () => {
                   </div>
 
                   {entitlements?.canUseTeamFeatures ? (
-                    <SubscriptionDetailsButton for="organization">
+                    <SubscriptionDetailsButton
+                      for="organization"
+                      subscriptionDetailsProps={{
+                        appearance: {
+                          elements: {
+                            drawerBackdrop: { zIndex: 100 },
+                            drawerRoot: { zIndex: 101, paddingTop: "5rem" },
+                            drawerContent: { marginTop: "0.5rem" },
+                          },
+                        },
+                      }}
+                    >
                       <button className="w-full bg-gradient-to-r from-slate-100 to-white text-slate-950 rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-[1.01]">
                         Manage Team Billing
                       </button>

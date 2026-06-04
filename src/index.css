@@ -141,6 +141,27 @@
   }
 }
 
+/* Clerk billing drawers above fixed app header (z-50) */
+.cl-drawerBackdrop {
+  z-index: 100 !important;
+}
+
+.cl-drawerRoot {
+  z-index: 101 !important;
+}
+
+/* Embedded OrganizationProfile on settings */
+.settings-organization-profile .cl-rootBox,
+.settings-organization-profile .cl-cardBox,
+.settings-organization-profile .cl-card,
+.settings-organization-profile .cl-scrollBox,
+.settings-organization-profile .cl-pageScrollBox {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: auto !important;
+  height: auto !important;
+}
+
 /* Custom gradient animations */
 @keyframes gradient-shift {
   0% {

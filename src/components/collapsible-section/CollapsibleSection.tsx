@@ -75,7 +75,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         </div>
       </div>
       {isOpen && (
-        <div className="p-4 bg-white/30 dark:bg-black/30 backdrop-blur-sm rounded-lg">
+        <div className="min-w-0 p-4 bg-white/30 dark:bg-black/30 backdrop-blur-sm rounded-lg">
           {children}
         </div>
       )}
