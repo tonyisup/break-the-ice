@@ -21,7 +21,7 @@ http.route({
 	handler: usersWebhook,
 });
 
-export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
+export const getQuestionForUserHttp = httpAction(async (ctx, request): Promise<Response> => {
 	const authHeader = request.headers.get("Authorization");
 	const expectedToken = process.env.N8N_WEBHOOK_SECRET;
 
@@ -42,38 +42,22 @@ export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
 
 	let attempts = 0;
 	const maxAttempts = 3;
-	let hadRetry = false;
 
 	while (attempts < maxAttempts) {
 		try {
 			const result = await ctx.runAction(internal.internal.newsletter.getQuestionForUser, { email });
-
-			if (hadRetry) {
-				console.log(`Successfully retrieved question after ${attempts + 1} attempt(s)`);
-			}
-
 			return new Response(JSON.stringify(result), {
 				status: 200,
 				headers: { "Content-Type": "application/json" },
 			});
 		} catch (error: any) {
 			attempts++;
-			hadRetry = true;
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			console.error(`Attempt ${attempts} failed:`, error);
 
-			// Normalize error handling to support multiple error shapes:
-			// 1. Convex error: error.data.kind, error.data.retryAfter, error.statusCode
-			// 2. APIError (OpenAI): error.status, error.headers['retry-after']
-			const status = error.status ?? error.statusCode;
-			const isRateLimited = error.data?.kind === "RateLimited";
-			const hasRetryAfter =
-				error.data?.retryAfter ||
-				(error.headers instanceof Headers ? error.headers.get("retry-after") : error.headers?.["retry-after"]);
-			const is5xxError = status !== undefined && status >= 500;
-			const isWorkerError = errorMessage.includes("worker");
-
-			const isRecoverable = isRateLimited || hasRetryAfter || is5xxError || isWorkerError;
+			const isRecoverable =
+				errorMessage.includes("There are no available workers to process the request") ||
+				errorMessage.includes("Your request couldn't be completed. Try again later.");
 
 			if (isRecoverable && attempts < maxAttempts) {
 				const delay = Math.pow(2, attempts) * 1000;
@@ -84,6 +68,8 @@ export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
 			return new Response("Failed to get question", { status: 500 });
 		}
 	}
+
+	return new Response("Failed to get question", { status: 500 });
 });
 
 http.route({
