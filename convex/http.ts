@@ -42,22 +42,31 @@ export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
 
 	let attempts = 0;
 	const maxAttempts = 3;
+	let hadRetry = false;
 
 	while (attempts < maxAttempts) {
 		try {
 			const result = await ctx.runAction(internal.internal.newsletter.getQuestionForUser, { email });
+
+			if (hadRetry) {
+				console.log(`Successfully retrieved question for ${email} after ${attempts} attempt(s)`);
+			}
+
 			return new Response(JSON.stringify(result), {
 				status: 200,
 				headers: { "Content-Type": "application/json" },
 			});
 		} catch (error: any) {
 			attempts++;
+			hadRetry = true;
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			console.error(`Attempt ${attempts} failed:`, error);
 
 			const isRecoverable =
-				errorMessage.includes("There are no available workers to process the request") ||
-				errorMessage.includes("Your request couldn't be completed. Try again later.");
+				(error.data && error.data.kind === "RateLimited") ||
+				(error.data && error.data.retryAfter) ||
+				error.statusCode === 503 ||
+				errorMessage.includes("worker");
 
 			if (isRecoverable && attempts < maxAttempts) {
 				const delay = Math.pow(2, attempts) * 1000;
@@ -68,8 +77,6 @@ export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
 			return new Response("Failed to get question", { status: 500 });
 		}
 	}
-
-	return new Response("Failed to get question", { status: 500 });
 });
 
 http.route({
