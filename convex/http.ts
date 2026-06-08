@@ -49,7 +49,7 @@ export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
 			const result = await ctx.runAction(internal.internal.newsletter.getQuestionForUser, { email });
 
 			if (hadRetry) {
-				console.log(`Successfully retrieved question for ${email} after ${attempts} attempt(s)`);
+				console.log(`Successfully retrieved question after ${attempts + 1} attempt(s)`);
 			}
 
 			return new Response(JSON.stringify(result), {
@@ -62,11 +62,18 @@ export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			console.error(`Attempt ${attempts} failed:`, error);
 
-			const isRecoverable =
-				(error.data && error.data.kind === "RateLimited") ||
-				(error.data && error.data.retryAfter) ||
-				error.statusCode === 503 ||
-				errorMessage.includes("worker");
+			// Normalize error handling to support multiple error shapes:
+			// 1. Convex error: error.data.kind, error.data.retryAfter, error.statusCode
+			// 2. APIError (OpenAI): error.status, error.headers['retry-after']
+			const status = error.status ?? error.statusCode;
+			const isRateLimited = error.data?.kind === "RateLimited";
+			const hasRetryAfter =
+				error.data?.retryAfter ||
+				(error.headers instanceof Headers ? error.headers.get("retry-after") : error.headers?.["retry-after"]);
+			const is5xxError = status !== undefined && status >= 500;
+			const isWorkerError = errorMessage.includes("worker");
+
+			const isRecoverable = isRateLimited || hasRetryAfter || is5xxError || isWorkerError;
 
 			if (isRecoverable && attempts < maxAttempts) {
 				const delay = Math.pow(2, attempts) * 1000;
