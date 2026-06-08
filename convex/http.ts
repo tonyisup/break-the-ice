@@ -21,7 +21,7 @@ http.route({
 	handler: usersWebhook,
 });
 
-export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
+export const getQuestionForUserHttp = httpAction(async (ctx, request): Promise<Response> => {
 	const authHeader = request.headers.get("Authorization");
 	const expectedToken = process.env.N8N_WEBHOOK_SECRET;
 
@@ -40,16 +40,36 @@ export const getQuestionForUserHttp = httpAction(async (ctx, request) => {
 		return new Response("Missing email", { status: 400 });
 	}
 
-	try {
-		const result = await ctx.runAction(internal.internal.newsletter.getQuestionForUser, { email });
-		return new Response(JSON.stringify(result), {
-			status: 200,
-			headers: { "Content-Type": "application/json" },
-		});
-	} catch (error) {
-		console.error(error);
-		return new Response("Failed to get question", { status: 500 });
+	let attempts = 0;
+	const maxAttempts = 3;
+
+	while (attempts < maxAttempts) {
+		try {
+			const result = await ctx.runAction(internal.internal.newsletter.getQuestionForUser, { email });
+			return new Response(JSON.stringify(result), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		} catch (error: any) {
+			attempts++;
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			console.error(`Attempt ${attempts} failed:`, error);
+
+			const isRecoverable =
+				errorMessage.includes("There are no available workers to process the request") ||
+				errorMessage.includes("Your request couldn't be completed. Try again later.");
+
+			if (isRecoverable && attempts < maxAttempts) {
+				const delay = Math.pow(2, attempts) * 1000;
+				await new Promise(resolve => setTimeout(resolve, delay));
+				continue;
+			}
+
+			return new Response("Failed to get question", { status: 500 });
+		}
 	}
+
+	return new Response("Failed to get question", { status: 500 });
 });
 
 http.route({
