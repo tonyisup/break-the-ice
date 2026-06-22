@@ -1,89 +1,197 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, FolderKanban, Users, WandSparkles } from "lucide-react";
+import {
+  ArrowRight,
+  FolderKanban,
+  Library,
+  MessageSquareQuote,
+  Users,
+  WandSparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "@/hooks/useTheme";
+
+const benefits = [
+  {
+    icon: Users,
+    title: "Shared team workspace",
+    copy: "Give facilitators one place to save, reuse, and refine questions across groups.",
+  },
+  {
+    icon: FolderKanban,
+    title: "Reusable collections",
+    copy: "Build sets for onboarding, retros, classrooms, and community moments.",
+  },
+  {
+    icon: WandSparkles,
+    title: "AI-assisted prep",
+    copy: "Generate more options when the calendar is full and the warmup still matters.",
+  },
+];
+
+const workflow = ["Choose a tone", "Filter by topic", "Save the best", "Share with the team"];
+
+const stackQuestions = [
+  "What is one assumption your team should revisit this month?",
+  "What should this group make easier for the next person?",
+  "What did you learn the hard way that others should not have to?",
+];
 
 const LandingPage = () => {
+  useTheme();
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(245,158,11,0.12),_transparent_28%),linear-gradient(180deg,#08111f_0%,#101a2d_48%,#3f3a31_48%,#3f3a31_100%)] text-white">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <div className="text-sm font-semibold uppercase tracking-[0.28em] text-amber-200/80">
-          Break the Ice
-        </div>
-        <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" className="text-white hover:bg-white/10">
-            <Link to="/app">Open app</Link>
-          </Button>
-          <Button asChild className="bg-amber-400 text-slate-950 hover:bg-amber-300">
-            <Link to="/pricing?source=landing">
-              Start Team Plan
-              <ArrowRight className="ml-2 size-4" />
-            </Link>
-          </Button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background text-foreground">
+      <LandingHeader />
 
-      <main className="mx-auto max-w-6xl px-6 pb-20 pt-10">
-        <section className="grid gap-12 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
-          <div className="space-y-8">
-            <div className="space-y-4">
-              <p className="inline-flex rounded-full border border-white/10 bg-white/5 px-4 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-amber-100">
-                Built for facilitators
-              </p>
-              <h1 className="max-w-4xl text-6xl font-black tracking-tight text-balance">
-                Better question-of-the-day warmups, without the scramble.
-              </h1>
-              <p className="max-w-2xl text-lg text-slate-300">
-                Break the Ice helps coaches, workshop facilitators, and team leads run better openers with shared collections and fast AI-assisted prompt generation.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="bg-amber-400 text-slate-950 hover:bg-amber-300">
-                <Link to="/pricing?source=landing_hero">
-                  Start Team Plan
-                  <ArrowRight className="ml-2 size-4" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="border-white/15 bg-white/5 text-white hover:bg-white/10">
-                <Link to="/app">Try the free app</Link>
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-slate-950/40 backdrop-blur-xl">
-            <div className="rounded-[1.5rem] bg-slate-950/60 p-6">
-              <p className="text-sm uppercase tracking-[0.24em] text-amber-200/70">Why teams buy</p>
-              <div className="mt-6 space-y-4">
-                {[
-                  {
-                    icon: Users,
-                    title: "Run a shared workspace",
-                    copy: "Keep one prompt library for the people leading classes, workshops, or meetings.",
-                  },
-                  {
-                    icon: FolderKanban,
-                    title: "Save reusable collections",
-                    copy: "Build sets for onboarding, community, retros, or warm-ups and bring them back instantly.",
-                  },
-                  {
-                    icon: WandSparkles,
-                    title: "Use AI when prep runs thin",
-                    copy: "Generate more prompts when you need coverage, then keep the best ones in your library.",
-                  },
-                ].map((item) => (
-                  <div key={item.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <item.icon className="size-5 text-amber-300" />
-                    <h2 className="mt-3 font-semibold">{item.title}</h2>
-                    <p className="mt-2 text-sm text-slate-300">{item.copy}</p>
-                  </div>
-                ))}
+      <main>
+        <section className="relative isolate overflow-hidden border-b">
+          <LibraryStackBackdrop />
+          <div className="mx-auto grid min-h-[calc(100vh-65px)] w-full max-w-6xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:py-20">
+            <div className="relative z-10 space-y-7">
+              <div className="space-y-4">
+                <p className="inline-flex rounded-md border bg-background/90 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground shadow-sm">
+                  Built for facilitator libraries
+                </p>
+                <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl">
+                  Show the depth of the library without turning prep into a dashboard.
+                </h1>
+                <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
+                  Break the Ice helps coaches, workshop facilitators, and team leads build a
+                  reusable question library for the moments when a group needs to open up.
+                </p>
               </div>
+
+              <div className="inline-flex w-full flex-col gap-3 rounded-lg border bg-card/90 p-3 shadow-xl shadow-slate-950/10 backdrop-blur sm:w-auto sm:flex-row dark:shadow-black/30">
+                <Button
+                  asChild
+                  size="lg"
+                  className="h-12 px-6 text-base shadow-lg shadow-primary/25 ring-1 ring-primary/20"
+                >
+                  <Link to="/pricing?source=landing_library_stack">
+                    Start Team Plan
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="h-12 border-primary/20 bg-background/80 px-6 text-base hover:bg-primary/5"
+                >
+                  <Link to="/app">Try the free app</Link>
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Start with the free app, then upgrade when your team needs shared collections.
+              </p>
             </div>
+
+            <div className="relative z-10 min-h-[520px] lg:min-h-[600px]" aria-hidden="true" />
+          </div>
+        </section>
+
+        <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:py-20">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              How it works
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-balance">
+              Keep the useful questions moving from session to session.
+            </h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {workflow.map((step, index) => (
+              <div key={step} className="flex items-center gap-3 rounded-lg border bg-card p-4">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">
+                  {index + 1}
+                </span>
+                <span className="text-sm font-medium">{step}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-t bg-muted/30">
+          <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-14 sm:px-6 lg:grid-cols-3 lg:py-20">
+            {benefits.map((benefit) => (
+              <FeatureBlock key={benefit.title} {...benefit} />
+            ))}
           </div>
         </section>
       </main>
     </div>
   );
 };
+
+const LandingHeader = () => (
+  <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
+    <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+      <Link to="/" className="flex items-center gap-2 text-sm font-semibold">
+        <span className="flex size-8 items-center justify-center rounded-md border bg-card">
+          <MessageSquareQuote className="size-4 text-primary" />
+        </span>
+        Break the Ice
+      </Link>
+      <div className="flex items-center gap-2">
+        <Button asChild variant="ghost" className="hidden sm:inline-flex">
+          <Link to="/app">Open app</Link>
+        </Button>
+        <Button asChild>
+          <Link to="/pricing?source=landing">
+            Start Team Plan
+            <ArrowRight className="size-4" />
+          </Link>
+        </Button>
+      </div>
+    </div>
+  </header>
+);
+
+const LibraryStackBackdrop = () => (
+  <div className="pointer-events-none absolute inset-0 z-0">
+    <div className="absolute inset-y-0 right-0 hidden w-[58%] bg-[linear-gradient(90deg,transparent_0%,hsl(var(--muted))_100%)] lg:block" />
+    <div className="absolute left-1/2 top-12 w-[min(88vw,640px)] -translate-x-1/2 lg:left-auto lg:right-[max(2rem,calc((100vw-72rem)/2))] lg:top-16 lg:translate-x-0">
+      <div className="relative h-[560px] sm:h-[600px]">
+        <div className="absolute inset-x-0 top-0 rotate-[-3deg] rounded-lg border bg-background p-5 shadow-xl shadow-slate-950/10">
+          <QuestionTile question={stackQuestions[0]} label="Leadership" />
+        </div>
+        <div className="absolute inset-x-6 top-40 rotate-[2deg] rounded-lg border bg-background p-5 shadow-xl shadow-slate-950/10">
+          <QuestionTile question={stackQuestions[1]} label="Retrospective" />
+        </div>
+        <div className="absolute inset-x-12 top-80 rotate-[-1deg] rounded-lg border bg-background p-5 shadow-xl shadow-slate-950/10">
+          <QuestionTile question={stackQuestions[2]} label="Onboarding" />
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const QuestionTile = ({ question, label }: { question: string; label: string }) => (
+  <div>
+    <div className="mb-5 flex items-center justify-between gap-3">
+      <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+        {label}
+      </span>
+      <Library className="size-4 text-primary" />
+    </div>
+    <p className="text-lg font-medium leading-7 sm:text-xl">{question}</p>
+  </div>
+);
+
+const FeatureBlock = ({
+  icon: Icon,
+  title,
+  copy,
+}: {
+  icon: typeof Users;
+  title: string;
+  copy: string;
+}) => (
+  <div className="rounded-lg border bg-card p-5">
+    <Icon className="size-5 text-primary" />
+    <h3 className="mt-5 font-medium">{title}</h3>
+    <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy}</p>
+  </div>
+);
 
 export default LandingPage;
