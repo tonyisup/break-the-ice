@@ -84,9 +84,24 @@ const LandingPage = () => {
               <p className="text-sm text-muted-foreground">
                 Start with the free app, then upgrade when your team needs shared collections.
               </p>
+
+              <div className="space-y-3 lg:hidden">
+                <div className="rounded-lg border bg-background p-5 shadow-sm">
+                  <QuestionTile question={stackQuestions[0]} label="Leadership" />
+                </div>
+                <div className="rounded-lg border bg-background p-5 shadow-sm">
+                  <QuestionTile question={stackQuestions[1]} label="Retrospective" />
+                </div>
+                <div className="rounded-lg border bg-background p-5 shadow-sm">
+                  <QuestionTile question={stackQuestions[2]} label="Onboarding" />
+                </div>
+              </div>
             </div>
 
-            <div className="relative z-10 min-h-[520px] lg:min-h-[600px]" aria-hidden="true" />
+            <div
+              className="relative z-10 hidden lg:block lg:min-h-[600px]"
+              aria-hidden="true"
+            />
           </div>
         </section>
 
@@ -150,7 +165,7 @@ const LandingHeader = () => (
 const LibraryStackBackdrop = () => (
   <div className="pointer-events-none absolute inset-0 z-0">
     <div className="absolute inset-y-0 right-0 hidden w-[58%] bg-[linear-gradient(90deg,transparent_0%,hsl(var(--muted))_100%)] lg:block" />
-    <div className="absolute left-1/2 top-12 w-[min(88vw,640px)] -translate-x-1/2 lg:left-auto lg:right-[max(2rem,calc((100vw-72rem)/2))] lg:top-16 lg:translate-x-0">
+    <div className="absolute left-1/2 top-12 hidden w-[min(88vw,640px)] -translate-x-1/2 lg:left-auto lg:right-[max(2rem,calc((100vw-72rem)/2))] lg:top-16 lg:block lg:translate-x-0">
       <div className="relative h-[560px] sm:h-[600px]">
         <div className="absolute inset-x-0 top-0 rotate-[-3deg] rounded-lg border bg-background p-5 shadow-xl shadow-slate-950/10">
           <QuestionTile question={stackQuestions[0]} label="Leadership" />
