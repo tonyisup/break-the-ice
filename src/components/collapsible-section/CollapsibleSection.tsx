@@ -9,7 +9,7 @@ interface CollapsibleSectionProps {
   children: ReactNode;
   isOpen: boolean;
   onOpenChange?: (isOpen: boolean) => void;
-  count?: number;
+  count?: ReactNode;
   visibleCount?: number;
   hiddenCount?: number;
 }

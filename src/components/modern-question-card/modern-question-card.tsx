@@ -437,12 +437,12 @@ const QuestionContent = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex justify-center items-center gap-3">
+      <div className="flex flex-wrap items-stretch justify-center gap-2 sm:gap-3">
         <button
           onClick={handleLike}
           disabled={disabled}
           className={cn(
-            "bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50",
+            "flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20",
             shakeHeart && "animate-shake"
           )}
           title="Toggle favorite"
@@ -451,13 +451,16 @@ const QuestionContent = ({
             size={24}
             className={isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600 dark:text-gray-400'}
           />
+          <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
+            Favorite
+          </span>
         </button>
 
         <button
           onClick={handleHide}
           disabled={disabled}
           className={cn(
-            "bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50",
+            "flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20",
             shakeThumbsDown && "animate-shake"
           )}
           title={isHidden ? "Unhide question" : "Hide question"}
@@ -466,16 +469,22 @@ const QuestionContent = ({
             size={24}
             className={isHidden ? 'text-blue-500 fill-blue-500' : 'text-gray-600 dark:text-gray-400'}
           />
+          <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
+            {isHidden ? "Unhide" : "Hide"}
+          </span>
         </button>
 
         {typeof navigator.share === 'function' && (
           <button
             onClick={handleShare}
             disabled={disabled}
-            className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+            className="flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20"
             title="Share question"
           >
             <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
+            <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
+              Share
+            </span>
           </button>
         )}
 
@@ -484,10 +493,13 @@ const QuestionContent = ({
             type="button"
             onClick={onRemix}
             disabled={disabled}
-            className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-black/20 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+            className="flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20"
             title="Remix question"
           >
             <Sparkles size={24} className="text-gray-600 dark:text-gray-400" />
+            <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
+              Remix
+            </span>
           </button>
         )}
 
@@ -496,10 +508,13 @@ const QuestionContent = ({
             type="button"
             onClick={onDelete}
             disabled={disabled}
-            className="bg-black/10 dark:bg-white/10 p-3 rounded-full hover:bg-red-500/20 dark:hover:bg-red-500/20 transition-colors disabled:opacity-50"
+            className="flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-red-500/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-red-500/20"
             title="Delete question"
           >
             <TrashIcon size={24} className="text-gray-600 dark:text-gray-400 hover:text-red-500" />
+            <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
+              Delete
+            </span>
           </button>
         )}
       </div>

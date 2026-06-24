@@ -16,6 +16,7 @@ import { useFilter } from "@/hooks/useFilter";
 
 import { SignInCTA } from "@/components/SignInCTA";
 import { useAuth } from "@clerk/clerk-react";
+import { MAX_ANON_HISTORY } from "@/hooks/useStorage";
 
 function HistoryPageContent() {
   const { isSignedIn } = useAuth();
@@ -158,9 +159,9 @@ function HistoryPageContent() {
                   bgGradient={currentGradient}
                   title="History Limit Reached"
                   featureHighlight={{
-                    pre: "Sign in to",
-                    highlight: "view unlimited history",
-                    post: "and save your progress",
+                    pre: "You've used",
+                    highlight: `${history.length}/${MAX_ANON_HISTORY}`,
+                    post: "guest history slots. Sign in to view unlimited history and save your progress.",
                   }}
                 />
               </div>
@@ -178,7 +179,7 @@ function HistoryPageContent() {
                   onClick={handleClearHistory}
                   className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
                 >
-                  Clear history
+                  Clear history {history.length}/{MAX_ANON_HISTORY}
                 </button>
               </div>
             </div>

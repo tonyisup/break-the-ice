@@ -30,16 +30,17 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
   const showSettingsFullBadge = !isSignedIn && (hiddenQuestions.length >= hiddenLimit);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 p-4 flex justify-between items-center backdrop-blur-md bg-white/5 dark:bg-black/20 border-b border-white/10">
-      <div className="flex gap-2">
+    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-white/10 bg-white/5 p-3 backdrop-blur-md dark:bg-black/20 sm:p-4">
+      <div className="flex gap-1.5 sm:gap-2">
         <HomeLink />
         {homeLinkSlot === "liked" ? (
           <HomeLink icon={<Heart className="w-5 h-5" />} text="Liked" />
         ) :
           <div className="relative">
-            <Button asChild>
+            <Button asChild className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
               <Link to="/liked">
-                <Heart className="w-5 h-5" /><span className="hidden sm:inline"> Liked</span>
+                <Heart className="w-5 h-5" />
+                <span>Liked</span>
               </Link>
             </Button>
             {pendingCount > 0 && (
@@ -58,9 +59,10 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
         {homeLinkSlot === "history" ? (
           <HomeLink icon={<History className="w-5 h-5" />} text="History" />
         ) : (
-          <Button asChild>
+          <Button asChild className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
             <Link to="/history">
-              <History className="w-5 h-5" /><span className="hidden sm:inline"> History</span>
+              <History className="w-5 h-5" />
+              <span>History</span>
             </Link>
           </Button>
         )}
@@ -79,12 +81,11 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
 
 export const HomeLink = ({ icon = <Home className="w-5 h-5" />, text = "Home" }: { icon?: React.ReactNode, text?: string }) => {
   return (
-    <Button asChild>
+    <Button asChild className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
       <Link to="/app">
         {icon}
-        <span className="hidden sm:inline"> {text}</span>
+        <span>{text}</span>
       </Link>
     </Button>
   );
 };
-

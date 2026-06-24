@@ -53,11 +53,11 @@ const LandingPage = () => {
                   Built for facilitator libraries
                 </p>
                 <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-                  Show the depth of the library without turning prep into a dashboard.
+                  Daily icebreaker questions for coaches, workshops, and team sessions.
                 </h1>
                 <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-                  Break the Ice helps coaches, workshop facilitators, and team leads build a
-                  reusable question library for the moments when a group needs to open up.
+                  Break the Ice helps coaches, workshop facilitators, and team leads build and
+                  share a reusable question library without extra prep.
                 </p>
               </div>
 
@@ -67,10 +67,7 @@ const LandingPage = () => {
                   size="lg"
                   className="h-12 px-6 text-base shadow-lg shadow-primary/25 ring-1 ring-primary/20"
                 >
-                  <Link to="/pricing?source=landing_library_stack">
-                    Start Team Plan
-                    <ArrowRight className="size-4" />
-                  </Link>
+                  <Link to="/app">Try the free app</Link>
                 </Button>
                 <Button
                   asChild
@@ -78,11 +75,14 @@ const LandingPage = () => {
                   variant="outline"
                   className="h-12 border-primary/20 bg-background/80 px-6 text-base hover:bg-primary/5"
                 >
-                  <Link to="/app">Try the free app</Link>
+                  <Link to="/pricing?source=landing_library_stack">
+                    Start Team Plan
+                    <ArrowRight className="size-4" />
+                  </Link>
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">
-                Start with the free app, then upgrade when your team needs shared collections.
+                Try the free feed first, then move to Team Plan when you need shared collections and billing.
               </p>
 
               <div className="space-y-3 lg:hidden">
@@ -140,18 +140,18 @@ const LandingPage = () => {
 
 const LandingHeader = () => (
   <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
-    <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-      <Link to="/" className="flex items-center gap-2 text-sm font-semibold">
-        <span className="flex size-8 items-center justify-center rounded-md border bg-card">
-          <MessageSquareQuote className="size-4 text-primary" />
-        </span>
-        Break the Ice
-      </Link>
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <Link to="/" className="flex items-center gap-2 text-sm font-semibold">
+          <span className="flex size-8 items-center justify-center rounded-md border bg-card">
+            <MessageSquareQuote className="size-4 text-primary" />
+          </span>
+          Break the Ice
+        </Link>
       <div className="flex items-center gap-2">
-        <Button asChild variant="ghost" className="hidden sm:inline-flex">
+        <Button asChild variant="ghost" className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
           <Link to="/app">Open app</Link>
         </Button>
-        <Button asChild>
+        <Button asChild className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
           <Link to="/pricing?source=landing">
             Start Team Plan
             <ArrowRight className="size-4" />

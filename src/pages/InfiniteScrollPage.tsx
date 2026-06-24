@@ -1,5 +1,5 @@
 import { useQuery, useConvex, useMutation, useAction } from "convex/react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
@@ -497,7 +497,14 @@ export default function InfiniteScrollPage() {
           event: "liked",
           viewDuration: 0, // Not tracking duration in list view accurately
         });
-        toast.success("Added to favorites!");
+        toast.success("Added to favorites!", {
+          action: {
+            label: "Open liked",
+            onClick: () => {
+              window.location.href = "/liked";
+            },
+          },
+        });
       }
     } catch (error) {
       console.error("Error toggling like:", error);
@@ -522,7 +529,14 @@ export default function InfiniteScrollPage() {
           event: "hidden",
           viewDuration: 0,
         });
-        toast.success("Question hidden");
+        toast.success("Question hidden", {
+          action: {
+            label: "Manage hidden",
+            onClick: () => {
+              window.location.href = "/settings?expand=hidden-questions";
+            },
+          },
+        });
       }
     } catch (error) {
       console.error("Error hiding question:", error);
@@ -710,6 +724,21 @@ export default function InfiniteScrollPage() {
       <Header />
 
       <main className="z-10 flex-1 flex flex-col pb-32 pt-20">
+        <div className="mx-auto w-full max-w-3xl px-4 pb-4">
+          <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white shadow-lg backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+                Public question feed
+              </p>
+              <p className="mt-1 text-sm text-white/80">
+                Browse icebreaker questions for coaches, workshops, and team sessions.
+              </p>
+            </div>
+            <Button asChild variant="outline" className="h-9 shrink-0 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
+              <Link to="/pricing?source=app_banner">Team plan</Link>
+            </Button>
+          </div>
+        </div>
         <AnchorHeader
           styleId={anchoredStyleId}
           toneId={anchoredToneId}

@@ -513,7 +513,7 @@ const SettingsPage = () => {
             title="Hidden Questions"
             isOpen={!!openSections['hidden-questions']}
             onOpenChange={() => toggleSection('hidden-questions')}
-            count={questionsToDisplay?.length}
+            count={isSignedIn ? questionsToDisplay?.length : `${hiddenQuestions.length}/${MAX_ANON_BLOCKED}`}
           >
             {questionsToDisplay && questionsToDisplay.length > 0 ? (
               <>

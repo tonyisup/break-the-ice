@@ -28,7 +28,7 @@ function LikedQuestionsPageContent() {
   const { openSignIn } = useClerk();
   const { effectiveTheme } = useTheme();
   const [searchText, setSearchText] = useState("");
-  const { likedQuestions, addLikedQuestion, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
+  const { likedQuestions, likedLimit, addLikedQuestion, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
   const makeQuestionPublic = useMutation(api.core.questions.makeQuestionPublic);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
@@ -150,7 +150,14 @@ function LikedQuestionsPageContent() {
         removeHiddenQuestion(questionId);
       }
       addLikedQuestion(questionId);
-      toast.success("Added to favorites!");
+      toast.success("Added to favorites!", {
+        action: {
+          label: "Open liked",
+          onClick: () => {
+            window.location.href = "/liked";
+          },
+        },
+      });
     }
   };
 
@@ -335,7 +342,7 @@ function LikedQuestionsPageContent() {
 
             <CollapsibleSection
               title="Liked Questions"
-              count={filteredQuestions.length}
+              count={`${likedQuestions.length}/${likedLimit}`}
               isOpen={isLikedOpen}
               onOpenChange={setIsLikedOpen}
             >

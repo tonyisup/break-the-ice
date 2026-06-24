@@ -41,36 +41,33 @@ const CookieConsentBanner = () => {
           animate={{ y: 0, opacity: 1, scale: 1 }}
           exit={{ y: 50, opacity: 0, scale: 0.95 }}
           transition={{ type: "spring", damping: 20, stiffness: 100 }}
-          className="fixed bottom-6 left-6 right-6 z-[100] md:left-auto md:right-8 md:max-w-md"
+          className="fixed bottom-3 left-3 right-3 z-[100] md:left-auto md:right-8 md:max-w-sm"
         >
           <div className={cn(
-            "relative overflow-hidden rounded-3xl border border-white/20 p-6 shadow-2xl backdrop-blur-2xl",
+            "relative overflow-hidden rounded-3xl border border-white/20 p-4 shadow-2xl backdrop-blur-2xl md:p-5",
             "bg-white/90 dark:bg-slate-900/90 dark:border-white/10"
           )}>
-            {/* Decorative background element */}
-            <div className="absolute -right-4 -top-4 -z-10 h-24 w-24 rounded-full bg-primary/10 blur-2xl" />
-
-            <div className="flex gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <div className="flex gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary md:h-12 md:w-12">
                 <Cookie className="h-6 w-6" />
               </div>
               <div className="flex flex-col gap-1">
-                <h3 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
+                <h3 className="text-base font-semibold tracking-tight text-slate-900 dark:text-white md:text-lg">
                   Cookie Settings
                 </h3>
-                <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400 md:text-sm">
                   We use cookies and local storage to personalize your experience and analyze our traffic.
                   See our <Link to="/cookies" className="font-medium text-primary hover:underline">Cookie Policy</Link>.
                 </p>
               </div>
             </div>
 
-            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleDecline}
-                className="h-10 px-4 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+                className="h-9 px-4 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
               >
                 <Info className="mr-2 h-4 w-4" />
                 Necessary only
@@ -79,7 +76,7 @@ const CookieConsentBanner = () => {
                 variant="default"
                 size="sm"
                 onClick={handleAccept}
-                className="h-10 px-6 font-semibold"
+                className="h-9 px-5 font-semibold"
               >
                 <ShieldCheck className="mr-2 h-4 w-4" />
                 I understand
@@ -93,4 +90,3 @@ const CookieConsentBanner = () => {
 };
 
 export default CookieConsentBanner;
-
