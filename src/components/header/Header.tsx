@@ -30,7 +30,7 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
   const showSettingsFullBadge = !isSignedIn && (hiddenQuestions.length >= hiddenLimit);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-white/10 bg-white/5 p-3 backdrop-blur-md dark:bg-black/20 sm:p-4">
+    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-white/10 bg-white/5 p-3 backdrop-blur-md dark:bg-black/20 md:p-4">
       <div className="flex gap-1.5 sm:gap-2">
         <HomeLink />
         {homeLinkSlot === "liked" ? (

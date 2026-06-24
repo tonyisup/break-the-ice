@@ -30,15 +30,20 @@ export function ClerkSyncManager() {
       return;
     }
 
-    if (!orgId) {
-      // Do not clear activeWorkspace here: Clerk may still be resolving the
-      // session. When the user explicitly chose personal, activeWorkspace is
-      // already null and localStorage was cleared — leave it that way.
-      lastOrgKeyRef.current = null;
+    if (!orgLoaded) {
       return;
     }
 
-    if (!orgLoaded || !organization) {
+    if (!orgId) {
+      // Once Clerk has fully loaded and no org is active, the user is in the
+      // personal workspace. Clear the local workspace selection to keep both
+      // sources of truth aligned.
+      lastOrgKeyRef.current = null;
+      setActiveWorkspace(null);
+      return;
+    }
+
+    if (!organization) {
       return;
     }
 

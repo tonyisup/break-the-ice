@@ -1,6 +1,6 @@
 "use client";
 
-import { CreateOrganization, OrganizationProfile, SignedIn, useAuth, useOrganization } from "@clerk/clerk-react";
+import { CreateOrganization, OrganizationProfile, OrganizationSwitcher, SignedIn, useAuth, useOrganization, useOrganizationList } from "@clerk/clerk-react";
 import { SubscriptionDetailsButton } from "@clerk/clerk-react/experimental";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -15,6 +15,11 @@ import { embeddedOrganizationProfileAppearance } from "@/lib/clerkAppearance";
 const OrganizationSettings = () => {
   const { isSignedIn, orgId } = useAuth();
   const { organization } = useOrganization();
+  const { userMemberships, isLoaded: organizationListLoaded } = useOrganizationList({
+    userMemberships: {
+      infinite: true,
+    },
+  });
   const { activeWorkspace } = useWorkspace();
   const [orgOpen, setOrgOpen] = useState(false);
   const entitlements = useQuery(
@@ -34,22 +39,49 @@ const OrganizationSettings = () => {
     return null;
   }
 
+  const memberships = userMemberships.data ?? [];
+  const hasExistingOrganizations = memberships.length > 0;
+
   return (
     <CollapsibleSection title="Organization Management" isOpen={orgOpen} onOpenChange={setOrgOpen}>
       <div className="min-w-0 space-y-5">
         {!orgId ? (
           <div className="space-y-4">
-            <div>
-              <h3 className="text-lg font-semibold dark:text-white text-black">
-                Create your first workspace
-              </h3>
-              <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-                Billing for teams is attached to an active organization. Create one here and then start the Team plan.
-              </p>
-            </div>
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <CreateOrganization />
-            </div>
+            {!organizationListLoaded ? (
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                <p className="text-sm text-black/60 dark:text-white/60">
+                  Loading your available workspaces...
+                </p>
+              </div>
+            ) : hasExistingOrganizations ? (
+              <>
+                <div>
+                  <h3 className="text-lg font-semibold dark:text-white text-black">
+                    Select an existing workspace
+                  </h3>
+                  <p className="mt-1 text-sm text-black/60 dark:text-white/60">
+                    You already belong to one or more organizations, but none is active right now. Pick one from the workspace switcher before managing billing or member access.
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <OrganizationSwitcher />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <h3 className="text-lg font-semibold dark:text-white text-black">
+                    Create your first workspace
+                  </h3>
+                  <p className="mt-1 text-sm text-black/60 dark:text-white/60">
+                    Billing for teams is attached to an active organization. Create one here and then start the Team plan.
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <CreateOrganization />
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <>
