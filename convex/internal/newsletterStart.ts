@@ -1,9 +1,8 @@
-"use node"
-
 import { ActionCtx, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { Doc } from "../_generated/dataModel";
+import { getResendApiKey } from "../lib/resend";
 
 const DEFAULT_BATCH_SIZE = 100;
 const NEWSLETTER_TIME_ZONE = "America/Los_Angeles";
@@ -36,10 +35,6 @@ function getLosAngelesDateParts(now: Date) {
 		deliveryDate: `${values.year}-${values.month}-${values.day}`,
 		hour: Number(values.hour),
 	};
-}
-
-function getResendApiKey() {
-	return process.env.RESEND_API_TOKEN || process.env.RESEND_API_KEY;
 }
 
 async function startNewsletterDelivery(
@@ -110,7 +105,7 @@ async function startNewsletterDelivery(
 		};
 	}
 
-	const batchSize = Math.min(args.batchSize ?? DEFAULT_BATCH_SIZE, DEFAULT_BATCH_SIZE);
+	const batchSize = Math.max(1, Math.min(args.batchSize ?? DEFAULT_BATCH_SIZE, DEFAULT_BATCH_SIZE));
 	const scheduledBatchCount = Math.ceil(deliveryPlan.pendingCount / batchSize);
 
 	for (let i = 0; i < scheduledBatchCount; i++) {

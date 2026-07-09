@@ -45,9 +45,9 @@ crons.interval(
   internal.internal.tones.updateQuestionsWithMissingToneIds
 );
 
-crons.hourly(
+crons.interval(
   "send daily newsletter questions",
-  { minuteUTC: 0 },
+  { hours: 24 },
   internal.internal.newsletterStart.startDailyNewsletterIfDue,
   {}
 );

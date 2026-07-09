@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 
+export const MAX_DELIVERY_ATTEMPTS = 3;
+
 const deliveryStatus = v.union(
   v.literal("pending"),
   v.literal("processing"),
@@ -34,20 +36,24 @@ export const createPendingDeliveries = internalMutation({
     let createdCount = 0;
     let existingCount = 0;
 
+    const existingDeliveries = await ctx.db
+      .query("newsletterDeliveries")
+      .withIndex("by_deliveryDate_email", (q) =>
+        q.eq("deliveryDate", args.deliveryDate)
+      )
+      .collect();
+
+    const existingEmails = new Set(
+      existingDeliveries.map((d) => d.email.trim().toLowerCase())
+    );
+
     for (const subscriber of args.subscribers) {
       const email = subscriber.email.trim().toLowerCase();
       if (!email) {
         continue;
       }
 
-      const existing = await ctx.db
-        .query("newsletterDeliveries")
-        .withIndex("by_deliveryDate_email", (q) =>
-          q.eq("deliveryDate", args.deliveryDate).eq("email", email)
-        )
-        .first();
-
-      if (existing) {
+      if (existingEmails.has(email)) {
         existingCount++;
         continue;
       }
@@ -82,7 +88,7 @@ export const createPendingDeliveries = internalMutation({
       targetCount: args.subscribers.length,
       createdCount,
       existingCount,
-      pendingCount: pending.length + retryableFailed.filter((row) => row.attemptCount < 3).length,
+      pendingCount: pending.length + retryableFailed.filter((row) => row.attemptCount < MAX_DELIVERY_ATTEMPTS).length,
     };
   },
 });
@@ -115,7 +121,7 @@ export const claimNewsletterDeliveries = internalMutation({
         .withIndex("by_deliveryDate_status", (q) =>
           q.eq("deliveryDate", args.deliveryDate).eq("status", "failed")
         )
-        .collect();
+        .take(args.limit);
       candidates.push(
         ...failed
           .filter((row) => row.attemptCount < args.maxAttempts)
@@ -129,7 +135,7 @@ export const claimNewsletterDeliveries = internalMutation({
         .withIndex("by_deliveryDate_status", (q) =>
           q.eq("deliveryDate", args.deliveryDate).eq("status", "processing")
         )
-        .collect();
+        .take(args.limit);
       candidates.push(
         ...staleProcessing
           .filter((row) => (row.claimedAt ?? 0) < args.staleProcessingBefore)

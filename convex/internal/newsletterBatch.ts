@@ -1,13 +1,12 @@
-"use node"
-
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { Id } from "../_generated/dataModel";
 import { createDailyQuestionEmail } from "../lib/emails";
+import { getResendApiKey } from "../lib/resend";
+import { MAX_DELIVERY_ATTEMPTS } from "./newsletterDelivery";
 
 const DEFAULT_BATCH_SIZE = 100;
-const MAX_DELIVERY_ATTEMPTS = 3;
 const PROCESSING_STALE_MS = 15 * 60 * 1000;
 
 type BatchResult = {
@@ -35,10 +34,6 @@ type PreparedDelivery = {
 		headers: Record<string, string>;
 	};
 };
-
-function getResendApiKey() {
-	return process.env.RESEND_API_TOKEN || process.env.RESEND_API_KEY;
-}
 
 export const processNewsletterBatch = internalAction({
 	args: {
@@ -130,14 +125,22 @@ export const processNewsletterBatch = internalAction({
 		}
 
 		try {
+			const abortController = new AbortController();
+			const timeoutId = setTimeout(() => abortController.abort(), 30000);
+
+			const batchPayload = prepared.map((item) => item.payload);
+			const idempotencyKey = `newsletter-${args.deliveryDate}-${prepared[0]?.deliveryId}`;
+
 			const response = await fetch("https://api.resend.com/emails/batch", {
 				method: "POST",
 				headers: {
 					Authorization: `Bearer ${resendApiKey.trim()}`,
 					"Content-Type": "application/json",
+					"Idempotency-Key": idempotencyKey,
 				},
-				body: JSON.stringify(prepared.map((item) => item.payload)),
-			});
+				body: JSON.stringify(batchPayload),
+				signal: abortController.signal,
+			}).finally(() => clearTimeout(timeoutId));
 
 			const responseText = await response.text();
 			let result: { data?: Array<{ id?: string }>; message?: string; body?: string } = {};
