@@ -2,13 +2,42 @@
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
+import { internal } from "./_generated/api";
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const RESEND_API_KEY = process.env.RESEND_API_TOKEN || process.env.RESEND_API_KEY;
 const AUDIENCE_ID = "7c132839-8e29-4e94-a1d1-61c9f3c3d299"; // From n8n workflow
+
+type ContactStatusResult = {
+	subscribed: boolean | null;
+	message?: string;
+	contactId?: string;
+	error?: string;
+};
+
+type ContactMutationResult = {
+	success: boolean;
+	message?: string;
+};
 
 export const getContactStatus = action({
 	args: { email: v.string() },
-	handler: async (ctx, args) => {
+	returns: v.object({
+		subscribed: v.union(v.boolean(), v.null()),
+		message: v.optional(v.string()),
+		contactId: v.optional(v.string()),
+		error: v.optional(v.string()),
+	}),
+	handler: async (ctx, args): Promise<ContactStatusResult> => {
+		const user: { newsletterSubscriptionStatus?: "subscribed" | "unsubscribed" } | null = await ctx.runQuery(internal.internal.users.getUserByEmail, {
+			email: args.email,
+		});
+
+		if (user?.newsletterSubscriptionStatus) {
+			return {
+				subscribed: user.newsletterSubscriptionStatus === "subscribed",
+			};
+		}
+
 		if (!RESEND_API_KEY) {
 			console.warn("RESEND_API_KEY is not set. Simulating subscription.");
 			return { subscribed: true };
@@ -47,9 +76,17 @@ export const getContactStatus = action({
 
 export const unsubscribeContact = action({
 	args: { email: v.string() },
-	handler: async (ctx, args) => {
+	returns: v.object({
+		success: v.boolean(),
+		message: v.optional(v.string()),
+	}),
+	handler: async (ctx, args): Promise<ContactMutationResult> => {
 		if (!RESEND_API_KEY) {
 			console.warn("RESEND_API_KEY is not set. Simulating unsubscribe.");
+			await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
+				email: args.email,
+				status: "unsubscribed",
+			});
 			return { success: true };
 		}
 
@@ -62,7 +99,11 @@ export const unsubscribeContact = action({
 			const contact = getData.data.find((c: any) => c.email.toLowerCase() === args.email.toLowerCase());
 
 			if (!contact) {
-				return { success: false, message: "Contact not found" };
+				await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
+					email: args.email,
+					status: "unsubscribed",
+				});
+				return { success: true, message: "Contact not found in Resend; updated Convex status." };
 			}
 
 			// 2. Update contact to unsubscribed
@@ -81,6 +122,11 @@ export const unsubscribeContact = action({
 				throw new Error(`Failed to update Resend contact: ${updateResponse.status}`);
 			}
 
+			await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
+				email: args.email,
+				status: "unsubscribed",
+			});
+
 			return { success: true };
 		} catch (error) {
 			console.error("Error unsubscribing from Resend:", error);
@@ -91,9 +137,17 @@ export const unsubscribeContact = action({
 
 export const subscribeContact = action({
 	args: { email: v.string() },
-	handler: async (ctx, args) => {
+	returns: v.object({
+		success: v.boolean(),
+		message: v.optional(v.string()),
+	}),
+	handler: async (ctx, args): Promise<ContactMutationResult> => {
 		if (!RESEND_API_KEY) {
 			console.warn("RESEND_API_KEY is not set. Simulating subscribe.");
+			await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
+				email: args.email,
+				status: "subscribed",
+			});
 			return { success: true };
 		}
 
@@ -131,6 +185,10 @@ export const subscribeContact = action({
 					}),
 				});
 			}
+			await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
+				email: args.email,
+				status: "subscribed",
+			});
 			return { success: true };
 		} catch (error) {
 			console.error("Error subscribing to Resend:", error);

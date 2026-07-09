@@ -1,7 +1,7 @@
 "use node"
 
-import { internalAction, internalMutation } from "../_generated/server";
-import { api, internal } from "../_generated/api";
+import { internalAction } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { Doc, Id } from "../_generated/dataModel";
 
@@ -9,6 +9,7 @@ export const getQuestionForUser = internalAction({
 	args: { email: v.string() },
 	returns: v.object({
 		success: v.boolean(),
+		questionId: v.id("questions"),
 		question: v.string(),
 		questionUrl: v.string(),
 		imageUrl: v.string(),
@@ -17,6 +18,7 @@ export const getQuestionForUser = internalAction({
 	}),
 	handler: async (ctx, args): Promise<{
 		success: boolean;
+		questionId: Id<"questions">;
 		question: string;
 		questionUrl: string;
 		imageUrl: string;
@@ -146,6 +148,7 @@ export const getQuestionForUser = internalAction({
 		const questionText: string = question.text || question.customText || "";
 		return {
 			success: true,
+			questionId: question._id,
 			question: questionText,
 			questionUrl: `${baseUrl}question/${question._id}`,
 			imageUrl: `${baseUrl}api/og?id=${question._id}`,
