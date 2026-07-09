@@ -104,43 +104,60 @@ export const getStats = query({
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 
-		const subscribed = await ctx.db
-			.query("users")
-			.withIndex("by_newsletterSubscriptionStatus", (q) =>
-				q.eq("newsletterSubscriptionStatus", "subscribed"),
-			)
-			.collect();
-		const unsubscribed = await ctx.db
-			.query("users")
-			.withIndex("by_newsletterSubscriptionStatus", (q) =>
-				q.eq("newsletterSubscriptionStatus", "unsubscribed"),
-			)
-			.collect();
-		const pendingVerifications = await ctx.db.query("pendingSubscriptions").collect();
-
-		const deliveryCountsResult = {
-			pending: 0,
-			processing: 0,
-			sent: 0,
-			failed: 0,
-		};
-
-		for (const status of ["pending", "processing", "sent", "failed"] as const) {
-			const rows = await ctx.db
-				.query("newsletterDeliveries")
-				.withIndex("by_deliveryDate_status", (q) =>
-					q.eq("deliveryDate", args.deliveryDate).eq("status", status),
+		// Run all database queries in parallel
+		const [subscribed, unsubscribed, pendingVerifications, deliveryCounts] = await Promise.all([
+			ctx.db
+				.query("users")
+				.withIndex("by_newsletterSubscriptionStatus", (q) =>
+					q.eq("newsletterSubscriptionStatus", "subscribed"),
 				)
-				.collect();
-			deliveryCountsResult[status] = rows.length;
-		}
+				.collect(),
+			ctx.db
+				.query("users")
+				.withIndex("by_newsletterSubscriptionStatus", (q) =>
+					q.eq("newsletterSubscriptionStatus", "unsubscribed"),
+				)
+				.collect(),
+			ctx.db.query("pendingSubscriptions").collect(),
+			Promise.all([
+				ctx.db
+					.query("newsletterDeliveries")
+					.withIndex("by_deliveryDate_status", (q) =>
+						q.eq("deliveryDate", args.deliveryDate).eq("status", "pending"),
+					)
+					.collect(),
+				ctx.db
+					.query("newsletterDeliveries")
+					.withIndex("by_deliveryDate_status", (q) =>
+						q.eq("deliveryDate", args.deliveryDate).eq("status", "processing"),
+					)
+					.collect(),
+				ctx.db
+					.query("newsletterDeliveries")
+					.withIndex("by_deliveryDate_status", (q) =>
+						q.eq("deliveryDate", args.deliveryDate).eq("status", "sent"),
+					)
+					.collect(),
+				ctx.db
+					.query("newsletterDeliveries")
+					.withIndex("by_deliveryDate_status", (q) =>
+						q.eq("deliveryDate", args.deliveryDate).eq("status", "failed"),
+					)
+					.collect(),
+			]).then(([pending, processing, sent, failed]) => ({
+				pending: pending.length,
+				processing: processing.length,
+				sent: sent.length,
+				failed: failed.length,
+			})),
+		]);
 
 		return {
 			subscribedCount: subscribed.length,
 			unsubscribedCount: unsubscribed.length,
 			pendingVerificationCount: pendingVerifications.length,
 			deliveryDate: args.deliveryDate,
-			deliveryCounts: deliveryCountsResult,
+			deliveryCounts: deliveryCounts,
 		};
 	},
 });
