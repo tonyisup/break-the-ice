@@ -192,44 +192,11 @@ export const sendDailyQuestions = action({
 		success: v.boolean(),
 		message: v.optional(v.string()),
 	}),
-	handler: async (ctx, args) => {
-		const webhookUrl = process.env.N8N_DAILY_QUESTIONS_WEBHOOK_URL;
+	handler: async (ctx): Promise<{ success: boolean; message?: string }> => {
+		const result: { success: boolean; message: string } = await ctx.runAction(internal.internal.newsletterStart.startDailyNewsletter, {
+			force: true,
+		});
 
-		if (!webhookUrl) {
-			console.warn("N8N_DAILY_QUESTIONS_WEBHOOK_URL is not set. Simulating success.");
-			// For development, we simulate success if the env var isn't set.
-			return { success: true, message: "Simulated sending" };
-		}
-
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 60000); // 1 minute timeout for bulk send
-
-		try {
-			const response = await fetch(webhookUrl, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({
-					source: "daily_questions_feed",
-					timestamp: new Date().toISOString(),
-				}),
-				signal: controller.signal,
-			});
-
-			if (!response.ok) {
-				throw new Error(`Webhook failed with status: ${response.status}`);
-			}
-
-			return { success: true };
-		} catch (error: any) {
-			if (error.name === "AbortError") {
-				throw new Error("Daily questions bulk send timed out.");
-			}
-			console.error("Failed to send daily questions:", error);
-			throw new Error("Failed to send daily questions. Please try again later.");
-		} finally {
-			clearTimeout(timeoutId);
-		}
+		return { success: result.success, message: result.message };
 	},
 });

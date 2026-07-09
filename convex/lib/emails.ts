@@ -50,6 +50,55 @@ export const createSubscriptionNotificationEmail = (email: string) => {
   return { subject, html };
 };
 
+export const createDailyQuestionEmail = (args: {
+  question: string;
+  questionUrl: string;
+  unsubscribeUrl: string;
+}) => {
+  const subject = "Your Icebreaker for Today";
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { color: #2563eb; margin: 0; font-size: 24px; }
+        .question-box { background: #f8fafc; padding: 30px; border-radius: 16px; margin: 20px 0; text-align: center; border: 1px solid #e2e8f0; }
+        .question-text { font-size: 20px; font-weight: 600; color: #1e293b; margin-bottom: 20px; }
+        .button-container { text-align: center; margin: 30px 0; }
+        .button { background-color: #2563eb; color: white !important; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block; }
+        .footer { text-align: center; font-size: 12px; color: #64748b; margin-top: 40px; }
+        .unsubscribe { margin-top: 20px; display: block; text-decoration: underline; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Icebreaker of the Day</h1>
+        </div>
+
+        <div class="question-box">
+          <p class="question-text">${escapeHtml(args.question)}</p>
+        </div>
+
+        <div class="button-container">
+          <a href="${escapeHtml(args.questionUrl)}" class="button">View on Break the Iceberg</a>
+        </div>
+
+        <div class="footer">
+          <p>You're receiving this because you subscribed to Break the Iceberg daily questions.</p>
+          <p>&copy; 2026 Break the Iceberg. All rights reserved.</p>
+          <p><a href="${escapeHtml(args.unsubscribeUrl)}" class="unsubscribe">Unsubscribe</a></p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+  return { subject, html };
+};
+
 type MinimumQuestionsResult = {
   combinationsProcessed: number;
   questionsGenerated: number;

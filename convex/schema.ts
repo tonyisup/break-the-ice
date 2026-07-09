@@ -476,6 +476,29 @@ export default defineSchema({
     email: v.string(),
     token: v.string(),
   }).index("by_token", ["token"]),
+  newsletterDeliveries: defineTable({
+    deliveryDate: v.string(),
+    email: v.string(),
+    userId: v.id("users"),
+    questionId: v.optional(v.id("questions")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("sent"),
+      v.literal("failed")
+    ),
+    attemptCount: v.number(),
+    resendEmailId: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    claimedAt: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+  })
+    .index("by_deliveryDate", ["deliveryDate"])
+    .index("by_deliveryDate_email", ["deliveryDate", "email"])
+    .index("by_deliveryDate_status", ["deliveryDate", "status"])
+    .index("by_userId_deliveryDate", ["userId", "deliveryDate"]),
   pruningSettings: defineTable({
     name: v.string(),
     status: v.union(

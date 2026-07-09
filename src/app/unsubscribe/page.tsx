@@ -17,8 +17,8 @@ const UnsubscribePage = () => {
 	const { effectiveTheme } = useTheme();
 
 	const currentUser = useQuery(api.core.users.getCurrentUser, {});
-	const unsubscribeAction = useAction(api.core.resend.unsubscribeContact);
-	const getStatusAction = useAction(api.core.resend.getContactStatus);
+	const unsubscribeAction = useAction(api.resend.unsubscribeContact);
+	const getStatusAction = useAction(api.resend.getContactStatus);
 	const subscribeAction = useAction(api.core.newsletter.subscribe);
 
 	const [email, setEmail] = useState<string | null>(null);

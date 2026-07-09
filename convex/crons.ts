@@ -45,6 +45,13 @@ crons.interval(
   internal.internal.tones.updateQuestionsWithMissingToneIds
 );
 
+crons.interval(
+  "send daily newsletter questions",
+  { hours: 1 },
+  internal.internal.newsletterStart.startDailyNewsletterIfDue,
+  {}
+);
+
 // Nightly zombie slug scan: finds style/tone/topic slugs on questions
 // that no longer resolve to active taxonomy entries
 crons.interval(
