@@ -83,10 +83,12 @@ test("failed deliveries can be retried up to max attempts", async () => {
   });
 
   expect(firstClaim).toHaveLength(1);
-  expect(firstClaim[0]?.attemptCount).toBe(1);
+  const firstClaimItem = firstClaim[0];
+  if (!firstClaimItem) throw new Error("Expected first claim item");
+  expect(firstClaimItem.attemptCount).toBe(1);
 
   await t.mutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesFailed, {
-    deliveryIds: [firstClaim[0]!._id],
+    deliveryIds: [firstClaimItem._id],
     error: "Test failure",
   });
 
@@ -98,10 +100,12 @@ test("failed deliveries can be retried up to max attempts", async () => {
   });
 
   expect(secondClaim).toHaveLength(1);
-  expect(secondClaim[0]?.attemptCount).toBe(2);
+  const secondClaimItem = secondClaim[0];
+  if (!secondClaimItem) throw new Error("Expected second claim item");
+  expect(secondClaimItem.attemptCount).toBe(2);
 
   await t.mutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesFailed, {
-    deliveryIds: [secondClaim[0]!._id],
+    deliveryIds: [secondClaimItem._id],
     error: "Test failure 2",
   });
 
@@ -113,10 +117,12 @@ test("failed deliveries can be retried up to max attempts", async () => {
   });
 
   expect(thirdClaim).toHaveLength(1);
-  expect(thirdClaim[0]?.attemptCount).toBe(3);
+  const thirdClaimItem = thirdClaim[0];
+  if (!thirdClaimItem) throw new Error("Expected third claim item");
+  expect(thirdClaimItem.attemptCount).toBe(3);
 
   await t.mutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesFailed, {
-    deliveryIds: [thirdClaim[0]!._id],
+    deliveryIds: [thirdClaimItem._id],
     error: "Test failure 3",
   });
 
@@ -210,17 +216,19 @@ test("markNewsletterDeliveriesSent marks deliveries as sent with question and re
   });
 
   expect(claimed).toHaveLength(1);
+  const claimedItem = claimed[0];
+  if (!claimedItem) throw new Error("Expected claimed item");
 
   await t.mutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesSent, {
     deliveries: [{
-      deliveryId: claimed[0]!._id,
+      deliveryId: claimedItem._id,
       questionId: questionId,
       resendEmailId: "resend-123",
     }],
   });
 
   const delivery = await t.run(async (ctx) => {
-    return await ctx.db.get("newsletterDeliveries", claimed[0]!._id);
+    return await ctx.db.get("newsletterDeliveries", claimedItem._id);
   });
 
   expect(delivery?.status).toBe("sent");
@@ -254,14 +262,16 @@ test("markNewsletterDeliveriesFailed marks deliveries as failed with error messa
   });
 
   expect(claimed).toHaveLength(1);
+  const claimedItem = claimed[0];
+  if (!claimedItem) throw new Error("Expected claimed item");
 
   await t.mutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesFailed, {
-    deliveryIds: [claimed[0]!._id],
+    deliveryIds: [claimedItem._id],
     error: "Network timeout error",
   });
 
   const delivery = await t.run(async (ctx) => {
-    return await ctx.db.get("newsletterDeliveries", claimed[0]!._id);
+    return await ctx.db.get("newsletterDeliveries", claimedItem._id);
   });
 
   expect(delivery?.status).toBe("failed");
@@ -305,17 +315,20 @@ test("getDeliveryCounts returns accurate counts for each status", async () => {
   });
 
   expect(claimed).toHaveLength(3);
+  const claimedFirst = claimed[0];
+  const claimedSecond = claimed[1];
+  if (!claimedFirst || !claimedSecond) throw new Error("Expected claimed items");
 
   await t.mutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesSent, {
     deliveries: [{
-      deliveryId: claimed[0]!._id,
+      deliveryId: claimedFirst._id,
       questionId: questionId,
       resendEmailId: "id1",
     }],
   });
 
   await t.mutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesFailed, {
-    deliveryIds: [claimed[1]!._id],
+    deliveryIds: [claimedSecond._id],
     error: "Test error",
   });
 

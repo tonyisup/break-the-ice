@@ -105,7 +105,7 @@ export const getStats = query({
 		await ensureAdmin(ctx);
 
 		// Run all database queries in parallel
-		const [subscribed, unsubscribed, pendingVerifications, deliveryCounts] = await Promise.all([
+		const [subscribed, unsubscribed, pendingVerifications, deliveryCountsResult] = await Promise.all([
 			ctx.db
 				.query("users")
 				.withIndex("by_newsletterSubscriptionStatus", (q) =>
@@ -157,7 +157,7 @@ export const getStats = query({
 			unsubscribedCount: unsubscribed.length,
 			pendingVerificationCount: pendingVerifications.length,
 			deliveryDate: args.deliveryDate,
-			deliveryCounts: deliveryCounts,
+			deliveryCounts: deliveryCountsResult,
 		};
 	},
 });
