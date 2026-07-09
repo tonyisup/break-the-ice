@@ -48,8 +48,29 @@ function getLosAngelesDeliveryDate(now = new Date()) {
 type StatusFilter = "subscribed" | "unsubscribed" | "all"
 
 export default function NewsletterPage() {
-	const deliveryDate = React.useMemo(() => getLosAngelesDeliveryDate(), [])
+	const [deliveryDate, setDeliveryDate] = React.useState(() => getLosAngelesDeliveryDate())
 	const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("subscribed")
+
+	// Update deliveryDate when page regains focus (handles day changes)
+	React.useEffect(() => {
+		const handleFocus = () => {
+			const newDate = getLosAngelesDeliveryDate()
+			setDeliveryDate(newDate)
+		}
+
+		window.addEventListener('focus', handleFocus)
+
+		// Also check periodically (every minute) in case the page stays open past midnight
+		const interval = setInterval(() => {
+			const newDate = getLosAngelesDeliveryDate()
+			setDeliveryDate(newDate)
+		}, 60000)
+
+		return () => {
+			window.removeEventListener('focus', handleFocus)
+			clearInterval(interval)
+		}
+	}, [])
 
 	const subscribers = useQuery(api.admin.newsletter.getSubscribers, { status: statusFilter })
 	const stats = useQuery(api.admin.newsletter.getStats, { deliveryDate })
