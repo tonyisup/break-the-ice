@@ -48,6 +48,7 @@ import { Toaster } from "sonner";
 import UserDetailsPage from "./app/admin/users/[userId]/page.tsx";
 import QuestionDetailsPage from "./app/admin/questions/[questionId]/page.tsx";
 import AdminOrganizationsPage from "./app/admin/organizations/page.tsx";
+import NewsletterPage from "./app/admin/newsletter/page.tsx";
 import OrgWeeklyCurationPage from "./app/org/schedule/page.tsx";
 import CoachDailyViewPage from "./app/org/today/page.tsx";
 import { ClerkSyncManager } from "./components/ClerkSyncManager";
@@ -90,6 +91,7 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/admin/styles" element={<StylesPage />} />
                   <Route path="/admin/tones" element={<TonesPage />} />
                   <Route path="/admin/users" element={<UsersPage />} />
+                  <Route path="/admin/newsletter" element={<NewsletterPage />} />
                   <Route path="/admin/feedback" element={<FeedbackPage />} />
                   <Route path="/admin/duplicates" element={<DuplicatesPage />} />
                   <Route path="/admin/duplicates/completed" element={<DuplicateHistoryPage />} />
