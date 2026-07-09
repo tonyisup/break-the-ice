@@ -47,7 +47,7 @@ crons.interval(
 
 crons.interval(
   "send daily newsletter questions",
-  { hours: 24 },
+  { hours: 1 },
   internal.internal.newsletterStart.startDailyNewsletterIfDue,
   {}
 );

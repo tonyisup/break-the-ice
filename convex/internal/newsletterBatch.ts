@@ -129,7 +129,8 @@ export const processNewsletterBatch = internalAction({
 			const timeoutId = setTimeout(() => abortController.abort(), 30000);
 
 			const batchPayload = prepared.map((item) => item.payload);
-			const idempotencyKey = `newsletter-${args.deliveryDate}-${prepared[0]?.deliveryId}`;
+			const deliveryIds = prepared.map((item) => item.deliveryId).sort().join(",");
+			const idempotencyKey = `newsletter-${args.deliveryDate}-${deliveryIds}`;
 
 			const response = await fetch("https://api.resend.com/emails/batch", {
 				method: "POST",
