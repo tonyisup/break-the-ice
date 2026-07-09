@@ -33,8 +33,8 @@ test("syncOrganizationFromClerk uses active Clerk org claims for membership role
   )) as Id<"organizations">;
 
   await t.run(async (ctx) => {
-    const user = await ctx.db.get(userId);
-    const organization = await ctx.db.get(organizationId);
+    const user = await ctx.db.get("users", userId);
+    const organization = await ctx.db.get("organizations", organizationId);
     const membership = await ctx.db
       .query("organization_members")
       .withIndex("by_userId_organizationId", (q) =>
@@ -72,7 +72,7 @@ test("syncOrganizationFromClerk defaults role to member when org claim has no ro
       .withIndex("by_clerkId", (q) => q.eq("clerkId", "user_roleless"))
       .unique();
     expect(user).not.toBeNull();
-    const org = await ctx.db.get(organizationId!);
+    const org = await ctx.db.get("organizations", organizationId!);
     expect(org?.name).toBe("No Role Org");
     const membership = await ctx.db
       .query("organization_members")

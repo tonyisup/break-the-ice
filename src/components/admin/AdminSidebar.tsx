@@ -14,6 +14,7 @@ import {
 	Box,
 	Sparkles,
 	Building2,
+	Mail,
 } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
@@ -73,6 +74,11 @@ const items = [
 		title: "Users",
 		url: "/admin/users",
 		icon: User,
+	},
+	{
+		title: "Newsletter",
+		url: "/admin/newsletter",
+		icon: Mail,
 	},
 	{
 		title: "Organizations",
