@@ -148,49 +148,104 @@ export function stripCodeFences(raw: string) {
     .trim();
 }
 
+/** Extract the first complete JSON object or array from model output. */
+export function extractFirstJsonValue(raw: string): string | null {
+  const cleaned = stripCodeFences(raw);
+  const start = cleaned.search(/[\[{]/);
+  if (start === -1) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === "{" || ch === "[") {
+      depth += 1;
+      continue;
+    }
+
+    if (ch === "}" || ch === "]") {
+      depth -= 1;
+      if (depth === 0) {
+        return cleaned.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+type ParsedQuestionItem = { text?: string; rationale?: string } | string;
+
+function normalizeParsedQuestions(parsed: unknown) {
+  const questions = Array.isArray(parsed)
+    ? parsed
+    : typeof parsed === "object" && parsed !== null && "questions" in parsed
+      ? (parsed as { questions?: ParsedQuestionItem[] }).questions
+      : undefined;
+
+  if (!Array.isArray(questions)) {
+    throw new Error('Model output is missing a "questions" array.');
+  }
+
+  return questions
+    .map((item) => {
+      if (typeof item === "string") return { text: item };
+      return {
+        text: typeof item?.text === "string" ? item.text : "",
+        rationale: typeof item?.rationale === "string" ? item.rationale : undefined,
+      };
+    })
+    .filter((item) => item.text.trim().length > 0);
+}
+
 export function parseQuestionObjects(raw: string) {
   const cleaned = stripCodeFences(raw);
-
-  try {
-    const parsed = JSON.parse(cleaned) as {
-      questions?: Array<{ text?: string; rationale?: string } | string>;
-    };
-
-    if (!Array.isArray(parsed.questions)) {
-      throw new Error('Model output is missing a "questions" array.');
-    }
-
-    return parsed.questions
-      .map((item) => {
-        if (typeof item === "string") return { text: item };
-        return {
-          text: typeof item?.text === "string" ? item.text : "",
-          rationale: typeof item?.rationale === "string" ? item.rationale : undefined,
-        };
-      })
-      .filter((item) => item.text.trim().length > 0);
-  } catch {
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
-    if (start === -1 || end === -1 || end <= start) {
-      throw new Error("Model did not return parseable JSON.");
-    }
-    const parsed = JSON.parse(cleaned.slice(start, end + 1)) as {
-      questions?: Array<{ text?: string; rationale?: string } | string>;
-    };
-    if (!Array.isArray(parsed.questions)) {
-      throw new Error('Model output is missing a "questions" array.');
-    }
-    return parsed.questions
-      .map((item) => {
-        if (typeof item === "string") return { text: item };
-        return {
-          text: typeof item?.text === "string" ? item.text : "",
-          rationale: typeof item?.rationale === "string" ? item.rationale : undefined,
-        };
-      })
-      .filter((item) => item.text.trim().length > 0);
+  const candidates = [cleaned];
+  const extracted = extractFirstJsonValue(cleaned);
+  if (extracted && extracted !== cleaned) {
+    candidates.push(extracted);
   }
+
+  let lastError: Error | null = null;
+
+  for (const candidate of candidates) {
+    try {
+      return normalizeParsedQuestions(JSON.parse(candidate));
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error("Model did not return parseable JSON.");
 }
 
 export function parseQuestionTexts(raw: string) {
