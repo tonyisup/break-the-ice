@@ -33,6 +33,18 @@ const triggerResult = v.object({
 	scheduledBatchCount: v.number(),
 });
 
+type TriggerNewsletterResult = {
+	success: boolean;
+	skipped: boolean;
+	message: string;
+	deliveryDate: string;
+	targetCount: number;
+	createdCount: number;
+	existingCount: number;
+	pendingCount: number;
+	scheduledBatchCount: number;
+};
+
 function toSubscriber(user: Doc<"users">) {
 	return {
 		_id: user._id,
@@ -160,13 +172,17 @@ export const triggerDailyNewsletter = action({
 		batchSize: v.optional(v.number()),
 	},
 	returns: triggerResult,
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<TriggerNewsletterResult> => {
 		await ensureAdmin(ctx);
 
-		return await ctx.runAction(internal.internal.newsletterStart.startDailyNewsletter, {
-			deliveryDate: args.deliveryDate,
-			batchSize: args.batchSize,
-			force: true,
-		});
+		const result: TriggerNewsletterResult = await ctx.runAction(
+			internal.internal.newsletterStart.startDailyNewsletter,
+			{
+				deliveryDate: args.deliveryDate,
+				batchSize: args.batchSize,
+				force: true,
+			},
+		);
+		return result;
 	},
 });

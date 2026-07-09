@@ -220,7 +220,7 @@ test("markNewsletterDeliveriesSent marks deliveries as sent with question and re
   });
 
   const delivery = await t.run(async (ctx) => {
-    return await ctx.db.get(claimed[0]!._id);
+    return await ctx.db.get("newsletterDeliveries", claimed[0]!._id);
   });
 
   expect(delivery?.status).toBe("sent");
@@ -261,7 +261,7 @@ test("markNewsletterDeliveriesFailed marks deliveries as failed with error messa
   });
 
   const delivery = await t.run(async (ctx) => {
-    return await ctx.db.get(claimed[0]!._id);
+    return await ctx.db.get("newsletterDeliveries", claimed[0]!._id);
   });
 
   expect(delivery?.status).toBe("failed");
