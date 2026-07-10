@@ -46,9 +46,11 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Link } from "react-router-dom"
-import { ADMIN_QUESTIONS_PAGE_SIZE, paginateQuestions } from "./pagination"
+import { getAdminQuestionPageSize, paginateQuestions } from "./pagination"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 export default function QuestionsPage() {
+	const isMobile = useIsMobile()
 	const allQuestions = useQuery(api.admin.questions.getQuestions)
 	const styles = useQuery(api.core.styles.getStyles, {})
 	const tones = useQuery(api.core.tones.getTones, {})
@@ -84,14 +86,16 @@ export default function QuestionsPage() {
 		const searchLower = search.toLowerCase()
 		return text.includes(searchLower) || styleName.includes(searchLower) || toneName.includes(searchLower)
 	})
-	const pageCount = Math.max(1, Math.ceil(filteredQuestions.length / ADMIN_QUESTIONS_PAGE_SIZE))
-	const visibleQuestions = paginateQuestions(filteredQuestions, page)
-	const rangeStart = filteredQuestions.length === 0 ? 0 : (page - 1) * ADMIN_QUESTIONS_PAGE_SIZE + 1
-	const rangeEnd = Math.min(page * ADMIN_QUESTIONS_PAGE_SIZE, filteredQuestions.length)
+	const pageSize = getAdminQuestionPageSize(isMobile)
+	const pageCount = Math.max(1, Math.ceil(filteredQuestions.length / pageSize))
+	const visibleQuestions = paginateQuestions(filteredQuestions, page, pageSize)
+	const rangeStart = filteredQuestions.length === 0 ? 0 : (page - 1) * pageSize + 1
+	const rangeEnd = Math.min(page * pageSize, filteredQuestions.length)
+	const effectiveViewMode = isMobile ? "grid" : viewMode
 
 	React.useEffect(() => {
 		setPage(1)
-	}, [search, viewMode])
+	}, [search, viewMode, pageSize])
 
 	React.useEffect(() => {
 		if (page > pageCount) setPage(pageCount)
@@ -219,7 +223,7 @@ export default function QuestionsPage() {
 				<div className="flex items-center gap-2">
 					<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
 						<DialogTrigger asChild>
-							<Button className="gap-2">
+							<Button className="h-11 gap-2 md:h-10">
 								<Plus className="size-4" />
 								Add Question
 							</Button>
@@ -304,7 +308,7 @@ export default function QuestionsPage() {
 											<select
 												value={q.style || ""}
 												onChange={(e) => handleUpdateField(q._id, { style: e.target.value })}
-												className="w-full h-9 rounded-md border bg-background px-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+										className="h-11 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 sm:h-9"
 											>
 												<option value="">Select Style...</option>
 												{styles.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -315,7 +319,7 @@ export default function QuestionsPage() {
 											<select
 												value={q.tone || ""}
 												onChange={(e) => handleUpdateField(q._id, { tone: e.target.value })}
-												className="w-full h-9 rounded-md border bg-background px-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+										className="h-11 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 sm:h-9"
 											>
 												<option value="">Select Tone...</option>
 												{tones.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -327,7 +331,7 @@ export default function QuestionsPage() {
 									<Button
 										variant="outline"
 										size="sm"
-										className="text-blue-500 hover:text-blue-600 hover:bg-blue-50 flex-1 sm:flex-none justify-center gap-2"
+									className="h-11 flex-1 justify-center gap-2 text-blue-500 hover:bg-blue-50 hover:text-blue-600 sm:h-9 sm:flex-none"
 										onClick={() => handleRemix(q._id)}
 										disabled={remixingIds.has(q._id)}
 									>
@@ -338,10 +342,10 @@ export default function QuestionsPage() {
 										)}
 										Remix
 									</Button>
-									<Button variant="outline" size="sm" className="text-blue-400 hover:text-blue-500 hover:bg-blue-50 flex-1 sm:flex-none justify-center" onClick={() => handleApprove(q, "personal")}>
+								<Button variant="outline" size="sm" className="h-11 flex-1 justify-center text-blue-400 hover:bg-blue-50 hover:text-blue-500 sm:h-9 sm:flex-none" onClick={() => handleApprove(q, "personal")}>
 										Mark Personal
 									</Button>
-									<Button size="sm" className="bg-green-600 hover:bg-green-700 text-white gap-2 flex-1 justify-center" onClick={() => handleApprove(q, "public")}>
+								<Button size="sm" className="h-11 flex-1 justify-center gap-2 bg-green-600 text-white hover:bg-green-700 sm:h-9" onClick={() => handleApprove(q, "public")}>
 										<CheckCircle2 className="size-4" />
 										Approve Public
 									</Button>
@@ -360,12 +364,12 @@ export default function QuestionsPage() {
 							placeholder="Search questions, styles, or tones..."
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
-							className="border-0 shadow-none focus-visible:ring-0 px-1 py-1"
+							className="h-11 border-0 px-1 py-1 shadow-none focus-visible:ring-0 md:h-10"
 						/>
 						{search && <Button variant="ghost" size="icon" className="size-6" onClick={() => setSearch("")}><X className="size-3" /></Button>}
 					</div>
 
-					<div className="flex items-center bg-muted/50 p-1 rounded-lg border self-start sm:self-auto">
+					<div className="hidden items-center self-start rounded-lg border bg-muted/50 p-1 md:flex sm:self-auto">
 						<Button
 							variant={viewMode === "table" ? "secondary" : "ghost"}
 							size="sm"
@@ -387,7 +391,7 @@ export default function QuestionsPage() {
 					</div>
 				</div>
 
-				{viewMode === "table" ? (
+				{effectiveViewMode === "table" ? (
 					<div className="rounded-xl border bg-card shadow-sm overflow-hidden">
 						<table className="w-full text-sm text-left block md:table">
 							<thead className="hidden md:table-header-group bg-muted/50 border-b text-muted-foreground font-medium uppercase text-xs tracking-wider">
@@ -592,7 +596,7 @@ export default function QuestionsPage() {
 											</div>
 											<DropdownMenu>
 												<DropdownMenuTrigger asChild>
-													<Button variant="ghost" size="icon" className="size-8 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+											<Button variant="ghost" size="icon" className="-mr-1 size-11 opacity-100 transition-opacity md:size-8 md:opacity-0 md:group-hover:opacity-100">
 														<MoreHorizontal className="size-4" />
 													</Button>
 												</DropdownMenuTrigger>
