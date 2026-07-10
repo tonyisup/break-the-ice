@@ -566,7 +566,7 @@ export default function QuestionDetailsPage() {
 						</Button>
 					</Link>
 					<div>
-						<h2 className="text-2xl font-bold tracking-tight">Question Details</h2>
+						<h1 className="text-2xl font-bold tracking-tight">Question Details</h1>
 						<code className="text-xs text-muted-foreground">{question._id}</code>
 					</div>
 				</div>

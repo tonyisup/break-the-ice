@@ -189,10 +189,10 @@ export default function AdminOrganizationsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <Building2 className="size-7" />
             Organizations
-          </h2>
+          </h1>
           <p className="text-muted-foreground">Manage team workspaces and their Clerk subscriptions.</p>
         </div>
         <Button onClick={fetchOrgs} disabled={loading} variant="outline" size="sm">

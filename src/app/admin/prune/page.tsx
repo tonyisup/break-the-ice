@@ -128,7 +128,7 @@ export default function PruningPage() {
 			<div className="space-y-6">
 				<div className="flex items-center justify-between">
 					<div className="space-y-1">
-						<h2 className="text-3xl font-bold tracking-tight">Pruning Review</h2>
+						<h1 className="text-3xl font-bold tracking-tight">Pruning Review</h1>
 						<p className="text-muted-foreground">Identifying questions that aren't hitting the mark.</p>
 					</div>
 				</div>
@@ -149,9 +149,9 @@ export default function PruningPage() {
 						<div className="p-2 bg-primary/10 rounded-lg">
 							<Trash2 className="w-6 h-6 text-primary" />
 						</div>
-						<h2 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+						<h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
 							Pruning Workshop
-						</h2>
+						</h1>
 					</div>
 					<p className="text-md text-muted-foreground max-w-2xl">
 						Review questions flagged for low engagement, high hidden rates, or style mismatches.

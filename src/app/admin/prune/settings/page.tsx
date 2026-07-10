@@ -100,9 +100,9 @@ export default function PruningSettingsPage() {
 						<div className="p-2 bg-primary/10 rounded-lg">
 							<Settings className="w-6 h-6 text-primary" />
 						</div>
-						<h2 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+						<h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
 							Pruning Logic Settings
-						</h2>
+						</h1>
 					</div>
 					<p className="text-md text-muted-foreground ml-12">
 						Control the "Magic Numbers" that decide which questions get flagged for review.

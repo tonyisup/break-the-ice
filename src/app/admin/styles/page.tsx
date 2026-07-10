@@ -158,7 +158,7 @@ export default function StylesPage() {
 		<div className="space-y-8">
 			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 				<div>
-					<h2 className="text-3xl font-bold tracking-tight">Question Styles</h2>
+					<h1 className="text-3xl font-bold tracking-tight">Question Styles</h1>
 					<p className="text-muted-foreground">Define the structure and aesthetic of different question types.</p>
 				</div>
 				<div className="flex items-center gap-2">

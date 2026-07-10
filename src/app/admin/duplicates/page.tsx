@@ -130,7 +130,7 @@ export default function DuplicatesPage() {
 		<div className="space-y-8">
 			<div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
 				<div>
-					<h2 className="text-3xl font-bold tracking-tight">Duplicates</h2>
+					<h1 className="text-3xl font-bold tracking-tight">Duplicates</h1>
 					<p className="text-muted-foreground">Review and merge duplicate questions detected by AI.</p>
 				</div>
 				<div className="flex flex-col gap-2 min-w-[200px]">

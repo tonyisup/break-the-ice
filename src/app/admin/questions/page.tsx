@@ -197,7 +197,7 @@ export default function QuestionsPage() {
 		<div className="space-y-8">
 			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 				<div>
-					<h2 className="text-3xl font-bold tracking-tight">Questions</h2>
+					<h1 className="text-3xl font-bold tracking-tight">Questions</h1>
 					<p className="text-muted-foreground">Manage and moderate questions in the database.</p>
 				</div>
 				<div className="flex items-center gap-2">

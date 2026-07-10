@@ -38,7 +38,7 @@ export default function DuplicateHistoryPage() {
                             </Link>
                         </Button>
                     </div>
-                    <h2 className="text-3xl font-bold tracking-tight">Review History</h2>
+                    <h1 className="text-3xl font-bold tracking-tight">Review History</h1>
                     <p className="text-muted-foreground">History of completed duplicate detection reviews.</p>
                 </div>
                 <div className="flex items-center gap-2">

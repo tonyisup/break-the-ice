@@ -165,7 +165,7 @@ export default function NewsletterPage() {
 		<div className="space-y-8">
 			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 				<div>
-					<h2 className="text-3xl font-bold tracking-tight">Newsletter</h2>
+					<h1 className="text-3xl font-bold tracking-tight">Newsletter</h1>
 					<p className="text-muted-foreground">
 						Manage subscriptions and manually trigger the daily icebreaker email.
 					</p>

@@ -199,7 +199,7 @@ export default function GeneratorPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h2 className="text-3xl font-bold tracking-tight">AI Generator</h2>
+                <h1 className="text-3xl font-bold tracking-tight">AI Generator</h1>
                 <p className="text-muted-foreground">Generate new questions using AI based on styles, tones, topics, and tags.</p>
             </div>
 

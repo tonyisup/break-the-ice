@@ -60,14 +60,19 @@ function AdminContent({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen w-full bg-background">
         <AdminSidebar />
         <SidebarInset>
-          <header className="flex h-16 shrink-0 items-center justify-between border-b px-6 sticky top-0 bg-background/80 backdrop-blur-sm z-10">
-            <div className="flex items-center gap-4">
-              <SidebarTrigger />
-              <div className="h-4 w-px bg-border" />
-              <h1 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Break the Ice Administration</h1>
+          <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center border-b bg-background/90 px-4 backdrop-blur-sm sm:px-6">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="size-11 md:size-9" />
+              <div className="h-4 w-px bg-border" aria-hidden="true" />
+              <div className="flex items-center gap-2" aria-label="Break the Ice administration">
+                <span className="text-sm font-semibold text-foreground">Break the Ice</span>
+                <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                  Admin
+                </span>
+              </div>
             </div>
           </header>
-          <main className="flex-1 overflow-y-auto p-6 lg:p-10">
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             {children}
           </main>
         </SidebarInset>
