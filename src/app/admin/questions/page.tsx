@@ -331,7 +331,7 @@ export default function QuestionsPage() {
 									<Button
 										variant="outline"
 										size="sm"
-									className="h-11 flex-1 justify-center gap-2 text-blue-500 hover:bg-blue-50 hover:text-blue-600 sm:h-9 sm:flex-none"
+									className="!h-11 flex-1 justify-center gap-2 text-blue-500 hover:bg-blue-50 hover:text-blue-600 sm:!h-9 sm:flex-none"
 										onClick={() => handleRemix(q._id)}
 										disabled={remixingIds.has(q._id)}
 									>
@@ -342,10 +342,10 @@ export default function QuestionsPage() {
 										)}
 										Remix
 									</Button>
-								<Button variant="outline" size="sm" className="h-11 flex-1 justify-center text-blue-400 hover:bg-blue-50 hover:text-blue-500 sm:h-9 sm:flex-none" onClick={() => handleApprove(q, "personal")}>
+								<Button variant="outline" size="sm" className="!h-11 flex-1 justify-center text-blue-400 hover:bg-blue-50 hover:text-blue-500 sm:!h-9 sm:flex-none" onClick={() => handleApprove(q, "personal")}>
 										Mark Personal
 									</Button>
-								<Button size="sm" className="h-11 flex-1 justify-center gap-2 bg-green-600 text-white hover:bg-green-700 sm:h-9" onClick={() => handleApprove(q, "public")}>
+								<Button size="sm" className="!h-11 flex-1 justify-center gap-2 bg-green-600 text-white hover:bg-green-700 sm:!h-9" onClick={() => handleApprove(q, "public")}>
 										<CheckCircle2 className="size-4" />
 										Approve Public
 									</Button>
@@ -596,7 +596,7 @@ export default function QuestionsPage() {
 											</div>
 											<DropdownMenu>
 												<DropdownMenuTrigger asChild>
-											<Button variant="ghost" size="icon" className="-mr-1 size-11 opacity-100 transition-opacity md:size-8 md:opacity-0 md:group-hover:opacity-100">
+											<Button variant="ghost" size="icon" className="-mr-1 !size-11 opacity-100 transition-opacity md:!size-8 md:opacity-0 md:group-hover:opacity-100">
 														<MoreHorizontal className="size-4" />
 													</Button>
 												</DropdownMenuTrigger>
@@ -678,7 +678,7 @@ export default function QuestionsPage() {
 											<Badge variant="secondary" className="capitalize text-[10px] font-normal px-2 py-0">
 												{q.status || "Public"}
 											</Badge>
-											<span>ID: <Link to={`/admin/questions/${q._id}`} className="hover:underline text-primary/80 hover:text-primary">{q._id.slice(0, 8)}...</Link></span>
+											<span className="flex items-center">ID: <Link to={`/admin/questions/${q._id}`} className="inline-flex min-h-11 items-center pl-1 text-primary/80 hover:text-primary hover:underline md:min-h-0">{q._id.slice(0, 8)}...</Link></span>
 										</div>
 									)}
 								</div>
