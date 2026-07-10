@@ -130,6 +130,17 @@
 }
 
 @layer components {
+  .admin-shell {
+    font-family:
+      "Manrope Variable", "Avenir Next", ui-sans-serif, system-ui, sans-serif;
+    font-optical-sizing: auto;
+  }
+
+  .admin-shell :is(h1, h2, h3) {
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+
   .card {
     @apply relative w-full h-full bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6;
     transform-style: preserve-3d;
