@@ -13,10 +13,7 @@ import {
   ArrowRight
 } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Link } from "react-router-dom"
-import { Badge } from "@/components/ui/badge"
 
 export default function AdminDashboard() {
   const stats = useQuery(api.admin.questions.getAdminStats)
@@ -35,8 +32,6 @@ export default function AdminDashboard() {
       value: stats.questions.total,
       description: `${stats.questions.public} Public, ${stats.questions.pending} Pending`,
       icon: MessageSquare,
-      color: "text-blue-600",
-      bgBase: "bg-blue-500/10",
       link: "/admin/questions"
     },
     {
@@ -44,8 +39,6 @@ export default function AdminDashboard() {
       value: stats.organizations.team,
       description: `${stats.users.total} Active Users`,
       icon: Users,
-      color: "text-purple-600",
-      bgBase: "bg-purple-500/10",
       link: "/admin/users"
     },
     {
@@ -53,8 +46,6 @@ export default function AdminDashboard() {
       value: stats.feedback.total,
       description: `${stats.feedback.new} New entries to review`,
       icon: ShieldAlert,
-      color: "text-amber-600",
-      bgBase: "bg-amber-500/10",
       link: "/admin/feedback"
     },
     {
@@ -62,114 +53,103 @@ export default function AdminDashboard() {
       value: stats.duplicates.pending,
       description: "Potential duplicates detected",
       icon: Copy,
-      color: "text-red-600",
-      bgBase: "bg-red-500/10",
       link: "/admin/duplicates"
     }
   ]
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Overview of your ice-breaker ecosystem.</p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground">The current state of questions, workspaces, and moderation.</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <section aria-labelledby="key-metrics" className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 xl:grid-cols-4">
+        <h2 id="key-metrics" className="sr-only">Key metrics</h2>
         {statCards.map((card) => (
-          <Link key={card.title} to={card.link} className="block group">
-            <Card className="hover:shadow-md hover:border-primary/20 transition-all border-muted/60 rounded-2xl overflow-hidden">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between space-y-0 pb-2">
-                  <p className="text-sm font-medium text-muted-foreground">{card.title}</p>
-                  <div className={`p-2 rounded-lg ${card.bgBase} ${card.color}`}>
-                    <card.icon className="size-4" />
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <div className="text-2xl font-bold">{card.value}</div>
-                  <p className="text-xs text-muted-foreground mt-1 group-hover:text-primary transition-colors flex items-center gap-1">
-                    {card.description}
-                    <ArrowRight className="size-3 opacity-0 group-hover:opacity-100 transition-all translate-x-[-4px] group-hover:translate-x-0" />
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+          <Link
+            key={card.title}
+            to={card.link}
+            className="group bg-card p-5 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm font-medium text-muted-foreground">{card.title}</p>
+              <card.icon className="size-4 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+            </div>
+            <div className="mt-5 text-3xl font-semibold tracking-tight tabular-nums">{card.value}</div>
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+              {card.description}
+              <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+            </p>
           </Link>
         ))}
-      </div>
+      </section>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="rounded-2xl border-muted/60 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <TrendingUp className="size-5 text-green-600" />
-              Quick Actions
-            </CardTitle>
-            <CardDescription>Perform common administrative maintenance.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <div className="flex items-center justify-between p-4 rounded-xl border bg-muted/30 group hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-red-100 text-red-600">
-                  <Trash2 className="size-4" />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)]">
+        <section aria-labelledby="quick-actions" className="overflow-hidden rounded-xl border bg-card">
+          <div className="border-b px-5 py-4">
+            <h2 id="quick-actions" className="flex items-center gap-2 text-base font-semibold">
+              <TrendingUp className="size-4 text-primary" aria-hidden="true" />
+              Needs attention
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">Review the queues that can change today.</p>
+          </div>
+          <div className="divide-y">
+            <Link to="/admin/prune" className="group flex min-h-20 items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-destructive">
+                  <Trash2 className="size-4" aria-hidden="true" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold">Stale Questions</p>
-                  <p className="text-xs text-muted-foreground">{stats.staleCount} questions candidates for pruning</p>
+                  <p className="text-sm text-muted-foreground">{stats.staleCount} candidates for pruning</p>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/admin/prune">Manage <ArrowRight className="size-3 ml-1" /></Link>
-              </Button>
-            </div>
+              <span className="flex shrink-0 items-center gap-2 text-sm font-medium">Review <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" /></span>
+            </Link>
 
-            <div className="flex items-center justify-between p-4 rounded-xl border bg-muted/30 group hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
-                  <MessageSquare className="size-4" />
+            <Link to="/admin/questions" className="group flex min-h-20 items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
+                  <MessageSquare className="size-4" aria-hidden="true" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold">Pending Review</p>
-                  <p className="text-xs text-muted-foreground">{stats.questions.pending} user-submitted questions</p>
+                  <p className="text-sm text-muted-foreground">{stats.questions.pending} user-submitted questions</p>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/admin/questions">Review <ArrowRight className="size-3 ml-1" /></Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+              <span className="flex shrink-0 items-center gap-2 text-sm font-medium">Review <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" /></span>
+            </Link>
+          </div>
+        </section>
 
-        <Card className="rounded-2xl border-muted/60 shadow-sm bg-primary/5 border-primary/10">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <ShieldAlert className="size-5 text-primary" />
+        <section aria-labelledby="system-status" className="overflow-hidden rounded-xl border bg-card">
+          <div className="border-b px-5 py-4">
+            <h2 id="system-status" className="flex items-center gap-2 text-base font-semibold">
+              <ShieldAlert className="size-4 text-primary" aria-hidden="true" />
               System Status
-            </CardTitle>
-            <CardDescription>AIGC and Infrastructure health.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Database Health</span>
-              <Badge variant="default" className="bg-green-500 hover:bg-green-500 h-2 w-2 rounded-full p-0" />
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">Generation and storage health.</p>
+          </div>
+          <div className="divide-y px-5">
+            <div className="flex min-h-12 items-center justify-between gap-4 text-sm">
+              <span>Database</span>
+              <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />Operational</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm">AI Generation Engine</span>
-              <Badge variant="default" className="bg-green-500 hover:bg-green-500 h-2 w-2 rounded-full p-0" />
+            <div className="flex min-h-12 items-center justify-between gap-4 text-sm">
+              <span>AI Generation</span>
+              <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />Operational</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Global Questions</span>
-              <span className="font-mono text-xs">{stats.questions.total}</span>
+            <div className="flex min-h-12 items-center justify-between gap-4 text-sm">
+              <span>Global Questions</span>
+              <span className="font-mono text-xs tabular-nums">{stats.questions.total}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Pruned Storage</span>
-              <span className="font-mono text-xs">{stats.questions.pruned} docs</span>
+            <div className="flex min-h-12 items-center justify-between gap-4 text-sm">
+              <span>Pruned Storage</span>
+              <span className="font-mono text-xs tabular-nums">{stats.questions.pruned} docs</span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
     </div>
   )
