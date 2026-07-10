@@ -20,6 +20,8 @@ import {
 	Sparkles,
 	Loader2,
 	Image,
+	ChevronLeft,
+	ChevronRight,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -44,6 +46,7 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Link } from "react-router-dom"
+import { ADMIN_QUESTIONS_PAGE_SIZE, paginateQuestions } from "./pagination"
 
 export default function QuestionsPage() {
 	const allQuestions = useQuery(api.admin.questions.getQuestions)
@@ -59,6 +62,7 @@ export default function QuestionsPage() {
 
 	const [search, setSearch] = React.useState("")
 	const [viewMode, setViewMode] = React.useState<"table" | "grid">("table")
+	const [page, setPage] = React.useState(1)
 	const [editingQuestion, setEditingQuestion] = React.useState<Doc<"questions"> | null>(null)
 	const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
 
@@ -80,6 +84,18 @@ export default function QuestionsPage() {
 		const searchLower = search.toLowerCase()
 		return text.includes(searchLower) || styleName.includes(searchLower) || toneName.includes(searchLower)
 	})
+	const pageCount = Math.max(1, Math.ceil(filteredQuestions.length / ADMIN_QUESTIONS_PAGE_SIZE))
+	const visibleQuestions = paginateQuestions(filteredQuestions, page)
+	const rangeStart = filteredQuestions.length === 0 ? 0 : (page - 1) * ADMIN_QUESTIONS_PAGE_SIZE + 1
+	const rangeEnd = Math.min(page * ADMIN_QUESTIONS_PAGE_SIZE, filteredQuestions.length)
+
+	React.useEffect(() => {
+		setPage(1)
+	}, [search, viewMode])
+
+	React.useEffect(() => {
+		if (page > pageCount) setPage(pageCount)
+	}, [page, pageCount])
 
 	const handleCreate = async () => {
 		if (!newQuestion.text.trim()) return
@@ -385,7 +401,7 @@ export default function QuestionsPage() {
 								</tr>
 							</thead>
 							<tbody className="divide-y block md:table-row-group">
-								{filteredQuestions.map((q) => {
+								{visibleQuestions.map((q) => {
 									const style = styles.find(s => s._id === q.styleId || s.id === q.style);
 									const tone = tones.find(t => t._id === q.toneId || t.id === q.tone);
 									const isEditing = editingQuestion?._id === q._id;
@@ -532,8 +548,8 @@ export default function QuestionsPage() {
 						)}
 					</div>
 				) : (
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
-						{filteredQuestions.map((q) => {
+					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+						{visibleQuestions.map((q) => {
 							const style = styles.find(s => s._id === q.styleId || s.id === q.style);
 							const tone = tones.find(t => t._id === q.toneId || t.id === q.tone);
 							const isEditing = editingQuestion?._id === q._id;
@@ -671,6 +687,40 @@ export default function QuestionsPage() {
 							</div>
 						)}
 					</div>
+				)}
+
+				{filteredQuestions.length > 0 && (
+					<nav aria-label="Question pages" className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+						<p className="text-sm text-muted-foreground">
+							Showing <span className="font-medium text-foreground tabular-nums">{rangeStart}–{rangeEnd}</span> of{" "}
+							<span className="font-medium text-foreground tabular-nums">{filteredQuestions.length}</span> questions
+						</p>
+						<div className="flex items-center gap-2">
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-10 gap-1.5 max-sm:h-11"
+								onClick={() => setPage(current => Math.max(1, current - 1))}
+								disabled={page === 1}
+							>
+								<ChevronLeft className="size-4" aria-hidden="true" />
+								Previous
+							</Button>
+							<span className="min-w-20 text-center text-sm text-muted-foreground tabular-nums">
+								{page} / {pageCount}
+							</span>
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-10 gap-1.5 max-sm:h-11"
+								onClick={() => setPage(current => Math.min(pageCount, current + 1))}
+								disabled={page === pageCount}
+							>
+								Next
+								<ChevronRight className="size-4" aria-hidden="true" />
+							</Button>
+						</div>
+					</nav>
 				)}
 			</div>
 		</div>
