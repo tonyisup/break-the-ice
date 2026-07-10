@@ -200,137 +200,82 @@ export default function GeneratorPage() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">AI Generator</h1>
-                <p className="text-muted-foreground">Generate new questions using AI based on styles, tones, topics, and tags.</p>
+                <p className="text-muted-foreground">Configure, preview, and save one question at a time.</p>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-12 items-start">
                 {/* Left Column: Controls */}
                 <div className="space-y-6 lg:col-span-7 xl:col-span-8">
-                    {/* Style & Tone Selection */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Configuration</CardTitle>
-                            <CardDescription>Choose the personality of the question.</CardDescription>
+                    <Card className="rounded-xl">
+                        <CardHeader className="pb-4">
+                            <CardTitle className="text-lg">Generation setup</CardTitle>
+                            <CardDescription>Choose a style and tone, then refine the prompt if needed.</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="space-y-3">
-                                <label className="text-sm font-medium">Style</label>
-                                <div className="flex flex-wrap gap-2">
-                                    {styles.map(style => (
-                                        <div
-                                            key={style.id}
-                                            onClick={() => setSelectedStyleId(style._id)}
-                                            className={`
-                                                cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
-                                                ${selectedStyleId === style._id
-                                                    ? "bg-primary text-primary-foreground border-primary"
-                                                    : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
-                                            `}
-                                        >
-                                            {style.name}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="space-y-3">
-                                <label className="text-sm font-medium">Tone</label>
-                                <div className="flex flex-wrap gap-2">
-                                    {tones.map(tone => (
-                                        <div
-                                            key={tone.id}
-                                            onClick={() => setSelectedToneId(tone._id)}
-                                            className={`
-                                                cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
-                                                ${selectedToneId === tone._id
-                                                    ? "bg-primary text-primary-foreground border-primary"
-                                                    : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
-                                            `}
-                                        >
-                                            {tone.name}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Topic Selection */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Topic</CardTitle>
-                            <CardDescription>Select a thematic focus (optional).</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex flex-wrap gap-2">
-                                <div
-                                    onClick={() => setSelectedTopicId(null)}
-                                    className={`
-                                        cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
-                                        ${selectedTopicId === null
-                                            ? "bg-primary text-primary-foreground border-primary"
-                                            : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
-                                    `}
+                        <CardContent className="grid gap-5 md:grid-cols-2">
+                            <label className="grid gap-2 text-sm font-medium">
+                                <span>Style <span className="text-destructive">*</span></span>
+                                <select
+                                    value={selectedStyleId ?? ""}
+                                    onChange={(event) => setSelectedStyleId((event.target.value || null) as Id<"styles"> | null)}
+                                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 >
-                                    None (General)
-                                </div>
-                                {topics.map(topic => (
-                                    <div
-                                        key={topic._id}
-                                        onClick={() => setSelectedTopicId(topic._id)}
-                                        className={`
-                                            cursor-pointer px-3 py-1.5 rounded-full text-sm font-medium border transition-all
-                                            ${selectedTopicId === topic._id
-                                                ? "bg-primary text-primary-foreground border-primary"
-                                                : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
-                                        `}
-                                    >
-                                        {topic.name}
-                                    </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
+                                    <option value="">Choose a style</option>
+                                    {styles.map(style => <option key={style._id} value={style._id}>{style.name}</option>)}
+                                </select>
+                            </label>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Prompt Blueprint</CardTitle>
-                            <CardDescription>Select the active prompt architecture used for preview generation.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                                <div className="flex flex-wrap gap-2">
+                            <label className="grid gap-2 text-sm font-medium">
+                                <span>Tone <span className="text-destructive">*</span></span>
+                                <select
+                                    value={selectedToneId ?? ""}
+                                    onChange={(event) => setSelectedToneId((event.target.value || null) as Id<"tones"> | null)}
+                                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                >
+                                    <option value="">Choose a tone</option>
+                                    {tones.map(tone => <option key={tone._id} value={tone._id}>{tone.name}</option>)}
+                                </select>
+                            </label>
+
+                            <label className="grid gap-2 text-sm font-medium">
+                                <span>Topic <span className="font-normal text-muted-foreground">Optional</span></span>
+                                <select
+                                    value={selectedTopicId ?? ""}
+                                    onChange={(event) => setSelectedTopicId((event.target.value || null) as Id<"topics"> | null)}
+                                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                >
+                                    <option value="">General</option>
+                                    {topics.map(topic => <option key={topic._id} value={topic._id}>{topic.name}</option>)}
+                                </select>
+                            </label>
+
+                            <label className="grid gap-2 text-sm font-medium">
+                                <span>Prompt blueprint</span>
+                                <select
+                                    value={selectedBlueprintSlug}
+                                    onChange={(event) => setSelectedBlueprintSlug(event.target.value)}
+                                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                >
                                     {promptBlueprints.map(blueprint => (
-                                    <button
-                                        key={blueprint._id}
-                                        type="button"
-                                        onClick={() => setSelectedBlueprintSlug(blueprint.slug)}
-                                        aria-pressed={selectedBlueprintSlug === blueprint.slug}
-                                        className={`
-                                            px-3 py-1.5 rounded-full text-sm font-medium border transition-all
-                                            ${selectedBlueprintSlug === blueprint.slug
-                                                ? "bg-primary text-primary-foreground border-primary"
-                                                : "bg-muted/50 hover:bg-muted border-transparent hover:border-muted-foreground/20"}
-                                        `}
-                                    >
-                                        {blueprint.slug} v{blueprint.version}
-                                        <span className="ml-2 text-xs opacity-70">{blueprint.status}</span>
-                                    </button>
-                                ))}
-                            </div>
+                                        <option key={blueprint._id} value={blueprint.slug}>
+                                            {blueprint.slug} v{blueprint.version} · {blueprint.status}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
                         </CardContent>
                     </Card>
 
                     {/* Tags Selection */}
-                    <Card className="flex flex-col h-[600px]">
+                    <Card className="flex h-[600px] flex-col rounded-xl">
                         <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <CardTitle>Tags</CardTitle>
-                                    <CardDescription>Select categories to guide the AI.</CardDescription>
+                                    <CardTitle className="text-lg">Tags</CardTitle>
+                                    <CardDescription>Add optional constraints to guide the prompt.</CardDescription>
                                 </div>
-                                <div className="flex gap-2">
-                                    <Button variant="outline" onClick={expandAllTagGroupings}>Expand All</Button>
-                                    <Button variant="outline" onClick={collapseAllTagGroupings}>Collapse All</Button>
+                                <div className="flex gap-2 sm:shrink-0">
+                                    <Button variant="outline" size="sm" className="h-10 max-sm:flex-1 max-sm:h-11" onClick={expandAllTagGroupings}>Expand all</Button>
+                                    <Button variant="outline" size="sm" className="h-10 max-sm:flex-1 max-sm:h-11" onClick={collapseAllTagGroupings}>Collapse all</Button>
                                 </div>
                             </div>
                         </CardHeader>
@@ -341,8 +286,9 @@ export default function GeneratorPage() {
                                     value={customTag}
                                     onChange={(e) => setCustomTag(e.target.value)}
                                     onKeyDown={(e) => e.key === "Enter" && handleAddCustomTag()}
+                                    className="h-11"
                                 />
-                                <Button size="icon" onClick={handleAddCustomTag}><Plus className="size-4" /></Button>
+                                <Button size="icon" className="!size-11 shrink-0" onClick={handleAddCustomTag} aria-label="Add custom tag"><Plus className="size-4" /></Button>
                             </div>
 
                             <ScrollArea className="flex-1 pr-4">
@@ -380,18 +326,20 @@ export default function GeneratorPage() {
                                                         >
                                                             <div className="p-4 flex flex-wrap gap-2 border-t bg-background/50">
                                                                 {groupingTags.map(tag => (
-                                                                    <div
+                                                                    <button
                                                                         key={tag._id}
+                                                                        type="button"
                                                                         onClick={() => handleTagToggle(tag.name)}
+                                                                        aria-pressed={selectedTags.includes(tag.name)}
                                                                         className={`
-                                                                            cursor-pointer px-2.5 py-1 rounded-md text-sm border transition-all
+                                                                            min-h-9 rounded-md border px-2.5 py-1 text-sm transition-colors max-sm:min-h-11
                                                                             ${selectedTags.includes(tag.name)
                                                                                 ? "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
                                                                                 : "bg-background border-input hover:border-muted-foreground/50 hover:bg-muted/50"}
                                                                         `}
                                                                     >
                                                                         {tag.name}
-                                                                    </div>
+                                                                    </button>
                                                                 ))}
                                                             </div>
                                                         </motion.div>
@@ -407,11 +355,11 @@ export default function GeneratorPage() {
                 </div>
 
                 {/* Right Column: Preview & Actions */}
-                <div className="space-y-6 lg:col-span-5 xl:col-span-4 lg:sticky lg:top-6">
-                    <Card className="border-2 border-primary/10 shadow-lg">
-                        <CardHeader className="bg-muted/20">
-                            <CardTitle className="flex items-center gap-2">
-                                <Sparkles className="size-5 text-purple-500" />
+                <div className="space-y-6 lg:sticky lg:top-24 lg:col-span-5 xl:col-span-4">
+                    <Card className="overflow-hidden rounded-xl">
+                        <CardHeader className="border-b bg-muted/20">
+                            <CardTitle className="flex items-center gap-2 text-lg">
+                                <Sparkles className="size-5 text-primary" />
                                 Preview
                             </CardTitle>
                         </CardHeader>
@@ -488,17 +436,17 @@ export default function GeneratorPage() {
                                 </Tabs>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full text-center space-y-4 py-12 text-muted-foreground">
-                                    <div className="p-4 rounded-full bg-muted/50">
+                                    <div className="flex size-14 items-center justify-center rounded-full bg-muted/50">
                                         <Sparkles className="size-8 opacity-50" />
                                     </div>
                                     <div className="space-y-2">
-                                        <p className="font-medium text-foreground">Ready to Generate</p>
-                                        <p className="text-sm">Select your preferences, topic, or tags, then click generate to create a new question.</p>
+                                        <p className="font-medium text-foreground">{selectedStyleId && selectedToneId ? "Ready to generate" : "Choose a style and tone"}</p>
+                                        <p className="text-sm">{selectedStyleId && selectedToneId ? "Generate a preview, then accept it to save." : "Both fields are required before a preview can be generated."}</p>
                                     </div>
                                     <Button
                                         onClick={handleGenerate}
                                         disabled={isGenerating || !selectedStyleId || !selectedToneId}
-                                        className="w-full mt-4"
+                                        className="mt-4 h-11 w-full"
                                     >
                                         {isGenerating ? (
                                             <>
