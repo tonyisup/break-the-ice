@@ -73,7 +73,11 @@ describe("Clerk billing authorization", () => {
       }),
     );
     global.fetch = vi.fn().mockImplementation(async (input: string | URL | Request) => {
-      const url = String(input);
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.href;
       if (url.includes("organization_memberships")) {
         return {
           ok: true,

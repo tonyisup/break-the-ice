@@ -18,7 +18,7 @@ export const useFilter = <T extends Doc<"questions"> | HistoryEntry>(
       (item) => {
         const question: Doc<"questions"> = isHistoryEntry(item)
           ? item.question
-          : item as Doc<"questions">;
+          : item;
         if (!question) return false;
         if (!question.text) return false;
         return question.text.toLowerCase().includes(searchText.toLowerCase()) &&

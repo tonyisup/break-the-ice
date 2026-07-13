@@ -6,6 +6,8 @@ import { v } from "convex/values";
 import { Doc, Id } from "../_generated/dataModel";
 import * as crypto from "crypto";
 
+const TRAILING_SLASHES_PATTERN = /\/{2,}$/;
+
 export const getQuestionForUser = internalAction({
 	args: { email: v.string() },
 	returns: v.object({
@@ -144,7 +146,7 @@ export const getQuestionForUser = internalAction({
 		});
 
 		const baseUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://breaktheiceberg.com"}/`
-			.replace(/\/{2,}$/, "/");
+			.replace(TRAILING_SLASHES_PATTERN, "/");
 		const unsubscribeToken = await ctx.runMutation(
 			internal.internal.users.ensureNewsletterUnsubscribeToken,
 			{

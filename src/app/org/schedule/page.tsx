@@ -1093,7 +1093,7 @@ const questionPool = useQuery(
             <span className={cn("text-xs", weekStartDay === "sunday" && "font-semibold")}>Sun</span>
             <Switch
               checked={weekStartDay === "monday"}
-              onCheckedChange={(v) => handleWeekStartChange(v ? "monday" : "sunday")}
+              onCheckedChange={(v) => void handleWeekStartChange(v ? "monday" : "sunday")}
             />
             <span className={cn("text-xs", weekStartDay === "monday" && "font-semibold")}>Mon</span>
           </div>
