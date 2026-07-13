@@ -50,7 +50,7 @@ export const embedQuestion = internalAction({
     questionId: v.id("questions"),
   },
   handler: async (ctx, args) => {
-    const question = await ctx.runQuery(api.core.questions.getQuestion, {
+    const question = await ctx.runQuery(internal.internal.questions.getQuestionById, {
       id: args.questionId,
     });
     if (!question) {

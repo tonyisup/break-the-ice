@@ -42,7 +42,7 @@ import { IconPicker } from "@/components/ui/icon-picker"
 import { toast } from "sonner"
 
 export default function TonesPage() {
-	const tones = useQuery(api.admin.tones.listTones)
+	const tones = useQuery(api.admin.tones.listTones, {})
 	const createTone = useMutation(api.admin.tones.createTone)
 	const updateTone = useMutation(api.admin.tones.updateTone)
 	const deleteTone = useMutation(api.admin.tones.deleteTone)

@@ -6,7 +6,9 @@ describe("ActionButtons", () => {
   const mockProps = {
     isColorDark: vi.fn(),
     gradient: ["#ffffff", "#000000"],
+    shuffledGradient: ["#ffffff", "#000000"],
     isGenerating: false,
+    isShuffling: false,
     handleShuffleStyleAndTone: vi.fn(),
     handleConfirmRandomizeStyleAndTone: vi.fn(),
     handleCancelRandomizeStyleAndTone: vi.fn(),

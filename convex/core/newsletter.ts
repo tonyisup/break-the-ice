@@ -185,18 +185,3 @@ async function subscribeUser(ctx: ActionCtx, email: string): Promise<{ success: 
 		clearTimeout(timeoutId);
 	}
 }
-
-export const sendDailyQuestions = action({
-	args: {},
-	returns: v.object({
-		success: v.boolean(),
-		message: v.optional(v.string()),
-	}),
-	handler: async (ctx): Promise<{ success: boolean; message?: string }> => {
-		const result: { success: boolean; message: string } = await ctx.runAction(internal.internal.newsletterStart.startDailyNewsletter, {
-			force: true,
-		});
-
-		return { success: result.success, message: result.message };
-	},
-});

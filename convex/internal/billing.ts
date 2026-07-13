@@ -56,7 +56,8 @@ export const forceApplyOrgSubscription = internalMutation({
     ),
     clerkCustomerId: v.optional(v.string()),
     clerkSubscriptionId: v.optional(v.string()),
-    clerkUserId: v.string(),
+    clerkUserId: v.optional(v.string()),
+    organizationRole: v.optional(organizationRoleValidator),
   },
   returns: v.union(v.id("organizations"), v.null()),
   handler: async (ctx, args) => {
@@ -81,7 +82,7 @@ export const forceApplyOrgSubscription = internalMutation({
       organization = (await ctx.db.get(orgId)) ?? null;
 
       // Also create membership for the user
-      if (organization) {
+      if (organization && args.clerkUserId && args.organizationRole) {
         const user = await ctx.db
           .query("users")
           .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkUserId))
@@ -90,7 +91,7 @@ export const forceApplyOrgSubscription = internalMutation({
           await ctx.db.insert("organization_members", {
             userId: user._id,
             organizationId: organization._id,
-            role: "admin",
+            role: args.organizationRole,
           });
         }
       }

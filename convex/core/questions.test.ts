@@ -3,6 +3,55 @@ import { expect, test } from "vitest";
 import { api } from "../_generated/api";
 import schema from "../schema";
 
+test("public question reads hide private questions from other users", async () => {
+  const t = convexTest(schema);
+  const { privateQuestionId, publicQuestionId } = await t.run(async (ctx) => {
+    const ownerId = await ctx.db.insert("users", {
+      email: "owner@example.com",
+      clerkId: "owner",
+    });
+    const privateQuestionId = await ctx.db.insert("questions", {
+      customText: "Owner only",
+      authorId: ownerId,
+      status: "private",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+    const publicQuestionId = await ctx.db.insert("questions", {
+      text: "Everyone can read this",
+      status: "public",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+    return { privateQuestionId, publicQuestionId };
+  });
+
+  expect(
+    await t.query(api.core.questions.getQuestionById, { id: privateQuestionId }),
+  ).toBeNull();
+  expect(
+    await t.query(api.core.questions.getQuestionById, { id: publicQuestionId }),
+  ).toMatchObject({ text: "Everyone can read this" });
+  expect(
+    await t.withIdentity({ subject: "owner", email: "owner@example.com" }).query(
+      api.core.questions.getQuestionById,
+      { id: privateQuestionId },
+    ),
+  ).toMatchObject({ customText: "Owner only" });
+});
+
+test("personal question creation always requires an authenticated author", async () => {
+  const t = convexTest(schema);
+  await expect(
+    t.mutation(api.core.questions.addPersonalQuestion, {
+      customText: "Spoofed question",
+      isPublic: false,
+    }),
+  ).rejects.toThrow("logged in");
+});
+
 test("getUserLikedAndPreferredEmbedding should ignore empty user embedding", async () => {
   const t = convexTest(schema);
 

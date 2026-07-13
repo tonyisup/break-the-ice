@@ -37,6 +37,7 @@ export const userValidator = v.object({
 		cycleStart: v.number(),
 	})),
 	newsletterSubscriptionStatus: v.optional(v.union(v.literal("subscribed"), v.literal("unsubscribed"))),
+	newsletterUnsubscribeToken: v.optional(v.string()),
 });
 
 export const getUserById = internalQuery({
@@ -51,6 +52,38 @@ export const getUserByEmail = internalQuery({
 	args: { email: v.string() },
 	handler: async (ctx, args) => {
 		return await findCanonicalUser(ctx, { email: args.email });
+	},
+});
+
+export const getEmailByNewsletterUnsubscribeToken = internalQuery({
+	args: { token: v.string() },
+	returns: v.union(v.string(), v.null()),
+	handler: async (ctx, args) => {
+		const user = await ctx.db
+			.query("users")
+			.withIndex("by_newsletterUnsubscribeToken", (q) =>
+				q.eq("newsletterUnsubscribeToken", args.token),
+			)
+			.unique();
+		return user?.email?.trim().toLowerCase() ?? null;
+	},
+});
+
+export const ensureNewsletterUnsubscribeToken = internalMutation({
+	args: {
+		userId: v.id("users"),
+		token: v.string(),
+	},
+	returns: v.string(),
+	handler: async (ctx, args) => {
+		const user = await ctx.db.get(args.userId);
+		if (!user) throw new Error("User not found");
+		if (user.newsletterUnsubscribeToken) return user.newsletterUnsubscribeToken;
+
+		await ctx.db.patch(args.userId, {
+			newsletterUnsubscribeToken: args.token,
+		});
+		return args.token;
 	},
 });
 

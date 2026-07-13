@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { ensureOrgMember } from "../auth";
+import { isValidTimeZone } from "../lib/timezone";
 
 // ──────────────────────────────────────────────
 // Queries
@@ -14,6 +15,7 @@ export const getOrgSettings = query({
   returns: v.object({
     _id: v.optional(v.id("orgSettings")),
     weekStartDay: v.optional(v.union(v.literal("monday"), v.literal("sunday"))),
+    timeZone: v.optional(v.string()),
     defaultAxisY: v.optional(v.union(
       v.literal("style"), v.literal("tone"), v.literal("topic")
     )),
@@ -32,6 +34,7 @@ export const getOrgSettings = query({
     if (!settings) {
       return {
         weekStartDay: undefined,
+        timeZone: undefined,
         defaultAxisY: undefined,
         defaultAxisX: undefined,
       };
@@ -40,6 +43,7 @@ export const getOrgSettings = query({
     return {
       _id: settings._id,
       weekStartDay: settings.weekStartDay,
+      timeZone: settings.timeZone,
       defaultAxisY: settings.defaultAxisY,
       defaultAxisX: settings.defaultAxisX,
     };
@@ -55,6 +59,7 @@ export const upsertOrgSettings = mutation({
   args: {
     organizationId: v.id("organizations"),
     weekStartDay: v.optional(v.union(v.literal("monday"), v.literal("sunday"))),
+    timeZone: v.optional(v.string()),
     defaultAxisY: v.optional(v.union(
       v.literal("style"), v.literal("tone"), v.literal("topic")
     )),
@@ -65,6 +70,9 @@ export const upsertOrgSettings = mutation({
   returns: v.id("orgSettings"),
   handler: async (ctx, args) => {
     await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
+    if (args.timeZone !== undefined && !isValidTimeZone(args.timeZone)) {
+      throw new Error("Invalid IANA time zone");
+    }
 
     const existing = await ctx.db
       .query("orgSettings")
@@ -74,6 +82,7 @@ export const upsertOrgSettings = mutation({
     if (existing) {
       const patch: Record<string, unknown> = {};
       if (args.weekStartDay !== undefined) patch.weekStartDay = args.weekStartDay;
+      if (args.timeZone !== undefined) patch.timeZone = args.timeZone;
       if (args.defaultAxisY !== undefined) patch.defaultAxisY = args.defaultAxisY;
       if (args.defaultAxisX !== undefined) patch.defaultAxisX = args.defaultAxisX;
 
@@ -86,6 +95,7 @@ export const upsertOrgSettings = mutation({
     const newId = await ctx.db.insert("orgSettings", {
       organizationId: args.organizationId,
       weekStartDay: args.weekStartDay ?? "monday",
+      timeZone: args.timeZone,
       defaultAxisY: args.defaultAxisY,
       defaultAxisX: args.defaultAxisX,
     });
