@@ -8,7 +8,7 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { SignInButton, useUser } from "@clerk/clerk-react";
 import { Outlet } from "react-router-dom";
-import "@fontsource-variable/manrope";
+import "@fontsource-variable/manrope/index.css";
 
 export default function AdminLayout({
   children,

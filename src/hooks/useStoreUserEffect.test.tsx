@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useStoreUserEffect } from './useStoreUserEffect';
 import { useConvexAuth } from 'convex/react';
@@ -23,9 +23,9 @@ vi.mock('@clerk/clerk-react', async () => {
     };
 });
 
-const mockUseConvexAuth = useConvexAuth as vi.Mock;
-const mockUseUser = useUser as vi.Mock;
-const mockUseMutation = useMutation as vi.Mock;
+const mockUseConvexAuth = useConvexAuth as unknown as Mock;
+const mockUseUser = useUser as unknown as Mock;
+const mockUseMutation = useMutation as unknown as Mock;
 
 describe('useStoreUserEffect', () => {
     const storeUserMock = vi.fn();

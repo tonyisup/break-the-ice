@@ -273,11 +273,13 @@ export default defineSchema({
       cycleStart: v.number(),
     })),
     newsletterSubscriptionStatus: v.optional(v.union(v.literal("subscribed"), v.literal("unsubscribed"))),
+    newsletterUnsubscribeToken: v.optional(v.string()),
   })
     .index("by_clerkId", ["clerkId"])
     .index("by_tokenIdentifier", ["tokenIdentifier"])
     .index("email", ["email"])
     .index("phone", ["phone"])
+    .index("by_newsletterUnsubscribeToken", ["newsletterUnsubscribeToken"])
     .index("by_newsletterSubscriptionStatus", ["newsletterSubscriptionStatus"]),
   userAiUsage: defineTable({
     userId: v.id("users"),
@@ -559,6 +561,7 @@ export default defineSchema({
   orgSettings: defineTable({
     organizationId: v.id("organizations"),
     weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
+    timeZone: v.optional(v.string()),
     defaultAxisY: v.optional(v.union(
       v.literal("style"), v.literal("tone"), v.literal("topic")
     )),

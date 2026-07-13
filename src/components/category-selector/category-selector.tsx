@@ -1,19 +1,25 @@
 import React from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '../../../convex/_generated/api';
-import * as icons from '@/components/ui/icons/icons';
+import { iconMap } from '@/components/ui/icons/icons';
+
+type Category = {
+  id: string;
+  name: string;
+  icon: string;
+  gradient: [string, string];
+};
 
 interface CategorySelectorProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
+  categories?: Category[];
 }
 
-export function CategorySelector({ selectedCategory, onSelectCategory }: CategorySelectorProps) {
-  const categories = useQuery(api.categories.getCategories);
+export function CategorySelector({ selectedCategory, onSelectCategory, categories = [] }: CategorySelectorProps) {
   return (
     <div className="flex gap-3 px-5 py-3 overflow-x-auto scrollbar-hide">
-      {categories && categories.map((category) => {
+      {categories.map((category) => {
         const isSelected = selectedCategory === category.id;
+        const CategoryIcon = iconMap[category.icon];
 
         return (
           <button
@@ -32,7 +38,7 @@ export function CategorySelector({ selectedCategory, onSelectCategory }: Categor
                 : {}
             }
           >
-            {React.createElement(icons[category.icon as keyof typeof icons], { size: 20 })}
+            {CategoryIcon ? <CategoryIcon size={20} /> : null}
             <span className="text-sm font-semibold whitespace-nowrap">
               {category.name}
             </span>

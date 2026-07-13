@@ -6,14 +6,27 @@ export default defineConfig({
   plugins: [react()],
   test: {
     globals: true,
-    environmentMatchGlobs: [
-      // all tests in convex/ will run in edge-runtime
-      ["convex/**", "edge-runtime"],
-      // all other tests use jsdom
-      ["src/**", "jsdom"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "frontend",
+          include: ["src/**/*.test.{ts,tsx}", "src/**/*.spec.{ts,tsx}"],
+          environment: "jsdom",
+          setupFiles: "./vitest.setup.ts",
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "convex",
+          include: ["convex/**/*.test.ts", "convex/**/*.spec.ts"],
+          environment: "edge-runtime",
+          setupFiles: "./vitest.setup.ts",
+          server: { deps: { inline: ["convex-test"] } },
+        },
+      },
     ],
-    server: { deps: { inline: ["convex-test"] } },
-    setupFiles: './vitest.setup.ts',
   },
   resolve: {
     alias: {

@@ -1,10 +1,16 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import schema from "./schema";
 
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+
 test("engagement settings are scoped per workspace", async () => {
+	vi.useFakeTimers();
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
 
   const { userId, orgId, questionId } = await t.run(async (ctx) => {

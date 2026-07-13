@@ -27,9 +27,14 @@ vi.mock('@/hooks/useStorageContext', () => ({
   useStorageContext: () => mockUseStorageContext(),
 }));
 
-vi.mock('react-router-dom', () => ({
-  useSearchParams: () => [new URLSearchParams()],
-}));
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useSearchParams: () => [new URLSearchParams()],
+    Link: ({ to, children, ...props }: any) => <a href={to} {...props}>{children}</a>,
+  };
+});
 
 vi.mock('@/components/header', () => ({
   Header: () => <div>Header</div>,

@@ -27,30 +27,22 @@ const UnsubscribePage = () => {
 	const [isProcessing, setIsProcessing] = useState(false);
 
 	useEffect(() => {
-		// Determine the initial email to check
-		let initialEmail: string | null = null;
-		const emailParam = searchParams.get("email");
-
-		if (emailParam) {
-			initialEmail = emailParam;
-		} else if (isLoaded && isSignedIn && currentUser?.email) {
-			initialEmail = currentUser.email;
-		}
-
-		if (initialEmail) {
-			setEmail(initialEmail);
-			setFormEmail(initialEmail);
-			checkStatus(initialEmail);
+		const token = searchParams.get("token");
+		if (token || (isLoaded && isSignedIn && currentUser?.email)) {
+			void checkStatus(token ?? undefined);
 		} else if (isLoaded) {
-			// Only set error if we're sure we're loaded and found nothing
 			setStatus("error");
 		}
 	}, [searchParams, isLoaded, isSignedIn, currentUser]);
 
-	const checkStatus = async (emailToCheck: string) => {
+	const checkStatus = async (token?: string) => {
 		setStatus("loading");
 		try {
-			const result = await getStatusAction({ email: emailToCheck });
+			const result = await getStatusAction({ token });
+			if (result.email) {
+				setEmail(result.email);
+				setFormEmail(result.email);
+			}
 			if (result.subscribed === true) {
 				setStatus("subscribed");
 			} else if (result.subscribed === false) {
@@ -65,10 +57,9 @@ const UnsubscribePage = () => {
 	};
 
 	const handleUnsubscribe = async () => {
-		if (!email) return;
 		setIsProcessing(true);
 		try {
-			await unsubscribeAction({ email });
+			await unsubscribeAction({ token: searchParams.get("token") ?? undefined });
 			setStatus("unsubscribed");
 			toast.success("You have been unsubscribed from daily questions.");
 		} catch (error) {

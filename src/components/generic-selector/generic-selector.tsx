@@ -3,7 +3,9 @@ import { ChevronLeft, ChevronRight } from '@/components/ui/icons/icons';
 import { IconComponent } from '@/components/ui/icons/icon';
 import { cn, isColorDark } from '@/lib/utils';
 import React from 'react';
-import { ItemDetails as SelectorItem } from '../item-detail-drawer';
+import { ItemDetails } from '../item-detail-drawer';
+
+export type SelectorItem = ItemDetails;
 
 interface GenericSelectorProps {
   items: SelectorItem[] | undefined;

@@ -4,6 +4,10 @@ import { mutation, query } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import { ensureOrgMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
+import {
+  DEFAULT_ORGANIZATION_TIME_ZONE,
+  getZonedCalendarDate,
+} from "../lib/timezone";
 
 /** Cap org memberships loaded per user when listing cross-org schedules. */
 const MEMBERSHIPS_LIST_CAP = 100;
@@ -198,8 +202,14 @@ export const getCurrentWeekSchedule = query({
   }),
   handler: async (ctx, args) => {
     await ensureOrgMember(ctx, args.organizationId);
-    const now = new Date();
-    const todayIso = now.toISOString().slice(0, 10);
+    const settings = await ctx.db
+      .query("orgSettings")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    const { isoDate: todayIso, dayOfWeek } = getZonedCalendarDate(
+      new Date(),
+      settings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE,
+    );
 
     const schedule = await ctx.db
       .query("schedules")
@@ -222,7 +232,6 @@ export const getCurrentWeekSchedule = query({
       return { scheduleId: undefined, weekStart: undefined, status: undefined, todayAssignment: undefined };
     }
 
-    const dayOfWeek = getDayOfWeekLabel(now);
     const sq = await ctx.db
       .query("scheduledQuestions")
       .withIndex("by_schedule_day", (q) =>
@@ -526,8 +535,4 @@ function computeWeekEnd(weekStart: string, _weekStartDay: string): string {
 function getDaysOfWeek(_weekStart: string, weekStartDay: "monday" | "sunday"): DayOfWeek[] {
   const startIdx = weekStartDay === "monday" ? 1 : 0;
   return [...DAYS_ORDERED.slice(startIdx), ...DAYS_ORDERED.slice(0, startIdx)].slice(0, 7);
-}
-
-function getDayOfWeekLabel(date: Date): DayOfWeek {
-  return DAYS_ORDERED[date.getUTCDay()];
 }

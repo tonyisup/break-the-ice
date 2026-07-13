@@ -55,7 +55,7 @@ export function ClerkSyncManager() {
     lastOrgKeyRef.current = syncKey;
     const currentKey = syncKey;
 
-    void syncOrganization()
+    void syncOrganization({})
       .then((convexOrgId) => {
         if (lastOrgKeyRef.current !== currentKey) {
           return;

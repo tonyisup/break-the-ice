@@ -3,6 +3,10 @@ import { type GenericId } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { ensureOrgMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
+import {
+  DEFAULT_ORGANIZATION_TIME_ZONE,
+  getZonedCalendarDate,
+} from "../lib/timezone";
 
 const MAX_FEEDBACK_PER_SCHEDULE = 10000;
 
@@ -19,15 +23,6 @@ const ALL_DAYS: DayOfWeek[] = [
   "monday", "tuesday", "wednesday", "thursday",
   "friday", "saturday", "sunday",
 ];
-
-const DAYS_ORDERED_BY_INDEX = [
-  "sunday", "monday", "tuesday", "wednesday",
-  "thursday", "friday", "saturday",
-] as const;
-
-function idxToDay(date: Date): DayOfWeek {
-  return DAYS_ORDERED_BY_INDEX[date.getUTCDay()]!;
-}
 
 // ──────────────────────────────────────────────
 // Queries
@@ -65,9 +60,14 @@ export const getCoachTodayAssignment = query({
     });
     if (!user) throw new Error("User not found");
 
-    const now = new Date();
-    const todayIso = now.toISOString().slice(0, 10);
-    const dayLabel = idxToDay(now);
+    const settings = await ctx.db
+      .query("orgSettings")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    const { isoDate: todayIso, dayOfWeek: dayLabel } = getZonedCalendarDate(
+      new Date(),
+      settings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE,
+    );
 
     const schedule = await ctx.db
       .query("schedules")

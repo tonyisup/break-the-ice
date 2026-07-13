@@ -4,6 +4,7 @@ import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { Doc, Id } from "../_generated/dataModel";
+import * as crypto from "crypto";
 
 export const getQuestionForUser = internalAction({
 	args: { email: v.string() },
@@ -142,9 +143,15 @@ export const getQuestionForUser = internalAction({
 			questionId: question._id,
 		});
 
-		const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://breaktheiceberg.com/";
-
-
+		const baseUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://breaktheiceberg.com"}/`
+			.replace(/\/{2,}$/, "/");
+		const unsubscribeToken = await ctx.runMutation(
+			internal.internal.users.ensureNewsletterUnsubscribeToken,
+			{
+				userId: user._id,
+				token: crypto.randomUUID(),
+			},
+		);
 		const questionText: string = question.text || question.customText || "";
 		return {
 			success: true,
@@ -152,7 +159,7 @@ export const getQuestionForUser = internalAction({
 			question: questionText,
 			questionUrl: `${baseUrl}question/${question._id}`,
 			imageUrl: `${baseUrl}api/og?id=${question._id}`,
-			unsubscribeUrl: `${baseUrl}unsubscribe?email=${encodeURIComponent(args.email)}`,
+			unsubscribeUrl: `${baseUrl}unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`,
 			email: args.email,
 		};
 	}

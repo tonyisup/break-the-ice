@@ -1,7 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const RESEND_API_KEY = process.env.RESEND_API_TOKEN || process.env.RESEND_API_KEY;
@@ -11,6 +11,7 @@ type ContactStatusResult = {
 	subscribed: boolean | null;
 	message?: string;
 	contactId?: string;
+	email?: string;
 	error?: string;
 };
 
@@ -19,28 +20,46 @@ type ContactMutationResult = {
 	message?: string;
 };
 
+async function getAuthorizedEmail(ctx: ActionCtx, token?: string): Promise<string> {
+	if (token) {
+		const email = await ctx.runQuery(
+			internal.internal.users.getEmailByNewsletterUnsubscribeToken,
+			{ token },
+		);
+		if (!email) throw new Error("Invalid unsubscribe link");
+		return email;
+	}
+
+	const identity = await ctx.auth.getUserIdentity();
+	if (identity?.email) return identity.email.trim().toLowerCase();
+	throw new Error("Not authenticated");
+}
+
 export const getContactStatus = action({
-	args: { email: v.string() },
+	args: { token: v.optional(v.string()) },
 	returns: v.object({
 		subscribed: v.union(v.boolean(), v.null()),
 		message: v.optional(v.string()),
 		contactId: v.optional(v.string()),
+		email: v.optional(v.string()),
 		error: v.optional(v.string()),
 	}),
 	handler: async (ctx, args): Promise<ContactStatusResult> => {
+		const email = await getAuthorizedEmail(ctx, args.token);
 		const user: { newsletterSubscriptionStatus?: "subscribed" | "unsubscribed" } | null = await ctx.runQuery(internal.internal.users.getUserByEmail, {
-			email: args.email,
+			email,
 		});
 
 		if (user?.newsletterSubscriptionStatus) {
 			return {
 				subscribed: user.newsletterSubscriptionStatus === "subscribed",
+				email,
 			};
 		}
 
 		if (!RESEND_API_KEY) {
 			console.warn("RESEND_API_KEY is not set. Simulating subscription.");
-			return { subscribed: true };
+			return { subscribed: true, email };
 		}
 
 		try {
@@ -56,16 +75,17 @@ export const getContactStatus = action({
 			}
 
 			const data = await response.json();
-			const contact = data.data.find((c: any) => c.email.toLowerCase() === args.email.toLowerCase());
+			const contact = data.data.find((c: any) => c.email.toLowerCase() === email);
 
 			if (!contact) {
-				return { subscribed: null, message: "Contact not found" };
+				return { subscribed: null, message: "Contact not found", email };
 			}
 
 			// If unsubscribed is true in Resend, return subscribed: false
 			return {
 				subscribed: contact.unsubscribed ? false : true,
-				contactId: contact.id
+				contactId: contact.id,
+				email,
 			};
 		} catch (error) {
 			console.error("Error fetching contact from Resend:", error);
@@ -75,16 +95,17 @@ export const getContactStatus = action({
 });
 
 export const unsubscribeContact = action({
-	args: { email: v.string() },
+	args: { token: v.optional(v.string()) },
 	returns: v.object({
 		success: v.boolean(),
 		message: v.optional(v.string()),
 	}),
 	handler: async (ctx, args): Promise<ContactMutationResult> => {
+		const email = await getAuthorizedEmail(ctx, args.token);
 		if (!RESEND_API_KEY) {
 			console.warn("RESEND_API_KEY is not set. Simulating unsubscribe.");
 			await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
-				email: args.email,
+				email,
 				status: "unsubscribed",
 			});
 			return { success: true };
@@ -96,11 +117,11 @@ export const unsubscribeContact = action({
 				headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
 			});
 			const getData = await getResponse.json();
-			const contact = getData.data.find((c: any) => c.email.toLowerCase() === args.email.toLowerCase());
+			const contact = getData.data.find((c: any) => c.email.toLowerCase() === email);
 
 			if (!contact) {
 				await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
-					email: args.email,
+					email,
 					status: "unsubscribed",
 				});
 				return { success: true, message: "Contact not found in Resend; updated Convex status." };
@@ -123,7 +144,7 @@ export const unsubscribeContact = action({
 			}
 
 			await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
-				email: args.email,
+				email,
 				status: "unsubscribed",
 			});
 
@@ -135,7 +156,7 @@ export const unsubscribeContact = action({
 	},
 });
 
-export const subscribeContact = action({
+export const subscribeContact = internalAction({
 	args: { email: v.string() },
 	returns: v.object({
 		success: v.boolean(),

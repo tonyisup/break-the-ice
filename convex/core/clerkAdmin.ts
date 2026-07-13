@@ -2,8 +2,10 @@
 
 import { action } from "../_generated/server";
 import { v } from "convex/values";
-import { api, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
+import { ensureAdmin } from "../auth";
+import { normalizeClerkApiRole, type OrganizationRole } from "../lib/clerkOrgSync";
 
 const CLERK_API_BASE = "https://api.clerk.com/v1";
 
@@ -85,6 +87,36 @@ async function getCurrentClerkUserId(ctx: any): Promise<string> {
   return identity.subject;
 }
 
+async function getVerifiedOrganizationMembership(
+  ctx: any,
+  clerkOrganizationId: string,
+): Promise<{ clerkUserId: string; organizationRole: OrganizationRole }> {
+  const clerkUserId = await getCurrentClerkUserId(ctx);
+  const pageSize = 100;
+
+  for (let offset = 0; ; offset += pageSize) {
+    const response = (await clerkFetch(
+      `/users/${encodeURIComponent(clerkUserId)}/organization_memberships?limit=${pageSize}&offset=${offset}`,
+    )) as {
+      data?: Array<{ role?: string; organization?: { id?: string } }>;
+    };
+    const memberships = response.data ?? [];
+    const membership = memberships.find(
+      (candidate) => candidate.organization?.id === clerkOrganizationId,
+    );
+
+    if (membership) {
+      return {
+        clerkUserId,
+        organizationRole: normalizeClerkApiRole(membership.role) ?? "member",
+      };
+    }
+    if (memberships.length < pageSize) break;
+  }
+
+  throw new Error("Not a member of this organization");
+}
+
 /**
  * Check an organization's subscription status directly from Clerk's REST API.
  * No webhook delay — queries Clerk in real-time.
@@ -106,7 +138,7 @@ export const getOrgSubscriptionStatus = action({
     clerkSubscriptionId: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
-    await getCurrentClerkUserId(ctx);
+    await getVerifiedOrganizationMembership(ctx, args.clerkOrganizationId);
     const subs = await fetchOrgSubscriptions(args.clerkOrganizationId);
 
     const activeSub = subs.find((s: any) =>
@@ -160,7 +192,10 @@ export const forceSyncOrgSubscription = action({
   },
   returns: v.union(v.id("organizations"), v.null()),
   handler: async (ctx, args): Promise<Id<"organizations"> | null> => {
-    const clerkUserId = await getCurrentClerkUserId(ctx);
+    const { clerkUserId, organizationRole } = await getVerifiedOrganizationMembership(
+      ctx,
+      args.clerkOrganizationId,
+    );
 
     // 1. Get subscription status directly from Clerk
     let planTier: "free" | "team" = "free";
@@ -217,6 +252,7 @@ export const forceSyncOrgSubscription = action({
         clerkCustomerId,
         clerkSubscriptionId,
         clerkUserId,
+        organizationRole,
       }
     );
   },
@@ -247,7 +283,8 @@ export const adminListOrganizations = action({
       memberCount: v.number(),
     })
   ),
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
     const limit = args.limit ?? 50;
     const offset = args.offset ?? 0;
 
@@ -341,7 +378,8 @@ export const adminGetOrgSubscription = action({
       })
     ),
   }),
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
     // Clerk API: get organization's subscription
     // The /billing/subscription endpoint returns the subscription object directly
     let rawSubData: any = null;
@@ -417,6 +455,8 @@ export const adminCancelOrgSubscription = action({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+
     // Find the active subscription
     const subs = await fetchOrgSubscriptions(args.clerkOrganizationId);
 
@@ -433,7 +473,6 @@ export const adminCancelOrgSubscription = action({
     }
 
     // Sync to Convex
-    const identity = await ctx.auth.getUserIdentity();
     await ctx.runMutation(internal.internal.billing.forceApplyOrgSubscription, {
       clerkOrganizationId: args.clerkOrganizationId,
       organizationName: "Team",
@@ -441,7 +480,6 @@ export const adminCancelOrgSubscription = action({
       billingStatus: "canceled",
       clerkCustomerId: undefined,
       clerkSubscriptionId: activeSub?.id,
-      clerkUserId: identity?.subject ?? "unknown",
     });
 
     return null;

@@ -15,6 +15,7 @@ import { ensureAdmin, ensureOrgMember } from "../auth";
 import { embed } from "../lib/retriever";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
+import { findCanonicalUser } from "../lib/users";
 
 export const discardQuestion = mutation({
 	args: {
@@ -50,7 +51,6 @@ export const discardQuestion = mutation({
 export const addPersonalQuestion = mutation({
 	args: {
 		customText: v.string(),
-		authorId: v.optional(v.id("users")),
 		isPublic: v.boolean(),
 		styleId: v.optional(v.id("styles")),
 		toneId: v.optional(v.id("tones")),
@@ -63,23 +63,16 @@ export const addPersonalQuestion = mutation({
 		if (args.organizationId) {
 			await ensureOrgMember(ctx, args.organizationId);
 		}
-		let userId;
-		if (args.authorId) {
-			userId = args.authorId;
-		} else {
-			const identity = await ctx.auth.getUserIdentity();
-			if (!identity) {
-				throw new Error("You must be logged in to add a personal question.");
-			}
-			const user = await ctx.db
-				.query("users")
-				.withIndex("email", (q) => q.eq("email", identity.email))
-				.unique();
-			if (!user) {
-				throw new Error("User not found.");
-			}
-			userId = user._id;
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) {
+			throw new Error("You must be logged in to add a personal question.");
 		}
+		const user = await findCanonicalUser(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
+		if (!user) throw new Error("User not found.");
 
 		const { customText, isPublic, styleId, toneId } = args;
 		if (customText.trim().length === 0) {
@@ -95,7 +88,7 @@ export const addPersonalQuestion = mutation({
 		]);
 
 		return await ctx.db.insert("questions", {
-			authorId: userId,
+			authorId: user._id,
 			customText,
 			status: isPublic ? "pending" : "private",
 			totalLikes: 0,
@@ -468,10 +461,26 @@ export const getQuestionsByIds = query({
 			return [];
 		}
 
+		const identity = await ctx.auth.getUserIdentity();
+		const user = identity
+			? await findCanonicalUser(ctx, {
+				clerkId: identity.subject,
+				tokenIdentifier: identity.tokenIdentifier,
+				email: identity.email,
+			})
+			: null;
+
 		const questions = await Promise.all(
 			validIds.map((id) => ctx.db.get(id))
 		);
-		return questions.filter((q): q is Doc<"questions"> => q !== null);
+		const visibleQuestions: Doc<"questions">[] = [];
+		for (const question of questions) {
+			if (!question) continue;
+			if (await canReadQuestion(ctx, question, user?._id)) {
+				visibleQuestions.push(question);
+			}
+		}
+		return visibleQuestions;
 	},
 });
 
@@ -662,25 +671,44 @@ export const getQuestionById = query({
 		try {
 			const questionId = ctx.db.normalizeId("questions", args.id);
 			if (!questionId) return null;
-			return await ctx.db.get(questionId);
+			const question = await ctx.db.get(questionId);
+			if (!question) return null;
+			const identity = await ctx.auth.getUserIdentity();
+			const user = identity
+				? await findCanonicalUser(ctx, {
+					clerkId: identity.subject,
+					tokenIdentifier: identity.tokenIdentifier,
+					email: identity.email,
+				})
+				: null;
+			return (await canReadQuestion(ctx, question, user?._id)) ? question : null;
 		} catch {
 			return null;
 		}
 	},
 });
 
-export const getQuestion = query({
-	args: {
-		id: v.id("questions"),
-	},
-	returns: v.union(v.any(), v.null()),
-	handler: async (ctx, args) => {
-		return await ctx.db.get(args.id);
-	},
-});
-
 function isQuestionPublic(status: string | undefined): boolean {
 	return status === "public" || status === "approved" || status === undefined;
+}
+
+async function canReadQuestion(
+	ctx: QueryCtx,
+	question: Doc<"questions">,
+	userId?: Id<"users">,
+): Promise<boolean> {
+	if (isQuestionPublic(question.status)) return true;
+	if (!userId) return false;
+	if (question.authorId === userId) return true;
+	if (!question.organizationId) return false;
+
+	const membership = await ctx.db
+		.query("organization_members")
+		.withIndex("by_userId_organizationId", (q) =>
+			q.eq("userId", userId).eq("organizationId", question.organizationId!),
+		)
+		.unique();
+	return membership !== null;
 }
 
 export const getQuestionImageUrl = query({
@@ -724,6 +752,7 @@ export const getQuestionForOgImage = query({
 			console.log(`Question not found in DB for normalized ID: ${questionId}`);
 			return null;
 		}
+		if (!isQuestionPublic(question.status)) return null;
 
 		let styleDoc = null;
 		if (question.style) {

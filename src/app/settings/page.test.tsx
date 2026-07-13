@@ -118,7 +118,7 @@ describe("SettingsPage", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    mockUseAuth.mockReturnValue({ isSignedIn: false });
+    mockUseAuth.mockReturnValue({ isSignedIn: true });
     mockUseSearchParams.mockReturnValue([new URLSearchParams()]);
     mockUseStorageContext.mockReturnValue({
       hiddenStyles: [],
@@ -141,7 +141,7 @@ describe("SettingsPage", () => {
       if (queryFn === "getStyles") return mockStyles;
       if (queryFn === "getTones") return mockTones;
       if (queryFn === "getQuestionsByIds") return mockHiddenQuestionObjects;
-      if (queryFn === "getCurrentUser") return null;
+      if (queryFn === "getCurrentUser") return { _id: "user-1", email: "user@example.com" };
       if (queryFn === "getEffectiveEntitlements") return null;
       return undefined;
     });

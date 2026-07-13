@@ -5,12 +5,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { iconMap } from "@/components/ui/icons/icons";
 
 interface IconPickerProps {
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   className?: string;
 }
 
-export function IconPicker({ value, onChange, className }: IconPickerProps) {
+export function IconPicker({ id, value, onChange, className }: IconPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -24,6 +25,7 @@ export function IconPicker({ value, onChange, className }: IconPickerProps) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          id={id}
           role="combobox"
           aria-expanded={open}
           className={cn(

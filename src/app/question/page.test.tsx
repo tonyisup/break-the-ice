@@ -68,6 +68,9 @@ vi.mock('sonner', () => ({
     success: vi.fn(),
   },
 }));
+vi.mock('@/components/header', () => ({
+  Header: () => <div>Header</div>,
+}));
 
 const mockUseParams = useParams as any; //vi.Mock;
 const mockUseQuery = useQuery as any; //vi.Mock;

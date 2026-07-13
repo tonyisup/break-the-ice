@@ -58,6 +58,24 @@ const axisLabels: Record<AxisType, string> = {
   topic: "Topic",
 };
 
+const DEFAULT_ORGANIZATION_TIME_ZONE = "America/Los_Angeles";
+const FALLBACK_ORGANIZATION_TIME_ZONES = [
+  "America/Los_Angeles",
+  "America/Denver",
+  "America/Chicago",
+  "America/New_York",
+  "America/Phoenix",
+  "Pacific/Honolulu",
+  "America/Anchorage",
+  "UTC",
+] as const;
+const supportedTimeZones = (
+  Intl as typeof Intl & { supportedValuesOf?: (key: "timeZone") => string[] }
+).supportedValuesOf?.("timeZone");
+const ORGANIZATION_TIME_ZONES = Array.from(
+  new Set([...(supportedTimeZones ?? FALLBACK_ORGANIZATION_TIME_ZONES), "UTC"]),
+).sort();
+
 /** Map a visible matrix (ySlug × xSlug) to style/tone/topic for generation. */
 function generationSlugsForMatrixCell(
   axisY: AxisType,
@@ -112,8 +130,31 @@ function generationSlugsForMatrixCell(
 // Helpers
 // ──────────────────────────────────────────────
 
-function computeWeekRange(weekStartDay: "monday" | "sunday", offset = 0) {
-  const today = new Date();
+function dateInTimeZone(date: Date, timeZone: string): Date {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return new Date(value("year"), value("month") - 1, value("day"), 12);
+}
+
+function calendarIso(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function computeWeekRange(
+  weekStartDay: "monday" | "sunday",
+  offset = 0,
+  timeZone = DEFAULT_ORGANIZATION_TIME_ZONE,
+) {
+  const today = dateInTimeZone(new Date(), timeZone);
   const dayOfWeek = today.getDay(); // 0=Sun
   const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   const sundayOffset = -dayOfWeek;
@@ -125,8 +166,9 @@ function computeWeekRange(weekStartDay: "monday" | "sunday", offset = 0) {
   return {
     start,
     end,
+    todayIso: calendarIso(today),
     label: `${start.toLocaleString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
-    isoStart: start.toISOString().slice(0, 10),
+    isoStart: calendarIso(start),
   };
 }
 
@@ -214,11 +256,10 @@ interface DaySlotProps {
   onAssignClick: (dayKey: string) => void;
   onUnassign: (scheduledQuestionId: string) => void;
   isTarget: boolean;
+  isToday: boolean;
 }
 
-function DaySlot({ dayKey, dayLabel, dayAbbr, date, assignment, canEdit, onAssignClick, onUnassign, isTarget }: DaySlotProps) {
-  const isToday = new Date().toDateString() === date.toDateString();
-
+function DaySlot({ dayKey, dayLabel, dayAbbr, date, assignment, canEdit, onAssignClick, onUnassign, isTarget, isToday }: DaySlotProps) {
   return (
     <Card
       className={cn(
@@ -343,10 +384,11 @@ export default function OrgWeeklyCurationPage() {
     orgId ? { organizationId: orgId } : "skip"
   );
   const weekStartDay = (orgSettings?.weekStartDay ?? "monday") as "monday" | "sunday";
+  const timeZone = orgSettings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE;
 
   /* --- Week navigation --- */
   const [weekOffset, setWeekOffset] = React.useState(0);
-  const week = computeWeekRange(weekStartDay, weekOffset);
+  const week = computeWeekRange(weekStartDay, weekOffset, timeZone);
 
   /* --- Current schedule for this week --- */
   const currentSchedule = schedules?.find(
@@ -763,6 +805,16 @@ const questionPool = useQuery(
     } catch {}
   };
 
+  const handleTimeZoneChange = async (value: string) => {
+    if (!orgId) return;
+    try {
+      await upsertSettings({ organizationId: orgId, timeZone: value });
+      toast.success("Studio time zone updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update time zone");
+    }
+  };
+
   // Trigger org sync after Clerk org creation (JWT path, then API fallback like ClerkSyncManager)
   const handleOrgReady = async (name: string) => {
     try {
@@ -1034,15 +1086,34 @@ const questionPool = useQuery(
       </div>
 
       {/* Week start day toggle */}
-      <div className="flex items-center gap-3">
-        <Label className="text-sm text-muted-foreground">Week starts on</Label>
+      <div className="flex flex-wrap items-center gap-5">
+        <div className="flex items-center gap-3">
+          <Label className="text-sm text-muted-foreground">Week starts on</Label>
+          <div className="flex items-center gap-2">
+            <span className={cn("text-xs", weekStartDay === "sunday" && "font-semibold")}>Sun</span>
+            <Switch
+              checked={weekStartDay === "monday"}
+              onCheckedChange={(v) => handleWeekStartChange(v ? "monday" : "sunday")}
+            />
+            <span className={cn("text-xs", weekStartDay === "monday" && "font-semibold")}>Mon</span>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
-          <span className={cn("text-xs", weekStartDay === "sunday" && "font-semibold")}>Sun</span>
-          <Switch
-            checked={weekStartDay === "monday"}
-            onCheckedChange={(v) => handleWeekStartChange(v ? "monday" : "sunday")}
-          />
-          <span className={cn("text-xs", weekStartDay === "monday" && "font-semibold")}>Mon</span>
+          <Label htmlFor="organization-time-zone" className="text-sm text-muted-foreground">
+            Studio time zone
+          </Label>
+          <select
+            id="organization-time-zone"
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            value={timeZone}
+            onChange={(event) => void handleTimeZoneChange(event.target.value)}
+          >
+            {ORGANIZATION_TIME_ZONES.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -1255,6 +1326,7 @@ const questionPool = useQuery(
                   assignment={assignmentsByDay[row.key]}
                   canEdit={canEdit}
                   isTarget={assignTargetDay === row.key}
+                  isToday={calendarIso(row.date) === week.todayIso}
                   onAssignClick={(k) =>
                     setAssignTargetDay(assignTargetDay === k ? null : k)
                   }
