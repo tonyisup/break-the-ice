@@ -49,35 +49,14 @@ export const getQuestionForUser = internalAction({
 			question = await ctx.runQuery(internal.internal.questions.getQuestionById, {
 				id: unseenQuestionIds[0],
 			});
-		}
-		else {
+		} else {
+			// 1. Get questions already sent through the newsletter.
+			const sentQuestionIds: Id<"questions">[] = await ctx.runQuery(
+				internal.internal.questions.getSentQuestionsForUser,
+				{ userId: user._id },
+			);
 
-      // 1. Get exclusion lists: sent questions, hidden questions, hidden styles, hidden tones
-      const sentQuestionIds: Id<"questions">[] = await ctx.runQuery(
-        internal.internal.questions.getSentQuestionsForUser,
-        { userId: user._id }
-      );
-  
-      const hiddenStyles: any[] = await ctx.runQuery(
-        internal.internal.users.getUserHiddenStyles,
-        { userId: user._id }
-      );
-      const hiddenTones: any[] = await ctx.runQuery(
-        internal.internal.users.getUserHiddenTones,
-        { userId: user._id }
-      );
-  
-      const excludedQuestionIds = new Set<string>(
-        sentQuestionIds.map(id => id.toString())
-      );
-      const excludedStyleIds = new Set<string>(
-        hiddenStyles.map((s: any) => s.styleId.toString())
-      );
-      const excludedToneIds = new Set<string>(
-        hiddenTones.map((t: any) => t.toneId.toString())
-      );
-
-		// 2. If the user has a preference embedding, find the most similar valid question
+			// 2. If the user has a preference embedding, find the most similar valid question
 			const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId: user._id });
 			if (userEmb && userEmb.length > 0) {
 				const MAX_CANDIDATES = 100;
@@ -90,28 +69,18 @@ export const getQuestionForUser = internalAction({
 				if (results.length > 0) {
 					const candidateIds = await ctx.runQuery(
 						internal.internal.questions.getQuestionIdsByEmbeddingRowIds,
-						{ embeddingRowIds: results.map((r) => r._id) }
+						{ embeddingRowIds: results.map((r) => r._id) },
 					);
-					for (const candidateId of candidateIds) {
-						if (!candidateId) continue;
-						if (excludedQuestionIds.size > 0 && excludedQuestionIds.has(candidateId.toString())) continue;
-
-						const candidate = await ctx.runQuery(
-							internal.internal.questions.getQuestionById,
-							{ id: candidateId }
-						) as Doc<"questions"> | null;
-
-						if (!candidate) continue;
-						if (!candidate.text) continue;
-						if (candidate.prunedAt !== undefined) continue;
-						if (candidate.status !== "approved" && candidate.status !== "public" && candidate.status !== undefined) continue;
-						if (candidate.styleId && excludedStyleIds.has(candidate.styleId.toString())) continue;
-						if (candidate.toneId && excludedToneIds.has(candidate.toneId.toString())) continue;
-
-						// Found a valid question
-						question = candidate;
-						break;
-					}
+					question = await ctx.runQuery(
+						internal.internal.questions.getFirstEligibleNewsletterQuestionForUser,
+						{
+							userId: user._id,
+							questionIds: candidateIds.filter(
+								(candidateId): candidateId is Id<"questions"> => candidateId !== null,
+							),
+							excludedQuestionIds: sentQuestionIds,
+						},
+					);
 				}
 			}
 		}

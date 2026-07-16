@@ -78,6 +78,7 @@ import type * as lib_retriever from "../lib/retriever.js";
 import type * as lib_styleHelpers from "../lib/styleHelpers.js";
 import type * as lib_takeover from "../lib/takeover.js";
 import type * as lib_taxonomy from "../lib/taxonomy.js";
+import type * as lib_timezone from "../lib/timezone.js";
 import type * as lib_users from "../lib/users.js";
 import type * as lib_workspaceEngagement from "../lib/workspaceEngagement.js";
 import type * as resend from "../resend.js";
@@ -161,6 +162,7 @@ declare const fullApi: ApiFromModules<{
   "lib/styleHelpers": typeof lib_styleHelpers;
   "lib/takeover": typeof lib_takeover;
   "lib/taxonomy": typeof lib_taxonomy;
+  "lib/timezone": typeof lib_timezone;
   "lib/users": typeof lib_users;
   "lib/workspaceEngagement": typeof lib_workspaceEngagement;
   resend: typeof resend;
