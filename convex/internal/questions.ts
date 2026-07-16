@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalQuery, internalMutation, internalAction } from "../_generated/server";
+import { internalQuery, internalMutation, internalAction, type QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { embed } from "../lib/retriever";
@@ -860,6 +860,114 @@ export const getQuestionTimeRange = internalQuery({
 	},
 });
 
+type NewsletterPreferenceFilters = {
+	hiddenStyleIds: Set<string>;
+	hiddenStyleSlugs: Set<string>;
+	hiddenToneIds: Set<string>;
+	hiddenToneSlugs: Set<string>;
+};
+
+async function getNewsletterPreferenceFilters(
+	ctx: QueryCtx,
+	userId: Id<"users">,
+): Promise<NewsletterPreferenceFilters> {
+	const [userHiddenStyles, userHiddenTones] = await Promise.all([
+		ctx.db
+			.query("userStyles")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", userId).eq("status", "hidden"),
+			)
+			.collect(),
+		ctx.db
+			.query("userTones")
+			.withIndex("by_userId_status", (q) =>
+				q.eq("userId", userId).eq("status", "hidden"),
+			)
+			.collect(),
+	]);
+
+	const [hiddenStyleDocs, hiddenToneDocs] = await Promise.all([
+		Promise.all(userHiddenStyles.map((entry) => ctx.db.get(entry.styleId))),
+		Promise.all(userHiddenTones.map((entry) => ctx.db.get(entry.toneId))),
+	]);
+	const hiddenStyleSlugs = new Set(
+		hiddenStyleDocs
+			.filter((style): style is Doc<"styles"> => style !== null)
+			.map((style) => style.slug ?? style.id),
+	);
+	const hiddenToneSlugs = new Set(
+		hiddenToneDocs
+			.filter((tone): tone is Doc<"tones"> => tone !== null)
+			.map((tone) => tone.slug ?? tone.id),
+	);
+	const [hiddenStyleVersions, hiddenToneVersions] = await Promise.all([
+		Promise.all(
+			Array.from(hiddenStyleSlugs).map((slug) =>
+				ctx.db.query("styles").withIndex("by_slug", (q) => q.eq("slug", slug)).collect(),
+			),
+		),
+		Promise.all(
+			Array.from(hiddenToneSlugs).map((slug) =>
+				ctx.db.query("tones").withIndex("by_slug", (q) => q.eq("slug", slug)).collect(),
+			),
+		),
+	]);
+
+	return {
+		hiddenStyleIds: new Set([
+			...userHiddenStyles.map((style) => style.styleId.toString()),
+			...hiddenStyleVersions.flat().map((style) => style._id.toString()),
+		]),
+		hiddenStyleSlugs,
+		hiddenToneIds: new Set([
+			...userHiddenTones.map((tone) => tone.toneId.toString()),
+			...hiddenToneVersions.flat().map((tone) => tone._id.toString()),
+		]),
+		hiddenToneSlugs,
+	};
+}
+
+function isQuestionAllowedByNewsletterPreferences(
+	question: Doc<"questions">,
+	filters: NewsletterPreferenceFilters,
+): boolean {
+	if (question.styleId && filters.hiddenStyleIds.has(question.styleId.toString())) {
+		return false;
+	}
+	if (
+		(question.styleSlug && filters.hiddenStyleSlugs.has(question.styleSlug)) ||
+		(question.style && filters.hiddenStyleSlugs.has(question.style))
+	) {
+		return false;
+	}
+	if (question.toneId && filters.hiddenToneIds.has(question.toneId.toString())) {
+		return false;
+	}
+	if (
+		(question.toneSlug && filters.hiddenToneSlugs.has(question.toneSlug)) ||
+		(question.tone && filters.hiddenToneSlugs.has(question.tone))
+	) {
+		return false;
+	}
+	return true;
+}
+
+function isQuestionEligibleForNewsletter(
+	question: Doc<"questions">,
+	filters: NewsletterPreferenceFilters,
+): boolean {
+	if (!question.text || question.prunedAt !== undefined) {
+		return false;
+	}
+	if (
+		question.status !== "approved" &&
+		question.status !== "public" &&
+		question.status !== undefined
+	) {
+		return false;
+	}
+	return isQuestionAllowedByNewsletterPreferences(question, filters);
+}
 
 export const getUnseenQuestionIdsForUser = internalQuery({
 	args: {
@@ -869,21 +977,57 @@ export const getUnseenQuestionIdsForUser = internalQuery({
 	returns: v.array(v.id("questions")),
 	handler: async (ctx, args) => {
 		const { userId, count } = args;
-		const unseenUserQuestions = count ? await ctx.db
+		const unseenUserQuestions = ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", userId).eq("status", "unseen")
-			)
-			.take(count) : await ctx.db
-			.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
-				q.eq("userId", userId).eq("status", "unseen")
-			)
-			.collect();
+			);
+		const filters = await getNewsletterPreferenceFilters(ctx, userId);
+		const questionIds: Id<"questions">[] = [];
 
-		const questionIds = unseenUserQuestions.map((uq) => uq.questionId);
+		for await (const userQuestion of unseenUserQuestions) {
+			const question = await ctx.db.get(userQuestion.questionId);
+			if (!question || !isQuestionEligibleForNewsletter(question, filters)) {
+				continue;
+			}
+
+			questionIds.push(question._id);
+			if (count !== undefined && questionIds.length >= count) {
+				break;
+			}
+		}
 
 		return questionIds;
+	},
+});
+
+export const getFirstEligibleNewsletterQuestionForUser = internalQuery({
+	args: {
+		userId: v.id("users"),
+		questionIds: v.array(v.id("questions")),
+		excludedQuestionIds: v.array(v.id("questions")),
+	},
+	returns: questionByIdResultValidator,
+	handler: async (ctx, args) => {
+		const filters = await getNewsletterPreferenceFilters(ctx, args.userId);
+		const excludedQuestionIds = new Set(
+			args.excludedQuestionIds.map((questionId) => questionId.toString()),
+		);
+
+		for (const questionId of args.questionIds) {
+			if (excludedQuestionIds.has(questionId.toString())) {
+				continue;
+			}
+
+			const question = await ctx.db.get(questionId);
+			if (!question || !isQuestionEligibleForNewsletter(question, filters)) {
+				continue;
+			}
+
+			return question;
+		}
+
+		return null;
 	},
 });
 
@@ -917,19 +1061,19 @@ export const getQuestionForNewsletter = internalQuery({
 		if (!user) {
 			return null;
 		}
+		const preferenceFilters = await getNewsletterPreferenceFilters(ctx, userId);
 
 		// PRIORITY 1: Check for unseen pool questions first
-		const unseenUserQuestion = await ctx.db
+		const unseenUserQuestions = ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", userId).eq("status", "unseen")
 			)
-			.order("asc")
-			.first();
+			.order("asc");
 
-		if (unseenUserQuestion) {
+		for await (const unseenUserQuestion of unseenUserQuestions) {
 			const unseenQuestion = await ctx.db.get(unseenUserQuestion.questionId);
-			if (unseenQuestion && !unseenQuestion.prunedAt && unseenQuestion.text) {
+			if (unseenQuestion && isQuestionEligibleForNewsletter(unseenQuestion, preferenceFilters)) {
 				return unseenQuestion;
 			}
 		}
@@ -939,22 +1083,6 @@ export const getQuestionForNewsletter = internalQuery({
 			.withIndex("by_userId", (q) => q.eq("userId", userId))
 			.collect();
 		const seenIds = new Set(userQuestions.map((uq) => uq.questionId));
-
-		const userHiddenStyles = await ctx.db.query("userStyles")
-			.withIndex("by_userId_status", (q) => q
-				.eq("userId", args.userId)
-				.eq("status", "hidden")
-			)
-			.collect();
-		const hiddenStyleIds = new Set(userHiddenStyles.map((s) => s.styleId));
-
-		const userHiddenTones = await ctx.db.query("userTones")
-			.withIndex("by_userId_status", (q) => q
-				.eq("userId", args.userId)
-				.eq("status", "hidden")
-			)
-			.collect();
-		const hiddenToneIds = new Set(userHiddenTones.map((t) => t.toneId));
 
 		const rawCandidates = await ctx.db
 			.query("questions")
@@ -967,8 +1095,7 @@ export const getQuestionForNewsletter = internalQuery({
 
 		const candidates = rawCandidates
 			.filter((q) => !seenIds.has(q._id))
-			.filter((q) => !q.styleId || !hiddenStyleIds.has(q.styleId))
-			.filter((q) => !q.toneId || !hiddenToneIds.has(q.toneId))
+			.filter((q) => isQuestionEligibleForNewsletter(q, preferenceFilters))
 			.slice(0, 50);
 
 		if (candidates.length === 0) {
