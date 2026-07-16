@@ -952,6 +952,23 @@ function isQuestionAllowedByNewsletterPreferences(
 	return true;
 }
 
+function isQuestionEligibleForNewsletter(
+	question: Doc<"questions">,
+	filters: NewsletterPreferenceFilters,
+): boolean {
+	if (!question.text || question.prunedAt !== undefined) {
+		return false;
+	}
+	if (
+		question.status !== "approved" &&
+		question.status !== "public" &&
+		question.status !== undefined
+	) {
+		return false;
+	}
+	return isQuestionAllowedByNewsletterPreferences(question, filters);
+}
+
 export const getUnseenQuestionIdsForUser = internalQuery({
 	args: {
 		userId: v.id("users"),
@@ -960,18 +977,17 @@ export const getUnseenQuestionIdsForUser = internalQuery({
 	returns: v.array(v.id("questions")),
 	handler: async (ctx, args) => {
 		const { userId, count } = args;
-		const unseenUserQuestions = await ctx.db
+		const unseenUserQuestions = ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", userId).eq("status", "unseen")
-			)
-			.collect();
+			);
 		const filters = await getNewsletterPreferenceFilters(ctx, userId);
 		const questionIds: Id<"questions">[] = [];
 
-		for (const userQuestion of unseenUserQuestions) {
+		for await (const userQuestion of unseenUserQuestions) {
 			const question = await ctx.db.get(userQuestion.questionId);
-			if (!question || !isQuestionAllowedByNewsletterPreferences(question, filters)) {
+			if (!question || !isQuestionEligibleForNewsletter(question, filters)) {
 				continue;
 			}
 
@@ -1004,17 +1020,7 @@ export const getFirstEligibleNewsletterQuestionForUser = internalQuery({
 			}
 
 			const question = await ctx.db.get(questionId);
-			if (!question || !question.text || question.prunedAt !== undefined) {
-				continue;
-			}
-			if (
-				question.status !== "approved" &&
-				question.status !== "public" &&
-				question.status !== undefined
-			) {
-				continue;
-			}
-			if (!isQuestionAllowedByNewsletterPreferences(question, filters)) {
+			if (!question || !isQuestionEligibleForNewsletter(question, filters)) {
 				continue;
 			}
 
@@ -1058,22 +1064,16 @@ export const getQuestionForNewsletter = internalQuery({
 		const preferenceFilters = await getNewsletterPreferenceFilters(ctx, userId);
 
 		// PRIORITY 1: Check for unseen pool questions first
-		const unseenUserQuestions = await ctx.db
+		const unseenUserQuestions = ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", userId).eq("status", "unseen")
 			)
-			.order("asc")
-			.collect();
+			.order("asc");
 
-		for (const unseenUserQuestion of unseenUserQuestions) {
+		for await (const unseenUserQuestion of unseenUserQuestions) {
 			const unseenQuestion = await ctx.db.get(unseenUserQuestion.questionId);
-			if (
-				unseenQuestion &&
-				!unseenQuestion.prunedAt &&
-				unseenQuestion.text &&
-				isQuestionAllowedByNewsletterPreferences(unseenQuestion, preferenceFilters)
-			) {
+			if (unseenQuestion && isQuestionEligibleForNewsletter(unseenQuestion, preferenceFilters)) {
 				return unseenQuestion;
 			}
 		}
@@ -1095,7 +1095,7 @@ export const getQuestionForNewsletter = internalQuery({
 
 		const candidates = rawCandidates
 			.filter((q) => !seenIds.has(q._id))
-			.filter((q) => isQuestionAllowedByNewsletterPreferences(q, preferenceFilters))
+			.filter((q) => isQuestionEligibleForNewsletter(q, preferenceFilters))
 			.slice(0, 50);
 
 		if (candidates.length === 0) {

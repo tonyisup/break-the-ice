@@ -38,11 +38,18 @@ test("getQuestionById returns generated question metadata", async () => {
 	});
 });
 
-test("newsletter unseen selection skips questions with hidden styles", async () => {
+test("newsletter unseen selection skips invalid and hidden-style questions", async () => {
 	const t = convexTest(schema, convexFunctionModules);
 	const now = Date.now();
 
-	const { userId, hiddenQuestionId, visibleQuestionId } = await t.run(async (ctx) => {
+	const {
+		userId,
+		missingTextQuestionId,
+		prunedQuestionId,
+		privateQuestionId,
+		hiddenQuestionId,
+		visibleQuestionId,
+	} = await t.run(async (ctx) => {
 		const userId = await ctx.db.insert("users", {
 			email: "reader@example.com",
 			newsletterSubscriptionStatus: "subscribed",
@@ -92,6 +99,33 @@ test("newsletter unseen selection skips questions with hidden styles", async () 
 			totalShows: 0,
 			averageViewDuration: 0,
 		});
+		const missingTextQuestionId = await ctx.db.insert("questions", {
+			styleId: visibleStyleId,
+			style: "visible-style",
+			status: "public",
+			totalLikes: 0,
+			totalShows: 0,
+			averageViewDuration: 0,
+		});
+		const prunedQuestionId = await ctx.db.insert("questions", {
+			text: "This question was pruned.",
+			styleId: visibleStyleId,
+			style: "visible-style",
+			status: "public",
+			prunedAt: now,
+			totalLikes: 0,
+			totalShows: 0,
+			averageViewDuration: 0,
+		});
+		const privateQuestionId = await ctx.db.insert("questions", {
+			text: "This question is private.",
+			styleId: visibleStyleId,
+			style: "visible-style",
+			status: "private",
+			totalLikes: 0,
+			totalShows: 0,
+			averageViewDuration: 0,
+		});
 		const visibleQuestionId = await ctx.db.insert("questions", {
 			text: "This question uses a visible style.",
 			styleId: visibleStyleId,
@@ -110,6 +144,24 @@ test("newsletter unseen selection skips questions with hidden styles", async () 
 		});
 		await ctx.db.insert("userQuestions", {
 			userId,
+			questionId: missingTextQuestionId,
+			status: "unseen",
+			updatedAt: now - 4,
+		});
+		await ctx.db.insert("userQuestions", {
+			userId,
+			questionId: prunedQuestionId,
+			status: "unseen",
+			updatedAt: now - 3,
+		});
+		await ctx.db.insert("userQuestions", {
+			userId,
+			questionId: privateQuestionId,
+			status: "unseen",
+			updatedAt: now - 2,
+		});
+		await ctx.db.insert("userQuestions", {
+			userId,
 			questionId: hiddenQuestionId,
 			status: "unseen",
 			updatedAt: now - 1,
@@ -121,7 +173,14 @@ test("newsletter unseen selection skips questions with hidden styles", async () 
 			updatedAt: now,
 		});
 
-		return { userId, hiddenQuestionId, visibleQuestionId };
+		return {
+			userId,
+			missingTextQuestionId,
+			prunedQuestionId,
+			privateQuestionId,
+			hiddenQuestionId,
+			visibleQuestionId,
+		};
 	});
 
 	await expect(
@@ -134,8 +193,21 @@ test("newsletter unseen selection skips questions with hidden styles", async () 
 	await expect(
 		t.query(internal.internal.questions.getFirstEligibleNewsletterQuestionForUser, {
 			userId,
-			questionIds: [hiddenQuestionId, visibleQuestionId],
+			questionIds: [
+				missingTextQuestionId,
+				prunedQuestionId,
+				privateQuestionId,
+				hiddenQuestionId,
+				visibleQuestionId,
+			],
 			excludedQuestionIds: [],
+		}),
+	).resolves.toMatchObject({ _id: visibleQuestionId });
+
+	await expect(
+		t.query(internal.internal.questions.getQuestionForNewsletter, {
+			userId,
+			randomSeed: 0,
 		}),
 	).resolves.toMatchObject({ _id: visibleQuestionId });
 });
