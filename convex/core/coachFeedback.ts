@@ -299,7 +299,7 @@ export const getCurationPreview = query({
         ),
       )
     ).flat();
-    const signalByDimension = new Map<string, { score: number; responses: number; landedWell: number; fellFlat: number; wrongVibe: number; timingOff: number }>();
+    const signalByDimension = new Map<string, { score: number; responses: number; landedWell: number; fellFlat: number; wrongVibe: number; timingOff: number; coachIds: Set<string> }>();
     const historicalQuestionIds = new Set<string>();
 
     for (const feedback of feedbacks) {
@@ -310,13 +310,14 @@ export const getCurationPreview = query({
       for (const [dimension, value] of [["style", question.style], ["tone", question.tone], ["topic", question.topic]] as const) {
         if (!value) continue;
         const key = `${dimension}:${value}`;
-        const current: { score: number; responses: number; landedWell: number; fellFlat: number; wrongVibe: number; timingOff: number } = signalByDimension.get(key) ?? { score: 0, responses: 0, landedWell: 0, fellFlat: 0, wrongVibe: 0, timingOff: 0 };
+        const current: { score: number; responses: number; landedWell: number; fellFlat: number; wrongVibe: number; timingOff: number; coachIds: Set<string> } = signalByDimension.get(key) ?? { score: 0, responses: 0, landedWell: 0, fellFlat: 0, wrongVibe: 0, timingOff: 0, coachIds: new Set<string>() };
         current.score += score;
         current.responses += 1;
         if (feedback.landedWell) current.landedWell += 1;
         if (feedback.fellFlat) current.fellFlat += 1;
         if (feedback.wrongVibe) current.wrongVibe += 1;
         if (feedback.timingOff) current.timingOff += 1;
+        current.coachIds.add(feedback.coachId);
         signalByDimension.set(key, current);
       }
     }
@@ -333,7 +334,7 @@ export const getCurationPreview = query({
           if (!value) return [];
           const signal = signalByDimension.get(`${dimension}:${value}`);
           if (!signal) return [];
-          return [{ dimension, value, score: signal.score / signal.responses, responses: signal.responses, landedWell: signal.landedWell, fellFlat: signal.fellFlat, wrongVibe: signal.wrongVibe, timingOff: signal.timingOff, isMixed: signal.landedWell > 0 && (signal.fellFlat > 0 || signal.wrongVibe > 0 || signal.timingOff > 0) }];
+          return [{ dimension, value, score: signal.score / signal.responses, responses: signal.responses, landedWell: signal.landedWell, fellFlat: signal.fellFlat, wrongVibe: signal.wrongVibe, timingOff: signal.timingOff, isMixed: signal.landedWell > 0 && (signal.fellFlat > 0 || signal.wrongVibe > 0 || signal.timingOff > 0), coachCount: signal.coachIds.size }];
         });
         return {
           questionId: question._id,

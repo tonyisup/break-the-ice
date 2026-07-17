@@ -1183,7 +1183,7 @@ const questionPool = useQuery(
                 <p>{candidate.text ?? "Untitled question"}</p>
                 {candidate.reasons.map((reason) => (
                   <p key={`${reason.dimension}-${reason.value}`} className="text-xs text-muted-foreground">
-                    {reason.dimension}: {reason.value} · {reason.responses} responses · {reason.landedWell} landed · {reason.fellFlat} flat · {reason.wrongVibe} wrong vibe · {reason.timingOff} timing off
+                    {reason.dimension}: {reason.value} · {reason.responses} responses from {reason.coachCount} coaches · {reason.landedWell} landed · {reason.fellFlat} flat · {reason.wrongVibe} wrong vibe · {reason.timingOff} timing off
                     {reason.isMixed && <span className="block font-medium text-amber-700 dark:text-amber-400">Mixed coach feedback — review before assigning.</span>}
                   </p>
                 ))}
