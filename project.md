@@ -22,6 +22,8 @@ In many fitness group training classes, the coach starts with a "Question of the
 - Select from AI-generated recommendations filtered by style, tone, topic
 - Configure 1–7 active delivery days for each studio, then set one question for every selected day
 - View aggregated coach feedback from the prior week to inform next week's curation
+- Inspect advisory feedback-informed rankings with attributable style/tone/topic evidence; recommendations never assign or publish questions
+- Treat evidence as directional only with at least 3 responses from 2 distinct coaches; show response/coach counts and mixed positive/negative feedback explicitly
 - Manage team members (coaches/operators) and their preferences
 
 ### Tier 3: B2B — Coach/Operator Daily Viewer
