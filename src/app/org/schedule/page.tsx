@@ -388,6 +388,10 @@ export default function OrgWeeklyCurationPage() {
   const weekStartDay = (orgSettings?.weekStartDay ?? "monday") as "monday" | "sunday";
   const timeZone = orgSettings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE;
   const activeDeliveryDays = orgSettings?.activeDeliveryDays ?? DEFAULT_DELIVERY_DAYS;
+  const curationPreview = useQuery(
+    api.core.coachFeedback.getCurationPreview,
+    orgId ? { organizationId: orgId, limit: 5 } : "skip",
+  );
 
   /* --- Week navigation --- */
   const [weekOffset, setWeekOffset] = React.useState(0);
@@ -1164,6 +1168,29 @@ const questionPool = useQuery(
       </div>
 
       <Separator />
+
+      {curationPreview && (
+        <Card>
+          <CardHeader className="pb-2 px-4 pt-4">
+            <h2 className="text-sm font-semibold">Feedback-informed curation</h2>
+            <p className="text-xs text-muted-foreground">
+              Advisory only — review evidence before assigning questions. {curationPreview.totalResponses} coach responses; {curationPreview.confidence === "insufficient" ? "insufficient evidence" : "directional evidence"}.
+            </p>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-2">
+            {curationPreview.recommendations.map((candidate) => (
+              <div key={candidate.questionId} className="rounded-md border p-2 text-sm">
+                <p>{candidate.text ?? "Untitled question"}</p>
+                {candidate.reasons.map((reason) => (
+                  <p key={`${reason.dimension}-${reason.value}`} className="text-xs text-muted-foreground">
+                    {reason.dimension}: {reason.value} · {reason.responses} responses
+                  </p>
+                ))}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
         {/* ─── LEFT SIDEBAR: Axis filters ─── */}

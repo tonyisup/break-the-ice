@@ -31,6 +31,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       schedules: { listSchedulesForUser: "listSchedulesForUser", listSchedules: "listSchedules", getSchedule: "getSchedule", createSchedule: "createSchedule", assignQuestion: "assignQuestion", unassignQuestion: "unassignQuestion", publishSchedule: "publishSchedule", autoSchedule: "autoSchedule" },
       organizations: { getOrganizations: "getOrganizations" },
       orgSettings: { getOrgSettings: "getOrgSettings", upsertOrgSettings: "upsertOrgSettings", setDeliveryDayActive: "setDeliveryDayActive" },
+      coachFeedback: { getCurationPreview: "getCurationPreview" },
       questions: { getPublicQuestions: "getPublicQuestions" },
       styles: { getStyles: "getStyles" }, tones: { getTones: "getTones" }, topics: { getTopics: "getTopics" },
       billing: { syncOrganizationFromClerk: "syncOrganizationFromClerk" },
@@ -52,6 +53,7 @@ beforeEach(() => {
     if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
     if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
     if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+    if (fn === "getCurationPreview") return { totalResponses: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3 }] }] };
     if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
     return undefined;
   });
@@ -68,12 +70,22 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     });
   });
 
+  it("renders feedback evidence as an advisory preview without an assignment action", () => {
+    render(<OrgWeeklyCurationPage />);
+
+    expect(screen.getByRole("heading", { name: "Feedback-informed curation" })).toBeInTheDocument();
+    expect(screen.getByText("Calm conversation starter")).toBeInTheDocument();
+    expect(screen.getByText(/tone: calm · 3 responses/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /assign calm conversation starter/i })).toBeNull();
+  });
+
   it("disables delivery-day controls until organization settings are loaded", () => {
     (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
       if (fn === "getOrgSettings") return undefined;
       if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
       if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
-      if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
+      if (fn === "getCurationPreview") return { totalResponses: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3 }] }] };
+    if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
       return undefined;
     });
 
