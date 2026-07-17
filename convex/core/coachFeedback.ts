@@ -275,6 +275,80 @@ export const getWeeklyFeedbackReport = query({
   },
 });
 
+/**
+ * Explainable, read-only candidate ranking for next-week curation.
+ * It never writes schedules or assignments; each score is attributable to historical coach feedback.
+ */
+export const getCurationPreview = query({
+  args: {
+    organizationId: v.id("organizations"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await ensureOrgMember(ctx, args.organizationId, "admin");
+    const limit = Math.min(Math.max(args.limit ?? 12, 1), 50);
+    const schedules = await ctx.db
+      .query("schedules")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(100);
+
+    const feedbacks = (
+      await Promise.all(
+        schedules.map((schedule) =>
+          ctx.db.query("coachFeedback").withIndex("by_schedule", (q) => q.eq("scheduleId", schedule._id)).take(MAX_FEEDBACK_PER_SCHEDULE),
+        ),
+      )
+    ).flat();
+    const signalByDimension = new Map<string, { score: number; responses: number }>();
+    const historicalQuestionIds = new Set<string>();
+
+    for (const feedback of feedbacks) {
+      historicalQuestionIds.add(feedback.questionId);
+      const question = await ctx.db.get(feedback.questionId);
+      if (!question) continue;
+      const score = (feedback.landedWell ? 1 : 0) - (feedback.fellFlat ? 1 : 0) - (feedback.wrongVibe ? 1 : 0) - (feedback.timingOff ? 0.5 : 0);
+      for (const [dimension, value] of [["style", question.style], ["tone", question.tone], ["topic", question.topic]] as const) {
+        if (!value) continue;
+        const key = `${dimension}:${value}`;
+        const current = signalByDimension.get(key) ?? { score: 0, responses: 0 };
+        current.score += score;
+        current.responses += 1;
+        signalByDimension.set(key, current);
+      }
+    }
+
+    const candidates = await ctx.db
+      .query("questions")
+      .withIndex("by_status", (q) => q.eq("status", "public"))
+      .take(200);
+    const recommendations = candidates
+      .filter((question) => !historicalQuestionIds.has(question._id))
+      .map((question) => {
+        const reasons = (["style", "tone", "topic"] as const).flatMap((dimension) => {
+          const value = question[dimension];
+          if (!value) return [];
+          const signal = signalByDimension.get(`${dimension}:${value}`);
+          if (!signal) return [];
+          return [{ dimension, value, score: signal.score / signal.responses, responses: signal.responses }];
+        });
+        return {
+          questionId: question._id,
+          text: question.text ?? question.customText,
+          score: reasons.reduce((total, reason) => total + reason.score, 0),
+          reasons,
+        };
+      })
+      .sort((left, right) => right.score - left.score || String(left.questionId).localeCompare(String(right.questionId)))
+      .slice(0, limit);
+
+    return {
+      totalResponses: feedbacks.length,
+      confidence: feedbacks.length >= 3 ? "directional" as const : "insufficient" as const,
+      recommendations,
+    };
+  },
+});
+
 // ──────────────────────────────────────────────
 // Mutations
 // ──────────────────────────────────────────────

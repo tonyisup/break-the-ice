@@ -259,3 +259,32 @@ test("coach daily delivery ignores an assignment outside the schedule's delivery
   });
   expect(current.question).toBeUndefined();
 });
+
+test("curation preview ranks candidates using attributed coach feedback without assigning them", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const { historicalQuestionId, intenseCandidateId, neutralCandidateId } = await t.run(async (ctx) => {
+    const now = Date.now();
+    const historicalQuestionId = await ctx.db.insert("questions", { text: "High-energy opener", tone: "intense", status: "public", totalLikes: 0, totalShows: 0, averageViewDuration: 0 });
+    const intenseCandidateId = await ctx.db.insert("questions", { text: "Another intense opener", tone: "intense", status: "public", totalLikes: 0, totalShows: 0, averageViewDuration: 0 });
+    const neutralCandidateId = await ctx.db.insert("questions", { text: "Calm conversation starter", tone: "calm", status: "public", totalLikes: 0, totalShows: 0, averageViewDuration: 0 });
+    const scheduleId = await ctx.db.insert("schedules", { organizationId, weekStart: "2026-07-06", weekEnd: "2026-07-12", status: "completed", weekStartDay: "monday", deliveryDays: ["monday"], createdAt: now, updatedAt: now });
+    const scheduledQuestionId = await ctx.db.insert("scheduledQuestions", { scheduleId, dayOfWeek: "monday", questionId: historicalQuestionId, slotOrder: 0, assignedAt: now });
+    const coachId = await ctx.db.insert("users", { clerkId: "second-coach", email: "second-coach@example.com" });
+    for (const id of ["first", "second", "third"]) {
+      const feedbackCoachId = id === "first" ? coachId : await ctx.db.insert("users", { clerkId: `coach-${id}`, email: `coach-${id}@example.com` });
+      await ctx.db.insert("coachFeedback", { scheduleId, scheduledQuestionId, questionId: historicalQuestionId, coachId: feedbackCoachId, dayOfWeek: "monday", wrongVibe: true, submittedAt: now });
+    }
+    return { historicalQuestionId, intenseCandidateId, neutralCandidateId };
+  });
+
+  const preview = await admin.query(api.core.coachFeedback.getCurationPreview, { organizationId, limit: 20 });
+
+  expect(preview.totalResponses).toBe(3);
+  expect(preview.recommendations.find((candidate) => candidate.questionId === intenseCandidateId)?.reasons).toContainEqual({
+    dimension: "tone", value: "intense", score: -1, responses: 3,
+  });
+  expect(preview.recommendations.findIndex((candidate) => candidate.questionId === neutralCandidateId)).toBeLessThan(
+    preview.recommendations.findIndex((candidate) => candidate.questionId === intenseCandidateId),
+  );
+  expect(preview.recommendations.some((candidate) => candidate.questionId === historicalQuestionId)).toBe(false);
+});
