@@ -271,7 +271,7 @@ test("curation preview ranks candidates using attributed coach feedback without 
     const scheduledQuestionId = await ctx.db.insert("scheduledQuestions", { scheduleId, dayOfWeek: "monday", questionId: historicalQuestionId, slotOrder: 0, assignedAt: now });
     const coachId = await ctx.db.insert("users", { clerkId: "second-coach", email: "second-coach@example.com" });
     for (const id of ["first", "second", "third"]) {
-      const feedbackCoachId = id === "first" ? coachId : await ctx.db.insert("users", { clerkId: `coach-${id}`, email: `coach-${id}@example.com` });
+      const feedbackCoachId = coachId;
       await ctx.db.insert("coachFeedback", { scheduleId, scheduledQuestionId, questionId: historicalQuestionId, coachId: feedbackCoachId, dayOfWeek: "monday", wrongVibe: id !== "third", landedWell: id === "third", submittedAt: now });
     }
     return { historicalQuestionId, intenseCandidateId, neutralCandidateId };
@@ -280,10 +280,11 @@ test("curation preview ranks candidates using attributed coach feedback without 
   const preview = await admin.query(api.core.coachFeedback.getCurationPreview, { organizationId, limit: 20 });
 
   expect(preview.totalResponses).toBe(3);
-  expect(preview.coachCount).toBe(3);
+  expect(preview.coachCount).toBe(1);
+  expect(preview.confidence).toBe("insufficient");
   expect(preview.recommendations.find((candidate) => candidate.questionId === intenseCandidateId)?.reasons).toContainEqual({
     dimension: "tone", value: "intense", score: -1 / 3, responses: 3,
-    landedWell: 1, fellFlat: 0, wrongVibe: 2, timingOff: 0, isMixed: true, coachCount: 3,
+    landedWell: 1, fellFlat: 0, wrongVibe: 2, timingOff: 0, isMixed: true, coachCount: 1,
   });
   expect(preview.recommendations.findIndex((candidate) => candidate.questionId === neutralCandidateId)).toBeLessThan(
     preview.recommendations.findIndex((candidate) => candidate.questionId === intenseCandidateId),
