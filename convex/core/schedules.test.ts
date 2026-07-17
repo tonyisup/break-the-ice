@@ -223,3 +223,39 @@ test("coach view ignores legacy assignments outside the schedule's delivery days
   });
   expect(current.todayAssignment).toBeUndefined();
 });
+
+test("coach daily delivery ignores an assignment outside the schedule's delivery days", async () => {
+  const { t, admin, organizationId, questionIds } = await createScheduleWorkspace();
+  const { isoDate, dayOfWeek } = getZonedCalendarDate(
+    new Date(),
+    DEFAULT_ORGANIZATION_TIME_ZONE,
+  );
+  const inactiveDeliveryDay = dayOfWeek === "monday" ? "tuesday" : "monday";
+
+  await t.run(async (ctx) => {
+    const now = Date.now();
+    const scheduleId = await ctx.db.insert("schedules", {
+      organizationId,
+      weekStart: isoDate,
+      weekEnd: isoDate,
+      status: "published",
+      weekStartDay: "monday",
+      deliveryDays: [inactiveDeliveryDay],
+      createdAt: now,
+      updatedAt: now,
+      publishedAt: now,
+    });
+    await ctx.db.insert("scheduledQuestions", {
+      scheduleId,
+      dayOfWeek,
+      questionId: questionIds[0],
+      slotOrder: 0,
+      assignedAt: now,
+    });
+  });
+
+  const current = await admin.query(api.core.coachFeedback.getCoachTodayAssignment, {
+    organizationId,
+  });
+  expect(current.question).toBeUndefined();
+});

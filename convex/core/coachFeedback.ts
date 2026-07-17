@@ -7,6 +7,7 @@ import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
   getZonedCalendarDate,
 } from "../lib/timezone";
+import { deliveryDaysForSchedule } from "../lib/deliveryDays";
 
 const MAX_FEEDBACK_PER_SCHEDULE = 10000;
 
@@ -86,6 +87,16 @@ export const getCoachTodayAssignment = query({
       return {
         scheduledQuestionId: undefined,
         scheduleId: undefined,
+        question: undefined,
+        dayOfWeek: dayLabel,
+        hasSubmittedFeedback: false,
+      };
+    }
+
+    if (!deliveryDaysForSchedule(schedule).includes(dayLabel)) {
+      return {
+        scheduledQuestionId: undefined,
+        scheduleId: schedule._id,
         question: undefined,
         dayOfWeek: dayLabel,
         hasSubmittedFeedback: false,
