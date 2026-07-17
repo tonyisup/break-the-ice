@@ -151,6 +151,43 @@ describe('InfiniteScrollPage', () => {
     });
   });
 
+  it('hides the Team plan banner link for Team subscribers', async () => {
+    (useQuery as any).mockImplementation((queryFn: any) => {
+      if (queryFn === 'getStyles') return mockStyles;
+      if (queryFn === 'getTones') return mockTones;
+      if (queryFn === 'getStyle') return mockStyles[0];
+      if (queryFn === 'getTone') return mockTones[0];
+      if (queryFn === 'getCurrentUser') return {
+        _id: 'u1',
+        email: 'test@example.com',
+        planTier: 'team',
+      };
+      return undefined;
+    });
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: 'Team plan' })).toBeNull();
+    });
+  });
+
+  it('shows the Team plan banner link for free users', async () => {
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Team plan' })).toBeDefined();
+    });
+  });
+
   it('shows NewsletterCard when not signed in', async () => {
     mockUseAuth.mockReturnValue({ isSignedIn: false, userId: null, isLoaded: true });
     // currentUser returns null when not signed in
