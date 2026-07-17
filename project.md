@@ -20,7 +20,7 @@ In many fitness group training classes, the coach starts with a "Question of the
 ### Tier 2: B2B — Organization Admin Portal
 - Studio/gym admins curate weekly question sets using AI suggestions
 - Select from AI-generated recommendations filtered by style, tone, topic
-- Set 5–7 questions for the week's schedule
+- Configure 1–7 active delivery days for each studio, then set one question for every selected day
 - View aggregated coach feedback from the prior week to inform next week's curation
 - Manage team members (coaches/operators) and their preferences
 
@@ -50,7 +50,7 @@ In many fitness group training classes, the coach starts with a "Question of the
 - ✅ Dark/light mode, responsive design
 
 ### In Progress / Near-Term
-- 🔄 Weekly curation UI: admin sets 5–7 questions for the coming week
+- 🔄 Weekly curation UI: admin configures 1–7 delivery days and sets one question for every selected day
 - 🔄 Coach daily viewer: single-assigned question with advanced feedback
 - 🔄 Refine feedback types beyond like/thumbs-down (relevance, tone match, suggestion)
 - 🔄 Feedback pipeline: aggregate coach feedback → weekly tuning signal for AI suggestions

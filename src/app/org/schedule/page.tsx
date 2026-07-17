@@ -33,6 +33,7 @@ import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
+import { TeamWorkspaceMenu } from "@/components/header/TeamWorkspaceMenu";
 import { toast } from "sonner";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 
@@ -49,6 +50,7 @@ const DAYS_DISPLAY: {
   { key: "saturday", label: "Saturday", abbr: "Sat" },
   { key: "sunday", label: "Sunday", abbr: "Sun" },
 ];
+const DEFAULT_DELIVERY_DAYS = DAYS_DISPLAY.map((day) => day.key);
 
 type AxisType = "style" | "tone" | "topic";
 
@@ -385,6 +387,7 @@ export default function OrgWeeklyCurationPage() {
   );
   const weekStartDay = (orgSettings?.weekStartDay ?? "monday") as "monday" | "sunday";
   const timeZone = orgSettings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE;
+  const activeDeliveryDays = orgSettings?.activeDeliveryDays ?? DEFAULT_DELIVERY_DAYS;
 
   /* --- Week navigation --- */
   const [weekOffset, setWeekOffset] = React.useState(0);
@@ -394,6 +397,9 @@ export default function OrgWeeklyCurationPage() {
   const currentSchedule = schedules?.find(
     (s) => s.weekStart === week.isoStart
   );
+  const scheduleDeliveryDays = currentSchedule
+    ? currentSchedule.deliveryDays ?? DEFAULT_DELIVERY_DAYS
+    : activeDeliveryDays;
 
   const scheduleDetail = useQuery(
     api.core.schedules.getSchedule,
@@ -461,6 +467,7 @@ const questionPool = useQuery(
 
   /* --- UI state --- */
   const [assignTargetDay, setAssignTargetDay] = React.useState<string | null>(null);
+  const [isUpdatingDeliveryDays, setIsUpdatingDeliveryDays] = React.useState(false);
 
   /* --- Mutations --- */
   const createSchedule = useMutation(api.core.schedules.createSchedule);
@@ -469,6 +476,7 @@ const questionPool = useQuery(
   const publishSchedule = useMutation(api.core.schedules.publishSchedule);
   const autoSchedule = useMutation(api.core.schedules.autoSchedule);
   const upsertSettings = useMutation(api.core.orgSettings.upsertOrgSettings);
+  const setDeliveryDayActive = useMutation(api.core.orgSettings.setDeliveryDayActive);
   const syncOrg = useMutation(api.core.billing.syncOrganizationFromClerk);
   const syncOrgViaClerkApi = useAction(api.core.billingSyncAction.syncOrganizationViaClerkApi);
   const fillEmptyCellsAction = useAction(api.core.fillMatrix.fillEmptyCells);
@@ -514,8 +522,8 @@ const questionPool = useQuery(
       const dayObj = orderedDays[i];
       rows.push({ key: dayObj.key, date: d, label: dayObj.label, abbr: dayObj.abbr });
     }
-    return rows;
-  }, [week, weekStartDay]);
+    return rows.filter((row) => scheduleDeliveryDays.includes(row.key));
+  }, [week, weekStartDay, scheduleDeliveryDays]);
 
   const weekIsFull = React.useMemo(
     () => dayRows.length > 0 && dayRows.every((row) => assignmentsByDay[row.key] != null),
@@ -815,6 +823,22 @@ const questionPool = useQuery(
     }
   };
 
+  const handleDeliveryDayToggle = async (
+    day: (typeof DAYS_DISPLAY)[number]["key"],
+    active: boolean,
+  ) => {
+    if (!orgId) return;
+    setIsUpdatingDeliveryDays(true);
+    try {
+      await setDeliveryDayActive({ organizationId: orgId, day, active });
+      toast.success("Delivery days updated for new schedules");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update delivery days");
+    } finally {
+      setIsUpdatingDeliveryDays(false);
+    }
+  };
+
   // Trigger org sync after Clerk org creation (JWT path, then API fallback like ClerkSyncManager)
   const handleOrgReady = async (name: string) => {
     try {
@@ -979,7 +1003,8 @@ const questionPool = useQuery(
     if (orgContextLoading) {
       return (
         <div className="relative flex flex-col items-center justify-center py-24 gap-4">
-          <div className="absolute top-0 right-0">
+          <div className="absolute top-0 right-0 flex items-center gap-2">
+            <TeamWorkspaceMenu />
             <ThemeToggle
               className="shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
               showLabel={false}
@@ -992,7 +1017,8 @@ const questionPool = useQuery(
     }
     return (
       <div className="relative space-y-6 max-w-lg mx-auto py-12">
-        <div className="absolute top-0 right-0">
+        <div className="absolute top-0 right-0 flex items-center gap-2">
+          <TeamWorkspaceMenu />
           <ThemeToggle
             className="shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
             showLabel={false}
@@ -1026,6 +1052,7 @@ const questionPool = useQuery(
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          <TeamWorkspaceMenu />
           <ThemeToggle
             className="shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
             showLabel={false}
@@ -1114,6 +1141,25 @@ const questionPool = useQuery(
               </option>
             ))}
           </select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Label className="text-sm text-muted-foreground">Delivery days</Label>
+          {DAYS_DISPLAY.map((day) => (
+            <label key={day.key} className="flex items-center gap-1 text-xs cursor-pointer">
+              <Checkbox
+                checked={activeDeliveryDays.includes(day.key)}
+                disabled={orgSettings === undefined || isUpdatingDeliveryDays}
+                onChange={(event) =>
+                  void handleDeliveryDayToggle(day.key, event.currentTarget.checked)
+                }
+                aria-label={`Deliver on ${day.label}`}
+              />
+              {day.abbr}
+            </label>
+          ))}
+          <span className="w-full text-xs text-muted-foreground">
+            Applies to newly created schedules; existing schedules retain their delivery-day plan.
+          </span>
         </div>
       </div>
 

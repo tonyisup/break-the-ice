@@ -12,6 +12,19 @@ import {
 /** Cap org memberships loaded per user when listing cross-org schedules. */
 const MEMBERSHIPS_LIST_CAP = 100;
 
+const DELIVERY_DAYS = [
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+] as const;
+type DeliveryDay = typeof DELIVERY_DAYS[number];
+const deliveryDayValidator = v.union(
+  v.literal("monday"), v.literal("tuesday"), v.literal("wednesday"),
+  v.literal("thursday"), v.literal("friday"), v.literal("saturday"), v.literal("sunday"),
+);
+
+function deliveryDaysForSchedule(schedule: { deliveryDays?: DeliveryDay[] }): DeliveryDay[] {
+  return schedule.deliveryDays?.length ? schedule.deliveryDays : [...DELIVERY_DAYS];
+}
+
 /** Full schedule row as returned from the database (matches `schedules` table + system fields). */
 const scheduleDocValidator = v.object({
   _id: v.id("schedules"),
@@ -21,6 +34,7 @@ const scheduleDocValidator = v.object({
   weekEnd: v.string(),
   status: v.union(v.literal("draft"), v.literal("published"), v.literal("completed")),
   weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
+  deliveryDays: v.optional(v.array(deliveryDayValidator)),
   axisY: v.optional(v.union(v.literal("style"), v.literal("tone"), v.literal("topic"))),
   axisYSlugs: v.optional(v.array(v.string())),
   axisX: v.optional(v.union(v.literal("style"), v.literal("tone"), v.literal("topic"))),
@@ -232,6 +246,15 @@ export const getCurrentWeekSchedule = query({
       return { scheduleId: undefined, weekStart: undefined, status: undefined, todayAssignment: undefined };
     }
 
+    if (!deliveryDaysForSchedule(schedule).includes(dayOfWeek)) {
+      return {
+        scheduleId: schedule._id,
+        weekStart: schedule.weekStart,
+        status: schedule.status,
+        todayAssignment: undefined,
+      };
+    }
+
     const sq = await ctx.db
       .query("scheduledQuestions")
       .withIndex("by_schedule_day", (q) =>
@@ -285,6 +308,13 @@ export const createSchedule = mutation({
     const weekStartDay = args.weekStartDay ?? "monday";
     const weekEnd = computeWeekEnd(args.weekStart, weekStartDay);
     const now = Date.now();
+    const orgSettings = await ctx.db
+      .query("orgSettings")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    const deliveryDays = orgSettings?.activeDeliveryDays?.length
+      ? orgSettings.activeDeliveryDays
+      : [...DELIVERY_DAYS];
 
     const existing = await ctx.db
       .query("schedules")
@@ -301,6 +331,7 @@ export const createSchedule = mutation({
       weekEnd,
       status: "draft",
       weekStartDay,
+      deliveryDays,
       createdAt: now,
       updatedAt: now,
       createdBy: user?._id,
@@ -323,6 +354,9 @@ export const assignQuestion = mutation({
     if (!schedule) throw new Error("Schedule not found");
     await ensureOrgMember(ctx, schedule.organizationId, ["admin", "manager"]);
     if (schedule.status !== "draft") throw new Error("Cannot modify a published schedule");
+    if (!deliveryDaysForSchedule(schedule).includes(args.dayOfWeek)) {
+      throw new Error(`${args.dayOfWeek} is not an active delivery day for this schedule`);
+    }
 
     const existing = await ctx.db
       .query("scheduledQuestions")
@@ -368,6 +402,16 @@ export const publishSchedule = mutation({
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
     await ensureOrgMember(ctx, schedule.organizationId, ["admin", "manager"]);
+
+    const assignments = await ctx.db
+      .query("scheduledQuestions")
+      .withIndex("by_schedule", (q) => q.eq("scheduleId", args.scheduleId))
+      .collect();
+    const assignedDays = new Set(assignments.map((assignment) => assignment.dayOfWeek));
+    const missingDays = deliveryDaysForSchedule(schedule).filter((day) => !assignedDays.has(day));
+    if (missingDays.length > 0) {
+      throw new Error(`Cannot publish: missing delivery days (${missingDays.join(", ")})`);
+    }
 
     await ctx.db.patch(args.scheduleId, {
       status: "published",
@@ -421,7 +465,8 @@ export const autoSchedule = mutation({
     await ensureOrgMember(ctx, schedule.organizationId, ["admin", "manager"]);
     if (schedule.status !== "draft") throw new Error("Cannot modify a published schedule");
 
-    const daysOfWeek = getDaysOfWeek(schedule.weekStart, schedule.weekStartDay);
+    const daysOfWeek = getDaysOfWeek(schedule.weekStart, schedule.weekStartDay)
+      .filter((day): day is DeliveryDay => deliveryDaysForSchedule(schedule).includes(day));
     const now = Date.now();
 
     const [pubRows, apprRows, legacyRows] = await Promise.all([
@@ -477,7 +522,7 @@ export const autoSchedule = mutation({
 
     candidates.sort(() => Math.random() - 0.5);
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < daysOfWeek.length; i++) {
       const day = daysOfWeek[i];
       const existingDay = await ctx.db
         .query("scheduledQuestions")

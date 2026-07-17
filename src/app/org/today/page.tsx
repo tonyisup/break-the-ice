@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
+import { TeamWorkspaceMenu } from "@/components/header/TeamWorkspaceMenu";
 
 const SIGNALS = [
   {
@@ -66,7 +67,8 @@ interface TodayStateShellProps {
 function TodayStateShell({ children, className = "relative flex items-center justify-center min-h-[60vh] px-4", themeToggleClassName = themeToggleClass }: TodayStateShellProps) {
   return (
     <div className={cn("relative", className)}>
-      <div className="absolute top-0 right-4">
+      <div className="absolute top-0 right-4 flex items-center gap-2">
+        <TeamWorkspaceMenu />
         <ThemeToggle className={themeToggleClassName} showLabel={false} />
       </div>
       {children}
@@ -205,7 +207,10 @@ export default function CoachDailyViewPage() {
             </p>
           )}
         </div>
-        <ThemeToggle className={themeToggleClass} showLabel={false} />
+        <div className="flex items-center gap-2">
+          <TeamWorkspaceMenu />
+          <ThemeToggle className={themeToggleClass} showLabel={false} />
+        </div>
       </div>
 
       {/* Question display */}

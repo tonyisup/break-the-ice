@@ -14,3 +14,8 @@
 ## Readiness
 
 - [ ] **6. Launch Audit:** Run a comprehensive audit of the current codebase to ensure stability and readiness for external users.
+
+## Scheduling Contract
+
+- [x] Organizations can configure 1–7 active delivery days from the weekly scheduler; new schedules snapshot that configuration.
+- [x] Publishing rejects schedules that are missing a question for any configured delivery day.

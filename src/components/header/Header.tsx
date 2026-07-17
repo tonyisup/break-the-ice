@@ -7,6 +7,7 @@ import { Heart, History, Home } from "@/components/ui/icons/icons";
 import { useStorageContext } from "@/hooks/useStorageContext";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { UserMenu } from "./UserMenu";
+import { TeamWorkspaceMenu } from "./TeamWorkspaceMenu";
 
 interface HeaderProps {
   homeLinkSlot?: "liked" | "history" | "settings";
@@ -68,6 +69,7 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
         )}
       </div>
       <div className="flex items-center gap-2">
+        <TeamWorkspaceMenu className="hidden sm:inline-flex" />
         <UserMenu
           showSettingsBadge={showSettingsLimitBadge || showSettingsFullBadge}
           settingsBadgeColor={showSettingsFullBadge ? "red" : "yellow"}

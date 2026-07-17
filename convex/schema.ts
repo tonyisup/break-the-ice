@@ -561,6 +561,10 @@ export default defineSchema({
   orgSettings: defineTable({
     organizationId: v.id("organizations"),
     weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
+    activeDeliveryDays: v.optional(v.array(v.union(
+      v.literal("monday"), v.literal("tuesday"), v.literal("wednesday"),
+      v.literal("thursday"), v.literal("friday"), v.literal("saturday"), v.literal("sunday")
+    ))),
     timeZone: v.optional(v.string()),
     defaultAxisY: v.optional(v.union(
       v.literal("style"), v.literal("tone"), v.literal("topic")
@@ -581,6 +585,10 @@ export default defineSchema({
       v.literal("completed")
     ),
     weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
+    deliveryDays: v.optional(v.array(v.union(
+      v.literal("monday"), v.literal("tuesday"), v.literal("wednesday"),
+      v.literal("thursday"), v.literal("friday"), v.literal("saturday"), v.literal("sunday")
+    ))),
     axisY: v.optional(v.union(
       v.literal("style"), v.literal("tone"), v.literal("topic")
     )),
