@@ -280,6 +280,7 @@ test("curation preview ranks candidates using attributed coach feedback without 
   const preview = await admin.query(api.core.coachFeedback.getCurationPreview, { organizationId, limit: 20 });
 
   expect(preview.totalResponses).toBe(3);
+  expect(preview.coachCount).toBe(3);
   expect(preview.recommendations.find((candidate) => candidate.questionId === intenseCandidateId)?.reasons).toContainEqual({
     dimension: "tone", value: "intense", score: -1 / 3, responses: 3,
     landedWell: 1, fellFlat: 0, wrongVibe: 2, timingOff: 0, isMixed: true, coachCount: 3,

@@ -1174,7 +1174,7 @@ const questionPool = useQuery(
           <CardHeader className="pb-2 px-4 pt-4">
             <h2 className="text-sm font-semibold">Feedback-informed curation</h2>
             <p className="text-xs text-muted-foreground">
-              Advisory only — review evidence before assigning questions. {curationPreview.totalResponses} coach responses; {curationPreview.confidence === "insufficient" ? "insufficient evidence" : "directional evidence"}.
+              Advisory only — review evidence before assigning questions. {curationPreview.totalResponses} coach responses from {curationPreview.coachCount} coaches; {curationPreview.confidence === "insufficient" ? "insufficient evidence" : "directional evidence"}.
             </p>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-2">

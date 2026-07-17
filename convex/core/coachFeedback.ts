@@ -346,9 +346,11 @@ export const getCurationPreview = query({
       .sort((left, right) => right.score - left.score || String(left.questionId).localeCompare(String(right.questionId)))
       .slice(0, limit);
 
+    const coachCount = new Set(feedbacks.map((feedback) => feedback.coachId)).size;
     return {
       totalResponses: feedbacks.length,
-      confidence: feedbacks.length >= 3 ? "directional" as const : "insufficient" as const,
+      coachCount,
+      confidence: feedbacks.length >= 3 && coachCount >= 2 ? "directional" as const : "insufficient" as const,
       recommendations,
     };
   },
