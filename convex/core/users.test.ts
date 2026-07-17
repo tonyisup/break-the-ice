@@ -103,6 +103,63 @@ test("store reuses an existing email user and patches Clerk identifiers", async 
   });
 });
 
+test("store creates a new Clerk user with normalized profile data", async () => {
+  const t = convexTest(schema, convexFunctionModules);
+
+  const storedUserId = await t
+    .withIdentity({
+      subject: "user_new",
+      tokenIdentifier: "https://clerk.example|user_new",
+      email: "  NEW@Example.COM ",
+      name: "New User",
+      pictureUrl: "https://example.com/avatar.png",
+    })
+    .mutation(api.core.users.store, {});
+
+  await t.run(async (ctx) => {
+    const user = await ctx.db.get(storedUserId);
+    expect(user).toMatchObject({
+      clerkId: "user_new",
+      tokenIdentifier: "https://clerk.example|user_new",
+      email: "new@example.com",
+      name: "New User",
+      image: "https://example.com/avatar.png",
+      billingStatus: "inactive",
+    });
+    expect(user?.aiUsage).toMatchObject({ count: 0 });
+  });
+});
+
+test("store is idempotent for repeated Clerk sessions", async () => {
+  const t = convexTest(schema, convexFunctionModules);
+  const authenticatedT = t.withIdentity({
+    subject: "user_repeat",
+    tokenIdentifier: "https://clerk.example|user_repeat",
+    email: "repeat@example.com",
+    name: "Repeat User",
+  });
+
+  const firstId = await authenticatedT.mutation(api.core.users.store, {});
+  const secondId = await authenticatedT.mutation(api.core.users.store, {});
+
+  expect(secondId).toBe(firstId);
+  await t.run(async (ctx) => {
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", "user_repeat"))
+      .collect();
+    expect(users).toHaveLength(1);
+  });
+});
+
+test("store rejects callers without a Clerk identity", async () => {
+  const t = convexTest(schema, convexFunctionModules);
+
+  await expect(t.mutation(api.core.users.store, {})).rejects.toThrow(
+    "Called storeUser without authentication present",
+  );
+});
+
 test("getCurrentUser prefers tokenIdentifier-linked row when duplicate emails exist", async () => {
   const t = convexTest(schema, convexFunctionModules);
 
