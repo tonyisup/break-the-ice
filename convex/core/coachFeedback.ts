@@ -333,7 +333,7 @@ export const getCurationPreview = query({
           if (!value) return [];
           const signal = signalByDimension.get(`${dimension}:${value}`);
           if (!signal) return [];
-          return [{ dimension, value, score: signal.score / signal.responses, responses: signal.responses, landedWell: signal.landedWell, fellFlat: signal.fellFlat, wrongVibe: signal.wrongVibe, timingOff: signal.timingOff }];
+          return [{ dimension, value, score: signal.score / signal.responses, responses: signal.responses, landedWell: signal.landedWell, fellFlat: signal.fellFlat, wrongVibe: signal.wrongVibe, timingOff: signal.timingOff, isMixed: signal.landedWell > 0 && (signal.fellFlat > 0 || signal.wrongVibe > 0 || signal.timingOff > 0) }];
         });
         return {
           questionId: question._id,

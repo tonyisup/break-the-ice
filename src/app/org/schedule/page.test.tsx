@@ -53,7 +53,7 @@ beforeEach(() => {
     if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
     if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
     if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
-    if (fn === "getCurationPreview") return { totalResponses: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3, landedWell: 3, fellFlat: 0, wrongVibe: 0, timingOff: 0 }] }] };
+    if (fn === "getCurationPreview") return { totalResponses: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3, landedWell: 1, fellFlat: 0, wrongVibe: 2, timingOff: 0, isMixed: true }] }] };
     if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
     return undefined;
   });
@@ -76,6 +76,7 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     expect(screen.getByRole("heading", { name: "Feedback-informed curation" })).toBeInTheDocument();
     expect(screen.getByText("Calm conversation starter")).toBeInTheDocument();
     expect(screen.getByText(/tone: calm · 3 responses/i)).toBeInTheDocument();
+    expect(screen.getByText("Mixed coach feedback — review before assigning.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /assign calm conversation starter/i })).toBeNull();
   });
 
@@ -84,7 +85,7 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
       if (fn === "getOrgSettings") return undefined;
       if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
       if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
-      if (fn === "getCurationPreview") return { totalResponses: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3, landedWell: 3, fellFlat: 0, wrongVibe: 0, timingOff: 0 }] }] };
+      if (fn === "getCurationPreview") return { totalResponses: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3, landedWell: 1, fellFlat: 0, wrongVibe: 2, timingOff: 0, isMixed: true }] }] };
     if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
       return undefined;
     });
