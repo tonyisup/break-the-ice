@@ -282,6 +282,7 @@ test("curation preview ranks candidates using attributed coach feedback without 
   expect(preview.totalResponses).toBe(3);
   expect(preview.recommendations.find((candidate) => candidate.questionId === intenseCandidateId)?.reasons).toContainEqual({
     dimension: "tone", value: "intense", score: -1, responses: 3,
+    landedWell: 0, fellFlat: 0, wrongVibe: 3, timingOff: 0,
   });
   expect(preview.recommendations.findIndex((candidate) => candidate.questionId === neutralCandidateId)).toBeLessThan(
     preview.recommendations.findIndex((candidate) => candidate.questionId === intenseCandidateId),

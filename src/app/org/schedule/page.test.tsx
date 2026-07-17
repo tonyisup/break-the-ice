@@ -53,7 +53,7 @@ beforeEach(() => {
     if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
     if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
     if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
-    if (fn === "getCurationPreview") return { totalResponses: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3 }] }] };
+    if (fn === "getCurationPreview") return { totalResponses: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3, landedWell: 3, fellFlat: 0, wrongVibe: 0, timingOff: 0 }] }] };
     if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
     return undefined;
   });
@@ -84,7 +84,7 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
       if (fn === "getOrgSettings") return undefined;
       if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
       if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
-      if (fn === "getCurationPreview") return { totalResponses: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3 }] }] };
+      if (fn === "getCurationPreview") return { totalResponses: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3, landedWell: 3, fellFlat: 0, wrongVibe: 0, timingOff: 0 }] }] };
     if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
       return undefined;
     });
