@@ -734,9 +734,11 @@ export default function InfiniteScrollPage() {
                 Browse icebreaker questions for coaches, workshops, and team sessions.
               </p>
             </div>
-            <Button asChild variant="outline" className="h-9 shrink-0 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
-              <Link to="/pricing?source=app_banner">Team plan</Link>
-            </Button>
+            {currentUser !== undefined && currentUser?.planTier !== "team" && (
+              <Button asChild variant="outline" className="h-9 shrink-0 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
+                <Link to="/pricing?source=app_banner">Team plan</Link>
+              </Button>
+            )}
           </div>
         </div>
         <AnchorHeader
