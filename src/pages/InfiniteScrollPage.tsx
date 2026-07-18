@@ -9,7 +9,7 @@ import { useStorageContext } from "@/hooks/useStorageContext";
 import { useWorkspace } from "@/hooks/useWorkspace.tsx";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, SearchX, Sparkles } from "lucide-react";
+import { ArrowUp, SearchX, Sparkles, X } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { AnchorHeader } from "@/components/filter-controls/AnchorHeader";
 import { ItemDetails, ItemDetailDrawer } from "@/components/item-detail-drawer/item-detail-drawer";
@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 
 const compareByTextLength = (a: Doc<"questions">, b: Doc<"questions">) =>
   (a.text || a.customText || "").length - (b.text || b.customText || "").length;
+
+const PUBLIC_FEED_BANNER_DISMISSED_KEY = "break-the-ice:public-feed-banner-dismissed:v1";
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
@@ -65,6 +67,14 @@ export default function InfiniteScrollPage() {
   const [showTopButton, setShowTopButton] = useState(false);
   const [showAuthCTA, setShowAuthCTA] = useState(false);
   const [showUpgradeCTA, setShowUpgradeCTA] = useState(false);
+  const [isPublicFeedBannerDismissed, setIsPublicFeedBannerDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(PUBLIC_FEED_BANNER_DISMISSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
   const [prevQuestion, setPrevQuestion] = useState<Doc<"questions"> | null>(null);
   const [nextQuestion, setNextQuestion] = useState<Doc<"questions"> | null>(null);
@@ -87,6 +97,15 @@ export default function InfiniteScrollPage() {
   });
   const dismissRefineCTA = useMutation(api.core.users.dismissRefineCTA);
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
+
+  const dismissPublicFeedBanner = useCallback(() => {
+    setIsPublicFeedBannerDismissed(true);
+    try {
+      window.localStorage.setItem(PUBLIC_FEED_BANNER_DISMISSED_KEY, "true");
+    } catch {
+      // The banner still stays dismissed for this page view when storage is unavailable.
+    }
+  }, []);
 
   const stylesMap = useMemo(() => {
     const map = new Map<string, Doc<"styles">>();
@@ -724,7 +743,7 @@ export default function InfiniteScrollPage() {
       <Header />
 
       <main className="z-10 flex-1 flex flex-col pb-32 pt-20">
-        {currentUser !== undefined && currentUser?.planTier !== "team" && (
+        {currentUser !== undefined && currentUser?.planTier !== "team" && !isPublicFeedBannerDismissed && (
           <div className="mx-auto w-full max-w-3xl px-4 pb-4">
             <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white shadow-lg backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -735,9 +754,22 @@ export default function InfiniteScrollPage() {
                   Browse icebreaker questions for coaches, workshops, and team sessions.
                 </p>
               </div>
-              <Button asChild variant="outline" className="h-9 shrink-0 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
-                <Link to="/pricing?source=app_banner">Team plan</Link>
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button asChild variant="outline" className="h-9 shrink-0 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
+                  <Link to="/pricing?source=app_banner">Team plan</Link>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 shrink-0 text-white/70 hover:bg-white/15 hover:text-white"
+                  onClick={dismissPublicFeedBanner}
+                  aria-label="Dismiss public question feed banner"
+                  title="Don't show this again"
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
             </div>
           </div>
         )}

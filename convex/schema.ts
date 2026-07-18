@@ -608,7 +608,8 @@ export default defineSchema({
   })
     .index("by_organizationId", ["organizationId"])
     .index("by_organizationId_and_weekStart", ["organizationId", "weekStart"])
-    .index("by_organizationId_and_status", ["organizationId", "status"]),
+    .index("by_organizationId_and_status", ["organizationId", "status"])
+    .index("by_organizationId_status_weekStart", ["organizationId", "status", "weekStart"]),
 
   scheduledQuestions: defineTable({
     scheduleId: v.id("schedules"),

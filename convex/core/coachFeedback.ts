@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { type GenericId } from "convex/values";
+import type { Doc } from "../_generated/dataModel";
 import { mutation, query } from "../_generated/server";
 import { ensureOrgMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
@@ -10,6 +11,9 @@ import {
 import { deliveryDaysForSchedule } from "../lib/deliveryDays";
 
 const MAX_FEEDBACK_PER_SCHEDULE = 10000;
+const CURATION_HISTORY_SCHEDULE_LIMIT = 8;
+const CURATION_FEEDBACK_PER_SCHEDULE_LIMIT = 500;
+const CURATION_CANDIDATE_LIMIT = 200;
 
 type DayOfWeek =
   | "monday"
@@ -285,27 +289,61 @@ export const getCurationPreview = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await ensureOrgMember(ctx, args.organizationId, "admin");
+    await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
     const limit = Math.min(Math.max(args.limit ?? 12, 1), 50);
-    const schedules = await ctx.db
-      .query("schedules")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
-      .take(100);
+    const settings = await ctx.db
+      .query("orgSettings")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    const { isoDate: todayIso } = getZonedCalendarDate(
+      new Date(),
+      settings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE,
+    );
+    const scheduleGroups = await Promise.all(
+      (["published", "completed"] as const).map((status) =>
+        ctx.db
+          .query("schedules")
+          .withIndex("by_organizationId_status_weekStart", (q) =>
+            q
+              .eq("organizationId", args.organizationId)
+              .eq("status", status)
+              .lte("weekStart", todayIso)
+          )
+          .order("desc")
+          .take(CURATION_HISTORY_SCHEDULE_LIMIT),
+      ),
+    );
+    const schedules = scheduleGroups
+      .flat()
+      .sort((left, right) => right.weekStart.localeCompare(left.weekStart))
+      .slice(0, CURATION_HISTORY_SCHEDULE_LIMIT);
 
     const feedbacks = (
       await Promise.all(
         schedules.map((schedule) =>
-          ctx.db.query("coachFeedback").withIndex("by_schedule", (q) => q.eq("scheduleId", schedule._id)).take(MAX_FEEDBACK_PER_SCHEDULE),
+          ctx.db
+            .query("coachFeedback")
+            .withIndex("by_schedule", (q) => q.eq("scheduleId", schedule._id))
+            .order("desc")
+            .take(CURATION_FEEDBACK_PER_SCHEDULE_LIMIT),
         ),
       )
     ).flat();
     const signalByDimension = new Map<string, { score: number; responses: number; landedWell: number; fellFlat: number; wrongVibe: number; timingOff: number; coachIds: Set<string> }>();
-    const historicalQuestionIds = new Set<string>();
+    const historicalQuestionIds = new Set<GenericId<"questions">>(
+      feedbacks.map((feedback) => feedback.questionId),
+    );
+    const historicalQuestionById = new Map<GenericId<"questions">, Doc<"questions">>();
+    for (const questionId of historicalQuestionIds) {
+      const question = await ctx.db.get(questionId);
+      if (question) historicalQuestionById.set(questionId, question);
+    }
+    const attributableFeedbacks = feedbacks.filter((feedback) =>
+      historicalQuestionById.has(feedback.questionId),
+    );
 
-    for (const feedback of feedbacks) {
-      historicalQuestionIds.add(feedback.questionId);
-      const question = await ctx.db.get(feedback.questionId);
-      if (!question) continue;
+    for (const feedback of attributableFeedbacks) {
+      const question = historicalQuestionById.get(feedback.questionId)!;
       const score = (feedback.landedWell ? 1 : 0) - (feedback.fellFlat ? 1 : 0) - (feedback.wrongVibe ? 1 : 0) - (feedback.timingOff ? 0.5 : 0);
       for (const [dimension, value] of [["style", question.style], ["tone", question.tone], ["topic", question.topic]] as const) {
         if (!value) continue;
@@ -325,7 +363,8 @@ export const getCurationPreview = query({
     const candidates = await ctx.db
       .query("questions")
       .withIndex("by_status", (q) => q.eq("status", "public"))
-      .take(200);
+      .order("desc")
+      .take(CURATION_CANDIDATE_LIMIT);
     const recommendations = candidates
       .filter((question) => !historicalQuestionIds.has(question._id))
       .map((question) => {
@@ -346,11 +385,11 @@ export const getCurationPreview = query({
       .sort((left, right) => right.score - left.score || String(left.questionId).localeCompare(String(right.questionId)))
       .slice(0, limit);
 
-    const coachCount = new Set(feedbacks.map((feedback) => feedback.coachId)).size;
+    const coachCount = new Set(attributableFeedbacks.map((feedback) => feedback.coachId)).size;
     return {
-      totalResponses: feedbacks.length,
+      totalResponses: attributableFeedbacks.length,
       coachCount,
-      confidence: feedbacks.length >= 3 && coachCount >= 2 ? "directional" as const : "insufficient" as const,
+      confidence: attributableFeedbacks.length >= 3 && coachCount >= 2 ? "directional" as const : "insufficient" as const,
       recommendations,
     };
   },
@@ -387,6 +426,25 @@ export const submitCoachFeedback = mutation({
     const schedule = await ctx.db.get(sq.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
     await ensureOrgMember(ctx, schedule.organizationId);
+    if (schedule.status !== "published") {
+      throw new Error("Feedback can only be submitted for a published schedule");
+    }
+    const settings = await ctx.db
+      .query("orgSettings")
+      .withIndex("by_org", (q) => q.eq("organizationId", schedule.organizationId))
+      .unique();
+    const { isoDate: todayIso, dayOfWeek: todayDay } = getZonedCalendarDate(
+      new Date(),
+      settings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE,
+    );
+    const isTodaysAssignment =
+      schedule.weekStart <= todayIso &&
+      schedule.weekEnd >= todayIso &&
+      sq.dayOfWeek === todayDay &&
+      deliveryDaysForSchedule(schedule).includes(todayDay);
+    if (!isTodaysAssignment) {
+      throw new Error("Feedback can only be submitted for today's assignment");
+    }
 
     // Check if coach already submitted for this schedule+question+day combo
     const existing = await ctx.db

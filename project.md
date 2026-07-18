@@ -65,7 +65,7 @@ In many fitness group training classes, the coach starts with a "Question of the
 - ⏸ Feature flags to gate beta features (More Like This, Style/Tone drawers)
 
 ### Feedback-informed curation preview
-The backend exposes an admin-only, read-only candidate preview based on prior coach feedback. It never creates schedules or assignments. Each candidate score carries its matching style, tone, or topic evidence and response count; fewer than three responses are explicitly labeled insufficient evidence.
+The backend exposes an admin/manager, read-only candidate preview based on up to 500 of the newest coach responses from each of the eight most recent eligible schedule weeks. It never creates schedules or assignments. Each candidate score carries its matching style, tone, or topic evidence and response count; fewer than three responses are explicitly labeled insufficient evidence.
 
 ## Design Guides
 - Consumer: infinite scroll, smooth animations, dark/light mode
