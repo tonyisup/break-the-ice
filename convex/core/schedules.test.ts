@@ -268,13 +268,14 @@ test("coach daily delivery ignores an assignment outside the schedule's delivery
 
 test("curation preview ranks candidates using attributed coach feedback without assigning them", async () => {
   const { t, admin, organizationId } = await createScheduleWorkspace();
-  const { historicalQuestionId, intenseCandidateId } = await t.run(async (ctx) => {
+  const { historicalQuestionId, intenseCandidateId, scheduledWithoutFeedbackId } = await t.run(async (ctx) => {
     const now = Date.now();
     const historicalQuestionId = await ctx.db.insert("questions", { text: "High-energy opener", tone: "intense", status: "public", totalLikes: 0, totalShows: 0, averageViewDuration: 0 });
     for (let index = 0; index < 201; index++) {
       await ctx.db.insert("questions", { text: `Filler candidate ${index}`, tone: "calm", status: "public", totalLikes: 0, totalShows: 0, averageViewDuration: 0 });
     }
     const intenseCandidateId = await ctx.db.insert("questions", { text: "Another intense opener", tone: "intense", status: "public", totalLikes: 0, totalShows: 0, averageViewDuration: 0 });
+    const scheduledWithoutFeedbackId = await ctx.db.insert("questions", { text: "Already scheduled intense opener", tone: "intense", status: "public", totalLikes: 0, totalShows: 0, averageViewDuration: 0 });
     const scheduleId = await ctx.db.insert("schedules", { organizationId, weekStart: "2026-07-06", weekEnd: "2026-07-12", status: "completed", weekStartDay: "monday", deliveryDays: ["monday"], createdAt: now, updatedAt: now });
     const coachId = await ctx.db.insert("users", { clerkId: "second-coach", email: "second-coach@example.com" });
     for (const [index, dayOfWeek] of (["monday", "tuesday", "wednesday"] as const).entries()) {
@@ -286,10 +287,17 @@ test("curation preview ranks candidates using attributed coach feedback without 
         wrongVibe: index !== 2, landedWell: true, submittedAt: now,
       });
     }
-    return { historicalQuestionId, intenseCandidateId };
+    await ctx.db.insert("scheduledQuestions", {
+      scheduleId, dayOfWeek: "thursday", questionId: scheduledWithoutFeedbackId, slotOrder: 3, assignedAt: now,
+    });
+    return { historicalQuestionId, intenseCandidateId, scheduledWithoutFeedbackId };
   });
 
-  const preview = await admin.query(api.core.coachFeedback.getCurationPreview, { organizationId, limit: 20 });
+  const preview = await admin.query(api.core.coachFeedback.getCurationPreview, {
+    organizationId,
+    currentDate: "2026-07-18",
+    limit: 20,
+  });
 
   expect(preview.totalResponses).toBe(3);
   expect(preview.coachCount).toBe(1);
@@ -300,6 +308,8 @@ test("curation preview ranks candidates using attributed coach feedback without 
   });
   expect(preview.recommendations.findIndex((candidate) => candidate.questionId === intenseCandidateId)).toBe(0);
   expect(preview.recommendations.some((candidate) => candidate.questionId === historicalQuestionId)).toBe(false);
+  expect(preview.recommendations.some((candidate) => candidate.questionId === scheduledWithoutFeedbackId)).toBe(false);
+  expect(preview.recommendations.every((candidate) => candidate.reasons.length > 0)).toBe(true);
 });
 
 test("managers can read the curation preview used by the scheduler", async () => {
@@ -319,7 +329,7 @@ test("managers can read the curation preview used by the scheduler", async () =>
 
   const preview = await t.withIdentity(MANAGER_IDENTITY).query(
     api.core.coachFeedback.getCurationPreview,
-    { organizationId },
+    { organizationId, currentDate: "2026-07-18" },
   );
 
   expect(preview.totalResponses).toBe(0);
@@ -374,6 +384,7 @@ test("curation preview uses recent schedule feedback after the organization exce
 
   const preview = await admin.query(api.core.coachFeedback.getCurationPreview, {
     organizationId,
+    currentDate: "2026-07-18",
     limit: 20,
   });
 

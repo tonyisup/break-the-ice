@@ -286,19 +286,12 @@ export const getWeeklyFeedbackReport = query({
 export const getCurationPreview = query({
   args: {
     organizationId: v.id("organizations"),
+    currentDate: v.string(),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
     const limit = Math.min(Math.max(args.limit ?? 12, 1), 50);
-    const settings = await ctx.db
-      .query("orgSettings")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-      .unique();
-    const { isoDate: todayIso } = getZonedCalendarDate(
-      new Date(),
-      settings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE,
-    );
     const scheduleGroups = await Promise.all(
       (["published", "completed"] as const).map((status) =>
         ctx.db
@@ -307,7 +300,7 @@ export const getCurationPreview = query({
             q
               .eq("organizationId", args.organizationId)
               .eq("status", status)
-              .lte("weekStart", todayIso)
+              .lte("weekStart", args.currentDate)
           )
           .order("desc")
           .take(CURATION_HISTORY_SCHEDULE_LIMIT),
@@ -329,12 +322,25 @@ export const getCurationPreview = query({
         ),
       )
     ).flat();
+    const scheduledQuestions = (
+      await Promise.all(
+        schedules.map((schedule) =>
+          ctx.db
+            .query("scheduledQuestions")
+            .withIndex("by_schedule", (q) => q.eq("scheduleId", schedule._id))
+            .collect(),
+        ),
+      )
+    ).flat();
     const signalByDimension = new Map<string, { score: number; responses: number; landedWell: number; fellFlat: number; wrongVibe: number; timingOff: number; coachIds: Set<string> }>();
-    const historicalQuestionIds = new Set<GenericId<"questions">>(
+    const scheduledQuestionIds = new Set<GenericId<"questions">>(
+      scheduledQuestions.map((scheduledQuestion) => scheduledQuestion.questionId),
+    );
+    const feedbackQuestionIds = new Set<GenericId<"questions">>(
       feedbacks.map((feedback) => feedback.questionId),
     );
     const historicalQuestionById = new Map<GenericId<"questions">, Doc<"questions">>();
-    for (const questionId of historicalQuestionIds) {
+    for (const questionId of feedbackQuestionIds) {
       const question = await ctx.db.get(questionId);
       if (question) historicalQuestionById.set(questionId, question);
     }
@@ -366,7 +372,7 @@ export const getCurationPreview = query({
       .order("desc")
       .take(CURATION_CANDIDATE_LIMIT);
     const recommendations = candidates
-      .filter((question) => !historicalQuestionIds.has(question._id))
+      .filter((question) => !scheduledQuestionIds.has(question._id))
       .map((question) => {
         const reasons = (["style", "tone", "topic"] as const).flatMap((dimension) => {
           const value = question[dimension];
@@ -382,6 +388,7 @@ export const getCurationPreview = query({
           reasons,
         };
       })
+      .filter((candidate) => candidate.reasons.length > 0)
       .sort((left, right) => right.score - left.score || String(left.questionId).localeCompare(String(right.questionId)))
       .slice(0, limit);
 

@@ -388,9 +388,10 @@ export default function OrgWeeklyCurationPage() {
   const weekStartDay = (orgSettings?.weekStartDay ?? "monday") as "monday" | "sunday";
   const timeZone = orgSettings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE;
   const activeDeliveryDays = orgSettings?.activeDeliveryDays ?? DEFAULT_DELIVERY_DAYS;
+  const currentZonedDate = calendarIso(dateInTimeZone(new Date(), timeZone));
   const curationPreview = useQuery(
     api.core.coachFeedback.getCurationPreview,
-    orgId ? { organizationId: orgId, limit: 5 } : "skip",
+    orgId ? { organizationId: orgId, currentDate: currentZonedDate, limit: 5 } : "skip",
   );
 
   /* --- Week navigation --- */

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import OrgWeeklyCurationPage from "./page";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -73,11 +73,14 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
   it("renders feedback evidence as an advisory preview without an assignment action", () => {
     render(<OrgWeeklyCurationPage />);
 
-    expect(screen.getByRole("heading", { name: "Feedback-informed curation" })).toBeInTheDocument();
+    const previewHeading = screen.getByRole("heading", { name: "Feedback-informed curation" });
+    expect(previewHeading).toBeInTheDocument();
     expect(screen.getByText("Calm conversation starter")).toBeInTheDocument();
     expect(screen.getByText(/tone: calm · 3 responses/i)).toBeInTheDocument();
     expect(screen.getByText("Mixed coach feedback — review before assigning.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /assign calm conversation starter/i })).toBeNull();
+    const previewCard = previewHeading.parentElement?.parentElement;
+    expect(previewCard).not.toBeNull();
+    expect(within(previewCard!).queryByRole("button", { name: /assign/i })).toBeNull();
   });
 
   it("disables delivery-day controls until organization settings are loaded", () => {
