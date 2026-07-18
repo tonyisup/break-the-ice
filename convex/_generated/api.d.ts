@@ -68,6 +68,7 @@ import type * as internal_users from "../internal/users.js";
 import type * as lib_aiUsageWorkspace from "../lib/aiUsageWorkspace.js";
 import type * as lib_billingSubjects from "../lib/billingSubjects.js";
 import type * as lib_clerkOrgSync from "../lib/clerkOrgSync.js";
+import type * as lib_deliveryDays from "../lib/deliveryDays.js";
 import type * as lib_emails from "../lib/emails.js";
 import type * as lib_embeddings from "../lib/embeddings.js";
 import type * as lib_generationRunner from "../lib/generationRunner.js";
@@ -152,6 +153,7 @@ declare const fullApi: ApiFromModules<{
   "lib/aiUsageWorkspace": typeof lib_aiUsageWorkspace;
   "lib/billingSubjects": typeof lib_billingSubjects;
   "lib/clerkOrgSync": typeof lib_clerkOrgSync;
+  "lib/deliveryDays": typeof lib_deliveryDays;
   "lib/emails": typeof lib_emails;
   "lib/embeddings": typeof lib_embeddings;
   "lib/generationRunner": typeof lib_generationRunner;

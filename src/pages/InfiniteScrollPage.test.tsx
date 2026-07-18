@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, waitFor, screen } from '@testing-library/react';
+import { fireEvent, render, waitFor, screen } from '@testing-library/react';
 import InfiniteScrollPage from './InfiniteScrollPage';
 import { useQuery, useConvex, useAction, useMutation } from 'convex/react';
 import { WorkspaceProvider } from '@/hooks/useWorkspace.tsx';
@@ -91,6 +91,7 @@ describe('InfiniteScrollPage', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    window.localStorage.clear();
 
     // Default auth state: Signed In
     mockUseAuth.mockReturnValue({ isSignedIn: true, userId: 'user123', isLoaded: true });
@@ -151,7 +152,7 @@ describe('InfiniteScrollPage', () => {
     });
   });
 
-  it('hides the Team plan banner link for Team subscribers', async () => {
+  it('hides the public feed banner for Team subscribers', async () => {
     (useQuery as any).mockImplementation((queryFn: any) => {
       if (queryFn === 'getStyles') return mockStyles;
       if (queryFn === 'getTones') return mockTones;
@@ -173,10 +174,11 @@ describe('InfiniteScrollPage', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('link', { name: 'Team plan' })).toBeNull();
+      expect(screen.queryByText('Public question feed')).toBeNull();
     });
   });
 
-  it('shows the Team plan banner link for free users', async () => {
+  it('shows a dismissible Team plan banner for non-Team users', async () => {
     render(
       <WorkspaceProvider>
         <InfiniteScrollPage />
@@ -184,7 +186,31 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
+      expect(screen.getByText('Public question feed')).toBeDefined();
       expect(screen.getByRole('link', { name: 'Team plan' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Dismiss public question feed banner' })).toBeDefined();
+    });
+  });
+
+  it('keeps the public feed banner dismissed across page mounts', async () => {
+    const firstRender = render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss public question feed banner' }));
+    expect(screen.queryByText('Public question feed')).toBeNull();
+
+    firstRender.unmount();
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Public question feed')).toBeNull();
     });
   });
 

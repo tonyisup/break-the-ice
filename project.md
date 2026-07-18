@@ -22,6 +22,8 @@ In many fitness group training classes, the coach starts with a "Question of the
 - Select from AI-generated recommendations filtered by style, tone, topic
 - Configure 1–7 active delivery days for each studio, then set one question for every selected day
 - View aggregated coach feedback from the prior week to inform next week's curation
+- Inspect advisory feedback-informed rankings with attributable style/tone/topic evidence; recommendations never assign or publish questions
+- Treat evidence as directional only with at least 3 responses from 2 distinct coaches; show response/coach counts and mixed positive/negative feedback explicitly
 - Manage team members (coaches/operators) and their preferences
 
 ### Tier 3: B2B — Coach/Operator Daily Viewer
@@ -61,6 +63,10 @@ In many fitness group training classes, the coach starts with a "Question of the
 - ⏸ URL slugs for questions
 - ⏸ Admin portal separation (currently co-located with consumer app)
 - ⏸ Feature flags to gate beta features (More Like This, Style/Tone drawers)
+
+### Feedback-informed curation preview
+
+The backend exposes an admin/manager, read-only candidate preview based on up to 500 of the newest coach responses from each of the eight most recent eligible schedule weeks. It never creates schedules or assignments. Each candidate score carries its matching style, tone, or topic evidence and response count. Candidates require at least three responses from two distinct coaches for directional confidence; candidates below either threshold are labeled insufficient evidence.
 
 ## Design Guides
 - Consumer: infinite scroll, smooth animations, dark/light mode

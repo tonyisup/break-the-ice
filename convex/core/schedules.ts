@@ -8,22 +8,15 @@ import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
   getZonedCalendarDate,
 } from "../lib/timezone";
+import { DELIVERY_DAYS, type DeliveryDay, deliveryDaysForSchedule } from "../lib/deliveryDays";
 
 /** Cap org memberships loaded per user when listing cross-org schedules. */
 const MEMBERSHIPS_LIST_CAP = 100;
 
-const DELIVERY_DAYS = [
-  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-] as const;
-type DeliveryDay = typeof DELIVERY_DAYS[number];
 const deliveryDayValidator = v.union(
   v.literal("monday"), v.literal("tuesday"), v.literal("wednesday"),
   v.literal("thursday"), v.literal("friday"), v.literal("saturday"), v.literal("sunday"),
 );
-
-function deliveryDaysForSchedule(schedule: { deliveryDays?: DeliveryDay[] }): DeliveryDay[] {
-  return schedule.deliveryDays?.length ? schedule.deliveryDays : [...DELIVERY_DAYS];
-}
 
 /** Full schedule row as returned from the database (matches `schedules` table + system fields). */
 const scheduleDocValidator = v.object({
