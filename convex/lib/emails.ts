@@ -55,7 +55,7 @@ export const createDailyQuestionEmail = (args: {
   questionUrl: string;
   unsubscribeUrl: string;
 }) => {
-  const subject = "Your Icebreaker for Today 🧊";
+  const subject = "🧊 Your Icebreaker for Today 🧊";
   const html = `
     <!DOCTYPE html>
     <html>
