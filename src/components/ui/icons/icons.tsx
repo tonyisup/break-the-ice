@@ -90,7 +90,8 @@ import {
   Plane,
   Music4,
   Shirt,
-  Music2
+  Music2,
+  Utensils,
 } from 'lucide-react';
 
 // Export all icons for direct use
@@ -185,7 +186,8 @@ export {
   Plane,
   Music4,
   Shirt,
-  Music2
+  Music2,
+  Utensils,
 };
 
 // Create a mapping of icon names to icon components for dynamic access
@@ -289,5 +291,6 @@ export const iconMap: Record<string, LucideIcon> = {
   Plane,
   Music4,
   Shirt,
-  Music2
+  Music2,
+  Utensils,
 };
