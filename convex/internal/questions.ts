@@ -860,6 +860,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 		anchoredToneId: v.optional(v.id("tones")),
 		anchoredTopicId: v.optional(v.id("topics")),
 		randomSeed: v.optional(v.number()),
+		currentTime: v.number(),
 	},
 	returns: v.object({
 		questions: v.array(v.any()),
@@ -872,7 +873,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 		const hiddenIds = new Set(args.hidden);
 		const hiddenStyleIds = new Set(args.hiddenStyles);
 		const hiddenToneIds = new Set(args.hiddenTones);
-		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+		const sevenDaysAgo = args.currentTime - 7 * 24 * 60 * 60 * 1000;
 
 		let seed = args.randomSeed ?? Math.random();
 		seed = ((seed % 1) + 1) % 1;
@@ -1014,8 +1015,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			return Number(wasShownRecently(left)) - Number(wasShownRecently(right));
 		});
 		const selectedAnchored = rankedAnchored.slice(0, targetAnchoredCount);
-		const allAnchoredIds = new Set(rankedAnchored.map((question) => question._id));
-		const generalVisible = allPublic.filter((question) => isVisible(question) && !allAnchoredIds.has(question._id));
+		const generalVisible = allPublic.filter(isVisible);
 		const freshGeneral = shuffle(generalVisible.filter((question) => !wasShownRecently(question)));
 		const recentGeneral = shuffle(generalVisible.filter(wasShownRecently));
 		const selectedIds = new Set(selectedAnchored.map((question) => question._id));

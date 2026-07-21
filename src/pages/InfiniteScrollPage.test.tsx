@@ -444,6 +444,41 @@ describe('InfiniteScrollPage', () => {
     expect(generateAction).not.toHaveBeenCalled();
   });
 
+  it('uses surplus generated anchors to fill an incomplete batch', async () => {
+    mockSearchParams = new URLSearchParams('style=style1');
+    const dbQuestions = Array.from({ length: 5 }, (_, index) => ({
+      _id: `db-anchor-${index}`,
+      text: `Existing anchor ${index}`,
+      styleId: 'style1',
+      toneId: 'tone1',
+    }));
+    const actionMock = vi.fn().mockResolvedValue({
+      questions: dbQuestions,
+      anchoredMatchCount: 5,
+      targetAnchoredCount: 6,
+    });
+    const generatedQuestions = Array.from({ length: 5 }, (_, index) => ({
+      _id: `generated-${index}`,
+      text: `Generated anchor ${index}`,
+      styleId: 'style1',
+      toneId: 'tone1',
+    }));
+    const generateAction = vi.fn().mockResolvedValue(generatedQuestions);
+    (useConvex as any).mockReturnValue({ query: vi.fn(), action: actionMock });
+    (useAction as any).mockReturnValue(generateAction);
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10);
+    });
+    expect(generateAction).toHaveBeenCalledWith(expect.objectContaining({ count: 5 }));
+  });
+
   it('sorts the first batch of questions by text length', async () => {
     const questionsWithDifferentLengths = [
       { _id: 'q1', text: 'This is a long question text', style: 'style1', tone: 'tone1' },

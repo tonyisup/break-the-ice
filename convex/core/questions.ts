@@ -229,6 +229,7 @@ async function getNextRandomQuestionsInternal(
 			anchoredToneId,
 			anchoredTopicId,
 			randomSeed,
+			currentTime: Date.now(),
 		});
 	}
 

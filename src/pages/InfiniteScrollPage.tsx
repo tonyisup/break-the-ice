@@ -348,8 +348,10 @@ export default function InfiniteScrollPage() {
 
         const existingIds = new Set(dbQuestions.map((question) => question._id));
         const uniqueGenerated = generatedQuestions.filter((question) => !existingIds.has(question._id));
-        const finalAnchored = [...anchoredQuestions, ...uniqueGenerated].slice(0, targetAnchoredCount);
-        const finalBatch = [...finalAnchored, ...generalQuestions].slice(0, BATCH_SIZE);
+        const generatedAnchoredCount = Math.max(0, targetAnchoredCount - anchoredQuestions.length);
+        const finalAnchored = [...anchoredQuestions, ...uniqueGenerated.slice(0, generatedAnchoredCount)];
+        const generatedFallback = uniqueGenerated.slice(generatedAnchoredCount);
+        const finalBatch = [...finalAnchored, ...generalQuestions, ...generatedFallback].slice(0, BATCH_SIZE);
         const orderedBatch = isFirstPull ? sortAnchoredBatch(finalBatch, finalAnchored.length) : finalBatch;
 
         if (orderedBatch.length === 0) {
@@ -832,7 +834,7 @@ export default function InfiniteScrollPage() {
   }, []); // Empty dependency array as we use refs
   return (
     <div
-      className="min-h-screen overflow-x-hidden flex flex-col"
+      className="min-h-screen overflow-x-clip flex flex-col"
     >
       <div
         className="h-screen fixed top-0 left-0 right-0 z-0"

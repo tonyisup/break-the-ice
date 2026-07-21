@@ -251,7 +251,7 @@ test("anchored feed meets its quota across taxonomy versions and legacy slugs", 
     });
 
     const matchingIds: Id<"questions">[] = [];
-    for (let index = 0; index < 4; index++) {
+    for (let index = 0; index < 6; index++) {
       matchingIds.push(
         await ctx.db.insert("questions", {
           text: `Archived-version story ${index}?`,
@@ -289,7 +289,7 @@ test("anchored feed meets its quota across taxonomy versions and legacy slugs", 
       }),
     );
 
-    for (let index = 0; index < 10; index++) {
+    for (let index = 0; index < 2; index++) {
       await ctx.db.insert("questions", {
         text: `General question ${index}?`,
         status: "public",
@@ -310,12 +310,14 @@ test("anchored feed meets its quota across taxonomy versions and legacy slugs", 
     hiddenTones: [],
     anchoredStyleId: currentStyleId,
     randomSeed: 0.25,
+    currentTime: now,
   });
 
   expect(result.targetAnchoredCount).toBe(6);
   expect(result.anchoredMatchCount).toBe(6);
   expect(result.questions).toHaveLength(10);
-  expect(new Set(result.questions.slice(0, 6).map((question: Doc<"questions">) => question._id))).toEqual(new Set(matchingIds));
+  expect(result.questions.slice(0, 6).every((question: Doc<"questions">) => matchingIds.includes(question._id))).toBe(true);
+  expect(result.questions.filter((question: Doc<"questions">) => matchingIds.includes(question._id))).toHaveLength(8);
 });
 
 test("anchored feed reports a shortfall and ranks full multi-anchor matches first", async () => {
@@ -396,6 +398,7 @@ test("anchored feed reports a shortfall and ranks full multi-anchor matches firs
     anchoredStyleId: styleId,
     anchoredToneId: toneId,
     randomSeed: 0.5,
+    currentTime: now,
   });
 
   expect(result.targetAnchoredCount).toBe(3);
@@ -504,6 +507,34 @@ test("tone ID backfill skips completed rows and reaches later legacy questions",
   await t.mutation(internal.internal.tones.updateQuestionsWithMissingToneIds, {});
   const legacyQuestion = await t.run((ctx) => ctx.db.get(legacyQuestionId));
   expect(legacyQuestion?.toneId).toBe(toneId);
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+
+test("tone ID backfill stops and reports an unresolved zero-progress batch", async () => {
+  vi.useFakeTimers();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 100; index++) {
+      await ctx.db.insert("questions", {
+        text: `Unresolved tone ${index}?`,
+        tone: "missing-tone",
+        status: "public",
+        totalLikes: 0,
+        totalShows: 0,
+        averageViewDuration: 0,
+      });
+    }
+  });
+
+  await t.mutation(internal.internal.tones.updateQuestionsWithMissingToneIds, {});
+  const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+
+  expect(scheduled).toHaveLength(0);
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining("100 unresolved question(s): missing-tone"));
+  warn.mockRestore();
   vi.clearAllTimers();
   vi.useRealTimers();
 });
