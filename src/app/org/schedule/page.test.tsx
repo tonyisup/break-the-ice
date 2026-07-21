@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import OrgWeeklyCurationPage from "./page";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -50,13 +50,18 @@ vi.mock("../../../../convex/_generated/api", () => ({
 }));
 
 const setDeliveryDayActive = vi.fn().mockResolvedValue(undefined);
+const createSchedule = vi.fn().mockResolvedValue("schedule-new");
+const assignQuestion = vi.fn().mockResolvedValue(undefined);
 
 beforeEach(() => {
   vi.clearAllMocks();
   workspaceState.activeWorkspace = "org-1";
-  (useMutation as ReturnType<typeof vi.fn>).mockImplementation((fn: string) =>
-    fn === "setDeliveryDayActive" ? setDeliveryDayActive : vi.fn().mockResolvedValue(undefined),
-  );
+  (useMutation as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+    if (fn === "setDeliveryDayActive") return setDeliveryDayActive;
+    if (fn === "createSchedule") return createSchedule;
+    if (fn === "assignQuestion") return assignQuestion;
+    return vi.fn().mockResolvedValue(undefined);
+  });
   (useAction as ReturnType<typeof vi.fn>).mockReturnValue(vi.fn().mockResolvedValue(undefined));
   (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
     if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
@@ -80,17 +85,69 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     });
   });
 
-  it("renders feedback evidence as an advisory preview without an assignment action", () => {
+  it("turns directional feedback into a concise scheduling action", async () => {
     render(<OrgWeeklyCurationPage />);
 
-    const previewHeading = screen.getByRole("heading", { name: "Feedback-informed curation" });
+    const previewHeading = screen.getByRole("heading", { name: "What your feedback suggests" });
     expect(previewHeading).toBeInTheDocument();
+    expect(screen.getByText("Try one suggestion this week")).toBeInTheDocument();
+    expect(screen.getByText("3 responses")).toBeInTheDocument();
+    expect(screen.getByText("3 coaches")).toBeInTheDocument();
     expect(screen.getByText("Calm conversation starter")).toBeInTheDocument();
-    expect(screen.getByText(/tone: calm · 3 responses/i)).toBeInTheDocument();
-    expect(screen.getByText("Mixed coach feedback — review before assigning.")).toBeInTheDocument();
-    const previewCard = previewHeading.parentElement?.parentElement;
-    expect(previewCard).not.toBeNull();
-    expect(within(previewCard!).queryByRole("button", { name: /assign/i })).toBeNull();
+    expect(screen.getByText("Tone · Calm")).toBeInTheDocument();
+    expect(screen.getByText("Mixed signal: 1 landed well, 2 caution signals.")).toBeInTheDocument();
+    expect(screen.queryByText(/tone: calm · 3 responses/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to week" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Monday" }));
+
+    await waitFor(() => {
+      expect(createSchedule).toHaveBeenCalledWith({
+        organizationId: "org-1",
+        weekStart: expect.any(String),
+        weekStartDay: "monday",
+      });
+      expect(assignQuestion).toHaveBeenCalledWith({
+        scheduleId: "schedule-new",
+        dayOfWeek: "monday",
+        questionId: "q-preview",
+      });
+    });
+  });
+
+  it("explains how to strengthen insufficient evidence and hides extra suggestions", () => {
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
+      if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
+      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
+      if (fn === "getCurationPreview") {
+        return {
+          totalResponses: 2,
+          coachCount: 1,
+          confidence: "insufficient",
+          recommendations: ["One", "Two", "Three", "Four"].map((text, index) => ({
+            questionId: `q-${index}`,
+            text: `${text} suggestion`,
+            score: 1,
+            reasons: [{ dimension: "style", value: "rapid-fire-either", score: 1, responses: 1, landedWell: 1, fellFlat: 0, wrongVibe: 0, timingOff: 0, isMixed: false, coachCount: 1 }],
+          })),
+        };
+      }
+      if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
+      return undefined;
+    });
+
+    render(<OrgWeeklyCurationPage />);
+
+    expect(screen.getByText("Collect more feedback before optimizing")).toBeInTheDocument();
+    expect(screen.getByText("Reach at least 3 responses from 2 coaches before treating these patterns as directional.")).toBeInTheDocument();
+    expect(screen.getByText("One suggestion")).toBeInTheDocument();
+    expect(screen.queryByText("Four suggestion")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 more" }));
+    expect(screen.getByText("Four suggestion")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show fewer" })).toBeInTheDocument();
   });
 
   it("disables delivery-day controls until organization settings are loaded", () => {
