@@ -113,6 +113,8 @@ type AssignmentEntry = {
   dayOfWeek: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
   slotOrder: number;
   assignedBy: GenericId<"users"> | undefined;
+  teamTopicId: GenericId<"teamTopics"> | undefined;
+  teamTopicName: string | undefined;
   question: {
     _id: GenericId<"questions">;
     text: string | undefined;
@@ -146,12 +148,18 @@ export const getSchedule = query({
         totalLikes: v.number(),
       }),
       assignedBy: v.optional(v.id("users")),
+      teamTopicId: v.optional(v.id("teamTopics")),
+      teamTopicName: v.optional(v.string()),
     })),
   }),
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
-    await ensureOrgMember(ctx, schedule.organizationId);
+    const membership = await ensureOrgMember(ctx, schedule.organizationId);
+    const canReadDraftTeamPrompts =
+      schedule.status !== "draft" ||
+      membership.role === "admin" ||
+      membership.role === "manager";
 
     const assignments = await ctx.db
       .query("scheduledQuestions")
@@ -161,23 +169,32 @@ export const getSchedule = query({
     const enriched: AssignmentEntry[] = [];
     for (const a of assignments) {
       const question = await ctx.db.get(a.questionId);
-      if (question) {
-        enriched.push({
-          _id: a._id,
-          dayOfWeek: a.dayOfWeek,
-          slotOrder: a.slotOrder,
-          assignedBy: a.assignedBy,
-          question: {
-            _id: question._id,
-            text: question.text,
-            style: question.style,
-            tone: question.tone,
-            topic: question.topic,
-            isAIGenerated: question.isAIGenerated,
-            totalLikes: question.totalLikes,
-          },
-        });
+      const isTeamPrompt =
+        question?.kind === "team_prompt" || a.questionTextSnapshot !== undefined;
+      if (isTeamPrompt && !canReadDraftTeamPrompts) {
+        continue;
       }
+      if (!question && !a.questionTextSnapshot) {
+        continue;
+      }
+      const teamTopic = a.teamTopicId ? await ctx.db.get(a.teamTopicId) : null;
+      enriched.push({
+        _id: a._id,
+        dayOfWeek: a.dayOfWeek,
+        slotOrder: a.slotOrder,
+        assignedBy: a.assignedBy,
+        teamTopicId: a.teamTopicId,
+        teamTopicName: teamTopic?.name,
+        question: {
+          _id: a.questionId,
+          text: a.questionTextSnapshot ?? question?.text ?? question?.customText,
+          style: question?.style,
+          tone: question?.tone,
+          topic: question?.topic,
+          isAIGenerated: question?.isAIGenerated,
+          totalLikes: question?.totalLikes ?? 0,
+        },
+      });
     }
 
     return { schedule, assignments: enriched };
@@ -208,7 +225,7 @@ export const getCurrentWeekSchedule = query({
     })),
   }),
   handler: async (ctx, args) => {
-    await ensureOrgMember(ctx, args.organizationId);
+    const membership = await ensureOrgMember(ctx, args.organizationId);
     const settings = await ctx.db
       .query("orgSettings")
       .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
@@ -258,17 +275,31 @@ export const getCurrentWeekSchedule = query({
     let todayAssignment = undefined;
     if (sq) {
       const question = await ctx.db.get(sq.questionId);
-      if (question) {
+      const isTeamPrompt =
+        question?.kind === "team_prompt" || sq.questionTextSnapshot !== undefined;
+      const canReadTeamPrompt =
+        schedule.status !== "draft" ||
+        membership.role === "admin" ||
+        membership.role === "manager";
+      if (isTeamPrompt && !canReadTeamPrompt) {
+        return {
+          scheduleId: schedule._id,
+          weekStart: schedule.weekStart,
+          status: schedule.status,
+          todayAssignment: undefined,
+        };
+      }
+      if (question || sq.questionTextSnapshot) {
         todayAssignment = {
           _id: sq._id,
           dayOfWeek: sq.dayOfWeek,
           scheduledQuestionId: sq._id,
           question: {
-            _id: question._id,
-            text: question.text,
-            style: question.style,
-            tone: question.tone,
-            topic: question.topic,
+            _id: sq.questionId,
+            text: sq.questionTextSnapshot ?? question?.text ?? question?.customText,
+            style: question?.style,
+            tone: question?.tone,
+            topic: question?.topic,
           },
         };
       }
@@ -349,6 +380,15 @@ export const assignQuestion = mutation({
     if (schedule.status !== "draft") throw new Error("Cannot modify a published schedule");
     if (!deliveryDaysForSchedule(schedule).includes(args.dayOfWeek)) {
       throw new Error(`${args.dayOfWeek} is not an active delivery day for this schedule`);
+    }
+    const question = await ctx.db.get(args.questionId);
+    if (!question) throw new Error("Question not found");
+    if (
+      (question.organizationId && question.organizationId !== schedule.organizationId) ||
+      (question.status === "private" &&
+        (question.kind !== "team_prompt" || question.organizationId !== schedule.organizationId))
+    ) {
+      throw new Error("Question is not available to this organization");
     }
 
     const existing = await ctx.db

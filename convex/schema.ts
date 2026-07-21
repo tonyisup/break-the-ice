@@ -191,6 +191,7 @@ export default defineSchema({
     quality: v.optional(questionQualitySnapshot),
     authorId: v.optional(v.string()),
     customText: v.optional(v.string()),
+    kind: v.optional(v.union(v.literal("personal"), v.literal("team_prompt"))),
     status: v.optional(
       v.union(
         v.literal("pending"),
@@ -575,6 +576,18 @@ export default defineSchema({
   })
     .index("by_org", ["organizationId"]),
 
+  teamTopics: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    guidance: v.string(),
+    boundaries: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_organizationId", ["organizationId"])
+    .index("by_organizationId_and_updatedAt", ["organizationId", "updatedAt"]),
+
   schedules: defineTable({
     organizationId: v.id("organizations"),
     weekStart: v.string(),       // ISO date, e.g. "2026-04-06"
@@ -622,10 +635,13 @@ export default defineSchema({
     assignedAt: v.number(),
     assignedBy: v.optional(v.id("users")),
     generationRunId: v.optional(v.id("generationRuns")),
+    teamTopicId: v.optional(v.id("teamTopics")),
+    questionTextSnapshot: v.optional(v.string()),
   })
     .index("by_schedule", ["scheduleId"])
     .index("by_schedule_day", ["scheduleId", "dayOfWeek"])
     .index("by_question", ["questionId"])
+    .index("by_teamTopic", ["teamTopicId"])
     .index("by_schedule_day_order", ["scheduleId", "dayOfWeek", "slotOrder"]),
 
   coachFeedback: defineTable({

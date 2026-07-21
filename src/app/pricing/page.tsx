@@ -95,7 +95,7 @@ export default function PricingPage() {
                   "Save shared question collections",
                   "Use higher monthly AI limits",
                   "Manage billing from Clerk",
-                  "Keep your team setup ready for each session",
+                  "Schedule custom questions and topics",
                 ].map((feature) => (
                   <div key={feature} className="flex items-center gap-3 rounded-lg bg-card px-4 py-3 text-sm shadow-sm">
                     <CheckCircle2 className="size-4 text-emerald-500" />

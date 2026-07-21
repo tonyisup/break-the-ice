@@ -1,6 +1,6 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
-import { api } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { convexFunctionModules } from "../../vitestConvexModules";
@@ -19,6 +19,12 @@ const MANAGER_IDENTITY = {
   subject: "schedule-manager",
   tokenIdentifier: "https://clerk.example|schedule-manager",
   email: "schedule-manager@example.com",
+};
+
+const MEMBER_IDENTITY = {
+  subject: "schedule-member",
+  tokenIdentifier: "https://clerk.example|schedule-member",
+  email: "schedule-member@example.com",
 };
 
 async function createScheduleWorkspace() {
@@ -57,6 +63,30 @@ async function createScheduleWorkspace() {
   };
 }
 
+async function createAssignedTeamQuestion() {
+  const workspace = await createScheduleWorkspace();
+  await workspace.t.run(async (ctx) => {
+    await ctx.db.patch(workspace.organizationId, {
+      planTier: "team",
+      billingStatus: "active",
+    });
+  });
+  await workspace.admin.mutation(api.core.orgSettings.upsertOrgSettings, {
+    organizationId: workspace.organizationId,
+    activeDeliveryDays: ["monday"],
+  });
+  const scheduleId = await workspace.admin.mutation(api.core.schedules.createSchedule, {
+    organizationId: workspace.organizationId,
+    weekStart: "2026-07-20",
+  });
+  const result = await workspace.admin.mutation(api.core.teamPrompts.createAndAssign, {
+    scheduleId,
+    dayOfWeek: "monday",
+    questionText: "What assumption should we challenge this week?",
+  });
+  return { ...workspace, scheduleId, questionId: result.questionId };
+}
+
 test("new schedules snapshot their organization's configured delivery days", async () => {
   const { admin, organizationId } = await createScheduleWorkspace();
 
@@ -71,6 +101,324 @@ test("new schedules snapshot their organization's configured delivery days", asy
 
   const detail = await admin.query(api.core.schedules.getSchedule, { scheduleId });
   expect(detail.schedule.deliveryDays).toEqual(["monday", "wednesday", "friday"]);
+});
+
+test("Team editors can create and assign an organization-private exact question", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  await t.run(async (ctx) => {
+    await ctx.db.patch(organizationId, {
+      planTier: "team",
+      billingStatus: "active",
+    });
+  });
+  await admin.mutation(api.core.orgSettings.upsertOrgSettings, {
+    organizationId,
+    activeDeliveryDays: ["monday"],
+  });
+  const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  });
+
+  const result = await admin.mutation(api.core.teamPrompts.createAndAssign, {
+    scheduleId,
+    dayOfWeek: "monday",
+    questionText: "  What assumption should we challenge this week?  ",
+  });
+
+  const detail = await admin.query(api.core.schedules.getSchedule, { scheduleId });
+  expect(detail.assignments).toHaveLength(1);
+  expect(detail.assignments[0]?.question.text).toBe("What assumption should we challenge this week?");
+  expect(detail.assignments[0]?.assignedBy).toBeDefined();
+  expect(result.teamTopicId).toBeUndefined();
+
+  const savedQuestion = await t.run(async (ctx) => ctx.db.get(result.questionId));
+  expect(savedQuestion).toMatchObject({
+    organizationId,
+    customText: "What assumption should we challenge this week?",
+    kind: "team_prompt",
+    status: "private",
+  });
+  const savedAssignment = await t.run(async (ctx) =>
+    ctx.db
+      .query("scheduledQuestions")
+      .withIndex("by_schedule", (q) => q.eq("scheduleId", scheduleId))
+      .unique(),
+  );
+  expect(savedAssignment?.questionTextSnapshot).toBe(
+    "What assumption should we challenge this week?",
+  );
+});
+
+test("schedule delivery retains exact Team Prompt wording if the source row is removed", async () => {
+  const { t, admin, scheduleId, questionId } = await createAssignedTeamQuestion();
+  await t.run(async (ctx) => ctx.db.delete(questionId));
+
+  const detail = await admin.query(api.core.schedules.getSchedule, { scheduleId });
+  expect(detail.assignments).toHaveLength(1);
+  expect(detail.assignments[0]?.question.text).toBe(
+    "What assumption should we challenge this week?",
+  );
+});
+
+test("Team prompts stay out of the creator's personal-question library", async () => {
+  const { admin, organizationId } = await createAssignedTeamQuestion();
+  const personalQuestions = await admin.query(api.core.questions.getCustomQuestions, { organizationId });
+  expect(personalQuestions).toEqual([]);
+});
+
+test("ordinary members cannot read draft Team prompt assignments", async () => {
+  const { t, organizationId, scheduleId, questionId } = await createAssignedTeamQuestion();
+  await t.run(async (ctx) => {
+    const memberId = await ctx.db.insert("users", {
+      clerkId: MEMBER_IDENTITY.subject,
+      tokenIdentifier: MEMBER_IDENTITY.tokenIdentifier,
+      email: MEMBER_IDENTITY.email,
+    });
+    await ctx.db.insert("organization_members", {
+      userId: memberId,
+      organizationId,
+      role: "member",
+    });
+  });
+
+  const member = t.withIdentity(MEMBER_IDENTITY);
+  const detail = await member.query(api.core.schedules.getSchedule, { scheduleId });
+
+  expect(detail.assignments).toEqual([]);
+  expect(await member.query(api.core.questions.getQuestionById, { id: questionId })).toBeNull();
+  expect(await member.query(api.core.questions.getQuestionsByIds, { ids: [questionId] })).toEqual([]);
+});
+
+test("ordinary members cannot read draft Team prompts through the current-week query", async () => {
+  const { t, organizationId } = await createScheduleWorkspace();
+  const { isoDate, dayOfWeek } = getZonedCalendarDate(
+    new Date(),
+    DEFAULT_ORGANIZATION_TIME_ZONE,
+  );
+  await t.run(async (ctx) => {
+    const memberId = await ctx.db.insert("users", {
+      clerkId: MEMBER_IDENTITY.subject,
+      tokenIdentifier: MEMBER_IDENTITY.tokenIdentifier,
+      email: MEMBER_IDENTITY.email,
+    });
+    await ctx.db.insert("organization_members", {
+      userId: memberId,
+      organizationId,
+      role: "member",
+    });
+    const questionId = await ctx.db.insert("questions", {
+      organizationId,
+      authorId: memberId,
+      customText: "Private draft wording",
+      kind: "team_prompt",
+      status: "private",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+    const now = Date.now();
+    const scheduleId = await ctx.db.insert("schedules", {
+      organizationId,
+      weekStart: isoDate,
+      weekEnd: isoDate,
+      status: "draft",
+      weekStartDay: "monday",
+      deliveryDays: [dayOfWeek],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("scheduledQuestions", {
+      scheduleId,
+      dayOfWeek,
+      questionId,
+      slotOrder: 0,
+      assignedAt: now,
+    });
+  });
+
+  const current = await t
+    .withIdentity(MEMBER_IDENTITY)
+    .query(api.core.schedules.getCurrentWeekSchedule, { organizationId });
+
+  expect(current.todayAssignment).toBeUndefined();
+});
+
+test("Team prompts cannot be edited through personal-question mutations", async () => {
+  const { admin, questionId } = await createAssignedTeamQuestion();
+  await expect(admin.mutation(api.core.questions.updatePersonalQuestion, {
+    questionId,
+    customText: "Changed after scheduling",
+    isPublic: false,
+  })).rejects.toThrow("schedule-managed Team prompt");
+});
+
+test("Team prompts cannot be made public through personal-question mutations", async () => {
+  const { admin, questionId } = await createAssignedTeamQuestion();
+  await expect(admin.mutation(api.core.questions.makeQuestionPublic, { questionId }))
+    .rejects.toThrow("schedule-managed Team prompt");
+});
+
+test("Team prompts cannot be deleted through personal-question mutations", async () => {
+  const { t, admin, questionId } = await createAssignedTeamQuestion();
+  await expect(admin.mutation(api.core.questions.deletePersonalQuestion, { questionId }))
+    .rejects.toThrow("schedule-managed Team prompt");
+  expect(await t.run(async (ctx) => ctx.db.get(questionId))).not.toBeNull();
+});
+
+test("accepting a topic preview saves topic provenance with the exact assignment", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  await t.run(async (ctx) => {
+    await ctx.db.patch(organizationId, {
+      planTier: "team",
+      billingStatus: "trialing",
+    });
+  });
+  await admin.mutation(api.core.orgSettings.upsertOrgSettings, {
+    organizationId,
+    activeDeliveryDays: ["wednesday"],
+  });
+  const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  });
+
+  const result = await admin.mutation(api.core.teamPrompts.createAndAssign, {
+    scheduleId,
+    dayOfWeek: "wednesday",
+    questionText: "What concern about launch readiness deserves more airtime?",
+    sourceTopic: {
+      name: "Launch readiness",
+      guidance: "Surface unspoken concerns without turning this into a status meeting.",
+      boundaries: "Do not ask people to name individual owners.",
+    },
+  });
+
+  const detail = await admin.query(api.core.schedules.getSchedule, { scheduleId });
+  expect(detail.assignments[0]).toMatchObject({
+    teamTopicId: result.teamTopicId,
+    teamTopicName: "Launch readiness",
+    question: { text: "What concern about launch readiness deserves more airtime?" },
+  });
+
+  const topics = await admin.query(api.core.teamPrompts.listTeamTopics, { organizationId });
+  expect(topics).toEqual([
+    expect.objectContaining({
+      _id: result.teamTopicId,
+      name: "Launch readiness",
+      guidance: "Surface unspoken concerns without turning this into a status meeting.",
+      boundaries: "Do not ask people to name individual owners.",
+    }),
+  ]);
+});
+
+test("custom schedule prompts require an active Team workspace", async () => {
+  const { admin, organizationId } = await createScheduleWorkspace();
+  const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  });
+
+  await expect(admin.mutation(api.core.teamPrompts.createAndAssign, {
+    scheduleId,
+    dayOfWeek: "monday",
+    questionText: "Should this be allowed?",
+  })).rejects.toThrow("active Team workspace");
+});
+
+test("topic previews reject taxonomy records owned by another organization", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const { styleId, toneId } = await t.run(async (ctx) => {
+    await ctx.db.patch(organizationId, {
+      planTier: "team",
+      billingStatus: "active",
+    });
+    const otherOrganizationId = await ctx.db.insert("organizations", {
+      name: "Other workspace",
+    });
+    const styleId = await ctx.db.insert("styles", {
+      id: "private-other-style",
+      name: "Private other style",
+      structure: "Private structure",
+      color: "#000000",
+      icon: "lock",
+      organizationId: otherOrganizationId,
+      status: "active",
+    });
+    const toneId = await ctx.db.insert("tones", {
+      id: "global-tone",
+      name: "Global tone",
+      color: "#ffffff",
+      icon: "message-circle",
+      promptGuidanceForAI: "Use clear language.",
+      status: "active",
+    });
+    return { styleId, toneId };
+  });
+
+  await expect(
+    admin.query(internal.core.teamPrompts.authorizeTopicPreview, {
+      organizationId,
+      styleId,
+      toneId,
+    }),
+  ).rejects.toThrow("Style is not available to this organization");
+});
+
+test("topic previews reject unpublished taxonomy records", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const { styleId, toneId } = await t.run(async (ctx) => {
+    await ctx.db.patch(organizationId, { planTier: "team", billingStatus: "active" });
+    const styleId = await ctx.db.insert("styles", {
+      id: "draft-style",
+      name: "Draft style",
+      structure: "Draft structure",
+      color: "#000000",
+      icon: "lock",
+      status: "draft",
+    });
+    const toneId = await ctx.db.insert("tones", {
+      id: "global-tone-2",
+      name: "Global tone",
+      color: "#ffffff",
+      icon: "message-circle",
+      promptGuidanceForAI: "Use clear language.",
+      status: "active",
+    });
+    return { styleId, toneId };
+  });
+
+  await expect(admin.query(internal.core.teamPrompts.authorizeTopicPreview, {
+    organizationId,
+    styleId,
+    toneId,
+  })).rejects.toThrow("Style is not available to this organization");
+});
+
+test("schedule assignment rejects a private prompt from another organization", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  });
+  const foreignQuestionId = await t.run(async (ctx) => {
+    const foreignOrganizationId = await ctx.db.insert("organizations", { name: "Foreign" });
+    return await ctx.db.insert("questions", {
+      organizationId: foreignOrganizationId,
+      customText: "Foreign private wording",
+      kind: "team_prompt",
+      status: "private",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+  });
+
+  await expect(admin.mutation(api.core.schedules.assignQuestion, {
+    scheduleId,
+    dayOfWeek: "monday",
+    questionId: foreignQuestionId,
+  })).rejects.toThrow("not available to this organization");
 });
 
 test("publish rejects a schedule missing configured delivery days", async () => {

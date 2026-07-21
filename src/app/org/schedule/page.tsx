@@ -14,8 +14,14 @@ import {
   Crown,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Sparkles,
   Loader2,
+  Lightbulb,
+  CircleAlert,
+  CheckCircle2,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,12 +36,21 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { TeamWorkspaceMenu } from "@/components/header/TeamWorkspaceMenu";
 import { toast } from "sonner";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
+import { TeamPromptComposer, type TeamTopicDraft } from "./TeamPromptComposer";
 
 const DAYS_DISPLAY: {
   key: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
@@ -236,6 +251,245 @@ function AxisMultiSelect({
 }
 
 // ──────────────────────────────────────────────
+// Feedback-informed curation
+// ──────────────────────────────────────────────
+
+type CurationReason = {
+  dimension: "style" | "tone" | "topic";
+  value: string;
+  score: number;
+  responses: number;
+  landedWell: number;
+  fellFlat: number;
+  wrongVibe: number;
+  timingOff: number;
+  isMixed: boolean;
+  coachCount: number;
+};
+
+type CurationCandidate = {
+  questionId: string;
+  text?: string;
+  score: number;
+  reasons: CurationReason[];
+};
+
+type CurationPreview = {
+  totalResponses: number;
+  coachCount: number;
+  confidence: "insufficient" | "directional";
+  recommendations: CurationCandidate[];
+};
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function humanizeSlug(value: string) {
+  return value
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function strongestCurationReason(reasons: CurationReason[]) {
+  return [...reasons].sort(
+    (left, right) =>
+      right.score - left.score ||
+      right.responses - left.responses ||
+      left.dimension.localeCompare(right.dimension),
+  )[0];
+}
+
+function curationSignal(reason: CurationReason | undefined) {
+  if (!reason) return "Matches a pattern in your team's recent feedback.";
+  const concerns = reason.fellFlat + reason.wrongVibe + reason.timingOff;
+  if (reason.landedWell > 0 && concerns > 0) {
+    return `Mixed signal: ${reason.landedWell} landed well, ${pluralize(concerns, "caution signal")}.`;
+  }
+  if (reason.landedWell > 0) {
+    return `${reason.landedWell} of ${reason.responses} ${reason.responses === 1 ? "response" : "responses"} landed well.`;
+  }
+  if (concerns > 0) {
+    return `${pluralize(concerns, "caution signal")} across ${pluralize(reason.responses, "response")}.`;
+  }
+  return `Informed by ${pluralize(reason.responses, "response")}.`;
+}
+
+function FeedbackCurationPanel({
+  preview,
+  openDays,
+  assignedIds,
+  canEdit,
+  showAll,
+  onToggleShowAll,
+  onAssign,
+}: {
+  preview: CurationPreview;
+  openDays: Array<{ key: (typeof DAYS_DISPLAY)[number]["key"]; label: string }>;
+  assignedIds: Set<string>;
+  canEdit: boolean;
+  showAll: boolean;
+  onToggleShowAll: () => void;
+  onAssign: (dayKey: string, questionId: string) => Promise<void>;
+}) {
+  const isInsufficient = preview.confidence === "insufficient";
+  const visibleCandidates = showAll
+    ? preview.recommendations
+    : preview.recommendations.slice(0, 3);
+  const hiddenCount = preview.recommendations.length - visibleCandidates.length;
+  const actionTitle = preview.totalResponses === 0
+    ? "Start building a feedback signal"
+    : isInsufficient
+      ? "Collect more feedback before optimizing"
+      : "Try one suggestion this week";
+  const actionCopy = preview.totalResponses === 0
+    ? "Schedule a few varied questions, then ask coaches to record what landed."
+    : isInsufficient
+      ? "Reach at least 3 responses from 2 coaches before treating these patterns as directional."
+      : "These patterns have early support. Add one to an open day, then keep collecting feedback.";
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="space-y-3 border-b bg-muted/20 px-4 pb-4 pt-4 sm:px-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Lightbulb className="size-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold">What your feedback suggests</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Patterns from questions your coaches have already tried.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5 sm:justify-end">
+            <Badge variant="outline">{pluralize(preview.totalResponses, "response")}</Badge>
+            <Badge variant="outline">{pluralize(preview.coachCount, "coach", "coaches")}</Badge>
+            <Badge variant={isInsufficient ? "secondary" : "default"}>
+              {isInsufficient ? "More feedback needed" : "Early pattern"}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3 rounded-lg border bg-background p-3">
+          {isInsufficient ? (
+            <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          )}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Recommended next step
+            </p>
+            <p className="mt-1 text-sm font-semibold">{actionTitle}</p>
+            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{actionCopy}</p>
+          </div>
+        </div>
+      </CardHeader>
+
+      {visibleCandidates.length > 0 && (
+        <CardContent className="space-y-3 px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {isInsufficient ? "Prompts to test next" : "Suggestions based on what worked"}
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Review the wording, then add a prompt to an open day.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            {visibleCandidates.map((candidate) => {
+              const strongestReason = strongestCurationReason(candidate.reasons);
+              const alreadyAssigned = assignedIds.has(candidate.questionId);
+              return (
+                <div
+                  key={candidate.questionId}
+                  className="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 space-y-2">
+                    <p className="text-sm font-medium leading-5">
+                      {candidate.text ?? "Untitled question"}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {candidate.reasons.map((reason) => (
+                        <Badge
+                          key={`${reason.dimension}-${reason.value}`}
+                          variant="secondary"
+                          className="font-normal"
+                        >
+                          {humanizeSlug(reason.dimension)} · {humanizeSlug(reason.value)}
+                        </Badge>
+                      ))}
+                      <span className={cn(
+                        "text-xs",
+                        strongestReason?.isMixed
+                          ? "font-medium text-amber-700 dark:text-amber-400"
+                          : "text-muted-foreground",
+                      )}>
+                        {curationSignal(strongestReason)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0">
+                    {alreadyAssigned ? (
+                      <Badge variant="outline">Already in this week</Badge>
+                    ) : canEdit && openDays.length > 0 ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button size="sm" className="w-full sm:w-auto">
+                            <CalendarDays className="mr-1.5 size-3.5" />
+                            Add to week
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-48 p-2">
+                          <p className="px-2 pb-2 text-xs font-medium text-muted-foreground">
+                            Choose an open day
+                          </p>
+                          <div className="space-y-1">
+                            {openDays.map((day) => (
+                              <Button
+                                key={day.key}
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                onClick={() => void onAssign(day.key, candidate.questionId)}
+                              >
+                                {day.label}
+                              </Button>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      <Badge variant="outline">
+                        {canEdit ? "Week is full" : "View only"}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {(hiddenCount > 0 || showAll && preview.recommendations.length > 3) && (
+            <Button variant="ghost" size="sm" onClick={onToggleShowAll}>
+              {showAll ? (
+                <><ChevronUp className="mr-1.5 size-3.5" />Show fewer</>
+              ) : (
+                <><ChevronDown className="mr-1.5 size-3.5" />Show {hiddenCount} more</>
+              )}
+            </Button>
+          )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Day slot card
 // ──────────────────────────────────────────────
 
@@ -252,6 +506,7 @@ interface DaySlotProps {
         style?: string;
         tone?: string;
         topic?: string;
+        teamTopicName?: string;
       }
     | undefined;
   canEdit: boolean;
@@ -297,6 +552,9 @@ function DaySlot({ dayKey, dayLabel, dayAbbr, date, assignment, canEdit, onAssig
               )}
               {assignment.topic && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{assignment.topic}</Badge>
+              )}
+              {assignment.teamTopicName && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Topic: {assignment.teamTopicName}</Badge>
               )}
             </div>
             {canEdit && (
@@ -379,6 +637,13 @@ export default function OrgWeeklyCurationPage() {
     api.core.schedules.listSchedules,
     orgId ? { organizationId: orgId } : "skip"
   );
+  const currentWorkspaceUser = useQuery(
+    api.core.users.getCurrentUser,
+    orgId ? { organizationId: orgId } : "skip",
+  );
+  const canManageWorkspace =
+    currentWorkspaceUser?.organizationRole === "admin" ||
+    currentWorkspaceUser?.organizationRole === "manager";
 
   /* --- Org settings --- */
   const orgSettings = useQuery(
@@ -391,7 +656,9 @@ export default function OrgWeeklyCurationPage() {
   const currentZonedDate = calendarIso(dateInTimeZone(new Date(), timeZone));
   const curationPreview = useQuery(
     api.core.coachFeedback.getCurationPreview,
-    orgId ? { organizationId: orgId, currentDate: currentZonedDate, limit: 5 } : "skip",
+    orgId && canManageWorkspace
+      ? { organizationId: orgId, currentDate: currentZonedDate, limit: 5 }
+      : "skip",
   );
 
   /* --- Week navigation --- */
@@ -420,9 +687,15 @@ const questionPool = useQuery(
   );
 
   /* --- Axis filter state --- */
-  const styles = useQuery(api.core.styles.getStyles, {});
-  const tones = useQuery(api.core.tones.getTones, {});
-  const topics = useQuery(api.core.topics.getTopics, {});
+  const styles = useQuery(api.core.styles.getStyles, {
+    organizationId: orgId ?? undefined,
+  });
+  const tones = useQuery(api.core.tones.getTones, {
+    organizationId: orgId ?? undefined,
+  });
+  const topics = useQuery(api.core.topics.getTopics, {
+    organizationId: orgId ?? undefined,
+  });
 
   const [axisY, setAxisY] = React.useState<AxisType>("style");
   const [axisX, setAxisX] = React.useState<AxisType>("tone");
@@ -472,7 +745,15 @@ const questionPool = useQuery(
 
   /* --- UI state --- */
   const [assignTargetDay, setAssignTargetDay] = React.useState<string | null>(null);
+  const [previewQuestionId, setPreviewQuestionId] = React.useState<string | null>(null);
   const [isUpdatingDeliveryDays, setIsUpdatingDeliveryDays] = React.useState(false);
+  const [showAllCurationCandidates, setShowAllCurationCandidates] = React.useState(false);
+
+  React.useEffect(() => {
+    setAssignTargetDay(null);
+    setPreviewQuestionId(null);
+    setShowAllCurationCandidates(false);
+  }, [orgId, week.isoStart]);
 
   /* --- Mutations --- */
   const createSchedule = useMutation(api.core.schedules.createSchedule);
@@ -486,13 +767,16 @@ const questionPool = useQuery(
   const syncOrgViaClerkApi = useAction(api.core.billingSyncAction.syncOrganizationViaClerkApi);
   const fillEmptyCellsAction = useAction(api.core.fillMatrix.fillEmptyCells);
   const fillSingleCellAction = useAction(api.core.fillMatrix.fillSingleCell);
+  const previewTopicQuestions = useAction(api.core.teamPromptActions.previewTopicQuestions);
+  const createAndAssignTeamPrompt = useMutation(api.core.teamPrompts.createAndAssign);
 
   /* Generation state */
   const [isFillingEmpty, setIsFillingEmpty] = React.useState(false);
   const [fillingCellKey, setFillingCellKey] = React.useState<string | null>(null);
 
   /* --- Derived --- */
-  const canEdit = !currentSchedule || currentSchedule.status === "draft";
+  const canManageSchedule = canManageWorkspace;
+  const canEdit = canManageSchedule && (!currentSchedule || currentSchedule.status === "draft");
 
   /* Map assignments by day */
   const assignmentsByDay = React.useMemo(() => {
@@ -506,6 +790,7 @@ const questionPool = useQuery(
         style: a.question.style,
         tone: a.question.tone,
         topic: a.question.topic,
+        teamTopicName: a.teamTopicName,
       };
     }
     return map;
@@ -790,9 +1075,79 @@ const questionPool = useQuery(
         questionId: questionId as Id<"questions">,
       });
       setAssignTargetDay(null);
+      setPreviewQuestionId(null);
       toast.success("Assigned to " + (DAYS_DISPLAY.find(d => d.key === dayKey)?.label ?? dayKey));
     } catch (e: any) {
       toast.error(e.message ?? "Failed to assign");
+    }
+  };
+
+  const getOrCreateCurrentScheduleId = async (): Promise<Id<"schedules">> => {
+    if (currentSchedule) return currentSchedule._id;
+    if (!orgId) throw new Error("Select an organization first");
+    return await createSchedule({
+      organizationId: orgId,
+      weekStart: week.isoStart,
+      weekStartDay,
+    });
+  };
+
+  const handleCreateTeamQuestion = async (questionText: string) => {
+    if (!assignTargetDay) throw new Error("Select a schedule day first");
+    try {
+      const scheduleId = await getOrCreateCurrentScheduleId();
+      await createAndAssignTeamPrompt({
+        scheduleId,
+        dayOfWeek: assignTargetDay as (typeof DAYS_DISPLAY)[number]["key"],
+        questionText,
+      });
+      toast.success(`Custom question assigned to ${DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}`);
+      setAssignTargetDay(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to assign custom question");
+      throw error;
+    }
+  };
+
+  const handlePreviewTeamTopic = async (request: {
+    name: string;
+    guidance: string;
+    boundaries?: string;
+    styleId: string;
+    toneId: string;
+  }): Promise<string[]> => {
+    if (!orgId) throw new Error("Select an organization first");
+    try {
+      const result = await previewTopicQuestions({
+        organizationId: orgId,
+        name: request.name,
+        guidance: request.guidance,
+        boundaries: request.boundaries,
+        styleId: request.styleId as Id<"styles">,
+        toneId: request.toneId as Id<"tones">,
+      });
+      return result.questions;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to generate topic options");
+      throw error;
+    }
+  };
+
+  const handleAssignTeamTopicQuestion = async (questionText: string, sourceTopic: TeamTopicDraft) => {
+    if (!assignTargetDay) throw new Error("Select a schedule day first");
+    try {
+      const scheduleId = await getOrCreateCurrentScheduleId();
+      await createAndAssignTeamPrompt({
+        scheduleId,
+        dayOfWeek: assignTargetDay as (typeof DAYS_DISPLAY)[number]["key"],
+        questionText,
+        sourceTopic,
+      });
+      toast.success(`Topic question assigned to ${DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}`);
+      setAssignTargetDay(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to assign topic question");
+      throw error;
     }
   };
 
@@ -996,6 +1351,17 @@ const questionPool = useQuery(
     () => new Set(Object.values(assignmentsByDay).filter(Boolean).map((a) => a!.questionId)),
     [assignmentsByDay]
   );
+  const matrixQuestions = React.useMemo(
+    () => questionMatrix?.matrix.flatMap((row) => row.flatMap((cell) => cell)) ?? [],
+    [questionMatrix],
+  );
+  const previewQuestionIndex = matrixQuestions.findIndex(
+    (question) => question._id === previewQuestionId,
+  );
+  const previewQuestion = previewQuestionIndex >= 0
+    ? matrixQuestions[previewQuestionIndex]
+    : undefined;
+  const openScheduleDays = dayRows.filter((day) => assignmentsByDay[day.key] == null);
 
   const orgContextLoading =
     isSignedIn &&
@@ -1171,27 +1537,17 @@ const questionPool = useQuery(
       <Separator />
 
       {curationPreview && (
-        <Card>
-          <CardHeader className="pb-2 px-4 pt-4">
-            <h2 className="text-sm font-semibold">Feedback-informed curation</h2>
-            <p className="text-xs text-muted-foreground">
-              Advisory only — review evidence before assigning questions. {curationPreview.totalResponses} coach responses from {curationPreview.coachCount} coaches; {curationPreview.confidence === "insufficient" ? "insufficient evidence" : "directional evidence"}.
-            </p>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-2">
-            {curationPreview.recommendations.map((candidate) => (
-              <div key={candidate.questionId} className="rounded-md border p-2 text-sm">
-                <p>{candidate.text ?? "Untitled question"}</p>
-                {candidate.reasons.map((reason) => (
-                  <p key={`${reason.dimension}-${reason.value}`} className="text-xs text-muted-foreground">
-                    {reason.dimension}: {reason.value} · {reason.responses} responses from {reason.coachCount} coaches · {reason.landedWell} landed · {reason.fellFlat} flat · {reason.wrongVibe} wrong vibe · {reason.timingOff} timing off
-                    {reason.isMixed && <span className="block font-medium text-amber-700 dark:text-amber-400">Mixed coach feedback — review before assigning.</span>}
-                  </p>
-                ))}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <FeedbackCurationPanel
+          preview={curationPreview}
+          openDays={dayRows
+            .filter((day) => assignmentsByDay[day.key] == null)
+            .map((day) => ({ key: day.key, label: day.label }))}
+          assignedIds={assignedIds}
+          canEdit={canEdit}
+          showAll={showAllCurationCandidates}
+          onToggleShowAll={() => setShowAllCurationCandidates((visible) => !visible)}
+          onAssign={handleAssign}
+        />
       )}
 
       <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
@@ -1411,6 +1767,32 @@ const questionPool = useQuery(
             </div>
           </section>
 
+          {assignTargetDay && canEdit && currentWorkspaceUser?.planTier === "team" && (
+            <TeamPromptComposer
+              key={`${orgId}:${week.isoStart}:${assignTargetDay}`}
+              dayLabel={DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}
+              styles={(styles ?? []).map((style) => ({ id: style._id, name: style.name }))}
+              tones={(tones ?? []).map((tone) => ({ id: tone._id, name: tone.name }))}
+              onCreateQuestion={handleCreateTeamQuestion}
+              onPreviewTopic={handlePreviewTeamTopic}
+              onAssignTopicQuestion={handleAssignTeamTopicQuestion}
+            />
+          )}
+
+          {assignTargetDay && canEdit && currentWorkspaceUser !== undefined && currentWorkspaceUser?.planTier !== "team" && (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col gap-3 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium">Custom questions and topics are a Team feature</p>
+                  <p className="text-xs text-muted-foreground">You can still assign a public question from the matrix below.</p>
+                </div>
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/pricing?source=team_prompt_composer">View Team plan</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Question pool — axis matrix */}
           <section>
             <div className="flex items-center justify-between mb-3">
@@ -1502,9 +1884,20 @@ const questionPool = useQuery(
                               const alreadyAssigned = assignedIds.has(q._id);
                               return (
                                 <div key={q._id} className="space-y-1">
-                                  <p className="text-xs leading-snug line-clamp-3">
-                                    {q.text ?? <em className="text-muted-foreground/50">No text</em>}
-                                  </p>
+                                  <button
+                                    type="button"
+                                    className="group w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                    onClick={() => setPreviewQuestionId(q._id)}
+                                    aria-label={`View full question: ${q.text ?? "Untitled question"}`}
+                                  >
+                                    <span className="block text-xs leading-snug line-clamp-3">
+                                      {q.text ?? <em className="text-muted-foreground/50">No text</em>}
+                                    </span>
+                                    <span className="mt-1 flex items-center gap-1 text-[10px] font-medium text-primary group-hover:underline">
+                                      <Eye className="size-3" aria-hidden="true" />
+                                      View full
+                                    </span>
+                                  </button>
                                   <div className="flex flex-wrap gap-1">
                                     <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">{q.topic ? q.topic : q.tone ? q.tone : q.style ? q.style : "Unknown"}</Badge>
                                     {q.isAIGenerated && (
@@ -1562,6 +1955,131 @@ const questionPool = useQuery(
           </section>
         </div>
       </div>
+
+      <Sheet
+        open={Boolean(previewQuestion)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewQuestionId(null);
+        }}
+      >
+        <SheetContent className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
+          <SheetHeader className="pr-8">
+            <SheetTitle>Question details</SheetTitle>
+            <SheetDescription>
+              Review the full wording before adding it to the week.
+            </SheetDescription>
+          </SheetHeader>
+
+          {previewQuestion && (
+            <div className="flex flex-1 flex-col gap-6 py-6">
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
+                <p className="text-base font-medium leading-relaxed">
+                  {previewQuestion.text ?? (
+                    <em className="text-muted-foreground">No question text</em>
+                  )}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Question profile</h3>
+                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {([
+                    ["Style", previewQuestion.style],
+                    ["Tone", previewQuestion.tone],
+                    ["Topic", previewQuestion.topic],
+                  ] as const).map(([label, value]) => (
+                    <div key={label} className="rounded-lg border bg-muted/20 p-3">
+                      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {label}
+                      </dt>
+                      <dd className="mt-1 text-sm font-medium">
+                        {value ? humanizeSlug(value) : "Not set"}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="flex flex-wrap gap-2">
+                  {previewQuestion.isAIGenerated && <Badge variant="outline">AI generated</Badge>}
+                  {assignedIds.has(previewQuestion._id) && (
+                    <Badge variant="secondary">Already in this week</Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-auto space-y-3">
+                {canEdit && !assignedIds.has(previewQuestion._id) && assignTargetDay && (
+                  <Button
+                    className="w-full"
+                    onClick={() => void handleAssign(assignTargetDay, previewQuestion._id)}
+                  >
+                    Assign to {DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}
+                  </Button>
+                )}
+                {canEdit && !assignedIds.has(previewQuestion._id) && !assignTargetDay && openScheduleDays.length > 0 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button className="w-full">Add to week</Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-52 p-2">
+                      <p className="px-2 pb-2 text-xs font-medium text-muted-foreground">
+                        Choose an open day
+                      </p>
+                      <div className="space-y-1">
+                        {openScheduleDays.map((day) => (
+                          <Button
+                            key={day.key}
+                            variant="ghost"
+                            className="w-full justify-start"
+                            onClick={() => void handleAssign(day.key, previewQuestion._id)}
+                          >
+                            {day.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+                {canEdit && !assignedIds.has(previewQuestion._id) && openScheduleDays.length === 0 && (
+                  <p className="text-center text-sm text-muted-foreground">
+                    Every delivery day already has a question.
+                  </p>
+                )}
+                {!canEdit && !assignedIds.has(previewQuestion._id) && (
+                  <p className="text-center text-sm text-muted-foreground">
+                    This week is view-only.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <SheetFooter className="flex-row items-center justify-between space-x-2 border-t pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPreviewQuestionId(matrixQuestions[previewQuestionIndex - 1]?._id ?? null)}
+              disabled={previewQuestionIndex <= 0}
+              aria-label="Previous question"
+            >
+              <ChevronLeft className="mr-1 size-4" aria-hidden="true" />
+              Previous
+            </Button>
+            <span className="self-center py-2 text-xs text-muted-foreground sm:py-0">
+              {previewQuestionIndex >= 0 ? previewQuestionIndex + 1 : 0} of {matrixQuestions.length}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPreviewQuestionId(matrixQuestions[previewQuestionIndex + 1]?._id ?? null)}
+              disabled={previewQuestionIndex < 0 || previewQuestionIndex >= matrixQuestions.length - 1}
+              aria-label="Next question"
+            >
+              Next
+              <ChevronRight className="ml-1 size-4" aria-hidden="true" />
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

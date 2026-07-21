@@ -5,6 +5,10 @@ import {
   defaultQualityRubric,
   defaultToneAxesValue,
 } from "./lib/taxonomy";
+import {
+  seriousRelationshipStyles,
+  seriousRelationshipTones,
+} from "./data/seriousRelationshipTaxonomy";
 
 export const seedTakeover = internalMutation({
   args: {},
@@ -647,6 +651,7 @@ const styles = [
     },
     riskLevel: "low" as const,
   },
+  ...seriousRelationshipStyles,
 ];
 
 const tones = [
@@ -971,6 +976,7 @@ const tones = [
       intimacy: 2,
     },
   },
+  ...seriousRelationshipTones,
 ];
 
 const topics = [
