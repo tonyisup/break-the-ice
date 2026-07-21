@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import OrgWeeklyCurationPage from "./page";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -164,6 +164,65 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     render(<OrgWeeklyCurationPage />);
 
     expect(screen.getByRole("checkbox", { name: "Deliver on Monday" })).toBeDisabled();
+  });
+
+  it("opens full matrix questions in a navigable sheet and assigns from the detail view", async () => {
+    const firstQuestion = "What are the top three songs you would want on a road trip playlist that say this is exactly who we are?";
+    const secondQuestion = "If you could only keep three songs for the rest of your life on a desert island, which ones would make the cut?";
+
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
+      if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
+      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
+      if (fn === "getCurationPreview") return { totalResponses: 0, coachCount: 0, confidence: "insufficient", recommendations: [] };
+      if (fn === "getStyles") {
+        return [{ id: "rapid-fire-either", slug: "rapid-fire-either", name: "Rapid fire", icon: "zap", color: "#888888" }];
+      }
+      if (fn === "getTones") {
+        return [
+          { id: "cozy", slug: "cozy", name: "Cozy", icon: "heart", color: "#888888" },
+          { id: "bold", slug: "bold", name: "Bold", icon: "flame", color: "#888888" },
+        ];
+      }
+      if (fn === "getTopics") return [];
+      if (fn === "getPublicQuestions") {
+        return [
+          { _id: "q-cozy", text: firstQuestion, style: "rapid-fire-either", tone: "cozy", topic: "music", isAIGenerated: false },
+          { _id: "q-bold", text: secondQuestion, style: "rapid-fire-either", tone: "bold", topic: "music", isAIGenerated: true },
+        ];
+      }
+      return undefined;
+    });
+
+    render(<OrgWeeklyCurationPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    fireEvent.click(screen.getByRole("button", { name: `View full question: ${firstQuestion}` }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Question details" })).toBeInTheDocument();
+    expect(within(dialog).getByText(firstQuestion)).toBeInTheDocument();
+    expect(within(dialog).getByText("Rapid Fire Either")).toBeInTheDocument();
+    expect(within(dialog).getByText("Cozy")).toBeInTheDocument();
+    expect(within(dialog).getByText("Music")).toBeInTheDocument();
+    expect(within(dialog).getByText("1 of 2")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next question" }));
+    expect(within(dialog).getByText(secondQuestion)).toBeInTheDocument();
+    expect(within(dialog).getByText("2 of 2")).toBeInTheDocument();
+    expect(within(dialog).getByText("AI generated")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Assign to Monday" }));
+
+    await waitFor(() => {
+      expect(assignQuestion).toHaveBeenCalledWith({
+        scheduleId: "schedule-new",
+        dayOfWeek: "monday",
+        questionId: "q-bold",
+      });
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 
   it("does not expose scheduler assignment controls to ordinary Team members", () => {

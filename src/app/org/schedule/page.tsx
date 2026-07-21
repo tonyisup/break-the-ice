@@ -21,6 +21,7 @@ import {
   Lightbulb,
   CircleAlert,
   CheckCircle2,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
@@ -736,11 +745,13 @@ const questionPool = useQuery(
 
   /* --- UI state --- */
   const [assignTargetDay, setAssignTargetDay] = React.useState<string | null>(null);
+  const [previewQuestionId, setPreviewQuestionId] = React.useState<string | null>(null);
   const [isUpdatingDeliveryDays, setIsUpdatingDeliveryDays] = React.useState(false);
   const [showAllCurationCandidates, setShowAllCurationCandidates] = React.useState(false);
 
   React.useEffect(() => {
     setAssignTargetDay(null);
+    setPreviewQuestionId(null);
     setShowAllCurationCandidates(false);
   }, [orgId, week.isoStart]);
 
@@ -1064,6 +1075,7 @@ const questionPool = useQuery(
         questionId: questionId as Id<"questions">,
       });
       setAssignTargetDay(null);
+      setPreviewQuestionId(null);
       toast.success("Assigned to " + (DAYS_DISPLAY.find(d => d.key === dayKey)?.label ?? dayKey));
     } catch (e: any) {
       toast.error(e.message ?? "Failed to assign");
@@ -1339,6 +1351,17 @@ const questionPool = useQuery(
     () => new Set(Object.values(assignmentsByDay).filter(Boolean).map((a) => a!.questionId)),
     [assignmentsByDay]
   );
+  const matrixQuestions = React.useMemo(
+    () => questionMatrix?.matrix.flatMap((row) => row.flatMap((cell) => cell)) ?? [],
+    [questionMatrix],
+  );
+  const previewQuestionIndex = matrixQuestions.findIndex(
+    (question) => question._id === previewQuestionId,
+  );
+  const previewQuestion = previewQuestionIndex >= 0
+    ? matrixQuestions[previewQuestionIndex]
+    : undefined;
+  const openScheduleDays = dayRows.filter((day) => assignmentsByDay[day.key] == null);
 
   const orgContextLoading =
     isSignedIn &&
@@ -1861,9 +1884,20 @@ const questionPool = useQuery(
                               const alreadyAssigned = assignedIds.has(q._id);
                               return (
                                 <div key={q._id} className="space-y-1">
-                                  <p className="text-xs leading-snug line-clamp-3">
-                                    {q.text ?? <em className="text-muted-foreground/50">No text</em>}
-                                  </p>
+                                  <button
+                                    type="button"
+                                    className="group w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                    onClick={() => setPreviewQuestionId(q._id)}
+                                    aria-label={`View full question: ${q.text ?? "Untitled question"}`}
+                                  >
+                                    <span className="block text-xs leading-snug line-clamp-3">
+                                      {q.text ?? <em className="text-muted-foreground/50">No text</em>}
+                                    </span>
+                                    <span className="mt-1 flex items-center gap-1 text-[10px] font-medium text-primary group-hover:underline">
+                                      <Eye className="size-3" aria-hidden="true" />
+                                      View full
+                                    </span>
+                                  </button>
                                   <div className="flex flex-wrap gap-1">
                                     <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">{q.topic ? q.topic : q.tone ? q.tone : q.style ? q.style : "Unknown"}</Badge>
                                     {q.isAIGenerated && (
@@ -1921,6 +1955,131 @@ const questionPool = useQuery(
           </section>
         </div>
       </div>
+
+      <Sheet
+        open={Boolean(previewQuestion)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewQuestionId(null);
+        }}
+      >
+        <SheetContent className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
+          <SheetHeader className="pr-8">
+            <SheetTitle>Question details</SheetTitle>
+            <SheetDescription>
+              Review the full wording before adding it to the week.
+            </SheetDescription>
+          </SheetHeader>
+
+          {previewQuestion && (
+            <div className="flex flex-1 flex-col gap-6 py-6">
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
+                <p className="text-base font-medium leading-relaxed">
+                  {previewQuestion.text ?? (
+                    <em className="text-muted-foreground">No question text</em>
+                  )}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold">Question profile</h3>
+                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {([
+                    ["Style", previewQuestion.style],
+                    ["Tone", previewQuestion.tone],
+                    ["Topic", previewQuestion.topic],
+                  ] as const).map(([label, value]) => (
+                    <div key={label} className="rounded-lg border bg-muted/20 p-3">
+                      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {label}
+                      </dt>
+                      <dd className="mt-1 text-sm font-medium">
+                        {value ? humanizeSlug(value) : "Not set"}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="flex flex-wrap gap-2">
+                  {previewQuestion.isAIGenerated && <Badge variant="outline">AI generated</Badge>}
+                  {assignedIds.has(previewQuestion._id) && (
+                    <Badge variant="secondary">Already in this week</Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-auto space-y-3">
+                {canEdit && !assignedIds.has(previewQuestion._id) && assignTargetDay && (
+                  <Button
+                    className="w-full"
+                    onClick={() => void handleAssign(assignTargetDay, previewQuestion._id)}
+                  >
+                    Assign to {DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}
+                  </Button>
+                )}
+                {canEdit && !assignedIds.has(previewQuestion._id) && !assignTargetDay && openScheduleDays.length > 0 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button className="w-full">Add to week</Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-52 p-2">
+                      <p className="px-2 pb-2 text-xs font-medium text-muted-foreground">
+                        Choose an open day
+                      </p>
+                      <div className="space-y-1">
+                        {openScheduleDays.map((day) => (
+                          <Button
+                            key={day.key}
+                            variant="ghost"
+                            className="w-full justify-start"
+                            onClick={() => void handleAssign(day.key, previewQuestion._id)}
+                          >
+                            {day.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+                {canEdit && !assignedIds.has(previewQuestion._id) && openScheduleDays.length === 0 && (
+                  <p className="text-center text-sm text-muted-foreground">
+                    Every delivery day already has a question.
+                  </p>
+                )}
+                {!canEdit && !assignedIds.has(previewQuestion._id) && (
+                  <p className="text-center text-sm text-muted-foreground">
+                    This week is view-only.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <SheetFooter className="flex-row items-center justify-between space-x-2 border-t pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPreviewQuestionId(matrixQuestions[previewQuestionIndex - 1]?._id ?? null)}
+              disabled={previewQuestionIndex <= 0}
+              aria-label="Previous question"
+            >
+              <ChevronLeft className="mr-1 size-4" aria-hidden="true" />
+              Previous
+            </Button>
+            <span className="self-center py-2 text-xs text-muted-foreground sm:py-0">
+              {previewQuestionIndex >= 0 ? previewQuestionIndex + 1 : 0} of {matrixQuestions.length}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPreviewQuestionId(matrixQuestions[previewQuestionIndex + 1]?._id ?? null)}
+              disabled={previewQuestionIndex < 0 || previewQuestionIndex >= matrixQuestions.length - 1}
+              aria-label="Next question"
+            >
+              Next
+              <ChevronRight className="ml-1 size-4" aria-hidden="true" />
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
