@@ -116,8 +116,11 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
   handler: async (ctx) => {
     const questions = await ctx.db
       .query("questions")
-      .withIndex("by_tone_text", (q) => q)
+      .withIndex("by_tone", (q) => q.eq("toneId", undefined))
+      .filter((q) => q.neq(q.field("tone"), undefined))
       .take(TONE_BACKFILL_BATCH_SIZE);
+    let patchedCount = 0;
+    const unresolvedToneSlugs = new Set<string>();
     for (const question of questions) {
       if (!question.toneId && question.tone) {
         const tone = await ctx.db
@@ -132,8 +135,24 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
           await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
             questionId: question._id,
           });
+          patchedCount++;
+        } else {
+          unresolvedToneSlugs.add(question.tone);
         }
       }
+    }
+
+    const batchMayHaveMore = questions.length === TONE_BACKFILL_BATCH_SIZE;
+    if (patchedCount > 0 && batchMayHaveMore) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.internal.tones.updateQuestionsWithMissingToneIds,
+        {},
+      );
+    } else if (unresolvedToneSlugs.size > 0) {
+      console.warn(
+        `Tone ID backfill stopped with ${questions.length - patchedCount} unresolved question(s): ${Array.from(unresolvedToneSlugs).join(", ")}`,
+      );
     }
 
     return null;

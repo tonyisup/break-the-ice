@@ -199,7 +199,11 @@ async function getNextRandomQuestionsInternal(
 		anchoredToneId?: Id<"tones">;
 		anchoredTopicId?: Id<"topics">;
 	}
-): Promise<any[]> {
+): Promise<{
+	questions: any[];
+	anchoredMatchCount: number;
+	targetAnchoredCount: number;
+}> {
 	const {
 		count,
 		seen = [],
@@ -213,8 +217,23 @@ async function getNextRandomQuestionsInternal(
 		anchoredTopicId
 	} = args;
 
+	if (anchoredStyleId || anchoredToneId || anchoredTopicId) {
+		return await ctx.runQuery(internal.internal.questions.getAnchoredQuestionsInternal, {
+			count,
+			seen,
+			hidden,
+			hiddenStyles,
+			hiddenTones,
+			organizationId,
+			anchoredStyleId,
+			anchoredToneId,
+			anchoredTopicId,
+			randomSeed,
+			currentTime: Date.now(),
+		});
+	}
 
-	// 2. Fetch candidates using internal query
+	// Fetch and shuffle the unanchored feed candidate pool.
 	const candidates = await ctx.runQuery(internal.internal.questions.getRandomQuestionsInternal, {
 		count,
 		seen,
@@ -227,11 +246,14 @@ async function getNextRandomQuestionsInternal(
 		anchoredTopicId,
 	});
 
-	// 3. Shuffle results (deterministic based on seed)
 	const results = [...candidates];
 	shuffleArray(results, randomSeed);
 
-	return results.slice(0, count);
+	return {
+		questions: results.slice(0, count),
+		anchoredMatchCount: 0,
+		targetAnchoredCount: 0,
+	};
 }
 
 export const getNextRandomQuestions = action({
@@ -247,8 +269,12 @@ export const getNextRandomQuestions = action({
 		anchoredToneId: v.optional(v.id("tones")),
 		anchoredTopicId: v.optional(v.id("topics")),
 	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args): Promise<any[]> => {
+	returns: v.object({
+		questions: v.array(v.any()),
+		anchoredMatchCount: v.number(),
+		targetAnchoredCount: v.number(),
+	}),
+	handler: async (ctx, args) => {
 		return await getNextRandomQuestionsInternal(ctx, args);
 	},
 });

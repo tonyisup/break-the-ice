@@ -26,6 +26,11 @@ import { cn } from "@/lib/utils";
 const compareByTextLength = (a: Doc<"questions">, b: Doc<"questions">) =>
   (a.text || a.customText || "").length - (b.text || b.customText || "").length;
 
+const sortAnchoredBatch = (questions: Doc<"questions">[], anchoredCount: number) => [
+  ...questions.slice(0, anchoredCount).sort(compareByTextLength),
+  ...questions.slice(anchoredCount).sort(compareByTextLength),
+];
+
 const PUBLIC_FEED_BANNER_DISMISSED_KEY = "break-the-ice:public-feed-banner-dismissed:v1";
 
 export default function InfiniteScrollPage() {
@@ -36,11 +41,9 @@ export default function InfiniteScrollPage() {
   const generateAIQuestions = useAction(api.core.ai.generateAIQuestionForFeed);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // IDs from searchParams are intentionally cast to Id<...> without full client-side validation
-  // because the Convex backend validators will enforce correctness and reject invalid IDs.
-  const anchoredStyleId = searchParams.get("style") as Id<"styles"> | null;
-  const anchoredToneId = searchParams.get("tone") as Id<"tones"> | null;
-  const anchoredTopicId = searchParams.get("topic") as Id<"topics"> | null;
+  const anchoredStyleParam = searchParams.get("style");
+  const anchoredToneParam = searchParams.get("tone");
+  const anchoredTopicParam = searchParams.get("topic");
 
   const [selectedAnchorItem, setSelectedAnchorItem] = useState<ItemDetails | null>(null);
   const [isAnchorDrawerOpen, setIsAnchorDrawerOpen] = useState(false);
@@ -112,6 +115,7 @@ export default function InfiniteScrollPage() {
     if (!allStyles) return map;
     allStyles.forEach(s => {
       map.set(s.id, s as unknown as Doc<"styles">);
+      map.set(s.slug, s as unknown as Doc<"styles">);
       map.set(s._id, s as unknown as Doc<"styles">);
     });
     return map;
@@ -122,6 +126,7 @@ export default function InfiniteScrollPage() {
     if (!allTones) return map;
     allTones.forEach(t => {
       map.set(t.id, t as unknown as Doc<"tones">);
+      map.set(t.slug, t as unknown as Doc<"tones">);
       map.set(t._id, t as unknown as Doc<"tones">);
     });
     return map;
@@ -132,10 +137,46 @@ export default function InfiniteScrollPage() {
     if (!allTopics) return map;
     allTopics.forEach(t => {
       map.set(t.id, t);
+      map.set(t.slug, t);
       map.set(t._id, t);
     });
     return map;
   }, [allTopics]);
+
+  const anchoredStyle = anchoredStyleParam ? stylesMap.get(anchoredStyleParam) : undefined;
+  const anchoredTone = anchoredToneParam ? tonesMap.get(anchoredToneParam) : undefined;
+  const anchoredTopic = anchoredTopicParam ? topicsMap.get(anchoredTopicParam) : undefined;
+  const anchoredStyleId = anchoredStyle?._id ?? null;
+  const anchoredToneId = anchoredTone?._id ?? null;
+  const anchoredTopicId = anchoredTopic?._id ?? null;
+  const anchorParamsReady =
+    (!anchoredStyleParam || allStyles !== undefined) &&
+    (!anchoredToneParam || allTones !== undefined) &&
+    (!anchoredTopicParam || allTopics !== undefined);
+
+  // Keep old ID-based links working, then replace them with canonical slugs.
+  useEffect(() => {
+    if (!anchorParamsReady) return;
+
+    const newParams = new URLSearchParams(searchParams);
+    let changed = false;
+    const normalizeParam = (key: "style" | "tone" | "topic", value: string | null, item: { slug?: string; id?: string } | undefined) => {
+      if (!value) return;
+      const slug = item?.slug ?? item?.id;
+      if (!slug) {
+        newParams.delete(key);
+        changed = true;
+      } else if (value !== slug) {
+        newParams.set(key, slug);
+        changed = true;
+      }
+    };
+
+    normalizeParam("style", anchoredStyleParam, anchoredStyle);
+    normalizeParam("tone", anchoredToneParam, anchoredTone);
+    normalizeParam("topic", anchoredTopicParam, anchoredTopic);
+    if (changed) setSearchParams(newParams, { replace: true });
+  }, [anchorParamsReady, anchoredStyleParam, anchoredToneParam, anchoredTopicParam, anchoredStyle, anchoredTone, anchoredTopic, searchParams, setSearchParams]);
 
   // Request ID to handle race conditions
   const requestIdRef = useRef(0);
@@ -264,7 +305,7 @@ export default function InfiniteScrollPage() {
     const isStorageLoaded = hiddenStyles !== undefined && hiddenTones !== undefined &&
       (!user.isSignedIn || (hiddenStyles !== null && hiddenTones !== null));
 
-    if (!user.isLoaded || isLoadingRef.current || !hasMore || allStylesBlocked || allTonesBlocked || !isStorageLoaded) return;
+    if (!user.isLoaded || !anchorParamsReady || isLoadingRef.current || !hasMore || allStylesBlocked || allTonesBlocked || !isStorageLoaded) return;
 
     // Capture current request ID
     requestIdRef.current++;
@@ -276,9 +317,105 @@ export default function InfiniteScrollPage() {
     try {
       const isFirstPull = questionsRef.current.length === 0;
       const BATCH_SIZE = isFirstPull ? 10 : 5;
+      const hasAnchors = !!(anchoredStyleId || anchoredToneId || anchoredTopicId);
+
+      if (hasAnchors) {
+        const feedBatch = await convex.action(api.core.questions.getNextRandomQuestions, {
+          count: BATCH_SIZE,
+          seen: Array.from(seenIds),
+          hidden: hiddenQuestions,
+          hiddenStyles: hiddenStyles ?? [],
+          hiddenTones: hiddenTones ?? [],
+          organizationId: activeWorkspace ?? undefined,
+          randomSeed: Math.random(),
+          anchoredStyleId: anchoredStyleId ?? undefined,
+          anchoredToneId: anchoredToneId ?? undefined,
+          anchoredTopicId: anchoredTopicId ?? undefined,
+        });
+
+        if (currentRequestId !== requestIdRef.current) return;
+
+        const dbQuestions = Array.isArray(feedBatch) ? feedBatch : feedBatch.questions;
+        const anchoredMatchCount = Array.isArray(feedBatch) ? 0 : feedBatch.anchoredMatchCount;
+        const targetAnchoredCount = Array.isArray(feedBatch) ? Math.min(BATCH_SIZE, BATCH_SIZE >= 10 ? 6 : Math.ceil(BATCH_SIZE * 0.6)) : feedBatch.targetAnchoredCount;
+        const anchoredQuestions = dbQuestions.slice(0, anchoredMatchCount);
+        const generalQuestions = dbQuestions.slice(anchoredMatchCount);
+        const anchorShortfall = Math.max(0, targetAnchoredCount - anchoredQuestions.length);
+        const totalShortfall = Math.max(0, BATCH_SIZE - dbQuestions.length);
+        const generationCount = Math.min(5, Math.max(anchorShortfall, totalShortfall));
+        let generatedQuestions: Doc<"questions">[] = [];
+
+        if (generationCount > 0 && user.isSignedIn && !currentUser?.isAiLimitReached) {
+          try {
+            const generated = await generateAIQuestions({
+              count: generationCount,
+              organizationId: activeWorkspace ?? undefined,
+              anchoredStyleId: anchoredStyleId ?? undefined,
+              anchoredToneId: anchoredToneId ?? undefined,
+              anchoredTopicId: anchoredTopicId ?? undefined,
+            });
+            if (currentRequestId !== requestIdRef.current) return;
+            generatedQuestions = (generated || []).filter((question): question is Doc<"questions"> => question !== null);
+          } catch (err) {
+            console.error("Anchored AI generation failed:", err);
+            if (currentRequestId !== requestIdRef.current) return;
+
+            const errorMessage = typeof err === "string" ? err : err instanceof Error ? err.message : JSON.stringify(err);
+            const errorCode = err instanceof ConvexError ? err.data?.code : null;
+            const errorDataMessage = err instanceof ConvexError ? err.data?.message : null;
+            const isLimitError =
+              errorCode === ERROR_CODES.AI_LIMIT_REACHED ||
+              errorMessage === ERROR_MESSAGES.AI_LIMIT_REACHED ||
+              errorDataMessage === ERROR_MESSAGES.AI_LIMIT_REACHED ||
+              errorMessage.includes("AI generation limit reached");
+
+            if (totalShortfall > 0 && isLimitError) {
+              setShowUpgradeCTA(true);
+              setHasMore(false);
+            } else if (dbQuestions.length === 0) {
+              toast.error("Failed to generate more questions. Scroll to retry.");
+            }
+          }
+        } else if (totalShortfall > 0) {
+          if (!user.isSignedIn) setShowAuthCTA(true);
+          if (currentUser?.isAiLimitReached) setShowUpgradeCTA(true);
+          setHasMore(false);
+        }
+
+        const existingIds = new Set(dbQuestions.map((question) => question._id));
+        const uniqueGenerated = generatedQuestions.filter((question) => !existingIds.has(question._id));
+        const generatedAnchoredCount = Math.max(0, targetAnchoredCount - anchoredQuestions.length);
+        const finalAnchored = [...anchoredQuestions, ...uniqueGenerated.slice(0, generatedAnchoredCount)];
+        const generatedFallback = uniqueGenerated.slice(generatedAnchoredCount);
+        const finalBatch = [...finalAnchored, ...generalQuestions, ...generatedFallback].slice(0, BATCH_SIZE);
+        const orderedBatch = isFirstPull ? sortAnchoredBatch(finalBatch, finalAnchored.length) : finalBatch;
+
+        if (orderedBatch.length === 0) {
+          if (isFirstPull) setHasMore(false);
+          else setSeenIds(new Set());
+          return;
+        }
+
+        if (isFirstPull) {
+          setQuestions(orderedBatch);
+          setSeenIds(new Set(orderedBatch.map((question) => question._id)));
+        } else {
+          setQuestions((previous) => {
+            const previousIds = new Set(previous.map((question) => question._id));
+            return [...previous, ...orderedBatch.filter((question) => !previousIds.has(question._id))];
+          });
+          setSeenIds((previous) => {
+            const next = new Set(previous);
+            orderedBatch.forEach((question) => next.add(question._id));
+            return next;
+          });
+        }
+        return;
+      }
+
 
       // 1. Try to get from DB
-      const dbQuestions = await convex.action(api.core.questions.getNextRandomQuestions, {
+      const feedBatch = await convex.action(api.core.questions.getNextRandomQuestions, {
         count: BATCH_SIZE,
         seen: Array.from(seenIds), // Pass currently seen IDs to avoid duplicates
         hidden: hiddenQuestions,
@@ -290,6 +427,7 @@ export default function InfiniteScrollPage() {
         anchoredToneId: anchoredToneId ?? undefined,
         anchoredTopicId: anchoredTopicId ?? undefined,
       });
+      const dbQuestions = Array.isArray(feedBatch) ? feedBatch : feedBatch.questions;
 
       // Check for staleness after await
       if (currentRequestId !== requestIdRef.current) return;
@@ -448,12 +586,14 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded, anchoredStyleId, anchoredToneId, anchoredTopicId]);
+  }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded, anchoredStyleId, anchoredToneId, anchoredTopicId, anchorParamsReady]);
 
   // Reset list when anchors change
   useEffect(() => {
     setQuestions([]);
-    setSeenIds(new Set());
+    const currentQuestionId = activeQuestionRef.current?._id;
+    setSeenIds(currentQuestionId ? new Set([currentQuestionId]) : new Set());
+    requestIdRef.current++;
     setHasMore(true);
     setShowAuthCTA(false);
     setShowUpgradeCTA(false);
@@ -606,10 +746,10 @@ export default function InfiniteScrollPage() {
     const paramKey = item.type.toLowerCase();
     const currentVal = newParams.get(paramKey);
 
-    if (currentVal === item.id) {
+    if (currentVal === item.slug || currentVal === item.id) {
       newParams.delete(paramKey);
     } else {
-      newParams.set(paramKey, item.id);
+      newParams.set(paramKey, item.slug);
     }
     setSearchParams(newParams);
   };
@@ -730,7 +870,7 @@ export default function InfiniteScrollPage() {
   }, []); // Empty dependency array as we use refs
   return (
     <div
-      className="min-h-screen overflow-hidden flex flex-col"
+      className="min-h-screen overflow-x-clip flex flex-col"
     >
       <div
         className="h-screen fixed top-0 left-0 right-0 z-0"
@@ -742,7 +882,7 @@ export default function InfiniteScrollPage() {
       </div>
       <Header />
 
-      <main className="z-10 flex-1 flex flex-col pb-32 pt-20">
+      <main className="z-10 flex-1 flex flex-col pb-32 pt-32">
         {currentUser !== undefined && currentUser?.planTier !== "team" && !isPublicFeedBannerDismissed && (
           <div className="mx-auto w-full max-w-3xl px-4 pb-4">
             <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white shadow-lg backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
