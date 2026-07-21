@@ -41,11 +41,9 @@ export default function InfiniteScrollPage() {
   const generateAIQuestions = useAction(api.core.ai.generateAIQuestionForFeed);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // IDs from searchParams are intentionally cast to Id<...> without full client-side validation
-  // because the Convex backend validators will enforce correctness and reject invalid IDs.
-  const anchoredStyleId = searchParams.get("style") as Id<"styles"> | null;
-  const anchoredToneId = searchParams.get("tone") as Id<"tones"> | null;
-  const anchoredTopicId = searchParams.get("topic") as Id<"topics"> | null;
+  const anchoredStyleParam = searchParams.get("style");
+  const anchoredToneParam = searchParams.get("tone");
+  const anchoredTopicParam = searchParams.get("topic");
 
   const [selectedAnchorItem, setSelectedAnchorItem] = useState<ItemDetails | null>(null);
   const [isAnchorDrawerOpen, setIsAnchorDrawerOpen] = useState(false);
@@ -117,6 +115,7 @@ export default function InfiniteScrollPage() {
     if (!allStyles) return map;
     allStyles.forEach(s => {
       map.set(s.id, s as unknown as Doc<"styles">);
+      map.set(s.slug, s as unknown as Doc<"styles">);
       map.set(s._id, s as unknown as Doc<"styles">);
     });
     return map;
@@ -127,6 +126,7 @@ export default function InfiniteScrollPage() {
     if (!allTones) return map;
     allTones.forEach(t => {
       map.set(t.id, t as unknown as Doc<"tones">);
+      map.set(t.slug, t as unknown as Doc<"tones">);
       map.set(t._id, t as unknown as Doc<"tones">);
     });
     return map;
@@ -137,10 +137,46 @@ export default function InfiniteScrollPage() {
     if (!allTopics) return map;
     allTopics.forEach(t => {
       map.set(t.id, t);
+      map.set(t.slug, t);
       map.set(t._id, t);
     });
     return map;
   }, [allTopics]);
+
+  const anchoredStyle = anchoredStyleParam ? stylesMap.get(anchoredStyleParam) : undefined;
+  const anchoredTone = anchoredToneParam ? tonesMap.get(anchoredToneParam) : undefined;
+  const anchoredTopic = anchoredTopicParam ? topicsMap.get(anchoredTopicParam) : undefined;
+  const anchoredStyleId = anchoredStyle?._id ?? null;
+  const anchoredToneId = anchoredTone?._id ?? null;
+  const anchoredTopicId = anchoredTopic?._id ?? null;
+  const anchorParamsReady =
+    (!anchoredStyleParam || allStyles !== undefined) &&
+    (!anchoredToneParam || allTones !== undefined) &&
+    (!anchoredTopicParam || allTopics !== undefined);
+
+  // Keep old ID-based links working, then replace them with canonical slugs.
+  useEffect(() => {
+    if (!anchorParamsReady) return;
+
+    const newParams = new URLSearchParams(searchParams);
+    let changed = false;
+    const normalizeParam = (key: "style" | "tone" | "topic", value: string | null, item: { slug?: string; id?: string } | undefined) => {
+      if (!value) return;
+      const slug = item?.slug ?? item?.id;
+      if (!slug) {
+        newParams.delete(key);
+        changed = true;
+      } else if (value !== slug) {
+        newParams.set(key, slug);
+        changed = true;
+      }
+    };
+
+    normalizeParam("style", anchoredStyleParam, anchoredStyle);
+    normalizeParam("tone", anchoredToneParam, anchoredTone);
+    normalizeParam("topic", anchoredTopicParam, anchoredTopic);
+    if (changed) setSearchParams(newParams, { replace: true });
+  }, [anchorParamsReady, anchoredStyleParam, anchoredToneParam, anchoredTopicParam, anchoredStyle, anchoredTone, anchoredTopic, searchParams, setSearchParams]);
 
   // Request ID to handle race conditions
   const requestIdRef = useRef(0);
@@ -269,7 +305,7 @@ export default function InfiniteScrollPage() {
     const isStorageLoaded = hiddenStyles !== undefined && hiddenTones !== undefined &&
       (!user.isSignedIn || (hiddenStyles !== null && hiddenTones !== null));
 
-    if (!user.isLoaded || isLoadingRef.current || !hasMore || allStylesBlocked || allTonesBlocked || !isStorageLoaded) return;
+    if (!user.isLoaded || !anchorParamsReady || isLoadingRef.current || !hasMore || allStylesBlocked || allTonesBlocked || !isStorageLoaded) return;
 
     // Capture current request ID
     requestIdRef.current++;
@@ -550,7 +586,7 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded, anchoredStyleId, anchoredToneId, anchoredTopicId]);
+  }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded, anchoredStyleId, anchoredToneId, anchoredTopicId, anchorParamsReady]);
 
   // Reset list when anchors change
   useEffect(() => {
@@ -710,10 +746,10 @@ export default function InfiniteScrollPage() {
     const paramKey = item.type.toLowerCase();
     const currentVal = newParams.get(paramKey);
 
-    if (currentVal === item.id) {
+    if (currentVal === item.slug || currentVal === item.id) {
       newParams.delete(paramKey);
     } else {
-      newParams.set(paramKey, item.id);
+      newParams.set(paramKey, item.slug);
     }
     setSearchParams(newParams);
   };

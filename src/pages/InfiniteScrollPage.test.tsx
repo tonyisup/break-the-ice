@@ -355,6 +355,71 @@ describe('InfiniteScrollPage', () => {
     });
   });
 
+  it('resolves slug anchors to IDs and normalizes legacy ID URLs', async () => {
+    const readableStyle = {
+      _id: 'style-document-id',
+      id: 'story-driven',
+      slug: 'story-driven',
+      color: '#111111',
+      name: 'Story Driven',
+    };
+    mockSearchParams = new URLSearchParams('style=style-document-id');
+    (useQuery as any).mockImplementation((queryFn: any) => {
+      if (queryFn === 'getStyles') return [readableStyle];
+      if (queryFn === 'getTones') return mockTones;
+      if (queryFn === 'getStyle') return readableStyle;
+      if (queryFn === 'getTone') return mockTones[0];
+      if (queryFn === 'getCurrentUser') return { _id: 'u1', email: 'test@example.com', newsletterSubscriptionStatus: null };
+      return undefined;
+    });
+    const actionMock = vi.fn().mockResolvedValue({
+      questions: [{ _id: 'anchored-question', text: 'Anchored?', styleId: 'style-document-id', toneId: 'tone1' }],
+      anchoredMatchCount: 1,
+      targetAnchoredCount: 6,
+    });
+    (useConvex as any).mockReturnValue({ query: vi.fn(), action: actionMock });
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(actionMock).toHaveBeenCalledWith(
+        'getNextRandomQuestions',
+        expect.objectContaining({ anchoredStyleId: 'style-document-id' }),
+      );
+    });
+    const normalizationCall = mockSetSearchParams.mock.calls.find((call) => call[1]?.replace === true);
+    expect(normalizationCall?.[0].get('style')).toBe('story-driven');
+  });
+
+  it('writes canonical slugs when selecting an anchor', async () => {
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(ModernQuestionCard).toHaveBeenCalled();
+    });
+    const latestCardProps = (ModernQuestionCard as any).mock.calls.at(-1)[0];
+    latestCardProps.onAnchorItem({
+      id: 'style-document-id',
+      slug: 'story-driven',
+      name: 'Story Driven',
+      type: 'Style',
+      description: '',
+      icon: 'book',
+      color: '#111111',
+    });
+
+    const writtenParams = mockSetSearchParams.mock.calls.at(-1)[0];
+    expect(writtenParams.get('style')).toBe('story-driven');
+  });
+
   it('generates and injects the anchored shortfall ahead of general questions', async () => {
     mockSearchParams = new URLSearchParams('style=style1');
     const dbQuestions = [
