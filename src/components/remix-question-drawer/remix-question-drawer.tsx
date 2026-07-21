@@ -53,10 +53,16 @@ export function RemixQuestionDrawer({
 	const [tags, setTags] = useState<string[]>([]);
 	const [saveFailed, setSaveFailed] = useState(false);
 	const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
-	const { activeWorkspace, teamWorkspaceId } = useTeamWorkspace();
+	const { activeWorkspace, isEntitlementsLoading, teamWorkspaceId } = useTeamWorkspace();
 
-	const styles = useQuery(api.core.styles.getStyles, isOpen ? {} : "skip");
-	const tones = useQuery(api.core.tones.getTones, isOpen ? {} : "skip");
+	const styles = useQuery(
+		api.core.styles.getStyles,
+		isOpen ? { organizationId: teamWorkspaceId } : "skip",
+	);
+	const tones = useQuery(
+		api.core.tones.getTones,
+		isOpen ? { organizationId: teamWorkspaceId } : "skip",
+	);
 	const allAvailableTags = useQuery(api.core.tags.getTags, isOpen ? {} : "skip");
 
 	const filteredSuggestions = useMemo(() => {
@@ -157,6 +163,10 @@ export function RemixQuestionDrawer({
 
 	const handleRemix = async () => {
 		if (!question) return;
+		if (!newQuestionId && isEntitlementsLoading) {
+			toast.error("Checking workspace access. Please try again in a moment.");
+			return;
+		}
 		setRemixState("remixing");
 		setSaveFailed(false);
 		try {
@@ -560,7 +570,7 @@ export function RemixQuestionDrawer({
 							<Button 
 								onClick={handleRemix} 
 								className="gap-2"
-								disabled={currentUser?.isAiLimitReached}
+								disabled={currentUser?.isAiLimitReached || isEntitlementsLoading}
 							>
 								<Sparkles className="size-4" />
 								Remix

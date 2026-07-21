@@ -11,13 +11,17 @@ import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 export default function AddQuestionPage() {
   const [questionText, setQuestionText] = useState("");
   const [isPublic, setIsPublic] = useState(true);
-  const { teamWorkspaceId } = useTeamWorkspace();
+  const { isEntitlementsLoading, teamWorkspaceId } = useTeamWorkspace();
   const addCustomQuestion = useMutation(api.core.questions.addCustomQuestion);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (questionText.trim() === "") {
       toast.error("Please enter a question.");
+      return;
+    }
+    if (isEntitlementsLoading) {
+      toast.error("Checking workspace access. Please try again in a moment.");
       return;
     }
 

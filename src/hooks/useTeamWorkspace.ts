@@ -12,10 +12,13 @@ export function useTeamWorkspace() {
     api.core.billing.getEffectiveEntitlements,
     activeWorkspace ? { organizationId: activeWorkspace } : "skip",
   );
+  const isEntitlementsLoading =
+    activeWorkspace !== null && entitlements === undefined;
 
   return {
     activeWorkspace,
     entitlements,
+    isEntitlementsLoading,
     teamWorkspaceId: entitlements?.canUseTeamFeatures
       ? activeWorkspace ?? undefined
       : undefined,

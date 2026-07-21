@@ -655,7 +655,7 @@ export default function OrgWeeklyCurationPage() {
     api.core.orgSettings.getOrgSettings,
     orgId && hasTeamAccess ? { organizationId: orgId } : "skip"
   );
-  const weekStartDay = (orgSettings?.weekStartDay ?? "monday") as "monday" | "sunday";
+  const weekStartDay = orgSettings?.weekStartDay ?? "monday";
   const timeZone = orgSettings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE;
   const activeDeliveryDays = orgSettings?.activeDeliveryDays ?? DEFAULT_DELIVERY_DAYS;
   const currentZonedDate = calendarIso(dateInTimeZone(new Date(), timeZone));
