@@ -24,13 +24,15 @@ export default function CollectionManagePage() {
   const { effectiveTheme } = useTheme();
   const collectionIdTyped = collectionId as Id<"collections">;
 
-  const collection = useQuery(
-    api.core.collections.getCollectionDetail,
-    collectionId ? { collectionId: collectionIdTyped } : "skip"
-  );
   const entitlements = useQuery(
     api.core.billing.getEffectiveEntitlements,
     activeWorkspace ? { organizationId: activeWorkspace } : "skip"
+  );
+  const collection = useQuery(
+    api.core.collections.getCollectionDetail,
+    collectionId && entitlements?.canUseTeamFeatures
+      ? { collectionId: collectionIdTyped }
+      : "skip"
   );
 
   const [nameDraft, setNameDraft] = useState("");
@@ -61,7 +63,7 @@ export default function CollectionManagePage() {
 
   const searchResults = useQuery(
     api.core.collections.searchPublicQuestions,
-    debouncedSearch.length >= MIN_SEARCH_LENGTH
+    entitlements?.canUseTeamFeatures && debouncedSearch.length >= MIN_SEARCH_LENGTH
       ? { searchText: debouncedSearch, excludeQuestionIds }
       : "skip"
   );
@@ -143,7 +145,17 @@ export default function CollectionManagePage() {
           Back to collections
         </Link>
 
-        {collection === undefined ? (
+        {activeWorkspace && entitlements !== undefined && !entitlements?.canUseTeamFeatures ? (
+          <section className="rounded-2xl border border-dashed border-amber-400/30 bg-amber-300/10 p-6 text-center">
+            <h1 className="text-xl font-semibold dark:text-white text-black">Collections require Team</h1>
+            <p className="mt-2 text-sm text-black/70 dark:text-white/70">
+              Start an active Team subscription for this workspace to view or manage shared collections.
+            </p>
+            <Button asChild className="mt-4 bg-amber-400 text-slate-950 hover:bg-amber-300">
+              <Link to="/pricing?source=collection_detail_gate">Upgrade to Team</Link>
+            </Button>
+          </section>
+        ) : collection === undefined ? (
           <p className="text-black/60 dark:text-white/60">Loading collection…</p>
         ) : collection === null ? (
           <p className="text-black/60 dark:text-white/60">Collection not found.</p>

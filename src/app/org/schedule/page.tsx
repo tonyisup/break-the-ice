@@ -633,9 +633,14 @@ export default function OrgWeeklyCurationPage() {
   }, [workspaceHydrated, allSchedules, myOrganizations, activeWorkspace, setActiveWorkspace]);
 
   const orgId = activeWorkspace;
+  const entitlements = useQuery(
+    api.core.billing.getEffectiveEntitlements,
+    orgId ? { organizationId: orgId } : "skip",
+  );
+  const hasTeamAccess = entitlements?.canUseTeamFeatures === true;
   const schedules = useQuery(
     api.core.schedules.listSchedules,
-    orgId ? { organizationId: orgId } : "skip"
+    orgId && hasTeamAccess ? { organizationId: orgId } : "skip"
   );
   const currentWorkspaceUser = useQuery(
     api.core.users.getCurrentUser,
@@ -648,7 +653,7 @@ export default function OrgWeeklyCurationPage() {
   /* --- Org settings --- */
   const orgSettings = useQuery(
     api.core.orgSettings.getOrgSettings,
-    orgId ? { organizationId: orgId } : "skip"
+    orgId && hasTeamAccess ? { organizationId: orgId } : "skip"
   );
   const weekStartDay = (orgSettings?.weekStartDay ?? "monday") as "monday" | "sunday";
   const timeZone = orgSettings?.timeZone ?? DEFAULT_ORGANIZATION_TIME_ZONE;
@@ -656,7 +661,7 @@ export default function OrgWeeklyCurationPage() {
   const currentZonedDate = calendarIso(dateInTimeZone(new Date(), timeZone));
   const curationPreview = useQuery(
     api.core.coachFeedback.getCurationPreview,
-    orgId && canManageWorkspace
+    orgId && hasTeamAccess && canManageWorkspace
       ? { organizationId: orgId, currentDate: currentZonedDate, limit: 5 }
       : "skip",
   );
@@ -675,7 +680,7 @@ export default function OrgWeeklyCurationPage() {
 
   const scheduleDetail = useQuery(
     api.core.schedules.getSchedule,
-    currentSchedule ? { scheduleId: currentSchedule._id } : "skip"
+    hasTeamAccess && currentSchedule ? { scheduleId: currentSchedule._id } : "skip"
   );
 
   /* --- Question pool updates via real-time subscription --- */
@@ -683,19 +688,22 @@ const [isFillingOrRegen, setIsFillingOrRegen] = React.useState(false);
 
 const questionPool = useQuery(
     api.core.questions.getPublicQuestions,
-    isSignedIn ? { limit: 200 } : "skip"
+    isSignedIn && hasTeamAccess ? { limit: 200 } : "skip"
   );
 
   /* --- Axis filter state --- */
-  const styles = useQuery(api.core.styles.getStyles, {
-    organizationId: orgId ?? undefined,
-  });
-  const tones = useQuery(api.core.tones.getTones, {
-    organizationId: orgId ?? undefined,
-  });
-  const topics = useQuery(api.core.topics.getTopics, {
-    organizationId: orgId ?? undefined,
-  });
+  const styles = useQuery(
+    api.core.styles.getStyles,
+    orgId && hasTeamAccess ? { organizationId: orgId } : "skip",
+  );
+  const tones = useQuery(
+    api.core.tones.getTones,
+    orgId && hasTeamAccess ? { organizationId: orgId } : "skip",
+  );
+  const topics = useQuery(
+    api.core.topics.getTopics,
+    orgId && hasTeamAccess ? { organizationId: orgId } : "skip",
+  );
 
   const [axisY, setAxisY] = React.useState<AxisType>("style");
   const [axisX, setAxisX] = React.useState<AxisType>("tone");
@@ -1406,6 +1414,50 @@ const questionPool = useQuery(
         <Card className="border-dashed">
           <CardContent className="p-6 text-center">
             <CreateOrganization />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (entitlements === undefined) {
+    return (
+      <div className="relative flex flex-col items-center justify-center py-24 gap-4">
+        <div className="absolute top-0 right-0 flex items-center gap-2">
+          <TeamWorkspaceMenu />
+          <ThemeToggle
+            className="shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+            showLabel={false}
+          />
+        </div>
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Checking Team access…</p>
+      </div>
+    );
+  }
+
+  if (!hasTeamAccess) {
+    return (
+      <div className="relative mx-auto max-w-lg py-12">
+        <div className="absolute top-0 right-0 flex items-center gap-2">
+          <TeamWorkspaceMenu />
+          <ThemeToggle
+            className="shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+            showLabel={false}
+          />
+        </div>
+        <Card className="border-amber-400/30 bg-amber-300/10">
+          <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
+            <Crown className="size-12 text-amber-500" />
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Weekly curation is a Team feature</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Start an active Team subscription for this workspace to create schedules, assign prompts, and review coach feedback.
+              </p>
+            </div>
+            <Button asChild className="bg-amber-400 text-slate-950 hover:bg-amber-300">
+              <Link to="/pricing?source=schedule_gate">Upgrade to Team</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>

@@ -2,7 +2,7 @@ import type { GenericId } from "convex/values";
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
-import { ensureOrgMember } from "../auth";
+import { ensurePaidOrganizationMember, isOrganizationPaid } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
@@ -54,7 +54,7 @@ export const listSchedules = query({
   },
   returns: v.array(scheduleDocValidator),
   handler: async (ctx, args) => {
-    await ensureOrgMember(ctx, args.organizationId);
+    await ensurePaidOrganizationMember(ctx, args.organizationId);
     const cap = Math.min(args.limit ?? 200, 500);
     return ctx.db
       .query("schedules")
@@ -95,6 +95,7 @@ export const listSchedulesForUser = query({
 
     const perOrgCap = Math.min(args.limitPerOrg ?? 50, 200);
     for (const orgId of orgIdSet) {
+      if (!(await isOrganizationPaid(ctx, orgId))) continue;
       const orgSchedules = await ctx.db
         .query("schedules")
         .withIndex("by_organizationId_and_weekStart", (q) => q.eq("organizationId", orgId))
@@ -155,7 +156,7 @@ export const getSchedule = query({
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
-    const membership = await ensureOrgMember(ctx, schedule.organizationId);
+    const membership = await ensurePaidOrganizationMember(ctx, schedule.organizationId);
     const canReadDraftTeamPrompts =
       schedule.status !== "draft" ||
       membership.role === "admin" ||
@@ -225,7 +226,7 @@ export const getCurrentWeekSchedule = query({
     })),
   }),
   handler: async (ctx, args) => {
-    const membership = await ensureOrgMember(ctx, args.organizationId);
+    const membership = await ensurePaidOrganizationMember(ctx, args.organizationId);
     const settings = await ctx.db
       .query("orgSettings")
       .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
@@ -321,7 +322,7 @@ export const createSchedule = mutation({
   },
   returns: v.id("schedules"),
   handler: async (ctx, args) => {
-    await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
+    await ensurePaidOrganizationMember(ctx, args.organizationId, ["admin", "manager"]);
     const identity = await ctx.auth.getUserIdentity();
     const user = await findCanonicalUser(ctx, {
       clerkId: identity?.subject,
@@ -376,7 +377,7 @@ export const assignQuestion = mutation({
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
-    await ensureOrgMember(ctx, schedule.organizationId, ["admin", "manager"]);
+    await ensurePaidOrganizationMember(ctx, schedule.organizationId, ["admin", "manager"]);
     if (schedule.status !== "draft") throw new Error("Cannot modify a published schedule");
     if (!deliveryDaysForSchedule(schedule).includes(args.dayOfWeek)) {
       throw new Error(`${args.dayOfWeek} is not an active delivery day for this schedule`);
@@ -420,7 +421,7 @@ export const unassignQuestion = mutation({
     if (!sq) throw new Error("Assignment not found");
     const schedule = await ctx.db.get(sq.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
-    await ensureOrgMember(ctx, schedule.organizationId, ["admin", "manager"]);
+    await ensurePaidOrganizationMember(ctx, schedule.organizationId, ["admin", "manager"]);
     if (schedule.status !== "draft") throw new Error("Cannot modify a published schedule");
 
     await ctx.db.delete(args.scheduledQuestionId);
@@ -434,7 +435,7 @@ export const publishSchedule = mutation({
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
-    await ensureOrgMember(ctx, schedule.organizationId, ["admin", "manager"]);
+    await ensurePaidOrganizationMember(ctx, schedule.organizationId, ["admin", "manager"]);
 
     const assignments = await ctx.db
       .query("scheduledQuestions")
@@ -495,7 +496,7 @@ export const autoSchedule = mutation({
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
-    await ensureOrgMember(ctx, schedule.organizationId, ["admin", "manager"]);
+    await ensurePaidOrganizationMember(ctx, schedule.organizationId, ["admin", "manager"]);
     if (schedule.status !== "draft") throw new Error("Cannot modify a published schedule");
 
     const daysOfWeek = getDaysOfWeek(schedule.weekStart, schedule.weekStartDay)

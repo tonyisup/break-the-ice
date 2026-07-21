@@ -40,7 +40,10 @@ vi.mock("../../../../convex/_generated/api", () => ({
       coachFeedback: { getCurationPreview: "getCurationPreview" },
       questions: { getPublicQuestions: "getPublicQuestions" },
       styles: { getStyles: "getStyles" }, tones: { getTones: "getTones" }, topics: { getTopics: "getTopics" },
-      billing: { syncOrganizationFromClerk: "syncOrganizationFromClerk" },
+      billing: {
+        getEffectiveEntitlements: "getEffectiveEntitlements",
+        syncOrganizationFromClerk: "syncOrganizationFromClerk",
+      },
       billingSyncAction: { syncOrganizationViaClerkApi: "syncOrganizationViaClerkApi" },
       fillMatrix: { fillEmptyCells: "fillEmptyCells", fillSingleCell: "fillSingleCell" },
       teamPromptActions: { previewTopicQuestions: "previewTopicQuestions" },
@@ -64,6 +67,7 @@ beforeEach(() => {
   });
   (useAction as ReturnType<typeof vi.fn>).mockReturnValue(vi.fn().mockResolvedValue(undefined));
   (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+    if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
     if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
     if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
     if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
@@ -117,6 +121,7 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
 
   it("explains how to strengthen insufficient evidence and hides extra suggestions", () => {
     (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
       if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
       if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
       if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
@@ -152,6 +157,7 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
 
   it("disables delivery-day controls until organization settings are loaded", () => {
     (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
       if (fn === "getOrgSettings") return undefined;
       if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
       if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
@@ -171,6 +177,7 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     const secondQuestion = "If you could only keep three songs for the rest of your life on a desert island, which ones would make the cut?";
 
     (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
       if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
       if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
       if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
@@ -227,6 +234,7 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
 
   it("does not expose scheduler assignment controls to ordinary Team members", () => {
     (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
       if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
       if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
       if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
@@ -239,6 +247,31 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     render(<OrgWeeklyCurationPage />);
 
     expect(screen.queryByRole("button", { name: "Assign" })).not.toBeInTheDocument();
+  });
+
+  it("shows an upgrade gate without loading protected workspace data on Free", () => {
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: false };
+      if (fn === "listSchedulesForUser") return [];
+      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+      if (fn === "getCurrentUser") return { planTier: "free", organizationRole: "manager" };
+      return undefined;
+    });
+
+    render(<OrgWeeklyCurationPage />);
+
+    expect(screen.getByRole("heading", {
+      name: "Weekly curation is a Team feature",
+    })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Upgrade to Team" })).toHaveAttribute(
+      "href",
+      "/pricing?source=schedule_gate",
+    );
+    expect(useQuery).toHaveBeenCalledWith("listSchedules", "skip");
+    expect(useQuery).toHaveBeenCalledWith("getOrgSettings", "skip");
+    expect(useQuery).toHaveBeenCalledWith("getStyles", "skip");
+    expect(useQuery).toHaveBeenCalledWith("getTones", "skip");
+    expect(useQuery).toHaveBeenCalledWith("getTopics", "skip");
   });
 
   it("closes a custom-prompt draft when the workspace changes", async () => {

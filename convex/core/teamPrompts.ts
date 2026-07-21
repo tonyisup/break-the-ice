@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "../_generated/server";
-import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
+import { ensurePaidOrganizationMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 import { deliveryDaysForSchedule } from "../lib/deliveryDays";
 import { MAX_TEAM_PROMPT_TEXT_LENGTH } from "../lib/teamPromptContract";
@@ -89,7 +89,7 @@ export const listTeamTopics = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await ensureOrgMember(ctx, args.organizationId);
+    await ensurePaidOrganizationMember(ctx, args.organizationId);
     const topics = await ctx.db
       .query("teamTopics")
       .withIndex("by_organizationId_and_updatedAt", (q) =>

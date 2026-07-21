@@ -81,18 +81,21 @@ export default function InfiniteScrollPage() {
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
   const [prevQuestion, setPrevQuestion] = useState<Doc<"questions"> | null>(null);
   const [nextQuestion, setNextQuestion] = useState<Doc<"questions"> | null>(null);
-  // Fetch all styles and tones for card rendering
-  const allStyles = useQuery(api.core.styles.getStyles, {
-    organizationId: activeWorkspace ?? undefined,
-  });
-  const allTones = useQuery(api.core.tones.getTones, {
-    organizationId: activeWorkspace ?? undefined,
-  });
   const currentUser = useQuery(api.core.users.getCurrentUser, {
     organizationId: activeWorkspace ?? undefined,
   });
+  const teamWorkspaceId = currentUser?.planTier === "team"
+    ? activeWorkspace ?? undefined
+    : undefined;
+  // Fetch all styles and tones for card rendering
+  const allStyles = useQuery(api.core.styles.getStyles, {
+    organizationId: teamWorkspaceId,
+  });
+  const allTones = useQuery(api.core.tones.getTones, {
+    organizationId: teamWorkspaceId,
+  });
   const allTopics = useQuery(api.core.topics.getTopics, {
-    organizationId: activeWorkspace ?? undefined,
+    organizationId: teamWorkspaceId,
   });
   const activeTakeoverTopics = useQuery(api.core.topics.getActiveTakeoverTopics);
   const interactionStats = useQuery(api.core.users.getUserInteractionStats, {

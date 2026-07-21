@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 
 type RemixState = "idle" | "remixing" | "remixed";
 
@@ -53,7 +53,7 @@ export function RemixQuestionDrawer({
 	const [tags, setTags] = useState<string[]>([]);
 	const [saveFailed, setSaveFailed] = useState(false);
 	const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
-	const { activeWorkspace } = useWorkspace();
+	const { activeWorkspace, teamWorkspaceId } = useTeamWorkspace();
 
 	const styles = useQuery(api.core.styles.getStyles, isOpen ? {} : "skip");
 	const tones = useQuery(api.core.tones.getTones, isOpen ? {} : "skip");
@@ -184,7 +184,7 @@ export function RemixQuestionDrawer({
 					toneId: selectedToneId,
 					topicId: question.topicId,
 					tags,
-					organizationId: activeWorkspace ?? undefined,
+					organizationId: teamWorkspaceId,
 				});
 				if (id) {
 					setNewQuestionId(id);

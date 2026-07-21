@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 
 interface AddPersonalQuestionDialogProps {
   isOpen: boolean;
@@ -27,7 +27,7 @@ export function AddPersonalQuestionDialog({
 }: AddPersonalQuestionDialogProps) {
   const [questionText, setQuestionText] = useState("");
   const [isPublic, setIsPublic] = useState(false);
-  const { activeWorkspace } = useWorkspace();
+  const { teamWorkspaceId } = useTeamWorkspace();
   const addPersonalQuestion = useMutation(api.core.questions.addPersonalQuestion);
 
   const handleSubmit = async () => {
@@ -39,7 +39,7 @@ export function AddPersonalQuestionDialog({
       await addPersonalQuestion({
         customText: questionText,
         isPublic,
-        organizationId: activeWorkspace ?? undefined,
+        organizationId: teamWorkspaceId,
       });
       if (isPublic) {
         toast.success("Question submitted for review!");

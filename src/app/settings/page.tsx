@@ -28,22 +28,24 @@ const SettingsPage = () => {
   const { isSignedIn } = useAuth();
   const { effectiveTheme } = useTheme();
   const { activeWorkspace } = useWorkspace();
+  const entitlements = useQuery(api.core.billing.getEffectiveEntitlements, {
+    organizationId: activeWorkspace ?? undefined,
+  });
+  const teamWorkspaceId = entitlements?.canUseTeamFeatures
+    ? activeWorkspace ?? undefined
+    : undefined;
 
   const allStyles = useQuery(
     api.core.styles.getStyles,
-    isSignedIn ? { organizationId: activeWorkspace ?? undefined } : "skip"
+    isSignedIn ? { organizationId: teamWorkspaceId } : "skip"
   );
   const allTones = useQuery(
     api.core.tones.getTones,
-    isSignedIn ? { organizationId: activeWorkspace ?? undefined } : "skip"
+    isSignedIn ? { organizationId: teamWorkspaceId } : "skip"
   );
   const currentUser = useQuery(api.core.users.getCurrentUser, {
     organizationId: activeWorkspace ?? undefined,
   });
-  const entitlements = useQuery(api.core.billing.getEffectiveEntitlements, {
-    organizationId: activeWorkspace ?? undefined,
-  });
-
   const [searchParams] = useSearchParams();
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 

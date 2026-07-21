@@ -14,6 +14,7 @@ import {
   Clock,
   MessageSquare,
   CalendarDays,
+  Crown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -80,6 +81,11 @@ export default function CoachDailyViewPage() {
   const { activeWorkspace, workspaceHydrated } = useWorkspace();
   const { orgRole, isLoaded: clerkAuthLoaded } = useAuth();
   const orgId = activeWorkspace;
+  const entitlements = useQuery(
+    api.core.billing.getEffectiveEntitlements,
+    orgId ? { organizationId: orgId } : "skip",
+  );
+  const hasTeamAccess = entitlements?.canUseTeamFeatures === true;
 
   const isOrgAdmin =
     clerkAuthLoaded &&
@@ -87,12 +93,12 @@ export default function CoachDailyViewPage() {
 
   const coachToday = useQuery(
     api.core.coachFeedback.getCoachTodayAssignment,
-    orgId ? { organizationId: orgId } : "skip"
+    orgId && hasTeamAccess ? { organizationId: orgId } : "skip"
   );
 
   const feedbackReport = useQuery(
     api.core.coachFeedback.getWeeklyFeedbackReport,
-    coachToday?.scheduleId && isOrgAdmin
+    hasTeamAccess && coachToday?.scheduleId && isOrgAdmin
       ? { scheduleId: coachToday.scheduleId }
       : "skip"
   );
@@ -167,6 +173,29 @@ export default function CoachDailyViewPage() {
         </p>
         <Button asChild variant="outline">
           <Link to="/settings">Go to Settings</Link>
+        </Button>
+      </TodayStateShell>
+    );
+  }
+
+  if (entitlements === undefined) {
+    return (
+      <TodayStateShell>
+        <div className="animate-spin size-6 border-2 border-primary border-t-transparent rounded-full" />
+      </TodayStateShell>
+    );
+  }
+
+  if (!hasTeamAccess) {
+    return (
+      <TodayStateShell className="relative flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4 text-center">
+        <Crown className="size-14 text-amber-500" />
+        <h2 className="text-xl font-semibold">Today&apos;s team prompt requires Team</h2>
+        <p className="text-muted-foreground max-w-md text-sm">
+          This workspace needs an active Team subscription before members can view scheduled prompts or submit feedback.
+        </p>
+        <Button asChild className="bg-amber-400 text-slate-950 hover:bg-amber-300">
+          <Link to="/pricing?source=today_gate">Upgrade to Team</Link>
         </Button>
       </TodayStateShell>
     );
