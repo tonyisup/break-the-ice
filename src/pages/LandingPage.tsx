@@ -1,212 +1,298 @@
+import { useState, type ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
-import {
-  ArrowRight,
-  FolderKanban,
-  Library,
-  MessageSquareQuote,
-  Users,
-  WandSparkles,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import "@fontsource-variable/manrope/index.css";
 import { useTheme } from "@/hooks/useTheme";
 
-const benefits = [
+const questions = [
+  "What is something you believed as a kid that still makes you laugh?",
+  "What tiny ritual makes an ordinary day feel better?",
+  "Which opinion have you changed your mind about recently?",
+  "What would your friends say is your most specific talent?",
+];
+
+const rooms = [
   {
-    icon: Users,
-    title: "Shared team workspace",
-    copy: "Give facilitators one place to save, reuse, and refine questions across groups.",
+    title: "Teams",
+    copy: "Make the first five minutes feel less like waiting for everyone to arrive.",
+    className: "md:col-span-7",
   },
   {
-    icon: FolderKanban,
-    title: "Reusable collections",
-    copy: "Build sets for onboarding, retros, classrooms, and community moments.",
+    title: "Classrooms",
+    copy: "Start with a question every student can answer in their own way.",
+    className: "md:col-span-5",
   },
   {
-    icon: WandSparkles,
-    title: "AI-assisted prep",
-    copy: "Generate more options when the calendar is full and the warmup still matters.",
+    title: "Dinner tables",
+    copy: "Give the group somewhere better to go than the usual small talk.",
+    className: "md:col-span-5",
+  },
+  {
+    title: "Workshops",
+    copy: "Set the tone before the agenda asks everyone to get serious.",
+    className: "md:col-span-7",
   },
 ];
 
-const workflow = ["Choose a tone", "Filter by topic", "Save the best", "Share with the team"];
-
-const stackQuestions = [
-  "What is one assumption your team should revisit this month?",
-  "What should this group make easier for the next person?",
-  "What did you learn the hard way that others should not have to?",
-];
+const reveal = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0 },
+};
 
 const LandingPage = () => {
   useTheme();
+  const reduceMotion = useReducedMotion();
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="landing-page min-h-[100dvh] bg-[#f4f2ed] text-[#181818] dark:bg-[#11110f] dark:text-[#f3f0e9]">
       <LandingHeader />
 
       <main>
-        <section className="relative isolate overflow-hidden border-b">
-          <LibraryStackBackdrop />
-          <div className="mx-auto grid min-h-[calc(100vh-65px)] w-full max-w-6xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:py-20">
-            <div className="relative z-10 space-y-7">
-              <div className="space-y-4">
-                <p className="inline-flex rounded-md border bg-background/90 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground shadow-sm">
-                  Built for facilitator libraries
-                </p>
-                <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-                  Daily icebreaker questions for coaches, workshops, and team sessions.
-                </h1>
-                <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-                  Break the Ice helps coaches, workshop facilitators, and team leads build and
-                  share a reusable question library without extra prep.
-                </p>
-              </div>
-
-              <div className="inline-flex w-full flex-col gap-3 rounded-lg border bg-card/90 p-3 shadow-xl shadow-slate-950/10 backdrop-blur sm:w-auto sm:flex-row dark:shadow-black/30">
-                <Button
-                  asChild
-                  size="lg"
-                  className="h-12 px-6 text-base shadow-lg shadow-primary/25 ring-1 ring-primary/20"
-                >
-                  <Link to="/app">Try the free app</Link>
-                </Button>
-                <Button
-                  asChild
-                  size="lg"
-                  variant="outline"
-                  className="h-12 border-primary/20 bg-background/80 px-6 text-base hover:bg-primary/5"
-                >
-                  <Link to="/pricing?source=landing_library_stack">
-                    Start Team Plan
-                    <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Try the free feed first, then move to Team Plan when you need shared collections and billing.
-              </p>
-
-              <div className="space-y-3 lg:hidden">
-                <div className="rounded-lg border bg-background p-5 shadow-sm">
-                  <QuestionTile question={stackQuestions[0]} label="Leadership" />
-                </div>
-                <div className="rounded-lg border bg-background p-5 shadow-sm">
-                  <QuestionTile question={stackQuestions[1]} label="Retrospective" />
-                </div>
-                <div className="rounded-lg border bg-background p-5 shadow-sm">
-                  <QuestionTile question={stackQuestions[2]} label="Onboarding" />
-                </div>
-              </div>
+        <section className="mx-auto grid min-h-[calc(100dvh-4rem)] w-full max-w-[1400px] items-center gap-8 px-5 py-10 md:grid-cols-[1.04fr_0.96fr] md:px-10 lg:gap-14 lg:px-14 lg:py-12">
+          <motion.div
+            initial={reduceMotion ? false : "hidden"}
+            animate="visible"
+            variants={reveal}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            className="max-w-[760px]"
+          >
+            <h1 className="text-[clamp(3.25rem,4.8vw,5.5rem)] font-extrabold leading-[0.88] tracking-[-0.075em]">
+              <span className="block lg:whitespace-nowrap">Good questions</span>
+              <span className="block lg:whitespace-nowrap">change the room.</span>
+            </h1>
+            <p className="mt-7 max-w-[520px] text-lg font-medium leading-7 text-[#4f4d48] dark:text-[#bdb9b0] md:text-xl">
+              Find the question that gets everyone talking, thinking, and laughing together.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <PrimaryLink to="/app">Open a question</PrimaryLink>
+              <SecondaryLink to="#try-one">Try one here</SecondaryLink>
             </div>
+          </motion.div>
 
-            <div
-              className="relative z-10 hidden lg:block lg:min-h-[600px]"
-              aria-hidden="true"
+          <motion.div
+            initial={reduceMotion ? false : { opacity: 0, scale: 0.96, rotate: 1.5 }}
+            animate={{ opacity: 1, scale: 1, rotate: 0 }}
+            transition={{ duration: 0.85, delay: reduceMotion ? 0 : 0.1, ease: [0.16, 1, 0.3, 1] }}
+            className="relative mx-auto w-full max-w-[540px] md:justify-self-end"
+          >
+            <div className="overflow-hidden rounded-2xl bg-[#1647ba] shadow-[0_28px_80px_rgba(33,42,62,0.18)] dark:shadow-[0_28px_80px_rgba(0,0,0,0.4)]">
+              <img
+                src="/bti-dinner-party.webp"
+                alt="Friends laughing together around a dinner table"
+                className="aspect-[4/5] h-full w-full object-cover"
+                fetchPriority="high"
+              />
+            </div>
+          </motion.div>
+        </section>
+
+        <QuestionExperience />
+
+        <RevealSection className="mx-auto grid w-full max-w-[1400px] gap-8 px-5 py-20 md:grid-cols-[1.15fr_0.85fr] md:items-center md:px-10 md:py-28 lg:gap-16 lg:px-14">
+          <div className="overflow-hidden rounded-2xl bg-[#e9e5dd]">
+            <img
+              src="/bti-table-cards.webp"
+              alt="Friends choosing a conversation card around a table"
+              className="aspect-[3/2] h-full w-full object-cover"
+              loading="lazy"
             />
           </div>
-        </section>
-
-        <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:py-20">
-          <div>
-            <p className="text-sm font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              How it works
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-balance">
-              Keep the useful questions moving from session to session.
+          <div className="max-w-[520px] md:pl-2">
+            <h2 className="text-4xl font-extrabold leading-[0.98] tracking-[-0.05em] text-balance md:text-6xl">
+              Never run out of somewhere to go.
             </h2>
+            <p className="mt-6 text-lg leading-8 text-[#57544e] dark:text-[#bdb9b0]">
+              Browse by mood, save the good ones, and build collections for the people you bring together most.
+            </p>
+            <Link
+              to="/app"
+              className="mt-8 inline-flex min-h-12 items-center rounded-2xl border-2 border-current px-5 text-sm font-bold transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ff4d2e]/35"
+            >
+              Open a question
+            </Link>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {workflow.map((step, index) => (
-              <div key={step} className="flex items-center gap-3 rounded-lg border bg-card p-4">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">
-                  {index + 1}
-                </span>
-                <span className="text-sm font-medium">{step}</span>
-              </div>
-            ))}
+        </RevealSection>
+
+        <section className="bg-[#1647ba] text-[#f8f5ee]">
+          <div className="mx-auto w-full max-w-[1400px] px-5 py-20 md:px-10 md:py-28 lg:px-14">
+            <RevealSection className="max-w-[760px]">
+              <h2 className="text-4xl font-extrabold leading-[0.96] tracking-[-0.05em] text-balance md:text-6xl">
+                For every kind of room.
+              </h2>
+              <p className="mt-5 max-w-[600px] text-lg leading-8 text-blue-100">
+                Pick a tone that fits the people, then let the conversation find its own shape.
+              </p>
+            </RevealSection>
+
+            <div className="mt-14 grid gap-4 md:grid-cols-12">
+              {rooms.map((room, index) => (
+                <motion.article
+                  key={room.title}
+                  initial={reduceMotion ? false : "hidden"}
+                  whileInView="visible"
+                  viewport={{ once: true, amount: 0.25 }}
+                  variants={reveal}
+                  transition={{ duration: 0.55, delay: reduceMotion ? 0 : index * 0.06 }}
+                  className={`${room.className} flex min-h-52 flex-col justify-end rounded-2xl border border-white/25 p-6 md:min-h-64 md:p-8 ${
+                    index === 0
+                      ? "bg-[#ff4d2e] text-[#191713]"
+                      : index === 3
+                        ? "bg-[#f4f2ed] text-[#181818]"
+                        : "bg-[#113b9f]"
+                  }`}
+                >
+                  <h3 className="text-3xl font-extrabold tracking-[-0.04em] md:text-4xl">{room.title}</h3>
+                  <p className={`mt-3 max-w-[480px] text-base leading-7 ${index === 1 || index === 2 ? "text-blue-100" : "opacity-80"}`}>
+                    {room.copy}
+                  </p>
+                </motion.article>
+              ))}
+            </div>
           </div>
         </section>
 
-        <section className="border-t bg-muted/30">
-          <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-14 sm:px-6 lg:grid-cols-3 lg:py-20">
-            {benefits.map((benefit) => (
-              <FeatureBlock key={benefit.title} {...benefit} />
-            ))}
+        <RevealSection className="mx-auto w-full max-w-[1400px] px-5 py-24 md:px-10 md:py-32 lg:px-14">
+          <div className="grid gap-8 rounded-2xl bg-[#ff4d2e] px-6 py-10 text-[#181818] md:grid-cols-[1fr_auto] md:items-end md:px-10 md:py-12 lg:px-14 lg:py-16">
+            <h2 className="max-w-[820px] text-5xl font-extrabold leading-[0.92] tracking-[-0.06em] text-balance md:text-7xl">
+              Skip the small talk.
+            </h2>
+            <Link
+              to="/app"
+              className="inline-flex min-h-14 w-fit items-center rounded-2xl bg-[#181818] px-6 text-base font-bold text-[#f8f5ee] transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#181818]/25"
+            >
+              Open a question
+            </Link>
           </div>
-        </section>
+        </RevealSection>
       </main>
+
+      <LandingFooter />
     </div>
   );
 };
 
 const LandingHeader = () => (
-  <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link to="/" className="flex items-center gap-2 text-sm font-semibold">
-          <span className="flex size-8 items-center justify-center rounded-md border bg-card">
-            <MessageSquareQuote className="size-4 text-primary" />
-          </span>
-          Break the Ice
-        </Link>
-      <div className="flex items-center gap-2">
-        <Button asChild variant="ghost" className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
-          <Link to="/app">Open app</Link>
-        </Button>
-        <Button asChild className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
-          <Link to="/pricing?source=landing">
-            Start Team Plan
-            <ArrowRight className="size-4" />
-          </Link>
-        </Button>
-      </div>
+  <header className="sticky top-0 z-40 h-16 border-b border-black/10 bg-[#f4f2ed]/92 backdrop-blur-xl dark:border-white/10 dark:bg-[#11110f]/92">
+    <div className="mx-auto flex h-full max-w-[1400px] items-center justify-between gap-5 px-5 md:px-10 lg:px-14">
+      <Link to="/" className="flex shrink-0 items-center gap-2.5 font-extrabold tracking-[-0.03em]">
+        <span className="flex size-8 items-center justify-center rounded-2xl bg-[#ff4d2e] text-lg font-black text-[#181818]" aria-hidden="true">
+          ?
+        </span>
+        Break the Ice
+      </Link>
+      <nav className="hidden items-center gap-7 text-sm font-semibold md:flex" aria-label="Primary navigation">
+        <a className="transition-opacity hover:opacity-55" href="#try-one">Try one here</a>
+        <Link className="transition-opacity hover:opacity-55" to="/pricing">For teams</Link>
+      </nav>
+      <Link
+        to="/app"
+        className="inline-flex min-h-10 items-center rounded-2xl bg-[#181818] px-4 text-sm font-bold text-[#f8f5ee] transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ff4d2e]/35 dark:bg-[#f3f0e9] dark:text-[#181818]"
+      >
+        Open a question
+      </Link>
     </div>
   </header>
 );
 
-const LibraryStackBackdrop = () => (
-  <div className="pointer-events-none absolute inset-0 z-0">
-    <div className="absolute inset-y-0 right-0 hidden w-[58%] bg-[linear-gradient(90deg,transparent_0%,hsl(var(--muted))_100%)] lg:block" />
-    <div className="absolute left-1/2 top-12 hidden w-[min(88vw,640px)] -translate-x-1/2 lg:left-auto lg:right-[max(2rem,calc((100vw-72rem)/2))] lg:top-16 lg:block lg:translate-x-0">
-      <div className="relative h-[560px] sm:h-[600px]">
-        <div className="absolute inset-x-0 top-0 rotate-[-3deg] rounded-lg border bg-background p-5 shadow-xl shadow-slate-950/10">
-          <QuestionTile question={stackQuestions[0]} label="Leadership" />
-        </div>
-        <div className="absolute inset-x-6 top-40 rotate-[2deg] rounded-lg border bg-background p-5 shadow-xl shadow-slate-950/10">
-          <QuestionTile question={stackQuestions[1]} label="Retrospective" />
-        </div>
-        <div className="absolute inset-x-12 top-80 rotate-[-1deg] rounded-lg border bg-background p-5 shadow-xl shadow-slate-950/10">
-          <QuestionTile question={stackQuestions[2]} label="Onboarding" />
+const QuestionExperience = () => {
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const reduceMotion = useReducedMotion();
+
+  const showNextQuestion = () => {
+    setQuestionIndex((current) => (current + 1) % questions.length);
+  };
+
+  return (
+    <section id="try-one" className="bg-[#ff4d2e] text-[#181818]">
+      <div className="mx-auto grid w-full max-w-[1400px] gap-10 px-5 py-20 md:grid-cols-[0.7fr_1.3fr] md:items-center md:px-10 md:py-28 lg:gap-16 lg:px-14">
+        <RevealSection>
+          <p className="text-sm font-bold">Try one now</p>
+          <h2 className="mt-4 text-4xl font-extrabold leading-[0.98] tracking-[-0.05em] text-balance md:text-6xl">
+            One question. A completely different conversation.
+          </h2>
+        </RevealSection>
+
+        <div className="rounded-2xl bg-[#f8f5ee] p-6 shadow-[0_24px_70px_rgba(68,22,14,0.18)] md:p-10">
+          <div className="min-h-[190px] md:min-h-[220px]" aria-live="polite">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.p
+                key={questionIndex}
+                initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -12 }}
+                transition={{ duration: reduceMotion ? 0 : 0.3, ease: [0.16, 1, 0.3, 1] }}
+                className="max-w-[760px] text-3xl font-extrabold leading-[1.05] tracking-[-0.04em] text-balance md:text-5xl"
+              >
+                {questions[questionIndex]}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t-2 border-[#181818]/15 pt-5">
+            <span className="text-sm font-bold tabular-nums">
+              {String(questionIndex + 1).padStart(2, "0")} / {String(questions.length).padStart(2, "0")}
+            </span>
+            <button
+              type="button"
+              onClick={showNextQuestion}
+              className="min-h-12 rounded-2xl bg-[#1647ba] px-5 text-sm font-bold text-white transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1647ba]/30"
+            >
+              Another question
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  </div>
+    </section>
+  );
+};
+
+const RevealSection = ({ className = "", children }: { className?: string; children: ReactNode }) => {
+  const reduceMotion = useReducedMotion();
+
+  return (
+    <motion.div
+      initial={reduceMotion ? false : "hidden"}
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.2 }}
+      variants={reveal}
+      transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+};
+
+const PrimaryLink = ({ to, children }: { to: string; children: ReactNode }) => (
+  <Link
+    to={to}
+    className="inline-flex min-h-14 items-center justify-center rounded-2xl bg-[#ff4d2e] px-6 text-base font-bold text-[#181818] transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ff4d2e]/35"
+  >
+    {children}
+  </Link>
 );
 
-const QuestionTile = ({ question, label }: { question: string; label: string }) => (
-  <div>
-    <div className="mb-5 flex items-center justify-between gap-3">
-      <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-        {label}
-      </span>
-      <Library className="size-4 text-primary" />
-    </div>
-    <p className="text-lg font-medium leading-7 sm:text-xl">{question}</p>
-  </div>
+const SecondaryLink = ({ to, children }: { to: string; children: ReactNode }) => (
+  <a
+    href={to}
+    className="inline-flex min-h-14 items-center justify-center rounded-2xl border-2 border-current px-6 text-base font-bold transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ff4d2e]/35"
+  >
+    {children}
+  </a>
 );
 
-const FeatureBlock = ({
-  icon: Icon,
-  title,
-  copy,
-}: {
-  icon: typeof Users;
-  title: string;
-  copy: string;
-}) => (
-  <div className="rounded-lg border bg-card p-5">
-    <Icon className="size-5 text-primary" />
-    <h3 className="mt-5 font-medium">{title}</h3>
-    <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy}</p>
-  </div>
+const LandingFooter = () => (
+  <footer className="border-t border-black/10 dark:border-white/10">
+    <div className="mx-auto flex max-w-[1400px] flex-col gap-6 px-5 py-8 text-sm md:flex-row md:items-center md:justify-between md:px-10 lg:px-14">
+      <p className="font-extrabold">Break the Ice</p>
+      <div className="flex flex-wrap gap-x-6 gap-y-3 text-[#5d5a54] dark:text-[#bdb9b0]">
+        <Link className="hover:text-current" to="/about">About</Link>
+        <Link className="hover:text-current" to="/contact">Contact</Link>
+        <Link className="hover:text-current" to="/privacy">Privacy</Link>
+        <Link className="hover:text-current" to="/terms">Terms</Link>
+      </div>
+      <p className="text-[#5d5a54] dark:text-[#bdb9b0]">Questions worth asking.</p>
+    </div>
+  </footer>
 );
 
 export default LandingPage;

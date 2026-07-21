@@ -130,6 +130,16 @@
 }
 
 @layer components {
+  .landing-page {
+    font-family: "Manrope Variable", "Avenir Next", ui-sans-serif, system-ui, sans-serif;
+    font-optical-sizing: auto;
+  }
+
+  .landing-page ::selection {
+    background: #ff4d2e;
+    color: #181818;
+  }
+
   .admin-shell {
     font-family:
       "Manrope Variable", "Avenir Next", ui-sans-serif, system-ui, sans-serif;
