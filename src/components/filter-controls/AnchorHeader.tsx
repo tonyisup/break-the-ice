@@ -31,7 +31,7 @@ export const AnchorHeader = ({
   if (!styleId && !toneId && !topicId) return null;
 
   return (
-    <div className="sticky top-[72px] z-40 w-full px-4 py-2 flex flex-wrap gap-2 justify-center backdrop-blur-md bg-white/5 dark:bg-black/20 border-b border-white/10 animate-in fade-in slide-in-from-top-4 duration-300">
+    <div className="fixed top-16 md:top-[72px] z-40 w-full px-4 py-2 flex flex-wrap gap-2 justify-center backdrop-blur-md bg-white/5 dark:bg-black/20 border-b border-white/10 animate-in fade-in slide-in-from-top-4 duration-300">
       {style && (
         <AnchorChip
           label={style.name}

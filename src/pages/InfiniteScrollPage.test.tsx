@@ -10,6 +10,8 @@ import { NewsletterCard } from '@/components/newsletter-card/NewsletterCard';
 const mockUseAuth = vi.fn();
 const mockUseUser = vi.fn();
 const mockUseStorageContext = vi.fn();
+let mockSearchParams = new URLSearchParams();
+const mockSetSearchParams = vi.fn();
 
 // Mocks
 vi.mock('convex/react', () => ({
@@ -31,11 +33,10 @@ vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>();
   return {
     ...actual,
-    useSearchParams: () => [new URLSearchParams()],
+    useSearchParams: () => [mockSearchParams, mockSetSearchParams],
     Link: ({ to, children, ...props }: any) => <a href={to} {...props}>{children}</a>,
   };
 });
-
 vi.mock('@/components/header', () => ({
   Header: () => <div>Header</div>,
 }));
@@ -92,6 +93,7 @@ describe('InfiniteScrollPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
+    mockSearchParams = new URLSearchParams();
 
     // Default auth state: Signed In
     mockUseAuth.mockReturnValue({ isSignedIn: true, userId: 'user123', isLoaded: true });
@@ -351,6 +353,95 @@ describe('InfiniteScrollPage', () => {
         })
       );
     });
+  });
+
+  it('generates and injects the anchored shortfall ahead of general questions', async () => {
+    mockSearchParams = new URLSearchParams('style=style1');
+    const dbQuestions = [
+      {
+        _id: 'db-anchor',
+        text: 'Existing anchor',
+        styleId: 'style1',
+        toneId: 'tone1',
+      },
+      ...Array.from({ length: 9 }, (_, index) => ({
+        _id: `general-${index}`,
+        text: `General ${index}`,
+        styleId: 'style2',
+        toneId: 'tone2',
+      })),
+    ];
+    const actionMock = vi.fn().mockResolvedValue({
+      questions: dbQuestions,
+      anchoredMatchCount: 1,
+      targetAnchoredCount: 6,
+    });
+    const generatedQuestions = Array.from({ length: 5 }, (_, index) => ({
+      _id: `generated-${index}`,
+      text: `Generated anchor ${index}`,
+      styleId: 'style1',
+      toneId: 'tone1',
+    }));
+    const generateAction = vi.fn().mockResolvedValue(generatedQuestions);
+    (useConvex as any).mockReturnValue({ query: vi.fn(), action: actionMock });
+    (useAction as any).mockReturnValue(generateAction);
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10);
+    });
+    expect(generateAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        count: 5,
+        anchoredStyleId: 'style1',
+      }),
+    );
+
+    const lastTenCalls = (ModernQuestionCard as any).mock.calls.slice(-10);
+    expect(lastTenCalls.slice(0, 6).every((call: any[]) => call[0].question.styleId === 'style1')).toBe(true);
+    expect(lastTenCalls.slice(6).every((call: any[]) => call[0].question.styleId === 'style2')).toBe(true);
+  });
+
+  it('does not generate when the anchored database quota is already met', async () => {
+    mockSearchParams = new URLSearchParams('tone=tone1');
+    const dbQuestions = [
+      ...Array.from({ length: 6 }, (_, index) => ({
+        _id: `anchor-${index}`,
+        text: `Anchored ${index}`,
+        styleId: 'style1',
+        toneId: 'tone1',
+      })),
+      ...Array.from({ length: 4 }, (_, index) => ({
+        _id: `general-${index}`,
+        text: `General ${index}`,
+        styleId: 'style2',
+        toneId: 'tone2',
+      })),
+    ];
+    const actionMock = vi.fn().mockResolvedValue({
+      questions: dbQuestions,
+      anchoredMatchCount: 6,
+      targetAnchoredCount: 6,
+    });
+    const generateAction = vi.fn().mockResolvedValue([]);
+    (useConvex as any).mockReturnValue({ query: vi.fn(), action: actionMock });
+    (useAction as any).mockReturnValue(generateAction);
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10);
+    });
+    expect(generateAction).not.toHaveBeenCalled();
   });
 
   it('sorts the first batch of questions by text length', async () => {

@@ -843,6 +843,192 @@ export const getRandomQuestionsInternal = internalQuery({
 	},
 });
 
+/**
+ * Build an anchored feed batch with an explicit 60% matching floor.
+ * Taxonomy versions sharing a slug are treated as the same user-facing
+ * attribute, and questions matching more active anchors rank first.
+ */
+export const getAnchoredQuestionsInternal = internalQuery({
+	args: {
+		count: v.number(),
+		seen: v.array(v.id("questions")),
+		hidden: v.array(v.id("questions")),
+		hiddenStyles: v.array(v.id("styles")),
+		hiddenTones: v.array(v.id("tones")),
+		organizationId: v.optional(v.id("organizations")),
+		anchoredStyleId: v.optional(v.id("styles")),
+		anchoredToneId: v.optional(v.id("tones")),
+		anchoredTopicId: v.optional(v.id("topics")),
+		randomSeed: v.optional(v.number()),
+	},
+	returns: v.object({
+		questions: v.array(v.any()),
+		anchoredMatchCount: v.number(),
+		targetAnchoredCount: v.number(),
+	}),
+	handler: async (ctx, args) => {
+		const targetAnchoredCount = Math.min(args.count, args.count >= 10 ? 6 : Math.ceil(args.count * 0.6));
+		const seenIds = new Set(args.seen);
+		const hiddenIds = new Set(args.hidden);
+		const hiddenStyleIds = new Set(args.hiddenStyles);
+		const hiddenToneIds = new Set(args.hiddenTones);
+		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+		let seed = args.randomSeed ?? Math.random();
+		seed = ((seed % 1) + 1) % 1;
+		let randomState = Math.floor(seed * 4294967296);
+		const random = () => {
+			randomState += 0x6d2b79f5;
+			let value = randomState;
+			value = Math.imul(value ^ (value >>> 15), value | 1);
+			value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+			return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+		};
+		const shuffle = <T>(items: T[]) => {
+			for (let index = items.length - 1; index > 0; index--) {
+				const swapIndex = Math.floor(random() * (index + 1));
+				[items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+			}
+			return items;
+		};
+
+		const applyFilters = (q: any) => {
+			const conditions = [q.neq(q.field("text"), undefined)];
+			if (args.organizationId) {
+				conditions.push(q.or(q.eq(q.field("organizationId"), args.organizationId), q.eq(q.field("organizationId"), undefined)));
+			} else {
+				conditions.push(q.eq(q.field("organizationId"), undefined));
+			}
+			return q.and(...conditions);
+		};
+		const isVisible = (question: Doc<"questions">) => {
+			if (seenIds.has(question._id) || hiddenIds.has(question._id)) return false;
+			if (question.styleId && hiddenStyleIds.has(question.styleId)) return false;
+			if (question.toneId && hiddenToneIds.has(question.toneId)) return false;
+			return true;
+		};
+		const wasShownRecently = (question: Doc<"questions">) => question.lastShownAt !== undefined && question.lastShownAt >= sevenDaysAgo;
+		const sameOrganization = (left: Id<"organizations"> | undefined, right: Id<"organizations"> | undefined) => left?.toString() === right?.toString();
+
+		const styleIds = new Set<string>(args.anchoredStyleId ? [args.anchoredStyleId.toString()] : []);
+		const toneIds = new Set<string>(args.anchoredToneId ? [args.anchoredToneId.toString()] : []);
+		const topicIds = new Set<string>(args.anchoredTopicId ? [args.anchoredTopicId.toString()] : []);
+		let styleSlug: string | undefined;
+		let toneSlug: string | undefined;
+		let topicSlug: string | undefined;
+
+		if (args.anchoredStyleId) {
+			const anchor = await ctx.db.get(args.anchoredStyleId);
+			styleSlug = anchor?.slug ?? anchor?.id;
+			if (anchor && styleSlug) {
+				const versions = await ctx.db
+					.query("styles")
+					.withIndex("by_slug", (q) => q.eq("slug", styleSlug!))
+					.collect();
+				for (const version of versions) {
+					if (sameOrganization(version.organizationId, anchor.organizationId)) {
+						styleIds.add(version._id.toString());
+					}
+				}
+			}
+		}
+		if (args.anchoredToneId) {
+			const anchor = await ctx.db.get(args.anchoredToneId);
+			toneSlug = anchor?.slug ?? anchor?.id;
+			if (anchor && toneSlug) {
+				const versions = await ctx.db
+					.query("tones")
+					.withIndex("by_slug", (q) => q.eq("slug", toneSlug!))
+					.collect();
+				for (const version of versions) {
+					if (sameOrganization(version.organizationId, anchor.organizationId)) {
+						toneIds.add(version._id.toString());
+					}
+				}
+			}
+		}
+		if (args.anchoredTopicId) {
+			const anchor = await ctx.db.get(args.anchoredTopicId);
+			topicSlug = anchor?.slug ?? anchor?.id;
+			if (anchor && topicSlug) {
+				const versions = await ctx.db
+					.query("topics")
+					.withIndex("by_slug", (q) => q.eq("slug", topicSlug!))
+					.collect();
+				for (const version of versions) {
+					if (sameOrganization(version.organizationId, anchor.organizationId)) {
+						topicIds.add(version._id.toString());
+					}
+				}
+			}
+		}
+
+		const matchesSlugOrVersion = (questionId: string | undefined, questionSlug: string | undefined, legacySlug: string | undefined, versionIds: Set<string>, anchorSlug: string | undefined) =>
+			!!((questionId && versionIds.has(questionId)) || (anchorSlug && (questionSlug === anchorSlug || legacySlug === anchorSlug)));
+		const getAnchorScore = (question: Doc<"questions">) => {
+			let score = 0;
+			if (args.anchoredStyleId && matchesSlugOrVersion(question.styleId?.toString(), question.styleSlug, question.style, styleIds, styleSlug)) score++;
+			if (args.anchoredToneId && matchesSlugOrVersion(question.toneId?.toString(), question.toneSlug, question.tone, toneIds, toneSlug)) score++;
+			if (args.anchoredTopicId && matchesSlugOrVersion(question.topicId?.toString(), question.topicSlug, question.topic, topicIds, topicSlug)) score++;
+			return score;
+		};
+
+		const allPublic = await ctx.db
+			.query("questions")
+			.withIndex("by_status", (q) => q.eq("status", "public"))
+			.filter(applyFilters)
+			.take(1000);
+		const anchorMatchPool = new Map<Id<"questions">, Doc<"questions">>();
+		for (const question of allPublic) {
+			if (getAnchorScore(question) > 0) anchorMatchPool.set(question._id, question);
+		}
+
+		for (const styleId of styleIds) {
+			const matches = await ctx.db
+				.query("questions")
+				.withIndex("by_styleId_status", (q) => q.eq("styleId", styleId as Id<"styles">).eq("status", "public"))
+				.filter(applyFilters)
+				.take(100);
+			for (const question of matches) anchorMatchPool.set(question._id, question);
+		}
+		for (const toneId of toneIds) {
+			const matches = await ctx.db
+				.query("questions")
+				.withIndex("by_toneId_status", (q) => q.eq("toneId", toneId as Id<"tones">).eq("status", "public"))
+				.filter(applyFilters)
+				.take(100);
+			for (const question of matches) anchorMatchPool.set(question._id, question);
+		}
+		for (const topicId of topicIds) {
+			const matches = await ctx.db
+				.query("questions")
+				.withIndex("by_topicId_status", (q) => q.eq("topicId", topicId as Id<"topics">).eq("status", "public"))
+				.filter(applyFilters)
+				.take(100);
+			for (const question of matches) anchorMatchPool.set(question._id, question);
+		}
+
+		const rankedAnchored = shuffle(Array.from(anchorMatchPool.values()).filter(isVisible)).sort((left, right) => {
+			const scoreDifference = getAnchorScore(right) - getAnchorScore(left);
+			if (scoreDifference !== 0) return scoreDifference;
+			return Number(wasShownRecently(left)) - Number(wasShownRecently(right));
+		});
+		const selectedAnchored = rankedAnchored.slice(0, targetAnchoredCount);
+		const allAnchoredIds = new Set(rankedAnchored.map((question) => question._id));
+		const generalVisible = allPublic.filter((question) => isVisible(question) && !allAnchoredIds.has(question._id));
+		const freshGeneral = shuffle(generalVisible.filter((question) => !wasShownRecently(question)));
+		const recentGeneral = shuffle(generalVisible.filter(wasShownRecently));
+		const selectedIds = new Set(selectedAnchored.map((question) => question._id));
+		const generalCandidates = [...freshGeneral, ...recentGeneral].filter((question) => !selectedIds.has(question._id));
+
+		return {
+			questions: [...selectedAnchored, ...generalCandidates].slice(0, args.count),
+			anchoredMatchCount: selectedAnchored.length,
+			targetAnchoredCount,
+		};
+	},
+});
+
 // Get the time range of all questions for randomization
 export const getQuestionTimeRange = internalQuery({
 	args: {},

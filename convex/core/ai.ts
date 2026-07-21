@@ -112,8 +112,11 @@ export const generateAIQuestionForFeed = action({
 		const takeoverTopics = await ctx.runQuery(api.core.topics.getActiveTakeoverTopics);
 		let topicId = args.anchoredTopicId;
 		let bypassAIUsage = false;
+		const hasExplicitAnchor = !!(
+			args.anchoredStyleId || args.anchoredToneId || args.anchoredTopicId
+		);
 
-		if (takeoverTopics.length > 0) {
+		if (!hasExplicitAnchor && takeoverTopics.length > 0) {
 			topicId = takeoverTopics[Math.floor(Math.random() * takeoverTopics.length)]._id;
 			bypassAIUsage = true;
 		}

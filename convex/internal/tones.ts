@@ -116,7 +116,12 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
   handler: async (ctx) => {
     const questions = await ctx.db
       .query("questions")
-      .withIndex("by_tone_text", (q) => q)
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("toneId"), undefined),
+          q.neq(q.field("tone"), undefined),
+        ),
+      )
       .take(TONE_BACKFILL_BATCH_SIZE);
     for (const question of questions) {
       if (!question.toneId && question.tone) {
@@ -134,6 +139,14 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
           });
         }
       }
+    }
+
+    if (questions.length === TONE_BACKFILL_BATCH_SIZE) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.internal.tones.updateQuestionsWithMissingToneIds,
+        {},
+      );
     }
 
     return null;
