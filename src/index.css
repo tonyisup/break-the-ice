@@ -130,12 +130,14 @@
 }
 
 @layer components {
-  .landing-page {
+  .landing-page,
+  .pricing-page {
     font-family: "Manrope Variable", "Avenir Next", ui-sans-serif, system-ui, sans-serif;
     font-optical-sizing: auto;
   }
 
-  .landing-page ::selection {
+  .landing-page ::selection,
+  .pricing-page ::selection {
     background: #ff4d2e;
     color: #181818;
   }
