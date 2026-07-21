@@ -2,7 +2,7 @@ import { MutationCtx, mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { getEffectivePlanForUser } from "../auth";
 import { getAiUsageForWorkspace } from "../lib/aiUsageWorkspace";
-import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
+import { collectUserCandidates, findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
 
 // Helper to ensure user exists
 export async function getUserOrCreate(ctx: MutationCtx) {
@@ -42,17 +42,49 @@ export const getCurrentUser = query({
 		}
 
 		const organizationId = args.organizationId;
-		const effectivePlan = await getEffectivePlanForUser(ctx, user._id, organizationId);
+		const { candidates } = await collectUserCandidates(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
+		const candidateIds = candidates.map((candidate) => candidate._id);
+		let organizationRole: "admin" | "manager" | "member" | undefined;
+		let workspaceUsageUserId = user._id;
+		if (organizationId) {
+			for (const candidateId of candidateIds) {
+				const membership = await ctx.db
+					.query("organization_members")
+					.withIndex("by_userId_organizationId", (q) =>
+						q.eq("userId", candidateId).eq("organizationId", organizationId),
+					)
+					.unique();
+				if (membership?.role === "admin") {
+					organizationRole = "admin";
+					workspaceUsageUserId = candidateId;
+					break;
+				}
+				if (membership?.role === "manager") {
+					organizationRole = "manager";
+					workspaceUsageUserId = candidateId;
+					break;
+				} else if (membership?.role === "member" && !organizationRole) {
+					organizationRole = "member";
+					workspaceUsageUserId = candidateId;
+				}
+			}
+		}
+		const effectivePlan = await getEffectivePlanForUser(ctx, candidateIds, organizationId);
 		const limit = effectivePlan.planTier === "team"
 			? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
 			: parseInt(process.env.MAX_FREE_AIGEN ?? "10");
-		const aiUsage = await getAiUsageForWorkspace(ctx, user._id, organizationId);
+		const aiUsage = await getAiUsageForWorkspace(ctx, workspaceUsageUserId, organizationId);
 
 		return {
 			...user,
 			planTier: effectivePlan.planTier,
 			billingStatus: effectivePlan.billingStatus,
 			activeOrganizationId: effectivePlan.organizationId,
+			organizationRole,
 			aiLimit: limit,
 			aiUsage: { count: aiUsage.count, cycleStart: aiUsage.cycleStart },
 			isAiLimitReached: aiUsage.count >= limit,

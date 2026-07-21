@@ -186,3 +186,74 @@ test("getCurrentUser prefers tokenIdentifier-linked row when duplicate emails ex
 
   expect(currentUser?._id).toBe(tokenUserId);
 });
+
+test("getCurrentUser exposes the caller's organization role for scheduler capability gates", async () => {
+  const t = convexTest(schema, convexFunctionModules);
+  const { userId, organizationId } = await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      email: "manager@example.com",
+      clerkId: "manager",
+    });
+    const organizationId = await ctx.db.insert("organizations", {
+      name: "Role-aware workspace",
+      planTier: "team",
+      billingStatus: "active",
+    });
+    await ctx.db.insert("organization_members", {
+      userId,
+      organizationId,
+      role: "manager",
+    });
+    return { userId, organizationId };
+  });
+
+  const currentUser = await t
+    .withIdentity({ subject: "manager", email: "manager@example.com" })
+    .query(api.core.users.getCurrentUser, { organizationId });
+
+  expect(currentUser?._id).toBe(userId);
+  expect(currentUser?.organizationRole).toBe("manager");
+});
+
+test("getCurrentUser resolves organization role from a matching legacy user row", async () => {
+  const t = convexTest(schema, convexFunctionModules);
+  const { canonicalUserId, organizationId } = await t.run(async (ctx) => {
+    const legacyUserId = await ctx.db.insert("users", {
+      email: "duplicate-manager@example.com",
+    });
+    const canonicalUserId = await ctx.db.insert("users", {
+      clerkId: "duplicate-manager",
+      tokenIdentifier: "https://clerk.example|duplicate-manager",
+      email: "duplicate-manager@example.com",
+    });
+    const organizationId = await ctx.db.insert("organizations", {
+      name: "Legacy membership workspace",
+      planTier: "team",
+      billingStatus: "active",
+    });
+    await ctx.db.insert("organization_members", {
+      userId: legacyUserId,
+      organizationId,
+      role: "manager",
+    });
+    await ctx.db.insert("userAiUsage", {
+      userId: legacyUserId,
+      organizationId,
+      count: 3,
+      cycleStart: Date.now(),
+    });
+    return { canonicalUserId, organizationId };
+  });
+
+  const currentUser = await t
+    .withIdentity({
+      subject: "duplicate-manager",
+      tokenIdentifier: "https://clerk.example|duplicate-manager",
+      email: "duplicate-manager@example.com",
+    })
+    .query(api.core.users.getCurrentUser, { organizationId });
+
+  expect(currentUser?._id).toBe(canonicalUserId);
+  expect(currentUser?.organizationRole).toBe("manager");
+  expect(currentUser?.aiUsage.count).toBe(3);
+});

@@ -27,7 +27,7 @@ vi.mock("react-router-dom", () => ({ Link: ({ children, to }: { children: React.
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
     core: {
-      users: { store: "storeUser" },
+      users: { store: "storeUser", getCurrentUser: "getCurrentUser" },
       schedules: { listSchedulesForUser: "listSchedulesForUser", listSchedules: "listSchedules", getSchedule: "getSchedule", createSchedule: "createSchedule", assignQuestion: "assignQuestion", unassignQuestion: "unassignQuestion", publishSchedule: "publishSchedule", autoSchedule: "autoSchedule" },
       organizations: { getOrganizations: "getOrganizations" },
       orgSettings: { getOrgSettings: "getOrgSettings", upsertOrgSettings: "upsertOrgSettings", setDeliveryDayActive: "setDeliveryDayActive" },
@@ -37,6 +37,8 @@ vi.mock("../../../../convex/_generated/api", () => ({
       billing: { syncOrganizationFromClerk: "syncOrganizationFromClerk" },
       billingSyncAction: { syncOrganizationViaClerkApi: "syncOrganizationViaClerkApi" },
       fillMatrix: { fillEmptyCells: "fillEmptyCells", fillSingleCell: "fillSingleCell" },
+      teamPromptActions: { previewTopicQuestions: "previewTopicQuestions" },
+      teamPrompts: { createAndAssign: "createAndAssignTeamPrompt" },
     },
   },
 }));
@@ -53,6 +55,7 @@ beforeEach(() => {
     if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
     if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
     if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+    if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
     if (fn === "getCurationPreview") return { totalResponses: 3, coachCount: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3, landedWell: 1, fellFlat: 0, wrongVibe: 2, timingOff: 0, isMixed: true, coachCount: 3 }] }] };
     if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
     return undefined;
@@ -88,6 +91,7 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
       if (fn === "getOrgSettings") return undefined;
       if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
       if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
       if (fn === "getCurationPreview") return { totalResponses: 3, coachCount: 3, confidence: "directional", recommendations: [{ questionId: "q-preview", text: "Calm conversation starter", score: 1, reasons: [{ dimension: "tone", value: "calm", score: 1, responses: 3, landedWell: 1, fellFlat: 0, wrongVibe: 2, timingOff: 0, isMixed: true, coachCount: 3 }] }] };
     if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
       return undefined;
@@ -96,5 +100,21 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     render(<OrgWeeklyCurationPage />);
 
     expect(screen.getByRole("checkbox", { name: "Deliver on Monday" })).toBeDisabled();
+  });
+
+  it("does not expose scheduler assignment controls to ordinary Team members", () => {
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
+      if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
+      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "member" };
+      if (fn === "getCurationPreview") return { totalResponses: 0, coachCount: 0, confidence: "insufficient", recommendations: [] };
+      if (fn === "getPublicQuestions" || fn === "getStyles" || fn === "getTones" || fn === "getTopics") return [];
+      return undefined;
+    });
+
+    render(<OrgWeeklyCurationPage />);
+
+    expect(screen.queryByRole("button", { name: "Assign" })).not.toBeInTheDocument();
   });
 });

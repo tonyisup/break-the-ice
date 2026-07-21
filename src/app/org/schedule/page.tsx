@@ -36,6 +36,7 @@ import { Link } from "react-router-dom";
 import { TeamWorkspaceMenu } from "@/components/header/TeamWorkspaceMenu";
 import { toast } from "sonner";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
+import { TeamPromptComposer, type TeamTopicDraft } from "./TeamPromptComposer";
 
 const DAYS_DISPLAY: {
   key: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
@@ -252,6 +253,7 @@ interface DaySlotProps {
         style?: string;
         tone?: string;
         topic?: string;
+        teamTopicName?: string;
       }
     | undefined;
   canEdit: boolean;
@@ -297,6 +299,9 @@ function DaySlot({ dayKey, dayLabel, dayAbbr, date, assignment, canEdit, onAssig
               )}
               {assignment.topic && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{assignment.topic}</Badge>
+              )}
+              {assignment.teamTopicName && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Topic: {assignment.teamTopicName}</Badge>
               )}
             </div>
             {canEdit && (
@@ -379,6 +384,10 @@ export default function OrgWeeklyCurationPage() {
     api.core.schedules.listSchedules,
     orgId ? { organizationId: orgId } : "skip"
   );
+  const currentWorkspaceUser = useQuery(
+    api.core.users.getCurrentUser,
+    orgId ? { organizationId: orgId } : "skip",
+  );
 
   /* --- Org settings --- */
   const orgSettings = useQuery(
@@ -420,9 +429,15 @@ const questionPool = useQuery(
   );
 
   /* --- Axis filter state --- */
-  const styles = useQuery(api.core.styles.getStyles, {});
-  const tones = useQuery(api.core.tones.getTones, {});
-  const topics = useQuery(api.core.topics.getTopics, {});
+  const styles = useQuery(api.core.styles.getStyles, {
+    organizationId: orgId ?? undefined,
+  });
+  const tones = useQuery(api.core.tones.getTones, {
+    organizationId: orgId ?? undefined,
+  });
+  const topics = useQuery(api.core.topics.getTopics, {
+    organizationId: orgId ?? undefined,
+  });
 
   const [axisY, setAxisY] = React.useState<AxisType>("style");
   const [axisX, setAxisX] = React.useState<AxisType>("tone");
@@ -486,13 +501,18 @@ const questionPool = useQuery(
   const syncOrgViaClerkApi = useAction(api.core.billingSyncAction.syncOrganizationViaClerkApi);
   const fillEmptyCellsAction = useAction(api.core.fillMatrix.fillEmptyCells);
   const fillSingleCellAction = useAction(api.core.fillMatrix.fillSingleCell);
+  const previewTopicQuestions = useAction(api.core.teamPromptActions.previewTopicQuestions);
+  const createAndAssignTeamPrompt = useMutation(api.core.teamPrompts.createAndAssign);
 
   /* Generation state */
   const [isFillingEmpty, setIsFillingEmpty] = React.useState(false);
   const [fillingCellKey, setFillingCellKey] = React.useState<string | null>(null);
 
   /* --- Derived --- */
-  const canEdit = !currentSchedule || currentSchedule.status === "draft";
+  const canManageSchedule =
+    currentWorkspaceUser?.organizationRole === "admin" ||
+    currentWorkspaceUser?.organizationRole === "manager";
+  const canEdit = canManageSchedule && (!currentSchedule || currentSchedule.status === "draft");
 
   /* Map assignments by day */
   const assignmentsByDay = React.useMemo(() => {
@@ -506,6 +526,7 @@ const questionPool = useQuery(
         style: a.question.style,
         tone: a.question.tone,
         topic: a.question.topic,
+        teamTopicName: a.teamTopicName,
       };
     }
     return map;
@@ -793,6 +814,75 @@ const questionPool = useQuery(
       toast.success("Assigned to " + (DAYS_DISPLAY.find(d => d.key === dayKey)?.label ?? dayKey));
     } catch (e: any) {
       toast.error(e.message ?? "Failed to assign");
+    }
+  };
+
+  const getOrCreateCurrentScheduleId = async (): Promise<Id<"schedules">> => {
+    if (currentSchedule) return currentSchedule._id;
+    if (!orgId) throw new Error("Select an organization first");
+    return await createSchedule({
+      organizationId: orgId,
+      weekStart: week.isoStart,
+      weekStartDay,
+    });
+  };
+
+  const handleCreateTeamQuestion = async (questionText: string) => {
+    if (!assignTargetDay) throw new Error("Select a schedule day first");
+    try {
+      const scheduleId = await getOrCreateCurrentScheduleId();
+      await createAndAssignTeamPrompt({
+        scheduleId,
+        dayOfWeek: assignTargetDay as (typeof DAYS_DISPLAY)[number]["key"],
+        questionText,
+      });
+      toast.success(`Custom question assigned to ${DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}`);
+      setAssignTargetDay(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to assign custom question");
+      throw error;
+    }
+  };
+
+  const handlePreviewTeamTopic = async (request: {
+    name: string;
+    guidance: string;
+    boundaries?: string;
+    styleId: string;
+    toneId: string;
+  }): Promise<string[]> => {
+    if (!orgId) throw new Error("Select an organization first");
+    try {
+      const result = await previewTopicQuestions({
+        organizationId: orgId,
+        name: request.name,
+        guidance: request.guidance,
+        boundaries: request.boundaries,
+        styleId: request.styleId as Id<"styles">,
+        toneId: request.toneId as Id<"tones">,
+      });
+      return result.questions;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to generate topic options");
+      throw error;
+    }
+  };
+
+  const handleAssignTeamTopicQuestion = async (questionText: string, sourceTopic: TeamTopicDraft) => {
+    if (!assignTargetDay) throw new Error("Select a schedule day first");
+    try {
+      const scheduleId = await getOrCreateCurrentScheduleId();
+      await createAndAssignTeamPrompt({
+        scheduleId,
+        dayOfWeek: assignTargetDay as (typeof DAYS_DISPLAY)[number]["key"],
+        questionText,
+        sourceTopic,
+      });
+      toast.success(`Topic question assigned to ${DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}`);
+      setAssignTargetDay(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to assign topic question");
+      throw error;
     }
   };
 
@@ -1410,6 +1500,32 @@ const questionPool = useQuery(
               ))}
             </div>
           </section>
+
+          {assignTargetDay && canEdit && currentWorkspaceUser?.planTier === "team" && (
+            <TeamPromptComposer
+              key={assignTargetDay}
+              dayLabel={DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}
+              styles={(styles ?? []).map((style) => ({ id: style._id, name: style.name }))}
+              tones={(tones ?? []).map((tone) => ({ id: tone._id, name: tone.name }))}
+              onCreateQuestion={handleCreateTeamQuestion}
+              onPreviewTopic={handlePreviewTeamTopic}
+              onAssignTopicQuestion={handleAssignTeamTopicQuestion}
+            />
+          )}
+
+          {assignTargetDay && canEdit && currentWorkspaceUser !== undefined && currentWorkspaceUser?.planTier !== "team" && (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col gap-3 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium">Custom questions and topics are a Team feature</p>
+                  <p className="text-xs text-muted-foreground">You can still assign a public question from the matrix below.</p>
+                </div>
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/pricing?source=team_prompt_composer">View Team plan</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Question pool — axis matrix */}
           <section>

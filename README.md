@@ -19,7 +19,13 @@ Powered by a modern tech stack, Ice Breaker features a sleek, intuitive interfac
 
 The AI question generation feature uses OpenAI's GPT-4 to create unique and contextually relevant questions. You can guide the AI by selecting from a variety of predefined categories, styles, and tones to generate questions that fit any occasion.
 
-For a more detailed explanation of how this feature is implemented, check out the [AI Feature Guide](./AI_FEATURE_GUIDE.md).
+The implementation is split between the [generation runner](./convex/lib/generationRunner.ts) and [prompt architecture](./convex/lib/promptArchitecture.ts).
+
+## Documentation
+
+- [Team Prompts product and engineering spec](./docs/team-prompts/product-spec.md)
+- [How to schedule a Team Prompt](./docs/team-prompts/how-to-schedule-team-prompts.md)
+- [Team Prompts reference](./docs/team-prompts/reference.md)
 
 ## 🚀 Getting Started
 

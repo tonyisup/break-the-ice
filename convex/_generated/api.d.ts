@@ -40,6 +40,8 @@ import type * as core_questions from "../core/questions.js";
 import type * as core_schedules from "../core/schedules.js";
 import type * as core_styles from "../core/styles.js";
 import type * as core_tags from "../core/tags.js";
+import type * as core_teamPromptActions from "../core/teamPromptActions.js";
+import type * as core_teamPrompts from "../core/teamPrompts.js";
 import type * as core_tones from "../core/tones.js";
 import type * as core_topics from "../core/topics.js";
 import type * as core_userSettings from "../core/userSettings.js";
@@ -125,6 +127,8 @@ declare const fullApi: ApiFromModules<{
   "core/schedules": typeof core_schedules;
   "core/styles": typeof core_styles;
   "core/tags": typeof core_tags;
+  "core/teamPromptActions": typeof core_teamPromptActions;
+  "core/teamPrompts": typeof core_teamPrompts;
   "core/tones": typeof core_tones;
   "core/topics": typeof core_topics;
   "core/userSettings": typeof core_userSettings;

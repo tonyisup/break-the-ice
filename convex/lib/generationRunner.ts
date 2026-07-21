@@ -332,6 +332,7 @@ export async function runPreviewQuestionGeneration(
   prompt: GenerationPrompt;
   rawResponse: string;
   previewText: string;
+  previewTexts: string[];
 }> {
   const temperature = args.temperature ?? 0.85;
   const prompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
@@ -369,8 +370,11 @@ export async function runPreviewQuestionGeneration(
 
     const rawResponse = getChatCompletionContent(completion);
     const parsed = parseQuestionObjects(rawResponse);
-    const preview = parsed[0];
-    const previewText = preview?.text ?? "";
+    const previewTexts = parsed
+      .slice(0, prompt.batchSize)
+      .map((candidate) => candidate.text.trim())
+      .filter(Boolean);
+    const previewText = previewTexts[0] ?? "";
 
     if (!previewText) {
       throw new Error("No preview questions parsed");
@@ -388,6 +392,7 @@ export async function runPreviewQuestionGeneration(
       prompt,
       rawResponse,
       previewText,
+      previewTexts,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown generation error";

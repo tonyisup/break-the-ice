@@ -612,11 +612,11 @@ export const getCustomQuestions = query({
 			return [];
 		}
 		const questions = await ctx.db
-			.query("questions")
-			.withIndex("by_author", (q) => q.eq("authorId", user._id))
-			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.collect();
-		return questions;
+		  .query("questions")
+		  .withIndex("by_author", (q) => q.eq("authorId", user._id))
+		  .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+		  .collect();
+		return questions.filter((question) => question.kind !== "team_prompt");
 	},
 });
 
@@ -699,6 +699,32 @@ async function canReadQuestion(
 ): Promise<boolean> {
 	if (isQuestionPublic(question.status)) return true;
 	if (!userId) return false;
+	if (question.kind === "team_prompt") {
+		if (!question.organizationId) return false;
+		const membership = await ctx.db
+			.query("organization_members")
+			.withIndex("by_userId_organizationId", (q) =>
+				q.eq("userId", userId).eq("organizationId", question.organizationId!),
+			)
+			.unique();
+		if (!membership) return false;
+		if (membership.role === "admin" || membership.role === "manager") return true;
+
+		const assignments = await ctx.db
+			.query("scheduledQuestions")
+			.withIndex("by_question", (q) => q.eq("questionId", question._id))
+			.take(50);
+		for (const assignment of assignments) {
+			const schedule = await ctx.db.get(assignment.scheduleId);
+			if (
+				schedule?.organizationId === question.organizationId &&
+				(schedule.status === "published" || schedule.status === "completed")
+			) {
+				return true;
+			}
+		}
+		return false;
+	}
 	if (question.authorId === userId) return true;
 	if (!question.organizationId) return false;
 
@@ -983,6 +1009,12 @@ export const remixQuestionForUser = action({
 	},
 });
 
+function assertPersonalQuestionLifecycle(question: Doc<"questions">) {
+	if (question.kind === "team_prompt") {
+		throw new Error("This is a schedule-managed Team prompt, not a personal question.");
+	}
+}
+
 // Update a personal question (must be owned by the current user)
 export const updatePersonalQuestion = mutation({
 	args: {
@@ -1014,6 +1046,7 @@ export const updatePersonalQuestion = mutation({
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to update this question.");
 		}
+		assertPersonalQuestionLifecycle(question);
 		// Look up slugs for legacy support
 		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
 			args.styleId ? ctx.db.get(args.styleId) : null,
@@ -1064,6 +1097,7 @@ export const deletePersonalQuestion = mutation({
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to delete this question.");
 		}
+		assertPersonalQuestionLifecycle(question);
 		await ctx.db.delete(args.questionId);
 		return null;
 	},
@@ -1092,6 +1126,7 @@ export const makeQuestionPublic = mutation({
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to update this question.");
 		}
+		assertPersonalQuestionLifecycle(question);
 		if (question.status !== "private") {
 			throw new Error("Only private questions can be made public.");
 		}
