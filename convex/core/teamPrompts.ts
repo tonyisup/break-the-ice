@@ -207,6 +207,7 @@ export const createAndAssign = mutation({
       assignedAt: now,
       assignedBy: user._id,
       teamTopicId,
+      questionTextSnapshot: questionText,
     });
     await ctx.db.patch(schedule._id, { updatedAt: now });
 

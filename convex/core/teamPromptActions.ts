@@ -90,12 +90,19 @@ export async function runTopicPreviewWithUsage(
       batchSize: PREVIEW_COUNT,
     });
 
-    const questions = preview.previewTexts
+    const persistableQuestions = preview.previewTexts
       .map(normalizePersistableTeamPromptText)
       .filter((question): question is string => question !== null);
-    if (questions.length === 0) {
+    const distinctQuestions = [...new Set(persistableQuestions)];
+    if (distinctQuestions.length === 0) {
       throw new Error("No persistable topic preview questions were generated.");
     }
+    if (distinctQuestions.length < PREVIEW_COUNT) {
+      throw new Error(
+        "Exactly three distinct topic preview questions are required. Please retry.",
+      );
+    }
+    const questions = distinctQuestions.slice(0, PREVIEW_COUNT);
 
     return { questions, runId: preview.runId };
   } catch (error) {

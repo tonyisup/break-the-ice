@@ -169,29 +169,32 @@ export const getSchedule = query({
     const enriched: AssignmentEntry[] = [];
     for (const a of assignments) {
       const question = await ctx.db.get(a.questionId);
-      if (question) {
-        if (question.kind === "team_prompt" && !canReadDraftTeamPrompts) {
-          continue;
-        }
-        const teamTopic = a.teamTopicId ? await ctx.db.get(a.teamTopicId) : null;
-        enriched.push({
-          _id: a._id,
-          dayOfWeek: a.dayOfWeek,
-          slotOrder: a.slotOrder,
-          assignedBy: a.assignedBy,
-          teamTopicId: a.teamTopicId,
-          teamTopicName: teamTopic?.name,
-          question: {
-            _id: question._id,
-            text: question.text ?? question.customText,
-            style: question.style,
-            tone: question.tone,
-            topic: question.topic,
-            isAIGenerated: question.isAIGenerated,
-            totalLikes: question.totalLikes,
-          },
-        });
+      const isTeamPrompt =
+        question?.kind === "team_prompt" || a.questionTextSnapshot !== undefined;
+      if (isTeamPrompt && !canReadDraftTeamPrompts) {
+        continue;
       }
+      if (!question && !a.questionTextSnapshot) {
+        continue;
+      }
+      const teamTopic = a.teamTopicId ? await ctx.db.get(a.teamTopicId) : null;
+      enriched.push({
+        _id: a._id,
+        dayOfWeek: a.dayOfWeek,
+        slotOrder: a.slotOrder,
+        assignedBy: a.assignedBy,
+        teamTopicId: a.teamTopicId,
+        teamTopicName: teamTopic?.name,
+        question: {
+          _id: a.questionId,
+          text: a.questionTextSnapshot ?? question?.text ?? question?.customText,
+          style: question?.style,
+          tone: question?.tone,
+          topic: question?.topic,
+          isAIGenerated: question?.isAIGenerated,
+          totalLikes: question?.totalLikes ?? 0,
+        },
+      });
     }
 
     return { schedule, assignments: enriched };
@@ -272,29 +275,31 @@ export const getCurrentWeekSchedule = query({
     let todayAssignment = undefined;
     if (sq) {
       const question = await ctx.db.get(sq.questionId);
-      if (question) {
-        const canReadTeamPrompt =
-          schedule.status !== "draft" ||
-          membership.role === "admin" ||
-          membership.role === "manager";
-        if (question.kind === "team_prompt" && !canReadTeamPrompt) {
-          return {
-            scheduleId: schedule._id,
-            weekStart: schedule.weekStart,
-            status: schedule.status,
-            todayAssignment: undefined,
-          };
-        }
+      const isTeamPrompt =
+        question?.kind === "team_prompt" || sq.questionTextSnapshot !== undefined;
+      const canReadTeamPrompt =
+        schedule.status !== "draft" ||
+        membership.role === "admin" ||
+        membership.role === "manager";
+      if (isTeamPrompt && !canReadTeamPrompt) {
+        return {
+          scheduleId: schedule._id,
+          weekStart: schedule.weekStart,
+          status: schedule.status,
+          todayAssignment: undefined,
+        };
+      }
+      if (question || sq.questionTextSnapshot) {
         todayAssignment = {
           _id: sq._id,
           dayOfWeek: sq.dayOfWeek,
           scheduledQuestionId: sq._id,
           question: {
-            _id: question._id,
-            text: question.text ?? question.customText,
-            style: question.style,
-            tone: question.tone,
-            topic: question.topic,
+            _id: sq.questionId,
+            text: sq.questionTextSnapshot ?? question?.text ?? question?.customText,
+            style: question?.style,
+            tone: question?.tone,
+            topic: question?.topic,
           },
         };
       }

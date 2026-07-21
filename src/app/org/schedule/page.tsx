@@ -489,6 +489,10 @@ const questionPool = useQuery(
   const [assignTargetDay, setAssignTargetDay] = React.useState<string | null>(null);
   const [isUpdatingDeliveryDays, setIsUpdatingDeliveryDays] = React.useState(false);
 
+  React.useEffect(() => {
+    setAssignTargetDay(null);
+  }, [orgId, week.isoStart]);
+
   /* --- Mutations --- */
   const createSchedule = useMutation(api.core.schedules.createSchedule);
   const assignQuestion = useMutation(api.core.schedules.assignQuestion);
@@ -1503,7 +1507,7 @@ const questionPool = useQuery(
 
           {assignTargetDay && canEdit && currentWorkspaceUser?.planTier === "team" && (
             <TeamPromptComposer
-              key={assignTargetDay}
+              key={`${orgId}:${week.isoStart}:${assignTargetDay}`}
               dayLabel={DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}
               styles={(styles ?? []).map((style) => ({ id: style._id, name: style.name }))}
               tones={(tones ?? []).map((tone) => ({ id: tone._id, name: tone.name }))}

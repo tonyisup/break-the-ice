@@ -112,12 +112,15 @@ table:
 
 Team Prompts do not appear in the creator's personal-question library and cannot
 be edited, deleted, or made public through personal-question mutations.
+User-account cleanup also preserves Team-owned question rows.
 
 ### Schedule provenance
 
 `scheduledQuestions.teamTopicId` optionally identifies the topic that produced
 the selected question. The assignment still requires `questionId`, so every
-downstream reader receives final wording.
+downstream reader retains provenance. `questionTextSnapshot` stores the reviewed
+exact wording so delivery remains deterministic if the source question or author
+later becomes unavailable.
 
 ### Topic preview generation
 
@@ -128,7 +131,8 @@ The preview action:
 3. Reserves one unit from the workspace's AI generation allowance.
 4. Uses the existing prompt architecture with the selected style and tone.
 5. Includes topic guidance and boundaries as generation context.
-6. Returns three candidates without adding them to the public question pool.
+6. Returns exactly three distinct persistable candidates without adding them to
+   the public question pool.
 
 Failed provider calls release the reserved usage unit.
 
@@ -143,6 +147,8 @@ The chosen candidate is persisted only when the manager assigns it.
 - Shared question readers do not reveal unpublished Team Prompt wording to
   members, including the original author after a role change.
 - Topic previews do not modify a schedule.
+- Topic previews fail and release reserved usage when fewer than three distinct,
+  persistable candidates remain after validation.
 - A failed preview leaves the current draft and existing assignments unchanged.
 - Preview candidates that exceed the exact-question persistence limit are not
   returned as selectable options.

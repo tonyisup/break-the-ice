@@ -44,11 +44,10 @@ Return value:
 ```
 
 The action requests three candidates and reserves one unit of the workspace's AI
-usage before calling the provider. A failed provider call releases that
-reservation. Provider output or parsing can produce fewer than three returned
-strings. Empty candidates and candidates over the 500-character persistence
-limit are discarded before return. `runId` identifies the generation audit
-record.
+usage before calling the provider. Empty, duplicate, and over-500-character
+candidates are discarded. If three distinct persistable questions do not remain,
+the action returns a retryable error and releases the usage reservation. `runId`
+identifies the generation audit record.
 
 ### `core.teamPrompts.createAndAssign`
 
@@ -163,6 +162,13 @@ Indexes:
 Optional `Id<"teamTopics">` identifying the topic that produced the exact
 assigned question. Assignments created from the public library or direct writing
 leave it unset.
+
+### `scheduledQuestions.questionTextSnapshot`
+
+Team Prompt assignments snapshot the reviewed exact wording. Schedule and coach
+readers prefer this snapshot, so publication remains deterministic even if the
+source question row is later unavailable. The source question ID remains for
+provenance and analytics.
 
 Index: `by_teamTopic`.
 

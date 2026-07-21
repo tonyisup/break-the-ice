@@ -636,6 +636,7 @@ export default defineSchema({
     assignedBy: v.optional(v.id("users")),
     generationRunId: v.optional(v.id("generationRuns")),
     teamTopicId: v.optional(v.id("teamTopics")),
+    questionTextSnapshot: v.optional(v.string()),
   })
     .index("by_schedule", ["scheduleId"])
     .index("by_schedule_day", ["scheduleId", "dayOfWeek"])

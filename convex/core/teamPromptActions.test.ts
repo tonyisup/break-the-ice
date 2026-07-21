@@ -17,7 +17,11 @@ describe("runTopicPreviewWithUsage", () => {
       runMutation: vi.fn().mockResolvedValue(1),
     } as any;
     const generate = vi.fn().mockResolvedValue({
-      previewTexts: ["What concern deserves more airtime?"],
+      previewTexts: [
+        "What concern deserves more airtime?",
+        "What assumption should we revisit?",
+        "What would make this week feel successful?",
+      ],
       runId: "run-id",
     });
 
@@ -30,7 +34,11 @@ describe("runTopicPreviewWithUsage", () => {
     );
     expect(generate).toHaveBeenCalledOnce();
     expect(result).toEqual({
-      questions: ["What concern deserves more airtime?"],
+      questions: [
+        "What concern deserves more airtime?",
+        "What assumption should we revisit?",
+        "What would make this week feel successful?",
+      ],
       runId: "run-id",
     });
   });
@@ -64,6 +72,25 @@ describe("runTopicPreviewWithUsage", () => {
 
     await expect(runTopicPreviewWithUsage(ctx, args, generate)).rejects.toThrow(
       "No persistable topic preview questions were generated",
+    );
+    expect(ctx.runMutation).toHaveBeenLastCalledWith(
+      internal.internal.users.decrementAIUsage,
+      { userId: "user-id", organizationId: "org-id" },
+    );
+  });
+
+  it("rejects incomplete or duplicate three-option responses", async () => {
+    const ctx = {
+      runQuery: vi.fn().mockResolvedValue("user-id"),
+      runMutation: vi.fn().mockResolvedValue(1),
+    } as any;
+    const generate = vi.fn().mockResolvedValue({
+      previewTexts: ["What should we revisit?", "What should we revisit?"],
+      runId: "run-id",
+    });
+
+    await expect(runTopicPreviewWithUsage(ctx, args, generate)).rejects.toThrow(
+      "Exactly three distinct topic preview questions are required",
     );
     expect(ctx.runMutation).toHaveBeenLastCalledWith(
       internal.internal.users.decrementAIUsage,

@@ -139,6 +139,26 @@ test("Team editors can create and assign an organization-private exact question"
     kind: "team_prompt",
     status: "private",
   });
+  const savedAssignment = await t.run(async (ctx) =>
+    ctx.db
+      .query("scheduledQuestions")
+      .withIndex("by_schedule", (q) => q.eq("scheduleId", scheduleId))
+      .unique(),
+  );
+  expect(savedAssignment?.questionTextSnapshot).toBe(
+    "What assumption should we challenge this week?",
+  );
+});
+
+test("schedule delivery retains exact Team Prompt wording if the source row is removed", async () => {
+  const { t, admin, scheduleId, questionId } = await createAssignedTeamQuestion();
+  await t.run(async (ctx) => ctx.db.delete(questionId));
+
+  const detail = await admin.query(api.core.schedules.getSchedule, { scheduleId });
+  expect(detail.assignments).toHaveLength(1);
+  expect(detail.assignments[0]?.question.text).toBe(
+    "What assumption should we challenge this week?",
+  );
 });
 
 test("Team prompts stay out of the creator's personal-question library", async () => {

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import OrgWeeklyCurationPage from "./page";
 import { useAction, useMutation, useQuery } from "convex/react";
 
+const workspaceState = vi.hoisted(() => ({ activeWorkspace: "org-1" }));
+
 vi.mock("convex/react", () => ({
   useAction: vi.fn(),
   useMutation: vi.fn(),
@@ -16,7 +18,11 @@ vi.mock("@clerk/clerk-react", () => ({
 }));
 
 vi.mock("@/hooks/useWorkspace", () => ({
-  useWorkspace: () => ({ activeWorkspace: "org-1", setActiveWorkspace: vi.fn(), workspaceHydrated: true }),
+  useWorkspace: () => ({
+    activeWorkspace: workspaceState.activeWorkspace,
+    setActiveWorkspace: vi.fn(),
+    workspaceHydrated: true,
+  }),
 }));
 
 vi.mock("@/components/header/TeamWorkspaceMenu", () => ({ TeamWorkspaceMenu: () => null }));
@@ -47,6 +53,7 @@ const setDeliveryDayActive = vi.fn().mockResolvedValue(undefined);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  workspaceState.activeWorkspace = "org-1";
   (useMutation as ReturnType<typeof vi.fn>).mockImplementation((fn: string) =>
     fn === "setDeliveryDayActive" ? setDeliveryDayActive : vi.fn().mockResolvedValue(undefined),
   );
@@ -116,5 +123,28 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     render(<OrgWeeklyCurationPage />);
 
     expect(screen.queryByRole("button", { name: "Assign" })).not.toBeInTheDocument();
+  });
+
+  it("closes a custom-prompt draft when the workspace changes", async () => {
+    const { rerender } = render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Write" }));
+
+    const questionInput = screen.getByPlaceholderText(
+      "What is one assumption about our launch plan that we should challenge?",
+    );
+    fireEvent.change(questionInput, { target: { value: "Org one draft" } });
+    expect(questionInput).toHaveValue("Org one draft");
+
+    workspaceState.activeWorkspace = "org-2";
+    rerender(<OrgWeeklyCurationPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByPlaceholderText(
+          "What is one assumption about our launch plan that we should challenge?",
+        ),
+      ).not.toBeInTheDocument();
+    });
   });
 });
