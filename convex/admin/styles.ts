@@ -313,46 +313,26 @@ export const activateStyleVersion = mutation({
         status: "archived",
         updatedAt: Date.now(),
       });
-
-      const userStyles = await ctx.db
-        .query("userStyles")
-        .withIndex("by_styleId", (q) => q.eq("styleId", previousActive._id))
-        .take(USER_STYLE_REASSIGN_BATCH_SIZE);
-      for (const userStyle of userStyles) {
-        await ctx.db.patch(userStyle._id, {
-          styleId: args.id,
-          updatedAt: Date.now(),
-        });
-      }
-      if (userStyles.length === USER_STYLE_REASSIGN_BATCH_SIZE) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.admin.styles.reassignUserStylesBatch,
-          {
-            previousStyleId: previousActive._id,
-            nextStyleId: args.id,
-          },
-        );
-      }
+      await ctx.scheduler.runAfter(
+        0,
+        internal.admin.styles.reassignUserStylesBatch,
+        {
+          previousStyleId: previousActive._id,
+          nextStyleId: args.id,
+        },
+      );
     }
 
     for (const sibling of siblings) {
       if (sibling._id === args.id) continue;
-      const hasMore = await performQuestionStyleReassignmentBatch(
-        ctx,
-        sibling._id,
-        styleToActivate,
+      await ctx.scheduler.runAfter(
+        0,
+        internal.admin.styles.reassignQuestionsForStyleBatch,
+        {
+          previousStyleId: sibling._id,
+          nextStyleId: args.id,
+        },
       );
-      if (hasMore) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.admin.styles.reassignQuestionsForStyleBatch,
-          {
-            previousStyleId: sibling._id,
-            nextStyleId: args.id,
-          },
-        );
-      }
     }
 
     await ctx.db.patch(args.id, { status: "active", updatedAt: Date.now() });

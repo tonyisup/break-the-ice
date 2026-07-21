@@ -371,21 +371,14 @@ export const activateToneVersion = mutation({
 
     for (const sibling of siblings) {
       if (sibling._id === args.id) continue;
-      const hasMore = await performQuestionToneReassignmentBatch(
-        ctx,
-        sibling._id,
-        toneToActivate,
+      await ctx.scheduler.runAfter(
+        0,
+        internal.admin.tones.reassignQuestionsForToneBatch,
+        {
+          previousToneId: sibling._id,
+          nextToneId: args.id,
+        },
       );
-      if (hasMore) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.admin.tones.reassignQuestionsForToneBatch,
-          {
-            previousToneId: sibling._id,
-            nextToneId: args.id,
-          },
-        );
-      }
     }
     await ctx.db.patch(args.id, { status: "active", updatedAt: Date.now() });
     return null;
