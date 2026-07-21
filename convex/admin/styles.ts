@@ -1,6 +1,12 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "../_generated/server";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
@@ -9,6 +15,55 @@ import { mapStyle, styleFields } from "../lib/styleHelpers";
 
 const MAX_STYLES = 500;
 const USER_STYLE_REASSIGN_BATCH_SIZE = 200;
+const QUESTION_STYLE_REASSIGN_BATCH_SIZE = 100;
+
+async function getStyleSiblings(ctx: { db: QueryCtx["db"] }, slug: string) {
+  const bySlug = await ctx.db
+    .query("styles")
+    .withIndex("by_slug", (q) => q.eq("slug", slug))
+    .collect();
+  const byLegacyId = await ctx.db
+    .query("styles")
+    .withIndex("by_my_id", (q) => q.eq("id", slug))
+    .collect();
+
+  return Array.from(
+    new Map(
+      [...bySlug, ...byLegacyId].map((style) => [style._id, style]),
+    ).values(),
+  );
+}
+
+async function performQuestionStyleReassignmentBatch(
+  ctx: MutationCtx,
+  previousStyleId: Doc<"styles">["_id"],
+  nextStyle: Doc<"styles">,
+) {
+  const questions = await ctx.db
+    .query("questions")
+    .withIndex("by_style", (q) => q.eq("styleId", previousStyleId))
+    .take(QUESTION_STYLE_REASSIGN_BATCH_SIZE);
+  const slug = nextStyle.slug ?? nextStyle.id;
+
+  for (const question of questions) {
+    await ctx.db.patch(question._id, {
+      style: slug,
+      styleId: nextStyle._id,
+      styleSlug: slug,
+      styleVersion: nextStyle.version ?? 1,
+    });
+
+    const embeddingRows = await ctx.db
+      .query("question_embeddings")
+      .withIndex("by_questionId", (q) => q.eq("questionId", question._id))
+      .collect();
+    for (const embeddingRow of embeddingRows) {
+      await ctx.db.patch(embeddingRow._id, { styleId: nextStyle._id });
+    }
+  }
+
+  return questions.length === QUESTION_STYLE_REASSIGN_BATCH_SIZE;
+}
 
 export const listStyles = query({
   args: {},
@@ -36,11 +91,10 @@ export const getStyleVersions = query({
   returns: v.array(v.object(styleFields)),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const styles = await ctx.db
-      .query("styles")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
-      .collect();
-    return styles.sort((a, b) => (b.version ?? 1) - (a.version ?? 1)).map(mapStyle);
+    const styles = await getStyleSiblings(ctx, args.slug);
+    return styles
+      .sort((a, b) => (b.version ?? 1) - (a.version ?? 1))
+      .map(mapStyle);
   },
 });
 
@@ -202,10 +256,10 @@ export const updateStyle = mutation({
       return null;
     }
 
-    const siblings = await ctx.db
-      .query("styles")
-      .withIndex("by_slug", (q) => q.eq("slug", existingStyle.slug ?? existingStyle.id))
-      .collect();
+    const siblings = await getStyleSiblings(
+      ctx,
+      existingStyle.slug ?? existingStyle.id,
+    );
     const nextVersion = (latestVersion(siblings)?.version ?? 1) + 1;
     await ctx.db.insert("styles", {
       id: existingStyle.slug ?? existingStyle.id,
@@ -248,27 +302,56 @@ export const activateStyleVersion = mutation({
     if (!styleToActivate) throw new Error("Style not found");
     const slug = styleToActivate.slug ?? styleToActivate.id;
 
-    const siblings = await ctx.db
-      .query("styles")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .collect();
+    const siblings = await getStyleSiblings(ctx, slug);
 
-    const previousActive = siblings.find((style) => style.status === "active");
-    if (previousActive && previousActive._id !== args.id) {
-      await ctx.db.patch(previousActive._id, { status: "archived", updatedAt: Date.now() });
+    const previousActives = siblings.filter(
+      (style) =>
+        style._id !== args.id && (style.status ?? "active") === "active",
+    );
+    for (const previousActive of previousActives) {
+      await ctx.db.patch(previousActive._id, {
+        status: "archived",
+        updatedAt: Date.now(),
+      });
 
       const userStyles = await ctx.db
         .query("userStyles")
         .withIndex("by_styleId", (q) => q.eq("styleId", previousActive._id))
         .take(USER_STYLE_REASSIGN_BATCH_SIZE);
       for (const userStyle of userStyles) {
-        await ctx.db.patch(userStyle._id, { styleId: args.id, updatedAt: Date.now() });
+        await ctx.db.patch(userStyle._id, {
+          styleId: args.id,
+          updatedAt: Date.now(),
+        });
       }
       if (userStyles.length === USER_STYLE_REASSIGN_BATCH_SIZE) {
-        await ctx.scheduler.runAfter(0, internal.admin.styles.reassignUserStylesBatch, {
-          previousStyleId: previousActive._id,
-          nextStyleId: args.id,
-        });
+        await ctx.scheduler.runAfter(
+          0,
+          internal.admin.styles.reassignUserStylesBatch,
+          {
+            previousStyleId: previousActive._id,
+            nextStyleId: args.id,
+          },
+        );
+      }
+    }
+
+    for (const sibling of siblings) {
+      if (sibling._id === args.id) continue;
+      const hasMore = await performQuestionStyleReassignmentBatch(
+        ctx,
+        sibling._id,
+        styleToActivate,
+      );
+      if (hasMore) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.admin.styles.reassignQuestionsForStyleBatch,
+          {
+            previousStyleId: sibling._id,
+            nextStyleId: args.id,
+          },
+        );
       }
     }
 
@@ -312,6 +395,32 @@ export const reassignUserStylesBatch = internalMutation({
       await ctx.scheduler.runAfter(0, internal.admin.styles.reassignUserStylesBatch, args);
     }
 
+    return null;
+  },
+});
+
+export const reassignQuestionsForStyleBatch = internalMutation({
+  args: {
+    previousStyleId: v.id("styles"),
+    nextStyleId: v.id("styles"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const nextStyle = await ctx.db.get(args.nextStyleId);
+    if (!nextStyle || nextStyle.status !== "active") return null;
+
+    const hasMore = await performQuestionStyleReassignmentBatch(
+      ctx,
+      args.previousStyleId,
+      nextStyle,
+    );
+    if (hasMore) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.admin.styles.reassignQuestionsForStyleBatch,
+        args,
+      );
+    }
     return null;
   },
 });

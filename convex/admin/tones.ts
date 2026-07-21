@@ -1,6 +1,12 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "../_generated/server";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
@@ -8,6 +14,55 @@ import { defaultQualityRubric, defaultToneAxesValue, latestVersion } from "../li
 import { DEFAULT_TONE_COLOR, DEFAULT_TONE_ICON } from "../core/tones";
 
 const USER_TONE_REASSIGN_BATCH_SIZE = 200;
+const QUESTION_TONE_REASSIGN_BATCH_SIZE = 100;
+
+async function getToneSiblings(ctx: { db: QueryCtx["db"] }, slug: string) {
+  const bySlug = await ctx.db
+    .query("tones")
+    .withIndex("by_slug", (q) => q.eq("slug", slug))
+    .collect();
+  const byLegacyId = await ctx.db
+    .query("tones")
+    .withIndex("by_my_id", (q) => q.eq("id", slug))
+    .collect();
+
+  return Array.from(
+    new Map(
+      [...bySlug, ...byLegacyId].map((tone) => [tone._id, tone]),
+    ).values(),
+  );
+}
+
+async function performQuestionToneReassignmentBatch(
+  ctx: MutationCtx,
+  previousToneId: Doc<"tones">["_id"],
+  nextTone: Doc<"tones">,
+) {
+  const questions = await ctx.db
+    .query("questions")
+    .withIndex("by_tone", (q) => q.eq("toneId", previousToneId))
+    .take(QUESTION_TONE_REASSIGN_BATCH_SIZE);
+  const slug = nextTone.slug ?? nextTone.id;
+
+  for (const question of questions) {
+    await ctx.db.patch(question._id, {
+      tone: slug,
+      toneId: nextTone._id,
+      toneSlug: slug,
+      toneVersion: nextTone.version ?? 1,
+    });
+
+    const embeddingRows = await ctx.db
+      .query("question_embeddings")
+      .withIndex("by_questionId", (q) => q.eq("questionId", question._id))
+      .collect();
+    for (const embeddingRow of embeddingRows) {
+      await ctx.db.patch(embeddingRow._id, { toneId: nextTone._id });
+    }
+  }
+
+  return questions.length === QUESTION_TONE_REASSIGN_BATCH_SIZE;
+}
 
 const toneFields = {
   _id: v.id("tones"),
@@ -104,11 +159,10 @@ export const getToneVersions = query({
   returns: v.array(v.object(toneFields)),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const tones = await ctx.db
-      .query("tones")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
-      .collect();
-    return tones.sort((a, b) => (b.version ?? 1) - (a.version ?? 1)).map(mapTone);
+    const tones = await getToneSiblings(ctx, args.slug);
+    return tones
+      .sort((a, b) => (b.version ?? 1) - (a.version ?? 1))
+      .map(mapTone);
   },
 });
 
@@ -255,10 +309,10 @@ export const updateTone = mutation({
       return null;
     }
 
-    const siblings = await ctx.db
-      .query("tones")
-      .withIndex("by_slug", (q) => q.eq("slug", existingTone.slug ?? existingTone.id))
-      .collect();
+    const siblings = await getToneSiblings(
+      ctx,
+      existingTone.slug ?? existingTone.id,
+    );
     const nextVersion = (latestVersion(siblings)?.version ?? 1) + 1;
 
     await ctx.db.insert("tones", {
@@ -296,17 +350,42 @@ export const activateToneVersion = mutation({
     const toneToActivate = await ctx.db.get(args.id);
     if (!toneToActivate) throw new Error("Tone not found");
     const slug = toneToActivate.slug ?? toneToActivate.id;
-    const siblings = await ctx.db
-      .query("tones")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .collect();
-    const previousActive = siblings.find((tone) => tone.status === "active");
-    if (previousActive && previousActive._id !== args.id) {
-      await ctx.db.patch(previousActive._id, { status: "archived", updatedAt: Date.now() });
-      await ctx.scheduler.runAfter(0, internal.admin.tones.reassignUserTonesBatch, {
-        previousToneId: previousActive._id,
-        nextToneId: args.id,
+    const siblings = await getToneSiblings(ctx, slug);
+    const previousActives = siblings.filter(
+      (tone) => tone._id !== args.id && (tone.status ?? "active") === "active",
+    );
+    for (const previousActive of previousActives) {
+      await ctx.db.patch(previousActive._id, {
+        status: "archived",
+        updatedAt: Date.now(),
       });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.admin.tones.reassignUserTonesBatch,
+        {
+          previousToneId: previousActive._id,
+          nextToneId: args.id,
+        },
+      );
+    }
+
+    for (const sibling of siblings) {
+      if (sibling._id === args.id) continue;
+      const hasMore = await performQuestionToneReassignmentBatch(
+        ctx,
+        sibling._id,
+        toneToActivate,
+      );
+      if (hasMore) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.admin.tones.reassignQuestionsForToneBatch,
+          {
+            previousToneId: sibling._id,
+            nextToneId: args.id,
+          },
+        );
+      }
     }
     await ctx.db.patch(args.id, { status: "active", updatedAt: Date.now() });
     return null;
@@ -336,6 +415,32 @@ export const reassignUserTonesBatch = internalMutation({
       await ctx.scheduler.runAfter(0, internal.admin.tones.reassignUserTonesBatch, args);
     }
 
+    return null;
+  },
+});
+
+export const reassignQuestionsForToneBatch = internalMutation({
+  args: {
+    previousToneId: v.id("tones"),
+    nextToneId: v.id("tones"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const nextTone = await ctx.db.get(args.nextToneId);
+    if (!nextTone || nextTone.status !== "active") return null;
+
+    const hasMore = await performQuestionToneReassignmentBatch(
+      ctx,
+      args.previousToneId,
+      nextTone,
+    );
+    if (hasMore) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.admin.tones.reassignQuestionsForToneBatch,
+        args,
+      );
+    }
     return null;
   },
 });
