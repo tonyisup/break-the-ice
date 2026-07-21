@@ -1,10 +1,66 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "../_generated/server";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { Doc } from "../_generated/dataModel";
 import { defaultQualityRubric, latestActiveVersion, latestVersion } from "../lib/taxonomy";
 import { internal } from "../_generated/api";
+
+const QUESTION_TOPIC_REASSIGN_BATCH_SIZE = 100;
+
+async function getTopicSiblings(ctx: { db: QueryCtx["db"] }, slug: string) {
+  const bySlug = await ctx.db
+    .query("topics")
+    .withIndex("by_slug", (q) => q.eq("slug", slug))
+    .collect();
+  const byLegacyId = await ctx.db
+    .query("topics")
+    .withIndex("by_my_id", (q) => q.eq("id", slug))
+    .collect();
+
+  return Array.from(
+    new Map(
+      [...bySlug, ...byLegacyId].map((topic) => [topic._id, topic]),
+    ).values(),
+  );
+}
+
+async function performQuestionTopicReassignmentBatch(
+  ctx: MutationCtx,
+  previousTopicId: Doc<"topics">["_id"],
+  nextTopic: Doc<"topics">,
+) {
+  const questions = await ctx.db
+    .query("questions")
+    .withIndex("by_topic", (q) => q.eq("topicId", previousTopicId))
+    .take(QUESTION_TOPIC_REASSIGN_BATCH_SIZE);
+  const slug = nextTopic.slug ?? nextTopic.id;
+
+  for (const question of questions) {
+    await ctx.db.patch(question._id, {
+      topic: slug,
+      topicId: nextTopic._id,
+      topicSlug: slug,
+      topicVersion: nextTopic.version ?? 1,
+    });
+
+    const embeddingRows = await ctx.db
+      .query("question_embeddings")
+      .withIndex("by_questionId", (q) => q.eq("questionId", question._id))
+      .collect();
+    for (const embeddingRow of embeddingRows) {
+      await ctx.db.patch(embeddingRow._id, { topicId: nextTopic._id });
+    }
+  }
+
+  return questions.length === QUESTION_TOPIC_REASSIGN_BATCH_SIZE;
+}
 
 const topicFields = {
   _id: v.id("topics"),
@@ -122,11 +178,10 @@ export const getTopicVersions = query({
   returns: v.array(v.object(topicFields)),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    const topics = await ctx.db
-      .query("topics")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
-      .collect();
-    return topics.sort((a, b) => (b.version ?? 1) - (a.version ?? 1)).map(mapTopic);
+    const topics = await getTopicSiblings(ctx, args.slug);
+    return topics
+      .sort((a, b) => (b.version ?? 1) - (a.version ?? 1))
+      .map(mapTopic);
   },
 });
 
@@ -291,10 +346,10 @@ export const updateTopic = mutation({
       return null;
     }
 
-    const siblings = await ctx.db
-      .query("topics")
-      .withIndex("by_slug", (q) => q.eq("slug", existingTopic.slug ?? existingTopic.id))
-      .collect();
+    const siblings = await getTopicSiblings(
+      ctx,
+      existingTopic.slug ?? existingTopic.id,
+    );
     const nextVersion = (latestVersion(siblings)?.version ?? 1) + 1;
 
     const topicId = await ctx.db.insert("topics", {
@@ -342,16 +397,64 @@ export const activateTopicVersion = mutation({
     const topicToActivate = await ctx.db.get(args._id);
     if (!topicToActivate) throw new Error("Topic not found");
     const slug = topicToActivate.slug ?? topicToActivate.id;
-    const siblings = await ctx.db
-      .query("topics")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .collect();
+    const siblings = await getTopicSiblings(ctx, slug);
     for (const sibling of siblings) {
-      if (sibling._id !== args._id && (sibling.status ?? "active") === "active") {
-        await ctx.db.patch(sibling._id, { status: "archived", updatedAt: Date.now() });
+      if (
+        sibling._id !== args._id &&
+        (sibling.status ?? "active") === "active"
+      ) {
+        await ctx.db.patch(sibling._id, {
+          status: "archived",
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
+    for (const sibling of siblings) {
+      if (sibling._id === args._id) continue;
+      const hasMore = await performQuestionTopicReassignmentBatch(
+        ctx,
+        sibling._id,
+        topicToActivate,
+      );
+      if (hasMore) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.admin.topics.reassignQuestionsForTopicBatch,
+          {
+            previousTopicId: sibling._id,
+            nextTopicId: args._id,
+          },
+        );
       }
     }
     await ctx.db.patch(args._id, { status: "active", updatedAt: Date.now() });
+    return null;
+  },
+});
+
+export const reassignQuestionsForTopicBatch = internalMutation({
+  args: {
+    previousTopicId: v.id("topics"),
+    nextTopicId: v.id("topics"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const nextTopic = await ctx.db.get(args.nextTopicId);
+    if (!nextTopic || nextTopic.status !== "active") return null;
+
+    const hasMore = await performQuestionTopicReassignmentBatch(
+      ctx,
+      args.previousTopicId,
+      nextTopic,
+    );
+    if (hasMore) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.admin.topics.reassignQuestionsForTopicBatch,
+        args,
+      );
+    }
     return null;
   },
 });
