@@ -412,21 +412,14 @@ export const activateTopicVersion = mutation({
 
     for (const sibling of siblings) {
       if (sibling._id === args._id) continue;
-      const hasMore = await performQuestionTopicReassignmentBatch(
-        ctx,
-        sibling._id,
-        topicToActivate,
+      await ctx.scheduler.runAfter(
+        0,
+        internal.admin.topics.reassignQuestionsForTopicBatch,
+        {
+          previousTopicId: sibling._id,
+          nextTopicId: args._id,
+        },
       );
-      if (hasMore) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.admin.topics.reassignQuestionsForTopicBatch,
-          {
-            previousTopicId: sibling._id,
-            nextTopicId: args._id,
-          },
-        );
-      }
     }
     await ctx.db.patch(args._id, { status: "active", updatedAt: Date.now() });
     return null;

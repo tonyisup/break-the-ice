@@ -12,6 +12,7 @@ afterEach(() => {
 
 describe("taxonomy version activation", () => {
   test("moves existing questions and embedding filters from any old version to the activated version", async () => {
+    vi.useFakeTimers();
     const t = convexTest(schema, import.meta.glob("./**/*.ts"));
     const now = Date.now();
 
@@ -145,6 +146,23 @@ describe("taxonomy version activation", () => {
       _id: ids.topicV3,
     });
 
+    const beforeScheduledWork = await t.run(async (ctx) => ({
+      question: await ctx.db.get(ids.questionId),
+      embedding: await ctx.db.get(ids.embeddingId),
+    }));
+    expect(beforeScheduledWork.question).toMatchObject({
+      styleId: ids.styleV1,
+      toneId: ids.toneV1,
+      topicId: ids.topicV1,
+    });
+    expect(beforeScheduledWork.embedding).toMatchObject({
+      styleId: ids.styleV1,
+      toneId: ids.toneV1,
+      topicId: ids.topicV1,
+    });
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
     const result = await t.run(async (ctx) => ({
       question: await ctx.db.get(ids.questionId),
       embedding: await ctx.db.get(ids.embeddingId),
@@ -182,11 +200,11 @@ describe("taxonomy version activation", () => {
     ).toBe(true);
   });
 
-  test("continues question reassignment in scheduled batches", async () => {
+  test("defers and continues question and preference reassignment in scheduled batches", async () => {
     vi.useFakeTimers();
     const t = convexTest(schema, import.meta.glob("./**/*.ts"));
 
-    const { oldStyleId, newStyleId } = await t.run(async (ctx) => {
+    const { oldStyleId, newStyleId, userStyleId } = await t.run(async (ctx) => {
       const oldStyleId = await ctx.db.insert("styles", {
         id: "story",
         slug: "story",
@@ -222,12 +240,38 @@ describe("taxonomy version activation", () => {
         });
       }
 
-      return { oldStyleId, newStyleId };
+      const userId = await ctx.db.insert("users", {
+        email: "scheduled-style@example.com",
+      });
+      const userStyleId = await ctx.db.insert("userStyles", {
+        userId,
+        styleId: oldStyleId,
+        status: "preferred",
+        updatedAt: Date.now(),
+      });
+
+      return { oldStyleId, newStyleId, userStyleId };
     });
 
     await t
       .withIdentity(adminIdentity)
       .mutation(api.admin.styles.activateStyleVersion, { id: newStyleId });
+
+    const beforeScheduledWork = await t.run(async (ctx) => ({
+      oldQuestions: await ctx.db
+        .query("questions")
+        .withIndex("by_style", (q) => q.eq("styleId", oldStyleId))
+        .collect(),
+      newQuestions: await ctx.db
+        .query("questions")
+        .withIndex("by_style", (q) => q.eq("styleId", newStyleId))
+        .collect(),
+      userStyle: await ctx.db.get(userStyleId),
+    }));
+    expect(beforeScheduledWork.oldQuestions).toHaveLength(101);
+    expect(beforeScheduledWork.newQuestions).toHaveLength(0);
+    expect(beforeScheduledWork.userStyle?.styleId).toBe(oldStyleId);
+
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     const counts = await t.run(async (ctx) => ({
@@ -239,6 +283,7 @@ describe("taxonomy version activation", () => {
         .query("questions")
         .withIndex("by_style", (q) => q.eq("styleId", newStyleId))
         .collect(),
+      userStyle: await ctx.db.get(userStyleId),
     }));
 
     expect(counts.old).toHaveLength(0);
@@ -246,5 +291,6 @@ describe("taxonomy version activation", () => {
     expect(
       counts.current.every((question) => question.styleVersion === 2),
     ).toBe(true);
+    expect(counts.userStyle?.styleId).toBe(newStyleId);
   });
 });
