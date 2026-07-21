@@ -1,9 +1,11 @@
 import { v } from "convex/values";
+import { doc } from "convex-helpers/validators";
 import { action, ActionCtx, internalAction, internalMutation, internalQuery, mutation, query } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
 import { cosineSimilarity } from "../lib/embeddings";
+import schema from "../schema";
 
 // Shared return validators for type safety
 export const pruningSettingsValidator = v.object({
@@ -22,41 +24,7 @@ export const pruningSettingsValidator = v.object({
 	enableToneCheck: v.boolean(),
 });
 
-export const questionValidator = v.object({
-	_id: v.id("questions"),
-	_creationTime: v.number(),
-	organizationId: v.optional(v.id("organizations")),
-	averageViewDuration: v.number(),
-	lastShownAt: v.optional(v.number()),
-	text: v.optional(v.string()),
-	totalLikes: v.number(),
-	totalThumbsDown: v.optional(v.number()),
-	totalShows: v.number(),
-	isAIGenerated: v.optional(v.boolean()),
-	tags: v.optional(v.array(v.string())),
-	style: v.optional(v.string()),
-	styleId: v.optional(v.id("styles")),
-	tone: v.optional(v.string()),
-	toneId: v.optional(v.id("tones")),
-	topic: v.optional(v.string()),
-	topicId: v.optional(v.id("topics")),
-	authorId: v.optional(v.string()),
-	customText: v.optional(v.string()),
-	status: v.optional(
-		v.union(
-			v.literal("pending"),
-			v.literal("approved"),
-			v.literal("public"),
-			v.literal("private"),
-			v.literal("pruning"),
-			v.literal("pruned")
-		)
-	),
-	prunedAt: v.optional(v.number()),
-	lastPostedAt: v.optional(v.number()),
-	poolDate: v.optional(v.string()),
-	poolStatus: v.optional(v.union(v.literal("available"), v.literal("distributed"))),
-});
+export const questionValidator = doc(schema, "questions");
 
 /**
  * Internal helper to satisfy both the cron and manual trigger.
