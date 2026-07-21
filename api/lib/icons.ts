@@ -76,7 +76,20 @@ import {
   Info,
   User,
   Globe,
-  BookOpen
+  BookOpen,
+  Sparkles,
+  SplitSquareVertical,
+  MessageCircleQuestion,
+  ScanSearch,
+  Compass,
+  SmilePlus,
+  Coffee,
+  Lightbulb,
+  PenTool,
+  UtensilsCrossed,
+  Plane,
+  Music4,
+  Shirt
 } from 'lucide-react';
 
 export const iconMap: Record<string, LucideIcon> = {
@@ -165,5 +178,18 @@ export const iconMap: Record<string, LucideIcon> = {
   Info,
   User,
   Globe,
-  BookOpen
+  BookOpen,
+  Sparkles,
+  SplitSquareVertical,
+  MessageCircleQuestion,
+  ScanSearch,
+  Compass,
+  SmilePlus,
+  Coffee,
+  Lightbulb,
+  PenTool,
+  UtensilsCrossed,
+  Plane,
+  Music4,
+  Shirt
 };

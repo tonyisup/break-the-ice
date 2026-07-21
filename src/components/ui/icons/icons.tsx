@@ -76,7 +76,20 @@ import {
   Info,
   User,
   Globe,
-  BookOpen
+  BookOpen,
+  Sparkles,
+  SplitSquareVertical,
+  MessageCircleQuestion,
+  ScanSearch,
+  Compass,
+  SmilePlus,
+  Coffee,
+  Lightbulb,
+  PenTool,
+  UtensilsCrossed,
+  Plane,
+  Music4,
+  Shirt
 } from 'lucide-react';
 
 // Export all icons for direct use
@@ -157,7 +170,20 @@ export {
   Info,
   User,
   Globe,
-  BookOpen
+  BookOpen,
+  Sparkles,
+  SplitSquareVertical,
+  MessageCircleQuestion,
+  ScanSearch,
+  Compass,
+  SmilePlus,
+  Coffee,
+  Lightbulb,
+  PenTool,
+  UtensilsCrossed,
+  Plane,
+  Music4,
+  Shirt
 };
 
 // Create a mapping of icon names to icon components for dynamic access
@@ -247,6 +273,18 @@ export const iconMap: Record<string, LucideIcon> = {
   Info,
   User,
   Globe,
-  BookOpen
+  BookOpen,
+  Sparkles,
+  SplitSquareVertical,
+  MessageCircleQuestion,
+  ScanSearch,
+  Compass,
+  SmilePlus,
+  Coffee,
+  Lightbulb,
+  PenTool,
+  UtensilsCrossed,
+  Plane,
+  Music4,
+  Shirt
 };
-
