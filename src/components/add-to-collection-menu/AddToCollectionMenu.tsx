@@ -35,11 +35,15 @@ export function AddToCollectionMenu({ questionId, className }: AddToCollectionMe
   );
   const collections = useQuery(
     api.core.collections.getCollectionsByOrganization,
-    activeWorkspace ? { organizationId: activeWorkspace } : "skip"
+    activeWorkspace && entitlements?.canUseTeamFeatures
+      ? { organizationId: activeWorkspace }
+      : "skip"
   );
   const memberCollectionIds = useQuery(
     api.core.collections.getCollectionMembershipForQuestion,
-    activeWorkspace ? { questionId, organizationId: activeWorkspace } : "skip"
+    activeWorkspace && entitlements?.canUseTeamFeatures
+      ? { questionId, organizationId: activeWorkspace }
+      : "skip"
   );
   const addQuestionToCollection = useMutation(api.core.collections.addQuestionToCollection);
   const removeQuestionFromCollection = useMutation(api.core.collections.removeQuestionFromCollection);

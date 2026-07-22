@@ -11,7 +11,11 @@ import {
 } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
-import { ensureAdmin, ensureOrgMember } from "../auth";
+import {
+	ensureAdmin,
+	ensurePaidOrganizationMember,
+	isOrganizationPaid,
+} from "../auth";
 import { embed } from "../lib/retriever";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
@@ -61,7 +65,7 @@ export const addPersonalQuestion = mutation({
 	returns: v.union(v.id("questions"), v.null()),
 	handler: async (ctx, args) => {
 		if (args.organizationId) {
-			await ensureOrgMember(ctx, args.organizationId);
+			await ensurePaidOrganizationMember(ctx, args.organizationId);
 		}
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
@@ -626,6 +630,9 @@ export const getCustomQuestions = query({
 		organizationId: v.optional(v.id("organizations")),
 	},
 	handler: async (ctx, args) => {
+		if (args.organizationId) {
+			await ensurePaidOrganizationMember(ctx, args.organizationId);
+		}
 		const userIdentity = await ctx.auth.getUserIdentity();
 		if (!userIdentity) {
 			return [];
@@ -727,6 +734,7 @@ async function canReadQuestion(
 	if (!userId) return false;
 	if (question.kind === "team_prompt") {
 		if (!question.organizationId) return false;
+		if (!(await isOrganizationPaid(ctx, question.organizationId))) return false;
 		const membership = await ctx.db
 			.query("organization_members")
 			.withIndex("by_userId_organizationId", (q) =>
@@ -751,8 +759,8 @@ async function canReadQuestion(
 		}
 		return false;
 	}
-	if (question.authorId === userId) return true;
-	if (!question.organizationId) return false;
+	if (!question.organizationId) return question.authorId === userId;
+	if (!(await isOrganizationPaid(ctx, question.organizationId))) return false;
 
 	const membership = await ctx.db
 		.query("organization_members")
@@ -936,7 +944,7 @@ export const addCustomQuestion = mutation({
 		}
 
 		if (args.organizationId) {
-			await ensureOrgMember(ctx, args.organizationId);
+			await ensurePaidOrganizationMember(ctx, args.organizationId);
 		}
 
 		const user = await ctx.db
@@ -1069,6 +1077,9 @@ export const updatePersonalQuestion = mutation({
 		if (!question) {
 			throw new Error("Question not found.");
 		}
+		if (question.organizationId) {
+			await ensurePaidOrganizationMember(ctx, question.organizationId);
+		}
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to update this question.");
 		}
@@ -1120,6 +1131,9 @@ export const deletePersonalQuestion = mutation({
 		if (!question) {
 			throw new Error("Question not found.");
 		}
+		if (question.organizationId) {
+			await ensurePaidOrganizationMember(ctx, question.organizationId);
+		}
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to delete this question.");
 		}
@@ -1148,6 +1162,9 @@ export const makeQuestionPublic = mutation({
 		const question = await ctx.db.get(args.questionId);
 		if (!question) {
 			throw new Error("Question not found.");
+		}
+		if (question.organizationId) {
+			await ensurePaidOrganizationMember(ctx, question.organizationId);
 		}
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to update this question.");

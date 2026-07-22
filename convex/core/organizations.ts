@@ -1,17 +1,17 @@
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
+import { ensurePaidOrganizationMember, isOrganizationPaid } from "../auth";
 import { collectUserCandidates, findCanonicalUser } from "../lib/users";
 
 const MEMBERSHIPS_QUERY_CAP = 100;
 
-/** Used from actions (e.g. matrix fill) to verify the caller belongs to the org. */
-export const assertOrgMembershipForCurrentUser = internalQuery({
+/** Used from actions (e.g. matrix fill) to verify paid workspace access. */
+export const assertPaidOrgMembershipForCurrentUser = internalQuery({
 	args: { organizationId: v.id("organizations") },
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ensureOrgMember(ctx, args.organizationId, ["admin", "manager", "member"]);
+		await ensurePaidOrganizationMember(ctx, args.organizationId, ["admin", "manager", "member"]);
 		return null;
 	},
 });
@@ -100,10 +100,12 @@ export const acceptInvitation = mutation({
 		if (!invitation) {
 			throw new Error("Invitation not found.");
 		}
-
 		// Validate that the invitation is for the accepting user's email
 		if (invitation.email.toLowerCase() !== identity.email?.toLowerCase()) {
 			throw new Error("This invitation is for a different email address.");
+		}
+		if (!(await isOrganizationPaid(ctx, invitation.organizationId))) {
+			throw new Error("This feature requires an active Team workspace.");
 		}
 
 		const existingMembership = await ctx.db
@@ -204,7 +206,7 @@ export const getMembers = query({
 	},
 	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
-		await ensureOrgMember(ctx, args.organizationId);
+		await ensurePaidOrganizationMember(ctx, args.organizationId);
 
 		const cap = Math.min(args.limit ?? DEFAULT_MEMBERS_LIMIT, 500);
 

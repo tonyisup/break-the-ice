@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 
 type RemixState = "idle" | "remixing" | "remixed";
 
@@ -53,10 +53,16 @@ export function RemixQuestionDrawer({
 	const [tags, setTags] = useState<string[]>([]);
 	const [saveFailed, setSaveFailed] = useState(false);
 	const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
-	const { activeWorkspace } = useWorkspace();
+	const { activeWorkspace, isEntitlementsLoading, teamWorkspaceId } = useTeamWorkspace();
 
-	const styles = useQuery(api.core.styles.getStyles, isOpen ? {} : "skip");
-	const tones = useQuery(api.core.tones.getTones, isOpen ? {} : "skip");
+	const styles = useQuery(
+		api.core.styles.getStyles,
+		isOpen ? { organizationId: teamWorkspaceId } : "skip",
+	);
+	const tones = useQuery(
+		api.core.tones.getTones,
+		isOpen ? { organizationId: teamWorkspaceId } : "skip",
+	);
 	const allAvailableTags = useQuery(api.core.tags.getTags, isOpen ? {} : "skip");
 
 	const filteredSuggestions = useMemo(() => {
@@ -157,6 +163,10 @@ export function RemixQuestionDrawer({
 
 	const handleRemix = async () => {
 		if (!question) return;
+		if (!newQuestionId && isEntitlementsLoading) {
+			toast.error("Checking workspace access. Please try again in a moment.");
+			return;
+		}
 		setRemixState("remixing");
 		setSaveFailed(false);
 		try {
@@ -184,7 +194,7 @@ export function RemixQuestionDrawer({
 					toneId: selectedToneId,
 					topicId: question.topicId,
 					tags,
-					organizationId: activeWorkspace ?? undefined,
+					organizationId: teamWorkspaceId,
 				});
 				if (id) {
 					setNewQuestionId(id);
@@ -560,7 +570,7 @@ export function RemixQuestionDrawer({
 							<Button 
 								onClick={handleRemix} 
 								className="gap-2"
-								disabled={currentUser?.isAiLimitReached}
+								disabled={currentUser?.isAiLimitReached || isEntitlementsLoading}
 							>
 								<Sparkles className="size-4" />
 								Remix

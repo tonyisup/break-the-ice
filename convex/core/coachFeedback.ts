@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { type GenericId } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
 import { mutation, query } from "../_generated/server";
-import { ensureOrgMember } from "../auth";
+import { ensurePaidOrganizationMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
@@ -55,7 +55,7 @@ export const getCoachTodayAssignment = query({
     hasSubmittedFeedback: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await ensureOrgMember(ctx, args.organizationId);
+    await ensurePaidOrganizationMember(ctx, args.organizationId);
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
     const user = await findCanonicalUser(ctx, {
@@ -192,7 +192,7 @@ export const getWeeklyFeedbackReport = query({
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
-    await ensureOrgMember(ctx, schedule.organizationId, "admin");
+    await ensurePaidOrganizationMember(ctx, schedule.organizationId, "admin");
 
     const feedbacks = await ctx.db
       .query("coachFeedback")
@@ -290,7 +290,7 @@ export const getCurationPreview = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
+    await ensurePaidOrganizationMember(ctx, args.organizationId, ["admin", "manager"]);
     const limit = Math.min(Math.max(args.limit ?? 12, 1), 50);
     const scheduleGroups = await Promise.all(
       (["published", "completed"] as const).map((status) =>
@@ -432,7 +432,7 @@ export const submitCoachFeedback = mutation({
 
     const schedule = await ctx.db.get(sq.scheduleId);
     if (!schedule) throw new Error("Schedule not found");
-    await ensureOrgMember(ctx, schedule.organizationId);
+    await ensurePaidOrganizationMember(ctx, schedule.organizationId);
     if (schedule.status !== "published") {
       throw new Error("Feedback can only be submitted for a published schedule");
     }

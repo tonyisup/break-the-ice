@@ -3,6 +3,7 @@ import { query, QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { defaultQualityRubric, latestActiveVersion } from "../lib/taxonomy";
 import { getActiveTakeoverTopicsHelper } from "../lib/takeover";
+import { ensurePaidOrganizationMember } from "../auth";
 
 const DEFAULT_TOPIC_LIMIT = 500;
 
@@ -121,6 +122,9 @@ export const getTopics = query({
   },
   returns: v.array(v.object(publicTopicFields)),
   handler: async (ctx, args) => {
+    if (args.organizationId) {
+      await ensurePaidOrganizationMember(ctx, args.organizationId);
+    }
     return await getActiveTopics(ctx, args.organizationId);
   },
 });

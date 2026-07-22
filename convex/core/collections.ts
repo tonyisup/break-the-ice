@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
-import { ensureOrgMember, ensurePaidOrganizationMember } from "../auth";
+import { ensurePaidOrganizationMember } from "../auth";
 
 const MIN_PUBLIC_SEARCH_LENGTH = 3;
 const MAX_PUBLIC_SEARCH_SCAN = 1500;
@@ -141,7 +141,7 @@ export const getCollectionMembershipForQuestion = query({
 	},
 	returns: v.array(v.id("collections")),
 	handler: async (ctx, args) => {
-		await ensureOrgMember(ctx, args.organizationId);
+		await ensurePaidOrganizationMember(ctx, args.organizationId);
 
 		const links = await ctx.db
 			.query("question_collections")
@@ -173,7 +173,7 @@ export const getCollectionsByOrganization = query({
 		questionCount: v.number(),
 	})),
 	handler: async (ctx, args) => {
-		await ensureOrgMember(ctx, args.organizationId);
+		await ensurePaidOrganizationMember(ctx, args.organizationId);
 		const limit = Math.min(args.limit ?? 100, 250);
 
 		const collections = await ctx.db
@@ -217,7 +217,7 @@ export const getCollectionDetail = query({
 		if (!collection) {
 			return null;
 		}
-		await ensureOrgMember(ctx, collection.organizationId);
+		await ensurePaidOrganizationMember(ctx, collection.organizationId);
 
 		const links = await ctx.db
 			.query("question_collections")

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Doc, Id } from "../../convex/_generated/dataModel";
 import { useTheme } from "@/hooks/useTheme";
 import { useStorageContext } from "@/hooks/useStorageContext";
-import { useWorkspace } from "@/hooks/useWorkspace.tsx";
+import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { ArrowUp, SearchX, Sparkles, X } from "lucide-react";
@@ -37,7 +37,7 @@ export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
   const convex = useConvex();
   const user = useAuth();
-  const { activeWorkspace } = useWorkspace();
+  const { activeWorkspace, teamWorkspaceId } = useTeamWorkspace();
   const generateAIQuestions = useAction(api.core.ai.generateAIQuestionForFeed);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -81,18 +81,18 @@ export default function InfiniteScrollPage() {
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
   const [prevQuestion, setPrevQuestion] = useState<Doc<"questions"> | null>(null);
   const [nextQuestion, setNextQuestion] = useState<Doc<"questions"> | null>(null);
-  // Fetch all styles and tones for card rendering
-  const allStyles = useQuery(api.core.styles.getStyles, {
-    organizationId: activeWorkspace ?? undefined,
-  });
-  const allTones = useQuery(api.core.tones.getTones, {
-    organizationId: activeWorkspace ?? undefined,
-  });
   const currentUser = useQuery(api.core.users.getCurrentUser, {
     organizationId: activeWorkspace ?? undefined,
   });
+  // Fetch all styles and tones for card rendering
+  const allStyles = useQuery(api.core.styles.getStyles, {
+    organizationId: teamWorkspaceId,
+  });
+  const allTones = useQuery(api.core.tones.getTones, {
+    organizationId: teamWorkspaceId,
+  });
   const allTopics = useQuery(api.core.topics.getTopics, {
-    organizationId: activeWorkspace ?? undefined,
+    organizationId: teamWorkspaceId,
   });
   const activeTakeoverTopics = useQuery(api.core.topics.getActiveTakeoverTopics);
   const interactionStats = useQuery(api.core.users.getUserInteractionStats, {

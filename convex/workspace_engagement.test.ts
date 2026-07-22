@@ -110,7 +110,11 @@ test("acceptInvitation allows membership in a second organization", async () => 
       tokenIdentifier: "multi|test",
     });
     const orgA = await ctx.db.insert("organizations", { name: "Org A" });
-    const orgB = await ctx.db.insert("organizations", { name: "Org B" });
+    const orgB = await ctx.db.insert("organizations", {
+      name: "Org B",
+      planTier: "team",
+      billingStatus: "active",
+    });
     await ctx.db.insert("organization_members", {
       userId,
       organizationId: orgA,

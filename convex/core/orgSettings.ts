@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { ensureOrgMember } from "../auth";
+import { ensurePaidOrganizationMember } from "../auth";
 import { isValidTimeZone } from "../lib/timezone";
 
 const DELIVERY_DAYS = [
@@ -44,7 +44,7 @@ export const getOrgSettings = query({
     )),
   }),
   handler: async (ctx, args) => {
-    await ensureOrgMember(ctx, args.organizationId);
+    await ensurePaidOrganizationMember(ctx, args.organizationId);
 
     const settings = await ctx.db
       .query("orgSettings")
@@ -92,7 +92,7 @@ export const upsertOrgSettings = mutation({
   },
   returns: v.id("orgSettings"),
   handler: async (ctx, args) => {
-    await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
+    await ensurePaidOrganizationMember(ctx, args.organizationId, ["admin", "manager"]);
     if (args.timeZone !== undefined && !isValidTimeZone(args.timeZone)) {
       throw new Error("Invalid IANA time zone");
     }
@@ -141,7 +141,7 @@ export const setDeliveryDayActive = mutation({
   },
   returns: v.array(deliveryDayValidator),
   handler: async (ctx, args) => {
-    await ensureOrgMember(ctx, args.organizationId, ["admin", "manager"]);
+    await ensurePaidOrganizationMember(ctx, args.organizationId, ["admin", "manager"]);
 
     const existing = await ctx.db
       .query("orgSettings")

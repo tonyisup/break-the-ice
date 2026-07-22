@@ -35,7 +35,11 @@ async function createScheduleWorkspace() {
       tokenIdentifier: ADMIN_IDENTITY.tokenIdentifier,
       email: ADMIN_IDENTITY.email,
     });
-    const organizationId = await ctx.db.insert("organizations", { name: "Three Day Studio" });
+    const organizationId = await ctx.db.insert("organizations", {
+      name: "Three Day Studio",
+      planTier: "team",
+      billingStatus: "active",
+    });
     await ctx.db.insert("organization_members", {
       userId,
       organizationId,
@@ -313,10 +317,13 @@ test("accepting a topic preview saves topic provenance with the exact assignment
 });
 
 test("custom schedule prompts require an active Team workspace", async () => {
-  const { admin, organizationId } = await createScheduleWorkspace();
+  const { t, admin, organizationId } = await createScheduleWorkspace();
   const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
     organizationId,
     weekStart: "2026-07-20",
+  });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(organizationId, { billingStatus: "canceled" });
   });
 
   await expect(admin.mutation(api.core.teamPrompts.createAndAssign, {
@@ -324,6 +331,68 @@ test("custom schedule prompts require an active Team workspace", async () => {
     dayOfWeek: "monday",
     questionText: "Should this be allowed?",
   })).rejects.toThrow("active Team workspace");
+});
+
+test("organization features require an active Team subscription", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  });
+  const { collectionId, privateQuestionId } = await t.run(async (ctx) => {
+    const collectionId = await ctx.db.insert("collections", {
+      name: "Team prompts",
+      organizationId,
+    });
+    const privateQuestionId = await ctx.db.insert("questions", {
+      organizationId,
+      customText: "Workspace private",
+      status: "private",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+    return { collectionId, privateQuestionId };
+  });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(organizationId, {
+      planTier: "free",
+      billingStatus: "inactive",
+    });
+  });
+
+  await expect(admin.query(api.core.schedules.listSchedules, {
+    organizationId,
+  })).rejects.toThrow("active Team workspace");
+  expect(await admin.query(api.core.schedules.listSchedulesForUser, {})).toEqual([]);
+  await expect(admin.query(api.core.schedules.getSchedule, {
+    scheduleId,
+  })).rejects.toThrow("active Team workspace");
+  await expect(admin.query(api.core.orgSettings.getOrgSettings, {
+    organizationId,
+  })).rejects.toThrow("active Team workspace");
+  await expect(admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  })).rejects.toThrow("active Team workspace");
+  await expect(admin.query(api.core.teamPrompts.listTeamTopics, {
+    organizationId,
+  })).rejects.toThrow("active Team workspace");
+  await expect(admin.query(api.core.collections.getCollectionsByOrganization, {
+    organizationId,
+  })).rejects.toThrow("active Team workspace");
+  await expect(admin.query(api.core.collections.getCollectionDetail, {
+    collectionId,
+  })).rejects.toThrow("active Team workspace");
+  await expect(admin.query(api.core.organizations.getMembers, {
+    organizationId,
+  })).rejects.toThrow("active Team workspace");
+  await expect(admin.query(api.core.styles.getStyles, {
+    organizationId,
+  })).rejects.toThrow("active Team workspace");
+  expect(await admin.query(api.core.questions.getQuestionById, {
+    id: privateQuestionId,
+  })).toBeNull();
 });
 
 test("topic previews reject taxonomy records owned by another organization", async () => {

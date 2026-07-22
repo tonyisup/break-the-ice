@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query, QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { defaultQualityRubric, defaultToneAxesValue, latestActiveVersion } from "../lib/taxonomy";
+import { ensurePaidOrganizationMember } from "../auth";
 
 export const DEFAULT_TONE_COLOR = "#6B7280";
 export const DEFAULT_TONE_ICON = "MessageCircle";
@@ -138,6 +139,9 @@ export const getTones = query({
   },
   returns: v.array(v.object(publicToneFields)),
   handler: async (ctx, args) => {
+    if (args.organizationId) {
+      await ensurePaidOrganizationMember(ctx, args.organizationId);
+    }
     return await getActiveTones(ctx, args.organizationId);
   },
 });
@@ -149,6 +153,9 @@ export const getFilteredTones = query({
   },
   returns: v.array(v.object(publicToneFields)),
   handler: async (ctx, args) => {
+    if (args.organizationId) {
+      await ensurePaidOrganizationMember(ctx, args.organizationId);
+    }
     const tones = await getActiveTones(ctx, args.organizationId);
     return tones.filter((tone) => !args.excluded.includes(tone.slug));
   },

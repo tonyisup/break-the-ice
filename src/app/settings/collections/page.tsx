@@ -26,13 +26,15 @@ const CollectionsSettings = () => {
       setCollectionsOpen(true);
     }
   }, [searchParams]);
-  const collections = useQuery(
-    api.core.collections.getCollectionsByOrganization,
-    activeWorkspace ? { organizationId: activeWorkspace } : "skip"
-  );
   const entitlements = useQuery(
     api.core.billing.getEffectiveEntitlements,
     activeWorkspace ? { organizationId: activeWorkspace } : "skip"
+  );
+  const collections = useQuery(
+    api.core.collections.getCollectionsByOrganization,
+    activeWorkspace && entitlements?.canUseTeamFeatures
+      ? { organizationId: activeWorkspace }
+      : "skip"
   );
   const createCollection = useMutation(api.core.collections.createCollection);
   const [newCollectionName, setNewCollectionName] = useState("");

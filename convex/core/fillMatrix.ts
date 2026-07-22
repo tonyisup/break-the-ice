@@ -132,7 +132,7 @@ export const fillEmptyCells = action({
 		if (!identity?.tokenIdentifier) {
 			throw new Error("Not authenticated");
 		}
-		await ctx.runQuery(internal.core.organizations.assertOrgMembershipForCurrentUser, {
+		await ctx.runQuery(internal.core.organizations.assertPaidOrgMembershipForCurrentUser, {
 			organizationId: args.organizationId,
 		});
 
@@ -252,7 +252,7 @@ export const fillSingleCell = action({
 		if (!identity?.tokenIdentifier) {
 			throw new Error("Not authenticated");
 		}
-		await ctx.runQuery(internal.core.organizations.assertOrgMembershipForCurrentUser, {
+		await ctx.runQuery(internal.core.organizations.assertPaidOrgMembershipForCurrentUser, {
 			organizationId: args.organizationId,
 		});
 
