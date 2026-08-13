@@ -4,8 +4,8 @@ import { v } from "convex/values";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { subscribeNewsletterContact } from "./lib/newsletterSubscription";
+import { getResendContactsApiKey } from "./lib/resend";
 
-const RESEND_API_KEY = process.env.RESEND_API_TOKEN || process.env.RESEND_API_KEY;
 const AUDIENCE_ID = "7c132839-8e29-4e94-a1d1-61c9f3c3d299"; // From n8n workflow
 
 type ContactStatusResult = {
@@ -47,6 +47,7 @@ export const getContactStatus = action({
 	}),
 	handler: async (ctx, args): Promise<ContactStatusResult> => {
 		const email = await getAuthorizedEmail(ctx, args.token);
+		const resendApiKey = getResendContactsApiKey();
 		const user: { newsletterSubscriptionStatus?: "subscribed" | "unsubscribed" } | null = await ctx.runQuery(internal.internal.users.getUserByEmail, {
 			email,
 		});
@@ -58,8 +59,8 @@ export const getContactStatus = action({
 			};
 		}
 
-		if (!RESEND_API_KEY) {
-			console.warn("RESEND_API_KEY is not set. Simulating subscription.");
+		if (!resendApiKey) {
+			console.warn("A Resend contacts API key is not set. Simulating subscription.");
 			return { subscribed: true, email };
 		}
 
@@ -67,7 +68,7 @@ export const getContactStatus = action({
 			// First, find the contact in the audience
 			const response = await fetch(`https://api.resend.com/audiences/${AUDIENCE_ID}/contacts`, {
 				headers: {
-					Authorization: `Bearer ${RESEND_API_KEY}`,
+					Authorization: `Bearer ${resendApiKey}`,
 				},
 			});
 
@@ -102,8 +103,9 @@ export const unsubscribeContact = action({
 	}),
 	handler: async (ctx, args): Promise<ContactMutationResult> => {
 		const email = await getAuthorizedEmail(ctx, args.token);
-		if (!RESEND_API_KEY) {
-			console.warn("RESEND_API_KEY is not set. Simulating unsubscribe.");
+		const resendApiKey = getResendContactsApiKey();
+		if (!resendApiKey) {
+			console.warn("A Resend contacts API key is not set. Simulating unsubscribe.");
 			await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
 				email,
 				status: "unsubscribed",
@@ -114,7 +116,7 @@ export const unsubscribeContact = action({
 		try {
 			// 1. Get contact ID first
 			const getResponse = await fetch(`https://api.resend.com/audiences/${AUDIENCE_ID}/contacts`, {
-				headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
+				headers: { Authorization: `Bearer ${resendApiKey}` },
 			});
 			const getData = await getResponse.json();
 			const contact = getData.data.find((c: any) => c.email.toLowerCase() === email);
@@ -131,7 +133,7 @@ export const unsubscribeContact = action({
 			const updateResponse = await fetch(`https://api.resend.com/audiences/${AUDIENCE_ID}/contacts/${contact.id}`, {
 				method: "PATCH",
 				headers: {
-					Authorization: `Bearer ${RESEND_API_KEY}`,
+					Authorization: `Bearer ${resendApiKey}`,
 					"Content-Type": "application/json",
 				},
 				body: JSON.stringify({

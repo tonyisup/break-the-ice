@@ -1,9 +1,9 @@
 "use node";
 
-import { Resend } from "resend";
+import { Resend, type ErrorResponse } from "resend";
 import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
-import { getResendApiKey } from "./resend";
+import { getResendContactsApiKey } from "./resend";
 
 const NEWSLETTER_SEGMENT_ID = "7c132839-8e29-4e94-a1d1-61c9f3c3d299";
 
@@ -12,13 +12,25 @@ export type NewsletterSubscriptionResult = {
 	message?: string;
 };
 
+function throwResendContactError(operation: string, error: ErrorResponse | null): void {
+	if (!error) return;
+
+	const permissionHint =
+		error.name === "restricted_api_key"
+			? " Configure RESEND_CONTACTS_API_KEY or RESEND_API_KEY with a full-access Resend key."
+			: "";
+	throw new Error(
+		`Resend ${operation} failed (${error.name}, status ${error.statusCode ?? "unavailable"}): ${error.message}${permissionHint}`,
+	);
+}
+
 export async function subscribeNewsletterContact(
 	ctx: ActionCtx,
 	rawEmail: string,
 ): Promise<NewsletterSubscriptionResult> {
-	const resendApiKey = getResendApiKey();
+	const resendApiKey = getResendContactsApiKey();
 	if (!resendApiKey) {
-		console.error("Resend API key is not set.");
+		console.error("A Resend contacts API key is not set.");
 		return {
 			success: false,
 			message: "Newsletter subscription is unavailable.",
@@ -35,16 +47,16 @@ export async function subscribeNewsletterContact(
 				email,
 				unsubscribed: false,
 			});
-			if (updatedContact.error) throw new Error(updatedContact.error.message);
+			throwResendContactError("contact update", updatedContact.error);
 
 			const segmentMembership = await resend.contacts.segments.add({
 				email,
 				segmentId: NEWSLETTER_SEGMENT_ID,
 			});
-			if (segmentMembership.error) throw new Error(segmentMembership.error.message);
+			throwResendContactError("segment assignment", segmentMembership.error);
 		} else {
 			if (existingContact.error?.statusCode !== 404) {
-				throw new Error(existingContact.error?.message || "Failed to look up Resend contact.");
+				throwResendContactError("contact lookup", existingContact.error);
 			}
 
 			const createdContact = await resend.contacts.create({
@@ -52,7 +64,7 @@ export async function subscribeNewsletterContact(
 				unsubscribed: false,
 				segments: [{ id: NEWSLETTER_SEGMENT_ID }],
 			});
-			if (createdContact.error) throw new Error(createdContact.error.message);
+			throwResendContactError("contact creation", createdContact.error);
 		}
 
 		await ctx.runMutation(internal.internal.users.setNewsletterStatus, {

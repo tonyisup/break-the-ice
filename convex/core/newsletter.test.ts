@@ -7,6 +7,7 @@ const originalFetch = global.fetch;
 const originalEnv = {
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   RESEND_API_TOKEN: process.env.RESEND_API_TOKEN,
+  RESEND_CONTACTS_API_KEY: process.env.RESEND_CONTACTS_API_KEY,
   CRONS_NOTICE_EMAIL: process.env.CRONS_NOTICE_EMAIL,
   N8N_SUBSCRIBE_WEBHOOK_URL: process.env.N8N_SUBSCRIBE_WEBHOOK_URL,
   N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL:
@@ -21,8 +22,9 @@ function restoreEnv(name: keyof typeof originalEnv) {
 }
 
 beforeEach(() => {
-  delete process.env.RESEND_API_TOKEN;
-  process.env.RESEND_API_KEY = "test_key";
+  process.env.RESEND_API_TOKEN = "test_sending_key";
+  process.env.RESEND_API_KEY = "test_full_access_key";
+  delete process.env.RESEND_CONTACTS_API_KEY;
   process.env.CRONS_NOTICE_EMAIL = "admin@example.com";
   process.env.N8N_SUBSCRIBE_WEBHOOK_URL = "https://webhook.example.com";
   process.env.N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL =
@@ -32,6 +34,7 @@ beforeEach(() => {
 
 afterEach(() => {
   global.fetch = originalFetch;
+  vi.restoreAllMocks();
   for (const name of Object.keys(originalEnv) as (keyof typeof originalEnv)[]) {
     restoreEnv(name);
   }
@@ -101,6 +104,9 @@ test("authenticated newsletter subscription bypasses n8n and triggers admin noti
     (call) => call[0] === "https://api.resend.com/contacts",
   );
   expect(contactCall).toBeDefined();
+  expect(new Headers(contactCall![1].headers).get("authorization")).toBe(
+    "Bearer test_full_access_key",
+  );
   expect(JSON.parse(contactCall![1].body)).toMatchObject({
     email: "user@example.com",
     unsubscribed: false,
@@ -110,6 +116,9 @@ test("authenticated newsletter subscription bypasses n8n and triggers admin noti
     (call) => call[0] === "https://api.resend.com/emails",
   );
   expect(resendCall).toBeDefined();
+  expect(resendCall![1].headers).toMatchObject({
+    Authorization: "Bearer test_sending_key",
+  });
 
   const resendBody = JSON.parse(resendCall![1].body);
   expect(resendBody.subject).toContain("New Newsletter Subscription");
@@ -241,6 +250,45 @@ test("authenticated newsletter subscription leaves status unchanged when Resend 
       .unique(),
   );
   expect(user?.newsletterSubscriptionStatus).toBeUndefined();
+});
+
+test("authenticated newsletter subscription logs an actionable restricted-key error", async () => {
+  const t = convexTest(schema);
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  global.fetch = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        name: "restricted_api_key",
+        message: "This API key is restricted to only send emails.",
+        statusCode: 401,
+      }),
+      { status: 401 },
+    ),
+  );
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("users", {
+      name: "User One",
+      email: "user@example.com",
+    });
+  });
+
+  const result = await t
+    .withIdentity({
+      subject: "user1",
+      email: "user@example.com",
+      name: "User One",
+    })
+    .action(api.core.newsletter.subscribe, { email: "ignored@example.com" });
+
+  expect(result).toMatchObject({ success: false, status: "error" });
+  expect(
+    consoleError.mock.calls.some(([, error]) =>
+      error instanceof Error &&
+      error.message.includes("restricted_api_key") &&
+      error.message.includes("full-access Resend key"),
+    ),
+  ).toBe(true);
 });
 
 test("authenticated newsletter subscription fails closed when Resend credentials are missing", async () => {
