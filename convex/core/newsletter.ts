@@ -2,8 +2,7 @@
 
 import { action, ActionCtx } from "../_generated/server";
 import { v } from "convex/values";
-import { api, internal } from "../_generated/api";
-import { Doc } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
 import * as crypto from "crypto";
 import { createSubscriptionNotificationEmail } from "../lib/emails";
 
@@ -110,56 +109,12 @@ export const confirmSubscription = action({
 
 // Helper function to reuse the logic
 async function subscribeUser(ctx: ActionCtx, email: string): Promise<{ success: boolean; message?: string }> {
-	const webhookUrl = process.env.N8N_SUBSCRIBE_WEBHOOK_URL;
-
-	if (!webhookUrl) {
-		console.warn("N8N_SUBSCRIBE_WEBHOOK_URL is not set. Simulating success.");
-		// For development, we simulate success if the env var isn't set.
-		await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
-			email: email,
-			status: "subscribed",
-		});
-
-		// Notify admin of new subscription (simulated)
-		try {
-			const { subject, html } = createSubscriptionNotificationEmail(email);
-			await ctx.runAction(internal.email.sendEmail, {
-				subject: `[Simulated] ${subject}`,
-				html,
-				fromName: "Newsletter Notifier"
-			});
-		} catch (error) {
-			console.error("Failed to send admin notification for simulated subscription:", error);
-		}
-
-		return { success: true, message: "Simulated subscription" };
-	}
-
-	const controller = new AbortController();
-	const timeoutId = setTimeout(() => controller.abort(), 10000);
-
 	try {
-		const response = await fetch(webhookUrl, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				email: email,
-				source: "daily_questions_feed",
-				timestamp: new Date().toISOString(),
-			}),
-			signal: controller.signal,
+		const result = await ctx.runAction(internal.resend.subscribeContact, {
+			email,
 		});
 
-		if (!response.ok) {
-			throw new Error(`Webhook failed with status: ${response.status}`);
-		}
-
-		await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
-			email: email,
-			status: "subscribed",
-		});
+		if (!result.success) throw new Error(result.message || "Resend rejected the subscription.");
 
 		// Notify admin of new subscription
 		try {
@@ -174,14 +129,9 @@ async function subscribeUser(ctx: ActionCtx, email: string): Promise<{ success: 
 			// We don't throw here to avoid failing the subscription itself
 		}
 
-		return { success: true };
-	} catch (error: any) {
-		if (error.name === "AbortError") {
-			throw new Error("Subscription request timed out.");
-		}
+		return result;
+	} catch (error) {
 		console.error("Failed to subscribe to newsletter:", error);
 		throw new Error("Failed to subscribe. Please try again later.");
-	} finally {
-		clearTimeout(timeoutId);
 	}
 }
