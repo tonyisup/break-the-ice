@@ -4,8 +4,24 @@ import { api } from "../_generated/api";
 import schema from "../schema";
 
 const originalFetch = global.fetch;
+const originalEnv = {
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  RESEND_API_TOKEN: process.env.RESEND_API_TOKEN,
+  CRONS_NOTICE_EMAIL: process.env.CRONS_NOTICE_EMAIL,
+  N8N_SUBSCRIBE_WEBHOOK_URL: process.env.N8N_SUBSCRIBE_WEBHOOK_URL,
+  N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL:
+    process.env.N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL,
+  ENVIRONMENT: process.env.ENVIRONMENT,
+};
+
+function restoreEnv(name: keyof typeof originalEnv) {
+  const value = originalEnv[name];
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
 
 beforeEach(() => {
+  delete process.env.RESEND_API_TOKEN;
   process.env.RESEND_API_KEY = "test_key";
   process.env.CRONS_NOTICE_EMAIL = "admin@example.com";
   process.env.N8N_SUBSCRIBE_WEBHOOK_URL = "https://webhook.example.com";
@@ -16,6 +32,9 @@ beforeEach(() => {
 
 afterEach(() => {
   global.fetch = originalFetch;
+  for (const name of Object.keys(originalEnv) as (keyof typeof originalEnv)[]) {
+    restoreEnv(name);
+  }
 });
 
 test("authenticated newsletter subscription bypasses n8n and triggers admin notification", async () => {
@@ -214,6 +233,40 @@ test("authenticated newsletter subscription leaves status unchanged when Resend 
 
   expect(result).toMatchObject({ success: false, status: "error" });
   expect(mockFetch).toHaveBeenCalledTimes(1);
+
+  const user = await t.run(async (ctx) =>
+    ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", "user@example.com"))
+      .unique(),
+  );
+  expect(user?.newsletterSubscriptionStatus).toBeUndefined();
+});
+
+test("authenticated newsletter subscription fails closed when Resend credentials are missing", async () => {
+  delete process.env.RESEND_API_KEY;
+  delete process.env.RESEND_API_TOKEN;
+  const t = convexTest(schema);
+  const mockFetch = vi.fn();
+  global.fetch = mockFetch;
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("users", {
+      name: "User One",
+      email: "user@example.com",
+    });
+  });
+
+  const result = await t
+    .withIdentity({
+      subject: "user1",
+      email: "user@example.com",
+      name: "User One",
+    })
+    .action(api.core.newsletter.subscribe, { email: "ignored@example.com" });
+
+  expect(result).toMatchObject({ success: false, status: "error" });
+  expect(mockFetch).not.toHaveBeenCalled();
 
   const user = await t.run(async (ctx) =>
     ctx.db

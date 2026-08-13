@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import * as crypto from "crypto";
 import { createSubscriptionNotificationEmail } from "../lib/emails";
+import { subscribeNewsletterContact } from "../lib/newsletterSubscription";
 
 export const subscribe = action({
 	args: { email: v.string() },
@@ -110,9 +111,7 @@ export const confirmSubscription = action({
 // Helper function to reuse the logic
 async function subscribeUser(ctx: ActionCtx, email: string): Promise<{ success: boolean; message?: string }> {
 	try {
-		const result = await ctx.runAction(internal.resend.subscribeContact, {
-			email,
-		});
+		const result = await subscribeNewsletterContact(ctx, email);
 
 		if (!result.success) throw new Error(result.message || "Resend rejected the subscription.");
 

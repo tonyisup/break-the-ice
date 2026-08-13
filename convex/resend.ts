@@ -3,11 +3,10 @@
 import { v } from "convex/values";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { Resend } from "resend";
+import { subscribeNewsletterContact } from "./lib/newsletterSubscription";
 
 const RESEND_API_KEY = process.env.RESEND_API_TOKEN || process.env.RESEND_API_KEY;
 const AUDIENCE_ID = "7c132839-8e29-4e94-a1d1-61c9f3c3d299"; // From n8n workflow
-const NEWSLETTER_SEGMENT_ID = AUDIENCE_ID;
 
 type ContactStatusResult = {
 	subscribed: boolean | null;
@@ -163,54 +162,6 @@ export const subscribeContact = internalAction({
 		success: v.boolean(),
 		message: v.optional(v.string()),
 	}),
-	handler: async (ctx, args): Promise<ContactMutationResult> => {
-		const resendApiKey = process.env.RESEND_API_TOKEN || process.env.RESEND_API_KEY;
-		if (!resendApiKey) {
-			console.warn("RESEND_API_KEY is not set. Simulating subscribe.");
-			await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
-				email: args.email,
-				status: "subscribed",
-			});
-			return { success: true };
-		}
-
-		try {
-			const email = args.email.trim().toLowerCase();
-			const resend = new Resend(resendApiKey);
-			const existingContact = await resend.contacts.get({ email });
-
-			if (existingContact.data) {
-				const updatedContact = await resend.contacts.update({
-					email,
-					unsubscribed: false,
-				});
-				if (updatedContact.error) throw new Error(updatedContact.error.message);
-
-				const segmentMembership = await resend.contacts.segments.add({
-					email,
-					segmentId: NEWSLETTER_SEGMENT_ID,
-				});
-				if (segmentMembership.error) throw new Error(segmentMembership.error.message);
-			} else {
-				if (existingContact.error?.statusCode !== 404) {
-					throw new Error(existingContact.error?.message || "Failed to look up Resend contact.");
-				}
-
-				const createdContact = await resend.contacts.create({
-					email,
-					unsubscribed: false,
-					segments: [{ id: NEWSLETTER_SEGMENT_ID }],
-				});
-				if (createdContact.error) throw new Error(createdContact.error.message);
-			}
-			await ctx.runMutation(internal.internal.users.setNewsletterStatus, {
-				email,
-				status: "subscribed",
-			});
-			return { success: true };
-		} catch (error) {
-			console.error("Error subscribing to Resend:", error);
-			throw new Error("Failed to subscribe.");
-		}
-	}
+	handler: async (ctx, args): Promise<ContactMutationResult> =>
+		subscribeNewsletterContact(ctx, args.email),
 });
