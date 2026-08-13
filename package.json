@@ -48,6 +48,7 @@
     "vaul": "^1.1.2"
   },
   "overrides": {
+    "brace-expansion@>=2.0.0 <2.1.2": "2.1.2",
     "convex": "^1.21.1-alpha.1",
     "path-to-regexp": "6.3.0",
     "undici": "6.27.0",
