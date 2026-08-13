@@ -8,6 +8,7 @@ const originalEnv = {
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   RESEND_API_TOKEN: process.env.RESEND_API_TOKEN,
   RESEND_CONTACTS_API_KEY: process.env.RESEND_CONTACTS_API_KEY,
+  RESEND_BASE_URL: process.env.RESEND_BASE_URL,
   CRONS_NOTICE_EMAIL: process.env.CRONS_NOTICE_EMAIL,
   N8N_SUBSCRIBE_WEBHOOK_URL: process.env.N8N_SUBSCRIBE_WEBHOOK_URL,
   N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL:
@@ -133,6 +134,72 @@ test("authenticated newsletter subscription bypasses n8n and triggers admin noti
       .unique();
   });
   expect(user?.newsletterSubscriptionStatus).toBe("subscribed");
+});
+
+test("authenticated newsletter subscription bypasses the email-only Resend proxy", async () => {
+  process.env.RESEND_BASE_URL = "https://email-only-proxy.example.com";
+  const t = convexTest(schema);
+  const contactUrl = "https://api.resend.com/contacts/user@example.com";
+  const mockFetch = vi.fn().mockImplementation((input) => {
+    const url = String(input);
+    if (url === contactUrl) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            name: "not_found",
+            message: "Contact not found",
+            statusCode: 404,
+          }),
+          { status: 404 },
+        ),
+      );
+    }
+
+    if (url.startsWith("https://email-only-proxy.example.com")) {
+      return Promise.resolve(
+        new Response(JSON.stringify("Only the /emails API is supported"), {
+          status: 400,
+        }),
+      );
+    }
+
+    return Promise.resolve(
+      new Response(JSON.stringify({ object: "contact", id: "resend-id" }), {
+        status: 200,
+      }),
+    );
+  });
+  global.fetch = mockFetch;
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("users", {
+      name: "User One",
+      email: "user@example.com",
+    });
+  });
+
+  const result = await t
+    .withIdentity({
+      subject: "user1",
+      email: "user@example.com",
+      name: "User One",
+    })
+    .action(api.core.newsletter.subscribe, { email: "ignored@example.com" });
+
+  expect(result).toMatchObject({ success: true, status: "subscribed" });
+  expect(mockFetch).toHaveBeenCalledWith(
+    contactUrl,
+    expect.objectContaining({ method: "GET" }),
+  );
+  expect(mockFetch).toHaveBeenCalledWith(
+    "https://api.resend.com/contacts",
+    expect.objectContaining({ method: "POST" }),
+  );
+  expect(
+    mockFetch.mock.calls.some(([input]) =>
+      String(input).startsWith("https://email-only-proxy.example.com"),
+    ),
+  ).toBe(false);
 });
 
 test("authenticated newsletter resubscription reactivates the contact and segment", async () => {

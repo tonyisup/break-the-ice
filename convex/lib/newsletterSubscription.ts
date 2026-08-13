@@ -6,21 +6,31 @@ import type { ActionCtx } from "../_generated/server";
 import { getResendContactsApiKey } from "./resend";
 
 const NEWSLETTER_SEGMENT_ID = "7c132839-8e29-4e94-a1d1-61c9f3c3d299";
+const RESEND_CONTACTS_API_BASE_URL = "https://api.resend.com";
 
 export type NewsletterSubscriptionResult = {
 	success: boolean;
 	message?: string;
 };
 
-function throwResendContactError(operation: string, error: ErrorResponse | null): void {
+function throwResendContactError(operation: string, error: unknown): void {
 	if (!error) return;
 
+	const structuredError =
+		typeof error === "object" ? (error as Partial<ErrorResponse>) : undefined;
+	const errorName = structuredError?.name ?? "unexpected_error";
+	const errorStatus = structuredError?.statusCode ?? "unavailable";
+	const errorMessage =
+		typeof error === "string"
+			? error
+			: structuredError?.message ?? "Unknown Resend error.";
+
 	const permissionHint =
-		error.name === "restricted_api_key"
+		errorName === "restricted_api_key"
 			? " Configure RESEND_CONTACTS_API_KEY or RESEND_API_KEY with a full-access Resend key."
 			: "";
 	throw new Error(
-		`Resend ${operation} failed (${error.name}, status ${error.statusCode ?? "unavailable"}): ${error.message}${permissionHint}`,
+		`Resend ${operation} failed (${errorName}, status ${errorStatus}): ${errorMessage}${permissionHint}`,
 	);
 }
 
@@ -39,7 +49,11 @@ export async function subscribeNewsletterContact(
 
 	try {
 		const email = rawEmail.trim().toLowerCase();
-		const resend = new Resend(resendApiKey);
+		// RESEND_BASE_URL is configured for an email-only proxy. Contacts must
+		// use Resend's public API or the proxy rejects every non-email endpoint.
+		const resend = new Resend(resendApiKey, {
+			baseUrl: RESEND_CONTACTS_API_BASE_URL,
+		});
 		const existingContact = await resend.contacts.get({ email });
 
 		if (existingContact.data) {
