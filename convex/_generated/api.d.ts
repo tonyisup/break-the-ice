@@ -75,6 +75,7 @@ import type * as lib_deliveryDays from "../lib/deliveryDays.js";
 import type * as lib_emails from "../lib/emails.js";
 import type * as lib_embeddings from "../lib/embeddings.js";
 import type * as lib_generationRunner from "../lib/generationRunner.js";
+import type * as lib_newsletterSubscription from "../lib/newsletterSubscription.js";
 import type * as lib_promptArchitecture from "../lib/promptArchitecture.js";
 import type * as lib_random from "../lib/random.js";
 import type * as lib_resend from "../lib/resend.js";
@@ -164,6 +165,7 @@ declare const fullApi: ApiFromModules<{
   "lib/emails": typeof lib_emails;
   "lib/embeddings": typeof lib_embeddings;
   "lib/generationRunner": typeof lib_generationRunner;
+  "lib/newsletterSubscription": typeof lib_newsletterSubscription;
   "lib/promptArchitecture": typeof lib_promptArchitecture;
   "lib/random": typeof lib_random;
   "lib/resend": typeof lib_resend;
