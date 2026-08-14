@@ -4,8 +4,14 @@ import { action, ActionCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import * as crypto from "crypto";
-import { createSubscriptionNotificationEmail } from "../lib/emails";
+import {
+	createSubscriptionNotificationEmail,
+	createSubscriptionVerificationEmail,
+} from "../lib/emails";
 import { subscribeNewsletterContact } from "../lib/newsletterSubscription";
+import { getResendApiKey } from "../lib/resend";
+
+const RESEND_EMAIL_API_URL = "https://api.resend.com/emails";
 
 export const subscribe = action({
 	args: { email: v.string() },
@@ -38,42 +44,54 @@ export const subscribe = action({
 			}
 
 			// If unauthenticated, initiate Double Opt-In
+			const resendApiKey = getResendApiKey();
+			if (!resendApiKey) {
+				throw new Error("A Resend email API key is not configured.");
+			}
+
 			const token = crypto.randomUUID();
 			await ctx.runMutation(internal.internal.subscriptions.createPendingSubscription, {
 				email: args.email,
 				token,
 			});
 
-			const webhookUrl = process.env.N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL;
 			const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://breaktheiceberg.com";
 			const verificationUrl = `${baseUrl}/verify-subscription?token=${token}`;
 
-			if (!webhookUrl) {
-				console.warn("N8N_VERIFY_SUBSCRIPTION_WEBHOOK_URL is not set. Simulating verification email sent.");
-				return { success: false, status: "verification_required", debugUrl: verificationUrl };
-			}
-
 			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout for webhook
+			const timeoutId = setTimeout(() => controller.abort(), 10000);
 
 			try {
-				const response = await fetch(webhookUrl, {
+				const verificationEmail = createSubscriptionVerificationEmail(verificationUrl);
+				const response = await fetch(RESEND_EMAIL_API_URL, {
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
+					headers: {
+						Authorization: `Bearer ${resendApiKey}`,
+						"Content-Type": "application/json",
+					},
 					body: JSON.stringify({
-						email: args.email,
-						verificationUrl,
-						timestamp: new Date().toISOString(),
+						from: "Daily Ice(berg) Breaker <newsletter@breaktheiceberg.com>",
+						to: [args.email],
+						subject: verificationEmail.subject,
+						html: verificationEmail.html,
 					}),
 					signal: controller.signal,
 				});
 
 				if (!response.ok) {
-					console.error(`Verification webhook failed: ${response.status}`);
+					console.error(`Resend verification email failed: ${response.status}`);
+					await ctx.runMutation(internal.internal.subscriptions.consumePendingSubscription, {
+						token,
+					});
 					return { success: false, status: "error", message: "Failed to send verification email." };
 				}
 
 				return { success: false, status: "verification_required" };
+			} catch (error) {
+				await ctx.runMutation(internal.internal.subscriptions.consumePendingSubscription, {
+					token,
+				});
+				throw error;
 			} finally {
 				clearTimeout(timeoutId);
 			}

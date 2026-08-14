@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { expect, test, vi, beforeEach, afterEach } from "vitest";
 import { api } from "../_generated/api";
 import schema from "../schema";
+import { convexFunctionModules } from "../../vitestConvexModules";
 
 const originalFetch = global.fetch;
 const originalEnv = {
@@ -42,7 +43,7 @@ afterEach(() => {
 });
 
 test("authenticated newsletter subscription bypasses n8n and triggers admin notification", async () => {
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
 
   const mockFetch = vi.fn().mockImplementation((input) => {
     if (input === "https://api.resend.com/contacts/user@example.com") {
@@ -138,7 +139,7 @@ test("authenticated newsletter subscription bypasses n8n and triggers admin noti
 
 test("authenticated newsletter subscription bypasses the email-only Resend proxy", async () => {
   process.env.RESEND_BASE_URL = "https://email-only-proxy.example.com";
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
   const contactUrl = "https://api.resend.com/contacts/user@example.com";
   const mockFetch = vi.fn().mockImplementation((input) => {
     const url = String(input);
@@ -203,7 +204,7 @@ test("authenticated newsletter subscription bypasses the email-only Resend proxy
 });
 
 test("authenticated newsletter resubscription reactivates the contact and segment", async () => {
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
   const contactUrl = "https://api.resend.com/contacts/user@example.com";
   const segmentUrl = `${contactUrl}/segments/7c132839-8e29-4e94-a1d1-61c9f3c3d299`;
   const mockFetch = vi.fn().mockImplementation((input, init) => {
@@ -279,7 +280,7 @@ test("authenticated newsletter resubscription reactivates the contact and segmen
 });
 
 test("authenticated newsletter subscription leaves status unchanged when Resend fails", async () => {
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
   const mockFetch = vi.fn().mockResolvedValue(
     new Response(
       JSON.stringify({
@@ -320,7 +321,7 @@ test("authenticated newsletter subscription leaves status unchanged when Resend 
 });
 
 test("authenticated newsletter subscription logs an actionable restricted-key error", async () => {
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
   global.fetch = vi.fn().mockResolvedValue(
     new Response(
@@ -361,7 +362,7 @@ test("authenticated newsletter subscription logs an actionable restricted-key er
 test("authenticated newsletter subscription fails closed when Resend credentials are missing", async () => {
   delete process.env.RESEND_API_KEY;
   delete process.env.RESEND_API_TOKEN;
-  const t = convexTest(schema);
+  const t = convexTest(schema, convexFunctionModules);
   const mockFetch = vi.fn();
   global.fetch = mockFetch;
 
@@ -392,9 +393,74 @@ test("authenticated newsletter subscription fails closed when Resend credentials
   expect(user?.newsletterSubscriptionStatus).toBeUndefined();
 });
 
-test("newsletter subscription unauthenticated flow triggers notification on confirmation", async () => {
-  const t = convexTest(schema);
+test("unauthenticated newsletter subscription fails closed when Resend credentials are missing", async () => {
+  delete process.env.RESEND_API_KEY;
+  delete process.env.RESEND_API_TOKEN;
+  const t = convexTest(schema, convexFunctionModules);
+  const mockFetch = vi.fn();
+  global.fetch = mockFetch;
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const result = await t.action(api.core.newsletter.subscribe, {
+    email: "missing-credentials@example.com",
+  });
+
+  expect(result).toMatchObject({
+    success: false,
+    status: "error",
+    message: "A Resend email API key is not configured.",
+  });
+  expect(mockFetch).not.toHaveBeenCalled();
+
+  const pending = await t.run(async (ctx) =>
+    ctx.db.query("pendingSubscriptions").collect(),
+  );
+  expect(
+    pending.some(({ email }) => email === "missing-credentials@example.com"),
+  ).toBe(false);
+});
+
+test("unauthenticated newsletter subscription reports a Resend delivery failure", async () => {
+  const t = convexTest(schema, convexFunctionModules);
+  global.fetch = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({ message: "Resend is unavailable" }),
+      { status: 503 },
+    ),
+  );
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const result = await t.action(api.core.newsletter.subscribe, {
+    email: "failed-delivery@example.com",
+  });
+
+  expect(result).toMatchObject({
+    success: false,
+    status: "error",
+    message: "Failed to send verification email.",
+  });
+  expect(global.fetch).toHaveBeenCalledWith(
+    "https://api.resend.com/emails",
+    expect.objectContaining({ method: "POST" }),
+  );
+
+  const pending = await t.run(async (ctx) =>
+    ctx.db.query("pendingSubscriptions").collect(),
+  );
+  expect(
+    pending.some(({ email }) => email === "failed-delivery@example.com"),
+  ).toBe(false);
+});
+
+test("unauthenticated newsletter subscription bypasses a missing n8n verification webhook", async () => {
+  const t = convexTest(schema, convexFunctionModules);
   const mockFetch = vi.fn().mockImplementation((input) => {
+    if (input === "https://verify.example.com") {
+      return Promise.resolve(
+        new Response("Not Found", { status: 404 }),
+      );
+    }
+
     if (input === "https://api.resend.com/contacts/new@example.com") {
       return Promise.resolve(
         new Response(
@@ -423,12 +489,36 @@ test("newsletter subscription unauthenticated flow triggers notification on conf
   global.fetch = mockFetch;
 
   // 1. Subscribe (unauthenticated)
-  await t.action(api.core.newsletter.subscribe, { email: "new@example.com" });
+  const result = await t.action(api.core.newsletter.subscribe, {
+    email: "new@example.com",
+  });
 
-  // Verify verify webhook called
-  expect(mockFetch).toHaveBeenCalledWith(
+  expect(result).toMatchObject({
+    success: false,
+    status: "verification_required",
+  });
+  expect(mockFetch).not.toHaveBeenCalledWith(
     "https://verify.example.com",
     expect.anything(),
+  );
+  expect(mockFetch).toHaveBeenCalledWith(
+    "https://api.resend.com/emails",
+    expect.objectContaining({ method: "POST" }),
+  );
+
+  const verificationCall = mockFetch.mock.calls.find(
+    (call) => call[0] === "https://api.resend.com/emails",
+  );
+  expect(verificationCall).toBeDefined();
+  expect(verificationCall![1].headers).toMatchObject({
+    Authorization: "Bearer test_sending_key",
+  });
+  expect(JSON.parse(verificationCall![1].body)).toMatchObject({
+    to: ["new@example.com"],
+    subject: "Confirm your Daily Questions subscription",
+  });
+  expect(JSON.parse(verificationCall![1].body).html).toContain(
+    "https://breaktheiceberg.com/verify-subscription?token=",
   );
   mockFetch.mockClear();
 
