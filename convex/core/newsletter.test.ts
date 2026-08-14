@@ -392,6 +392,51 @@ test("authenticated newsletter subscription fails closed when Resend credentials
   expect(user?.newsletterSubscriptionStatus).toBeUndefined();
 });
 
+test("unauthenticated newsletter subscription fails closed when Resend credentials are missing", async () => {
+  delete process.env.RESEND_API_KEY;
+  delete process.env.RESEND_API_TOKEN;
+  const t = convexTest(schema);
+  const mockFetch = vi.fn();
+  global.fetch = mockFetch;
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const result = await t.action(api.core.newsletter.subscribe, {
+    email: "new@example.com",
+  });
+
+  expect(result).toMatchObject({
+    success: false,
+    status: "error",
+    message: "A Resend email API key is not configured.",
+  });
+  expect(mockFetch).not.toHaveBeenCalled();
+});
+
+test("unauthenticated newsletter subscription reports a Resend delivery failure", async () => {
+  const t = convexTest(schema);
+  global.fetch = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({ message: "Resend is unavailable" }),
+      { status: 503 },
+    ),
+  );
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const result = await t.action(api.core.newsletter.subscribe, {
+    email: "new@example.com",
+  });
+
+  expect(result).toMatchObject({
+    success: false,
+    status: "error",
+    message: "Failed to send verification email.",
+  });
+  expect(global.fetch).toHaveBeenCalledWith(
+    "https://api.resend.com/emails",
+    expect.objectContaining({ method: "POST" }),
+  );
+});
+
 test("unauthenticated newsletter subscription bypasses a missing n8n verification webhook", async () => {
   const t = convexTest(schema);
   const mockFetch = vi.fn().mockImplementation((input) => {
