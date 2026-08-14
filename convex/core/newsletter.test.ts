@@ -392,9 +392,15 @@ test("authenticated newsletter subscription fails closed when Resend credentials
   expect(user?.newsletterSubscriptionStatus).toBeUndefined();
 });
 
-test("newsletter subscription unauthenticated flow triggers notification on confirmation", async () => {
+test("unauthenticated newsletter subscription bypasses a missing n8n verification webhook", async () => {
   const t = convexTest(schema);
   const mockFetch = vi.fn().mockImplementation((input) => {
+    if (input === "https://verify.example.com") {
+      return Promise.resolve(
+        new Response("Not Found", { status: 404 }),
+      );
+    }
+
     if (input === "https://api.resend.com/contacts/new@example.com") {
       return Promise.resolve(
         new Response(
@@ -423,12 +429,36 @@ test("newsletter subscription unauthenticated flow triggers notification on conf
   global.fetch = mockFetch;
 
   // 1. Subscribe (unauthenticated)
-  await t.action(api.core.newsletter.subscribe, { email: "new@example.com" });
+  const result = await t.action(api.core.newsletter.subscribe, {
+    email: "new@example.com",
+  });
 
-  // Verify verify webhook called
-  expect(mockFetch).toHaveBeenCalledWith(
+  expect(result).toMatchObject({
+    success: false,
+    status: "verification_required",
+  });
+  expect(mockFetch).not.toHaveBeenCalledWith(
     "https://verify.example.com",
     expect.anything(),
+  );
+  expect(mockFetch).toHaveBeenCalledWith(
+    "https://api.resend.com/emails",
+    expect.objectContaining({ method: "POST" }),
+  );
+
+  const verificationCall = mockFetch.mock.calls.find(
+    (call) => call[0] === "https://api.resend.com/emails",
+  );
+  expect(verificationCall).toBeDefined();
+  expect(verificationCall![1].headers).toMatchObject({
+    Authorization: "Bearer test_sending_key",
+  });
+  expect(JSON.parse(verificationCall![1].body)).toMatchObject({
+    to: ["new@example.com"],
+    subject: "Confirm your Daily Questions subscription",
+  });
+  expect(JSON.parse(verificationCall![1].body).html).toContain(
+    "https://breaktheiceberg.com/verify-subscription?token=",
   );
   mockFetch.mockClear();
 
