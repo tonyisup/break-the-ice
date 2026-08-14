@@ -50,6 +50,36 @@ export const createSubscriptionNotificationEmail = (email: string) => {
   return { subject, html };
 };
 
+export const createSubscriptionVerificationEmail = (verificationUrl: string) => {
+  const subject = "Confirm your Daily Questions subscription";
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #1e293b; }
+        .container { max-width: 600px; margin: 0 auto; padding: 32px; border: 1px solid #e2e8f0; border-radius: 12px; }
+        .button-container { margin: 28px 0; }
+        .button { background-color: #2563eb; color: white !important; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block; }
+        .footer { color: #64748b; font-size: 12px; margin-top: 32px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>Confirm your subscription</h1>
+        <p>Click the button below to confirm that you want a fresh icebreaker question delivered every morning.</p>
+        <div class="button-container">
+          <a href="${escapeHtml(verificationUrl)}" class="button">Confirm subscription</a>
+        </div>
+        <p>This link expires in 24 hours. If you did not request this email, you can ignore it.</p>
+        <div class="footer">Break the Iceberg Daily Questions</div>
+      </div>
+    </body>
+    </html>
+  `;
+  return { subject, html };
+};
+
 export const createDailyQuestionEmail = (args: {
   question: string;
   questionUrl: string;
