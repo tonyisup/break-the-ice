@@ -55,6 +55,7 @@ import { ClerkSyncManager } from "./components/ClerkSyncManager";
 import { RouteMetadata } from "./components/RouteMetadata";
 import NotFoundPage from "./app/not-found/page";
 import ThankYouPage from "./app/thank-you/page";
+import CookieConsentBanner from "./components/CookieConsentBanner";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -65,9 +66,9 @@ createRoot(document.getElementById("root")!).render(
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <WorkspaceProvider>
           <StorageProvider>
-            <AnalyticsManager />
             <BrowserRouter>
               <RouteMetadata />
+              <AnalyticsManager />
               <ClerkSyncManager />
               <Routes>
                 <Route path="/" element={<Root />} />
@@ -117,6 +118,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/thank-you" element={<ThankYouPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
+              <CookieConsentBanner />
               <FeedbackButton />
               <Toaster position="bottom-left" richColors />
             </BrowserRouter>
