@@ -53,6 +53,8 @@ import OrgWeeklyCurationPage from "./app/org/schedule/page.tsx";
 import CoachDailyViewPage from "./app/org/today/page.tsx";
 import { ClerkSyncManager } from "./components/ClerkSyncManager";
 import { RouteMetadata } from "./components/RouteMetadata";
+import NotFoundPage from "./app/not-found/page";
+import ThankYouPage from "./app/thank-you/page";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -112,6 +114,8 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/cookies" element={<CookiePolicyPage />} />
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/contact" element={<ContactPage />} />
+                <Route path="/thank-you" element={<ThankYouPage />} />
+                <Route path="*" element={<NotFoundPage />} />
               </Routes>
               <FeedbackButton />
               <Toaster position="bottom-left" richColors />
