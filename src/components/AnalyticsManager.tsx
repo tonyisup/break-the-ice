@@ -1,35 +1,29 @@
 import { useEffect } from "react";
-import posthog from "posthog-js";
 import { useStorageContext } from "../hooks/useStorageContext";
 import { useLocation } from "react-router-dom";
-
-const POSTHOG_KEY = "phc_yvPURPmuOmgD7fy6Y854zBLP9sVU71T9ddHQJWVywqZ";
-let isInitialized = false;
+import { captureAnalytics, disableAnalytics, enableAnalytics } from "@/lib/analytics";
 
 export const AnalyticsManager = () => {
   const { hasConsented } = useStorageContext();
   const { pathname, search } = useLocation();
 
   useEffect(() => {
+    let cancelled = false;
+
     if (hasConsented) {
-      if (!isInitialized) {
-        posthog.init(POSTHOG_KEY, {
-          api_host: "https://us.i.posthog.com",
-          person_profiles: "identified_only",
-          capture_pageview: false,
+      void enableAnalytics().then(() => {
+        if (cancelled) return;
+        captureAnalytics("$pageview", {
+          $current_url: window.location.href,
         });
-        isInitialized = true;
-      }
-
-      if (posthog.has_opted_out_capturing()) posthog.opt_in_capturing();
-      posthog.capture("$pageview", { $current_url: window.location.href });
-      return;
+      });
+    } else {
+      disableAnalytics();
     }
 
-    if (isInitialized && !posthog.has_opted_out_capturing()) {
-      posthog.opt_out_capturing();
-      posthog.reset();
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [hasConsented, pathname, search]);
 
   return null;

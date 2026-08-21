@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
+import { captureAnalytics } from "@/lib/analytics";
 
 export default function BillingCancelPage() {
   useEffect(() => {
-    posthog.capture("team_checkout_canceled");
+    captureAnalytics("team_checkout_canceled");
   }, []);
 
   return (
