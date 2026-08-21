@@ -2,10 +2,13 @@ User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /app
-Disallow: /billing/
+Disallow: /billing
 Disallow: /history
 Disallow: /liked
 Disallow: /org
 Disallow: /settings
+Disallow: /unsubscribe
+Disallow: /verify-subscription
+Disallow: /add-question
 
 Sitemap: https://breaktheiceberg.com/sitemap.xml

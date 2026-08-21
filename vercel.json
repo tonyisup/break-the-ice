@@ -27,6 +27,9 @@
     "api/question.ts": {
       "includeFiles": "dist/index.html"
     },
+    "api/page.ts": {
+      "includeFiles": "dist/index.html"
+    },
     "api/og_question.ts": {
       "includeFiles": "src/components/ui/icons/icons.tsx"
     },
@@ -48,8 +51,8 @@
       "destination": "/api/og_question?id=:id"
     },
     {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "source": "/:path((?!api/).*)",
+      "destination": "/api/page"
     }
   ]
 }
