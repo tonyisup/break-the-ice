@@ -468,11 +468,13 @@ export default defineSchema({
   feedback: defineTable({
     text: v.string(),
     pageUrl: v.string(),
+    submissionId: v.optional(v.string()),
     userId: v.optional(v.id("users")),
     sessionId: v.optional(v.string()),
     status: v.union(v.literal("new"), v.literal("read"), v.literal("archived")),
   })
     .index("by_status", ["status"])
+    .index("by_submissionId", ["submissionId"])
     .index("by_userId", ["userId"])
     .index("by_sessionId", ["sessionId"]),
   pendingSubscriptions: defineTable({

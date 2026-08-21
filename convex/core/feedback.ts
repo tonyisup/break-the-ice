@@ -5,10 +5,20 @@ export const submitFeedback = mutation({
 	args: {
 		text: v.string(),
 		pageUrl: v.string(),
+		submissionId: v.optional(v.string()),
 		sessionId: v.optional(v.string()),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		if (args.submissionId) {
+			const existingFeedback = await ctx.db
+				.query("feedback")
+				.withIndex("by_submissionId", (q) => q.eq("submissionId", args.submissionId))
+				.unique();
+
+			if (existingFeedback) return null;
+		}
+
 		const identity = await ctx.auth.getUserIdentity();
 		let userId;
 		if (identity) {
@@ -51,6 +61,7 @@ export const submitFeedback = mutation({
 		await ctx.db.insert("feedback", {
 			text: args.text,
 			pageUrl: args.pageUrl,
+			submissionId: args.submissionId,
 			userId: userId,
 			sessionId: args.sessionId,
 			status: "new",
