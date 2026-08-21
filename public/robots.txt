@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /app
+Disallow: /billing/
+Disallow: /history
+Disallow: /liked
+Disallow: /org
+Disallow: /settings
+
+Sitemap: https://breaktheiceberg.com/sitemap.xml

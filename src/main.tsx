@@ -52,6 +52,7 @@ import NewsletterPage from "./app/admin/newsletter/page.tsx";
 import OrgWeeklyCurationPage from "./app/org/schedule/page.tsx";
 import CoachDailyViewPage from "./app/org/today/page.tsx";
 import { ClerkSyncManager } from "./components/ClerkSyncManager";
+import { RouteMetadata } from "./components/RouteMetadata";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -64,6 +65,7 @@ createRoot(document.getElementById("root")!).render(
           <StorageProvider>
             <AnalyticsManager />
             <BrowserRouter>
+              <RouteMetadata />
               <ClerkSyncManager />
               <Routes>
                 <Route path="/" element={<Root />} />
