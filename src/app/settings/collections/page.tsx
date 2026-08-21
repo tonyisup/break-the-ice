@@ -4,11 +4,11 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/../convex/_generated/api";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import posthog from "posthog-js";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
+import { captureAnalytics } from "@/lib/analytics";
 
 const CollectionsSettings = () => {
   const { isSignedIn } = useAuth();
@@ -55,7 +55,7 @@ const CollectionsSettings = () => {
     }
 
     if (!entitlements?.canUseTeamFeatures) {
-      posthog.capture("collections_gate_hit", { source: "settings_collections" });
+      captureAnalytics("collections_gate_hit", { source: "settings_collections" });
       return;
     }
 
@@ -105,7 +105,7 @@ const CollectionsSettings = () => {
                 </p>
                 <Button
                   asChild
-                  onClick={() => posthog.capture("collections_gate_hit", { source: "settings_collections" })}
+                  onClick={() => captureAnalytics("collections_gate_hit", { source: "settings_collections" })}
                   className="mt-4 bg-amber-400 text-slate-950 hover:bg-amber-300"
                 >
                   <Link to="/pricing?source=collections_gate">Upgrade to Team</Link>

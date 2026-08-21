@@ -16,11 +16,7 @@ const CookieConsentBanner = () => {
       .split("; ")
       .find((row) => row.startsWith("cookieConsent="));
 
-    if (!consent) {
-      // Small delay for a better entry feel
-      const timer = setTimeout(() => setIsVisible(true), 1200);
-      return () => clearTimeout(timer);
-    }
+    setIsVisible(!consent);
   }, []);
 
   const handleAccept = () => {
@@ -56,7 +52,7 @@ const CookieConsentBanner = () => {
                   Cookie Settings
                 </h3>
                 <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400 md:text-sm">
-                  We use cookies and local storage to personalize your experience and analyze our traffic.
+                  We use necessary storage to run the site and optional analytics to understand traffic.
                   See our <Link to="/cookies" className="font-medium text-primary hover:underline">Cookie Policy</Link>.
                 </p>
               </div>
@@ -79,7 +75,7 @@ const CookieConsentBanner = () => {
                 className="h-9 px-5 font-semibold"
               >
                 <ShieldCheck className="mr-2 h-4 w-4" />
-                I understand
+                Accept analytics
               </Button>
             </div>
           </div>

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, useOrganization } from "@clerk/clerk-react";
-import posthog from "posthog-js";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useAction, useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/../convex/_generated/api";
 import { Id } from "@/../convex/_generated/dataModel";
+import { captureAnalytics } from "@/lib/analytics";
 
 export default function BillingSuccessPage() {
   const { orgId } = useAuth();
@@ -69,7 +69,7 @@ export default function BillingSuccessPage() {
 
   useEffect(() => {
     if (!effectiveEntitlements?.canUseTeamFeatures || hasTrackedRef.current) return;
-    posthog.capture("team_checkout_completed");
+    captureAnalytics("team_checkout_completed");
     hasTrackedRef.current = true;
   }, [effectiveEntitlements?.canUseTeamFeatures]);
 

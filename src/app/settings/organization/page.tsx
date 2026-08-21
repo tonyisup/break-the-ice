@@ -4,13 +4,13 @@ import { CreateOrganization, OrganizationProfile, OrganizationSwitcher, SignedIn
 import { SubscriptionDetailsButton } from "@clerk/clerk-react/experimental";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import posthog from "posthog-js";
 import { useQuery } from "convex/react";
 import { api } from "@/../convex/_generated/api";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { embeddedOrganizationProfileAppearance } from "@/lib/clerkAppearance";
+import { captureAnalytics } from "@/lib/analytics";
 
 const OrganizationSettings = () => {
   const { isSignedIn, orgId } = useAuth();
@@ -31,7 +31,7 @@ const OrganizationSettings = () => {
 
   useEffect(() => {
     if (orgId) {
-      posthog.capture("workspace_viewed", { orgId });
+      captureAnalytics("workspace_viewed", { orgId });
     }
   }, [orgId]);
 
@@ -110,7 +110,7 @@ const OrganizationSettings = () => {
                   ) : entitlements?.canUseTeamFeatures ? (
                     <SubscriptionDetailsButton for="organization">
                       <Button
-                        onClick={() => posthog.capture("billing_portal_opened", { payer: "organization" })}
+                        onClick={() => captureAnalytics("billing_portal_opened", { payer: "organization" })}
                         className="bg-amber-400 text-slate-950 hover:bg-amber-300"
                       >
                         Manage Team Billing
@@ -119,7 +119,7 @@ const OrganizationSettings = () => {
                   ) : (
                     <Button
                       asChild
-                      onClick={() => posthog.capture("workspace_gate_hit", { source: "settings_organization" })}
+                      onClick={() => captureAnalytics("workspace_gate_hit", { source: "settings_organization" })}
                       className="bg-amber-400 text-slate-950 hover:bg-amber-300"
                     >
                       <Link to="/pricing?source=workspace_gate">Upgrade to Team</Link>
@@ -149,7 +149,7 @@ const OrganizationSettings = () => {
                 </p>
                 <Button
                   asChild
-                  onClick={() => posthog.capture("invite_gate_hit", { source: "settings_organization" })}
+                  onClick={() => captureAnalytics("invite_gate_hit", { source: "settings_organization" })}
                   className="mt-4 bg-amber-400 text-slate-950 hover:bg-amber-300"
                 >
                   <Link to="/pricing?source=invite_gate">Start Team Plan</Link>

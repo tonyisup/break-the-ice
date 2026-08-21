@@ -11,10 +11,10 @@ import {
 import { useEffect, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Link, useSearchParams } from "react-router-dom";
-import posthog from "posthog-js";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import "@fontsource-variable/manrope/index.css";
 import { useTheme } from "@/hooks/useTheme";
+import { captureAnalytics } from "@/lib/analytics";
 
 const includedFeatures = [
   {
@@ -51,7 +51,7 @@ export default function PricingPage() {
   const hasMemberships = organizationMemberships.length > 0;
 
   useEffect(() => {
-    posthog.capture("pricing_viewed", { source });
+    captureAnalytics("pricing_viewed", { source });
   }, [source]);
 
   return (
@@ -223,7 +223,7 @@ const CheckoutIntro = ({ source }: { source: string }) => (
     <SignInButton mode="modal">
       <button
         type="button"
-        onClick={() => posthog.capture("upgrade_clicked", { source, payer: "organization" })}
+        onClick={() => captureAnalytics("upgrade_clicked", { source, payer: "organization" })}
         className="mt-7 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#ff4d2e] px-6 text-base font-extrabold text-[#181818] transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ff4d2e]/35"
       >
         Sign in to continue
