@@ -44,6 +44,11 @@ export const subscribe = action({
 			}
 
 			// If unauthenticated, initiate Double Opt-In
+			const resendApiKey = getResendApiKey();
+			if (!resendApiKey) {
+				throw new Error("A Resend email API key is not configured.");
+			}
+
 			const token = crypto.randomUUID();
 			await ctx.runMutation(internal.internal.subscriptions.createPendingSubscription, {
 				email: args.email,
@@ -80,10 +85,18 @@ export const subscribe = action({
 
 				if (!response.ok) {
 					console.error(`Resend verification email failed: ${response.status}`);
+					await ctx.runMutation(internal.internal.subscriptions.consumePendingSubscription, {
+						token,
+					});
 					return { success: false, status: "error", message: "Failed to send verification email." };
 				}
 
 				return { success: false, status: "verification_required" };
+			} catch (error) {
+				await ctx.runMutation(internal.internal.subscriptions.consumePendingSubscription, {
+					token,
+				});
+				throw error;
 			} finally {
 				clearTimeout(timeoutId);
 			}

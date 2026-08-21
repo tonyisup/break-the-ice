@@ -68,6 +68,7 @@ The following variables need to be set in your [Convex Dashboard](https://dashbo
 
 *   `CLERK_JWT_ISSUER_DOMAIN`: You can find this in your [Clerk Dashboard](https://dashboard.clerk.com) under **API Keys**. It should be the "JWT Issuer URL".
 *   `OPENAI_API_KEY`: Your API key from the [OpenAI Platform](https://platform.openai.com/api-keys).
+*   `RESEND_API_KEY` or `RESEND_API_TOKEN`: A Resend API key with email-sending permission, required for newsletter verification and delivery.
 
 ### 3. Running the Application
 
