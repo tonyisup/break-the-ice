@@ -569,6 +569,9 @@ export default function InfiniteScrollPage() {
     const currentQuestionId = activeQuestionRef.current?._id;
     setSeenIds(currentQuestionId ? new Set([currentQuestionId]) : new Set());
     requestIdRef.current++;
+    // The invalidated request cannot release the loading lock in its finally block.
+    isLoadingRef.current = false;
+    setIsLoading(false);
     setHasMore(true);
     setShowAuthCTA(false);
     setShowUpgradeCTA(false);

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, waitFor, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
 import InfiniteScrollPage from './InfiniteScrollPage';
 import { useQuery, useConvex, useAction, useMutation } from 'convex/react';
 import { WorkspaceProvider } from '@/hooks/useWorkspace.tsx';
@@ -151,6 +152,23 @@ describe('InfiniteScrollPage', () => {
 
     await waitFor(() => {
       expect(screen.getAllByTestId('modern-question-card')).toHaveLength(5);
+    });
+  });
+
+  it('loads the feed when mounted in StrictMode after Clerk is already ready', async () => {
+    mockUseAuth.mockReturnValue({ isSignedIn: false, userId: null, isLoaded: true });
+
+    render(
+      <StrictMode>
+        <WorkspaceProvider>
+          <InfiniteScrollPage />
+        </WorkspaceProvider>
+      </StrictMode>
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(5);
+      expect(screen.queryByText('Loading questions…')).not.toBeInTheDocument();
     });
   });
 
