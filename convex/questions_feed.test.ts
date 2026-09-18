@@ -220,6 +220,129 @@ test("organization feed includes org-tagged and global questions", async () => {
   expect(resultIds.has(orgOnlyId)).toBe(true);
 });
 
+test("feed hides every version and legacy reference of a hidden style", async () => {
+  const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+  const now = Date.now();
+
+  const {
+    archivedStyleId,
+    currentStyleId,
+    archivedVersionQuestionId,
+    legacyQuestionId,
+    visibleQuestionId,
+  } = await t.run(async (ctx) => {
+    const archivedStyleId = await ctx.db.insert("styles", {
+      id: "hidden-style",
+      slug: "hidden-style",
+      name: "Hidden Style v1",
+      structure: "Ask a hidden-style question",
+      color: "#111111",
+      icon: "eye-off",
+      status: "archived",
+      version: 1,
+      createdAt: now - 1_000,
+      updatedAt: now - 1_000,
+    });
+    const currentStyleId = await ctx.db.insert("styles", {
+      id: "hidden-style",
+      slug: "hidden-style",
+      name: "Hidden Style v2",
+      structure: "Ask a hidden-style question",
+      color: "#222222",
+      icon: "eye-off",
+      status: "active",
+      version: 2,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const visibleStyleId = await ctx.db.insert("styles", {
+      id: "visible-style",
+      slug: "visible-style",
+      name: "Visible Style",
+      structure: "Ask a visible-style question",
+      color: "#333333",
+      icon: "eye",
+      status: "active",
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const archivedVersionQuestionId = await ctx.db.insert("questions", {
+      text: "Question tied to the archived hidden style?",
+      styleId: archivedStyleId,
+      style: "hidden-style",
+      status: "public",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+    const legacyQuestionId = await ctx.db.insert("questions", {
+      text: "Legacy question with only the hidden style slug?",
+      style: "hidden-style",
+      status: "public",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+    const visibleQuestionId = await ctx.db.insert("questions", {
+      text: "Question in a visible style?",
+      styleId: visibleStyleId,
+      styleSlug: "visible-style",
+      status: "public",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+
+    return {
+      archivedStyleId,
+      currentStyleId,
+      archivedVersionQuestionId,
+      legacyQuestionId,
+      visibleQuestionId,
+    };
+  });
+
+  const unanchored = await t.query(
+    internal.internal.questions.getRandomQuestionsInternal,
+    {
+      count: 10,
+      seen: [],
+      hidden: [],
+      hiddenStyles: [currentStyleId],
+      hiddenTones: [],
+    },
+  );
+  const unanchoredIds = new Set(
+    unanchored.map((question: Doc<"questions">) => question._id),
+  );
+
+  expect(unanchoredIds.has(visibleQuestionId)).toBe(true);
+  expect(unanchoredIds.has(archivedVersionQuestionId)).toBe(false);
+  expect(unanchoredIds.has(legacyQuestionId)).toBe(false);
+
+  const anchored = await t.query(
+    internal.internal.questions.getAnchoredQuestionsInternal,
+    {
+      count: 10,
+      seen: [],
+      hidden: [],
+      hiddenStyles: [currentStyleId],
+      hiddenTones: [],
+      anchoredStyleId: archivedStyleId,
+      randomSeed: 0.25,
+      currentTime: now,
+    },
+  );
+  const anchoredIds = new Set(
+    anchored.questions.map((question: Doc<"questions">) => question._id),
+  );
+
+  expect(anchoredIds.has(visibleQuestionId)).toBe(true);
+  expect(anchoredIds.has(archivedVersionQuestionId)).toBe(false);
+  expect(anchoredIds.has(legacyQuestionId)).toBe(false);
+});
+
 test("anchored feed meets its quota across taxonomy versions and legacy slugs", async () => {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
   const now = Date.now();

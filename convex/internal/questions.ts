@@ -618,6 +618,84 @@ export const checkSimilarity = internalAction({
 	},
 });
 
+type QuestionPreferenceFilters = {
+	hiddenStyleIds: Set<string>;
+	hiddenStyleSlugs: Set<string>;
+	hiddenToneIds: Set<string>;
+	hiddenToneSlugs: Set<string>;
+};
+
+async function resolveQuestionPreferenceFilters(
+	ctx: QueryCtx,
+	hiddenStyles: Id<"styles">[],
+	hiddenTones: Id<"tones">[],
+): Promise<QuestionPreferenceFilters> {
+	const [hiddenStyleDocs, hiddenToneDocs] = await Promise.all([
+		Promise.all(hiddenStyles.map((styleId) => ctx.db.get(styleId))),
+		Promise.all(hiddenTones.map((toneId) => ctx.db.get(toneId))),
+	]);
+	const hiddenStyleSlugs = new Set(
+		hiddenStyleDocs
+			.filter((style): style is Doc<"styles"> => style !== null)
+			.map((style) => style.slug ?? style.id),
+	);
+	const hiddenToneSlugs = new Set(
+		hiddenToneDocs
+			.filter((tone): tone is Doc<"tones"> => tone !== null)
+			.map((tone) => tone.slug ?? tone.id),
+	);
+	const [hiddenStyleVersions, hiddenToneVersions] = await Promise.all([
+		Promise.all(
+			Array.from(hiddenStyleSlugs).map((slug) =>
+				ctx.db.query("styles").withIndex("by_slug", (q) => q.eq("slug", slug)).collect(),
+			),
+		),
+		Promise.all(
+			Array.from(hiddenToneSlugs).map((slug) =>
+				ctx.db.query("tones").withIndex("by_slug", (q) => q.eq("slug", slug)).collect(),
+			),
+		),
+	]);
+
+	return {
+		hiddenStyleIds: new Set([
+			...hiddenStyles.map((styleId) => styleId.toString()),
+			...hiddenStyleVersions.flat().map((style) => style._id.toString()),
+		]),
+		hiddenStyleSlugs,
+		hiddenToneIds: new Set([
+			...hiddenTones.map((toneId) => toneId.toString()),
+			...hiddenToneVersions.flat().map((tone) => tone._id.toString()),
+		]),
+		hiddenToneSlugs,
+	};
+}
+
+function isQuestionAllowedByPreferences(
+	question: Doc<"questions">,
+	filters: QuestionPreferenceFilters,
+): boolean {
+	if (question.styleId && filters.hiddenStyleIds.has(question.styleId.toString())) {
+		return false;
+	}
+	if (
+		(question.styleSlug && filters.hiddenStyleSlugs.has(question.styleSlug)) ||
+		(question.style && filters.hiddenStyleSlugs.has(question.style))
+	) {
+		return false;
+	}
+	if (question.toneId && filters.hiddenToneIds.has(question.toneId.toString())) {
+		return false;
+	}
+	if (
+		(question.toneSlug && filters.hiddenToneSlugs.has(question.toneSlug)) ||
+		(question.tone && filters.hiddenToneSlugs.has(question.tone))
+	) {
+		return false;
+	}
+	return true;
+}
+
 // Internal query to get random questions with proper filtering
 export const getRandomQuestionsInternal = internalQuery({
 	args: {
@@ -646,8 +724,11 @@ export const getRandomQuestionsInternal = internalQuery({
 		} = args;
 		const seenIds = new Set(seen);
 		const hiddenIds = new Set(hidden);
-		const hiddenStyleIds = new Set(hiddenStyles);
-		const hiddenToneIds = new Set(hiddenTones);
+		const preferenceFilters = await resolveQuestionPreferenceFilters(
+			ctx,
+			hiddenStyles,
+			hiddenTones,
+		);
 
 		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
@@ -675,8 +756,7 @@ export const getRandomQuestionsInternal = internalQuery({
 			if (seenIds.has(question._id)) return false;
 			if (hiddenIds.has(question._id)) return false;
 			if (excludedIds?.has(question._id)) return false;
-			if (question.styleId && hiddenStyleIds.has(question.styleId)) return false;
-			if (question.toneId && hiddenToneIds.has(question.toneId)) return false;
+			if (!isQuestionAllowedByPreferences(question, preferenceFilters)) return false;
 			return true;
 		};
 
@@ -810,7 +890,11 @@ export const getRandomQuestionsInternal = internalQuery({
 
 		// Return enough candidates to fill the requested count after the
 		// caller's own shuffle + slice. Account for all exclusion sources.
-		const exclusionCount = seenIds.size + hiddenIds.size + hiddenStyleIds.size + hiddenToneIds.size;
+		const exclusionCount =
+			seenIds.size +
+			hiddenIds.size +
+			preferenceFilters.hiddenStyleIds.size +
+			preferenceFilters.hiddenToneIds.size;
 		const returnCount = Math.min(Math.max(count + exclusionCount + 10, 50), 500);
 
 		const now = Date.now();
@@ -871,8 +955,11 @@ export const getAnchoredQuestionsInternal = internalQuery({
 		const targetAnchoredCount = Math.min(args.count, args.count >= 10 ? 6 : Math.ceil(args.count * 0.6));
 		const seenIds = new Set(args.seen);
 		const hiddenIds = new Set(args.hidden);
-		const hiddenStyleIds = new Set(args.hiddenStyles);
-		const hiddenToneIds = new Set(args.hiddenTones);
+		const preferenceFilters = await resolveQuestionPreferenceFilters(
+			ctx,
+			args.hiddenStyles,
+			args.hiddenTones,
+		);
 		const sevenDaysAgo = args.currentTime - 7 * 24 * 60 * 60 * 1000;
 
 		let seed = args.randomSeed ?? Math.random();
@@ -904,8 +991,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 		};
 		const isVisible = (question: Doc<"questions">) => {
 			if (seenIds.has(question._id) || hiddenIds.has(question._id)) return false;
-			if (question.styleId && hiddenStyleIds.has(question.styleId)) return false;
-			if (question.toneId && hiddenToneIds.has(question.toneId)) return false;
+			if (!isQuestionAllowedByPreferences(question, preferenceFilters)) return false;
 			return true;
 		};
 		const wasShownRecently = (question: Doc<"questions">) => question.lastShownAt !== undefined && question.lastShownAt >= sevenDaysAgo;
@@ -1046,17 +1132,10 @@ export const getQuestionTimeRange = internalQuery({
 	},
 });
 
-type NewsletterPreferenceFilters = {
-	hiddenStyleIds: Set<string>;
-	hiddenStyleSlugs: Set<string>;
-	hiddenToneIds: Set<string>;
-	hiddenToneSlugs: Set<string>;
-};
-
 async function getNewsletterPreferenceFilters(
 	ctx: QueryCtx,
 	userId: Id<"users">,
-): Promise<NewsletterPreferenceFilters> {
+): Promise<QuestionPreferenceFilters> {
 	const [userHiddenStyles, userHiddenTones] = await Promise.all([
 		ctx.db
 			.query("userStyles")
@@ -1072,75 +1151,16 @@ async function getNewsletterPreferenceFilters(
 			.collect(),
 	]);
 
-	const [hiddenStyleDocs, hiddenToneDocs] = await Promise.all([
-		Promise.all(userHiddenStyles.map((entry) => ctx.db.get(entry.styleId))),
-		Promise.all(userHiddenTones.map((entry) => ctx.db.get(entry.toneId))),
-	]);
-	const hiddenStyleSlugs = new Set(
-		hiddenStyleDocs
-			.filter((style): style is Doc<"styles"> => style !== null)
-			.map((style) => style.slug ?? style.id),
+	return await resolveQuestionPreferenceFilters(
+		ctx,
+		userHiddenStyles.map((style) => style.styleId),
+		userHiddenTones.map((tone) => tone.toneId),
 	);
-	const hiddenToneSlugs = new Set(
-		hiddenToneDocs
-			.filter((tone): tone is Doc<"tones"> => tone !== null)
-			.map((tone) => tone.slug ?? tone.id),
-	);
-	const [hiddenStyleVersions, hiddenToneVersions] = await Promise.all([
-		Promise.all(
-			Array.from(hiddenStyleSlugs).map((slug) =>
-				ctx.db.query("styles").withIndex("by_slug", (q) => q.eq("slug", slug)).collect(),
-			),
-		),
-		Promise.all(
-			Array.from(hiddenToneSlugs).map((slug) =>
-				ctx.db.query("tones").withIndex("by_slug", (q) => q.eq("slug", slug)).collect(),
-			),
-		),
-	]);
-
-	return {
-		hiddenStyleIds: new Set([
-			...userHiddenStyles.map((style) => style.styleId.toString()),
-			...hiddenStyleVersions.flat().map((style) => style._id.toString()),
-		]),
-		hiddenStyleSlugs,
-		hiddenToneIds: new Set([
-			...userHiddenTones.map((tone) => tone.toneId.toString()),
-			...hiddenToneVersions.flat().map((tone) => tone._id.toString()),
-		]),
-		hiddenToneSlugs,
-	};
-}
-
-function isQuestionAllowedByNewsletterPreferences(
-	question: Doc<"questions">,
-	filters: NewsletterPreferenceFilters,
-): boolean {
-	if (question.styleId && filters.hiddenStyleIds.has(question.styleId.toString())) {
-		return false;
-	}
-	if (
-		(question.styleSlug && filters.hiddenStyleSlugs.has(question.styleSlug)) ||
-		(question.style && filters.hiddenStyleSlugs.has(question.style))
-	) {
-		return false;
-	}
-	if (question.toneId && filters.hiddenToneIds.has(question.toneId.toString())) {
-		return false;
-	}
-	if (
-		(question.toneSlug && filters.hiddenToneSlugs.has(question.toneSlug)) ||
-		(question.tone && filters.hiddenToneSlugs.has(question.tone))
-	) {
-		return false;
-	}
-	return true;
 }
 
 function isQuestionEligibleForNewsletter(
 	question: Doc<"questions">,
-	filters: NewsletterPreferenceFilters,
+	filters: QuestionPreferenceFilters,
 ): boolean {
 	if (!question.text || question.prunedAt !== undefined) {
 		return false;
@@ -1152,7 +1172,7 @@ function isQuestionEligibleForNewsletter(
 	) {
 		return false;
 	}
-	return isQuestionAllowedByNewsletterPreferences(question, filters);
+	return isQuestionAllowedByPreferences(question, filters);
 }
 
 export const getUnseenQuestionIdsForUser = internalQuery({
