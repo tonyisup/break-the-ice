@@ -1,4 +1,5 @@
 "use client";
+import { handleAsync, reportAsyncError } from "@/lib/async";
 
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -42,7 +43,7 @@ export default function VerifySubscriptionPage() {
       }
     };
 
-    verify();
+    void verify().catch(reportAsyncError);
   }, [token, confirmSubscription]);
 
   const gradientLight = ["#667EEA", "#A064DE"];
@@ -83,7 +84,7 @@ export default function VerifySubscriptionPage() {
 
               <button
                 type="button"
-                onClick={() => navigate("/app")}
+                onClick={handleAsync(() => navigate("/app"))}
                 className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2"
               >
                 Go to App <ArrowRight size={20} />
@@ -105,7 +106,7 @@ export default function VerifySubscriptionPage() {
 
               <button
                 type="button"
-                onClick={() => navigate("/app")}
+                onClick={handleAsync(() => navigate("/app"))}
                 className="inline-block px-8 py-3 bg-white/10 hover:bg-white/20 rounded-full text-white/80 font-medium transition-colors text-sm"
               >
                 Return Home

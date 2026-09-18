@@ -13,7 +13,7 @@ async function pickRandomActiveTopicSlug(ctx: ActionCtx): Promise<string> {
 			"No active topics in the catalog. Add a topic in admin or pick a global topic in the UI.",
 		);
 	}
-	return topics[Math.floor(Math.random() * topics.length)]!.slug;
+	return topics[Math.floor(Math.random() * topics.length)].slug;
 }
 
 const axisValidator = v.union(

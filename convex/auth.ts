@@ -62,7 +62,6 @@ export const ensureOrgMember = async (
         left._creationTime - right._creationTime,
     );
 
-  let foundAllowed = false;
   let firstMembership = null;
 
   for (const user of sorted) {
@@ -84,7 +83,6 @@ export const ensureOrgMember = async (
     if (requiredRole) {
       const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
       if (roles.includes(membership.role)) {
-        foundAllowed = true;
         return membership;
       }
     } else {

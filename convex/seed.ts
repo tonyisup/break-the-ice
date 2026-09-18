@@ -1,5 +1,5 @@
 import { internalMutation, MutationCtx } from "./_generated/server";
-import { v } from "convex/values";
+
 import {
   defaultIdealPromptLength,
   defaultQualityRubric,
@@ -52,7 +52,6 @@ export const seedTakeover = internalMutation({
     });
   },
 });
-
 
 type Quality = {
   distinctness: number;

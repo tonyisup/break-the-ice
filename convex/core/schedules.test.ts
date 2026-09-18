@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import { api, internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+
 import schema from "../schema";
 import { convexFunctionModules } from "../../vitestConvexModules";
 import {

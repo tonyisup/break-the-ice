@@ -1,4 +1,5 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import * as React from "react"
 import { useQuery, useMutation, useAction } from "convex/react"
@@ -27,7 +28,7 @@ import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
@@ -49,7 +50,7 @@ export default function PruningPage() {
 		try {
 			await approvePruning({ pruningId: id })
 			toast.success("Question pruned successfully")
-		} catch (error) {
+		} catch {
 			toast.error("Failed to prune question")
 		} finally {
 			setProcessingIds(prev => {
@@ -65,7 +66,7 @@ export default function PruningPage() {
 			await updateQuestion({ id, text: editedText })
 			toast.success("Question updated")
 			setEditingQuestionId(null)
-		} catch (error) {
+		} catch {
 			toast.error("Failed to update question")
 		}
 	}
@@ -96,7 +97,7 @@ export default function PruningPage() {
 		try {
 			await rejectPruning({ pruningId: id })
 			toast.success("Question kept in rotation")
-		} catch (error) {
+		} catch {
 			toast.error("Failed to update status")
 		} finally {
 			setProcessingIds(prev => {
@@ -113,11 +114,13 @@ export default function PruningPage() {
 	const handleGatherNow = async () => {
 		setIsGathering(true)
 		try {
-			await toast.promise(triggerGathering({}), {
+			const gathering = triggerGathering({});
+			toast.promise(gathering, {
 				loading: "Searching for pruning targets...",
 				success: (data: { targetsFound: number }) => `Found ${data.targetsFound} new targets`,
 				error: "Failed to gather pruning targets"
 			})
+			await gathering;
 		} finally {
 			setIsGathering(false)
 		}
@@ -160,7 +163,7 @@ export default function PruningPage() {
 				</div>
 				<div className="flex items-center gap-3">
 					<Button
-						onClick={handleGatherNow}
+						onClick={handleAsync(handleGatherNow)}
 						disabled={isGathering}
 						variant="outline"
 						className="rounded-xl h-10 border-2 font-bold shadow-sm hover:shadow-md transition-all active:scale-95"
@@ -217,7 +220,7 @@ export default function PruningPage() {
 												className="min-h-[80px] text-base"
 											/>
 											<div className="flex flex-col gap-1">
-												<Button aria-label="Save" size="icon" className="size-8 bg-green-600 hover:bg-green-700" onClick={() => handleSaveEdit(target.questionId)}>
+												<Button aria-label="Save" size="icon" className="size-8 bg-green-600 hover:bg-green-700" onClick={handleAsync(() => handleSaveEdit(target.questionId))}>
 													<Save className="size-3.5" />
 												</Button>
 												<Button aria-label="Cancel" size="icon" variant="ghost" className="size-8" onClick={() => setEditingQuestionId(null)}>
@@ -248,7 +251,7 @@ export default function PruningPage() {
 													variant="ghost"
 													size="icon"
 													className="size-8 text-blue-500 hover:text-blue-600"
-													onClick={() => handleRemix(target.questionId)}
+													onClick={handleAsync(() => handleRemix(target.questionId))}
 													disabled={remixingIds.has(target.questionId)}
 												>
 													{remixingIds.has(target.questionId) ? (
@@ -320,7 +323,7 @@ export default function PruningPage() {
 								<Button
 									variant="outline"
 									className="flex-1 rounded-xl h-11 font-semibold border-2 hover:bg-background transition-all"
-									onClick={() => handleReject(target._id)}
+									onClick={handleAsync(() => handleReject(target._id))}
 									disabled={processingIds.has(target._id)}
 								>
 									{processingIds.has(target._id) ? (
@@ -333,7 +336,7 @@ export default function PruningPage() {
 								<Button
 									variant="destructive"
 									className="flex-1 rounded-xl h-11 font-semibold transition-all shadow-lg shadow-red-500/20"
-									onClick={() => handleApprove(target._id)}
+									onClick={handleAsync(() => handleApprove(target._id))}
 									disabled={processingIds.has(target._id)}
 								>
 									{processingIds.has(target._id) ? (

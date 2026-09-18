@@ -8,7 +8,9 @@
     "dev:frontend": "vite --open --port 5170",
     "dev:backend": "convex dev",
     "build": "vite build",
-    "lint": "tsc -p convex -noEmit --pretty false && tsc -p . -noEmit --pretty false && convex dev --once && vite build",
+    "lint": "eslint src convex api && npm run typecheck",
+    "typecheck": "tsc -p convex --noEmit --pretty false && tsc -p tsconfig.app.json --noEmit --pretty false && tsc -p tsconfig.node.json --noEmit --pretty false && tsc -p tsconfig.api.json --noEmit --pretty false",
+    "check": "npm run lint && vitest run && npm run build",
     "test": "vitest",
     "test:ui": "vitest --ui"
   },

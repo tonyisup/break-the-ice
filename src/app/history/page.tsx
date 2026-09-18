@@ -1,4 +1,4 @@
-import { useQuestionHistory, HistoryEntry } from "../../hooks/useQuestionHistory";
+import { useQuestionHistory } from "../../hooks/useQuestionHistory";
 import { useMemo, useState } from "react";
 import { Id } from "../../../convex/_generated/dataModel";
 import { toast } from "sonner";
@@ -8,7 +8,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Header } from "@/components/header";
 import { useStorageContext } from "@/hooks/useStorageContext";
 import { Link } from "react-router-dom";
-import { cn, isColorDark } from "@/lib/utils";
+
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { QuestionList } from "@/components/question-list/QuestionList";
 import { FilterControls } from "@/components/filter-controls/filter-controls";
@@ -16,12 +16,10 @@ import { useFilter } from "@/hooks/useFilter";
 
 import { SignInCTA } from "@/components/SignInCTA";
 import { useAuth } from "@clerk/clerk-react";
-import { MAX_ANON_HISTORY } from "@/hooks/useStorage";
 
 function HistoryPageContent() {
   const { isSignedIn } = useAuth();
-  const { history, removeQuestionHistoryEntry, clearHistoryEntries } = useQuestionHistory();
-  // ... (keep existing storage context destructuring)
+  const { history, clearHistoryEntries } = useQuestionHistory();
   const {
     likedQuestions,
     addLikedQuestion,
@@ -29,8 +27,6 @@ function HistoryPageContent() {
     hiddenQuestions,
     addHiddenQuestion,
     removeHiddenQuestion,
-    hiddenStyles,
-    hiddenTones,
     addHiddenStyle,
     addHiddenTone,
   } = useStorageContext();
@@ -40,33 +36,14 @@ function HistoryPageContent() {
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
   const styles = useQuery(api.core.styles.getStyles, {});
   const tones = useQuery(api.core.tones.getTones, {});
-  const { effectiveTheme } = useTheme();
+  useTheme();
 
   const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) || 100;
   const showLimitCTA = !isSignedIn && history.length >= MAX_ANON_HISTORY;
 
   const questions = useMemo(() => history.map(entry => entry.question), [history]);
-  // ... (keep existing useFilter)
   const filteredHistory = useFilter(history, searchText, selectedStyles, selectedTones);
 
-  // ... (keep existing color memoization)
-  const styleColors = useMemo(() => {
-    if (!styles) return {};
-    return styles.reduce((acc, style) => {
-      acc[style.id] = style.color;
-      return acc;
-    }, {} as { [key: string]: string });
-  }, [styles]);
-
-  const toneColors = useMemo(() => {
-    if (!tones) return {};
-    return tones.reduce((acc, tone) => {
-      acc[tone.id] = tone.color;
-      return acc;
-    }, {} as { [key: string]: string });
-  }, [tones]);
-
-  // ... (keep existing handlers)
   const toggleLike = async (questionId: Id<"questions">) => {
     const isLiked = likedQuestions.includes(questionId);
 
@@ -84,7 +61,7 @@ function HistoryPageContent() {
     }
   };
   const handleToggleLike = (questionId: Id<"questions">) => {
-    void toggleLike(questionId);
+    void toggleLike(questionId).catch(() => toast.error("Couldn't update favorites. Try again."));
   };
 
   const handleHideStyle = (styleId: Id<"styles">) => {
@@ -128,25 +105,16 @@ function HistoryPageContent() {
     toast.success("History cleared");
   };
 
-  const gradientLight = ["#667EEA", "#A064DE"];
-  const gradient = ["#3B2554", "#262D54"];
-  const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
-
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-      style={{
-        background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradient[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradient[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
-      }}
-    >
-      <Header
-        homeLinkSlot="history" />
+    <div className="app-shell overflow-x-clip">
+      <Header />
       <main className="p-4 pt-24">
         {history.length === 0 ? (
           <div className="flex flex-col items-center justify-center">
             <p className="text-center text-gray-500 dark:text-gray-400">No questions viewed yet.</p>
             <Link
-              to="/"
-              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "inline-block mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
+              to="/app"
+              className="inline-flex min-h-11 items-center rounded-lg bg-primary px-5 font-semibold text-primary-foreground"
             >
               Start Exploring
             </Link>
@@ -156,7 +124,6 @@ function HistoryPageContent() {
             {showLimitCTA && (
               <div className="mb-4">
                 <SignInCTA
-                  bgGradient={currentGradient}
                   title="History Limit Reached"
                   featureHighlight={{
                     pre: "You've used",
@@ -194,8 +161,6 @@ function HistoryPageContent() {
             />
             <QuestionList
               questions={filteredHistory}
-              styleColors={styleColors}
-              toneColors={toneColors}
               styles={styles || []}
               tones={tones || []}
               likedQuestions={likedQuestions}

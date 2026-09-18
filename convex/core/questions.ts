@@ -1,14 +1,6 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import {
-	mutation,
-	query,
-	QueryCtx,
-	action,
-	ActionCtx,
-	internalAction,
-	internalQuery,
-} from "../_generated/server";
+import { mutation, query, QueryCtx, action, ActionCtx, internalQuery } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
 import {
@@ -331,7 +323,6 @@ async function getNearestQuestionsByEmbeddingInternal(
 	return filtered.slice(0, requestedCount);
 }
 
-
 export const getNextQuestions = query({
 	args: {
 		count: v.float64(),
@@ -431,20 +422,11 @@ export const recordAnalytics = mutation({
 			const userQuestion = await ctx.db
 				.query("userQuestions")
 				.withIndex("by_userIdAndQuestionId", (q) =>
-					q.eq("userId", userId!).eq("questionId", questionId)
+					q.eq("userId", userId).eq("questionId", questionId)
 				)
 				.first();
 
 			if (userQuestion) {
-				let newStatus = userQuestion.status;
-				if (event === "liked") {
-					newStatus = "liked";
-				} else if (event === "hidden") {
-					newStatus = "hidden";
-				} else if (userQuestion.status === "unseen") {
-					newStatus = "seen";
-				}
-
 				await ctx.db.patch(userQuestion._id, {
 					viewDuration: userQuestion.viewDuration ? userQuestion.viewDuration + viewDuration : viewDuration,
 					seenCount: userQuestion.seenCount ? userQuestion.seenCount + 1 : 1,
@@ -991,7 +973,7 @@ export const remixQuestionForUser = action({
 		if (!identity.email) {
 			throw new Error("You must have an email to remix a question.");
 		}
-		
+
 		const user = await ctx.runQuery(internal.internal.users.getUserByEmail, {
 			email: identity.email,
 		});

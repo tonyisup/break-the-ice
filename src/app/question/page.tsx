@@ -1,23 +1,23 @@
+import { handleAsync, reportAsyncError } from "@/lib/async";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Id, Doc } from "../../../convex/_generated/dataModel";
+import { Id } from "../../../convex/_generated/dataModel";
 import { useTheme } from "../../hooks/useTheme";
 import { useStorageContext } from "../../hooks/useStorageContext";
 import { useQuestionHistory } from "../../hooks/useQuestionHistory";
 import { Header } from "../../components/header";
 import { useEffect } from "react";
-import { QuestionDisplay } from "../../components/question-display";
 import { toast } from "sonner";
-import { cn } from "../../lib/utils";
+
 import { ModernQuestionCard } from "@/components/modern-question-card";
 
 export default function QuestionPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { theme, setTheme } = useTheme();
+  useTheme();
   const { addQuestionHistoryEntry } = useQuestionHistory();
-  const { likedQuestions, addLikedQuestion, removeLikedQuestion, setLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
+  const { likedQuestions, addLikedQuestion, removeLikedQuestion, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
 
   const question = useQuery(api.core.questions.getQuestionById, id ? { id } : "skip");
@@ -29,10 +29,6 @@ export default function QuestionPage() {
       addQuestionHistoryEntry(question);
     }
   }, [question, addQuestionHistoryEntry]);
-
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
 
   const toggleLike = async (questionId: Id<"questions">) => {
     const isLiked = likedQuestions.includes(questionId);
@@ -76,23 +72,15 @@ export default function QuestionPage() {
 
   const handleHideStyle = (styleId: Id<"styles">) => {
     addHiddenStyle(styleId);
-    navigate("/app");
+    void Promise.resolve(navigate("/app")).catch(reportAsyncError);
   }
   const handleHideTone = (toneId: Id<"tones">) => {
     addHiddenTone(toneId);
-    navigate("/app");
+    void Promise.resolve(navigate("/app")).catch(reportAsyncError);
   }
 
   const isFavorite = question ? likedQuestions.includes(question._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
-  const gradientTarget = theme === "dark" ? "#000" : "#fff";
-
-  const isColorDark = (color: string) => {
-    if (!color) return false;
-    const [r, g, b] = color.match(/\w\w/g)!.map((hex) => parseInt(hex, 16));
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    return brightness < 128;
-  };
 
   const isLoadingQuestion = question === undefined;
   const isLoadingStyle = question?.style && style === undefined;
@@ -115,37 +103,31 @@ export default function QuestionPage() {
   if (question === null) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div>Question not found</div>
+        <div className="space-y-4 text-center"><h1 className="text-2xl font-bold">Question not found</h1><Link to="/app" className="underline">Browse questions</Link></div>
       </div>
     );
   }
 
   return (
-    <div
-      className="min-h-screen transition-colors overflow-hidden"
-      style={{
-        background: `linear-gradient(135deg, ${gradient[0]}, ${gradientTarget}, ${gradient[1]})`
-      }}
-    >
+    <div className="app-shell overflow-x-clip">
       <Header />
       <main className="flex-1 flex flex-col pt-20">
         <ModernQuestionCard
-                isGenerating={false}  
+                isGenerating={false}
                 question={question}
                 isFavorite={isFavorite}
                 isHidden={question ? hiddenQuestions.includes(question._id) : false}
-                gradient={gradient}
                 style={style}
                 tone={tone}
-                onToggleFavorite={() => question && toggleLike(question._id)}
-                onToggleHidden={() => question && toggleHide(question._id)}
+                onToggleFavorite={handleAsync(() => question && toggleLike(question._id))}
+                onToggleHidden={handleAsync(() => question && toggleHide(question._id))}
                 onHideStyle={handleHideStyle}
                 onHideTone={handleHideTone}
               />
         <div className="flex justify-center p-4">
           <Link
-            to="/"
-            className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
+            to="/app"
+            className="inline-flex min-h-11 items-center rounded-lg bg-primary px-5 font-semibold text-primary-foreground"
           >
             Get more questions
           </Link>

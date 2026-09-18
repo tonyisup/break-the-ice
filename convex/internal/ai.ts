@@ -45,7 +45,7 @@ export const populateMissingEmbeddings = internalAction({
 export const populateMissingStyleEmbeddings = internalAction({
 	args: {},
 	returns: v.null(),
-	handler: async (ctx, args) => {
+	handler: async (ctx, _args) => {
 		const styles = await ctx.runQuery(internal.internal.styles.getStylesWithMissingEmbeddings);
 		let stylesProcessed = 0;
 		const stylesMissingEmbeddings = styles.length;
@@ -74,7 +74,7 @@ export const populateMissingStyleEmbeddings = internalAction({
 export const populateMissingToneEmbeddings = internalAction({
 	args: {},
 	returns: v.null(),
-	handler: async (ctx, args) => {
+	handler: async (ctx, _args) => {
 		const tones = await ctx.runQuery(internal.internal.tones.getTonesWithMissingEmbeddings);
 		let tonesProcessed = 0;
 		const tonesMissingEmbeddings = tones.length;
@@ -258,8 +258,8 @@ export const generateNightlyQuestionPool = internalAction({
 			);
 
 			// Flatten and de-duplicate by ID to ensure we generate variety across all targeted users
-			styles = Array.from(new Map((allUserStyles.flat() as Doc<"styles">[]).map((s: Doc<"styles">) => [s._id, s])).values());
-			tones = Array.from(new Map((allUserTones.flat() as Doc<"tones">[]).map((t: Doc<"tones">) => [t._id, t])).values());
+			styles = Array.from(new Map((allUserStyles.flat()).map((s: Doc<"styles">) => [s._id, s])).values());
+			tones = Array.from(new Map((allUserTones.flat()).map((t: Doc<"tones">) => [t._id, t])).values());
 		}
 		const topic = await ctx.runQuery(internal.internal.topics.getTopCurrentTopic, {});
 
@@ -363,7 +363,6 @@ export const remixQuestion = internalAction({
 	},
 });
 
-
 export const generateAIQuestionForUser = internalAction({
 	args: {
 		userId: v.id("users"),
@@ -424,7 +423,6 @@ export const generateAIQuestionForUser = internalAction({
 				});
 				usageIncremented = true;
 			}
-						
 
 			const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId: user._id });
 			if (userEmb && userEmb.length > 0) {

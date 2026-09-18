@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStorageContext } from './useStorageContext';
 
-type Theme = 'light' | 'dark' | 'system';
-
 export function useTheme() {
   const { theme, setTheme } = useStorageContext();
   const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>('light');

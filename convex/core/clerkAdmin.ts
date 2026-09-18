@@ -42,7 +42,7 @@ async function fetchOrgSubscriptions(clerkOrganizationId: string): Promise<any[]
   try {
     const subData = (await clerkFetch(
       `/organizations/${encodeURIComponent(clerkOrganizationId)}/billing/subscription`
-    )) as any;
+    ));
     if (subData?.id && subData?.status) {
       return [subData];
     }
@@ -54,7 +54,7 @@ async function fetchOrgSubscriptions(clerkOrganizationId: string): Promise<any[]
   try {
     const orgData = (await clerkFetch(
       `/organizations/${encodeURIComponent(clerkOrganizationId)}`
-    )) as any;
+    ));
     if (orgData?.subscription) return [orgData.subscription];
     if (orgData?.subscriptions) return orgData.subscriptions;
     if (orgData?.subscription_items) {
@@ -234,7 +234,7 @@ export const forceSyncOrgSubscription = action({
       try {
         const orgData = (await clerkFetch(
           `/organizations/${encodeURIComponent(args.clerkOrganizationId)}`
-        )) as any;
+        ));
         orgName = orgData?.name ?? "Team";
       } catch {
         orgName = "Team";
@@ -387,7 +387,7 @@ export const adminGetOrgSubscription = action({
     try {
       rawSubData = (await clerkFetch(
         `/organizations/${encodeURIComponent(args.clerkOrganizationId)}/billing/subscription`
-      )) as any;
+      ));
       // Response is the subscription object itself (not wrapped)
       if (rawSubData?.id && rawSubData?.status) {
         subs = [rawSubData];

@@ -6,14 +6,6 @@ import { internal } from "../_generated/api";
 
 const FIX_EXISTING_QUESTIONS_BATCH_SIZE = 100;
 
-async function getOldestQuestion(ctx: MutationCtx) {
-	return await ctx.db
-		.query("questions")
-		.withIndex("by_creation_time")
-		.order("asc")
-		.first();
-}
-
 export const getQuestions = query({
 	args: {},
 	returns: v.array(v.any()),
@@ -91,7 +83,7 @@ export const generateUploadUrl = mutation({
 		}
 		const user = await ctx.db
 			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email!))
+			.withIndex("email", (q) => q.eq("email", identity.email))
 			.unique();
 		if (!user?.isAdmin) {
 			throw new Error("Not an admin");
@@ -335,7 +327,6 @@ export const deleteQuestion = mutation({
 		return null;
 	},
 });
-
 
 // Function to fix existing questions by adding lastShownAt field
 export const fixExistingQuestions = mutation({

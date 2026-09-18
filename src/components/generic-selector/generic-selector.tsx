@@ -13,7 +13,7 @@ interface GenericSelectorProps {
   onClickItem: (itemId: string) => void;
   onSelectItem: (itemId: string) => void;
   randomizeLabel?: string;
-  onRandomizeItem?: (itemId: string | null) => void;  
+  onRandomizeItem?: (itemId: string | null) => void;
   highlightedItem: SelectorItem | null;
   setHighlightedItem: (item: SelectorItem | null) => void;
 }
@@ -27,7 +27,7 @@ export interface GenericSelectorRef {
 }
 
 export const GenericSelector = forwardRef<GenericSelectorRef, GenericSelectorProps>(
-  ({ items, selectedItem, onClickItem, onSelectItem, randomizeLabel = "Randomize", onRandomizeItem, highlightedItem, setHighlightedItem }, ref) => {
+  ({ items, selectedItem, onClickItem, onSelectItem, onRandomizeItem, highlightedItem, setHighlightedItem }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const buttonRefs = useRef<{ [key: string]: HTMLElement | null }>({});
     const [canScrollLeft, setCanScrollLeft] = useState(false);

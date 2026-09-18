@@ -3,8 +3,9 @@ import { Id } from "../_generated/dataModel";
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 import { getEffectivePlanForUser } from "../auth";
+import { AI_CYCLE_DAYS, getPlanAiLimit } from "./planLimits";
 
-const CYCLE_LENGTH_MS = 30 * 24 * 60 * 60 * 1000;
+const CYCLE_LENGTH_MS = AI_CYCLE_DAYS * 24 * 60 * 60 * 1000;
 
 type AiUsageSnapshot = {
   count: number;
@@ -100,10 +101,7 @@ export async function checkAndIncrementAiUsageForWorkspace(
   }
 
   const effectivePlan = await getEffectivePlanForUser(ctx, userId, organizationId);
-  const limit =
-    effectivePlan.planTier === "team"
-      ? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
-      : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
+  const limit = getPlanAiLimit(effectivePlan.planTier === "team" ? "team" : "free");
 
   const remaining = limit - count;
   if (remaining <= 0) {

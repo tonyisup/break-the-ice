@@ -1,3 +1,4 @@
+import { handleAsync } from "@/lib/async";
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useConvexAuth } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -28,7 +29,6 @@ export default function FeedbackButton() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isOpen, text]);
-
 
   if (!isAuthenticated) return null;
 
@@ -82,7 +82,7 @@ export default function FeedbackButton() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <form onSubmit={handleAsync(handleSubmit)} className="flex flex-col gap-3">
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}

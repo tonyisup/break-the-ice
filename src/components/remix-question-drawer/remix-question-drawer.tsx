@@ -1,3 +1,4 @@
+import { handleAsync } from "@/lib/async";
 import { useState, useMemo, useRef } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -17,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
@@ -36,7 +37,6 @@ interface RemixQuestionDrawerProps {
 
 const CLOSE_ANIMATION_DURATION_MS = 500;
 
-
 export function RemixQuestionDrawer({
 	question,
 	styleId,
@@ -51,7 +51,7 @@ export function RemixQuestionDrawer({
 	const [isPublic, setIsPublic] = useState(false);
 	const [tagInput, setTagInput] = useState("");
 	const [tags, setTags] = useState<string[]>([]);
-	const [saveFailed, setSaveFailed] = useState(false);
+
 	const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
 	const { activeWorkspace, isEntitlementsLoading, teamWorkspaceId } = useTeamWorkspace();
 
@@ -67,8 +67,8 @@ export function RemixQuestionDrawer({
 
 	const filteredSuggestions = useMemo(() => {
 		if (!tagInput.trim()) return [];
-		return allAvailableTags?.filter(t => 
-			t.name.toLowerCase().includes(tagInput.toLowerCase()) && 
+		return allAvailableTags?.filter(t =>
+			t.name.toLowerCase().includes(tagInput.toLowerCase()) &&
 			!tags.includes(t.name)
 		).slice(0, 10) || [];
 	}, [allAvailableTags, tagInput, tags]);
@@ -101,10 +101,10 @@ export function RemixQuestionDrawer({
 		const styleChanged = selectedStyleId !== styleId;
 		const toneChanged = selectedToneId !== toneId;
 		const initialTags = question?.tags || [];
-		const tagsChanged = tags.length !== initialTags.length || 
+		const tagsChanged = tags.length !== initialTags.length ||
 						  !tags.every(t => initialTags.includes(t)) ||
 						  !initialTags.every(t => tags.includes(t));
-		
+
 		return remixState === "remixed" || styleChanged || toneChanged || tagsChanged;
 	}, [remixState, selectedStyleId, styleId, selectedToneId, toneId, tags, question?.tags]);
 
@@ -121,7 +121,7 @@ export function RemixQuestionDrawer({
 			}
 			toast.warning("Please save or discard your changes.", {
 				id: "remix-unsaved-changes",
-				description: remixState === "remixed" 
+				description: remixState === "remixed"
 					? "A remixed draft has been created."
 					: "You have adjusted filters or tags."
 			});
@@ -157,7 +157,7 @@ export function RemixQuestionDrawer({
 		setTags([]);
 		setSelectedStyleId(styleId);
 		setSelectedToneId(toneId);
-		setSaveFailed(false);
+
 		setFocusedSuggestionIndex(-1);
 	};
 
@@ -168,20 +168,20 @@ export function RemixQuestionDrawer({
 			return;
 		}
 		setRemixState("remixing");
-		setSaveFailed(false);
+
 		try {
-			const text = await remixQuestion({ 
+			const text = await remixQuestion({
 				questionId: question._id,
 				styleId: selectedStyleId,
 				toneId: selectedToneId,
 				topicId: question.topicId,
 			});
-			
+
 			// If user cancelled or closed during the await, don't update state
 			// We check remixState indirectly via its current closure or just trust the ref sync if we had one.
-			// However, since handleRemix is recreated on every render where questin/ids change, 
+			// However, since handleRemix is recreated on every render where questin/ids change,
 			// it's safer to use the state setter with a check or a ref.
-			
+
 			setRemixedText(text);
 
 			let currentId = newQuestionId;
@@ -218,7 +218,7 @@ export function RemixQuestionDrawer({
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			toast.error(`Remix failed: ${message}`);
-			setSaveFailed(true);
+
 			setRemixState(current => {
 				if (current !== "remixing") return current;
 				return remixedText ? "remixed" : "idle";
@@ -239,11 +239,11 @@ export function RemixQuestionDrawer({
 				tags,
 			});
 			if (updatedQuestion && onRemixed) {
-				onRemixed(question, updatedQuestion as Doc<"questions">);
+				onRemixed(question, updatedQuestion);
 			}
 			toast.success(isPublic ? "Question submitted for review!" : "Remixed question saved to your stash!");
 			forceClose();
-		} catch (error) {
+		} catch {
 			toast.error("Failed to save remixed question.");
 		}
 	};
@@ -262,7 +262,7 @@ export function RemixQuestionDrawer({
 	const handleAddTag = (tagName?: string) => {
 		const tagToAdd = (tagName || tagInput).trim().toLowerCase();
 		if (!tagToAdd) return;
-		
+
 		const tagExists = allAvailableTags?.some(t => t.name.toLowerCase() === tagToAdd);
 		if (!tagExists) {
 			toast.error(`"${tagToAdd}" is not a valid tag. Please select from the list.`);
@@ -284,8 +284,8 @@ export function RemixQuestionDrawer({
 	const questionText = question.text ?? question.customText ?? "No question text";
 
 	return (
-		<Drawer 
-			open={isOpen} 
+		<Drawer
+			open={isOpen}
 			onOpenChange={handleOpenChange}
 			onClose={() => {
 				if (!isOpen) {
@@ -303,18 +303,18 @@ export function RemixQuestionDrawer({
 			}}>
 				<DrawerHeader>
 					<DrawerTitle className="flex items-center gap-2 justify-between">
-						<span className="flex items-center gap-2">							
+						<span className="flex items-center gap-2">
 							Remix Question
 						</span>
 						{currentUser && (
 							<span className={`flex items-center gap-2 text-xs font-normal ${currentUser.isAiLimitReached ? "text-red-500" : "text-muted-foreground"}`}>
-								{currentUser.aiUsage?.count ?? 0}/{currentUser.aiLimit} 
+								{currentUser.aiUsage?.count ?? 0}/{currentUser.aiLimit}
 								<Sparkles className={cn(
-									`size-4`, 
+									`size-4`,
 									currentUser.aiLimit - (currentUser.aiUsage?.count ?? 0) <= 3 ? "text-yellow-500" : "",
 									currentUser.isAiLimitReached ? "text-red-500" : ""
-								)} /> 
-								{currentUser.isAiLimitReached ? <Badge 
+								)} />
+								{currentUser.isAiLimitReached ? <Badge
 																			onClick={() => {
 																				window.location.href = "/pricing?source=remix_limit";
 																			}}
@@ -336,7 +336,7 @@ export function RemixQuestionDrawer({
 					<div className="rounded-lg border bg-muted/50 p-3">
 						<p className="text-xs font-medium text-muted-foreground mb-1">Original</p>
 						<p className="text-sm font-medium">{questionText}</p>
-						
+
 						{questionStyle && (
 							<Badge
 								variant="outline"
@@ -492,11 +492,11 @@ export function RemixQuestionDrawer({
 											handleAddTag();
 										}
 									} else if (e.key === "ArrowRight") {
-										setFocusedSuggestionIndex(prev => 
+										setFocusedSuggestionIndex(prev =>
 											prev < filteredSuggestions.length - 1 ? prev + 1 : prev
 										);
 									} else if (e.key === "ArrowLeft") {
-										setFocusedSuggestionIndex(prev => 
+										setFocusedSuggestionIndex(prev =>
 											prev > 0 ? prev - 1 : prev
 										);
 									} else if (e.key === "Backspace" && !tagInput && tags.length > 0) {
@@ -510,7 +510,7 @@ export function RemixQuestionDrawer({
 							/>
 						</div>
 						{tagInput && filteredSuggestions.length > 0 && (
-							<div 
+							<div
 								className="flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200 mt-2"
 								role="listbox"
 								aria-label="Tag suggestions"
@@ -567,8 +567,8 @@ export function RemixQuestionDrawer({
 				<DrawerFooter className="gap-3 pt-4">
 					{remixState === "idle" && (
 						<>
-							<Button 
-								onClick={handleRemix} 
+							<Button
+								onClick={handleAsync(handleRemix)}
 								className="gap-2"
 								disabled={currentUser?.isAiLimitReached || isEntitlementsLoading}
 							>
@@ -595,20 +595,20 @@ export function RemixQuestionDrawer({
 
 					{remixState === "remixed" && (
 						<>
-							<Button onClick={handleSave} className="gap-2">
+							<Button onClick={handleAsync(handleSave)} className="gap-2">
 								<Save className="size-4" />
 								Save
 							</Button>
-							<Button 
-								variant="outline" 
-								onClick={handleRemix} 
+							<Button
+								variant="outline"
+								onClick={handleAsync(handleRemix)}
 								className="gap-2"
 								disabled={currentUser?.isAiLimitReached}
 							>
 								<RotateCcw className="size-4" />
 								Remix Again
 							</Button>
-							<Button variant="ghost" onClick={handleDiscard} className="gap-2 text-destructive hover:text-destructive">
+							<Button variant="ghost" onClick={handleAsync(handleDiscard)} className="gap-2 text-destructive hover:text-destructive">
 								<Trash2 className="size-4" />
 								Discard
 							</Button>

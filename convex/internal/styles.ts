@@ -71,7 +71,7 @@ export const updateQuestionsWithMissingStyleIds = internalMutation({
       if (!question.styleId && question.style) {
         const style = await ctx.db
           .query("styles")
-          .withIndex("by_slug", (q) => q.eq("slug", question.style!))
+          .withIndex("by_slug", (q) => q.eq("slug", question.style))
           .first();
 
         if (style) {

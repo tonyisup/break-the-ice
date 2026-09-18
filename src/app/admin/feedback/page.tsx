@@ -1,21 +1,11 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import * as React from "react"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
-import { Doc, Id } from "../../../../convex/_generated/dataModel"
-import {
-	CheckCircle2,
-	Clock,
-	Archive,
-	MoreHorizontal,
-	UserCircle,
-	ExternalLink,
-	MessageSquare,
-	Search,
-	Filter,
-	Check
-} from "lucide-react"
+import { Id } from "../../../../convex/_generated/dataModel";
+import { Clock, Archive, MoreHorizontal, UserCircle, ExternalLink, MessageSquare, Search, Filter, Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,7 +37,7 @@ export default function FeedbackPage() {
 		try {
 			await updateStatus({ id, status })
 			toast.success(`Feedback marked as ${status}`)
-		} catch (error) {
+		} catch {
 			toast.error("Failed to update status")
 		}
 	}
@@ -127,13 +117,13 @@ export default function FeedbackPage() {
 										</Button>
 									</DropdownMenuTrigger>
 									<DropdownMenuContent align="end">
-										<DropdownMenuItem className="gap-2" onClick={() => handleStatusUpdate(item._id, "read")}>
+										<DropdownMenuItem className="gap-2" onClick={handleAsync(() => handleStatusUpdate(item._id, "read"))}>
 											<Check className="size-3.5" /> Mark Read
 										</DropdownMenuItem>
-										<DropdownMenuItem className="gap-2" onClick={() => handleStatusUpdate(item._id, "archived")}>
+										<DropdownMenuItem className="gap-2" onClick={handleAsync(() => handleStatusUpdate(item._id, "archived"))}>
 											<Archive className="size-3.5" /> Archive
 										</DropdownMenuItem>
-										<DropdownMenuItem className="gap-2" onClick={() => handleStatusUpdate(item._id, "new")}>
+										<DropdownMenuItem className="gap-2" onClick={handleAsync(() => handleStatusUpdate(item._id, "new"))}>
 											<Clock className="size-3.5" /> Mark New
 										</DropdownMenuItem>
 									</DropdownMenuContent>

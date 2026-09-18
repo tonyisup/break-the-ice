@@ -1,4 +1,5 @@
 "use client";
+import { handleAsync } from "@/lib/async";
 
 import * as React from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
@@ -196,7 +197,7 @@ export default function NewsletterPage() {
           </p>
         </div>
         <Button
-          onClick={handleTriggerNewsletter}
+          onClick={handleAsync(handleTriggerNewsletter)}
           disabled={isTriggering || stats.subscribedCount === 0}
           className="gap-2"
           title={
@@ -375,8 +376,8 @@ export default function NewsletterPage() {
                         <Switch
                           checked={isSubscribed}
                           disabled={updatingUserId === user._id || !user.email}
-                          onCheckedChange={(checked) =>
-                            handleToggleSubscription(user, checked)
+                          onCheckedChange={handleAsync((checked) =>
+                            handleToggleSubscription(user, checked))
                           }
                         />
                       </td>

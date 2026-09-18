@@ -1,4 +1,5 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import * as React from "react"
 import { useQuery, useAction, useMutation } from "convex/react"
@@ -6,16 +7,7 @@ import { api } from "../../../../convex/_generated/api"
 import { Id } from "../../../../convex/_generated/dataModel"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
-import {
-    Sparkles,
-    Loader2,
-    Save,
-    RefreshCw,
-    Plus,
-    ChevronRight,
-    Check,
-    X
-} from "lucide-react"
+import { Sparkles, Loader2, RefreshCw, Plus, ChevronRight, Check, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -369,8 +361,8 @@ export default function GeneratorPage() {
                                     <div className="flex items-center justify-between mb-4">
                                         <TabsList className="bg-muted/50 w-full justify-start overflow-x-auto h-auto p-1 gap-1">
                                             {generatedQuestions.map((_, i) => (
-                                                <TabsTrigger 
-                                                    key={i} 
+                                                <TabsTrigger
+                                                    key={i}
                                                     value={i.toString()}
                                                     className="px-3 py-1 h-8 min-w-[32px]"
                                                 >
@@ -378,9 +370,9 @@ export default function GeneratorPage() {
                                                 </TabsTrigger>
                                             ))}
                                         </TabsList>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
                                             className="ml-2 h-8 w-8 text-muted-foreground hover:text-destructive"
                                             onClick={(e) => {
                                                 e.stopPropagation()
@@ -395,9 +387,9 @@ export default function GeneratorPage() {
                                     </div>
 
                                     {generatedQuestions.map((q, i) => (
-                                        <TabsContent 
-                                            key={i} 
-                                            value={i.toString()} 
+                                        <TabsContent
+                                            key={i}
+                                            value={i.toString()}
                                             className="flex-1 mt-0 flex flex-col justify-between space-y-6 animate-in fade-in zoom-in duration-300"
                                         >
                                             <div className="space-y-4">
@@ -415,7 +407,7 @@ export default function GeneratorPage() {
                                             <div className="grid grid-cols-2 gap-3 pt-6 border-t">
                                                 <Button
                                                     variant="outline"
-                                                    onClick={handleGenerate}
+                                                    onClick={handleAsync(handleGenerate)}
                                                     disabled={isGenerating}
                                                     className="w-full"
                                                 >
@@ -423,7 +415,7 @@ export default function GeneratorPage() {
                                                     Generate Another
                                                 </Button>
                                                 <Button
-                                                    onClick={handleAccept}
+                                                    onClick={handleAsync(handleAccept)}
                                                     disabled={isSaving}
                                                     className="w-full bg-green-600 hover:bg-green-700"
                                                 >
@@ -444,7 +436,7 @@ export default function GeneratorPage() {
                                         <p className="text-sm">{selectedStyleId && selectedToneId ? "Generate a preview, then accept it to save." : "Both fields are required before a preview can be generated."}</p>
                                     </div>
                                     <Button
-                                        onClick={handleGenerate}
+                                        onClick={handleAsync(handleGenerate)}
                                         disabled={isGenerating || !selectedStyleId || !selectedToneId}
                                         className="mt-4 h-11 w-full"
                                     >

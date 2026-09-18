@@ -524,7 +524,7 @@ export const assignPoolQuestionsToUsers = internalAction({
 				const hiddenStyleIds = hiddenStylesByUser.get(user._id.toString()) ?? new Set();
 				const hiddenToneIds = hiddenTonesByUser.get(user._id.toString()) ?? new Set();
 
-				let userQuestions = poolQuestions.filter(q => {
+				const userQuestions = poolQuestions.filter(q => {
 					if (q.styleId && hiddenStyleIds.has(q.styleId.toString())) return false;
 					if (q.toneId && hiddenToneIds.has(q.toneId.toString())) return false;
 					return true;
@@ -542,8 +542,8 @@ export const assignPoolQuestionsToUsers = internalAction({
 						const embA = embMap.get(a._id);
 						const embB = embMap.get(b._id);
 						if (!embA || !embB) return 0;
-						const simA = cosineSimilarity(userEmb as number[], embA as number[]);
-						const simB = cosineSimilarity(userEmb as number[], embB as number[]);
+						const simA = cosineSimilarity(userEmb, embA);
+						const simB = cosineSimilarity(userEmb, embB);
 						return simB - simA;
 					});
 				} else {
@@ -1010,7 +1010,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			if (anchor && styleSlug) {
 				const versions = await ctx.db
 					.query("styles")
-					.withIndex("by_slug", (q) => q.eq("slug", styleSlug!))
+					.withIndex("by_slug", (q) => q.eq("slug", styleSlug))
 					.collect();
 				for (const version of versions) {
 					if (sameOrganization(version.organizationId, anchor.organizationId)) {
@@ -1025,7 +1025,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			if (anchor && toneSlug) {
 				const versions = await ctx.db
 					.query("tones")
-					.withIndex("by_slug", (q) => q.eq("slug", toneSlug!))
+					.withIndex("by_slug", (q) => q.eq("slug", toneSlug))
 					.collect();
 				for (const version of versions) {
 					if (sameOrganization(version.organizationId, anchor.organizationId)) {
@@ -1040,7 +1040,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			if (anchor && topicSlug) {
 				const versions = await ctx.db
 					.query("topics")
-					.withIndex("by_slug", (q) => q.eq("slug", topicSlug!))
+					.withIndex("by_slug", (q) => q.eq("slug", topicSlug))
 					.collect();
 				for (const version of versions) {
 					if (sameOrganization(version.organizationId, anchor.organizationId)) {
@@ -1254,7 +1254,6 @@ export const getSentQuestionsForUser = internalQuery({
 	},
 });
 
-
 export const getQuestionForNewsletter = internalQuery({
 	args: {
 		userId: v.id("users"),
@@ -1315,13 +1314,12 @@ export const getQuestionForNewsletter = internalQuery({
 	},
 });
 
-
 export const markUserQuestionAsSent = internalMutation({
 	args: {
 		userId: v.id("users"),
 		questionId: v.id("questions"),
 	},
-	handler: async (ctx, args) => {	
+	handler: async (ctx, args) => {
 		const userQuestion = await ctx.db.query("userQuestions").filter((q) => q.eq(q.field("userId"), args.userId)).filter((q) => q.eq(q.field("questionId"), args.questionId)).first();
 		if (userQuestion) {
 			await ctx.db.patch(userQuestion._id, {
@@ -1329,12 +1327,12 @@ export const markUserQuestionAsSent = internalMutation({
 				updatedAt: Date.now(),
 			});
 			return;
-		}	
+		}
 
 		await ctx.db.insert("userQuestions", {
 			userId: args.userId,
 			questionId: args.questionId,
-			status: "sent",	
+			status: "sent",
 			viewDuration: 0,
 			seenCount: 0,
 			updatedAt: Date.now(),

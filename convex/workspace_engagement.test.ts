@@ -13,7 +13,7 @@ test("engagement settings are scoped per workspace", async () => {
 	vi.useFakeTimers();
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
 
-  const { userId, orgId, questionId } = await t.run(async (ctx) => {
+  const { orgId, questionId } = await t.run(async (ctx) => {
     const userId = await ctx.db.insert("users", {
       email: "workspace@test.com",
       tokenIdentifier: "workspace|test",

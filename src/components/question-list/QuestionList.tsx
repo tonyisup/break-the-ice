@@ -1,13 +1,11 @@
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useState } from "react";
 import { CollapsibleSection } from "../collapsible-section/CollapsibleSection";
 
 interface QuestionListProps {
   questions: Doc<"questions">[] | HistoryEntryWrapper[];
-  styleColors: { [key: string]: string };
-  toneColors: { [key: string]: string };
   styles: Doc<"styles">[];
   tones: Doc<"tones">[];
   likedQuestions: Id<"questions">[];
@@ -30,8 +28,6 @@ interface HistoryEntryWrapper {
 
 export function QuestionList({
   questions,
-  styleColors,
-  toneColors,
   styles,
   tones,
   likedQuestions,
@@ -46,6 +42,7 @@ export function QuestionList({
   selectedStyles,
   selectedTones,
 }: QuestionListProps) {
+  const reduceMotion = useReducedMotion();
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   const toggleSection = (date: string) => {
@@ -56,21 +53,17 @@ export function QuestionList({
   };
 
   const renderQuestion = (question: Doc<"questions">) => {
-    const styleColor =
-      (question.style && styleColors[question.style]) || "#667EEA";
-    const toneColor = (question.tone && toneColors[question.tone]) || "#764BA2";
-    const gradient = [styleColor, toneColor];
 
-    const style = styles.find((s) => s.id === question.style);
-    const tone = tones.find((t) => t.id === question.tone);
+    const style = styles.find((s) => s._id === question.styleId || s.id === question.style);
+    const tone = tones.find((t) => t._id === question.toneId || t.id === question.tone);
 
     return (
       <motion.div
         key={question._id}
-        layout
-        initial={{ opacity: 0, scale: 0.8 }}
+        layout={!reduceMotion}
+        initial={reduceMotion ? false : { opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
+        exit={reduceMotion ? undefined : { opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
         onDragEnd={(event, info) => {
@@ -89,7 +82,6 @@ export function QuestionList({
           isHidden={hiddenQuestions.includes(question._id)}
           onToggleFavorite={() => onToggleLike(question._id)}
           onToggleHidden={() => onRemoveItem(question._id)}
-          gradient={gradient}
           style={style}
           tone={tone}
           onHideStyle={onHideStyle}

@@ -1,6 +1,7 @@
 "use client";
+import { handleAsync } from "@/lib/async";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAction, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -26,16 +27,7 @@ const UnsubscribePage = () => {
 	const [status, setStatus] = useState<"loading" | "subscribed" | "unsubscribed" | "unset" | "error" | "success_subscribed" | "verification_sent">("loading");
 	const [isProcessing, setIsProcessing] = useState(false);
 
-	useEffect(() => {
-		const token = searchParams.get("token");
-		if (token || (isLoaded && isSignedIn && currentUser?.email)) {
-			void checkStatus(token ?? undefined);
-		} else if (isLoaded) {
-			setStatus("error");
-		}
-	}, [searchParams, isLoaded, isSignedIn, currentUser]);
-
-	const checkStatus = async (token?: string) => {
+	const checkStatus = useCallback(async (token?: string) => {
 		setStatus("loading");
 		try {
 			const result = await getStatusAction({ token });
@@ -54,7 +46,16 @@ const UnsubscribePage = () => {
 			console.error(error);
 			setStatus("error");
 		}
-	};
+	}, [getStatusAction]);
+
+	useEffect(() => {
+		const token = searchParams.get("token");
+		if (token || (isLoaded && isSignedIn && currentUser?.email)) {
+			void checkStatus(token ?? undefined);
+		} else if (isLoaded) {
+			setStatus("error");
+		}
+	}, [searchParams, isLoaded, isSignedIn, currentUser, checkStatus]);
 
 	const handleUnsubscribe = async () => {
 		setIsProcessing(true);
@@ -141,7 +142,7 @@ const UnsubscribePage = () => {
 								<span className="font-bold text-blue-400">{email}</span>
 							</p>
 							<button
-								onClick={handleUnsubscribe}
+								onClick={handleAsync(handleUnsubscribe)}
 								disabled={isProcessing}
 								className="w-full bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2"
 							>
@@ -161,7 +162,7 @@ const UnsubscribePage = () => {
 							</p>
 
 							<button
-								onClick={() => handleSubscribe()}
+								onClick={handleAsync(() => handleSubscribe())}
 								disabled={isProcessing}
 								className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-full py-3 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2 mb-4"
 							>
@@ -213,8 +214,6 @@ const UnsubscribePage = () => {
 						</div>
 					)}
 
-
-
 					{(status === "error" || status === "unset") && (
 						<div className="space-y-6 py-4">
 							{(status === "error" && <div className="flex justify-center">
@@ -231,14 +230,14 @@ const UnsubscribePage = () => {
 
 								{isSignedIn && currentUser?.email ? (
 									<button
-										onClick={() => handleSubscribe()}
+										onClick={handleAsync(() => handleSubscribe())}
 										disabled={isProcessing}
 										className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-full py-3 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2"
 									>
 										{isProcessing ? <Loader2 className="animate-spin" /> : `Subscribe as ${currentUser.email}`}
 									</button>
 								) : (
-									<form onSubmit={handleSubscribe} className="space-y-3">
+									<form onSubmit={handleAsync(handleSubscribe)} className="space-y-3">
 										<input
 											type="email"
 											placeholder="Enter your email"

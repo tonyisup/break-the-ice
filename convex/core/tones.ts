@@ -176,7 +176,7 @@ export const getRandomTone = query({
 export const getRandomToneForUser = query({
   args: {},
   returns: v.object(publicToneFields),
-  handler: async (ctx, args) => {
+  handler: async (ctx, _args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Not authenticated");

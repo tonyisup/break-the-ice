@@ -1,3 +1,4 @@
+import { reportAsyncError } from "@/lib/async";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { useWorkspace } from "./useWorkspace";
@@ -312,8 +313,7 @@ export const useConvexStorageContext = (
   const settings = useQuery(api.core.userSettings.getSettings, workspaceArgs);
   const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
   const [hiddenQuestions, setHiddenQuestions] = useState<Id<"questions">[]>([]);
-  const [localHiddenStyles, setLocalHiddenStyles] = useState<Id<"styles">[]>([]);
-  const [localHiddenTones, setLocalHiddenTones] = useState<Id<"tones">[]>([]);
+
   const [defaultStyle, setDefaultStyle] = useState<string | undefined>(
     undefined,
   );
@@ -405,15 +405,13 @@ export const useConvexStorageContext = (
     if (settings) {
       setLikedQuestions(settings.likedQuestions ?? []);
       setHiddenQuestions(settings.hiddenQuestions ?? []);
-      setLocalHiddenStyles(settings.hiddenStyles as Id<"styles">[] ?? []);
-      setLocalHiddenTones(settings.hiddenTones as Id<"tones">[] ?? []);
+
       setDefaultStyle(settings.defaultStyle);
       setDefaultTone(settings.defaultTone);
     } else if (settings === null) {
       setLikedQuestions([]);
       setHiddenQuestions([]);
-      setLocalHiddenStyles([]);
-      setLocalHiddenTones([]);
+
     }
   }, [settings, activeWorkspace]);
 
@@ -503,25 +501,25 @@ export const useConvexStorageContext = (
     removeHiddenQuestion,
     hiddenStyles: hiddenStylesQuery === null ? [] : hiddenStylesQuery,
     setHiddenStyles: (ids: Id<"styles">[]) => {
-      setLocalHiddenStyles(ids);
+
       void updateHiddenStyles({ hiddenStyles: ids, ...workspaceArgs });
     },
     addHiddenStyle: (id: Id<"styles">) => {
-      addHiddenStyleId({ styleId: id, ...workspaceArgs });
+      void Promise.resolve(addHiddenStyleId({ styleId: id, ...workspaceArgs })).catch(reportAsyncError);
     },
     removeHiddenStyle: (id: Id<"styles">) => {
-      removeHiddenStyleId({ styleId: id, ...workspaceArgs });
+      void Promise.resolve(removeHiddenStyleId({ styleId: id, ...workspaceArgs })).catch(reportAsyncError);
     },
     hiddenTones: hiddenTonesQuery === null ? [] : hiddenTonesQuery,
     setHiddenTones: (ids: Id<"tones">[]) => {
-      setLocalHiddenTones(ids);
+
       void updateHiddenTones({ hiddenTones: ids, ...workspaceArgs });
     },
     addHiddenTone: (id: Id<"tones">) => {
-      addHiddenToneId({ toneId: id, ...workspaceArgs });
+      void Promise.resolve(addHiddenToneId({ toneId: id, ...workspaceArgs })).catch(reportAsyncError);
     },
     removeHiddenTone: (id: Id<"tones">) => {
-      removeHiddenToneId({ toneId: id, ...workspaceArgs });
+      void Promise.resolve(removeHiddenToneId({ toneId: id, ...workspaceArgs })).catch(reportAsyncError);
     },
     clearLikedQuestions,
     clearQuestionHistory,

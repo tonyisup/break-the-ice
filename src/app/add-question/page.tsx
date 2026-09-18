@@ -1,3 +1,4 @@
+import { handleAsync } from "@/lib/async";
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -60,7 +61,7 @@ export default function AddQuestionPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleAsync(handleSubmit)} className="space-y-6">
         <div className="space-y-2">
           <Label htmlFor="question" className="text-lg">Your Question</Label>
           <textarea

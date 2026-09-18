@@ -134,7 +134,7 @@ export default function CollectionManagePage() {
         background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradientDark[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradientDark[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`,
       }}
     >
-      <Header homeLinkSlot="settings" />
+      <Header />
 
       <div className="container mx-auto max-w-3xl p-4 md:p-8 pt-24 space-y-8">
         <Link

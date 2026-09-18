@@ -38,7 +38,7 @@ test("syncOrganizationFromClerk uses active Clerk org claims for membership role
     const membership = await ctx.db
       .query("organization_members")
       .withIndex("by_userId_organizationId", (q) =>
-        q.eq("userId", userId).eq("organizationId", organizationId!),
+        q.eq("userId", userId).eq("organizationId", organizationId),
       )
       .unique();
 

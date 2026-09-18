@@ -1,3 +1,4 @@
+import { reportAsyncError } from "@/lib/async";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, useOrganization } from "@clerk/clerk-react";
@@ -64,7 +65,7 @@ export default function BillingSuccessPage() {
     const syncKey = `${orgId}:${organization.name}`;
     if (lastOrgKeyRef.current === syncKey) return;
 
-    performSync(orgId, organization.name);
+    void performSync(orgId, organization.name).catch(reportAsyncError);
   }, [isLoaded, orgId, organization, performSync]);
 
   useEffect(() => {
@@ -75,7 +76,7 @@ export default function BillingSuccessPage() {
 
   const handleRetrySync = () => {
     if (!orgId || !organization) return;
-    performSync(orgId, organization.name);
+    void Promise.resolve(performSync(orgId, organization.name)).catch(reportAsyncError);
   };
 
   const isLoading = !effectiveEntitlements && !syncError;

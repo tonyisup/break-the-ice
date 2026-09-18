@@ -3,8 +3,6 @@ import { v } from "convex/values";
 import {
   baseTaxonomyFields,
   lifecycleStatus,
-  promptExample,
-  qualityRubric,
   questionQualitySnapshot,
   styleVersionFields,
   toneVersionFields,

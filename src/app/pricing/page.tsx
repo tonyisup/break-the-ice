@@ -11,10 +11,12 @@ import {
 import { useEffect, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import "@fontsource-variable/manrope/index.css";
 import { useTheme } from "@/hooks/useTheme";
 import { captureAnalytics } from "@/lib/analytics";
+import { PlanAllowances } from "@/components/PlanAllowances";
+import { Button } from "@/components/ui/button";
 
 const includedFeatures = [
   {
@@ -30,8 +32,8 @@ const includedFeatures = [
     copy: "Plan questions and topics before the session starts.",
   },
   {
-    title: "More room to create",
-    copy: "Use higher monthly AI limits when your library needs fresh options.",
+    title: "Question variations",
+    copy: "Write and remix questions for your next session.",
   },
 ];
 
@@ -47,7 +49,7 @@ export default function PricingPage() {
   const { user, isLoaded } = useUser();
   const [searchParams] = useSearchParams();
   const source = searchParams.get("source") ?? "direct";
-  const organizationMemberships = ((user as any)?.organizationMemberships ?? []) as unknown[];
+  const organizationMemberships = user?.organizationMemberships ?? [];
   const hasMemberships = organizationMemberships.length > 0;
 
   useEffect(() => {
@@ -73,7 +75,7 @@ export default function PricingPage() {
               <span className="block sm:whitespace-nowrap">Better questions.</span>
             </h1>
             <p className="mt-7 max-w-[590px] text-lg font-medium leading-8 text-[#55524c] dark:text-[#bdb9b0] md:text-xl">
-              Shared collections, scheduled prompts, and more room to create for everyone who leads the conversation.
+              Build a shared question library and schedule prompts for your team.
             </p>
 
             <div className="mt-9 grid gap-3 text-sm font-semibold sm:grid-cols-2">
@@ -81,7 +83,7 @@ export default function PricingPage() {
                 One plan for the whole workspace
               </div>
               <div className="border-t-2 border-[#181818]/20 pt-3 dark:border-white/20">
-                Review every charge before confirming
+                Monthly and annual billing options
               </div>
             </div>
           </motion.div>
@@ -92,8 +94,20 @@ export default function PricingPage() {
             transition={{ duration: 0.7, delay: reduceMotion ? 0 : 0.08, ease: [0.16, 1, 0.3, 1] }}
             className="rounded-2xl bg-[#ffffff] p-5 shadow-[0_24px_80px_rgba(28,27,23,0.12)] dark:bg-[#1a1a17] dark:shadow-[0_24px_80px_rgba(0,0,0,0.35)] sm:p-8"
           >
+            <h2 className="mb-5 text-2xl font-bold tracking-tight">Plans and pricing</h2>
+            <PricingTable
+              for="organization"
+              collapseFeatures={false}
+              ctaPosition="bottom"
+              newSubscriptionRedirectUrl="/billing/success"
+            />
+            <PlanAllowances />
             <SignedOut>
-              <CheckoutIntro source={source} />
+              <SignInButton mode="modal" forceRedirectUrl="/pricing">
+                <Button variant="default" className="mt-6 min-h-11 w-full" onClick={() => captureAnalytics("team_checkout_started", { source })}>
+                  Sign in to choose a plan
+                </Button>
+              </SignInButton>
             </SignedOut>
 
             <SignedIn>
@@ -117,21 +131,7 @@ export default function PricingPage() {
                     <CreateOrganization />
                   </div>
                 </CheckoutState>
-              ) : (
-                <CheckoutState
-                  title="Review the Team plan"
-                  copy="Check the full price, renewal terms, and included features before you confirm."
-                >
-                  <div className="mt-7 rounded-2xl border-2 border-[#181818]/10 bg-[#f4f2ed] p-3 dark:border-white/10 dark:bg-[#11110f] sm:p-5">
-                    <PricingTable
-                      for="organization"
-                      collapseFeatures={false}
-                      ctaPosition="bottom"
-                      newSubscriptionRedirectUrl="/billing/success"
-                    />
-                  </div>
-                </CheckoutState>
-              )}
+              ) : null}
             </SignedIn>
           </motion.section>
         </section>
@@ -194,43 +194,6 @@ const PricingHeader = () => (
       </div>
     </div>
   </header>
-);
-
-const CheckoutIntro = ({ source }: { source: string }) => (
-  <div>
-    <h2 className="max-w-[620px] text-3xl font-extrabold leading-[1] tracking-[-0.045em] text-balance sm:text-4xl">
-      Bring your question library together.
-    </h2>
-    <p className="mt-4 max-w-[590px] text-base leading-7 text-[#5a5751] dark:text-[#bdb9b0]">
-      Sign in to choose your workspace. You will see the full price and renewal terms before confirming anything.
-    </p>
-
-    <div className="mt-8 grid gap-5 border-y-2 border-[#181818]/10 py-6 text-sm dark:border-white/10 sm:grid-cols-3">
-      <div>
-        <p className="font-extrabold">Sign in</p>
-        <p className="mt-1 leading-5 text-[#6a665f] dark:text-[#aaa69e]">Use your existing account.</p>
-      </div>
-      <div>
-        <p className="font-extrabold">Choose workspace</p>
-        <p className="mt-1 leading-5 text-[#6a665f] dark:text-[#aaa69e]">Select the team to upgrade.</p>
-      </div>
-      <div>
-        <p className="font-extrabold">Review and confirm</p>
-        <p className="mt-1 leading-5 text-[#6a665f] dark:text-[#aaa69e]">Check every detail first.</p>
-      </div>
-    </div>
-
-    <SignInButton mode="modal">
-      <button
-        type="button"
-        onClick={() => captureAnalytics("upgrade_clicked", { source, payer: "organization" })}
-        className="mt-7 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#ff4d2e] px-6 text-base font-extrabold text-[#181818] transition-transform hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ff4d2e]/35"
-      >
-        Sign in to continue
-        <ArrowRight className="size-5" aria-hidden="true" />
-      </button>
-    </SignInButton>
-  </div>
 );
 
 const CheckoutState = ({

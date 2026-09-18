@@ -1,23 +1,11 @@
 "use client"
+import { handleAsync, reportAsyncError } from "@/lib/async";
 
 import * as React from "react"
 import { useQuery, useMutation, useAction } from "convex/react"
-import { api, internal } from "../../../../convex/_generated/api"
-import { Doc, Id } from "../../../../convex/_generated/dataModel"
-import {
-	Copy,
-	Trash2,
-	Check,
-	X,
-	AlertTriangle,
-	Search,
-	RefreshCw,
-	MoreHorizontal,
-	ChevronRight,
-	History,
-	Pencil,
-	Save
-} from "lucide-react"
+import { api } from "../../../../convex/_generated/api";
+import { Id } from "../../../../convex/_generated/dataModel";
+import { Copy, Trash2, Check, X, RefreshCw, History, Pencil, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,7 +14,7 @@ import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"
 import { Link } from "react-router-dom"
 import { IconComponent } from "@/components/ui/icons/icon"
-import { cn } from "@/lib/utils"
+
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 
@@ -47,13 +35,12 @@ export default function DuplicatesPage() {
 	const [isDetecting, setIsDetecting] = React.useState(false)
 	const [threshold, setThreshold] = React.useState([0.95])
 
-
 	const handleStartDetection = async () => {
 		try {
 			setIsDetecting(true)
 			await detectDuplicatesAction({ threshold: threshold[0] })
 			toast.success("Duplicate detection started")
-		} catch (error) {
+		} catch {
 			toast.error("Failed to start detection")
 			setIsDetecting(false)
 		}
@@ -84,7 +71,7 @@ export default function DuplicatesPage() {
 			toast.success("Duplicates resolved")
 			setKeepQuestionId(null)
 			setSelectedToDelete(new Set())
-		} catch (error) {
+		} catch {
 			toast.error("Failed to resolve duplicates")
 		}
 	}
@@ -102,7 +89,7 @@ export default function DuplicatesPage() {
 				delete next[detectionId]
 				return next
 			})
-		} catch (error) {
+		} catch {
 			toast.error("Failed to reject detection")
 		}
 	}
@@ -112,7 +99,7 @@ export default function DuplicatesPage() {
 			await updateQuestion({ id: questionId, text: editedText })
 			toast.success("Question updated")
 			setEditingQuestionId(null)
-		} catch (error) {
+		} catch {
 			toast.error("Failed to update question")
 		}
 	}
@@ -156,7 +143,7 @@ export default function DuplicatesPage() {
 								History
 							</Link>
 						</Button>
-						<Button onClick={handleStartDetection} disabled={isDetecting || progress?.status === 'running'} className="gap-2">
+						<Button onClick={handleAsync(handleStartDetection)} disabled={isDetecting || progress?.status === 'running'} className="gap-2">
 							<RefreshCw className={`size-4 ${progress?.status === 'running' ? 'animate-spin' : ''}`} />
 							Scan for Duplicates
 						</Button>
@@ -223,7 +210,7 @@ export default function DuplicatesPage() {
 																autoFocus
 															/>
 															<div className="flex flex-col gap-1">
-																<Button size="icon" className="size-8 bg-green-600 hover:bg-green-700" onClick={() => handleSaveEdit(q._id)}><Save className="size-3.5" /></Button>
+																<Button size="icon" className="size-8 bg-green-600 hover:bg-green-700" onClick={handleAsync(() => handleSaveEdit(q._id))}><Save className="size-3.5" /></Button>
 																<Button size="icon" variant="ghost" className="size-8" onClick={() => setEditingQuestionId(null)}><X className="size-3.5" /></Button>
 															</div>
 														</div>
@@ -296,21 +283,21 @@ export default function DuplicatesPage() {
 
 									<div className="flex items-center gap-2 w-full md:w-auto">
 										{keepQuestionId ? (
-											<Button className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 shadow-lg shadow-green-500/20" onClick={() => handleApprove(detection._id)}>
+											<Button className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 shadow-lg shadow-green-500/20" onClick={handleAsync(() => handleApprove(detection._id))}>
 												Resolve Duplicates
 											</Button>
 										) : (
 											<>
-												<Button variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleReject(detection._id)}>
+												<Button variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleAsync(() => handleReject(detection._id))}>
 													Reject Detection
 												</Button>
 												<Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50" onClick={() => {
 													// Special case: Delete all in group
 													if (confirm("Delete all questions in this group?")) {
-														deleteDuplicates({
+														void Promise.resolve(deleteDuplicates({
 															detectionId: detection._id,
 															questionIdsToDelete: detection.questions.map((qu: any) => qu._id)
-														})
+														})).catch(reportAsyncError);
 													}
 												}}>
 													Delete All

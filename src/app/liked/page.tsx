@@ -1,3 +1,4 @@
+import { handleAsync } from "@/lib/async";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
@@ -13,23 +14,19 @@ import { ModernQuestionCard } from "@/components/modern-question-card/modern-que
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
 import { AddToCollectionMenu } from "@/components/add-to-collection-menu/AddToCollectionMenu";
 
-import { cn, isColorDark } from "@/lib/utils";
-
 import { Header } from "@/components/header";
 import { toast } from "sonner";
 import { SignInCTA } from "@/components/SignInCTA";
 import { Button } from "@/components/ui/button";
-import { useAuth, useClerk } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";
 import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 
 function LikedQuestionsPageContent() {
   const { isSignedIn } = useAuth();
   const { activeWorkspace, teamWorkspaceId } = useTeamWorkspace();
-  const { openSignIn } = useClerk();
-  const { effectiveTheme } = useTheme();
+  useTheme();
   const [searchText, setSearchText] = useState("");
   const { likedQuestions, likedLimit, addLikedQuestion, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
-  const makeQuestionPublic = useMutation(api.core.questions.makeQuestionPublic);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
@@ -43,7 +40,6 @@ function LikedQuestionsPageContent() {
     organizationId: teamWorkspaceId,
   });
 
-
   const validLikedQuestions = useMemo(() => {
     const combined = [...likedQuestions];
     const uniqueIds = Array.from(new Set(combined));
@@ -52,7 +48,7 @@ function LikedQuestionsPageContent() {
     });
   }, [likedQuestions]);
 
-  const questions = useQuery(api.core.questions.getQuestionsByIds, { ids: validLikedQuestions as Id<"questions">[] });
+  const questions = useQuery(api.core.questions.getQuestionsByIds, { ids: validLikedQuestions });
   const styles = useQuery(api.core.styles.getStyles, {});
   const tones = useQuery(api.core.tones.getTones, {});
 
@@ -138,7 +134,6 @@ function LikedQuestionsPageContent() {
     };
   }, []);
 
-
   const handleToggleLike = (questionId: Id<"questions">) => {
     const isLiked = likedQuestions.includes(questionId);
     if (isLiked) {
@@ -181,16 +176,6 @@ function LikedQuestionsPageContent() {
     }
   };
 
-  const handleMakePublic = async (questionId: Id<"questions">) => {
-    try {
-      await makeQuestionPublic({ questionId });
-      toast.success("Question submitted for review!");
-    } catch (error) {
-      console.error("Error making question public:", error);
-      toast.error("Failed to make question public.");
-    }
-  };
-
   const handleClearLikes = () => {
     setSearchText("");
     toast.success("Likes cleared");
@@ -209,18 +194,11 @@ function LikedQuestionsPageContent() {
     }
   };
 
-  const gradientLight = ["#667EEA", "#A064DE"];
-  const gradient = ["#3B2554", "#262D54"];
-  const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
-
   const showCollectionActions = isSignedIn && !!activeWorkspace;
 
   const renderCard = (question: Doc<"questions">, onDelete?: () => void) => {
     const style = stylesMap.get(question.styleId || (question.style as string) || "");
     const tone = tonesMap.get(question.toneId || (question.tone as string) || "");
-    const styleColor = style?.color || "#667EEA";
-    const toneColor = tone?.color || "#764BA2";
-    const cardGradient = [styleColor, toneColor];
 
     return (
       <div className="relative h-full">
@@ -234,7 +212,6 @@ function LikedQuestionsPageContent() {
           isGenerating={false}
           isFavorite={likedQuestions.includes(question._id)}
           isHidden={hiddenQuestions.includes(question._id)}
-          gradient={cardGradient}
           style={style}
           tone={tone}
           onToggleFavorite={() => handleToggleLike(question._id)}
@@ -248,13 +225,8 @@ function LikedQuestionsPageContent() {
   };
 
   return (
-    <div
-      className="min-h-screen overflow-hidden"
-      style={{
-        background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradient[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradient[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
-      }}
-    >
-      <Header homeLinkSlot="liked" />
+    <div className="app-shell overflow-x-clip">
+      <Header />
 
       <AddPersonalQuestionDialog
         isOpen={isAddPersonalQuestionDialogOpen}
@@ -269,7 +241,6 @@ function LikedQuestionsPageContent() {
               <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add Question</Button>
             ) : (
               <SignInCTA
-                bgGradient={currentGradient}
                 title={likedQuestions.length >= (Number(import.meta.env.VITE_MAX_ANON_LIKED) || 20) ? "Liked limit reached" : "Want more features?"}
                 featureHighlight={{
                   pre: "Sign in to",
@@ -290,7 +261,7 @@ function LikedQuestionsPageContent() {
               <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 {myQuestions.map((question) => (
                   <div key={question._id}>
-                    {renderCard(question as Doc<"questions">, () => handleDeletePersonalQuestion(question._id))}
+                    {renderCard(question, handleAsync(() => handleDeletePersonalQuestion(question._id)))}
                   </div>
                 ))}
               </div>
@@ -303,8 +274,8 @@ function LikedQuestionsPageContent() {
           <div className="text-center py-12">
             <p className="text-gray-500 dark:text-gray-400 text-lg">You haven't liked any questions yet.</p>
             <Link
-              to="/"
-              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "inline-block mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
+              to="/app"
+              className="inline-flex min-h-11 items-center rounded-lg bg-primary px-5 font-semibold text-primary-foreground"
             >
               Start Exploring
             </Link>

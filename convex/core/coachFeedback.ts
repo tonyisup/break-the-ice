@@ -247,7 +247,7 @@ export const getWeeklyFeedbackReport = query({
       return {
         dayOfWeek: day,
         questionId: qId,
-        questionText: qId ? questionTextCache.get(qId as GenericId<"questions">) : undefined,
+        questionText: qId ? questionTextCache.get(qId) : undefined,
         totalResponses: total,
         landedWellPct: total ? (dayLanded / total) * 100 : 0,
         fellFlatPct: total ? (dayFlat / total) * 100 : 0,

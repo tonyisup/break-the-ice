@@ -1,3 +1,4 @@
+import { handleAsync } from "@/lib/async";
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -94,7 +95,7 @@ export function AddPersonalQuestionDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSubmit}>{isPublic ? "Submit for Review" : "Add to Stash"}</Button>
+          <Button onClick={handleAsync(handleSubmit)}>{isPublic ? "Submit for Review" : "Add to Stash"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

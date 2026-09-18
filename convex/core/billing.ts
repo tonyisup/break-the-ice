@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { getEffectivePlanForUser } from "../auth";
 import { collectUserCandidates } from "../lib/users";
+import { AI_CYCLE_DAYS, getPlanAiLimit } from "../lib/planLimits";
 import {
   normalizeClerkApiRole,
   parseClerkIdentityClaims,
@@ -17,6 +18,12 @@ const getActiveClerkOrganization = (identity: Record<string, unknown>) => {
     organizationName: parsed.organizationName,
   };
 };
+
+export const getPublicPlanLimits = query({
+  args: {},
+  returns: v.object({ free: v.number(), team: v.number(), cycleDays: v.number() }),
+  handler: () => ({ free: getPlanAiLimit("free"), team: getPlanAiLimit("team"), cycleDays: AI_CYCLE_DAYS }),
+});
 
 export const getEffectiveEntitlements = query({
   args: {
@@ -43,10 +50,7 @@ export const getEffectiveEntitlements = query({
     const candidateIds = candidates.map(c => c._id);
 
     const effectivePlan = await getEffectivePlanForUser(ctx, candidateIds, args.organizationId);
-    const aiLimit =
-      effectivePlan.planTier === "team"
-        ? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
-        : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
+    const aiLimit = getPlanAiLimit(effectivePlan.planTier === "team" ? "team" : "free");
 
     return {
       userId: user._id,

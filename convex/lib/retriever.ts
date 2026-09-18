@@ -1,6 +1,6 @@
 "use node";
 
-import { action, internalAction } from "../_generated/server";
+import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
 import OpenAI from "openai";

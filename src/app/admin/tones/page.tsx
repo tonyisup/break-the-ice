@@ -1,21 +1,11 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import * as React from "react"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
 import { Doc, Id } from "../../../../convex/_generated/dataModel"
-import {
-	Plus,
-	MoreHorizontal,
-	Pencil,
-	Trash2,
-	Check,
-	X,
-	Music,
-	Search,
-	LayoutGrid,
-	List
-} from "lucide-react"
+import { Plus, MoreHorizontal, Pencil, Trash2, Check, X, Search, LayoutGrid, List } from "lucide-react";
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -92,7 +82,7 @@ export default function TonesPage() {
 				order: (tones?.length ?? 0) + 1,
 				promptGuidanceForAI: ""
 			})
-		} catch (error) {
+		} catch {
 			toast.error("Failed to create tone")
 		}
 	}
@@ -110,7 +100,7 @@ export default function TonesPage() {
 			})
 			toast.success("Tone updated")
 			setEditingTone(null)
-		} catch (error) {
+		} catch {
 			toast.error("Failed to update tone")
 		}
 	}
@@ -120,7 +110,7 @@ export default function TonesPage() {
 		try {
 			await deleteTone({ id })
 			toast.success("Tone version archived")
-		} catch (error) {
+		} catch {
 			toast.error("Failed to delete tone")
 		}
 	}
@@ -129,7 +119,7 @@ export default function TonesPage() {
 		try {
 			await activateToneVersion({ id })
 			toast.success("Tone version activated")
-		} catch (error) {
+		} catch {
 			toast.error("Failed to activate tone version")
 		}
 	}
@@ -239,7 +229,7 @@ export default function TonesPage() {
 							</div>
 							<DialogFooter>
 								<Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
-								<Button onClick={handleCreate}>Create Tone</Button>
+								<Button onClick={handleAsync(handleCreate)}>Create Tone</Button>
 							</DialogFooter>
 						</DialogContent>
 					</Dialog>
@@ -291,12 +281,12 @@ export default function TonesPage() {
 											Edit Tone
 										</DropdownMenuItem>
 										{tone.status !== "active" && (
-											<DropdownMenuItem className="gap-2" onClick={() => handleActivate(tone._id)}>
+											<DropdownMenuItem className="gap-2" onClick={handleAsync(() => handleActivate(tone._id))}>
 												<Check className="size-3.5" />
 												Activate Version
 											</DropdownMenuItem>
 										)}
-										<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={() => handleDelete(tone._id)}>
+										<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={handleAsync(() => handleDelete(tone._id))}>
 											<Trash2 className="size-3.5" />
 											Archive
 										</DropdownMenuItem>
@@ -350,14 +340,14 @@ export default function TonesPage() {
 									<td className="px-6 py-4 text-right">
 										<div className="flex items-center justify-end gap-1">
 											{tone.status !== "active" && (
-												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={() => handleActivate(tone._id)}>
+												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={handleAsync(() => handleActivate(tone._id))}>
 													<Check className="size-3.5" />
 												</Button>
 											)}
 											<Button variant="ghost" size="icon" className="size-8" onClick={() => setEditingTone(tone)}>
 												<Pencil className="size-3.5" />
 											</Button>
-											<Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(tone._id)}>
+											<Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleAsync(() => handleDelete(tone._id))}>
 												<Trash2 className="size-3.5" />
 											</Button>
 										</div>
@@ -428,7 +418,7 @@ export default function TonesPage() {
 							</div>
 							<DialogFooter>
 								<Button variant="outline" onClick={() => setEditingTone(null)}>Cancel</Button>
-								<Button onClick={() => handleUpdate(editingTone)}>Save Changes</Button>
+								<Button onClick={handleAsync(() => handleUpdate(editingTone))}>Save Changes</Button>
 							</DialogFooter>
 						</>
 					)}

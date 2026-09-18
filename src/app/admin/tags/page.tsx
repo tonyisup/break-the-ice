@@ -1,19 +1,11 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import * as React from "react"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
 import { Doc, Id } from "../../../../convex/_generated/dataModel"
-import {
-	Plus,
-	MoreHorizontal,
-	Pencil,
-	Trash2,
-	X,
-	Search,
-	Tag as TagIcon,
-	Tag
-} from "lucide-react"
+import { Plus, Pencil, Trash2, X, Search, Tag as TagIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -63,7 +55,7 @@ export default function TagsPage() {
 			toast.success("Tag created successfully")
 			setIsCreateDialogOpen(false)
 			setNewTag({ name: "", grouping: "", description: "" })
-		} catch (error) {
+		} catch {
 			toast.error("Failed to create tag")
 		}
 	}
@@ -78,7 +70,7 @@ export default function TagsPage() {
 			})
 			toast.success("Tag updated")
 			setEditingTag(null)
-		} catch (error) {
+		} catch {
 			toast.error("Failed to update tag")
 		}
 	}
@@ -88,7 +80,7 @@ export default function TagsPage() {
 		try {
 			await deleteTag({ id })
 			toast.success("Tag deleted")
-		} catch (error) {
+		} catch {
 			toast.error("Failed to delete tag")
 		}
 	}
@@ -151,7 +143,7 @@ export default function TagsPage() {
 							</div>
 							<DialogFooter>
 								<Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
-								<Button onClick={handleCreate}>Create Tag</Button>
+								<Button onClick={handleAsync(handleCreate)}>Create Tag</Button>
 							</DialogFooter>
 						</DialogContent>
 					</Dialog>
@@ -199,7 +191,7 @@ export default function TagsPage() {
 										<Button variant="ghost" size="icon" className="size-8" onClick={() => setEditingTag(tag)}>
 											<Pencil className="size-3.5" />
 										</Button>
-										<Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(tag._id)}>
+										<Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleAsync(() => handleDelete(tag._id))}>
 											<Trash2 className="size-3.5" />
 										</Button>
 									</div>
@@ -245,7 +237,7 @@ export default function TagsPage() {
 							</div>
 							<DialogFooter>
 								<Button variant="outline" onClick={() => setEditingTag(null)}>Cancel</Button>
-								<Button onClick={() => handleUpdate(editingTag)}>Save Changes</Button>
+								<Button onClick={handleAsync(() => handleUpdate(editingTag))}>Save Changes</Button>
 							</DialogFooter>
 						</>
 					)}

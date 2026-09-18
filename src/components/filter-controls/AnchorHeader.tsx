@@ -24,9 +24,9 @@ export const AnchorHeader = ({
   onRemoveTopic,
   onOpenItem
 }: AnchorHeaderProps) => {
-  const style = useQuery(api.core.styles.getStyleById, styleId ? { id: styleId as Id<"styles"> } : "skip");
-  const tone = useQuery(api.core.tones.getToneById, toneId ? { id: toneId as Id<"tones"> } : "skip");
-  const topic = useQuery(api.core.topics.getTopicById, topicId ? { id: topicId as Id<"topics"> } : "skip");
+  const style = useQuery(api.core.styles.getStyleById, styleId ? { id: styleId } : "skip");
+  const tone = useQuery(api.core.tones.getToneById, toneId ? { id: toneId } : "skip");
+  const topic = useQuery(api.core.topics.getTopicById, topicId ? { id: topicId } : "skip");
 
   if (!styleId && !toneId && !topicId) return null;
 

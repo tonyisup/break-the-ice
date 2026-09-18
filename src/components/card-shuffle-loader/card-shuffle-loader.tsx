@@ -2,7 +2,6 @@
 
 import type React from "react"
 
-import { useState } from "react"
 import "./card-shuffle.css"
 
 export interface CardShuffleLoaderProps {
@@ -50,7 +49,6 @@ export default function CardShuffleLoader({
   borderRadius = 8,
   shadowIntensity = 0.1,
 }: CardShuffleLoaderProps) {
-  const [isLoading, setIsLoading] = useState(true)
 
   // Default card faces if not provided
   const defaultCardFaces = [

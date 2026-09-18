@@ -23,6 +23,9 @@ export const qualityRubric = v.object({
 
 export const questionQualitySnapshot = v.object({
   readability: v.optional(v.number()),
+  answerability: v.optional(v.number()),
+  styleFit: v.optional(v.number()),
+  toneFit: v.optional(v.number()),
   specificity: v.optional(v.number()),
   storyYield: v.optional(v.number()),
   safety: v.optional(v.number()),

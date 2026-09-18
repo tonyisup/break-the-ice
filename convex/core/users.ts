@@ -1,3 +1,4 @@
+import { getPlanAiLimit } from "../lib/planLimits";
 import { MutationCtx, mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { getEffectivePlanForUser } from "../auth";
@@ -74,9 +75,7 @@ export const getCurrentUser = query({
 			}
 		}
 		const effectivePlan = await getEffectivePlanForUser(ctx, candidateIds, organizationId);
-		const limit = effectivePlan.planTier === "team"
-			? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
-			: parseInt(process.env.MAX_FREE_AIGEN ?? "10");
+		const limit = getPlanAiLimit(effectivePlan.planTier === "team" ? "team" : "free");
 		const aiUsage = await getAiUsageForWorkspace(ctx, workspaceUsageUserId, organizationId);
 
 		return {

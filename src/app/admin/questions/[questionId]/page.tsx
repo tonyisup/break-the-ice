@@ -1,4 +1,5 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import { useQuery, useMutation, useAction } from "convex/react"
 import { api } from "../../../../../convex/_generated/api"
@@ -24,7 +25,7 @@ import {
 	Image,
 } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -139,7 +140,6 @@ function DailyChart({ data }: { data: { date: string; seen: number; liked: numbe
 		<div className="space-y-3">
 			<div className="flex items-end gap-[2px] h-32">
 				{data.map((d, i) => {
-					const total = d.seen + d.liked + d.shared + d.hidden
 					return (
 						<div
 							key={i}
@@ -180,7 +180,6 @@ function DailyChart({ data }: { data: { date: string; seen: number; liked: numbe
 		</div>
 	)
 }
-
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -280,6 +279,14 @@ export default function QuestionDetailsPage() {
 		draftImageStorageIdRef.current = draftImageStorageId
 	}, [draftImageStorageId])
 
+	const deleteUploadedStorage = useCallback(async (storageId: Id<"_storage">) => {
+		try {
+			await deleteStorageId({ storageId })
+		} catch {
+			// best-effort cleanup; ignore
+		}
+	}, [deleteStorageId])
+
 	useEffect(() => {
 		return () => {
 			if (draftImageObjectUrlRef.current) {
@@ -293,7 +300,7 @@ export default function QuestionDetailsPage() {
 				void deleteUploadedStorage(currentDraftImageStorageId)
 			}
 		}
-	}, [])
+	}, [deleteUploadedStorage])
 
 	const clearDraftPreviewUrl = () => {
 		if (draftImageObjectUrlRef.current) {
@@ -363,7 +370,7 @@ export default function QuestionDetailsPage() {
 			}
 			toast.success("Question updated successfully")
 			setHasChanges(false)
-		} catch (error) {
+		} catch {
 			toast.error("Failed to update question")
 		} finally {
 			setSaving(false)
@@ -383,14 +390,6 @@ export default function QuestionDetailsPage() {
 			toast.error(`Remix failed: ${message}`)
 		} finally {
 			setRemixing(false)
-		}
-	}
-
-	const deleteUploadedStorage = async (storageId: Id<"_storage">) => {
-		try {
-			await deleteStorageId({ storageId })
-		} catch {
-			// best-effort cleanup; ignore
 		}
 	}
 
@@ -495,7 +494,7 @@ export default function QuestionDetailsPage() {
 			await stageDraftImage(storageId, previewUrl)
 			toast.success("Replacement image staged. Save changes to apply it.")
 			imageInputRef.current?.form?.reset()
-		} catch (error) {
+		} catch {
 			toast.error("Failed to upload image")
 			if (storageId) {
 				await deleteUploadedStorage(storageId)
@@ -592,7 +591,7 @@ export default function QuestionDetailsPage() {
 						variant="outline"
 						size="sm"
 						className="gap-2 text-blue-500 hover:text-blue-600"
-						onClick={handleRemix}
+						onClick={handleAsync(handleRemix)}
 						disabled={remixing}
 					>
 						{remixing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
@@ -603,14 +602,14 @@ export default function QuestionDetailsPage() {
 						variant="outline"
 						size="sm"
 						className="gap-2"
-						onClick={handleReset}
+						onClick={handleAsync(handleReset)}
 						title="Reset form to database version"
 					>
 						<Activity className="size-4" />
 						Reset
 					</Button>
 
-					<Button size="sm" className="gap-2" onClick={handleSave} disabled={saving || !hasChanges}>
+					<Button size="sm" className="gap-2" onClick={handleAsync(handleSave)} disabled={saving || !hasChanges}>
 						{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
 						Save Changes
 					</Button>
@@ -746,7 +745,7 @@ export default function QuestionDetailsPage() {
 											type="file"
 											accept="image/*"
 											className="sr-only"
-												onChange={handleUploadImage}
+												onChange={handleAsync(handleUploadImage)}
 												disabled={!imageEditingEnabled || uploadingImage}
 											/>
 											{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
@@ -757,14 +756,14 @@ export default function QuestionDetailsPage() {
 											variant="outline"
 											size="sm"
 											className="gap-2 text-destructive hover:text-destructive"
-											onClick={handleClearImage}
+											onClick={handleAsync(handleClearImage)}
 											disabled={!imageEditingEnabled || uploadingImage}
 										>
 											Remove image
 										</Button>
 									) : null}
 									{isEditingImage || hasDraftImageChange ? (
-										<Button variant="ghost" size="sm" className="gap-2" onClick={handleCancelImageEdit} disabled={uploadingImage}>
+										<Button variant="ghost" size="sm" className="gap-2" onClick={handleAsync(handleCancelImageEdit)} disabled={uploadingImage}>
 											Cancel edit
 										</Button>
 									) : null}
@@ -796,7 +795,7 @@ export default function QuestionDetailsPage() {
 								<Button
 									variant="outline"
 									className="w-full gap-2 text-purple-500 hover:text-purple-600"
-									onClick={handleGenerateImage}
+									onClick={handleAsync(handleGenerateImage)}
 									disabled={!imageEditingEnabled || uploadingImage}
 								>
 									{uploadingImage ? <Loader2 className="size-4 animate-spin" /> : <Image className="size-4" />}
@@ -1128,11 +1127,11 @@ export default function QuestionDetailsPage() {
 							<Button
 								variant="secondary"
 								size="sm"
-								onClick={handleReset}
+								onClick={handleAsync(handleReset)}
 							>
 								Discard
 							</Button>
-							<Button variant="secondary" size="sm" className="gap-2 bg-white text-primary hover:bg-white/90" onClick={handleSave} disabled={saving}>
+							<Button variant="secondary" size="sm" className="gap-2 bg-white text-primary hover:bg-white/90" onClick={handleAsync(handleSave)} disabled={saving}>
 								{saving ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />}
 								Save
 							</Button>

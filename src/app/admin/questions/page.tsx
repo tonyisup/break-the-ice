@@ -1,4 +1,5 @@
 "use client";
+import { handleAsync, reportAsyncError } from "@/lib/async";
 
 import * as React from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
@@ -124,7 +125,7 @@ export default function QuestionsPage() {
       toast.success("Question created successfully");
       setNewQuestion({ text: "", style: "open-ended", tone: "fun-silly" });
       setIsCreateDialogOpen(false);
-    } catch (error) {
+    } catch {
       toast.error("Failed to create question");
     }
   };
@@ -135,7 +136,7 @@ export default function QuestionsPage() {
         id,
         ...updates,
       });
-    } catch (error) {
+    } catch {
       toast.error("Failed to update question");
     }
   };
@@ -151,7 +152,7 @@ export default function QuestionsPage() {
       });
       toast.success("Question updated");
       setEditingQuestion(null);
-    } catch (error) {
+    } catch {
       toast.error("Failed to update question");
     }
   };
@@ -161,7 +162,7 @@ export default function QuestionsPage() {
     try {
       await deleteQuestion({ id });
       toast.success("Question deleted");
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete question");
     }
   };
@@ -179,7 +180,7 @@ export default function QuestionsPage() {
         status: status === "public" ? "public" : "private",
       });
       toast.success(`Question marked as ${status}`);
-    } catch (error) {
+    } catch {
       toast.error("Failed to process question");
     }
   };
@@ -331,7 +332,7 @@ export default function QuestionsPage() {
                 >
                   Cancel
                 </Button>
-                <Button onClick={handleCreate}>Create Question</Button>
+                <Button onClick={handleAsync(handleCreate)}>Create Question</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -362,7 +363,7 @@ export default function QuestionsPage() {
                     defaultValue={q.text || q.customText || ""}
                     onBlur={(e) => {
                       if (e.target.value !== (q.text || q.customText)) {
-                        handleUpdateField(q._id, { text: e.target.value });
+                        void Promise.resolve(handleUpdateField(q._id, { text: e.target.value })).catch(reportAsyncError);
                       }
                     }}
                     placeholder="Question text..."
@@ -374,8 +375,8 @@ export default function QuestionsPage() {
                       </label>
                       <select
                         value={q.style || ""}
-                        onChange={(e) =>
-                          handleUpdateField(q._id, { style: e.target.value })
+                        onChange={handleAsync((e) =>
+                          handleUpdateField(q._id, { style: e.target.value }))
                         }
                         className="h-11 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 sm:h-9"
                       >
@@ -393,8 +394,8 @@ export default function QuestionsPage() {
                       </label>
                       <select
                         value={q.tone || ""}
-                        onChange={(e) =>
-                          handleUpdateField(q._id, { tone: e.target.value })
+                        onChange={handleAsync((e) =>
+                          handleUpdateField(q._id, { tone: e.target.value }))
                         }
                         className="h-11 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 sm:h-9"
                       >
@@ -413,7 +414,7 @@ export default function QuestionsPage() {
                     variant="outline"
                     size="sm"
                     className="!h-11 w-full shrink-0 justify-center gap-2 text-blue-500 hover:bg-blue-50 hover:text-blue-600 sm:!h-9 sm:w-auto"
-                    onClick={() => handleRemix(q._id)}
+                    onClick={handleAsync(() => handleRemix(q._id))}
                     disabled={remixingIds.has(q._id)}
                   >
                     {remixingIds.has(q._id) ? (
@@ -427,14 +428,14 @@ export default function QuestionsPage() {
                     variant="outline"
                     size="sm"
                     className="!h-11 w-full shrink-0 justify-center text-blue-400 hover:bg-blue-50 hover:text-blue-500 sm:!h-9 sm:w-auto"
-                    onClick={() => handleApprove(q, "personal")}
+                    onClick={handleAsync(() => handleApprove(q, "personal"))}
                   >
                     Mark Personal
                   </Button>
                   <Button
                     size="sm"
                     className="!h-11 w-full shrink-0 justify-center gap-2 bg-green-600 text-white hover:bg-green-700 sm:!h-9 sm:w-auto"
-                    onClick={() => handleApprove(q, "public")}
+                    onClick={handleAsync(() => handleApprove(q, "public"))}
                   >
                     <CheckCircle2 className="size-4" />
                     Approve Public
@@ -664,7 +665,7 @@ export default function QuestionsPage() {
                               <Button
                                 variant="outline"
                                 className="flex-1 md:flex-none gap-2 text-green-600 border-green-200 bg-green-50"
-                                onClick={() => handleUpdate(editingQuestion)}
+                                onClick={handleAsync(() => handleUpdate(editingQuestion))}
                               >
                                 <Check className="size-4" />
                                 <span className="md:hidden">Save</span>
@@ -699,7 +700,7 @@ export default function QuestionsPage() {
                                 >
                                   <DropdownMenuItem
                                     className="gap-2 py-2.5"
-                                    onClick={() => handleShare(q)}
+                                    onClick={handleAsync(() => handleShare(q))}
                                   >
                                     <Share2 className="size-4" />
                                     Share Link
@@ -726,14 +727,14 @@ export default function QuestionsPage() {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className="gap-2 py-2.5 text-destructive focus:text-destructive"
-                                    onClick={() => handleDelete(q._id)}
+                                    onClick={handleAsync(() => handleDelete(q._id))}
                                   >
                                     <Trash2 className="size-4" />
                                     Delete
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className="gap-2 py-2.5 text-blue-500 focus:text-blue-600"
-                                    onClick={() => handleRemix(q._id)}
+                                    onClick={handleAsync(() => handleRemix(q._id))}
                                     disabled={remixingIds.has(q._id)}
                                   >
                                     {remixingIds.has(q._id) ? (
@@ -851,7 +852,7 @@ export default function QuestionsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             className="gap-2"
-                            onClick={() => handleShare(q)}
+                            onClick={handleAsync(() => handleShare(q))}
                           >
                             <Share2 className="size-4" /> Share Link
                           </DropdownMenuItem>
@@ -872,13 +873,13 @@ export default function QuestionsPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="gap-2 text-destructive focus:text-destructive"
-                            onClick={() => handleDelete(q._id)}
+                            onClick={handleAsync(() => handleDelete(q._id))}
                           >
                             <Trash2 className="size-4" /> Delete
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="gap-2 text-blue-500 focus:text-blue-600"
-                            onClick={() => handleRemix(q._id)}
+                            onClick={handleAsync(() => handleRemix(q._id))}
                             disabled={remixingIds.has(q._id)}
                           >
                             {remixingIds.has(q._id) ? (
@@ -948,7 +949,7 @@ export default function QuestionsPage() {
                         <div className="flex gap-2 pt-2">
                           <Button
                             className="flex-1 h-9 bg-green-600 hover:bg-green-700 text-white"
-                            onClick={() => handleUpdate(editingQuestion)}
+                            onClick={handleAsync(() => handleUpdate(editingQuestion))}
                           >
                             <Check className="size-4 mr-2" /> Save
                           </Button>

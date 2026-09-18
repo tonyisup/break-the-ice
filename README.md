@@ -1,25 +1,10 @@
-# Ice Breaker: AI-Powered Conversation Starters
+# Break the Ice
 
-https://www.breaktheiceberg.com/
+[breaktheiceberg.com](https://breaktheiceberg.com)
 
-**Ice Breaker** is a fun and interactive application designed to spark engaging conversations in any social setting. Whether you're in a team meeting, a workshop, or a friendly get-together, this app provides an endless stream of unique ice-breaker questions to get everyone talking.
+Conversation starters for classes, meetings, workshops, and dinner tables. Browse questions, save favorites, and filter by style, tone, or topic. Signed-in users can add questions and generate variations; teams can share collections and schedule prompts.
 
-Powered by a modern tech stack, Ice Breaker features a sleek, intuitive interface and AI-driven question generation to ensure you never run out of interesting topics.
-
-## ✨ Features
-
-*   **Instant Question Display**: Get a unique ice-breaker question the moment you open the app.
-*   **Swipe Interface**: Effortlessly swipe through questions to find the perfect one.
-*   **Favorites**: Like a question? Save it to your "Liked" list for easy access later.
-*   **AI-Powered Generation**: Generate custom questions tailored to your interests using AI. Select from various categories, styles, and tones to guide the generation process.
-*   **Sleek, Modern UI**: Enjoy a beautiful, responsive interface with both **Dark and Light modes**, smooth animations, and full gesture support.
-*   **Admin Dashboard**: A built-in dashboard allows administrators to manage questions, categories, styles, and tones, giving you full control over the app's content.
-
-## 🤖 AI-Powered Question Generation
-
-The AI question generation feature uses OpenAI's GPT-4 to create unique and contextually relevant questions. You can guide the AI by selecting from a variety of predefined categories, styles, and tones to generate questions that fit any occasion.
-
-The implementation is split between the [generation runner](./convex/lib/generationRunner.ts) and [prompt architecture](./convex/lib/promptArchitecture.ts).
+The app uses React, Vite, TypeScript, Convex, and Clerk. Question generation runs through an OpenRouter preset. The implementation is split between the [generation runner](./convex/lib/generationRunner.ts) and [prompt architecture](./convex/lib/promptArchitecture.ts).
 
 ## Documentation
 
@@ -27,13 +12,13 @@ The implementation is split between the [generation runner](./convex/lib/generat
 - [How to schedule a Team Prompt](./docs/team-prompts/how-to-schedule-team-prompts.md)
 - [Team Prompts reference](./docs/team-prompts/reference.md)
 
-## 🚀 Getting Started
+## Getting started
 
 Follow these steps to get the Ice Breaker application running on your local machine.
 
 ### Prerequisites
 
-*   [Node.js](https://nodejs.org/) (v18 or later)
+*   [Node.js](https://nodejs.org/) (v22 or later)
 *   [npm](https://www.npmjs.com/)
 
 ### 1. Installation
@@ -41,8 +26,8 @@ Follow these steps to get the Ice Breaker application running on your local mach
 Clone the repository and install the dependencies:
 
 ```bash
-git clone https://github.com/your-repo/ice-breaker.git
-cd ice-breaker
+git clone https://github.com/tonyisup/break-the-ice.git
+cd break-the-ice
 npm install
 ```
 
@@ -67,7 +52,7 @@ VITE_CLERK_PUBLISHABLE_KEY="your-clerk-publishable-key"
 The following variables need to be set in your [Convex Dashboard](https://dashboard.convex.dev) under **Settings** → **Environment Variables**:
 
 *   `CLERK_JWT_ISSUER_DOMAIN`: You can find this in your [Clerk Dashboard](https://dashboard.clerk.com) under **API Keys**. It should be the "JWT Issuer URL".
-*   `OPENAI_API_KEY`: Your API key from the [OpenAI Platform](https://platform.openai.com/api-keys).
+*   `OPEN_ROUTER_API_KEY`: Your OpenRouter API key. Configure the `break-the-ice-berg-default` preset in OpenRouter before generating questions.
 *   `RESEND_API_KEY` or `RESEND_API_TOKEN`: A Resend API key with email-sending permission, required for newsletter verification and delivery.
 
 ### 3. Running the Application
@@ -79,13 +64,23 @@ npm run dev
 ```
 
 This command will:
-1.  Run a one-time setup script (`setup.mjs`) to help configure Convex auth.
-2.  Start the Vite development server for the frontend.
-3.  Start the Convex development server for the backend.
+1. Start Vite on port 5170.
+2. Start Convex in development mode, which synchronizes backend functions with the configured development deployment.
 
 The application will open in your default browser.
 
-## 🛠️ Tech Stack
+## Checks
+
+```bash
+npm run lint       # ESLint and all TypeScript projects; no backend synchronization
+npm test -- --run  # Unit and integration tests
+npm run build     # Production frontend build
+npm run check     # All three
+```
+
+Use `npm run dev:backend` when you intend to synchronize backend changes with your development deployment. The local Vite server uses the deployment in `VITE_CONVEX_URL`.
+
+## Tech stack
 
 *   **Frontend**: [React](https://react.dev/), [Vite](https://vitejs.dev/), [TypeScript](https://www.typescriptlang.org/)
 *   **Backend & Database**: [Convex](https://convex.dev/)

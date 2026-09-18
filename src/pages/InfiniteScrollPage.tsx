@@ -9,11 +9,11 @@ import { useStorageContext } from "@/hooks/useStorageContext";
 import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, SearchX, Sparkles, X } from "lucide-react";
+import { ArrowUp, SearchX, X } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { AnchorHeader } from "@/components/filter-controls/AnchorHeader";
 import { ItemDetails, ItemDetailDrawer } from "@/components/item-detail-drawer/item-detail-drawer";
-import { Icon, IconComponent } from "@/components/ui/icons/icon";
+import { Icon } from "@/components/ui/icons/icon";
 import { useAuth } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
 import { UpgradeCTA } from "@/components/UpgradeCTA";
@@ -22,19 +22,17 @@ import { RefineResultsCTA } from "@/components/RefineResultsCTA";
 import { ERROR_MESSAGES, ERROR_CODES } from "../../convex/constants";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils";
+import { orderQuestionBatch } from "@/lib/questionOrder";
 
-const compareByTextLength = (a: Doc<"questions">, b: Doc<"questions">) =>
-  (a.text || a.customText || "").length - (b.text || b.customText || "").length;
-
-const sortAnchoredBatch = (questions: Doc<"questions">[], anchoredCount: number) => [
-  ...questions.slice(0, anchoredCount).sort(compareByTextLength),
-  ...questions.slice(anchoredCount).sort(compareByTextLength),
-];
+const sortAnchoredBatch = (questions: Doc<"questions">[], anchoredCount: number) => {
+  const anchored = orderQuestionBatch(questions.slice(0, anchoredCount));
+  return [...anchored, ...orderQuestionBatch(questions.slice(anchoredCount), anchored.at(-1))];
+};
 
 const PUBLIC_FEED_BANNER_DISMISSED_KEY = "break-the-ice:public-feed-banner-dismissed:v1";
 
 export default function InfiniteScrollPage() {
-  const { effectiveTheme } = useTheme();
+  useTheme();
   const convex = useConvex();
   const user = useAuth();
   const { activeWorkspace, teamWorkspaceId } = useTeamWorkspace();
@@ -79,8 +77,6 @@ export default function InfiniteScrollPage() {
     }
   });
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
-  const [prevQuestion, setPrevQuestion] = useState<Doc<"questions"> | null>(null);
-  const [nextQuestion, setNextQuestion] = useState<Doc<"questions"> | null>(null);
   const currentUser = useQuery(api.core.users.getCurrentUser, {
     organizationId: activeWorkspace ?? undefined,
   });
@@ -133,7 +129,7 @@ export default function InfiniteScrollPage() {
   }, [allTones]);
 
   const topicsMap = useMemo(() => {
-    const map = new Map<string, any>();
+    const map = new Map<string, Doc<"topics">>();
     if (!allTopics) return map;
     allTopics.forEach(t => {
       map.set(t.id, t);
@@ -203,7 +199,7 @@ export default function InfiniteScrollPage() {
     }
   }, []);
 
-  // Track the cards for the background gradients
+  // Track the centered question for viewing history.
   useEffect(() => {
     const options = {
       root: null,
@@ -212,19 +208,13 @@ export default function InfiniteScrollPage() {
     };
 
     const handleIntersect: IntersectionObserverCallback = (entries) => {
-      entries.forEach((entry, index) => {
+      entries.forEach((entry) => {
         if (entry.isIntersecting) {
           const questionId = entry.target.getAttribute('data-question-id');
           if (questionId) {
             const question = questionsRef.current.find(q => q._id === questionId);
             if (question) {
-              if (index === 0) {
-                setPrevQuestion(null);
-              } else {
-                setPrevQuestion(questionsRef.current[index - 1]);
-              }
               setActiveQuestion(question);
-              setNextQuestion(questionsRef.current[index + 1]);
             }
           }
         }
@@ -249,7 +239,6 @@ export default function InfiniteScrollPage() {
 
   useEffect(() => {
 
-
     // Update refs for the new active question
     activeQuestionRef.current = activeQuestion;
     startTimeRef.current = Date.now();
@@ -263,7 +252,7 @@ export default function InfiniteScrollPage() {
           event: "seen",
           viewDuration: duration,
           sessionId: user.sessionId ?? undefined,
-        }); // No catch here as it might run during unmount
+        }).catch(() => { /* Viewing history remains local if analytics is unavailable. */ });
 
         if (duration > 1000) {
           addQuestionToHistory({
@@ -273,10 +262,7 @@ export default function InfiniteScrollPage() {
         }
       }
     };
-  }, [activeQuestion, recordAnalytics, addQuestionToHistory]);
-
-  const style = useQuery(api.core.styles.getStyle, { id: activeQuestion?.style || "would-you-rather" });
-  const tone = useQuery(api.core.tones.getTone, { id: activeQuestion?.tone || "fun-silly" });
+  }, [activeQuestion, recordAnalytics, addQuestionToHistory, user.sessionId]);
 
   // Check if all styles or tones are blocked
   const allStylesBlocked = useMemo(() => {
@@ -288,16 +274,6 @@ export default function InfiniteScrollPage() {
     if (!allTones || allTones.length === 0 || !hiddenTones) return false;
     return allTones.every(t => hiddenTones.includes(t._id));
   }, [allTones, hiddenTones]);
-
-  // Used for styling and gradient
-  const gradientTarget = effectiveTheme === "dark" ? "#000" : "#bbb";
-
-
-  useEffect(() => {
-    if (style?.color && tone?.color) {
-      setBgGradient([style.color, tone.color]);
-    }
-  }, [style, tone]);
 
   // Function to load more questions
   const loadMoreQuestions = useCallback(async () => {
@@ -388,7 +364,7 @@ export default function InfiniteScrollPage() {
         const finalAnchored = [...anchoredQuestions, ...uniqueGenerated.slice(0, generatedAnchoredCount)];
         const generatedFallback = uniqueGenerated.slice(generatedAnchoredCount);
         const finalBatch = [...finalAnchored, ...generalQuestions, ...generatedFallback].slice(0, BATCH_SIZE);
-        const orderedBatch = isFirstPull ? sortAnchoredBatch(finalBatch, finalAnchored.length) : finalBatch;
+        const orderedBatch = sortAnchoredBatch(finalBatch, finalAnchored.length);
 
         if (orderedBatch.length === 0) {
           if (isFirstPull) setHasMore(false);
@@ -412,7 +388,6 @@ export default function InfiniteScrollPage() {
         }
         return;
       }
-
 
       // 1. Try to get from DB
       const feedBatch = await convex.action(api.core.questions.getNextRandomQuestions, {
@@ -441,7 +416,7 @@ export default function InfiniteScrollPage() {
           const existingIds = new Set(prev.map(q => q._id));
           const uniqueNew = combinedQuestions.filter(q => !existingIds.has(q._id));
           if (uniqueNew.length === 0) return prev;
-          return [...prev, ...uniqueNew];
+          return [...prev, ...orderQuestionBatch(uniqueNew, prev.at(-1), false)];
         });
         setSeenIds(prev => {
           const next = new Set(prev);
@@ -458,7 +433,7 @@ export default function InfiniteScrollPage() {
 
           // If we have some DB questions and it was the first pull, we need to show them now
           if (isFirstPull && combinedQuestions.length > 0) {
-            combinedQuestions.sort(compareByTextLength);
+            combinedQuestions = orderQuestionBatch(combinedQuestions);
 
             setQuestions(combinedQuestions);
             setSeenIds(new Set(combinedQuestions.map(q => q._id)));
@@ -473,7 +448,7 @@ export default function InfiniteScrollPage() {
 
           // If we have some DB questions and it was the first pull, we need to show them now
           if (isFirstPull && combinedQuestions.length > 0) {
-            combinedQuestions.sort(compareByTextLength);
+            combinedQuestions = orderQuestionBatch(combinedQuestions);
             setQuestions(combinedQuestions);
             setSeenIds(new Set(combinedQuestions.map(q => q._id)));
           }
@@ -500,7 +475,7 @@ export default function InfiniteScrollPage() {
             if (combinedQuestions.length === 0) {
               setHasMore(false);
             } else {
-              combinedQuestions.sort(compareByTextLength);
+              combinedQuestions = orderQuestionBatch(combinedQuestions);
               setQuestions(combinedQuestions);
               setSeenIds(new Set(combinedQuestions.map(q => q._id)));
             }
@@ -509,7 +484,7 @@ export default function InfiniteScrollPage() {
               const existingIds = new Set(prev.map(q => q._id));
               const uniqueNew = uniqueGenerated.filter(q => !existingIds.has(q._id));
               if (uniqueNew.length === 0) return prev;
-              return [...prev, ...uniqueNew];
+              return [...prev, ...orderQuestionBatch(uniqueNew, prev.at(-1), false)];
             });
             setSeenIds(prev => {
               const next = new Set(prev);
@@ -552,7 +527,7 @@ export default function InfiniteScrollPage() {
 
           // If AI failed and it was first pull, show what we have from DB
           if (isFirstPull && combinedQuestions.length > 0) {
-            combinedQuestions.sort(compareByTextLength);
+            combinedQuestions = orderQuestionBatch(combinedQuestions);
 
             setQuestions(combinedQuestions);
             setSeenIds(new Set(combinedQuestions.map(q => q._id)));
@@ -562,7 +537,7 @@ export default function InfiniteScrollPage() {
         }
       } else if (isFirstPull) {
         // We have a full batch from DB, sort and show
-        combinedQuestions.sort(compareByTextLength);
+        combinedQuestions = orderQuestionBatch(combinedQuestions);
 
         setQuestions(combinedQuestions);
         setSeenIds(new Set(combinedQuestions.map(q => q._id)));
@@ -760,149 +735,36 @@ export default function InfiniteScrollPage() {
     setSearchParams(newParams);
   };
 
-  // Smooth gradient transition logic
-  const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
-
   const showRefineCTA = interactionStats &&
-    interactionStats.totalSeen >= 50 &&
-    interactionStats.totalLikes === 0 &&
-    !interactionStats.dismissedRefineCTA;
+    interactionStats.totalSeen >= 50 && interactionStats.totalLikes === 0 && !interactionStats.dismissedRefineCTA;
 
-  // Determine variant for A/B testing (randomized on mount)
-  // We use a ref to keep it consistent across re-renders
-  const newsletterVariantRef = useRef(Math.random() > 0.5 ? 'blend' as const : 'standout' as const);
-
-  // Refs for data needed in scroll handler to avoid frequent re-attachments
-  const stylesMapRef = useRef(stylesMap);
-  const tonesMapRef = useRef(tonesMap);
-
-  useEffect(() => {
-    stylesMapRef.current = stylesMap;
-  }, [stylesMap]);
-
-  useEffect(() => {
-    tonesMapRef.current = tonesMap;
-  }, [tonesMap]);
-
-  useEffect(() => {
-    const handleScrollColor = () => {
-      const centerY = window.innerHeight / 2;
-      const range = window.innerHeight / 1.5; // Cards within this distance from center contribute to color
-
-      let totalWeight = 0;
-      let r1 = 0, g1 = 0, b1 = 0;
-      let r2 = 0, g2 = 0, b2 = 0;
-
-      // Helper to parse hex
-      const hexToRgb = (hex: string) => {
-        const clean = hex.replace('#', '');
-        let r = 0, g = 0, b = 0;
-        if (clean.length === 3) {
-          r = parseInt(clean[0] + clean[0], 16);
-          g = parseInt(clean[1] + clean[1], 16);
-          b = parseInt(clean[2] + clean[2], 16);
-        } else {
-          r = parseInt(clean.substring(0, 2), 16);
-          g = parseInt(clean.substring(2, 4), 16);
-          b = parseInt(clean.substring(4, 6), 16);
-        }
-        return [r, g, b];
-      };
-
-      questionsRef.current.forEach((q) => {
-        const el = cardRefs.current.get(q._id);
-        if (!el) return;
-
-        const rect = el.getBoundingClientRect();
-        const cardCenter = rect.top + rect.height / 2;
-        const dist = Math.abs(cardCenter - centerY);
-
-        if (dist < range) {
-          // Weight follows a cosine overlap or linear curve
-          // Using Math.max(0, 1 - dist/range) gives a linear falloff
-          // Squaring it makes the transition smoother at the extremes
-          const weight = Math.pow(Math.max(0, 1 - dist / range), 2);
-
-          if (weight > 0) {
-            const s = q.style ? stylesMapRef.current.get(q.style) : undefined;
-            const t = q.tone ? tonesMapRef.current.get(q.tone) : undefined;
-            const colors = (s?.color && t?.color) ? [s.color, t.color] : ['#667EEA', '#764BA2'];
-
-            const rgb1 = hexToRgb(colors[0]);
-            const rgb2 = hexToRgb(colors[1]);
-
-            r1 += rgb1[0] * weight;
-            g1 += rgb1[1] * weight;
-            b1 += rgb1[2] * weight;
-
-            r2 += rgb2[0] * weight;
-            g2 += rgb2[1] * weight;
-            b2 += rgb2[2] * weight;
-
-            totalWeight += weight;
-          }
-        }
-      });
-
-      if (totalWeight > 0) {
-        const final1 = `rgb(${Math.round(r1 / totalWeight)}, ${Math.round(g1 / totalWeight)}, ${Math.round(b1 / totalWeight)})`;
-        const final2 = `rgb(${Math.round(r2 / totalWeight)}, ${Math.round(g2 / totalWeight)}, ${Math.round(b2 / totalWeight)})`;
-        setBgGradient([final1, final2]);
-      }
-    };
-
-    // Throttle or use RAF
-    let rafId: number;
-    const onScroll = () => {
-      rafId = requestAnimationFrame(handleScrollColor);
-    };
-
-    window.addEventListener('scroll', onScroll);
-    window.addEventListener('resize', onScroll);
-    // Initial calculation
-    handleScrollColor();
-
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-      cancelAnimationFrame(rafId);
-    };
-  }, []); // Empty dependency array as we use refs
   return (
     <div
-      className="min-h-screen overflow-x-clip flex flex-col"
+      className="app-shell overflow-x-clip flex flex-col"
     >
-      <div
-        className="h-screen fixed top-0 left-0 right-0 z-0"
-        style={{
-          background: `linear-gradient(135deg, ${bgGradient[0]}, ${gradientTarget}, ${bgGradient[1]})`,
-          transition: "background 0.2s ease-out"
-        }}
-      >
-      </div>
       <Header />
 
-      <main className="z-10 flex-1 flex flex-col pb-32 pt-32">
+      <main className="flex-1 flex flex-col pb-20 pt-24">
         {currentUser !== undefined && currentUser?.planTier !== "team" && !isPublicFeedBannerDismissed && (
-          <div className="mx-auto w-full max-w-3xl px-4 pb-4">
-            <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white shadow-lg backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
+          <div className="mx-auto w-full max-w-2xl px-4 pb-4">
+            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-foreground sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Public question feed
                 </p>
-                <p className="mt-1 text-sm text-white/80">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Browse icebreaker questions for coaches, workshops, and team sessions.
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <Button asChild variant="outline" className="h-9 shrink-0 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
+                <Button asChild variant="outline" className="h-9 shrink-0 border-border bg-card text-foreground hover:bg-secondary">
                   <Link to="/pricing?source=app_banner">Team plan</Link>
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-9 shrink-0 text-white/70 hover:bg-white/15 hover:text-white"
+                  className="size-9 shrink-0 text-muted-foreground hover:bg-white/15 hover:text-white"
                   onClick={dismissPublicFeedBanner}
                   aria-label="Dismiss public question feed banner"
                   title="Don't show this again"
@@ -933,15 +795,15 @@ export default function InfiniteScrollPage() {
             setIsAnchorDrawerOpen(true);
           }}
         />
-        <div className="flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full">
+        <div className="flex flex-col gap-6 px-4 max-w-2xl mx-auto w-full">
           {(allStylesBlocked || allTonesBlocked) && (
-            <div className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-4 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20">
-              <SearchX className="w-12 h-12 text-white/80" />
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-4 bg-card rounded-2xl border border-border">
+              <SearchX className="w-12 h-12 text-muted-foreground" />
               <div className="space-y-2">
-                <h3 className="text-xl font-semibold text-white">
-                  {allStylesBlocked ? "All Styles Hidden" : "All Tones Hidden"}
+                <h3 className="text-xl font-semibold text-foreground">
+                  {allStylesBlocked ? "All styles hidden" : "All tones hidden"}
                 </h3>
-                <p className="text-white/70 max-w-md">
+                <p className="text-muted-foreground max-w-md">
                   {allStylesBlocked
                     ? "You have hidden all available question styles. Please unhide some styles in the settings to see more questions."
                     : "You have hidden all available tones. Please unhide some tones in the settings to see more questions."}
@@ -950,11 +812,6 @@ export default function InfiniteScrollPage() {
               <Button
                 variant="default"
                 onClick={() => {
-                  // Direct user to settings or open the selector
-                  // Since specific selectors are in the header, maybe just generic guidance or reload?
-                  // For now, reload might reset if persistence isn't perfect, but better to just let them know.
-                  // Actually, opening the header selectors would be ideal but hard from here.
-                  // We can link to settings page if it exists and has these controls.
                   window.location.href = "/settings";
                 }}
               >
@@ -964,42 +821,47 @@ export default function InfiniteScrollPage() {
           )}
 
           {!allStylesBlocked && !allTonesBlocked && questions.length === 0 && !hasMore && !isLoading && (
-            <div className="flex flex-col items-center justify-center py-20 px-4 text-center space-y-6 bg-white/10 backdrop-blur-md rounded-[30px] border border-white/20">
-              <div className="bg-white/20 p-6 rounded-full">
-                <SearchX className="w-12 h-12 text-white" />
+            <div className="flex flex-col items-center justify-center py-20 px-4 text-center space-y-6 bg-card rounded-2xl border border-border">
+              <div className="p-2">
+                <SearchX className="w-12 h-12 text-muted-foreground" />
               </div>
               <div className="space-y-2">
-                <h3 className="text-2xl font-bold text-white uppercase italic">
-                  {loadError ? "Oops! Something went wrong" : "No results found"}
+                <h3 className="text-2xl font-bold text-foreground">
+                  {loadError ? "Couldn't load questions" : "No results found"}
                 </h3>
-                <p className="text-white/70 max-w-md mx-auto text-lg">
+                <p className="text-muted-foreground max-w-md mx-auto text-lg">
                   {loadError
-                    ? "We hit a snag trying to load some icebreakers for you. Mind giving it another shot?"
-                    : "We've searched high and low but couldn't find any questions matching your filters. Try adjusting your settings!"}
+                    ? "Check your connection and try again."
+                    : "No questions match these preferences. Try a different style or tone."}
                 </p>
               </div>
               <Button
                 variant="default"
                 size="lg"
-                className="rounded-full px-10 font-bold uppercase italic tracking-wider transition-all hover:scale-105"
+                className="min-h-11 px-6 font-semibold"
                 onClick={() => {
+                  if (!loadError) {
+                    setSearchParams(previous => {
+                      const next = new URLSearchParams(previous);
+                      next.delete("style");
+                      next.delete("tone");
+                      next.delete("topic");
+                      return next;
+                    });
+                    setSeenIds(new Set());
+                  }
                   setHasMore(true);
                   setLoadError(null);
-                  // The Effect will trigger loadMoreQuestions automatically
                 }}
               >
-                {loadError ? "Try Again" : "Reset Filters"}
+                {loadError ? "Try Again" : "Browse all questions"}
               </Button>
             </div>
           )}
 
           {!allStylesBlocked && !allTonesBlocked && questions.map((question, index) => {
-            // Derive specific style/tone/gradient for this card
-            const cardStyle = stylesMap.get(question.styleId || (question.style as string) || "");
+                    const cardStyle = stylesMap.get(question.styleId || (question.style as string) || "");
             const cardTone = tonesMap.get(question.toneId || (question.tone as string) || "");
-            const cardGradient = (cardStyle?.color && cardTone?.color)
-              ? [cardStyle.color, cardTone.color]
-              : ['#667EEA', '#764BA2'];
 
             return (
               <div key={`container-${question._id}`} className="flex flex-col gap-6 w-full">
@@ -1014,7 +876,6 @@ export default function InfiniteScrollPage() {
                     question={question}
                     isFavorite={likedQuestions.includes(question._id)}
                     isHidden={hiddenQuestions.includes(question._id)}
-                    gradient={cardGradient}
                     style={cardStyle}
                     tone={cardTone}
                     onToggleFavorite={() => void toggleLike(question._id)}
@@ -1036,7 +897,7 @@ export default function InfiniteScrollPage() {
                   (currentUser && !currentUser.newsletterSubscriptionStatus)
                 ) && (
                     <NewsletterCard
-                      variant={newsletterVariantRef.current}
+
                       prefilledEmail={user.isSignedIn ? currentUser?.email : undefined}
                     />
                   )}
@@ -1044,7 +905,6 @@ export default function InfiniteScrollPage() {
                 {/* Insert Refine Results CTA after the 10th question (index 9) */}
                 {index === 9 && showRefineCTA && (
                   <RefineResultsCTA
-                    bgGradient={bgGradient}
                     onDismiss={() => {
                       void dismissRefineCTA();
                     }}
@@ -1056,29 +916,28 @@ export default function InfiniteScrollPage() {
 
           {isLoading && (
             <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              <p role="status" className="text-sm text-muted-foreground">Loading questions…</p>
             </div>
           )}
 
           {showAuthCTA && (
             <SignInCTA
-              bgGradient={bgGradient}
               title="Want more questions?"
               featureHighlight={{
-                pre: "Sign in to get",
-                highlight: `${import.meta.env.VITE_MAX_FREE_AIGEN} free AI generations`,
-                post: "every month!"
+                pre: "Sign in to",
+                highlight: "create questions",
+                post: "and save them across your devices."
               }}
             />
           )}
 
           {showUpgradeCTA && (
             <UpgradeCTA
-              bgGradient={bgGradient}
-              title="Generation Limit Reached"
+              title="AI allowance used"
+              isTeam={currentUser?.planTier === "team"}
               description={currentUser?.planTier === 'team'
                 ? `You've reached your current Team workspace AI limit for this cycle.`
-                : `You've used all ${import.meta.env.VITE_MAX_FREE_AIGEN} free AI generations for this cycle.`
+                : "You've used your free AI allowance for this cycle."
               }
               onUpgrade={() => {
                 window.location.href = "/pricing?source=ai_limit";
@@ -1115,6 +974,7 @@ export default function InfiniteScrollPage() {
       {showTopButton && (
         <Button
           onClick={scrollToTop}
+          aria-label="Back to top"
           data-testid="scroll-to-top-button"
           className={cn(
             "fixed left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50 transition-all duration-300",
@@ -1126,28 +986,9 @@ export default function InfiniteScrollPage() {
       )}
 
       {activeTakeoverTopics && activeTakeoverTopics.length > 0 && (
-        <div
-          className="fixed bottom-0 left-0 right-0 z-50 text-white py-4 px-6 shadow-[0_-8px_30px_rgba(0,0,0,0.3)] flex items-center justify-center gap-6 animate-in slide-in-from-bottom duration-700 backdrop-blur-md border-t border-white/10"
-          style={{
-            background: activeTakeoverTopics.length === 1
-              ? `${activeTakeoverTopics[0].color || '#9333ea'}F2`
-              : `linear-gradient(90deg, ${activeTakeoverTopics[0].color || '#9333ea'}F2, ${activeTakeoverTopics[activeTakeoverTopics.length - 1].color || '#7c3aed'}F2)`
-          }}
-        >
-          <Sparkles className="size-6 text-yellow-300 fill-yellow-300 animate-pulse" />
-          <div className="flex items-center gap-4 font-black tracking-tighter uppercase text-xl italic">
-            <div className="flex -space-x-3">
-              {activeTakeoverTopics.map((t) => (
-                <div key={t._id} className="bg-white/20 p-2 rounded-full border-2 border-white/40 shadow-xl backdrop-blur-sm" title={t.name}>
-                  <IconComponent icon={(t.icon || "CircleQuestionMark") as Icon} size={28} />
-                </div>
-              ))}
-            </div>
-            <span className="drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
-              {activeTakeoverTopics.map(t => t.name).join(" & ")} Takeover!
-            </span>
-          </div>
-          <Sparkles className="size-6 text-yellow-300 fill-yellow-300 animate-pulse" />
+        <div className="fixed bottom-0 inset-x-0 z-50 flex items-center justify-center gap-3 border-t border-border bg-card px-4 py-3 text-sm text-foreground">
+          <span className="text-muted-foreground">Featured topics:</span>
+          <span className="font-semibold">{activeTakeoverTopics.map(topic => topic.name).join(" & ")}</span>
         </div>
       )}
 

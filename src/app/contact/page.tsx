@@ -1,3 +1,4 @@
+import { handleAsync, reportAsyncError } from "@/lib/async";
 import { useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -72,7 +73,7 @@ export default function ContactPage() {
       );
       toast.success("Thank you! Your message has been sent.");
       submissionIdRef.current = null;
-      navigate("/thank-you", { replace: true });
+      void Promise.resolve(navigate("/thank-you", { replace: true })).catch(reportAsyncError);
     } catch (error) {
       console.error(error);
       const errorMessage = error instanceof Error ? error.message : "Failed to send message.";
@@ -101,7 +102,7 @@ export default function ContactPage() {
           Use the form below to get in touch with our team.
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4 bg-card p-6 rounded-xl border shadow-sm">
+        <form onSubmit={handleAsync(handleSubmit)} className="space-y-4 bg-card p-6 rounded-xl border shadow-sm">
           <div className="space-y-2">
             <Label htmlFor="message">Your Message</Label>
             <Textarea

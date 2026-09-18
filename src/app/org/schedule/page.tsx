@@ -1,4 +1,5 @@
 "use client";
+import { handleAsync, reportAsyncError } from "@/lib/async";
 
 import * as React from "react";
 import { CreateOrganization, useAuth, useOrganization } from "@clerk/clerk-react";
@@ -516,7 +517,7 @@ interface DaySlotProps {
   isToday: boolean;
 }
 
-function DaySlot({ dayKey, dayLabel, dayAbbr, date, assignment, canEdit, onAssignClick, onUnassign, isTarget, isToday }: DaySlotProps) {
+function DaySlot({ dayKey, dayAbbr, date, assignment, canEdit, onAssignClick, onUnassign, isTarget, isToday }: DaySlotProps) {
   return (
     <Card
       className={cn(
@@ -596,7 +597,7 @@ function DaySlot({ dayKey, dayLabel, dayAbbr, date, assignment, canEdit, onAssig
 export default function OrgWeeklyCurationPage() {
   const { activeWorkspace, setActiveWorkspace, workspaceHydrated } = useWorkspace();
   const { isSignedIn, isLoaded: authLoaded, orgId: clerkOrgId } = useAuth();
-  const { organization: clerkOrganization, isLoaded: clerkOrgLoaded } = useOrganization();
+  const { isLoaded: clerkOrgLoaded } = useOrganization();
 
   /* --- Ensure user is synced to Convex before queries run --- */
   const syncUser = useMutation(api.core.users.store);
@@ -684,7 +685,6 @@ export default function OrgWeeklyCurationPage() {
   );
 
   /* --- Question pool updates via real-time subscription --- */
-const [isFillingOrRegen, setIsFillingOrRegen] = React.useState(false);
 
 const questionPool = useQuery(
     api.core.questions.getPublicQuestions,
@@ -771,8 +771,7 @@ const questionPool = useQuery(
   const autoSchedule = useMutation(api.core.schedules.autoSchedule);
   const upsertSettings = useMutation(api.core.orgSettings.upsertOrgSettings);
   const setDeliveryDayActive = useMutation(api.core.orgSettings.setDeliveryDayActive);
-  const syncOrg = useMutation(api.core.billing.syncOrganizationFromClerk);
-  const syncOrgViaClerkApi = useAction(api.core.billingSyncAction.syncOrganizationViaClerkApi);
+
   const fillEmptyCellsAction = useAction(api.core.fillMatrix.fillEmptyCells);
   const fillSingleCellAction = useAction(api.core.fillMatrix.fillSingleCell);
   const previewTopicQuestions = useAction(api.core.teamPromptActions.previewTopicQuestions);
@@ -869,8 +868,8 @@ const questionPool = useQuery(
     () =>
       (axisY === "style" ? styles : axisY === "tone" ? tones : topics)?.map((t) => ({
         id: t.id,
-        name: t.name as string,
-        slug: t.slug as string,
+        name: t.name,
+        slug: t.slug,
         icon: t.icon as Icon,
         color: t.color as string,
       })) ?? [],
@@ -880,8 +879,8 @@ const questionPool = useQuery(
     () =>
       (axisX === "style" ? styles : axisX === "tone" ? tones : topics)?.map((t) => ({
         id: t.id,
-        name: t.name as string,
-        slug: t.slug as string,
+        name: t.name,
+        slug: t.slug,
         icon: t.icon as Icon,
         color: t.color as string,
       })) ?? [],
@@ -1178,7 +1177,9 @@ const questionPool = useQuery(
         weekStartDay: value,
       });
       toast.success(`Week now starts on ${value === "monday" ? "Monday" : "Sunday"}`);
-    } catch {}
+    } catch {
+      toast.error("Couldn't update the start of the week. Try again.");
+    }
   };
 
   const handleTimeZoneChange = async (value: string) => {
@@ -1204,25 +1205,6 @@ const questionPool = useQuery(
       toast.error(error instanceof Error ? error.message : "Failed to update delivery days");
     } finally {
       setIsUpdatingDeliveryDays(false);
-    }
-  };
-
-  // Trigger org sync after Clerk org creation (JWT path, then API fallback like ClerkSyncManager)
-  const handleOrgReady = async (name: string) => {
-    try {
-      let orgDocId = await syncOrg({});
-      if (!orgDocId && clerkOrgId) {
-        orgDocId = await syncOrgViaClerkApi({
-          clerkOrganizationId: clerkOrgId,
-          organizationName: name,
-        });
-      }
-      if (orgDocId) {
-        setActiveWorkspace(orgDocId);
-        toast.success(`Connected to ${name}`);
-      }
-    } catch (e: any) {
-      toast.error(e.message ?? "Failed to sync org");
     }
   };
 
@@ -1272,7 +1254,7 @@ const questionPool = useQuery(
   /* --- Fill empty cells in the matrix --- */
   const handleFillEmptyCells = async () => {
     if (!questionMatrix) return;
-    setIsFillingOrRegen(true);
+
     setIsFillingEmpty(true);
     try {
       const cells = questionMatrix.yItems.flatMap((y) =>
@@ -1317,7 +1299,7 @@ const questionPool = useQuery(
       toast.error(e.message ?? "Failed to fill empty cells");
     } finally {
       setIsFillingEmpty(false);
-      setIsFillingOrRegen(false);
+
     }
   };
 
@@ -1518,17 +1500,17 @@ const questionPool = useQuery(
                 size="sm"
                 disabled={weekIsFull}
                 title={weekIsFull ? "Every day already has a question" : undefined}
-                onClick={handleAutoSchedule}
+                onClick={handleAsync(handleAutoSchedule)}
               >
                 <CalendarDays className="size-4 mr-1" /> Auto-fill
               </Button>
-              <Button size="sm" onClick={handlePublish}>
+              <Button size="sm" onClick={handleAsync(handlePublish)}>
                 <Crown className="size-4 mr-1" /> Publish
               </Button>
             </>
           )}
           {!currentSchedule && (
-            <Button size="sm" onClick={handleCreateWeek}>
+            <Button size="sm" onClick={handleAsync(handleCreateWeek)}>
               <Plus className="size-4 mr-1" /> Create Week
             </Button>
           )}
@@ -1732,7 +1714,7 @@ const questionPool = useQuery(
                                 globalTopicId === t.id && "bg-accent"
                               )}
                             >
-                              {t.name as string}
+                              {t.name}
                             </button>
                           ))}
                         </div>
@@ -1783,7 +1765,7 @@ const questionPool = useQuery(
                   size="sm"
                   className="w-full"
                   disabled={isGenerating || weekIsFull}
-                  onClick={handleGenerateWeek}
+                  onClick={handleAsync(handleGenerateWeek)}
                 >
                   <CalendarDays className="mr-1.5 size-3.5" />
                   {isGenerating ? "Scheduling…" : "Auto-fill Week"}
@@ -1813,7 +1795,7 @@ const questionPool = useQuery(
                   onAssignClick={(k) =>
                     setAssignTargetDay(assignTargetDay === k ? null : k)
                   }
-                  onUnassign={handleUnassign}
+                  onUnassign={handleAsync(handleUnassign)}
                 />
               ))}
             </div>
@@ -1855,7 +1837,7 @@ const questionPool = useQuery(
                     variant="outline"
                     size="sm"
                     disabled={isFillingEmpty}
-                    onClick={handleFillEmptyCells}
+                    onClick={handleAsync(handleFillEmptyCells)}
                   >
                     {isFillingEmpty ? (
                       <>
@@ -1964,7 +1946,7 @@ const questionPool = useQuery(
                                       size="sm"
                                       variant="default"
                                       className="w-full h-6 text-xs px-1"
-                                      onClick={() => handleAssign(assignTargetDay, q._id)}
+                                      onClick={handleAsync(() => handleAssign(assignTargetDay, q._id))}
                                     >
                                       Assign
                                     </Button>
@@ -1987,7 +1969,7 @@ const questionPool = useQuery(
                                     size="sm"
                                     className="h-6 w-full text-[10px] px-1"
                                     onClick={() => {
-                                      handleFillSingleCell(y.slug, x.slug);
+                                      void Promise.resolve(handleFillSingleCell(y.slug, x.slug)).catch(reportAsyncError);
                                     }}
                                     disabled={fillingCellKey !== null}
                                   >

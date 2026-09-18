@@ -7,7 +7,10 @@ import type { ActionCtx } from "../_generated/server";
 import {
   buildRemixPrompts,
   parseQuestionObjects,
+  normalizeQuestion,
 } from "./promptArchitecture";
+
+import { EDITORIAL_REVIEW_INSTRUCTION, parseEditorialReviews, questionRejectionReasons } from "./editorialReview";
 
 export const GENERATION_MODEL = "@preset/break-the-ice-berg-default";
 export const GENERATION_PROVIDER = "openrouter";
@@ -128,6 +131,21 @@ function getChatCompletionContent(completion: OpenAI.Chat.Completions.ChatComple
     );
   }
   return content;
+}
+
+async function reviewCandidates(candidates: { text: string; rationale?: string }[], context: string) {
+  if (candidates.length === 0) throw new Error("No questions returned for editorial review");
+  const completion = await createChatCompletionWithRetry({
+    model: GENERATION_MODEL,
+    temperature: 0,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: EDITORIAL_REVIEW_INSTRUCTION },
+      { role: "user", content: JSON.stringify({ context, candidates: candidates.map((candidate, index) => ({ index, text: candidate.text })) }) },
+    ],
+  });
+  const reviews = parseEditorialReviews(getChatCompletionContent(completion), candidates.length);
+  return candidates.map((candidate, index) => ({ ...candidate, text: normalizeQuestion(candidate.text), editorialReview: reviews[index] }));
 }
 
 type GenerationPurpose = "feed" | "admin_preview" | "admin_accept" | "nightly_pool" | "newsletter" | "remix";
@@ -264,7 +282,9 @@ export async function runPersistedQuestionGeneration(
     });
 
     const rawResponse = getChatCompletionContent(completion);
-    const parsedQuestions = parseQuestionObjects(rawResponse).slice(0, prompt.batchSize);
+    const parsedQuestions = await reviewCandidates(
+      parseQuestionObjects(rawResponse).slice(0, prompt.batchSize), prompt.userPrompt,
+    );
 
     const saveResult = await ctx.runMutation(internal.internal.generation.insertGeneratedQuestions, {
       runId,
@@ -282,6 +302,10 @@ export async function runPersistedQuestionGeneration(
       poolDate: args.poolDate,
       poolStatus: args.poolStatus,
     });
+
+    if (saveResult.insertedCount === 0 && saveResult.rejectedCount > 0) {
+      throw new Error("No questions passed editorial review. Please try again.");
+    }
 
     await ctx.runMutation(internal.internal.generation.completeGenerationRun, {
       runId,
@@ -369,15 +393,16 @@ export async function runPreviewQuestionGeneration(
     });
 
     const rawResponse = getChatCompletionContent(completion);
-    const parsed = parseQuestionObjects(rawResponse);
+    const parsed = await reviewCandidates(parseQuestionObjects(rawResponse).slice(0, prompt.batchSize), prompt.userPrompt);
     const previewTexts = parsed
+      .filter(candidate => questionRejectionReasons(candidate.text, candidate.editorialReview).length === 0)
       .slice(0, prompt.batchSize)
       .map((candidate) => candidate.text.trim())
       .filter(Boolean);
     const previewText = previewTexts[0] ?? "";
 
     if (!previewText) {
-      throw new Error("No preview questions parsed");
+      throw new Error("No questions passed editorial review. Try a different style or tone.");
     }
 
     await ctx.runMutation(internal.internal.generation.completeGenerationRun, {
@@ -462,8 +487,9 @@ export async function runRemixQuestion(
 
     const rawResponse = getChatCompletionContent(completion);
     const remixedText = rawResponse.replace(/^["']|["']$/g, "").trim();
-    if (!remixedText) {
-      throw new Error("AI failed to generate a remix");
+    const [reviewed] = await reviewCandidates([{ text: remixedText }], [prompts.systemPrompt, prompts.userPrompt].join("\n"));
+    if (questionRejectionReasons(reviewed.text, reviewed.editorialReview).length > 0) {
+      throw new Error("This remix needs more editing. Try a different style or tone.");
     }
 
     await ctx.runMutation(internal.internal.generation.completeGenerationRun, {

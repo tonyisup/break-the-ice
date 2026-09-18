@@ -1,9 +1,9 @@
-import { randomInt } from 'crypto';
+
 import React from 'react';
 
 interface GradientShuffleIconProps {
   size?: number;
-  className?: string; 
+  className?: string;
 }
 
 const styleColors = [
@@ -51,30 +51,30 @@ export const GradientShuffleIcon: React.FC<GradientShuffleIconProps> = ({ size =
         {/* Top left gradient with style colors */}
         <linearGradient id="topLeftGradient" x1="0%" y1="0%" x2="50%" y2="50%">
           {styleColors.map((color, index) => (
-            <stop 
-              key={index} 
-              offset={`${(index / (styleColors.length - 1)) * 100}%`} 
-              stopColor={color} 
+            <stop
+              key={index}
+              offset={`${(index / (styleColors.length - 1)) * 100}%`}
+              stopColor={color}
             />
           ))}
         </linearGradient>
-        
+
         {/* Bottom right gradient with tone colors */}
         <linearGradient id="bottomRightGradient" x1="50%" y1="50%" x2="100%" y2="100%">
           {toneColors.map((color, index) => (
-            <stop 
-              key={index} 
-              offset={`${(index / (toneColors.length - 1)) * 100}%`} 
-              stopColor={color} 
+            <stop
+              key={index}
+              offset={`${(index / (toneColors.length - 1)) * 100}%`}
+              stopColor={color}
             />
           ))}
         </linearGradient>
       </defs>
-      
+
       {/* Top left paths with style gradient */}
       <path d="m18 2 4 4-4 4" stroke="url(#topLeftGradient)" />
       <path d="M2 6h1.972a4 4 0 0 1 3.6 2.2" stroke="url(#topLeftGradient)" />
-      
+
       {/* Bottom right paths with tone gradient */}
       <path d="m18 14 4 4-4 4" stroke="url(#bottomRightGradient)" />
       <path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22" stroke="url(#bottomRightGradient)" />

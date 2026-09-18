@@ -1,6 +1,7 @@
 "use client";
+import { handleAsync, reportAsyncError } from "@/lib/async";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -103,7 +104,7 @@ function OrgDetailModal({
         </CardHeader>
         <CardContent className="space-y-4">
           {!data && !loading && (
-            <Button onClick={load} className="w-full">
+            <Button onClick={handleAsync(load)} className="w-full">
               Load Details
             </Button>
           )}
@@ -143,7 +144,7 @@ function OrgDetailModal({
               )}
 
               {data.billingStatus === "active" && (
-                <Button variant="destructive" onClick={handleCancel} className="w-full" disabled={cancelling}>
+                <Button variant="destructive" onClick={handleAsync(handleCancel)} className="w-full" disabled={cancelling}>
                   {cancelling ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Trash2 className="size-4 mr-2" />}
                   Cancel Subscription
                 </Button>
@@ -163,7 +164,7 @@ export default function AdminOrganizationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
 
-  const fetchOrgs = async () => {
+  const fetchOrgs = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -176,11 +177,11 @@ export default function AdminOrganizationsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [listOrgs]);
 
   useEffect(() => {
-    fetchOrgs();
-  }, []);
+    void fetchOrgs().catch(reportAsyncError);
+  }, [fetchOrgs]);
 
   const teamCount = orgs.filter((o) => o.planTier === "team").length;
   const activeCount = orgs.filter((o) => o.billingStatus === "active").length;
@@ -195,7 +196,7 @@ export default function AdminOrganizationsPage() {
           </h1>
           <p className="text-muted-foreground">Manage team workspaces and their Clerk subscriptions.</p>
         </div>
-        <Button onClick={fetchOrgs} disabled={loading} variant="outline" size="sm">
+        <Button onClick={handleAsync(fetchOrgs)} disabled={loading} variant="outline" size="sm">
           {loading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <RefreshCw className="size-4 mr-2" />}
           Refresh
         </Button>
@@ -338,7 +339,7 @@ export default function AdminOrganizationsPage() {
         <OrgDetailModal
           orgId={selectedOrg}
           onClose={() => setSelectedOrg(null)}
-          onRefresh={fetchOrgs}
+          onRefresh={handleAsync(fetchOrgs)}
         />
       )}
     </div>

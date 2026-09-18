@@ -9,10 +9,10 @@ export type HistoryEntry = {
 
 export function useQuestionHistory() {
   const { questionHistory } = useStorageContext();
-  
+
   // These are now no-ops as history is read-only (fed by backend analytics)
-  const addQuestionHistoryEntry = useCallback((question: Doc<"questions">) => {}, []);
-  const removeQuestionHistoryEntry = useCallback((questionId: Id<"questions">) => {}, []);
+  const addQuestionHistoryEntry = useCallback((_question: Doc<"questions">) => {}, []);
+  const removeQuestionHistoryEntry = useCallback((_questionId: Id<"questions">) => {}, []);
   const clearHistoryEntries = useCallback(() => {}, []);
 
   return {

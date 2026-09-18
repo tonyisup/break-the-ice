@@ -1,4 +1,5 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import { useQuery, useMutation } from "convex/react"
 import { api } from "../../../../../convex/_generated/api"
@@ -112,7 +113,7 @@ export default function UserDetailsPage() {
                 newsletterSubscriptionStatus: isSubscribed ? "subscribed" : "unsubscribed"
             })
             toast.success("User updated")
-        } catch (e) {
+        } catch {
             toast.error("Failed to update user")
         } finally {
             setIsSaving(false)
@@ -255,7 +256,7 @@ export default function UserDetailsPage() {
                                     </div>
                                 </div>
 
-                                <Button onClick={handleSave} disabled={isSaving} className="w-full">
+                                <Button onClick={handleAsync(handleSave)} disabled={isSaving} className="w-full">
                                     {isSaving ? (
                                         <>
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -321,7 +322,7 @@ export default function UserDetailsPage() {
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                     />
                                     {searchTerm && (
-                                        <button 
+                                        <button
                                             onClick={() => setSearchTerm("")}
                                             className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
                                         >
@@ -341,9 +342,9 @@ export default function UserDetailsPage() {
                                         ))}
                                     </select>
                                     {(searchTerm || filterStatus !== "all") && (
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
                                             onClick={() => {
                                                 setSearchTerm("")
                                                 setFilterStatus("all")

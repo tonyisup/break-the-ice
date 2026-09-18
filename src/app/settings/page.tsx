@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useStorageContext } from "../../hooks/useStorageContext";
-import { toast } from "sonner";
+
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useTheme } from "../../hooks/useTheme";
@@ -26,7 +26,7 @@ import { ModernQuestionCard } from "@/components/modern-question-card/modern-que
 
 const SettingsPage = () => {
   const { isSignedIn } = useAuth();
-  const { effectiveTheme } = useTheme();
+  useTheme();
   const { activeWorkspace } = useWorkspace();
   const entitlements = useQuery(api.core.billing.getEffectiveEntitlements, {
     organizationId: activeWorkspace ?? undefined,
@@ -191,17 +191,9 @@ const SettingsPage = () => {
   const visibleToneCount = allTones?.filter(t => !hiddenTones?.includes(t._id)).length;
   const hiddenToneCount = allTones?.filter(t => hiddenTones?.includes(t._id)).length;
 
-  const gradientLight: [string, string] = ["#667EEA", "#A064DE"];
-  const gradientDark: [string, string] = ["#3B2554", "#262D54"];
-  const bgGradient = effectiveTheme === 'dark' ? gradientDark : gradientLight;
   return (
-    <div
-      className="min-h-screen transition-colors overflow-x-clip"
-      style={{
-        background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradientDark[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradientDark[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
-      }}
-    >
-      <Header homeLinkSlot="settings" />
+    <div className="app-shell overflow-x-clip">
+      <Header />
 
       <div className="container mx-auto p-4 md:p-8 md:pt-24 pt-20">
 
@@ -221,16 +213,16 @@ const SettingsPage = () => {
                 onOpenChange={() => toggleSection('subscription')}
               >
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
+                  <div className="flex items-center justify-between p-4 bg-muted rounded-xl border border-border">
                     <div>
-                      <p className="text-sm text-gray-400">Current Plan</p>
-                      <p className="text-xl font-bold capitalize text-white">
+                      <p className="text-sm text-muted-foreground">Current Plan</p>
+                      <p className="text-xl font-bold capitalize text-foreground">
                         {currentUser.planTier || 'free'}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-gray-400">Usage this cycle</p>
-                      <p className="text-xl font-bold text-white">
+                      <p className="text-sm text-muted-foreground">Usage this cycle</p>
+                      <p className="text-xl font-bold text-foreground">
                         {currentUser.aiUsage?.count ?? 0} / {currentUser.aiLimit}
                       </p>
                     </div>
@@ -238,37 +230,37 @@ const SettingsPage = () => {
 
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-400">AI Generations Progress</span>
-                      <span className="text-white font-medium">
+                      <span className="text-muted-foreground">AI Generations Progress</span>
+                      <span className="text-foreground font-medium">
                         {Math.round(((currentUser.aiUsage?.count ?? 0) / Math.max(1, Number(currentUser.aiLimit))) * 100)}%
                       </span>
                     </div>
-                    <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
                       <div
-                        className="bg-gradient-to-r from-blue-500 to-purple-600 h-full transition-all duration-500"
+                        className="bg-primary h-full transition-all duration-500"
                         style={{ width: `${Math.min(100, ((currentUser.aiUsage?.count ?? 0) / Math.max(1, Number(currentUser.aiLimit))) * 100)}%` }}
                       />
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-sm text-gray-300">
+                  <div className="rounded-2xl border border-border bg-muted p-4">
+                    <p className="text-sm text-muted-foreground">
                       {entitlements?.canUseTeamFeatures
                         ? "Team billing is active for this workspace. Use Clerk to manage payment methods, upgrades, or cancellation."
-                        : "Free accounts can still use the personal app. Team unlocks shared workspaces, invites, collections, and higher AI limits."}
+                        : "The Team plan adds shared collections, invitations, and a larger AI allowance."}
                     </p>
                   </div>
 
                   {entitlements?.canUseTeamFeatures ? (
                     <SubscriptionDetailsButton for="organization">
-                      <button className="w-full bg-gradient-to-r from-slate-100 to-white text-slate-950 rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-[1.01]">
+                      <button className="w-full rounded-lg bg-secondary px-4 py-3 font-semibold text-secondary-foreground hover:bg-secondary/80">
                         Manage Team Billing
                       </button>
                     </SubscriptionDetailsButton>
                   ) : (
                     <Link
                       to="/pricing?source=settings"
-                      className="block w-full bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105 text-center"
+                      className="block w-full rounded-lg bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 text-center"
                     >
                       Start Team Plan
                     </Link>
@@ -360,7 +352,6 @@ const SettingsPage = () => {
               <div className="p-4">
                 <p className="dark:text-white/70 text-black/70 mb-4">Sign in to manage your style preferences.</p>
                 <SignInCTA
-                  bgGradient={bgGradient}
                   title="Sign In to Customize Styles"
                   featureHighlight={{
                     pre: "Personalize your",
@@ -433,7 +424,6 @@ const SettingsPage = () => {
               <div className="p-4">
                 <p className="dark:text-white/70 text-black/70 mb-4">Sign in to manage your tone preferences.</p>
                 <SignInCTA
-                  bgGradient={bgGradient}
                   title="Sign In to Customize Tones"
                   featureHighlight={{
                     pre: "Personalize your",
@@ -499,7 +489,6 @@ const SettingsPage = () => {
           {!isSignedIn && hiddenQuestions.length >= MAX_ANON_BLOCKED && (
             <div className="mb-6">
               <SignInCTA
-                bgGradient={bgGradient}
                 title="Hidden Question Limit Reached"
                 featureHighlight={{
                   pre: "Sign in to hide",
@@ -528,9 +517,6 @@ const SettingsPage = () => {
                   {questionsToDisplay.map(question => {
                     const style = stylesMap.get(question.styleId || (question.style as string) || "");
                     const tone = tonesMap.get(question.toneId || (question.tone as string) || "");
-                    const styleColor = style?.color || "#667EEA";
-                    const toneColor = tone?.color || "#764BA2";
-                    const cardGradient = [styleColor, toneColor];
 
                     return (
                       <div key={question._id}>
@@ -539,7 +525,6 @@ const SettingsPage = () => {
                           isGenerating={false}
                           isFavorite={false}
                           isHidden={true}
-                          gradient={cardGradient}
                           style={style}
                           tone={tone}
                           onToggleFavorite={() => {}}

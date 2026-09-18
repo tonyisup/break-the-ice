@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { doc } from "convex-helpers/validators";
 import { action, ActionCtx, internalAction, internalMutation, internalQuery, mutation, query } from "../_generated/server";
-import { api, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
 import { cosineSimilarity } from "../lib/embeddings";

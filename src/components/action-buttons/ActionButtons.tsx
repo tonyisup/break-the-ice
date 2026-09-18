@@ -1,4 +1,4 @@
-import { Shuffle, X, SquareArrowRight } from '@/components/ui/icons/icons';
+import { X, SquareArrowRight } from '@/components/ui/icons/icons';
 import { cn } from "../../lib/utils";
 import { GradientSquareArrowRightIcon } from '../ui/icons/GradientSquareArrowRightIcon';
 import { GradientArrowRightIcon } from '../ui/icons/GradientArrowRightIcon';

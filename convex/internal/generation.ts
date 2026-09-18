@@ -1,5 +1,6 @@
+import { questionRejectionReasons } from "../lib/editorialReview";
 import { ConvexError, v } from "convex/values";
-import { api, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import { internalMutation, internalQuery, QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import {
@@ -8,7 +9,6 @@ import {
   clampBatchSize,
   fingerprintText,
   normalizeQuestion,
-  validateGeneratedQuestion,
 } from "../lib/promptArchitecture";
 
 async function getLatestActiveBySlug(
@@ -361,6 +361,9 @@ export const insertGeneratedQuestions = internalMutation({
       v.object({
         text: v.string(),
         rationale: v.optional(v.string()),
+        editorialReview: v.optional(v.object({
+          readability: v.number(), answerability: v.number(), styleFit: v.number(), toneFit: v.number(), reasons: v.array(v.string()),
+        })),
       }),
     ),
     status: v.optional(
@@ -385,7 +388,6 @@ export const insertGeneratedQuestions = internalMutation({
     rejectedCount: v.number(),
   }),
   handler: async (ctx, args) => {
-    const now = Date.now();
     const insertedQuestionIds: Id<"questions">[] = [];
     const duplicates: Array<{ text: string; reason: string }> = [];
     const rejected: Array<{ text: string; reasons: string[] }> = [];
@@ -394,7 +396,7 @@ export const insertGeneratedQuestions = internalMutation({
     for (const candidate of args.candidates) {
       const text = normalizeQuestion(candidate.text);
       const fingerprint = fingerprintText(text);
-      const reasons = validateGeneratedQuestion(text);
+      const reasons = questionRejectionReasons(text, candidate.editorialReview);
 
       if (seenFingerprints.has(fingerprint)) {
         duplicates.push({ text, reason: "duplicate within batch" });
@@ -438,7 +440,12 @@ export const insertGeneratedQuestions = internalMutation({
         generationRunId: args.runId,
         safetyFlags: [],
         moderationNotes: candidate.rationale,
-        quality: {},
+        quality: candidate.editorialReview ? {
+          readability: candidate.editorialReview.readability,
+          answerability: candidate.editorialReview.answerability,
+          styleFit: candidate.editorialReview.styleFit,
+          toneFit: candidate.editorialReview.toneFit,
+        } : undefined,
         status: args.status ?? "public",
         poolDate: args.poolDate,
         poolStatus: args.poolStatus,

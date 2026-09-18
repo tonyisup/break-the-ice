@@ -58,7 +58,6 @@ import {
   Settings,
   Home,
   History,
-  Check,
   Circle,
   Moon,
   Sun,
@@ -89,7 +88,7 @@ import {
   UtensilsCrossed,
   Plane,
   Music4,
-  Shirt
+  Shirt,
 } from 'lucide-react';
 
 export const iconMap: Record<string, LucideIcon> = {

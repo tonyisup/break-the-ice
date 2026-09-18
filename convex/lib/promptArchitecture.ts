@@ -151,7 +151,7 @@ export function stripCodeFences(raw: string) {
 /** Extract the first complete JSON object or array from model output. */
 export function extractFirstJsonValue(raw: string): string | null {
   const cleaned = stripCodeFences(raw);
-  const start = cleaned.search(/[\[{]/);
+  const start = cleaned.search(/[[{]/);
   if (start === -1) {
     return null;
   }
@@ -272,6 +272,10 @@ export function buildGenerationPrompts(args: {
     "Global non-negotiables:",
     "- One card contains one prompt and one question mark.",
     "- The prompt must be understood in a few seconds.",
+    "- Write as a person would speak. Aim for 8–25 words; remove qualifiers that do not change the answer.",
+    "- Ask for one response. Avoid tacking on a second task such as explaining what the answer reveals about someone.",
+    "- Use at most one constraint or trade-off. Never force an awkward metaphor just to satisfy a taxonomy combination.",
+    "- Match the actual emotional depth to the tone; a routine preference does not become reflective by adding 'secretly'.",
     "- Prefer specific scenes, constraints, trade-offs, memories, habits,",
     "  values, taste, or quirks over generic favorites.",
     "- Low-stakes vulnerability beats high-stakes intensity.",
@@ -366,13 +370,14 @@ export function buildRemixPrompts(args: {
 
   return {
     systemPrompt: [
-      "You are a world-class creative writer specializing in social psychology and ice-breakers.",
+      "You edit icebreaker questions for natural, spoken conversation.",
       'TASK: Remix the user\'s question. Change the words and phrasing completely.',
       "FORMAT: Return only the new question text as a plain string.",
       `STYLE STRUCTURE: ${effectiveStyleStructure}`,
       `TONE GUIDE: ${effectiveToneGuidance}`,
       `TOPIC FOCUS: ${effectiveTopicGuidance}`,
       "Keep exactly one question. End with a single question mark.",
+      "Use concise, natural wording and one clear task. Avoid stacked conditions or a forced metaphor.",
     ].join("\n"),
     userPrompt: [
       `Remix this question: "${questionText}"`,

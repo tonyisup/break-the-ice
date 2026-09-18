@@ -27,7 +27,7 @@ export const claimMatrixFillCell = internalMutation({
 		const sorted = siblings.sort(
 			(a, b) => a._creationTime - b._creationTime,
 		);
-		const winner = sorted[0]!;
+		const winner = sorted[0];
 		if (winner._id !== myId) {
 			await ctx.db.delete(myId);
 			return { claimed: false };

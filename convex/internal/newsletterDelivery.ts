@@ -3,13 +3,6 @@ import { internalMutation, internalQuery } from "../_generated/server";
 
 export const MAX_DELIVERY_ATTEMPTS = 3;
 
-const deliveryStatus = v.union(
-  v.literal("pending"),
-  v.literal("processing"),
-  v.literal("sent"),
-  v.literal("failed"),
-);
-
 const claimedDelivery = v.object({
   _id: v.id("newsletterDeliveries"),
   email: v.string(),

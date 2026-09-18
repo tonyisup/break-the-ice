@@ -1,4 +1,5 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import * as React from "react"
 import { useQuery, useMutation } from "convex/react"
@@ -73,7 +74,7 @@ export default function PruningSettingsPage() {
 			})
 			toast.success("Pruning settings updated successfully")
 			setHasLocalEdits(false)
-		} catch (error) {
+		} catch {
 			toast.error("Failed to update settings")
 		} finally {
 			setIsSaving(false)
@@ -109,7 +110,7 @@ export default function PruningSettingsPage() {
 					</p>
 				</div>
 				<Button
-					onClick={saveConfiguration}
+					onClick={handleAsync(saveConfiguration)}
 					disabled={isSaving}
 					className="h-11 rounded-xl px-6 font-bold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95"
 				>
@@ -131,7 +132,7 @@ export default function PruningSettingsPage() {
 				</div>
 			)}
 
-			<form onSubmit={handleSubmit} className="grid gap-8">
+			<form onSubmit={handleAsync(handleSubmit)} className="grid gap-8">
 				{/* Settings Identity */}
 				<Card className="border-2 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-primary/5">
 					<CardHeader className="border-b bg-background/50">

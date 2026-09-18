@@ -125,7 +125,7 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
       if (!question.toneId && question.tone) {
         const tone = await ctx.db
           .query("tones")
-          .withIndex("by_slug", (q) => q.eq("slug", question.tone!))
+          .withIndex("by_slug", (q) => q.eq("slug", question.tone))
           .first();
         if (tone) {
           await ctx.db.patch(question._id, {

@@ -1,13 +1,12 @@
 import router from "./router";
 import { usersWebhook } from "./clerk";
 import { httpAction } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 
 const http = router;
 
 // Clerk handles authentication via ConvexProviderWithClerk
 // No need to add Convex Auth HTTP routes
-
 
 http.route({
 	path: "/clerk-users-webhook",

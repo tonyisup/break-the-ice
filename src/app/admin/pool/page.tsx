@@ -1,4 +1,5 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import * as React from "react"
 import { useQuery, useAction, useMutation } from "convex/react"
@@ -138,7 +139,7 @@ export default function PoolPage() {
         try {
             await deleteQuestion({ id })
             toast.success("Question removed from pool")
-        } catch (error) {
+        } catch {
             toast.error("Failed to remove question")
         }
     }
@@ -148,7 +149,7 @@ export default function PoolPage() {
             await updateQuestion({ id, text: editedText })
             toast.success("Question updated")
             setEditingQuestionId(null)
-        } catch (error) {
+        } catch {
             toast.error("Failed to update question")
         }
     }
@@ -203,7 +204,7 @@ export default function PoolPage() {
                     </div>
                     <div className="flex items-center gap-2">
                         <Button
-                            onClick={handleGenerate}
+                            onClick={handleAsync(handleGenerate)}
                             disabled={!isToday || isGenerating}
                             variant="outline"
                             className="gap-2"
@@ -216,7 +217,7 @@ export default function PoolPage() {
                             Generate Pool
                         </Button>
                         <Button
-                            onClick={handleAssign}
+                            onClick={handleAsync(handleAssign)}
                             disabled={!isToday || isAssigning || (stats?.availableQuestions ?? 0) === 0}
                             className="gap-2"
                         >
@@ -391,7 +392,7 @@ export default function PoolPage() {
                                                     className="min-h-[60px]"
                                                 />
                                                 <div className="flex flex-col gap-1">
-                                                    <Button size="icon" className="size-8 bg-green-600 hover:bg-green-700" onClick={() => handleSaveEdit(question._id)}>
+                                                    <Button size="icon" className="size-8 bg-green-600 hover:bg-green-700" onClick={handleAsync(() => handleSaveEdit(question._id))}>
                                                         <Save className="size-3.5" />
                                                     </Button>
                                                     <Button size="icon" variant="ghost" className="size-8" onClick={() => setEditingQuestionId(null)}>
@@ -452,7 +453,7 @@ export default function PoolPage() {
                                                 variant="ghost"
                                                 size="icon"
                                                 className="size-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
-                                                onClick={() => handleRemix(question._id)}
+                                                onClick={handleAsync(() => handleRemix(question._id))}
                                                 disabled={remixingIds.has(question._id)}
                                             >
                                                 {remixingIds.has(question._id) ? (
@@ -465,7 +466,7 @@ export default function PoolPage() {
                                                 variant="ghost"
                                                 size="icon"
                                                 className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                onClick={() => handleDelete(question._id as Id<"questions">)}
+                                                onClick={handleAsync(() => handleDelete(question._id))}
                                             >
                                                 <Trash2 className="size-4" />
                                             </Button>

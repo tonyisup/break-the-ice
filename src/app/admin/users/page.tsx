@@ -1,22 +1,12 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import * as React from "react"
 import { useQuery, useMutation } from "convex/react"
 import { Link } from "react-router-dom"
 import { api } from "../../../../convex/_generated/api"
 import { Doc, Id } from "../../../../convex/_generated/dataModel"
-import {
-	UserCircle,
-	ShieldAlert,
-	Search,
-	MoreHorizontal,
-	Mail,
-	Zap,
-	ShieldCheck,
-	Ban,
-	Pencil,
-	Eye
-} from "lucide-react"
+import { UserCircle, Search, MoreHorizontal, Mail, Zap, ShieldCheck, Ban, Pencil, Eye } from "lucide-react";
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -138,7 +128,7 @@ export default function UsersPage() {
 								<td className="px-6 py-4">
 									<div className="flex items-center gap-3">
 										{user.image ? (
-											<img src={user.image} className="size-10 rounded-full border shadow-sm" alt={user.name!} />
+											<img src={user.image} className="size-10 rounded-full border shadow-sm" alt={user.name} />
 										) : (
 											<div className="size-10 rounded-full bg-muted flex items-center justify-center border">
 												<UserCircle className="size-6 text-muted-foreground" />
@@ -191,7 +181,7 @@ export default function UsersPage() {
 										</DropdownMenuTrigger>
 										<DropdownMenuContent align="end" className="w-56">
 											{!user.isAdmin && (
-												<DropdownMenuItem className="gap-2 text-blue-600 focus:text-blue-600" onClick={() => handleMakeAdmin(user.email!)}>
+												<DropdownMenuItem className="gap-2 text-blue-600 focus:text-blue-600" onClick={handleAsync(() => handleMakeAdmin(user.email!))}>
 													<ShieldCheck className="size-3.5" />
 													Grant Admin Access
 												</DropdownMenuItem>
@@ -261,7 +251,7 @@ export default function UsersPage() {
 					</div>
 					<DialogFooter>
 						<Button variant="outline" onClick={() => setEditingUserId(null)}>Cancel</Button>
-						<Button onClick={handleSave} disabled={isSaving}>
+						<Button onClick={handleAsync(handleSave)} disabled={isSaving}>
 							{isSaving ? "Saving..." : "Save Changes"}
 						</Button>
 					</DialogFooter>

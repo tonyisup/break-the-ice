@@ -4,7 +4,6 @@ import InfiniteScrollPage from './InfiniteScrollPage';
 import { useQuery, useConvex, useAction, useMutation } from 'convex/react';
 import { WorkspaceProvider } from '@/hooks/useWorkspace.tsx';
 import { ModernQuestionCard } from '@/components/modern-question-card';
-import { NewsletterCard } from '@/components/newsletter-card/NewsletterCard';
 
 // Hoisted mocks for dynamic control
 const mockUseAuth = vi.fn();
@@ -118,7 +117,7 @@ describe('InfiniteScrollPage', () => {
 
     // Mock IntersectionObserver
     global.IntersectionObserver = class IntersectionObserver {
-      constructor(callback: any) { }
+      constructor(_callback: any) { }
       observe() { }
       unobserve() { }
       disconnect() { }
@@ -302,7 +301,7 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('All Styles Hidden')).toBeDefined();
+      expect(screen.getByText('All styles hidden')).toBeDefined();
     });
   });
 
@@ -329,7 +328,7 @@ describe('InfiniteScrollPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('All Tones Hidden')).toBeDefined();
+      expect(screen.getByText('All tones hidden')).toBeDefined();
     });
   });
 
@@ -417,7 +416,8 @@ describe('InfiniteScrollPage', () => {
       color: '#111111',
     });
 
-    const writtenParams = mockSetSearchParams.mock.calls.at(-1)[0];
+    const writtenParams = mockSetSearchParams.mock.calls.at(-1)?.[0];
+    expect(writtenParams).toBeDefined();
     expect(writtenParams.get('style')).toBe('story-driven');
   });
 
@@ -644,7 +644,7 @@ describe('InfiniteScrollPage', () => {
       action: actionMock,
     });
 
-    const { rerender } = render(
+    render(
       <WorkspaceProvider>
         <InfiniteScrollPage />
       </WorkspaceProvider>
@@ -702,7 +702,7 @@ describe('InfiniteScrollPage', () => {
 
     // Should automatically try to load first batch, fail, and show UpgradeCTA
     await waitFor(() => {
-      expect(screen.getByText('Generation Limit Reached')).toBeDefined();
+      expect(screen.getByText('AI allowance used')).toBeDefined();
       expect(screen.queryByText('Load More')).toBeNull();
     });
   });
@@ -734,7 +734,7 @@ describe('InfiniteScrollPage', () => {
 
     // Should immediately show UpgradeCTA if it tries to load and finds no DB questions
     await waitFor(() => {
-      expect(screen.getByText('Generation Limit Reached')).toBeDefined();
+      expect(screen.getByText('AI allowance used')).toBeDefined();
       expect(screen.queryByText('Load More')).toBeNull();
     });
   });

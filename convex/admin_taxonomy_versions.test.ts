@@ -14,7 +14,6 @@ describe("taxonomy version activation", () => {
   test("moves existing questions and embedding filters from any old version to the activated version", async () => {
     vi.useFakeTimers();
     const t = convexTest(schema, import.meta.glob("./**/*.ts"));
-    const now = Date.now();
 
     const ids = await t.run(async (ctx) => {
       const styleV1 = await ctx.db.insert("styles", {

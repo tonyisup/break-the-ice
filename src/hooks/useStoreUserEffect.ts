@@ -1,3 +1,4 @@
+import { reportAsyncError } from "@/lib/async";
 import { useUser } from "@clerk/clerk-react";
 import { useConvexAuth } from "convex/react";
 import { useEffect, useState } from "react";
@@ -26,7 +27,7 @@ export function useStoreUserEffect() {
       const id = await storeUser();
       setUserId(id);
     }
-    createUser();
+    void createUser().catch(reportAsyncError);
     return () => setUserId(null);
     // Make sure the effect reruns if the user logs in with
     // a different identity

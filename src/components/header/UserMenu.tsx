@@ -35,15 +35,16 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 
 	return (
 		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				<div className="relative">
-					<Button variant="ghost" size="icon" className="h-10 w-10 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center p-0 overflow-hidden">
+			<div className="relative">
+				<DropdownMenuTrigger asChild>
+					<Button aria-label="Account menu" variant="ghost" size="icon" className="h-10 w-10 rounded-lg border border-border bg-card hover:bg-accent flex items-center justify-center p-0 overflow-hidden">
 						{user?.imageUrl ? (
 							<img src={user.imageUrl} alt={user.fullName || "User"} className="h-full w-full object-cover" />
 						) : (
 							<User className="h-5 w-5" />
 						)}
 					</Button>
+				</DropdownMenuTrigger>
 					{showSettingsBadge && (
 						<div
 							className={cn(
@@ -53,9 +54,8 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 							title={settingsBadgeTitle}
 						/>
 					)}
-				</div>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-56 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-white/10">
+			</div>
+			<DropdownMenuContent align="end" className="w-56 bg-popover border-border">
 				<DropdownMenuLabel className="font-normal">
 					<div className="flex flex-col space-y-1">
 						<p className="text-sm font-medium leading-none">{user?.fullName || "Guest"}</p>
@@ -64,16 +64,16 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 						</p>
 					</div>
 				</DropdownMenuLabel>
-				<DropdownMenuSeparator className="bg-white/10" />
+				<DropdownMenuSeparator className="bg-border" />
 
 				<Unauthenticated>
-					<DropdownMenuItem onClick={() => openSignIn()} className="cursor-pointer focus:bg-white/10">
+					<DropdownMenuItem onClick={() => openSignIn()} className="cursor-pointer focus:bg-accent">
 						<LogIn className="mr-2 h-4 w-4" />
 						<span>Sign In</span>
 					</DropdownMenuItem>
 				</Unauthenticated>
 
-				<DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
+				<DropdownMenuItem asChild className="cursor-pointer focus:bg-accent">
 					<Link to="/settings" className="w-full flex items-center">
 						<Settings className="mr-2 h-4 w-4" />
 						<span>Settings</span>
@@ -92,14 +92,14 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 					<WorkspaceMenuSub />
 					{activeWorkspace && (
 						<>
-							<DropdownMenuSeparator className="bg-white/10 sm:hidden" />
-							<DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10 sm:hidden">
+							<DropdownMenuSeparator className="bg-border sm:hidden" />
+							<DropdownMenuItem asChild className="cursor-pointer focus:bg-accent sm:hidden">
 								<Link to="/org/schedule" className="w-full flex items-center">
 									<CalendarDays className="mr-2 h-4 w-4" />
 									<span>Weekly schedule</span>
 								</Link>
 							</DropdownMenuItem>
-							<DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10 sm:hidden">
+							<DropdownMenuItem asChild className="cursor-pointer focus:bg-accent sm:hidden">
 								<Link to="/org/today" className="w-full flex items-center">
 									<Users className="mr-2 h-4 w-4" />
 									<span>Coach view</span>
@@ -110,7 +110,7 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 				</Authenticated>
 
 				<DropdownMenuSub>
-					<DropdownMenuSubTrigger className="cursor-pointer focus:bg-white/10">
+					<DropdownMenuSubTrigger className="cursor-pointer focus:bg-accent">
 						<div className="flex items-center">
 							{theme === "light" && <Sun className="mr-2 h-4 w-4" />}
 							{theme === "dark" && <Moon className="mr-2 h-4 w-4" />}
@@ -119,28 +119,28 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 						</div>
 					</DropdownMenuSubTrigger>
 					<DropdownMenuPortal>
-						<DropdownMenuSubContent className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-white/10">
-							<DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer focus:bg-white/10">
+						<DropdownMenuSubContent className="bg-popover border-border">
+							<DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer focus:bg-accent">
 								<Sun className="mr-2 h-4 w-4" />
 								<span>Light</span>
-								{theme === "light" && <span className="ml-auto text-xs text-blue-500">●</span>}
+								{theme === "light" && <span className="ml-auto text-xs text-primary">●</span>}
 							</DropdownMenuItem>
-							<DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer focus:bg-white/10">
+							<DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer focus:bg-accent">
 								<Moon className="mr-2 h-4 w-4" />
 								<span>Dark</span>
-								{theme === "dark" && <span className="ml-auto text-xs text-blue-500">●</span>}
+								{theme === "dark" && <span className="ml-auto text-xs text-primary">●</span>}
 							</DropdownMenuItem>
-							<DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer focus:bg-white/10">
+							<DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer focus:bg-accent">
 								<Computer className="mr-2 h-4 w-4" />
 								<span>System</span>
-								{theme === "system" && <span className="ml-auto text-xs text-blue-500">●</span>}
+								{theme === "system" && <span className="ml-auto text-xs text-primary">●</span>}
 							</DropdownMenuItem>
 						</DropdownMenuSubContent>
 					</DropdownMenuPortal>
 				</DropdownMenuSub>
 
 				<Authenticated>
-					<DropdownMenuSeparator className="bg-white/10" />
+					<DropdownMenuSeparator className="bg-border" />
 					<DropdownMenuItem onClick={() => void signOut()} className="cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-500/10">
 						<LogOut className="mr-2 h-4 w-4" />
 						<span>Sign Out</span>

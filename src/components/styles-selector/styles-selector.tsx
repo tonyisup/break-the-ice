@@ -9,7 +9,7 @@ interface StyleSelectorProps {
   styles: Doc<"styles">[];
   selectedStyle: string;
   randomOrder?: boolean;
-  onSelectStyle: (style: string) => void; 
+  onSelectStyle: (style: string) => void;
   isHighlighting: boolean;
   setIsHighlighting: (isHighlighting: boolean) => void;
   onHighlightStyle?: (style: Doc<"styles"> | null) => void;
@@ -23,13 +23,13 @@ export interface StyleSelectorRef {
   scrollToCenter: (styleId: string) => void;
   scrollToSelectedItem: () => void;
 }
-export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, randomOrder = true, ref, isHighlighting, setIsHighlighting, onHighlightStyle }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
+export const StyleSelector = ({ styles, selectedStyle, onSelectStyle, ref, setIsHighlighting, onHighlightStyle }: StyleSelectorProps & { ref?: React.Ref<StyleSelectorRef> }) => {
   const { addHiddenStyle } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<ItemDetails | null>(null);
-  
+
   useEffect(() => {
     setIsHighlighting(highlightedItem !== null);
     if (onHighlightStyle) {

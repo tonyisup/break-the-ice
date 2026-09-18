@@ -1,22 +1,11 @@
 "use client"
+import { handleAsync } from "@/lib/async";
 
 import * as React from "react"
 import { useQuery, useMutation } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
 import { Doc, Id } from "../../../../convex/_generated/dataModel"
-import {
-	Plus,
-	MoreHorizontal,
-	Pencil,
-	Trash2,
-	Check,
-	X,
-	Palette,
-	Search,
-	ChevronDown,
-	LayoutGrid,
-	List
-} from "lucide-react"
+import { Plus, MoreHorizontal, Pencil, Trash2, Check, X, Search, LayoutGrid, List } from "lucide-react";
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -98,7 +87,7 @@ export default function StylesPage() {
 				promptGuidanceForAI: "",
 				example: ""
 			})
-		} catch (error) {
+		} catch {
 			toast.error("Failed to create style")
 		}
 	}
@@ -119,7 +108,7 @@ export default function StylesPage() {
 			})
 			toast.success("Style updated")
 			setEditingStyle(null)
-		} catch (error) {
+		} catch {
 			toast.error("Failed to update style")
 		}
 	}
@@ -129,7 +118,7 @@ export default function StylesPage() {
 		try {
 			await archiveStyle({ id })
 			toast.success("Style version archived")
-		} catch (error) {
+		} catch {
 			toast.error("Failed to delete style")
 		}
 	}
@@ -138,7 +127,7 @@ export default function StylesPage() {
 		try {
 			await activateStyleVersion({ id })
 			toast.success("Style version activated")
-		} catch (error) {
+		} catch {
 			toast.error("Failed to activate style version")
 		}
 	}
@@ -269,7 +258,7 @@ export default function StylesPage() {
 							</div>
 							<DialogFooter>
 								<Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
-								<Button onClick={handleCreate}>Create Style</Button>
+								<Button onClick={handleAsync(handleCreate)}>Create Style</Button>
 							</DialogFooter>
 						</DialogContent>
 					</Dialog>
@@ -321,12 +310,12 @@ export default function StylesPage() {
 											Edit Style
 										</DropdownMenuItem>
 										{style.status !== "active" && (
-											<DropdownMenuItem className="gap-2" onClick={() => handleActivate(style._id)}>
+											<DropdownMenuItem className="gap-2" onClick={handleAsync(() => handleActivate(style._id))}>
 												<Check className="size-3.5" />
 												Activate Version
 											</DropdownMenuItem>
 										)}
-										<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={() => handleDelete(style._id)}>
+										<DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={handleAsync(() => handleDelete(style._id))}>
 											<Trash2 className="size-3.5" />
 											Archive
 										</DropdownMenuItem>
@@ -388,14 +377,14 @@ export default function StylesPage() {
 									<td className="px-6 py-4 text-right">
 										<div className="flex items-center justify-end gap-1">
 											{style.status !== "active" && (
-												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={() => handleActivate(style._id)}>
+												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={handleAsync(() => handleActivate(style._id))}>
 													<Check className="size-3.5" />
 												</Button>
 											)}
 											<Button variant="ghost" size="icon" className="size-8" onClick={() => setEditingStyle(style)}>
 												<Pencil className="size-3.5" />
 											</Button>
-											<Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(style._id)}>
+											<Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleAsync(() => handleDelete(style._id))}>
 												<Trash2 className="size-3.5" />
 											</Button>
 										</div>
@@ -480,7 +469,7 @@ export default function StylesPage() {
 							</div>
 							<DialogFooter>
 								<Button variant="outline" onClick={() => setEditingStyle(null)}>Cancel</Button>
-								<Button onClick={() => handleUpdate(editingStyle)}>Save Changes</Button>
+								<Button onClick={handleAsync(() => handleUpdate(editingStyle))}>Save Changes</Button>
 							</DialogFooter>
 						</>
 					)}

@@ -6,6 +6,7 @@ import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./index.css";
+import "@fontsource-variable/manrope/index.css";
 import { StorageProvider } from "./hooks/useStorageContext";
 import { WorkspaceProvider } from "./hooks/useWorkspace.tsx";
 import App from "./App";
@@ -59,7 +60,6 @@ import CookieConsentBanner from "./components/CookieConsentBanner";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ClerkProviderWithTheme>
@@ -107,7 +107,6 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/admin/users/:userId" element={<UserDetailsPage />} />
                   <Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
                 </Route>
-
 
                 <Route path="/privacy" element={<PrivacyPolicyPage />} />
                 <Route path="/terms" element={<TermsOfServicePage />} />

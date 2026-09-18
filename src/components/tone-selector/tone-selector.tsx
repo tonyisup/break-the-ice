@@ -24,13 +24,13 @@ export interface ToneSelectorRef {
   scrollToSelectedItem: () => void;
 }
 
-export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = true, ref, isHighlighting, setIsHighlighting, onHighlightTone }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
+export const ToneSelector = ({ tones, selectedTone, onSelectTone, ref, setIsHighlighting, onHighlightTone }: ToneSelectorProps & { ref?: React.Ref<ToneSelectorRef> }) => {
   const { addHiddenTone } = useStorageContext();
   const genericSelectorRef = useRef<GenericSelectorRef>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<ItemDetails | null>(null);
-  
+
   useEffect(() => {
     setIsHighlighting(highlightedItem !== null);
     if (onHighlightTone) {
@@ -90,7 +90,6 @@ export const ToneSelector = ({ tones, selectedTone, onSelectTone, randomOrder = 
       genericSelectorRef.current?.scrollToSelectedItem();
     },
   }));
-
 
   return (
     <>
