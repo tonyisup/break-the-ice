@@ -1,16 +1,9 @@
-import { useState, type ReactNode } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { type ReactNode } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowRight, MessageCircle, Shuffle, Smile } from "lucide-react";
+import { ArrowRight, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/useTheme";
-
-const questions = [
-  "What is something you believed as a kid that still makes you laugh?",
-  "What tiny ritual makes an ordinary day feel better?",
-  "Which opinion have you changed your mind about recently?",
-  "What would your friends say is your most specific talent?",
-];
 
 const rooms = [
   {
@@ -67,7 +60,6 @@ const LandingPage = () => {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <PrimaryLink to="/app">Open a question</PrimaryLink>
-              <SecondaryLink to="#try-one">Try one here</SecondaryLink>
             </div>
           </motion.div>
 
@@ -87,8 +79,6 @@ const LandingPage = () => {
             </div>
           </motion.div>
         </section>
-
-        <QuestionExperience />
 
         <RevealSection className="mx-auto grid w-full max-w-[1400px] gap-8 px-5 py-20 md:grid-cols-[1.15fr_0.85fr] md:items-center md:px-10 md:py-28 lg:gap-16 lg:px-14">
           <div className="landing-card-frame overflow-hidden rounded-[30px] p-[3px]">
@@ -162,7 +152,7 @@ const LandingPage = () => {
 };
 
 const LandingHeader = () => (
-  <header className="sticky top-0 z-40 h-16 border-b border-white/10 bg-white/5 backdrop-blur-md dark:bg-black/20 md:h-[72px]">
+  <header className="sticky top-0 z-40 h-16 border-b border-white/10 bg-white/80 backdrop-blur-md dark:bg-gray-900/80 md:h-[72px]">
     <div className="mx-auto flex h-full max-w-[1400px] items-center justify-between gap-3 px-4 sm:gap-5 sm:px-5 md:px-10 lg:px-14">
       <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-md text-sm font-bold tracking-tight sm:text-base">
         <span className="flex size-8 items-center justify-center rounded-full bg-black/10 dark:bg-white/10" aria-hidden="true">
@@ -171,7 +161,7 @@ const LandingHeader = () => (
         Break the Ice
       </Link>
       <nav className="hidden items-center gap-7 text-sm font-semibold md:flex" aria-label="Primary navigation">
-        <a className="transition-opacity hover:opacity-55" href="#try-one">Try one here</a>
+        <Link className="transition-opacity hover:opacity-55" to="/app">Browse questions</Link>
         <Link className="transition-opacity hover:opacity-55" to="/pricing">For teams</Link>
       </nav>
       <Button asChild className="h-10 bg-black/10 px-3 text-xs dark:bg-white/10 sm:px-4 sm:text-sm">
@@ -180,70 +170,6 @@ const LandingHeader = () => (
     </div>
   </header>
 );
-
-const QuestionExperience = () => {
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const reduceMotion = useReducedMotion();
-
-  const showNextQuestion = () => {
-    setQuestionIndex((current) => (current + 1) % questions.length);
-  };
-
-  return (
-    <section id="try-one" className="scroll-mt-20 border-y border-white/20 bg-white/10 backdrop-blur-md dark:border-white/10 dark:bg-black/10">
-      <div className="mx-auto grid w-full max-w-[1400px] gap-10 px-5 py-20 md:grid-cols-[0.7fr_1.3fr] md:items-center md:px-10 md:py-28 lg:gap-16 lg:px-14">
-        <RevealSection>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Try one now</p>
-          <h2 className="mt-4 text-4xl font-bold leading-[1.12] tracking-[-0.03em] text-balance md:text-5xl">
-            One question. A completely different conversation.
-          </h2>
-        </RevealSection>
-
-        <div className="landing-card-frame mx-auto w-full max-w-md rounded-[30px] p-[3px]">
-          <div className="rounded-[27px] bg-white/95 p-6 dark:bg-gray-900/95 sm:p-8">
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-semibold sm:text-sm">
-              <span className="inline-flex items-center gap-2 rounded-full border-l-2 border-t-2 border-[#667eea] bg-black/10 px-3 py-2 text-gray-800 dark:bg-white/10 dark:text-gray-200 sm:px-4">
-                <MessageCircle aria-hidden="true" className="size-4 text-indigo-500 dark:text-indigo-300" />
-                Open-ended
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full border-b-2 border-r-2 border-[#764ba2] bg-black/10 px-3 py-2 text-gray-800 dark:bg-white/10 dark:text-gray-200 sm:px-4">
-                <Smile aria-hidden="true" className="size-4 text-purple-600 dark:text-purple-300" />
-                Lighthearted
-              </span>
-            </div>
-            <div className="flex min-h-[240px] items-center justify-center py-8" aria-live="polite" aria-atomic="true">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.p
-                  key={questionIndex}
-                  initial={reduceMotion ? false : { opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -12 }}
-                  transition={{ duration: reduceMotion ? 0 : 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  className="text-center text-2xl font-bold leading-relaxed text-gray-900 dark:text-white"
-                >
-                  {questions[questionIndex]}
-                </motion.p>
-              </AnimatePresence>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-gray-900/10 pt-5 dark:border-white/10">
-              <span className="text-sm font-medium tabular-nums text-gray-600 dark:text-gray-400">
-                {String(questionIndex + 1).padStart(2, "0")} / {String(questions.length).padStart(2, "0")}
-              </span>
-              <Button
-                type="button"
-                onClick={showNextQuestion}
-                className="min-h-12 rounded-full bg-black/10 px-5 text-sm font-semibold text-gray-800 hover:bg-black/20 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/20"
-              >
-                <Shuffle aria-hidden="true" />
-                Another question
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-};
 
 const RevealSection = ({ className = "", children }: { className?: string; children: ReactNode }) => {
   const reduceMotion = useReducedMotion();
@@ -263,18 +189,9 @@ const RevealSection = ({ className = "", children }: { className?: string; child
 };
 
 const PrimaryLink = ({ to, children }: { to: string; children: ReactNode }) => (
-  <Button asChild className="min-h-14 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 px-6 text-base font-bold text-white shadow-lg transition-transform hover:scale-[1.02] hover:from-blue-600 hover:to-purple-700 active:scale-[0.98] motion-reduce:transform-none">
+  <Button asChild className="min-h-14 rounded-full bg-gradient-to-r from-blue-600 to-purple-700 px-6 text-base font-bold text-white shadow-lg transition-transform hover:scale-[1.02] hover:from-blue-700 hover:to-purple-800 active:scale-[0.98] motion-reduce:transform-none">
     <Link to={to}>{children} <ArrowRight aria-hidden="true" /></Link>
   </Button>
-);
-
-const SecondaryLink = ({ to, children }: { to: string; children: ReactNode }) => (
-  <a
-    href={to}
-    className="inline-flex min-h-14 items-center justify-center rounded-full border border-gray-900/15 bg-white/10 px-6 text-base font-semibold backdrop-blur-sm transition-colors hover:bg-white/20 dark:border-white/20 dark:bg-white/5 dark:hover:bg-white/10"
-  >
-    {children}
-  </a>
 );
 
 const LandingFooter = () => (

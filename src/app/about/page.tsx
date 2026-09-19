@@ -2,57 +2,36 @@ import { PlaceholderPage } from "@/components/PlaceholderPage";
 
 export default function AboutPage() {
   return (
-    <PlaceholderPage title="About Us">
+    <PlaceholderPage title="About Break the Ice">
       <div className="space-y-8">
         <section>
-          <h2 className="text-2xl font-bold mb-4">Beyond the Small Talk</h2>
+          <h2 className="mb-4 text-2xl font-bold">It started before the first class of the morning.</h2>
           <p>
-            Break the Ice(berg) was born from a simple belief: starting a conversation shouldn't be the hardest part of your day.
-            Whether you're leading a team, teaching a class, or just meeting someone new, a single thoughtful question
-            can transform a room full of strangers into a community of connected individuals.
-          </p>
-        </section>
-
-        <section className="bg-white/5 p-6 rounded-xl border border-white/10 italic">
-          <h2 className="text-xl font-semibold mb-3 not-italic">The Inspiration</h2>
-          <p>
-            "For eight years, I've been a regular at group fitness classes. Every single session starts the same way:
-            with a 'Question of the Day.' Attending the very first class of the morning meant I often found myself
-            huddled with instructors, brainstorming questions minutes before the doors opened."
+            For eight years, I’ve attended group fitness classes that start with a question of the day.
+            At the first class of the morning, I would often join the instructors in coming up with
+            a question just minutes before the doors opened.
           </p>
           <p className="mt-4">
-            "When AI began to evolve, I saw an opportunity. I realized I could leverage this technology to move
-            past the standard 'what's your favorite color' questions and generate prompts that spark real
-            storytelling and genuine laughter."
+            Break the Ice grew out of that routine: a place to find a question when you have
+            people to bring together and very little time to prepare.
           </p>
         </section>
-
         <section>
-          <h2 className="text-xl font-semibold mb-3">AI with a Human Touch</h2>
+          <h2 className="mb-3 text-xl font-semibold">Find something worth asking.</h2>
           <p>
-            We don't just use AI to generate text; we use it to match your mood. By blending advanced language models
-            with custom styles and tones, Break the Ice helps you find the right words for any
-            occasion—from professional networking to late-night campfire chats.
+            Browse the question feed, explore different styles and tones, and save the questions
+            you want to use again. Teams can share collections and schedule prompts for their sessions.
+            AI helps create new questions and remix existing ones.
           </p>
         </section>
-
         <section>
-          <h2 className="text-xl font-semibold mb-3">A Solo Passion Project</h2>
+          <h2 className="mb-3 text-xl font-semibold">Built by one person, shaped by use.</h2>
           <p>
-            This is a solo project built with a 'build in public' philosophy. I'm constantly refining the experience
-            based on how people actually use it. Because this isn't built by a faceless corporation, your feedback
-            goes directly to the person responsible for every line of code.
-          </p>
-          <p className="mt-4">
-            You own your questions, you control your data, and we're just here to help you break the ice.
+            This is a solo project. I’m improving it as people use it in classes, meetings,
+            workshops, and around the dinner table. If a question falls flat or something
+            gets in your way, the feedback button sends your note directly to me.
           </p>
         </section>
-
-        <div className="pt-6 border-t border-white/10 text-center">
-          <p className="text-sm text-muted-foreground">
-            Thank you for being part of the journey. Let's keep the conversation going.
-          </p>
-        </div>
       </div>
     </PlaceholderPage>
   );

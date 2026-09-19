@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
+import { useReducedMotion } from "framer-motion";
 import { Doc, Id } from "../../convex/_generated/dataModel";
 import { useTheme } from "@/hooks/useTheme";
 import { useStorageContext } from "@/hooks/useStorageContext";
@@ -35,6 +36,7 @@ const PUBLIC_FEED_BANNER_DISMISSED_KEY = "break-the-ice:public-feed-banner-dismi
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
+  const reduceMotion = useReducedMotion();
   const convex = useConvex();
   const user = useAuth();
   const { activeWorkspace, teamWorkspaceId } = useTeamWorkspace();
@@ -79,8 +81,6 @@ export default function InfiniteScrollPage() {
     }
   });
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
-  const [prevQuestion, setPrevQuestion] = useState<Doc<"questions"> | null>(null);
-  const [nextQuestion, setNextQuestion] = useState<Doc<"questions"> | null>(null);
   const currentUser = useQuery(api.core.users.getCurrentUser, {
     organizationId: activeWorkspace ?? undefined,
   });
@@ -184,6 +184,11 @@ export default function InfiniteScrollPage() {
   const questionsRef = useRef(questions);
   questionsRef.current = questions;
 
+  const colorObserverRef = useRef<IntersectionObserver | null>(null);
+  const visibleColorCards = useRef(new Set<string>());
+  const questionsById = useMemo(() => new Map(questions.map(question => [String(question._id), question])), [questions]);
+  const questionsByIdRef = useRef(questionsById);
+  questionsByIdRef.current = questionsById;
   const observerRef = useRef<IntersectionObserver | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const isLoadingRef = useRef(false);
@@ -194,16 +199,19 @@ export default function InfiniteScrollPage() {
     if (element) {
       cardRefs.current.set(questionId, element);
       observerRef.current?.observe(element);
+      colorObserverRef.current?.observe(element);
     } else {
       const el = cardRefs.current.get(questionId);
       if (el) {
         observerRef.current?.unobserve(el);
+        colorObserverRef.current?.unobserve(el);
+        visibleColorCards.current.delete(questionId);
         cardRefs.current.delete(questionId);
       }
     }
   }, []);
 
-  // Track the cards for the background gradients
+  // Track the card at the center of the viewport for view analytics.
   useEffect(() => {
     const options = {
       root: null,
@@ -212,19 +220,13 @@ export default function InfiniteScrollPage() {
     };
 
     const handleIntersect: IntersectionObserverCallback = (entries) => {
-      entries.forEach((entry, index) => {
+      entries.forEach((entry) => {
         if (entry.isIntersecting) {
           const questionId = entry.target.getAttribute('data-question-id');
           if (questionId) {
             const question = questionsRef.current.find(q => q._id === questionId);
             if (question) {
-              if (index === 0) {
-                setPrevQuestion(null);
-              } else {
-                setPrevQuestion(questionsRef.current[index - 1]);
-              }
               setActiveQuestion(question);
-              setNextQuestion(questionsRef.current[index + 1]);
             }
           }
         }
@@ -236,6 +238,7 @@ export default function InfiniteScrollPage() {
     // Observe existing elements
     cardRefs.current.forEach((element) => {
       observerRef.current?.observe(element);
+      colorObserverRef.current?.observe(element);
     });
 
     return () => {
@@ -273,10 +276,8 @@ export default function InfiniteScrollPage() {
         }
       }
     };
-  }, [activeQuestion, recordAnalytics, addQuestionToHistory]);
+  }, [activeQuestion, recordAnalytics, addQuestionToHistory, user.sessionId]);
 
-  const style = useQuery(api.core.styles.getStyle, { id: activeQuestion?.style || "would-you-rather" });
-  const tone = useQuery(api.core.tones.getTone, { id: activeQuestion?.tone || "fun-silly" });
 
   // Check if all styles or tones are blocked
   const allStylesBlocked = useMemo(() => {
@@ -293,11 +294,6 @@ export default function InfiniteScrollPage() {
   const gradientTarget = effectiveTheme === "dark" ? "#000" : "#bbb";
 
 
-  useEffect(() => {
-    if (style?.color && tone?.color) {
-      setBgGradient([style.color, tone.color]);
-    }
-  }, [style, tone]);
 
   // Function to load more questions
   const loadMoreQuestions = useCallback(async () => {
@@ -588,12 +584,16 @@ export default function InfiniteScrollPage() {
     }
   }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded, anchoredStyleId, anchoredToneId, anchoredTopicId, anchorParamsReady]);
 
-  // Reset list when anchors change
+  // Reset the request and its loading state together when the feed changes.
   useEffect(() => {
     setQuestions([]);
     const currentQuestionId = activeQuestionRef.current?._id;
     setSeenIds(currentQuestionId ? new Set([currentQuestionId]) : new Set());
     requestIdRef.current++;
+    // The discarded request cannot release this lock in its finally block.
+    isLoadingRef.current = false;
+    setIsLoading(false);
+    setLoadError(null);
     setHasMore(true);
     setShowAuthCTA(false);
     setShowUpgradeCTA(false);
@@ -785,6 +785,11 @@ export default function InfiniteScrollPage() {
   }, [tonesMap]);
 
   useEffect(() => {
+    if (reduceMotion) {
+      setBgGradient(['#667EEA', '#764BA2']);
+      return;
+    }
+    const visibleCards = visibleColorCards.current;
     const handleScrollColor = () => {
       const centerY = window.innerHeight / 2;
       const range = window.innerHeight / 1.5; // Cards within this distance from center contribute to color
@@ -809,9 +814,10 @@ export default function InfiniteScrollPage() {
         return [r, g, b];
       };
 
-      questionsRef.current.forEach((q) => {
-        const el = cardRefs.current.get(q._id);
-        if (!el) return;
+      visibleCards.forEach((questionId) => {
+        const q = questionsByIdRef.current.get(questionId);
+        const el = cardRefs.current.get(questionId);
+        if (!el || !q) return;
 
         const rect = el.getBoundingClientRect();
         const cardCenter = rect.top + rect.height / 2;
@@ -824,8 +830,8 @@ export default function InfiniteScrollPage() {
           const weight = Math.pow(Math.max(0, 1 - dist / range), 2);
 
           if (weight > 0) {
-            const s = q.style ? stylesMapRef.current.get(q.style) : undefined;
-            const t = q.tone ? tonesMapRef.current.get(q.tone) : undefined;
+            const s = (q.styleId || q.style) ? stylesMapRef.current.get(q.styleId || q.style || "") : undefined;
+            const t = (q.toneId || q.tone) ? tonesMapRef.current.get(q.toneId || q.tone || "") : undefined;
             const colors = (s?.color && t?.color) ? [s.color, t.color] : ['#667EEA', '#764BA2'];
 
             const rgb1 = hexToRgb(colors[0]);
@@ -851,23 +857,38 @@ export default function InfiniteScrollPage() {
       }
     };
 
-    // Throttle or use RAF
-    let rafId: number;
+    let rafId: number | null = null;
     const onScroll = () => {
-      rafId = requestAnimationFrame(handleScrollColor);
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        handleScrollColor();
+      });
     };
-
-    window.addEventListener('scroll', onScroll);
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const id = entry.target.getAttribute('data-question-id');
+        if (!id) continue;
+        if (entry.isIntersecting) visibleCards.add(id);
+        else visibleCards.delete(id);
+      }
+      onScroll();
+    }, { rootMargin: '67% 0px' });
+    colorObserverRef.current = observer;
+    cardRefs.current.forEach(element => observer.observe(element));
+    window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll);
-    // Initial calculation
-    handleScrollColor();
+    onScroll();
 
     return () => {
+      observer.disconnect();
+      colorObserverRef.current = null;
+      visibleCards.clear();
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onScroll);
-      cancelAnimationFrame(rafId);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, []); // Empty dependency array as we use refs
+  }, [reduceMotion]);
   return (
     <div
       className="min-h-screen overflow-x-clip flex flex-col"
@@ -876,7 +897,7 @@ export default function InfiniteScrollPage() {
         className="h-screen fixed top-0 left-0 right-0 z-0"
         style={{
           background: `linear-gradient(135deg, ${bgGradient[0]}, ${gradientTarget}, ${bgGradient[1]})`,
-          transition: "background 0.2s ease-out"
+          transition: reduceMotion ? "none" : "background 0.2s ease-out"
         }}
       >
       </div>
@@ -885,7 +906,7 @@ export default function InfiniteScrollPage() {
       <main className="z-10 flex-1 flex flex-col pb-32 pt-32">
         {currentUser !== undefined && currentUser?.planTier !== "team" && !isPublicFeedBannerDismissed && (
           <div className="mx-auto w-full max-w-3xl px-4 pb-4">
-            <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white shadow-lg backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-gray-900/75 px-4 py-3 text-white shadow-lg backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
                   Public question feed
@@ -949,16 +970,9 @@ export default function InfiniteScrollPage() {
               </div>
               <Button
                 variant="default"
-                onClick={() => {
-                  // Direct user to settings or open the selector
-                  // Since specific selectors are in the header, maybe just generic guidance or reload?
-                  // For now, reload might reset if persistence isn't perfect, but better to just let them know.
-                  // Actually, opening the header selectors would be ideal but hard from here.
-                  // We can link to settings page if it exists and has these controls.
-                  window.location.href = "/settings";
-                }}
+                asChild
               >
-                Manage Preferences
+                <Link to="/settings">Manage preferences</Link>
               </Button>
             </div>
           )}
@@ -970,12 +984,12 @@ export default function InfiniteScrollPage() {
               </div>
               <div className="space-y-2">
                 <h3 className="text-2xl font-bold text-white uppercase italic">
-                  {loadError ? "Oops! Something went wrong" : "No results found"}
+                  {loadError ? "Couldn’t load questions" : "No matching questions"}
                 </h3>
                 <p className="text-white/70 max-w-md mx-auto text-lg">
                   {loadError
-                    ? "We hit a snag trying to load some icebreakers for you. Mind giving it another shot?"
-                    : "We've searched high and low but couldn't find any questions matching your filters. Try adjusting your settings!"}
+                    ? "Please try again."
+                    : "Try changing your style, tone, or topic filters."}
                 </p>
               </div>
               <Button

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { Button } from "../ui/button";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -9,11 +9,7 @@ import { UserMenu } from "./UserMenu";
 import { TeamWorkspaceMenu } from "./TeamWorkspaceMenu";
 import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 
-interface HeaderProps {
-  homeLinkSlot?: "liked" | "history" | "settings";
-}
-
-export const Header = ({ homeLinkSlot }: HeaderProps) => {
+export const Header = () => {
   const { isSignedIn } = useAuth();
   const { teamWorkspaceId } = useTeamWorkspace();
   const customQuestions = useQuery(api.core.questions.getCustomQuestions, {
@@ -31,42 +27,34 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
   const showSettingsFullBadge = !isSignedIn && (hiddenQuestions.length >= hiddenLimit);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-white/10 bg-white/5 p-3 backdrop-blur-md dark:bg-black/20 md:p-4">
+    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-white/10 bg-white/80 p-3 backdrop-blur-md dark:bg-gray-900/80 md:p-4">
       <div className="flex gap-1.5 sm:gap-2">
         <HomeLink />
-        {homeLinkSlot === "liked" ? (
-          <HomeLink icon={<Heart className="w-5 h-5" />} text="Liked" />
-        ) :
-          <div className="relative">
-            <Button asChild className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
-              <Link to="/liked">
-                <Heart className="w-5 h-5" />
-                <span>Liked</span>
-              </Link>
-            </Button>
-            {pendingCount > 0 && (
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">
-                {pendingCount}
-              </div>
-            )}
-            {showLimitBadge && (
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-white dark:border-gray-900" title={`${likedLimit - likedQuestions.length} left`} />
-            )}
-            {showFullBadge && (
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" title="Limit reached" />
-            )}
-          </div>
-        }
-        {homeLinkSlot === "history" ? (
-          <HomeLink icon={<History className="w-5 h-5" />} text="History" />
-        ) : (
+        <div className="relative">
           <Button asChild className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
-            <Link to="/history">
-              <History className="w-5 h-5" />
-              <span>History</span>
-            </Link>
+            <NavLink to="/liked" className="aria-[current=page]:bg-white/20 aria-[current=page]:dark:bg-white/10">
+              <Heart className="w-5 h-5" />
+              <span>Liked</span>
+            </NavLink>
           </Button>
-        )}
+          {pendingCount > 0 && (
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">
+              {pendingCount}
+            </div>
+          )}
+          {showLimitBadge && (
+            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-white dark:border-gray-900" title={`${likedLimit - likedQuestions.length} left`} />
+          )}
+          {showFullBadge && (
+            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" title="Limit reached" />
+          )}
+        </div>
+        <Button asChild className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
+          <NavLink to="/history" className="aria-[current=page]:bg-white/20 aria-[current=page]:dark:bg-white/10">
+            <History className="w-5 h-5" />
+            <span>History</span>
+          </NavLink>
+        </Button>
       </div>
       <div className="flex items-center gap-2">
         <TeamWorkspaceMenu className="hidden sm:inline-flex" />
@@ -84,10 +72,10 @@ export const Header = ({ homeLinkSlot }: HeaderProps) => {
 export const HomeLink = ({ icon = <Home className="w-5 h-5" />, text = "Home" }: { icon?: React.ReactNode, text?: string }) => {
   return (
     <Button asChild className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
-      <Link to="/app">
+      <NavLink to="/app" end className="aria-[current=page]:bg-white/20 aria-[current=page]:dark:bg-white/10">
         {icon}
         <span>{text}</span>
-      </Link>
+      </NavLink>
     </Button>
   );
 };

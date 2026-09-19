@@ -1,3 +1,4 @@
+import { getAiPlanLimit, AI_USAGE_CYCLE_DAYS } from "../lib/aiPlanLimits";
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { getEffectivePlanForUser } from "../auth";
@@ -43,10 +44,7 @@ export const getEffectiveEntitlements = query({
     const candidateIds = candidates.map(c => c._id);
 
     const effectivePlan = await getEffectivePlanForUser(ctx, candidateIds, args.organizationId);
-    const aiLimit =
-      effectivePlan.planTier === "team"
-        ? parseInt(process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
-        : parseInt(process.env.MAX_FREE_AIGEN ?? "10");
+    const aiLimit = getAiPlanLimit(effectivePlan.planTier);
 
     return {
       userId: user._id,
@@ -92,4 +90,14 @@ export const syncOrganizationFromClerk = mutation({
       organizationRole,
     });
   },
+});
+/** Public plan allowances contain no account or billing information. */
+export const getPublicPlanLimits = query({
+  args: {},
+  returns: v.object({ free: v.number(), team: v.number(), cycleDays: v.number() }),
+  handler: () => ({
+    free: getAiPlanLimit("free"),
+    team: getAiPlanLimit("team"),
+    cycleDays: AI_USAGE_CYCLE_DAYS,
+  }),
 });

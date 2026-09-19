@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, waitFor, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { act, fireEvent, render, waitFor, screen } from '@testing-library/react';
 import InfiniteScrollPage from './InfiniteScrollPage';
 import { useQuery, useConvex, useAction, useMutation } from 'convex/react';
 import { WorkspaceProvider } from '@/hooks/useWorkspace.tsx';
@@ -12,6 +13,12 @@ const mockUseUser = vi.fn();
 const mockUseStorageContext = vi.fn();
 let mockSearchParams = new URLSearchParams();
 const mockSetSearchParams = vi.fn();
+
+let mockReducedMotion = false;
+vi.mock('framer-motion', async (importOriginal) => ({
+  ...await importOriginal<typeof import('framer-motion')>(),
+  useReducedMotion: () => mockReducedMotion,
+}));
 
 // Mocks
 vi.mock('convex/react', () => ({
@@ -93,6 +100,7 @@ describe('InfiniteScrollPage', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    mockReducedMotion = false;
     window.localStorage.clear();
     mockSearchParams = new URLSearchParams();
 
@@ -141,6 +149,58 @@ describe('InfiniteScrollPage', () => {
       if (queryFn === 'getCurrentUser') return { _id: 'u1', email: 'test@example.com', newsletterSubscriptionStatus: null };
       return undefined;
     });
+  });
+
+  it('does not install the decorative color observer for reduced motion', async () => {
+    mockReducedMotion = true;
+    const observer = vi.fn(function () { return { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() }; });
+    global.IntersectionObserver = observer as unknown as typeof IntersectionObserver;
+    render(<WorkspaceProvider><InfiniteScrollPage /></WorkspaceProvider>);
+    await waitFor(() => expect(ModernQuestionCard).toHaveBeenCalled());
+    expect(observer.mock.calls.some(call => (call as unknown[])[1] && ((call as unknown[])[1] as IntersectionObserverInit).rootMargin === '67% 0px')).toBe(false);
+  });
+
+  it('loads questions when mounted in StrictMode after auth is already ready', async () => {
+    render(
+      <StrictMode>
+        <WorkspaceProvider>
+          <InfiniteScrollPage />
+        </WorkspaceProvider>
+      </StrictMode>
+    );
+
+    expect(await screen.findAllByTestId('modern-question-card')).toHaveLength(5);
+    expect(document.querySelector('.animate-spin')).toBeNull();
+  });
+
+  it('starts a new request when anchors change during loading and ignores the old response', async () => {
+    mockUseAuth.mockReturnValue({ isSignedIn: false, userId: null, isLoaded: true });
+    let resolveOld!: (questions: typeof mockQuestions) => void;
+    let resolveNew!: (questions: typeof mockQuestions) => void;
+    const oldRequest = new Promise<typeof mockQuestions>(resolve => { resolveOld = resolve; });
+    const newRequest = new Promise<typeof mockQuestions>(resolve => { resolveNew = resolve; });
+    const action = vi.fn().mockReturnValueOnce(oldRequest).mockReturnValueOnce(newRequest);
+    vi.mocked(useConvex).mockReturnValue({ action } as unknown as ReturnType<typeof useConvex>);
+    const view = render(<WorkspaceProvider><InfiniteScrollPage /></WorkspaceProvider>);
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+
+    mockSearchParams = new URLSearchParams('style=style2');
+    view.rerender(<WorkspaceProvider><InfiniteScrollPage /></WorkspaceProvider>);
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
+    expect(action).toHaveBeenLastCalledWith('getNextRandomQuestions', expect.objectContaining({
+      anchoredStyleId: 'style2',
+    }));
+
+    await act(async () => { resolveOld(mockQuestions); });
+    expect(screen.queryAllByTestId('modern-question-card')).toHaveLength(0);
+    expect(document.querySelector('.animate-spin')).not.toBeNull();
+
+    await act(async () => { resolveNew([mockQuestions[1]]); });
+    expect(screen.getAllByTestId('modern-question-card')).toHaveLength(1);
+    expect(ModernQuestionCard).toHaveBeenLastCalledWith(expect.objectContaining({
+      question: mockQuestions[1],
+    }), undefined);
+    expect(document.querySelector('.animate-spin')).toBeNull();
   });
 
   it('renders cards with specific styles and tones', async () => {
@@ -417,7 +477,10 @@ describe('InfiniteScrollPage', () => {
       color: '#111111',
     });
 
-    const writtenParams = mockSetSearchParams.mock.calls.at(-1)[0];
+    const lastCall = mockSetSearchParams.mock.calls.at(-1);
+    expect(lastCall).toBeDefined();
+    if (!lastCall) throw new Error("Expected anchor navigation");
+    const writtenParams = lastCall[0];
     expect(writtenParams.get('style')).toBe('story-driven');
   });
 

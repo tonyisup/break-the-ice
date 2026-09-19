@@ -23,10 +23,13 @@ export const PlaceholderPage = ({ title, children }: PlaceholderPageProps) => {
       <div className="max-w-2xl mx-auto">
         <div className="mb-6">
           <Button variant="ghost" asChild className="-ml-4 mb-4">
-            <Link to="/settings" className="flex items-center gap-2 dark:text-gray-400 text-gray-600 hover:dark:text-gray-100 hover:text-gray-900">
+            <Link to="/" className="flex items-center gap-2 dark:text-gray-400 text-gray-600 hover:dark:text-gray-100 hover:text-gray-900">
               <ArrowLeft className="w-4 h-4" />
-              Back to Settings
+              Home
             </Link>
+          </Button>
+          <Button variant="ghost" asChild className="mb-4 ml-2">
+            <Link to="/app">Browse questions</Link>
           </Button>
           <h1 className="text-3xl font-bold mb-4 dark:text-white text-black">{title}</h1>
         </div>

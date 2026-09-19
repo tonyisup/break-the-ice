@@ -1,13 +1,12 @@
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Id, Doc } from "../../../convex/_generated/dataModel";
+import { Id } from "../../../convex/_generated/dataModel";
 import { useTheme } from "../../hooks/useTheme";
 import { useStorageContext } from "../../hooks/useStorageContext";
 import { useQuestionHistory } from "../../hooks/useQuestionHistory";
 import { Header } from "../../components/header";
 import { useEffect } from "react";
-import { QuestionDisplay } from "../../components/question-display";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 import { ModernQuestionCard } from "@/components/modern-question-card";
@@ -15,9 +14,9 @@ import { ModernQuestionCard } from "@/components/modern-question-card";
 export default function QuestionPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { theme, setTheme } = useTheme();
+  const { effectiveTheme } = useTheme();
   const { addQuestionHistoryEntry } = useQuestionHistory();
-  const { likedQuestions, addLikedQuestion, removeLikedQuestion, setLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
+  const { likedQuestions, addLikedQuestion, removeLikedQuestion, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
 
   const question = useQuery(api.core.questions.getQuestionById, id ? { id } : "skip");
@@ -29,10 +28,6 @@ export default function QuestionPage() {
       addQuestionHistoryEntry(question);
     }
   }, [question, addQuestionHistoryEntry]);
-
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
 
   const toggleLike = async (questionId: Id<"questions">) => {
     const isLiked = likedQuestions.includes(questionId);
@@ -75,17 +70,17 @@ export default function QuestionPage() {
   };
 
   const handleHideStyle = (styleId: Id<"styles">) => {
-    addHiddenStyle(styleId);
-    navigate("/app");
+    void addHiddenStyle(styleId);
+    void navigate("/app");
   }
   const handleHideTone = (toneId: Id<"tones">) => {
-    addHiddenTone(toneId);
-    navigate("/app");
+    void addHiddenTone(toneId);
+    void navigate("/app");
   }
 
   const isFavorite = question ? likedQuestions.includes(question._id) : false;
   const gradient = (style?.color && tone?.color) ? [style?.color, tone?.color] : ['#667EEA', '#764BA2'];
-  const gradientTarget = theme === "dark" ? "#000" : "#fff";
+  const gradientTarget = effectiveTheme === "dark" ? "#000" : "#fff";
 
   const isColorDark = (color: string) => {
     if (!color) return false;
@@ -137,14 +132,14 @@ export default function QuestionPage() {
                 gradient={gradient}
                 style={style}
                 tone={tone}
-                onToggleFavorite={() => question && toggleLike(question._id)}
-                onToggleHidden={() => question && toggleHide(question._id)}
+                onToggleFavorite={() => { if (question) void toggleLike(question._id); }}
+                onToggleHidden={() => { if (question) void toggleHide(question._id); }}
                 onHideStyle={handleHideStyle}
                 onHideTone={handleHideTone}
               />
         <div className="flex justify-center p-4">
           <Link
-            to="/"
+            to="/app"
             className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
           >
             Get more questions

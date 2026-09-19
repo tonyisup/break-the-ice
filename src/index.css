@@ -130,29 +130,23 @@
 }
 
 @layer components {
-  .pricing-page {
-    font-family: "Manrope Variable", "Avenir Next", ui-sans-serif, system-ui, sans-serif;
-    font-optical-sizing: auto;
-  }
-
-  .pricing-page ::selection {
-    background: #ff4d2e;
-    color: #181818;
-  }
-
-  .landing-backdrop {
+  .landing-backdrop,
+  .pricing-backdrop {
     background: linear-gradient(135deg, #667eea, #bbb, #764ba2);
   }
 
-  .dark .landing-backdrop {
+  .dark .landing-backdrop,
+  .dark .pricing-backdrop {
     background: linear-gradient(135deg, #667eea, #000, #764ba2);
   }
 
-  .landing-card-frame {
+  .landing-card-frame,
+  .pricing-card-frame {
     background: linear-gradient(135deg, #764ba2, #667eea);
   }
 
-  .landing-page :is(a, button):focus-visible {
+  .landing-page :is(a, button):focus-visible,
+  .pricing-page :is(a, button):focus-visible {
     outline: 2px solid currentColor;
     outline-offset: 4px;
   }

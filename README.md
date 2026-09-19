@@ -1,25 +1,14 @@
-# Ice Breaker: AI-Powered Conversation Starters
+# Break the Ice
 
-https://www.breaktheiceberg.com/
+[breaktheiceberg.com](https://www.breaktheiceberg.com/)
 
-**Ice Breaker** is a fun and interactive application designed to spark engaging conversations in any social setting. Whether you're in a team meeting, a workshop, or a friendly get-together, this app provides an endless stream of unique ice-breaker questions to get everyone talking.
+Break the Ice helps facilitators find conversation starters for classes, team meetings,
+workshops, and social gatherings. Browse a scrolling feed, filter by style, tone, or topic,
+and save questions to use again. Team workspaces add shared collections and scheduled prompts.
 
-Powered by a modern tech stack, Ice Breaker features a sleek, intuitive interface and AI-driven question generation to ensure you never run out of interesting topics.
-
-## ✨ Features
-
-*   **Instant Question Display**: Get a unique ice-breaker question the moment you open the app.
-*   **Swipe Interface**: Effortlessly swipe through questions to find the perfect one.
-*   **Favorites**: Like a question? Save it to your "Liked" list for easy access later.
-*   **AI-Powered Generation**: Generate custom questions tailored to your interests using AI. Select from various categories, styles, and tones to guide the generation process.
-*   **Sleek, Modern UI**: Enjoy a beautiful, responsive interface with both **Dark and Light modes**, smooth animations, and full gesture support.
-*   **Admin Dashboard**: A built-in dashboard allows administrators to manage questions, categories, styles, and tones, giving you full control over the app's content.
-
-## 🤖 AI-Powered Question Generation
-
-The AI question generation feature uses OpenAI's GPT-4 to create unique and contextually relevant questions. You can guide the AI by selecting from a variety of predefined categories, styles, and tones to generate questions that fit any occasion.
-
-The implementation is split between the [generation runner](./convex/lib/generationRunner.ts) and [prompt architecture](./convex/lib/promptArchitecture.ts).
+The admin tools support question editing, generation, pruning review, and duplicate review.
+AI generation is implemented in the [generation runner](./convex/lib/generationRunner.ts)
+and [prompt architecture](./convex/lib/promptArchitecture.ts).
 
 ## Documentation
 
@@ -27,13 +16,13 @@ The implementation is split between the [generation runner](./convex/lib/generat
 - [How to schedule a Team Prompt](./docs/team-prompts/how-to-schedule-team-prompts.md)
 - [Team Prompts reference](./docs/team-prompts/reference.md)
 
-## 🚀 Getting Started
+## Development
 
 Follow these steps to get the Ice Breaker application running on your local machine.
 
 ### Prerequisites
 
-*   [Node.js](https://nodejs.org/) (v18 or later)
+*   [Node.js](https://nodejs.org/) (22 or later)
 *   [npm](https://www.npmjs.com/)
 
 ### 1. Installation
@@ -41,8 +30,8 @@ Follow these steps to get the Ice Breaker application running on your local mach
 Clone the repository and install the dependencies:
 
 ```bash
-git clone https://github.com/your-repo/ice-breaker.git
-cd ice-breaker
+git clone https://github.com/tonyisup/break-the-ice.git
+cd break-the-ice
 npm install
 ```
 
@@ -78,14 +67,31 @@ Once your environment variables are set, you can start the application with the 
 npm run dev
 ```
 
-This command will:
-1.  Run a one-time setup script (`setup.mjs`) to help configure Convex auth.
-2.  Start the Vite development server for the frontend.
-3.  Start the Convex development server for the backend.
+This starts Vite on port 5170 and `convex dev` in parallel. Convex watches and
+synchronizes backend code with the configured development deployment. Configure Clerk
+and Convex before starting; the command does not run `setup.mjs`.
 
-The application will open in your default browser.
+Use `npm run dev:frontend` to preview frontend changes against the existing backend
+without synchronizing it.
 
-## 🛠️ Tech Stack
+### Validation
+
+- `npm run typecheck` checks the frontend, backend, API routes, and Vite configuration.
+- `npm run lint` runs ESLint across `src`, `convex`, and `api`.
+- `npm run test:run` runs the test suite once.
+- `npm run build` builds the frontend.
+- `npm run check` runs all four checks and stops on the first failure.
+
+These checks do not synchronize or deploy backend code. ESLint currently exposes existing
+violations, including async event handlers and redundant type assertions; a failed lint
+run is a real failure to address, not a successful validation.
+
+AI allowances come from the Convex environment: `MAX_FREE_AIGEN` (default 10) and
+`MAX_TEAM_AIGEN` (default 100; falls back to legacy `MAX_CASUAL_AIGEN`). Usage is counted
+per person within each workspace over 30-day cycles. The public pricing summary reads
+those allowances from Convex and plan prices directly from Clerk.
+
+## Stack
 
 *   **Frontend**: [React](https://react.dev/), [Vite](https://vitejs.dev/), [TypeScript](https://www.typescriptlang.org/)
 *   **Backend & Database**: [Convex](https://convex.dev/)

@@ -52,7 +52,7 @@ function LikedQuestionsPageContent() {
     });
   }, [likedQuestions]);
 
-  const questions = useQuery(api.core.questions.getQuestionsByIds, { ids: validLikedQuestions as Id<"questions">[] });
+  const questions = useQuery(api.core.questions.getQuestionsByIds, { ids: validLikedQuestions });
   const styles = useQuery(api.core.styles.getStyles, {});
   const tones = useQuery(api.core.tones.getTones, {});
 
@@ -254,7 +254,7 @@ function LikedQuestionsPageContent() {
         background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradient[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradient[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
       }}
     >
-      <Header homeLinkSlot="liked" />
+      <Header />
 
       <AddPersonalQuestionDialog
         isOpen={isAddPersonalQuestionDialogOpen}
@@ -290,7 +290,7 @@ function LikedQuestionsPageContent() {
               <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 {myQuestions.map((question) => (
                   <div key={question._id}>
-                    {renderCard(question as Doc<"questions">, () => handleDeletePersonalQuestion(question._id))}
+                    {renderCard(question, () => { void handleDeletePersonalQuestion(question._id); })}
                   </div>
                 ))}
               </div>

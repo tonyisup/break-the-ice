@@ -68,6 +68,7 @@ import type * as internal_subscriptions from "../internal/subscriptions.js";
 import type * as internal_tones from "../internal/tones.js";
 import type * as internal_topics from "../internal/topics.js";
 import type * as internal_users from "../internal/users.js";
+import type * as lib_aiPlanLimits from "../lib/aiPlanLimits.js";
 import type * as lib_aiUsageWorkspace from "../lib/aiUsageWorkspace.js";
 import type * as lib_billingSubjects from "../lib/billingSubjects.js";
 import type * as lib_clerkOrgSync from "../lib/clerkOrgSync.js";
@@ -158,6 +159,7 @@ declare const fullApi: ApiFromModules<{
   "internal/tones": typeof internal_tones;
   "internal/topics": typeof internal_topics;
   "internal/users": typeof internal_users;
+  "lib/aiPlanLimits": typeof lib_aiPlanLimits;
   "lib/aiUsageWorkspace": typeof lib_aiUsageWorkspace;
   "lib/billingSubjects": typeof lib_billingSubjects;
   "lib/clerkOrgSync": typeof lib_clerkOrgSync;

@@ -1,5 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { motion, useScroll, useTransform, useSpring, useVelocity } from 'framer-motion';
+import { useRef, useState } from 'react';
 import { Heart, Share2, ThumbsDown, TrashIcon } from '@/components/ui/icons/icons';
 import { Sparkles } from 'lucide-react';
 import { Doc, Id } from '../../../convex/_generated/dataModel';
@@ -10,6 +9,7 @@ import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer/item-detail
 import { RemixQuestionDrawer } from '../remix-question-drawer/remix-question-drawer';
 import { useStorageContext } from '@/hooks/useStorageContext';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface ModernQuestionCardProps {
   question: Doc<"questions"> | null;
@@ -154,20 +154,22 @@ export function ModernQuestionCard({
     setIsDrawerOpen(true);
   };
   const handleShare = async () => {
-    if (!question || !navigator.share) return;
+    if (!question) return;
 
     const shareUrl = `${window.location.origin}/question/${question._id}`;
 
     try {
-      await navigator.share({
-        title: 'Ice Breaker Question',
-        text: question.text,
-        url: shareUrl,
-      });
+      if (typeof navigator.share === "function") {
+        await navigator.share({ title: 'Ice Breaker Question', text: question.text, url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success("Question link copied");
+      }
     } catch (error) {
       // User cancelled the share dialog or an error occurred
       if (error instanceof Error && error.name !== 'AbortError') {
         console.error('Error sharing:', error);
+        toast.error("Couldn’t share the question. Please try again.");
       }
     }
   };
@@ -206,7 +208,6 @@ export function ModernQuestionCard({
                 onClickStyle={handleOpenStyleDrawer}
                 onClickTone={handleOpenToneDrawer}
                   onClickTopic={handleOpenTopicDrawer}
-                containerRef={cardRef}
                 onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
                 topic={topic}
                 imageUrl={imageUrl}
@@ -277,7 +278,6 @@ interface QuestionContentProps {
   onClickStyle?: () => void;
   onClickTone?: () => void;
   onClickTopic?: () => void;
-  containerRef: React.RefObject<HTMLDivElement | null>;
   onRemix?: () => void;
   topic?: any;
   /** When provided, used for the question image and getQuestionImageUrl is not called. */
@@ -299,31 +299,11 @@ const QuestionContent = ({
   onClickStyle,
   onClickTone,
   onClickTopic,
-  containerRef,
   onRemix,
   topic: providedTopic,
   imageUrl,
   onDelete,
 }: QuestionContentProps) => {
-  const { scrollYProgress } = useScroll({ target: containerRef });
-  const scrollVelocity = useVelocity(scrollYProgress);
-
-  // Map scroll velocity to rotation (-1 to 1 range usually covers most flicks)
-  const velocityRotate = useTransform(scrollVelocity, [-1, 0, 1], [-180, 0, 180]);
-
-  const rotate = useSpring(velocityRotate, {
-    stiffness: 40,
-    damping: 12,
-    mass: 3
-  });
-
-  // Trail effects for the topic icon
-  const trail1Rotate = useSpring(velocityRotate, { stiffness: 30, damping: 10, mass: 2 });
-  const trail2Rotate = useSpring(velocityRotate, { stiffness: 20, damping: 10, mass: 1.5 });
-
-  const trail1Y = useSpring(useTransform(scrollVelocity, [-1, 1], [-15, 15]), { stiffness: 30, damping: 10 });
-  const trail2Y = useSpring(useTransform(scrollVelocity, [-1, 1], [-30, 30]), { stiffness: 20, damping: 10 });
-
   const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
@@ -379,7 +359,7 @@ const QuestionContent = ({
     <div className="w-full h-full flex flex-col justify-between min-h-[300px]">
       {/* Category Badge */}
       {(hasStyle || hasTone) && (
-        <div className="flex flex-row gap-2 justify-between">
+        <div className="flex flex-wrap gap-2 justify-between">
           {hasStyle && (
             <div className="border-t-2 border-l-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
               style={{
@@ -387,17 +367,19 @@ const QuestionContent = ({
                 borderLeftColor: gradient[0]
               }}
             >
-              <div
+              <button
+                type="button"
+                aria-label={`Style: ${style?.name || styleSlug}`}
                 title={style?.name || styleSlug || "style"}
-                className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
+                className="cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
                 onClick={handleClickStyle}
               >
                 {style && <IconComponent icon={style.icon as Icon} size={24} color={style.color} />}
-                <span className="hidden md:block">
+                <span className="text-left">
                   {style?.name}
                 </span>
                 {!style && styleSlug}
-              </div>
+              </button>
             </div>
           )}
 
@@ -408,17 +390,19 @@ const QuestionContent = ({
                 borderRightColor: gradient[1]
               }}
             >
-              <div
+              <button
+                type="button"
+                aria-label={`Tone: ${tone?.name || toneSlug}`}
                 title={tone?.name || toneSlug || "tone"}
-                className="cursor-pointer flex gap-2 items-center text-sm font-semibold text-gray-800 dark:text-gray-200"
+                className="cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
                 onClick={handleClickTone}
               >
                 {tone && <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />}
-                <span className="hidden md:block">
+                <span className="text-left">
                   {tone?.name}
                 </span>
                 {!tone && toneSlug}
-              </div>
+              </button>
             </div>
           )}
         </div>
@@ -443,9 +427,11 @@ const QuestionContent = ({
           disabled={disabled}
           className={cn(
             "flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20",
-            shakeHeart && "animate-shake"
+            shakeHeart && "motion-safe:animate-shake"
           )}
           title="Toggle favorite"
+          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+          aria-pressed={isFavorite}
         >
           <Heart
             size={24}
@@ -461,7 +447,7 @@ const QuestionContent = ({
           disabled={disabled}
           className={cn(
             "flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20",
-            shakeThumbsDown && "animate-shake"
+            shakeThumbsDown && "motion-safe:animate-shake"
           )}
           title={isHidden ? "Unhide question" : "Hide question"}
         >
@@ -474,12 +460,14 @@ const QuestionContent = ({
           </span>
         </button>
 
-        {typeof navigator.share === 'function' && (
+        {(
           <button
             onClick={handleShare}
+            type="button"
             disabled={disabled}
             className="flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20"
             title="Share question"
+            aria-label="Share question"
           >
             <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
             <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
@@ -528,29 +516,9 @@ const QuestionContent = ({
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Topic: {topic.name}
           </p>
-          <div className="relative">
-            {/* Trail icons */}
-            <motion.div
-              style={{ rotate: trail2Rotate, y: trail2Y, opacity: 0.2 }}
-              className="absolute inset-0 pointer-events-none"
-              contentEditable={false}
-            >
-              <IconComponent icon={safeIcon} size={24} color={topic.color} />
-            </motion.div>
-            <motion.div
-              style={{ rotate: trail1Rotate, y: trail1Y, opacity: 0.4 }}
-              className="absolute inset-0 pointer-events-none"
-            >
-              <IconComponent icon={safeIcon} size={24} color={topic.color} />
-            </motion.div>
-            {/* Main icon */}
-            <motion.div
-              style={{ rotate }}
-              className="relative z-10"
-            >
-              <IconComponent icon={safeIcon} size={24} color={topic.color} />
-            </motion.div>
-          </div>
+          <span aria-hidden="true">
+            <IconComponent icon={safeIcon} size={24} color={topic.color} />
+          </span>
         </button>
       )}
     </div>

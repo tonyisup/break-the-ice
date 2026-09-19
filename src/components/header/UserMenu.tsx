@@ -35,15 +35,16 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 
 	return (
 		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				<div className="relative">
-					<Button variant="ghost" size="icon" className="h-10 w-10 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center p-0 overflow-hidden">
+			<div className="relative">
+				<DropdownMenuTrigger asChild>
+					<Button aria-label="Account menu" variant="ghost" size="icon" className="h-10 w-10 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center p-0 overflow-hidden">
 						{user?.imageUrl ? (
 							<img src={user.imageUrl} alt={user.fullName || "User"} className="h-full w-full object-cover" />
 						) : (
 							<User className="h-5 w-5" />
 						)}
 					</Button>
+				</DropdownMenuTrigger>
 					{showSettingsBadge && (
 						<div
 							className={cn(
@@ -53,8 +54,7 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 							title={settingsBadgeTitle}
 						/>
 					)}
-				</div>
-			</DropdownMenuTrigger>
+			</div>
 			<DropdownMenuContent align="end" className="w-56 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-white/10">
 				<DropdownMenuLabel className="font-normal">
 					<div className="flex flex-col space-y-1">
