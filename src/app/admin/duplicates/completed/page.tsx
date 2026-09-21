@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge"
 import { Link } from "react-router-dom"
 import { IconComponent } from "@/components/ui/icons/icon"
 
+import { QuestionReviewHistory } from "@/components/admin/QuestionReviewHistory"
+
 export default function DuplicateHistoryPage() {
     const duplicateHistory = useQuery(api.admin.questions.getCompletedDuplicateDetections)
 
@@ -46,6 +48,7 @@ export default function DuplicateHistoryPage() {
                 </div>
             </div>
 
+            <QuestionReviewHistory source="duplicates" />
             {duplicateHistory.length === 0 ? (
                 <div className="py-20 text-center space-y-4 border-2 border-dashed rounded-3xl">
                     <History className="size-12 text-muted-foreground/20 mx-auto" />

@@ -64,6 +64,7 @@ export const embedQuestion = internalAction({
     await ctx.runMutation(internal.internal.questions.addEmbedding, {
       questionId: args.questionId,
       embedding: vector,
+      expectedText: textToEmbed,
     });
   },
 });

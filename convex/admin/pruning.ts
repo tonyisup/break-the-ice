@@ -1,11 +1,13 @@
 import { v } from "convex/values";
 import { doc } from "convex-helpers/validators";
 import { action, ActionCtx, internalAction, internalMutation, internalQuery, mutation, query } from "../_generated/server";
-import { api, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
 import { cosineSimilarity } from "../lib/embeddings";
 import schema from "../schema";
+import { editorialReason } from "../lib/questionReviewValidators";
+import { recordReview, refreshQuestionText, reviewReason, snapshot } from "../lib/questionReview";
 
 // Shared return validators for type safety
 export const pruningSettingsValidator = v.object({
@@ -274,6 +276,10 @@ export const savePruningTargets = internalMutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		for (const target of args.targets) {
+            const question = await ctx.db.get(target.questionId);
+            if (!question || question.prunedAt !== undefined || question.status === "pruned") continue;
+            const kept = await ctx.db.query("pruning").withIndex("by_questionId_and_status", q => q.eq("questionId", target.questionId).eq("status", "rejected")).order("desc").first();
+            if (kept?.reviewedRevision === (question.reviewRevision ?? 0)) continue;
 			const existing = await ctx.db
 				.query("pruning")
 				.withIndex("by_questionId_and_status", (q) =>
@@ -304,43 +310,20 @@ export const savePruningTargets = internalMutation({
  * Query to get pending pruning targets for admin review.
  */
 export const getPendingTargets = query({
-	args: {},
-	returns: v.array(v.object({
-		_id: v.id("pruning"),
-		_creationTime: v.number(),
-		questionId: v.id("questions"),
-		userId: v.optional(v.id("users")),
-		status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
-		reason: v.string(),
-		metrics: v.optional(v.object({
-			totalShows: v.number(),
-			totalLikes: v.number(),
-			averageViewDuration: v.number(),
-			hiddenCount: v.number(),
-			styleSimilarity: v.optional(v.number()),
-			toneSimilarity: v.optional(v.number()),
-		})),
-		prunedAt: v.optional(v.number()),
-		question: questionValidator,
-	})),
-	handler: async (ctx) => {
+	args: { limit: v.optional(v.number()) },
+	returns: v.array(v.object({ ...doc(schema, "pruning").fields, question: questionValidator })),
+	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
 
-		const targets = await ctx.db
-			.query("pruning")
-			.withIndex("by_status", (q) => q.eq("status", "pending"))
-			.collect();
 
-		const result: (Doc<"pruning"> & { question: Doc<"questions"> })[] = [];
-		for (const target of targets) {
-			const question = await ctx.db.get(target.questionId);
-			if (question) {
-				result.push({
-					...target,
-					question,
-				});
-			}
-		}
+        const limit = Math.max(1, Math.min(50, Math.floor(Number.isFinite(args.limit) ? args.limit! : 10)));
+        const result: (Doc<"pruning"> & { question: Doc<"questions"> })[] = [];
+        for await (const target of ctx.db.query("pruning").withIndex("by_status", q => q.eq("status", "pending"))) {
+            const question = await ctx.db.get(target.questionId);
+            if (!question || question.prunedAt !== undefined || question.status === "pruned") continue;
+            result.push({ ...target, question });
+            if (result.length >= limit) break;
+        }
 		return result;
 	},
 });
@@ -349,15 +332,19 @@ export const getPendingTargets = query({
  * Mutation to approve pruning (actual prune).
  */
 export const approvePruning = mutation({
-	args: { pruningId: v.id("pruning") },
+	args: { pruningId: v.id("pruning"), reason: v.string(), expectedRevision: v.number() },
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ensureAdmin(ctx);
+		const reviewer = await ensureAdmin(ctx);
+        const reason = reviewReason(args.reason);
 		const target = await ctx.db.get(args.pruningId);
 		if (!target) throw new Error("Target not found");
 		if (target.status !== "pending") {
 			throw new Error(`Pruning target is already ${target.status}`);
 		}
+        const before = await ctx.db.get(target.questionId);
+        if (!before || before.duplicateOf || before.status === "pruned") throw new Error("Question is no longer available for review");
+        if ((before.reviewRevision ?? 0) !== args.expectedRevision) throw new Error("Question changed during review. Reload first.");
 
 		await ctx.db.patch(target.questionId, {
 			status: "pruned",
@@ -370,7 +357,12 @@ export const approvePruning = mutation({
 		await ctx.db.patch(args.pruningId, {
 			status: "approved",
 			prunedAt: Date.now(),
+            reviewedBy: reviewer.tokenIdentifier,
+            reviewedRevision: (before.reviewRevision ?? 0) + 1,
+            reviewedAt: Date.now(),
 		});
+        await recordReview(ctx, [before], { reviewer: reviewer.tokenIdentifier, reason, outcome: "prune", source: "pruning", pruningId: target._id, undoable: true });
+        return null;
 	},
 });
 
@@ -378,19 +370,28 @@ export const approvePruning = mutation({
  * Mutation to reject pruning (keep the question).
  */
 export const rejectPruning = mutation({
-	args: { pruningId: v.id("pruning") },
+	args: { pruningId: v.id("pruning"), reason: v.string(), expectedRevision: v.number() },
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ensureAdmin(ctx);
+		const reviewer = await ensureAdmin(ctx);
+        const reason = reviewReason(args.reason);
 		const target = await ctx.db.get(args.pruningId);
 		if (!target) throw new Error("Target not found");
 		if (target.status !== "pending") {
 			throw new Error(`Pruning target is already ${target.status}`);
 		}
+        const before = await ctx.db.get(target.questionId);
+        if (!before || before.duplicateOf || before.status === "pruned") throw new Error("Question is no longer available for review");
+        if ((before.reviewRevision ?? 0) !== args.expectedRevision) throw new Error("Question changed during review. Reload first.");
 
 		await ctx.db.patch(args.pruningId, {
 			status: "rejected",
+            reviewedBy: reviewer.tokenIdentifier,
+            reviewedRevision: (before.reviewRevision ?? 0) + 1,
+            reviewedAt: Date.now(),
 		});
+        await recordReview(ctx, [before], { reviewer: reviewer.tokenIdentifier, reason, outcome: "keep", source: "pruning", pruningId: target._id, undoable: true });
+        return null;
 	},
 });
 /**
@@ -471,4 +472,82 @@ export const triggerGathering = action({
 
 		return await gatherPruningTargetsImpl(ctx);
 	},
+});
+
+/** Manual editorial flags do not require any engagement history. */
+export const flagQuestion = mutation({
+  args: { questionId: v.id("questions"), reasons: v.array(editorialReason), notes: v.string() },
+  returns: v.id("pruning"),
+  handler: async (ctx, args) => {
+    const reviewer = await ensureAdmin(ctx);
+    if (!args.reasons.length) throw new Error("Select at least one editorial reason");
+    const notes = reviewReason(args.notes);
+    const question = await ctx.db.get(args.questionId);
+    if (!question || question.prunedAt !== undefined || question.status === "pruned") throw new Error("Question is not available for review");
+    const pending = await ctx.db.query("pruning").withIndex("by_questionId_and_status", q => q.eq("questionId", args.questionId).eq("status", "pending")).first();
+    const editorialReasons = [...new Set([...(pending?.editorialReasons ?? []), ...args.reasons])];
+    const data = { editorialReasons, editorialNotes: notes, flaggedBy: reviewer.tokenIdentifier };
+    const pruningId = pending?._id ?? await ctx.db.insert("pruning", { questionId: args.questionId, status: "pending", reason: "Manual editorial review", ...data });
+    if (pending) await ctx.db.patch(pending._id, data);
+    await recordReview(ctx, [question], { reviewer: reviewer.tokenIdentifier, reason: `${args.reasons.join(", ")}: ${notes}`, source: "pruning", outcome: "flag", pruningId, undoable: false });
+    return pruningId;
+  },
+});
+
+export const getReviewHistory = query({
+  args: { source: v.union(v.literal("pruning"), v.literal("duplicates"), v.literal("question")) },
+  returns: v.array(v.object({ ...doc(schema, "questionReviews").fields, changes: v.array(doc(schema, "questionReviewChanges")) })),
+  handler: async (ctx, args) => {
+    await ensureAdmin(ctx);
+    const reviews = await ctx.db.query("questionReviews").withIndex("by_source", q => q.eq("source", args.source)).order("desc").take(30);
+    return await Promise.all(reviews.map(async review => ({
+      ...review,
+      changes: await ctx.db.query("questionReviewChanges").withIndex("by_reviewId", q => q.eq("reviewId", review._id)).collect(),
+    })));
+  },
+});
+
+export const undoReview = mutation({
+  args: { reviewId: v.id("questionReviews") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const reviewer = await ensureAdmin(ctx);
+    const review = await ctx.db.get(args.reviewId);
+    if (!review || !review.undoable || review.undoneAt !== undefined) throw new Error("This review cannot be undone");
+    const changes = await ctx.db.query("questionReviewChanges").withIndex("by_reviewId", q => q.eq("reviewId", review._id)).collect();
+    // Validate the whole group before restoring anything; newer edits must never
+    // be silently overwritten. Analytics updates do not invalidate an undo.
+    for (const change of changes) {
+      const question = await ctx.db.get(change.questionId);
+      if (!question) throw new Error("Question no longer exists");
+      const current = snapshot(question);
+      if (Object.keys(current).some(key => current[key as keyof typeof current] !== change.after[key as keyof typeof current])) {
+        throw new Error("Question changed after this review; undo would overwrite newer work");
+      }
+    }
+    if (review.pruningId) {
+      const target = await ctx.db.get(review.pruningId);
+      const pending = target && await ctx.db.query("pruning").withIndex("by_questionId_and_status", q => q.eq("questionId", target.questionId).eq("status", "pending")).first();
+      if (!target || (pending && pending._id !== target._id)) throw new Error("A newer pruning review is pending");
+      await ctx.db.patch(target._id, { status: "pending", prunedAt: undefined, reviewedBy: undefined, reviewedAt: undefined, reviewedRevision: undefined });
+    }
+    if (review.detectionId) {
+      const detection = await ctx.db.get(review.detectionId);
+      if (!detection || detection.status === "pending") throw new Error("Duplicate review has changed");
+      await ctx.db.patch(detection._id, { status: "pending", reviewedBy: undefined, reviewedAt: undefined, rejectReason: undefined });
+    }
+    for (const change of changes) {
+      // Explicit keys restore absent optional fields as well as defined values.
+      await ctx.db.patch(change.questionId, {
+        text: change.before.text, fingerprint: change.before.fingerprint,
+        status: change.before.status, prunedAt: change.before.prunedAt,
+        duplicateOf: change.before.duplicateOf, duplicateWasPublic: change.before.duplicateWasPublic,
+        reviewRevision: (change.after.reviewRevision ?? 0) + 1,
+      });
+      if (change.before.text !== change.after.text) await refreshQuestionText(ctx, change.questionId);
+      await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: change.questionId });
+    }
+    await ctx.db.patch(review._id, { undoneAt: Date.now(), undoneBy: reviewer.tokenIdentifier });
+    return null;
+  },
 });

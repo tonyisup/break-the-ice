@@ -51,11 +51,12 @@ export const addEmbedding = internalMutation({
 	args: {
 		questionId: v.id("questions"),
 		embedding: v.array(v.float64()),
+		expectedText: v.string(),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const question = await ctx.db.get(args.questionId);
-		if (!question) return null;
+		if (!question || (question.text ?? question.customText) !== args.expectedText) return null;
 		const existing = await ctx.db
 			.query("question_embeddings")
 			.withIndex("by_questionId", (q) => q.eq("questionId", args.questionId))
@@ -524,7 +525,7 @@ export const assignPoolQuestionsToUsers = internalAction({
 				const hiddenStyleIds = hiddenStylesByUser.get(user._id.toString()) ?? new Set();
 				const hiddenToneIds = hiddenTonesByUser.get(user._id.toString()) ?? new Set();
 
-				let userQuestions = poolQuestions.filter(q => {
+				const userQuestions = poolQuestions.filter(q => {
 					if (q.styleId && hiddenStyleIds.has(q.styleId.toString())) return false;
 					if (q.toneId && hiddenToneIds.has(q.toneId.toString())) return false;
 					return true;
@@ -542,8 +543,8 @@ export const assignPoolQuestionsToUsers = internalAction({
 						const embA = embMap.get(a._id);
 						const embB = embMap.get(b._id);
 						if (!embA || !embB) return 0;
-						const simA = cosineSimilarity(userEmb as number[], embA as number[]);
-						const simB = cosineSimilarity(userEmb as number[], embB as number[]);
+						const simA = cosineSimilarity(userEmb, embA);
+						const simB = cosineSimilarity(userEmb, embB);
 						return simB - simA;
 					});
 				} else {
@@ -1010,7 +1011,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			if (anchor && styleSlug) {
 				const versions = await ctx.db
 					.query("styles")
-					.withIndex("by_slug", (q) => q.eq("slug", styleSlug!))
+					.withIndex("by_slug", (q) => q.eq("slug", styleSlug))
 					.collect();
 				for (const version of versions) {
 					if (sameOrganization(version.organizationId, anchor.organizationId)) {
@@ -1025,7 +1026,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			if (anchor && toneSlug) {
 				const versions = await ctx.db
 					.query("tones")
-					.withIndex("by_slug", (q) => q.eq("slug", toneSlug!))
+					.withIndex("by_slug", (q) => q.eq("slug", toneSlug))
 					.collect();
 				for (const version of versions) {
 					if (sameOrganization(version.organizationId, anchor.organizationId)) {
@@ -1040,7 +1041,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			if (anchor && topicSlug) {
 				const versions = await ctx.db
 					.query("topics")
-					.withIndex("by_slug", (q) => q.eq("slug", topicSlug!))
+					.withIndex("by_slug", (q) => q.eq("slug", topicSlug))
 					.collect();
 				for (const version of versions) {
 					if (sameOrganization(version.organizationId, anchor.organizationId)) {

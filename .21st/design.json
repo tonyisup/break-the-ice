@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "project": {
+    "name": "break-the-ice",
+    "productType": null,
+    "stack": [
+      "react",
+      "shadcn",
+      "tailwind-v3",
+      "vite"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "src/index.css"
+    ],
+    "components": [
+      "src/components/ui"
+    ],
+    "assets": [],
+    "instructions": [
+      "CLAUDE.md"
+    ]
+  },
+  "design": {
+    "colorMode": "light-and-dark",
+    "colors": {
+      "--background": {
+        "value": "0 0% 100%",
+        "source": "src/index.css (:root)",
+        "darkValue": "222.2 84% 4.9%"
+      },
+      "--foreground": {
+        "value": "222.2 84% 4.9%",
+        "source": "src/index.css (:root)",
+        "darkValue": "210 40% 98%"
+      },
+      "--card-foreground": {
+        "value": "222.2 84% 4.9%",
+        "source": "src/index.css (:root)",
+        "darkValue": "210 40% 98%"
+      },
+      "--popover-foreground": {
+        "value": "222.2 84% 4.9%",
+        "source": "src/index.css (:root)",
+        "darkValue": "210 40% 98%"
+      },
+      "--primary": {
+        "value": "221.2 83.2% 53.3%",
+        "source": "src/index.css (:root)",
+        "darkValue": "217.2 91.2% 59.8%"
+      },
+      "--primary-foreground": {
+        "value": "210 40% 98%",
+        "source": "src/index.css (:root)",
+        "darkValue": "222.2 47.4% 11.2%"
+      },
+      "--secondary": {
+        "value": "210 40% 96.1%",
+        "source": "src/index.css (:root)",
+        "darkValue": "217.2 32.6% 17.5%"
+      },
+      "--secondary-foreground": {
+        "value": "222.2 47.4% 11.2%",
+        "source": "src/index.css (:root)",
+        "darkValue": "210 40% 98%"
+      },
+      "--muted": {
+        "value": "210 40% 96.1%",
+        "source": "src/index.css (:root)",
+        "darkValue": "217.2 32.6% 17.5%"
+      },
+      "--muted-foreground": {
+        "value": "215.4 16.3% 46.9%",
+        "source": "src/index.css (:root)",
+        "darkValue": "215 20.2% 65.1%"
+      },
+      "--accent": {
+        "value": "210 40% 96.1%",
+        "source": "src/index.css (:root)",
+        "darkValue": "217.2 32.6% 17.5%"
+      },
+      "--accent-foreground": {
+        "value": "222.2 47.4% 11.2%",
+        "source": "src/index.css (:root)",
+        "darkValue": "210 40% 98%"
+      },
+      "--destructive": {
+        "value": "0 84.2% 60.2%",
+        "source": "src/index.css (:root)",
+        "darkValue": "0 62.8% 30.6%"
+      },
+      "--destructive-foreground": {
+        "value": "210 40% 98%",
+        "source": "src/index.css (:root)",
+        "darkValue": "210 40% 98%"
+      },
+      "--border": {
+        "value": "214.3 31.8% 91.4%",
+        "source": "src/index.css (:root)",
+        "darkValue": "217.2 32.6% 17.5%"
+      },
+      "--ring": {
+        "value": "221.2 83.2% 53.3%",
+        "source": "src/index.css (:root)",
+        "darkValue": "224.3 76.3% 48%"
+      },
+      "--sidebar-background": {
+        "value": "0 0% 98%",
+        "source": "src/index.css (:root)",
+        "darkValue": "240 5.9% 10%"
+      },
+      "--sidebar-foreground": {
+        "value": "240 5.3% 26.1%",
+        "source": "src/index.css (:root)",
+        "darkValue": "240 4.8% 95.9%"
+      },
+      "--sidebar-primary": {
+        "value": "240 5.9% 10%",
+        "source": "src/index.css (:root)",
+        "darkValue": "224.3 76.3% 48%"
+      },
+      "--sidebar-primary-foreground": {
+        "value": "0 0% 98%",
+        "source": "src/index.css (:root)",
+        "darkValue": "0 0% 100%"
+      },
+      "--sidebar-accent": {
+        "value": "240 4.8% 95.9%",
+        "source": "src/index.css (:root)",
+        "darkValue": "240 3.7% 15.9%"
+      },
+      "--sidebar-accent-foreground": {
+        "value": "240 5.9% 10%",
+        "source": "src/index.css (:root)",
+        "darkValue": "240 4.8% 95.9%"
+      },
+      "--sidebar-border": {
+        "value": "220 13% 91%",
+        "source": "src/index.css (:root)",
+        "darkValue": "240 3.7% 15.9%"
+      },
+      "--sidebar-ring": {
+        "value": "217.2 91.2% 59.8%",
+        "source": "src/index.css (:root)",
+        "darkValue": "217.2 91.2% 59.8%"
+      },
+      "--color-light": {
+        "value": "blue",
+        "source": "src/index.css (:root)"
+      },
+      "--color-dark": {
+        "value": "green",
+        "source": "src/index.css (:root)"
+      }
+    },
+    "typography": {},
+    "spacing": {},
+    "radius": {
+      "--radius": {
+        "value": "0.5rem",
+        "source": "src/index.css"
+      }
+    },
+    "shadows": {},
+    "motion": {},
+    "density": "unknown"
+  },
+  "components": {
+    "installed": [
+      "badge",
+      "button",
+      "card",
+      "checkbox",
+      "color-picker",
+      "dialog",
+      "drawer",
+      "dropdown-menu",
+      "dynamic-icon",
+      "icon-picker",
+      "icon-picker.test",
+      "icons",
+      "input",
+      "label",
+      "popover",
+      "progress",
+      "scroll-area",
+      "separator",
+      "sheet",
+      "sidebar",
+      "skeleton",
+      "slider",
+      "svg-icon",
+      "switch",
+      "table",
+      "tabs",
+      "textarea",
+      "theme-toggle",
+      "tooltip"
+    ],
+    "preferredPrimitives": [
+      "radix-ui"
+    ],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [],
+    "avoid": []
+  },
+  "decisions": [],
+  "evidence": [
+    {
+      "fact": "components.installed",
+      "source": "src/components/ui"
+    },
+    {
+      "fact": "design.colorMode:light-and-dark",
+      "source": "src/index.css"
+    },
+    {
+      "fact": "design.tokens",
+      "source": "src/index.css"
+    },
+    {
+      "fact": "project.instructions",
+      "source": "CLAUDE.md"
+    },
+    {
+      "fact": "project.stack:react",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:shadcn",
+      "source": "components.json"
+    },
+    {
+      "fact": "project.stack:tailwind-v3",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:vite",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-09-21T21:37:05Z"
+}

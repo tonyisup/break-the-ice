@@ -1,0 +1,14 @@
+npm notice run break-the-ice@0.0.0 test:run
+npm notice run vitest run
+
+ RUN  v4.1.8 /Users/juicebox/.codex/worktrees/9e28/break-the-ice
+
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+ Test Files  62 passed (62)
+      Tests  268 passed (268)
+   Start at  11:55:55
+   Duration  3.46s (transform 4.61s, setup 2.94s, import 9.48s, tests 6.45s, environment 11.44s)
+
