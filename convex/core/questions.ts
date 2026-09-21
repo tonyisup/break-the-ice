@@ -431,7 +431,7 @@ export const recordAnalytics = mutation({
 			const userQuestion = await ctx.db
 				.query("userQuestions")
 				.withIndex("by_userIdAndQuestionId", (q) =>
-					q.eq("userId", userId!).eq("questionId", questionId)
+					q.eq("userId", userId).eq("questionId", questionId)
 				)
 				.first();
 
@@ -721,8 +721,10 @@ export const getQuestionById = query({
 	},
 });
 
-function isQuestionPublic(status: string | undefined): boolean {
-	return status === "public" || status === "approved" || status === undefined;
+function isQuestionPublic(question: Doc<"questions">): boolean {
+    const status = question.status;
+    // Duplicate retirement preserves the original public URL and content.
+    return (Boolean(question.duplicateOf) && question.duplicateWasPublic === true && status === "pruned") || status === "public" || status === "approved" || status === undefined;
 }
 
 async function canReadQuestion(
@@ -730,7 +732,7 @@ async function canReadQuestion(
 	question: Doc<"questions">,
 	userId?: Id<"users">,
 ): Promise<boolean> {
-	if (isQuestionPublic(question.status)) return true;
+	if (isQuestionPublic(question)) return true;
 	if (!userId) return false;
 	if (question.kind === "team_prompt") {
 		if (!question.organizationId) return false;
@@ -777,7 +779,7 @@ export const getQuestionImageUrl = query({
 	handler: async (ctx, args) => {
 		const question = await ctx.db.get(args.questionId);
 		if (!question?.imageStorageId) return null;
-		if (!isQuestionPublic(question.status)) return null;
+		if (!isQuestionPublic(question)) return null;
 		return await ctx.storage.getUrl(question.imageStorageId);
 	},
 });
@@ -812,7 +814,7 @@ export const getQuestionForOgImage = query({
 			console.log(`Question not found in DB for normalized ID: ${questionId}`);
 			return null;
 		}
-		if (!isQuestionPublic(question.status)) return null;
+		if (!isQuestionPublic(question)) return null;
 
 		let styleDoc = null;
 		if (question.style) {
@@ -825,7 +827,7 @@ export const getQuestionForOgImage = query({
 		}
 
 		const imageUrl =
-			question.imageStorageId && isQuestionPublic(question.status)
+			question.imageStorageId && isQuestionPublic(question)
 				? await ctx.storage.getUrl(question.imageStorageId)
 				: undefined;
 

@@ -1,0 +1,222 @@
+{
+  "version": 1,
+  "project": {
+    "name": "break-the-ice",
+    "productType": null,
+    "stack": [
+      "react",
+      "shadcn",
+      "tailwind-v3",
+      "vite"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "src/index.css"
+    ],
+    "components": [
+      "src/components/ui"
+    ],
+    "assets": [],
+    "instructions": [
+      "CLAUDE.md"
+    ]
+  },
+  "design": {
+    "colorMode": "light-and-dark",
+    "colors": {
+      "--background": {
+        "value": "222.2 84% 4.9%",
+        "source": "src/index.css"
+      },
+      "--foreground": {
+        "value": "210 40% 98%",
+        "source": "src/index.css"
+      },
+      "--card-foreground": {
+        "value": "210 40% 98%",
+        "source": "src/index.css"
+      },
+      "--popover-foreground": {
+        "value": "210 40% 98%",
+        "source": "src/index.css"
+      },
+      "--primary": {
+        "value": "217.2 91.2% 59.8%",
+        "source": "src/index.css"
+      },
+      "--primary-foreground": {
+        "value": "222.2 47.4% 11.2%",
+        "source": "src/index.css"
+      },
+      "--secondary": {
+        "value": "217.2 32.6% 17.5%",
+        "source": "src/index.css"
+      },
+      "--secondary-foreground": {
+        "value": "210 40% 98%",
+        "source": "src/index.css"
+      },
+      "--muted": {
+        "value": "217.2 32.6% 17.5%",
+        "source": "src/index.css"
+      },
+      "--muted-foreground": {
+        "value": "215 20.2% 65.1%",
+        "source": "src/index.css"
+      },
+      "--accent": {
+        "value": "217.2 32.6% 17.5%",
+        "source": "src/index.css"
+      },
+      "--accent-foreground": {
+        "value": "210 40% 98%",
+        "source": "src/index.css"
+      },
+      "--destructive": {
+        "value": "0 62.8% 30.6%",
+        "source": "src/index.css"
+      },
+      "--destructive-foreground": {
+        "value": "210 40% 98%",
+        "source": "src/index.css"
+      },
+      "--border": {
+        "value": "217.2 32.6% 17.5%",
+        "source": "src/index.css"
+      },
+      "--ring": {
+        "value": "224.3 76.3% 48%",
+        "source": "src/index.css"
+      },
+      "--sidebar-background": {
+        "value": "240 5.9% 10%",
+        "source": "src/index.css"
+      },
+      "--sidebar-foreground": {
+        "value": "240 4.8% 95.9%",
+        "source": "src/index.css"
+      },
+      "--sidebar-primary": {
+        "value": "224.3 76.3% 48%",
+        "source": "src/index.css"
+      },
+      "--sidebar-primary-foreground": {
+        "value": "0 0% 100%",
+        "source": "src/index.css"
+      },
+      "--sidebar-accent": {
+        "value": "240 3.7% 15.9%",
+        "source": "src/index.css"
+      },
+      "--sidebar-accent-foreground": {
+        "value": "240 4.8% 95.9%",
+        "source": "src/index.css"
+      },
+      "--sidebar-border": {
+        "value": "240 3.7% 15.9%",
+        "source": "src/index.css"
+      },
+      "--sidebar-ring": {
+        "value": "217.2 91.2% 59.8%",
+        "source": "src/index.css"
+      },
+      "--color-light": {
+        "value": "blue",
+        "source": "src/index.css"
+      },
+      "--color-dark": {
+        "value": "green",
+        "source": "src/index.css"
+      }
+    },
+    "typography": {},
+    "spacing": {},
+    "radius": {
+      "--radius": {
+        "value": "0.5rem",
+        "source": "src/index.css"
+      }
+    },
+    "shadows": {},
+    "motion": {},
+    "density": "unknown"
+  },
+  "components": {
+    "installed": [
+      "badge",
+      "button",
+      "card",
+      "checkbox",
+      "color-picker",
+      "dialog",
+      "drawer",
+      "dropdown-menu",
+      "dynamic-icon",
+      "icon-picker",
+      "icon-picker.test",
+      "icons",
+      "input",
+      "label",
+      "popover",
+      "progress",
+      "scroll-area",
+      "separator",
+      "sheet",
+      "sidebar",
+      "skeleton",
+      "slider",
+      "svg-icon",
+      "switch",
+      "table",
+      "tabs",
+      "textarea",
+      "theme-toggle",
+      "tooltip"
+    ],
+    "preferredPrimitives": [
+      "radix-ui"
+    ],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [],
+    "avoid": []
+  },
+  "decisions": [],
+  "evidence": [
+    {
+      "fact": "components.installed",
+      "source": "src/components/ui"
+    },
+    {
+      "fact": "design.colorMode:light-and-dark",
+      "source": "src/index.css"
+    },
+    {
+      "fact": "design.tokens",
+      "source": "src/index.css"
+    },
+    {
+      "fact": "project.instructions",
+      "source": "CLAUDE.md"
+    },
+    {
+      "fact": "project.stack:react",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:shadcn",
+      "source": "components.json"
+    },
+    {
+      "fact": "project.stack:tailwind-v3",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:vite",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-09-19T18:41:55.760Z"
+}

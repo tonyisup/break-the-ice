@@ -11,6 +11,8 @@ import {
   topicVersionFields,
 } from "./lib/taxonomy";
 
+import { editorialReason, reviewSnapshot } from "./lib/questionReviewValidators";
+
 const questionSource = v.union(
   v.literal("ai"),
   v.literal("seed"),
@@ -178,6 +180,9 @@ export default defineSchema({
     topic: v.optional(v.string()),
     topicId: v.optional(v.id("topics")),
     fingerprint: v.optional(v.string()),
+    reviewRevision: v.optional(v.number()),
+    duplicateOf: v.optional(v.id("questions")),
+    duplicateWasPublic: v.optional(v.boolean()),
     source: v.optional(questionSource),
     styleSlug: v.optional(v.string()),
     toneSlug: v.optional(v.string()),
@@ -398,9 +403,27 @@ export default defineSchema({
     lastUpdatedAt: v.number(),
   })
     .index("by_status", ["status"]),
+  questionReviews: defineTable({
+    reviewer: v.string(),
+    reason: v.string(),
+    outcome: v.union(v.literal("flag"), v.literal("keep"), v.literal("prune"), v.literal("edit"), v.literal("remix"), v.literal("duplicates"), v.literal("reject_duplicates")),
+    source: v.union(v.literal("pruning"), v.literal("duplicates"), v.literal("question")),
+    pruningId: v.optional(v.id("pruning")),
+    detectionId: v.optional(v.id("duplicateDetections")),
+    changes: v.array(v.object({ questionId: v.id("questions"), before: reviewSnapshot, after: reviewSnapshot })),
+    undoable: v.boolean(),
+    undoneAt: v.optional(v.number()),
+    undoneBy: v.optional(v.string()),
+  }).index("by_source", ["source"]),
   pruning: defineTable({
     questionId: v.id("questions"),
     userId: v.optional(v.id("users")), // Optional, as some pruning might be global
+    editorialReasons: v.optional(v.array(editorialReason)),
+    editorialNotes: v.optional(v.string()),
+    flaggedBy: v.optional(v.string()),
+    reviewedRevision: v.optional(v.number()),
+    reviewedBy: v.optional(v.string()),
+    reviewedAt: v.optional(v.number()),
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),

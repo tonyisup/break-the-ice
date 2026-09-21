@@ -4,6 +4,9 @@ import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 
+import { fingerprintText } from "../lib/promptArchitecture";
+import { recordReview, refreshQuestionText, reviewReason } from "../lib/questionReview";
+
 const FIX_EXISTING_QUESTIONS_BATCH_SIZE = 100;
 
 async function getOldestQuestion(ctx: MutationCtx) {
@@ -91,7 +94,7 @@ export const generateUploadUrl = mutation({
 		}
 		const user = await ctx.db
 			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email!))
+			.withIndex("email", (q) => q.eq("email", identity.email))
 			.unique();
 		if (!user?.isAdmin) {
 			throw new Error("Not an admin");
@@ -114,6 +117,10 @@ export const deleteStorageId = mutation({
 export const updateQuestion = mutation({
 	args: {
 		id: v.id("questions"),
+        reviewReason: v.optional(v.string()),
+        reviewSource: v.optional(v.union(v.literal("pruning"), v.literal("duplicates"), v.literal("question"))),
+        reviewOutcome: v.optional(v.union(v.literal("edit"), v.literal("remix"))),
+        expectedRevision: v.optional(v.number()),
 		text: v.optional(v.string()),
 		tags: v.optional(v.array(v.string())),
 		style: v.optional(v.string()),
@@ -134,13 +141,20 @@ export const updateQuestion = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ensureAdmin(ctx);
+		const reviewer = await ensureAdmin(ctx);
+        const before = await ctx.db.get(args.id);
+        if (!before) throw new Error("Question not found");
+        if (args.expectedRevision !== undefined && args.expectedRevision !== (before.reviewRevision ?? 0)) {
+            throw new Error("Question changed during review. Reload before saving.");
+        }
 		const { id, text, tags, style, tone, status, styleId, toneId, topic, topicId, imageStorageId } = args;
 
 		const updateData: any = {};
 
 		if (text !== undefined) {
-			updateData.text = text;
+			if (!text.trim()) throw new Error("Question text cannot be empty");
+            updateData.text = text.trim();
+            updateData.fingerprint = fingerprintText(text.trim());
 		}
 
 		if (tags !== undefined) {
@@ -184,7 +198,9 @@ export const updateQuestion = mutation({
 		}
 
 		if (status !== undefined) {
-			updateData.status = status;
+			if (before.duplicateOf) throw new Error("Undo duplicate resolution before changing its status");
+            updateData.status = status;
+            updateData.prunedAt = status === "pruned" ? (before.prunedAt ?? Date.now()) : undefined;
 		}
 
 		if (imageStorageId !== undefined) {
@@ -196,10 +212,22 @@ export const updateQuestion = mutation({
 		}
 
 		await ctx.db.patch(id, updateData);
+        if (updateData.text !== undefined && updateData.text !== before.text) {
+            await refreshQuestionText(ctx, id);
+        }
+        const hasOtherEdits = [tags, style, tone, styleId, toneId, topic, topicId, imageStorageId].some(value => value !== undefined);
+        await recordReview(ctx, [before], {
+            reviewer: reviewer.tokenIdentifier,
+            reason: reviewReason(args.reviewReason ?? "Admin question edit"),
+            source: args.reviewSource ?? "question",
+            outcome: args.reviewOutcome ?? "edit",
+            undoable: !hasOtherEdits,
+        });
 		if (
 			status !== undefined ||
 			updateData.styleId !== undefined ||
-			updateData.toneId !== undefined
+			updateData.toneId !== undefined ||
+            updateData.topicId !== undefined
 		) {
 			await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 				questionId: id,
@@ -439,30 +467,12 @@ export const updateCategories = mutation({
 
 // to be executed on a daily schedule
 export const cleanDuplicateQuestions = mutation({
-	args: {},
-	returns: v.number(),
-	handler: async (ctx) => {
-		await ensureAdmin(ctx);
-		const allQuestions = await ctx.db.query("questions").collect();
-
-		let totalDeleted = 0;
-		const duplicateQuestions = allQuestions.filter((question, index, self) =>
-			index !== self.findIndex((t) => t.text === question.text)
-		);
-		for (const question of duplicateQuestions) {
-			const embeddingRows = await ctx.db
-				.query("question_embeddings")
-				.withIndex("by_questionId", (q) => q.eq("questionId", question._id))
-				.collect();
-			for (const row of embeddingRows) {
-				await ctx.db.delete(row._id);
-			}
-			await ctx.db.delete(question._id);
-			totalDeleted++;
-		}
-
-		return totalDeleted;
-	},
+    args: {},
+    returns: v.number(),
+    handler: async (ctx) => {
+        await ensureAdmin(ctx);
+        throw new Error("Bulk duplicate deletion is disabled. Review groups in /admin/duplicates to preserve references and undo history.");
+    },
 });
 
 // Get all pending duplicate detections for admin review
@@ -478,28 +488,29 @@ export const getPendingDuplicateDetections = query({
 		confidence: v.number(),
 		status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
 		reviewedAt: v.optional(v.number()),
-		reviewedBy: v.optional(v.id("users")),
+		reviewedBy: v.optional(v.string()),
 		questions: v.array(v.object({
 			_id: v.id("questions"),
 			_creationTime: v.number(),
+            reviewRevision: v.optional(v.number()),
 			text: v.string(),
-			style: v.object({
+			style: v.union(v.null(), v.object({
 				_id: v.id("styles"),
 				icon: v.string(),
 				name: v.string(),
 				color: v.string(),
-			}),
-			tone: v.object({
+			})),
+			tone: v.union(v.null(), v.object({
 				_id: v.id("tones"),
 				icon: v.string(),
 				name: v.string(),
 				color: v.string(),
-			}),
+			})),
 			totalLikes: v.number(),
 			totalShows: v.number(),
 		})),
 	})),
-	handler: async (ctx): Promise<any> => {
+	handler: async (ctx) => {
 		await ensureAdmin(ctx);
 
 		const detections = await ctx.db
@@ -513,32 +524,31 @@ export const getPendingDuplicateDetections = query({
 				const questions = await Promise.all(
 					detection.questionIds.map(async (id) => {
 						const question = await ctx.db.get(id);
-						if (!question) return null;
-						if (!question.styleId || !question.toneId) return null;
+						if (!question || question.prunedAt !== undefined || question.status === "pruned") return null;
 
 						const [styleRaw, toneRaw] = await Promise.all([
-							ctx.db.get(question.styleId),
-							ctx.db.get(question.toneId),
+							question.styleId ? ctx.db.get(question.styleId) : null,
+							question.toneId ? ctx.db.get(question.toneId) : null,
 						]);
 
-						if (!styleRaw || !toneRaw) return null;
 
 						return {
 							_id: question._id,
 							_creationTime: question._creationTime,
-							text: question.text,
-							style: {
+                            reviewRevision: question.reviewRevision,
+							text: question.text ?? question.customText ?? "",
+							style: styleRaw ? {
 								_id: styleRaw._id,
 								icon: styleRaw.icon,
 								name: styleRaw.name,
 								color: styleRaw.color,
-							},
-							tone: {
+							} : null,
+							tone: toneRaw ? {
 								_id: toneRaw._id,
 								icon: toneRaw.icon,
 								name: toneRaw.name,
 								color: toneRaw.color,
-							},
+							} : null,
 							totalLikes: question.totalLikes,
 							totalShows: question.totalShows,
 						};
@@ -573,10 +583,11 @@ export const getCompletedDuplicateDetections = query({
 		confidence: v.number(),
 		status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"), v.literal("deleted")),
 		reviewedAt: v.optional(v.number()),
-		reviewedBy: v.optional(v.id("users")),
+		reviewedBy: v.optional(v.string()),
 		questions: v.array(v.object({
 			_id: v.id("questions"),
 			_creationTime: v.number(),
+            reviewRevision: v.optional(v.number()),
 			text: v.string(),
 			style: v.union(v.null(), v.object({
 				_id: v.id("styles"),
@@ -594,7 +605,7 @@ export const getCompletedDuplicateDetections = query({
 			totalShows: v.number(),
 		})),
 	})),
-	handler: async (ctx): Promise<any> => {
+	handler: async (ctx) => {
 		await ensureAdmin(ctx);
 
 		const approvedDetections = await ctx.db
@@ -648,7 +659,8 @@ export const getCompletedDuplicateDetections = query({
 						return {
 							_id: question._id,
 							_creationTime: question._creationTime,
-							text: question.text,
+                            reviewRevision: question.reviewRevision,
+							text: question.text ?? question.customText ?? "",
 							style,
 							tone,
 							totalLikes: question.totalLikes,
@@ -667,79 +679,65 @@ export const getCompletedDuplicateDetections = query({
 	},
 });
 
-// Update duplicate detection status (approve/reject)
+// Reviewer identity comes from auth, never from a client-supplied email.
 export const updateDuplicateDetectionStatus = mutation({
-	args: {
-		detectionId: v.id("duplicateDetections"),
-		status: v.union(v.literal("approved"), v.literal("rejected")),
-		reviewerEmail: v.optional(v.string()),
-		rejectReason: v.optional(v.string()),
-	},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		await ensureAdmin(ctx);
-
-		const reviewer = args.reviewerEmail
-			? await ctx.db.query("users").withIndex("email", (q) => q.eq("email", args.reviewerEmail)).unique()
-			: null;
-
-		// Only include reviewedBy if a valid user was found
-		const patchData: {
-			status: "approved" | "rejected";
-			reviewedAt: number;
-			reviewedBy?: Id<"users">;
-			rejectReason?: string;
-		} = {
-			status: args.status,
-			reviewedAt: Date.now(),
-		};
-
-		if (reviewer) {
-			patchData.reviewedBy = reviewer._id;
-		}
-
-		if (args.rejectReason) {
-			patchData.rejectReason = args.rejectReason;
-		}
-
-		await ctx.db.patch(args.detectionId, patchData);
-
-		return null;
-	},
+    args: { detectionId: v.id("duplicateDetections"), status: v.literal("rejected"), rejectReason: v.string() },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const reviewer = await ensureAdmin(ctx);
+        const detection = await ctx.db.get(args.detectionId);
+        if (!detection || detection.status !== "pending") throw new Error("Detection is no longer pending");
+        const reason = reviewReason(args.rejectReason);
+        const questions = await Promise.all(detection.questionIds.map(id => ctx.db.get(id)));
+        await ctx.db.patch(detection._id, { status: "rejected", reviewedBy: reviewer.tokenIdentifier, reviewedAt: Date.now(), rejectReason: reason });
+        await recordReview(ctx, questions.filter((q): q is Doc<"questions"> => q !== null), { reviewer: reviewer.tokenIdentifier, reason, outcome: "reject_duplicates", source: "duplicates", detectionId: detection._id, undoable: true });
+        return null;
+    },
 });
 
-// Delete duplicate questions after approval
+// Retain original IDs and content for saved collections, history, schedules and
+// public links. Only discovery eligibility changes; no references are remapped.
+// Keep the old endpoint name for client compatibility, but never delete records.
 export const deleteDuplicateQuestions = mutation({
-	args: {
-		detectionId: v.id("duplicateDetections"),
-		questionIdsToDelete: v.array(v.id("questions")),
-		keepQuestionId: v.optional(v.id("questions")),
-	},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		await ensureAdmin(ctx);
-
-		for (const questionId of args.questionIdsToDelete) {
-			if (args.keepQuestionId && questionId === args.keepQuestionId) {
-				continue;
-			}
-			const embeddingRows = await ctx.db
-				.query("question_embeddings")
-				.withIndex("by_questionId", (q) => q.eq("questionId", questionId))
-				.collect();
-			for (const row of embeddingRows) {
-				await ctx.db.delete(row._id);
-			}
-			await ctx.db.delete(questionId);
-		}
-
-		await ctx.db.patch(args.detectionId, {
-			status: "approved",
-			reviewedAt: Date.now(),
-		});
-
-		return null;
-	},
+    args: {
+        detectionId: v.id("duplicateDetections"),
+        questionIdsToDelete: v.array(v.id("questions")),
+        keepQuestionId: v.id("questions"),
+        reason: v.string(),
+        expectedRevisions: v.array(v.object({ questionId: v.id("questions"), revision: v.number() })),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+        const reviewer = await ensureAdmin(ctx);
+        const reason = reviewReason(args.reason);
+        const detection = await ctx.db.get(args.detectionId);
+        if (!detection || detection.status !== "pending") throw new Error("Detection is no longer pending");
+        const group = new Set(detection.questionIds);
+        const retiring = new Set(args.questionIdsToDelete);
+        if (group.size < 2 || group.size > 50 || !group.has(args.keepQuestionId) || retiring.has(args.keepQuestionId) || retiring.size !== args.questionIdsToDelete.length || retiring.size !== group.size - 1 || [...retiring].some(id => !group.has(id))) {
+            throw new Error("Select one retained question and all remaining members of this group");
+        }
+        const questions: Doc<"questions">[] = [];
+        for (const id of group) {
+            const question = await ctx.db.get(id);
+            if (!question || question.duplicateOf || question.prunedAt !== undefined || question.status === "pruned") throw new Error("Group membership is stale; a question is missing or retired");
+            if (!args.expectedRevisions.some(item => item.questionId === id && item.revision === (question.reviewRevision ?? 0))) throw new Error("Question changed during review. Reload first.");
+            questions.push(question);
+        }
+        const keep = questions.find(q => q._id === args.keepQuestionId)!;
+        if (questions.some(q => q.organizationId !== keep.organizationId || q.kind !== keep.kind)) throw new Error("Cannot resolve duplicates across question workspaces");
+        for (const question of questions) {
+            if (!retiring.has(question._id)) continue;
+            await ctx.db.patch(question._id, {
+                status: "pruned", prunedAt: Date.now(), duplicateOf: keep._id,
+                duplicateWasPublic: question.status === undefined || question.status === "public" || question.status === "approved",
+            });
+            await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: question._id });
+        }
+        await ctx.db.patch(detection._id, { status: "approved", reviewedAt: Date.now(), reviewedBy: reviewer.tokenIdentifier });
+        await recordReview(ctx, questions, { reviewer: reviewer.tokenIdentifier, reason, outcome: "duplicates", source: "duplicates", detectionId: detection._id, undoable: true });
+        return null;
+    },
 });
 
 // Public query to get question counts by style and tone combination (for monitoring)

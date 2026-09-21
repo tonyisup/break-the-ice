@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "reviewedBy": "Codex (assistant editorial pass)",
+  "reviewedAt": "2026-09-19",
+  "calibrationStatus": "awaiting_owner_review",
+  "purpose": "Evaluation fixture only; not wired into generation acceptance or live library actions.",
+  "examples": [
+    {
+      "id": "accept-clear-01",
+      "expected": "acceptable",
+      "text": "What small act of kindness have you noticed lately?",
+      "reasons": [],
+      "rationale": "One concrete invitation, answerable without disclosing private information.",
+      "context": "General conversation; no engagement requirement."
+    },
+    {
+      "id": "accept-clear-02",
+      "expected": "acceptable",
+      "text": "What hobby would you like to try?",
+      "reasons": [],
+      "rationale": "Plain wording and a clear answer space; a short answer is acceptable.",
+      "context": "General conversation."
+    },
+    {
+      "id": "accept-story-01",
+      "expected": "acceptable",
+      "text": "What ordinary moment taught you something about the kind of friend you want to be?",
+      "reasons": [],
+      "rationale": "A bounded story connected to a present value without assuming hardship.",
+      "context": "Serious relationship building; formative moment."
+    },
+    {
+      "id": "accept-story-02",
+      "expected": "acceptable",
+      "text": "When has someone made a small effort that helped you feel included?",
+      "reasons": [],
+      "rationale": "Invites a concrete example without demanding an intimate confession.",
+      "context": "Serious relationship building; warm tone."
+    },
+    {
+      "id": "accept-playful-01",
+      "expected": "acceptable",
+      "text": "If your weekend had a theme song, what would it be?",
+      "reasons": [],
+      "rationale": "A playful premise with a straightforward response.",
+      "context": "Casual group; playful tone."
+    },
+    {
+      "id": "accept-tone-01",
+      "expected": "acceptable",
+      "text": "What helps you feel heard during a difficult conversation?",
+      "reasons": [],
+      "rationale": "Appropriate relational depth with optional disclosure.",
+      "context": "Serious relationship building; reflective tone."
+    },
+    {
+      "id": "accept-variety-01",
+      "expected": "acceptable",
+      "text": "What is a place you would happily visit again?",
+      "reasons": [],
+      "rationale": "A familiar construction can still be useful; repetition is evaluated against a batch.",
+      "context": "The surrounding batch contains different mechanics and answer spaces."
+    },
+    {
+      "id": "accept-variety-02",
+      "expected": "acceptable",
+      "text": "Which tiny ritual makes an ordinary day better?",
+      "reasons": [],
+      "rationale": "Clear and specific; low views or likes would not make this unacceptable.",
+      "context": "General conversation; standalone prompt."
+    },
+    {
+      "id": "reject-wording-01",
+      "expected": "unacceptable",
+      "text": "What is the thing of doing that makes your day of days better?",
+      "reasons": [
+        "awkward_wording"
+      ],
+      "rationale": "Redundant and unnatural phrasing obscures a simple invitation.",
+      "context": "General conversation."
+    },
+    {
+      "id": "reject-wording-02",
+      "expected": "unacceptable",
+      "text": "In what manner would your preferred preference prefer to be preferred?",
+      "reasons": [
+        "awkward_wording",
+        "unclear_answer"
+      ],
+      "rationale": "Circular phrasing has no stable meaning or answer space.",
+      "context": "General conversation."
+    },
+    {
+      "id": "reject-answer-01",
+      "expected": "unacceptable",
+      "text": "Which thing is more like it than that?",
+      "reasons": [
+        "unclear_answer"
+      ],
+      "rationale": "The referents are absent; a participant cannot know what is being compared.",
+      "context": "Standalone prompt, with no earlier referents."
+    },
+    {
+      "id": "reject-answer-02",
+      "expected": "unacceptable",
+      "text": "What do you think about everything?",
+      "reasons": [
+        "unclear_answer"
+      ],
+      "rationale": "The scope is too broad to give participants an entry point.",
+      "context": "A short group icebreaker."
+    },
+    {
+      "id": "reject-fit-01",
+      "expected": "unacceptable",
+      "text": "What is your deepest childhood wound?",
+      "reasons": [
+        "style_tone_mismatch"
+      ],
+      "rationale": "Pressures disclosure of trauma and uses clinical framing.",
+      "context": "Serious relationship building should allow voluntary depth without demanding trauma."
+    },
+    {
+      "id": "reject-fit-02",
+      "expected": "unacceptable",
+      "text": "Which coworker would you fire first?",
+      "reasons": [
+        "style_tone_mismatch"
+      ],
+      "rationale": "Targets real people and undermines the supportive social setting.",
+      "context": "Workplace icebreaker; warm and inclusive tone."
+    },
+    {
+      "id": "reject-repeat-01",
+      "expected": "unacceptable",
+      "text": "If your Monday were a sandwich, which sandwich would it be?",
+      "reasons": [
+        "repeated_construction"
+      ],
+      "rationale": "Adds another arbitrary object substitution to an already repetitive batch.",
+      "context": "Batch already includes: If your Monday were a color, which color would it be? If your Monday were an animal, which animal would it be?"
+    },
+    {
+      "id": "reject-repeat-02",
+      "expected": "unacceptable",
+      "text": "What is one small thing that makes your afternoon better?",
+      "reasons": [
+        "repeated_construction"
+      ],
+      "rationale": "Substantially overlaps both the construction and likely answers of nearby prompts.",
+      "context": "Batch already includes: What is one small thing that makes your morning better? What is one small thing that makes your day better?"
+    }
+  ]
+}

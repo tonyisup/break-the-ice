@@ -1,353 +1,404 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useQuery, useMutation, useAction } from "convex/react"
-import { api } from "../../../../convex/_generated/api"
-import { Id } from "../../../../convex/_generated/dataModel"
+import { useEffect, useId, useState } from "react";
+import { useQuery, useMutation, useAction } from "convex/react";
+import { api } from "../../../../convex/_generated/api";
+import type { Doc, Id } from "../../../../convex/_generated/dataModel";
+import { editorialReasonLabels } from "../../../../convex/lib/questionReviewValidators";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-	Trash2,
-	CheckCircle2,
-	AlertCircle,
-	BarChart3,
-	Eye,
-	Heart,
-	Ghost,
-	RefreshCw,
-	MessageSquareOff,
-	Zap,
-	Settings,
-	Pencil,
-	Save,
-	X,
-	Sparkles,
-	Loader2
-} from "lucide-react"
+  Card,
+  CardContent,
+  CardHeader,
+  CardFooter,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { QuestionReviewHistory } from "@/components/admin/QuestionReviewHistory";
+import { toast } from "sonner";
 
-import { Link } from "react-router-dom"
+const message = (error: unknown) =>
+  error instanceof Error ? error.message : "Could not save review";
+type EditorialReason = keyof typeof editorialReasonLabels;
+type Target = Doc<"pruning"> & { question: Doc<"questions"> };
 
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { toast } from "sonner"
-import { Textarea } from "@/components/ui/textarea"
+function EditorialFlagForm() {
+  const flag = useMutation(api.admin.pruning.flagQuestion);
+  const [questionId, setQuestionId] = useState("");
+  const [reasons, setReasons] = useState<EditorialReason[]>([]);
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const id = useId();
+  return (
+    <details className="rounded-xl border bg-card p-4">
+      <summary className="cursor-pointer font-semibold">
+        Flag a question for editorial review
+      </summary>
+      <form
+        className="mt-4 space-y-4 max-w-2xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setBusy(true);
+          void flag({
+            questionId: questionId.trim() as Id<"questions">,
+            reasons,
+            notes,
+          })
+            .then(() => {
+              toast.success("Question added to review");
+              setQuestionId("");
+              setReasons([]);
+              setNotes("");
+            })
+            .catch((error: unknown) => toast.error(message(error)))
+            .finally(() => setBusy(false));
+        }}
+      >
+        <div className="space-y-2">
+          <Label htmlFor={`${id}-question`}>Question ID</Label>
+          <Input
+            id={`${id}-question`}
+            value={questionId}
+            onChange={(event) => setQuestionId(event.target.value)}
+            required
+            disabled={busy}
+          />
+          <p className="text-xs text-muted-foreground">
+            Paste the ID from the question’s admin URL. Questions can be flagged
+            before they have any views.
+          </p>
+        </div>
+        <fieldset disabled={busy} className="space-y-2">
+          <legend className="mb-2 text-sm font-medium">
+            Editorial reasons
+          </legend>
+          {Object.entries(editorialReasonLabels).map(([value, label]) => (
+            <label key={value} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={reasons.includes(value as EditorialReason)}
+                onChange={(event) =>
+                  setReasons((current) =>
+                    event.target.checked
+                      ? [...current, value as EditorialReason]
+                      : current.filter((reason) => reason !== value),
+                  )
+                }
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+        <div className="space-y-2">
+          <Label htmlFor={`${id}-notes`}>What needs a closer look?</Label>
+          <Textarea
+            id={`${id}-notes`}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            maxLength={2000}
+            required
+            disabled={busy}
+          />
+        </div>
+        <Button
+          disabled={
+            busy || !reasons.length || !notes.trim() || !questionId.trim()
+          }
+        >
+          {busy ? "Flagging…" : "Add to review"}
+        </Button>
+      </form>
+    </details>
+  );
+}
+
+function ReviewCard({ target }: { target: Target }) {
+  const approve = useMutation(api.admin.pruning.approvePruning);
+  const keep = useMutation(api.admin.pruning.rejectPruning);
+  const update = useMutation(api.admin.questions.updateQuestion);
+  const remix = useAction(api.admin.questions.remixQuestion);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<{
+    text: string;
+    revision: number;
+    outcome: "edit" | "remix";
+  } | null>(null);
+  const id = useId();
+  const revision = target.question.reviewRevision ?? 0;
+  const text = target.question.text ?? target.question.customText ?? "";
+  const run = async (work: () => Promise<unknown>, success: string) => {
+    setBusy(true);
+    try {
+      await work();
+      toast.success(success);
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="flex flex-col rounded-xl">
+      <CardHeader className="space-y-4">
+        <Badge variant="secondary" className="self-start">
+          Needs review
+        </Badge>
+        <p className="text-lg font-medium leading-relaxed">"{text}"</p>
+        {draft ? (
+          <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+            <Label htmlFor={`${id}-draft`}>
+              {draft.outcome === "remix"
+                ? "Remix draft — not saved"
+                : "Edit draft — not saved"}
+            </Label>
+            <Textarea
+              id={`${id}-draft`}
+              value={draft.text}
+              disabled={busy}
+              onChange={(event) =>
+                setDraft({ ...draft, text: event.target.value })
+              }
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                aria-label="Save"
+                size="sm"
+                disabled={busy || !draft.text.trim() || !reason.trim()}
+                onClick={() => {
+                  void run(async () => {
+                    await update({
+                      id: target.questionId,
+                      text: draft.text,
+                      expectedRevision: draft.revision,
+                      reviewReason: reason,
+                      reviewSource: "pruning",
+                      reviewOutcome: draft.outcome,
+                    });
+                    setDraft(null);
+                  }, "Draft saved. Review the question before keeping or pruning it.");
+                }}
+              >
+                Save draft
+              </Button>
+              <Button
+                aria-label="Cancel"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => setDraft(null)}
+              >
+                Discard draft
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Button
+              aria-label="Edit"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => setDraft({ text, revision, outcome: "edit" })}
+            >
+              Edit
+            </Button>
+            <Button
+              aria-label="Remix"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                void run(async () => {
+                  const newText = await remix({ id: target.questionId });
+                  setDraft({ text: newText, revision, outcome: "remix" });
+                }, "Remix draft ready for review");
+              }}
+            >
+              {busy ? "Working…" : "Remix"}
+            </Button>
+          </div>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-4 flex-1">
+        <div className="space-y-2">
+          <p className="text-sm font-semibold">Review signals</p>
+          <p className="text-sm text-muted-foreground">{target.reason}</p>
+          {target.editorialReasons?.map((reason) => (
+            <Badge key={reason} variant="outline" className="mr-1">
+              {editorialReasonLabels[reason]}
+            </Badge>
+          ))}
+          {target.editorialNotes && (
+            <p className="text-sm">{target.editorialNotes}</p>
+          )}
+        </div>
+        <dl className="grid grid-cols-2 gap-3 rounded-lg bg-muted/30 p-3 text-sm">
+          <div>
+            <dt className="text-muted-foreground">Views</dt>
+            <dd>{target.metrics?.totalShows ?? target.question.totalShows}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Likes</dt>
+            <dd>{target.metrics?.totalLikes ?? target.question.totalLikes}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Avg. view</dt>
+            <dd>
+              {(
+                (target.metrics?.averageViewDuration ??
+                  target.question.averageViewDuration) / 1000
+              ).toFixed(1)}
+              s
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Hidden</dt>
+            <dd>{target.metrics?.hiddenCount ?? "Not measured"}</dd>
+          </div>
+        </dl>
+        <div className="space-y-2">
+          <Label htmlFor={`${id}-reason`}>Review reason</Label>
+          <Textarea
+            id={`${id}-reason`}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            disabled={busy}
+            maxLength={2000}
+            placeholder="Explain your editorial decision before saving, keeping, or pruning."
+          />
+        </div>
+      </CardContent>
+      <CardFooter className="gap-2">
+        <Button
+          variant="outline"
+          className="flex-1"
+          disabled={busy || draft !== null || !reason.trim()}
+          onClick={() => {
+            void run(
+              () =>
+                keep({
+                  pruningId: target._id,
+                  reason,
+                  expectedRevision: revision,
+                }),
+              "Question kept",
+            );
+          }}
+        >
+          Keep
+        </Button>
+        <Button
+          variant="destructive"
+          className="flex-1"
+          disabled={busy || draft !== null || !reason.trim()}
+          onClick={() => {
+            void run(
+              () =>
+                approve({
+                  pruningId: target._id,
+                  reason,
+                  expectedRevision: revision,
+                }),
+              "Question pruned",
+            );
+          }}
+        >
+          Prune
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
 
 export default function PruningPage() {
-	const pendingTargets = useQuery(api.admin.pruning.getPendingTargets)
-	const approvePruning = useMutation(api.admin.pruning.approvePruning)
-	const rejectPruning = useMutation(api.admin.pruning.rejectPruning)
-	const updateQuestion = useMutation(api.admin.questions.updateQuestion)
-	const remixQuestion = useAction(api.admin.questions.remixQuestion)
-
-	const [processingIds, setProcessingIds] = React.useState<Set<Id<"pruning">>>(new Set())
-	const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
-	const [editedText, setEditedText] = React.useState("")
-	const [remixingIds, setRemixingIds] = React.useState<Set<Id<"questions">>>(new Set())
-
-	const handleApprove = async (id: Id<"pruning">) => {
-		setProcessingIds(prev => new Set(prev).add(id))
-		try {
-			await approvePruning({ pruningId: id })
-			toast.success("Question pruned successfully")
-		} catch (error) {
-			toast.error("Failed to prune question")
-		} finally {
-			setProcessingIds(prev => {
-				const next = new Set(prev)
-				next.delete(id)
-				return next
-			})
-		}
-	}
-
-	const handleSaveEdit = async (id: Id<"questions">) => {
-		try {
-			await updateQuestion({ id, text: editedText })
-			toast.success("Question updated")
-			setEditingQuestionId(null)
-		} catch (error) {
-			toast.error("Failed to update question")
-		}
-	}
-
-	const handleRemix = async (id: Id<"questions">) => {
-		setRemixingIds(prev => {
-			const next = new Set(prev)
-			next.add(id)
-			return next
-		})
-		try {
-			const newText = await remixQuestion({ id })
-			await updateQuestion({ id, text: newText })
-			toast.success("Question remixed!")
-		} catch (error: any) {
-			toast.error(`Remix failed: ${error.message}`)
-		} finally {
-			setRemixingIds(prev => {
-				const next = new Set(prev)
-				next.delete(id)
-				return next
-			})
-		}
-	}
-
-	const handleReject = async (id: Id<"pruning">) => {
-		setProcessingIds(prev => new Set(prev).add(id))
-		try {
-			await rejectPruning({ pruningId: id })
-			toast.success("Question kept in rotation")
-		} catch (error) {
-			toast.error("Failed to update status")
-		} finally {
-			setProcessingIds(prev => {
-				const next = new Set(prev)
-				next.delete(id)
-				return next
-			})
-		}
-	}
-
-	const triggerGathering = useAction(api.admin.pruning.triggerGathering)
-	const [isGathering, setIsGathering] = React.useState(false)
-
-	const handleGatherNow = async () => {
-		setIsGathering(true)
-		try {
-			await toast.promise(triggerGathering({}), {
-				loading: "Searching for pruning targets...",
-				success: (data: { targetsFound: number }) => `Found ${data.targetsFound} new targets`,
-				error: "Failed to gather pruning targets"
-			})
-		} finally {
-			setIsGathering(false)
-		}
-	}
-
-	if (pendingTargets === undefined) {
-		return (
-			<div className="space-y-6">
-				<div className="flex items-center justify-between">
-					<div className="space-y-1">
-						<h1 className="text-3xl font-bold tracking-tight">Pruning Review</h1>
-						<p className="text-muted-foreground">Identifying questions that aren't hitting the mark.</p>
-					</div>
-				</div>
-				<div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-					{[1, 2, 3].map(i => (
-						<Skeleton key={i} className="h-[300px] w-full rounded-xl" />
-					))}
-				</div>
-			</div>
-		)
-	}
-
-	return (
-		<div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-500">
-			<div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b pb-8">
-				<div className="space-y-2">
-					<div className="flex items-center gap-2">
-						<div className="p-2 bg-primary/10 rounded-lg">
-							<Trash2 className="w-6 h-6 text-primary" />
-						</div>
-						<h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-							Pruning Workshop
-						</h1>
-					</div>
-					<p className="text-md text-muted-foreground max-w-2xl">
-						Review questions flagged for low engagement, high hidden rates, or style mismatches.
-						Keep the pool fresh and relevant.
-					</p>
-				</div>
-				<div className="flex items-center gap-3">
-					<Button
-						onClick={handleGatherNow}
-						disabled={isGathering}
-						variant="outline"
-						className="rounded-xl h-10 border-2 font-bold shadow-sm hover:shadow-md transition-all active:scale-95"
-					>
-						{isGathering ? (
-							<RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-						) : (
-							<Zap className="w-4 h-4 mr-2 text-yellow-500 fill-yellow-500" />
-						)}
-						Find Prune Targets Now
-					</Button>
-					<Link to="/admin/prune/settings">
-						<Button variant="outline" size="icon" className="rounded-xl h-10 border-2 shadow-sm hover:shadow-md transition-all active:scale-95">
-							<Settings className="w-4 h-4 text-muted-foreground" />
-						</Button>
-					</Link>
-					<Badge variant="outline" className="px-3 py-1 h-10 flex items-center text-sm font-bold bg-secondary/50 border-2 rounded-xl">
-						{pendingTargets.length} Targets
-					</Badge>
-				</div>
-			</div>
-
-			{pendingTargets.length === 0 ? (
-				<div className="flex flex-col items-center justify-center py-24 text-center space-y-4 bg-secondary/20 rounded-3xl border-2 border-dashed">
-					<div className="p-6 bg-background rounded-full shadow-lg">
-						<Ghost className="w-12 h-12 text-muted-foreground/40" />
-					</div>
-					<div className="space-y-2">
-						<h3 className="text-xl font-semibold">Clear Skies</h3>
-						<p className="text-muted-foreground max-w-xs mx-auto">
-							All questions are performing well. No pruning targets detected for now.
-						</p>
-					</div>
-				</div>
-			) : (
-				<div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-					{pendingTargets.map((target) => (
-						<Card key={target._id} className="group relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 shadow-sm hover:shadow-xl rounded-2xl flex flex-col">
-							<div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary/50 via-primary to-primary/50 opacity-0 group-hover:opacity-100 transition-opacity" />
-
-							<CardHeader className="pb-4">
-								<div className="flex items-start justify-between mb-2">
-									<Badge variant="secondary" className="bg-red-500/10 text-red-600 border-red-200 dark:border-red-900/50 hover:bg-red-500/20 transition-colors">
-										Targeted for Pruning
-									</Badge>
-								</div>
-
-								<div className="min-h-[80px] flex flex-col justify-center">
-									{editingQuestionId === target.questionId ? (
-										<div className="flex gap-2 items-start w-full">
-											<Textarea
-												value={editedText}
-												onChange={(e) => setEditedText(e.target.value)}
-												className="min-h-[80px] text-base"
-											/>
-											<div className="flex flex-col gap-1">
-												<Button aria-label="Save" size="icon" className="size-8 bg-green-600 hover:bg-green-700" onClick={() => handleSaveEdit(target.questionId)}>
-													<Save className="size-3.5" />
-												</Button>
-												<Button aria-label="Cancel" size="icon" variant="ghost" className="size-8" onClick={() => setEditingQuestionId(null)}>
-													<X className="size-3.5" />
-												</Button>
-											</div>
-										</div>
-									) : (
-										<div className="group/text flex items-start justify-between gap-2">
-											<p className="text-lg font-medium italic text-foreground/90 leading-relaxed">
-												"{target.question.text || target.question.customText}"
-											</p>
-											<div className="flex flex-col gap-1 opacity-0 group-hover/text:opacity-100 transition-opacity">
-												<Button
-													aria-label="Edit"
-													variant="ghost"
-													size="icon"
-													className="size-8"
-													onClick={() => {
-														setEditingQuestionId(target.questionId)
-														setEditedText(target.question.text || target.question.customText || "")
-													}}
-												>
-													<Pencil className="size-4" />
-												</Button>
-												<Button
-													aria-label="Remix"
-													variant="ghost"
-													size="icon"
-													className="size-8 text-blue-500 hover:text-blue-600"
-													onClick={() => handleRemix(target.questionId)}
-													disabled={remixingIds.has(target.questionId)}
-												>
-													{remixingIds.has(target.questionId) ? (
-														<Loader2 className="size-4 animate-spin" />
-													) : (
-														<Sparkles className="size-4" />
-													)}
-												</Button>
-											</div>
-										</div>
-									)}
-								</div>
-							</CardHeader>
-
-							<CardContent className="space-y-6 flex-grow">
-								<div className="space-y-2">
-									<div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-										<AlertCircle className="w-3.5 h-3.5" />
-										Reasoning
-									</div>
-									<div className="p-3 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/30">
-										<p className="text-sm text-red-700 dark:text-red-400 font-medium">
-											{target.reason}
-										</p>
-									</div>
-								</div>
-
-								<div className="grid grid-cols-2 gap-3">
-									<div className="p-3 rounded-xl bg-secondary/40 border border-secondary/60 transition-colors hover:bg-secondary/60">
-										<div className="flex items-center gap-2 text-muted-foreground mb-1">
-											<Eye className="w-3.5 h-3.5" />
-											<span className="text-[10px] font-bold uppercase">Exposure</span>
-										</div>
-										<p className="text-lg font-bold tabular-nums">
-											{target.metrics?.totalShows || 0}
-										</p>
-									</div>
-									<div className="p-3 rounded-xl bg-secondary/40 border border-secondary/60 transition-colors hover:bg-secondary/60">
-										<div className="flex items-center gap-2 text-muted-foreground mb-1">
-											<Heart className="w-3.5 h-3.5" />
-											<span className="text-[10px] font-bold uppercase">Likes</span>
-										</div>
-										<p className="text-lg font-bold tabular-nums">
-											{target.metrics?.totalLikes || 0}
-										</p>
-									</div>
-									<div className="p-3 rounded-xl bg-secondary/40 border border-secondary/60 transition-colors hover:bg-secondary/60">
-										<div className="flex items-center gap-2 text-muted-foreground mb-1">
-											<BarChart3 className="w-3.5 h-3.5" />
-											<span className="text-[10px] font-bold uppercase">Avg Dur.</span>
-										</div>
-										<p className="text-lg font-bold tabular-nums">
-											{((target.metrics?.averageViewDuration || 0) / 1000).toFixed(1)}s
-										</p>
-									</div>
-									<div className="p-3 rounded-xl bg-secondary/40 border border-secondary/60 transition-colors hover:bg-secondary/60">
-										<div className="flex items-center gap-2 text-muted-foreground mb-1">
-											<MessageSquareOff className="w-3.5 h-3.5" />
-											<span className="text-[10px] font-bold uppercase">Hidden</span>
-										</div>
-										<p className="text-lg font-bold tabular-nums">
-											{target.metrics?.hiddenCount || 0}
-										</p>
-									</div>
-								</div>
-							</CardContent>
-
-							<CardFooter className="pt-4 border-t bg-secondary/10 gap-3 group-hover:bg-secondary/20 transition-colors">
-								<Button
-									variant="outline"
-									className="flex-1 rounded-xl h-11 font-semibold border-2 hover:bg-background transition-all"
-									onClick={() => handleReject(target._id)}
-									disabled={processingIds.has(target._id)}
-								>
-									{processingIds.has(target._id) ? (
-										<RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-									) : (
-										<CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
-									)}
-									Keep
-								</Button>
-								<Button
-									variant="destructive"
-									className="flex-1 rounded-xl h-11 font-semibold transition-all shadow-lg shadow-red-500/20"
-									onClick={() => handleApprove(target._id)}
-									disabled={processingIds.has(target._id)}
-								>
-									{processingIds.has(target._id) ? (
-										<RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-									) : (
-										<Trash2 className="w-4 h-4 mr-2" />
-									)}
-									Prune
-								</Button>
-							</CardFooter>
-						</Card>
-					))}
-				</div>
-			)}
-		</div>
-	)
+  const pending = useQuery(api.admin.pruning.getPendingTargets, { limit: 10 });
+  const gather = useAction(api.admin.pruning.triggerGathering);
+  const [gathering, setGathering] = useState(false);
+  const [batchIds, setBatchIds] = useState<Id<"pruning">[] | null>(null);
+  useEffect(() => {
+    if (pending)
+      setBatchIds((current) => current ?? pending.map((target) => target._id));
+  }, [pending]);
+  const batch =
+    pending?.filter((target) => batchIds?.includes(target._id)) ?? [];
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Pruning Workshop
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            Review wording, answerability, and fit. Low engagement is a signal
+            to inspect, not proof of poor content.
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/admin/prune/settings">Settings</Link>
+          </Button>
+          <Button
+            variant="outline"
+            disabled={gathering}
+            onClick={() => {
+              setGathering(true);
+              void gather({})
+                .then((result) =>
+                  toast.success(`Found ${result.targetsFound} candidates`),
+                )
+                .catch((error: unknown) => toast.error(message(error)))
+                .finally(() => setGathering(false));
+            }}
+          >
+            {gathering ? "Finding…" : "Find review candidates"}
+          </Button>
+        </div>
+      </div>
+      <EditorialFlagForm />
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+        <div>
+          <h2 className="font-semibold">Small review batch</h2>
+          <p className="text-sm text-muted-foreground">
+            Up to 10 questions at a time. Check the saved outcomes below before
+            starting another batch.
+          </p>
+        </div>
+        <Badge variant="outline">{batch.length} remaining</Badge>
+      </div>
+      {pending === undefined ? (
+        <p role="status">Loading review queue…</p>
+      ) : batch.length ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {batch.map((target) => (
+            <ReviewCard key={target._id} target={target} />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed p-8 text-center space-y-3">
+          <h3 className="font-semibold">
+            {pending.length
+              ? "This batch is complete"
+              : "No pending review items"}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {pending.length
+              ? "Check recent decisions and undo anything that needs another look."
+              : "You can manually flag a question or gather more review signals."}
+          </p>
+          {pending.length > 0 && (
+            <Button
+              onClick={() => setBatchIds(pending.map((target) => target._id))}
+            >
+              Start next batch
+            </Button>
+          )}
+        </div>
+      )}
+      <QuestionReviewHistory source="pruning" />
+    </div>
+  );
 }

@@ -3,7 +3,7 @@
 Keep question-library cleanup in a focused follow-up session. Build on `/admin/prune`
 and `/admin/duplicates`; a separate review page is not needed yet.
 
-## Existing foundation
+## Foundation at the time of the audit
 
 - Pruning gathers candidates using engagement, hidden counts, and optional style/tone
   embedding similarity. The review page supports Keep, Prune, Edit, and Remix.
@@ -33,3 +33,19 @@ and `/admin/duplicates`; a separate review page is not needed yet.
 7. Run a small review batch first and check the outcomes before a library-wide pass.
 
 No question records were reviewed, edited, pruned, or deleted as part of the UI audit fixes.
+
+## Implementation status — 2026-09-19
+
+The existing review screens now support manual editorial flags, reasons, bounded
+review batches, explicit remix drafts, authenticated audit history, and guarded
+undo. Edits regenerate text fingerprints and embeddings, including protection
+against embedding results arriving after another edit. Duplicate resolution
+validates the group and retires copies while preserving their records and
+references; it no longer deletes question records.
+
+See [question-evaluation-guide.md](question-evaluation-guide.md) for the preservation
+decision, undo limits, evaluation procedure, and live pilot checklist. The
+[16-example calibration set](question-evaluation-set.json) has an initial assistant
+editorial pass and still needs owner calibration. The generation acceptance
+rubric remains unchanged. A small isolated regression pilot verifies the workflow;
+the live library pilot and library-wide cleanup remain unperformed.
