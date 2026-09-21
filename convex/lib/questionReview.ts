@@ -40,19 +40,20 @@ export async function refreshQuestionText(
 export async function recordReview(
   ctx: MutationCtx,
   before: Doc<"questions">[],
-  review: Omit<Doc<"questionReviews">, "_id" | "_creationTime" | "changes">,
+  review: Omit<Doc<"questionReviews">, "_id" | "_creationTime">,
 ) {
-  const changes = [];
+  const reviewId = await ctx.db.insert("questionReviews", review);
   for (const question of before) {
     const current = await ctx.db.get(question._id);
     if (!current) throw new Error("Question no longer exists");
     const reviewRevision = (current.reviewRevision ?? 0) + 1;
     await ctx.db.patch(question._id, { reviewRevision });
-    changes.push({
+    await ctx.db.insert("questionReviewChanges", {
+      reviewId,
       questionId: question._id,
       before: snapshot(question),
       after: snapshot({ ...current, reviewRevision }),
     });
   }
-  return await ctx.db.insert("questionReviews", { ...review, changes });
+  return reviewId;
 }

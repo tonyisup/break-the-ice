@@ -45,6 +45,7 @@ type PoolStats = {
 type PoolQuestion = {
     _id: Id<"questions">
     _creationTime: number
+    reviewRevision?: number
     text?: string
     poolStatus?: "available" | "distributed"
     style?: {
@@ -70,6 +71,7 @@ export default function PoolPage() {
     const [isAssigning, setIsAssigning] = React.useState(false)
     const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
     const [editedText, setEditedText] = React.useState("")
+    const [editRevision, setEditRevision] = React.useState(0)
     const [targetCountPerStyleTone, setTargetCountPerStyleTone] = React.useState(5)
     const [remixingIds, setRemixingIds] = React.useState<Set<Id<"questions">>>(new Set())
 
@@ -144,8 +146,10 @@ export default function PoolPage() {
     }
 
     const handleSaveEdit = async (id: Id<"questions">) => {
+        const reason = window.prompt("Why are you changing this question?")?.trim()
+        if (!reason) return
         try {
-            await updateQuestion({ id, text: editedText })
+            await updateQuestion({ id, text: editedText, expectedRevision: editRevision, reviewReason: reason })
             toast.success("Question updated")
             setEditingQuestionId(null)
         } catch (error) {
@@ -154,6 +158,9 @@ export default function PoolPage() {
     }
 
     const handleRemix = async (id: Id<"questions">) => {
+        const question = questions?.find(q => q._id === id)
+        if (!question) return
+        const expectedRevision = question.reviewRevision ?? 0
         setRemixingIds(prev => {
             const next = new Set(prev)
             next.add(id)
@@ -161,7 +168,9 @@ export default function PoolPage() {
         })
         try {
             const newText = await remixQuestion({ id })
-            await updateQuestion({ id, text: newText })
+            const reason = window.prompt(`Remix draft: ${newText}\n\nWhy are you applying this remix?`)?.trim()
+            if (!reason) return
+            await updateQuestion({ id, text: newText, expectedRevision, reviewReason: reason, reviewOutcome: "remix" })
             toast.success("Question remixed!")
         } catch (error: any) {
             toast.error(`Remix failed: ${error.message}`)
@@ -411,6 +420,7 @@ export default function PoolPage() {
                                                     onClick={() => {
                                                         setEditingQuestionId(question._id);
                                                         setEditedText(question.text || "");
+                                                        setEditRevision(question.reviewRevision ?? 0);
                                                     }}
                                                 >
                                                     <Pencil className="size-3" />

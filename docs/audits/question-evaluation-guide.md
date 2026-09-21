@@ -75,8 +75,7 @@ review area, and records both the original and undo reviewer.
 
 ## Verification — 2026-09-19
 
-- Full Vitest suite: 62 files, 268 tests passed. The final repeated-Keep regression
-  also passes in the focused backend suite.
+- Full Vitest suite: 62 files, 268 tests passed. See the [retained run output](question-review-vitest-2026-09-19.txt) for the command, counts, and timing.
 - Type checks and production build passed. Changed files have no ESLint errors;
   repository-wide lint still fails on existing errors elsewhere.
 - Local fixture browser checks: pruning and duplicates render at desktop/mobile
@@ -85,3 +84,18 @@ review area, and records both the original and undo reviewer.
 - 21st local UI review: zero findings. Its project-context scan reused existing
   shadcn components and tokens. Catalog search was unavailable without 21st login;
   no generated or downloaded component was installed.
+
+
+## Review-fix verification — 2026-09-21
+
+- `npm run test:run` completed successfully: 62 files, 273 tests passed. The
+  [saved output](question-review-vitest-2026-09-21.txt) includes the exact run
+  results. New coverage checks required review metadata, normalized storage for
+  large reviews, and recovery from failed duplicate resolve/reject/edit requests.
+- `npm run typecheck` and `npm run build` passed. Existing lint errors in the
+  question list, question detail, and pool pages remain outside these fixes.
+- Generic design tokens now match `:root`; `.dark` values are separate overrides.
+  The design Markdown was regenerated from that corrected snapshot.
+- Review metadata lives in `questionReviews`; before/after snapshots live in
+  `questionReviewChanges`, indexed by `reviewId`. History joins these records;
+  undo still validates every changed question before restoring the group.

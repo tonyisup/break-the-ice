@@ -496,10 +496,14 @@ export const flagQuestion = mutation({
 
 export const getReviewHistory = query({
   args: { source: v.union(v.literal("pruning"), v.literal("duplicates"), v.literal("question")) },
-  returns: v.array(doc(schema, "questionReviews")),
+  returns: v.array(v.object({ ...doc(schema, "questionReviews").fields, changes: v.array(doc(schema, "questionReviewChanges")) })),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
-    return await ctx.db.query("questionReviews").withIndex("by_source", q => q.eq("source", args.source)).order("desc").take(30);
+    const reviews = await ctx.db.query("questionReviews").withIndex("by_source", q => q.eq("source", args.source)).order("desc").take(30);
+    return await Promise.all(reviews.map(async review => ({
+      ...review,
+      changes: await ctx.db.query("questionReviewChanges").withIndex("by_reviewId", q => q.eq("reviewId", review._id)).collect(),
+    })));
   },
 });
 
@@ -510,9 +514,10 @@ export const undoReview = mutation({
     const reviewer = await ensureAdmin(ctx);
     const review = await ctx.db.get(args.reviewId);
     if (!review || !review.undoable || review.undoneAt !== undefined) throw new Error("This review cannot be undone");
+    const changes = await ctx.db.query("questionReviewChanges").withIndex("by_reviewId", q => q.eq("reviewId", review._id)).collect();
     // Validate the whole group before restoring anything; newer edits must never
     // be silently overwritten. Analytics updates do not invalidate an undo.
-    for (const change of review.changes) {
+    for (const change of changes) {
       const question = await ctx.db.get(change.questionId);
       if (!question) throw new Error("Question no longer exists");
       const current = snapshot(question);
@@ -531,7 +536,7 @@ export const undoReview = mutation({
       if (!detection || detection.status === "pending") throw new Error("Duplicate review has changed");
       await ctx.db.patch(detection._id, { status: "pending", reviewedBy: undefined, reviewedAt: undefined, rejectReason: undefined });
     }
-    for (const change of review.changes) {
+    for (const change of changes) {
       // Explicit keys restore absent optional fields as well as defined values.
       await ctx.db.patch(change.questionId, {
         text: change.before.text, fingerprint: change.before.fingerprint,

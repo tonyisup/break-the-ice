@@ -144,6 +144,16 @@ export const updateQuestion = mutation({
 		const reviewer = await ensureAdmin(ctx);
         const before = await ctx.db.get(args.id);
         if (!before) throw new Error("Question not found");
+        const changesReviewedContent =
+            (args.text !== undefined && args.text.trim() !== before.text) ||
+            (args.status !== undefined && args.status !== before.status);
+        if (changesReviewedContent && args.expectedRevision === undefined) {
+            throw new Error("An expected revision is required for text or status changes");
+        }
+        if (args.expectedRevision !== undefined && (!Number.isSafeInteger(args.expectedRevision) || args.expectedRevision < 0)) {
+            throw new Error("Expected revision must be a non-negative integer");
+        }
+        const reason = reviewReason(changesReviewedContent ? (args.reviewReason ?? "") : (args.reviewReason ?? "Admin metadata edit"));
         if (args.expectedRevision !== undefined && args.expectedRevision !== (before.reviewRevision ?? 0)) {
             throw new Error("Question changed during review. Reload before saving.");
         }
@@ -218,7 +228,7 @@ export const updateQuestion = mutation({
         const hasOtherEdits = [tags, style, tone, styleId, toneId, topic, topicId, imageStorageId].some(value => value !== undefined);
         await recordReview(ctx, [before], {
             reviewer: reviewer.tokenIdentifier,
-            reason: reviewReason(args.reviewReason ?? "Admin question edit"),
+            reason,
             source: args.reviewSource ?? "question",
             outcome: args.reviewOutcome ?? "edit",
             undoable: !hasOtherEdits,
@@ -922,6 +932,7 @@ export const getPoolQuestions = query({
 		_id: v.id("questions"),
 		_creationTime: v.number(),
 		text: v.optional(v.string()),
+        reviewRevision: v.optional(v.number()),
 		poolStatus: v.optional(v.union(v.literal("available"), v.literal("distributed"))),
 		style: v.optional(v.object({
 			_id: v.id("styles"),
@@ -977,6 +988,7 @@ export const getPoolQuestions = query({
 				_id: q._id,
 				_creationTime: q._creationTime,
 				text: q.text,
+                reviewRevision: q.reviewRevision,
 				poolStatus: q.poolStatus,
 				style: styleDoc ? {
 					_id: styleDoc._id,

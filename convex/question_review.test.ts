@@ -65,6 +65,97 @@ async function setupGroup() {
 }
 
 describe("editorial review safeguards", () => {
+  test("text and status changes require an explicit reason and matching revision at the boundary", async () => {
+    const t = convexTest(schema, modules);
+    const admin = t.withIdentity(identity);
+    const id = await t.run((ctx) => ctx.db.insert("questions", question()));
+    for (const changes of [
+      { text: "A clearer question?" },
+      { status: "pruned" as const },
+    ]) {
+      await expect(
+        admin.mutation(api.admin.questions.updateQuestion, {
+          id,
+          ...changes,
+          reviewReason: "Editorial review",
+        }),
+      ).rejects.toThrow("expected revision");
+      for (const reason of [undefined, "", "   "]) {
+        await expect(
+          admin.mutation(api.admin.questions.updateQuestion, {
+            id,
+            ...changes,
+            expectedRevision: 0,
+            reviewReason: reason,
+          }),
+        ).rejects.toThrow("review reason");
+      }
+      await expect(
+        admin.mutation(api.admin.questions.updateQuestion, {
+          id,
+          ...changes,
+          expectedRevision: 1,
+          reviewReason: "Editorial review",
+        }),
+      ).rejects.toThrow("changed during review");
+    }
+    expect(
+      await t.run((ctx) => ctx.db.query("questionReviews").collect()),
+    ).toHaveLength(0);
+    expect(
+      await t.run((ctx) => ctx.db.query("questionReviewChanges").collect()),
+    ).toHaveLength(0);
+    expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject(question());
+    await admin.mutation(api.admin.questions.updateQuestion, {
+      id,
+      status: "pruned",
+      expectedRevision: 0,
+      reviewReason: "Unclear invitation",
+    });
+    const history = await admin.query(api.admin.pruning.getReviewHistory, {
+      source: "question",
+    });
+    expect(history[0].changes[0].after.status).toBe("pruned");
+    await admin.mutation(api.admin.pruning.undoReview, {
+      reviewId: history[0]._id,
+    });
+    expect((await t.run((ctx) => ctx.db.get(id)))?.status).toBe("public");
+  });
+
+  test("review headers remain bounded and individual changes are indexed by review", async () => {
+    const { t, admin, ids, args } = await setupGroup();
+    await t.run(async (ctx) => {
+      await ctx.db.patch(ids.keep, { text: "A".repeat(300_000) });
+      await ctx.db.patch(ids.retire, { text: "B".repeat(300_000) });
+    });
+    await admin.mutation(api.admin.questions.deleteDuplicateQuestions, args);
+    const [header] = await t.run((ctx) =>
+      ctx.db.query("questionReviews").collect(),
+    );
+    expect(header).not.toHaveProperty("changes");
+    expect(JSON.stringify(header).length).toBeLessThan(2000);
+    const changes = await t.run((ctx) =>
+      ctx.db
+        .query("questionReviewChanges")
+        .withIndex("by_reviewId", (q) => q.eq("reviewId", header._id))
+        .collect(),
+    );
+    expect(changes).toHaveLength(2);
+    expect(new Set(changes.map((change) => change.questionId))).toEqual(
+      new Set([ids.keep, ids.retire]),
+    );
+    const [history] = await admin.query(api.admin.pruning.getReviewHistory, {
+      source: "duplicates",
+    });
+    expect(history.changes).toEqual(changes);
+    await admin.mutation(api.admin.pruning.undoReview, {
+      reviewId: header._id,
+    });
+    expect((await t.run((ctx) => ctx.db.get(ids.retire)))?.status).toBe(
+      "public",
+    );
+  });
+
   test("manual flags need no engagement; scans preserve editorial reasons and notes", async () => {
     const t = convexTest(schema, modules);
     const admin = t.withIdentity(identity);
@@ -265,12 +356,14 @@ describe("editorial review safeguards", () => {
       admin.mutation(api.admin.questions.updateQuestion, {
         id: questionId,
         text: "New wording?",
+        reviewReason: "Clarify the wording",
         expectedRevision: 1,
       }),
     ).rejects.toThrow("changed during review");
     await admin.mutation(api.admin.questions.updateQuestion, {
       id: questionId,
       text: "New wording?",
+      reviewReason: "Clarify the wording",
       expectedRevision: 2,
     });
     await expect(
@@ -280,15 +373,21 @@ describe("editorial review safeguards", () => {
       "New wording?",
     );
     const reopened = await admin.mutation(api.admin.pruning.flagQuestion, {
-      questionId, reasons: ["unclear_answer"], notes: "Review the new wording.",
+      questionId,
+      reasons: ["unclear_answer"],
+      notes: "Review the new wording.",
     });
     await admin.mutation(api.admin.pruning.rejectPruning, {
-      pruningId: reopened, expectedRevision: 4, reason: "The revised question is clear.",
+      pruningId: reopened,
+      expectedRevision: 4,
+      reason: "The revised question is clear.",
     });
     await t.mutation(internal.admin.pruning.savePruningTargets, {
       targets: [{ questionId, reason: "Low engagement", metrics }],
     });
-    expect(await admin.query(api.admin.pruning.getPendingTargets, {})).toHaveLength(0);
+    expect(
+      await admin.query(api.admin.pruning.getPendingTargets, {}),
+    ).toHaveLength(0);
   });
 
   test("duplicate retirement preserves saved references, history, schedules and public links; undo restores all", async () => {

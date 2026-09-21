@@ -202,6 +202,7 @@ export default function QuestionDetailsPage() {
 
 	// ── Editing State ──
 	const [editText, setEditText] = useState("")
+    const [editRevision, setEditRevision] = useState(0)
 	const [editStyle, setEditStyle] = useState("")
 	const [editTone, setEditTone] = useState("")
 	const [editTopic, setEditTopic] = useState("")
@@ -230,6 +231,7 @@ export default function QuestionDetailsPage() {
 	const handleReset = async () => {
 		if (question) {
 			setEditText(question.text || question.customText || "")
+            setEditRevision(question.reviewRevision ?? 0)
 			setEditStyle(question.styleId || question.style || "")
 			setEditTone(question.toneId || question.tone || "")
 			setEditTopic(question.topicId || question.topic || "")
@@ -245,6 +247,7 @@ export default function QuestionDetailsPage() {
 	useEffect(() => {
 		if (question && !hasInitialized.current) {
 			setEditText(question.text || question.customText || "")
+            setEditRevision(question.reviewRevision ?? 0)
 			setEditStyle(question.styleId || question.style || "")
 			setEditTone(question.toneId || question.tone || "")
 			setEditTopic(question.topicId || question.topic || "")
@@ -330,6 +333,9 @@ export default function QuestionDetailsPage() {
 
 	const handleSave = async () => {
 		if (!question) return
+        const changesContent = editText !== (question.text ?? question.customText ?? "") || editStatus !== (question.status ?? "public")
+        const reason = changesContent ? window.prompt("Why are you changing this question?")?.trim() : undefined
+        if (changesContent && !reason) return
 		setSaving(true)
 		try {
 			const tags = editTags
@@ -339,14 +345,16 @@ export default function QuestionDetailsPage() {
 
 			await updateQuestion({
 				id: question._id,
-				text: editText || undefined,
+                expectedRevision: editRevision,
+                reviewReason: reason,
+				text: editText !== (question.text ?? question.customText ?? "") ? editText : undefined,
 				style: selectedStyle?.slug || undefined,
 				styleId: selectedStyle?._id,
 				tone: selectedTone?.slug || undefined,
 				toneId: selectedTone?._id,
 				topic: selectedTopic?.slug || undefined,
 				topicId: selectedTopic?._id,
-				status: (editStatus as any) || undefined,
+				status: editStatus !== (question.status ?? "public") ? (editStatus as any) : undefined,
 				tags,
 				imageStorageId: draftImageStorageId !== undefined ? draftImageStorageId : undefined,
 			})
@@ -361,6 +369,7 @@ export default function QuestionDetailsPage() {
 				setDraftImageUrl(null)
 				setIsEditingImage(false)
 			}
+            setEditRevision(editRevision + 1)
 			toast.success("Question updated successfully")
 			setHasChanges(false)
 		} catch (error) {

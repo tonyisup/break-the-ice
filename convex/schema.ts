@@ -410,11 +410,16 @@ export default defineSchema({
     source: v.union(v.literal("pruning"), v.literal("duplicates"), v.literal("question")),
     pruningId: v.optional(v.id("pruning")),
     detectionId: v.optional(v.id("duplicateDetections")),
-    changes: v.array(v.object({ questionId: v.id("questions"), before: reviewSnapshot, after: reviewSnapshot })),
     undoable: v.boolean(),
     undoneAt: v.optional(v.number()),
     undoneBy: v.optional(v.string()),
   }).index("by_source", ["source"]),
+  questionReviewChanges: defineTable({
+    reviewId: v.id("questionReviews"),
+    questionId: v.id("questions"),
+    before: reviewSnapshot,
+    after: reviewSnapshot,
+  }).index("by_reviewId", ["reviewId"]),
   pruning: defineTable({
     questionId: v.id("questions"),
     userId: v.optional(v.id("users")), // Optional, as some pruning might be global

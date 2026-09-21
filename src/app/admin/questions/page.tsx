@@ -130,9 +130,17 @@ export default function QuestionsPage() {
   };
 
   const handleUpdateField = async (id: Id<"questions">, updates: any) => {
+    const question = allQuestions?.find(q => q._id === id);
+    if (!question) return;
+    const reason = updates.text !== undefined || updates.status !== undefined
+      ? window.prompt("Why are you changing this question?")?.trim()
+      : undefined;
+    if ((updates.text !== undefined || updates.status !== undefined) && !reason) return;
     try {
       await updateQuestion({
         id,
+        expectedRevision: question.reviewRevision ?? 0,
+        reviewReason: reason,
         ...updates,
       });
     } catch (error) {
@@ -141,9 +149,13 @@ export default function QuestionsPage() {
   };
 
   const handleUpdate = async (q: Doc<"questions">) => {
+    const reason = window.prompt("Why are you changing this question?")?.trim();
+    if (!reason) return;
     try {
       await updateQuestion({
         id: q._id,
+        expectedRevision: q.reviewRevision ?? 0,
+        reviewReason: reason,
         text: q.text || q.customText!,
         style: q.style || undefined,
         tone: q.tone || undefined,
@@ -170,9 +182,13 @@ export default function QuestionsPage() {
     q: Doc<"questions">,
     status: "public" | "personal",
   ) => {
+    const reason = window.prompt("Why are you changing this question’s status?")?.trim();
+    if (!reason) return;
     try {
       await updateQuestion({
         id: q._id,
+        expectedRevision: q.reviewRevision ?? 0,
+        reviewReason: reason,
         text: q.text || q.customText!,
         style: q.style || undefined,
         tone: q.tone || undefined,
@@ -196,6 +212,9 @@ export default function QuestionsPage() {
   };
 
   const handleRemix = async (id: Id<"questions">) => {
+    const question = allQuestions?.find(q => q._id === id);
+    if (!question) return;
+    const expectedRevision = question.reviewRevision ?? 0;
     setRemixingIds((prev) => {
       const next = new Set(prev);
       next.add(id);
@@ -208,7 +227,9 @@ export default function QuestionsPage() {
           `Review the remixed question:\n\n"${newText}"\n\nApply this change?`,
         )
       ) {
-        await updateQuestion({ id, text: newText });
+        const reason = window.prompt("Why are you applying this remix?")?.trim();
+        if (!reason) return;
+        await updateQuestion({ id, text: newText, expectedRevision, reviewReason: reason, reviewOutcome: "remix" });
         toast.success("Question remixed!");
       }
     } catch (error) {
