@@ -256,6 +256,57 @@ describe("analytics can't be inflated", () => {
     expect(question?.totalLikes).toBe(0);
   });
 
+  test("anonymous likes on a question are capped per hour, whatever the session id", async () => {
+    const { t, publicQuestionId } = await setup();
+    const anonymousLike = (sessionId: string) =>
+      t.mutation(api.core.questions.recordAnalytics, {
+        questionId: publicQuestionId,
+        event: "liked",
+        viewDuration: 0,
+        sessionId,
+      });
+
+    // A fresh session id per like gets past the per-session check; the cap (20 an hour) still holds.
+    for (let i = 0; i < 25; i++) await anonymousLike(`session-${i}`);
+    let question = await t.run(async (ctx) => await ctx.db.get(publicQuestionId));
+    expect(question?.totalLikes).toBe(20);
+
+    // Signed-in likes are unaffected.
+    await t.withIdentity(OTHER).mutation(api.core.questions.recordAnalytics, {
+      questionId: publicQuestionId,
+      event: "liked",
+      viewDuration: 0,
+    });
+    question = await t.run(async (ctx) => await ctx.db.get(publicQuestionId));
+    expect(question?.totalLikes).toBe(21);
+  });
+
+  test("anonymous likes older than the window don't count toward the cap", async () => {
+    const { t, publicQuestionId } = await setup();
+    await t.run(async (ctx) => {
+      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+      for (let i = 0; i < 20; i++) {
+        await ctx.db.insert("analytics", {
+          questionId: publicQuestionId,
+          event: "liked",
+          viewDuration: 0,
+          timestamp: twoHoursAgo,
+          sessionId: `old-session-${i}`,
+        });
+      }
+    });
+
+    await t.mutation(api.core.questions.recordAnalytics, {
+      questionId: publicQuestionId,
+      event: "liked",
+      viewDuration: 0,
+      sessionId: "new-session",
+    });
+
+    const question = await t.run(async (ctx) => await ctx.db.get(publicQuestionId));
+    expect(question?.totalLikes).toBe(1);
+  });
+
   test("view durations are bounded", async () => {
     const { t, publicQuestionId } = await setup();
 

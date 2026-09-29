@@ -6,7 +6,7 @@ All notable changes to Break the Ice are recorded here.
 
 ### Fixed
 - Private and team questions stay private everywhere. Likes, history, analytics and remix now check who can see a question before linking or returning it, so someone who has another person's private question ID can't like it, pull it into their history, or get it remixed.
-- Likes count once. Repeated likes from a signed-in person, or from a signed-out visitor in the same browser, no longer inflate a question's like count, the admin like rate, or its show count.
+- Likes count once. Repeated likes from a signed-in person, or from a signed-out visitor in the same browser, no longer inflate a question's like count, the admin like rate, or its show count. Signed-out likes on a question are also capped per hour, so switching browsers or sessions can't raise them without limit. One exception remains: after a signed-out like is merged into your account at sign-in, unliking and re-liking that question can count it again.
 - Signing in no longer loses what you did while signed out. Your liked, hidden and viewed questions go to your personal workspace first, and they are cleared from the browser only after the server confirms and only if nothing changed meanwhile.
 - Merging signed-out history again after a failed or repeated sign-in no longer double-counts views.
 - A failed remix refunds the same allowance it used. Remixing a gym's public question uses your own allowance unless you are a member of that gym.

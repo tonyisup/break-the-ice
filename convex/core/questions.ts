@@ -288,6 +288,10 @@ export const getNextQuestions = query({
 const MAX_VIEW_DURATION_MS = 10 * 60 * 1000;
 // Client session ids are UUIDs; a longer string is not one, and it would be stored and indexed.
 const MAX_SESSION_ID_LENGTH = 64;
+// Anonymous likes on one question are capped per window: a caller can mint a new session
+// id per like, so the per-session check alone does not bound them.
+const ANONYMOUS_LIKE_WINDOW_MS = 60 * 60 * 1000;
+const MAX_ANONYMOUS_LIKES_PER_WINDOW = 20;
 
 export const recordAnalytics = mutation({
 	args: {
@@ -348,7 +352,19 @@ export const recordAnalytics = mutation({
 						q.eq("sessionId", sessionId).eq("questionId", questionId).eq("event", "liked"),
 					)
 					.first();
-				countLike = priorLike === null;
+				if (priorLike === null) {
+					const recentAnonymousLikes = await ctx.db
+						.query("analytics")
+						.withIndex("by_questionId_event_timestamp", (q) =>
+							q
+								.eq("questionId", questionId)
+								.eq("event", "liked")
+								.gte("timestamp", Date.now() - ANONYMOUS_LIKE_WINDOW_MS),
+						)
+						.filter((q) => q.eq(q.field("userId"), undefined))
+						.take(MAX_ANONYMOUS_LIKES_PER_WINDOW);
+					countLike = recentAnonymousLikes.length < MAX_ANONYMOUS_LIKES_PER_WINDOW;
+				}
 			}
 		}
 
