@@ -45,6 +45,7 @@ In many fitness group training classes, the coach starts with a "Question of the
 - ✅ Billing integration via Clerk (org-level)
 - ✅ Embedding-based similarity/duplicate detection (384-dim vectors)
 - ✅ Nightly generation pool system for batch AI generation
+- ✅ Daily AI spend cap, per-call cost tracking, and per-person/per-team AI rate limits
 - ✅ Configurable pruning pipeline with settings
 - ✅ Analytics with view duration tracking
 - ✅ PostHog integration

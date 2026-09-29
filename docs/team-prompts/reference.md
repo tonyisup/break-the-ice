@@ -43,6 +43,12 @@ Return value:
 }
 ```
 
+Before checking the caller's role, the action checks the daily AI budget and the
+caller's per-person AI request limits. While the budget is paused it fails with a
+`ConvexError` whose `code` is `AI_BUDGET_PAUSED`; over a request limit, the code
+is `AI_RATE_LIMITED`. Neither failure uses the workspace's AI usage, and the
+error's `message` is ready to show.
+
 The action requests three candidates and reserves one unit of the workspace's AI
 usage before calling the provider. Empty, duplicate, and over-500-character
 candidates are discarded. If three distinct persistable questions do not remain,

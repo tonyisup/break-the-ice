@@ -147,6 +147,8 @@ The chosen candidate is persisted only when the manager assigns it.
 - Shared question readers do not reveal unpublished Team Prompt wording to
   members, including the original author after a role change.
 - Topic previews do not modify a schedule.
+- Topic previews are refused, without using the workspace's AI usage, while the
+  daily AI budget is paused or the caller is over their AI request limits.
 - Topic previews fail and release reserved usage when fewer than three distinct,
   persistable candidates remain after validation.
 - A failed preview leaves the current draft and existing assignments unchanged.
