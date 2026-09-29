@@ -56,7 +56,7 @@ VITE_CLERK_PUBLISHABLE_KEY="your-clerk-publishable-key"
 The following variables need to be set in your [Convex Dashboard](https://dashboard.convex.dev) under **Settings** → **Environment Variables**:
 
 *   `CLERK_JWT_ISSUER_DOMAIN`: You can find this in your [Clerk Dashboard](https://dashboard.clerk.com) under **API Keys**. It should be the "JWT Issuer URL".
-*   `OPENAI_API_KEY`: Your API key from the [OpenAI Platform](https://platform.openai.com/api-keys).
+*   `OPEN_ROUTER_API_KEY`: Your API key from [OpenRouter](https://openrouter.ai/settings/keys). AI question generation and remix call OpenRouter with this key.
 *   `RESEND_API_KEY` or `RESEND_API_TOKEN`: A Resend API key with email-sending permission, required for newsletter verification and delivery.
 
 ### 3. Running the Application
@@ -93,6 +93,18 @@ AI allowances come from the Convex environment: `MAX_FREE_AIGEN` (default 10) an
 `MAX_TEAM_AIGEN` (default 100; falls back to legacy `MAX_CASUAL_AIGEN`). Usage is counted
 per person within each workspace over 30-day cycles. The public pricing summary reads
 those allowances from Convex and plan prices directly from Clerk.
+
+Daily AI spend is capped from the Convex environment too, with no deploy needed to change
+it. Once the day's spend on generation a signed-in user can start (feed questions, remix,
+matrix fill, team topic previews) reaches `AI_DAILY_BUDGET_USD` (default 1), that
+generation pauses for the rest of the day. Once the day's total spend reaches
+`AI_DAILY_HARD_CAP_USD` (default 5), generation for the daily email and admin tools stops
+too. Keep the budget below the hard cap. Days run on Los
+Angeles time, each tracked generation call is charged what OpenRouter reports it cost (a
+flat $0.02 when it reports none), and each day's totals are in the `aiSpendDays` table.
+Embedding calls and the admin image generator are not tracked or counted toward the cap. Per-person and
+per-team request limits are defined in
+[`convex/lib/aiRateLimit.ts`](./convex/lib/aiRateLimit.ts).
 
 ## Stack
 

@@ -6,6 +6,9 @@ import { useQuery, useConvex, useAction, useMutation } from 'convex/react';
 import { WorkspaceProvider } from '@/hooks/useWorkspace.tsx';
 import { ModernQuestionCard } from '@/components/modern-question-card';
 import { NewsletterCard } from '@/components/newsletter-card/NewsletterCard';
+import { ConvexError } from 'convex/values';
+import { toast } from 'sonner';
+import { ERROR_CODES, ERROR_MESSAGES } from '../../convex/constants';
 
 // Hoisted mocks for dynamic control
 const mockUseAuth = vi.fn();
@@ -558,6 +561,35 @@ describe('InfiniteScrollPage', () => {
     expect(lastTenCalls.slice(6).every((call: any[]) => call[0].question.styleId === 'style2')).toBe(true);
   });
 
+  it('keeps the anchored database questions and posts a notice when the daily AI budget is paused', async () => {
+    mockSearchParams = new URLSearchParams('style=style1');
+    const dbQuestions = [
+      { _id: 'db-anchor', text: 'Existing anchor', styleId: 'style1', toneId: 'tone1' },
+      { _id: 'general-0', text: 'General 0', styleId: 'style2', toneId: 'tone2' },
+    ];
+    const actionMock = vi.fn().mockResolvedValue({
+      questions: dbQuestions,
+      anchoredMatchCount: 1,
+      targetAnchoredCount: 6,
+    });
+    const paused = new ConvexError({ code: ERROR_CODES.AI_BUDGET_PAUSED, message: ERROR_MESSAGES.AI_BUDGET_PAUSED });
+    (useConvex as any).mockReturnValue({ query: vi.fn(), action: actionMock });
+    (useAction as any).mockReturnValue(vi.fn().mockRejectedValue(paused));
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => 0);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_BUDGET_PAUSED));
+    expect(await screen.findAllByTestId('modern-question-card')).toHaveLength(2);
+    expect(screen.queryByText('Load More')).toBeNull();
+    expect(screen.queryByText('Generation Limit Reached')).toBeNull();
+  });
+
   it('does not generate when the anchored database quota is already met', async () => {
     mockSearchParams = new URLSearchParams('tone=tone1');
     const dbQuestions = [
@@ -792,6 +824,47 @@ describe('InfiniteScrollPage', () => {
     });
   });
 
+  it('stops the feed with a notice, not an upgrade prompt, when the daily AI budget is paused', async () => {
+    (useConvex as any).mockReturnValue({
+      query: vi.fn(),
+      action: vi.fn().mockResolvedValue([]), // DB returns nothing
+    });
+    const paused = new ConvexError({ code: ERROR_CODES.AI_BUDGET_PAUSED, message: ERROR_MESSAGES.AI_BUDGET_PAUSED });
+    (useAction as any).mockReturnValue(vi.fn().mockRejectedValue(paused));
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => 0);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_BUDGET_PAUSED));
+    expect(screen.queryByText('Generation Limit Reached')).toBeNull();
+    expect(screen.queryByText('Load More')).toBeNull();
+  });
+
+  it('shows the rate-limit message from the server when a person is making too many AI requests', async () => {
+    (useConvex as any).mockReturnValue({
+      query: vi.fn(),
+      action: vi.fn().mockResolvedValue([]),
+    });
+    const limited = new ConvexError({ code: ERROR_CODES.AI_RATE_LIMITED, message: ERROR_MESSAGES.AI_RATE_LIMITED });
+    (useAction as any).mockReturnValue(vi.fn().mockRejectedValue(limited));
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => 0);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>
+    );
+
+    await waitFor(() => expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_RATE_LIMITED));
+    expect(screen.queryByText('Generation Limit Reached')).toBeNull();
+  });
+
   it('proactively shows UpgradeCTA if isAiLimitReached is true and DB is empty', async () => {
     (useConvex as any).mockReturnValue({
       query: vi.fn(),
@@ -822,5 +895,108 @@ describe('InfiniteScrollPage', () => {
       expect(screen.getByText('Generation Limit Reached')).toBeDefined();
       expect(screen.queryByText('Load More')).toBeNull();
     });
+  });
+
+  it('shows the database questions it already had when the budget pauses on the first page', async () => {
+    const dbQuestions = [
+      { _id: 'db-long', text: 'A much longer database question', style: 'style1', tone: 'tone1' },
+      { _id: 'db-short', text: 'Short one', style: 'style2', tone: 'tone2' },
+      { _id: 'db-mid', text: 'Middle question', style: 'style1', tone: 'tone1' },
+    ];
+    (useConvex as any).mockReturnValue({ query: vi.fn(), action: vi.fn().mockResolvedValue(dbQuestions) });
+    const paused = new ConvexError({ code: ERROR_CODES.AI_BUDGET_PAUSED, message: ERROR_MESSAGES.AI_BUDGET_PAUSED });
+    (useAction as any).mockReturnValue(vi.fn().mockRejectedValue(paused));
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => 0);
+    const error = vi.spyOn(toast, 'error').mockImplementation(() => 0);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>,
+    );
+
+    expect(await screen.findAllByTestId('modern-question-card')).toHaveLength(3);
+    expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_BUDGET_PAUSED);
+    expect(error).not.toHaveBeenCalled();
+    const lastThree = (ModernQuestionCard as any).mock.calls.slice(-3).map((call: any[]) => call[0].question._id);
+    expect(lastThree).toEqual(['db-short', 'db-mid', 'db-long']);
+    expect(screen.queryByText('Load More')).toBeNull();
+    expect(screen.queryByText('Generation Limit Reached')).toBeNull();
+  });
+
+  it('keeps the database questions from a later page and stops loading when the budget pauses', async () => {
+    const firstPage = Array.from({ length: 10 }, (_, index) => ({
+      _id: `first-${index}`,
+      text: `First page ${index}`,
+      style: 'style1',
+      tone: 'tone1',
+    }));
+    const secondPage = [
+      { _id: 'second-0', text: 'Second page 0', style: 'style1', tone: 'tone1' },
+      { _id: 'second-1', text: 'Second page 1', style: 'style1', tone: 'tone1' },
+    ];
+    (useConvex as any).mockReturnValue({
+      query: vi.fn(),
+      action: vi.fn().mockResolvedValueOnce(firstPage).mockResolvedValueOnce(secondPage),
+    });
+    const paused = new ConvexError({ code: ERROR_CODES.AI_BUDGET_PAUSED, message: ERROR_MESSAGES.AI_BUDGET_PAUSED });
+    const generate = vi.fn().mockRejectedValue(paused);
+    (useAction as any).mockReturnValue(generate);
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => 0);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>,
+    );
+
+    expect(await screen.findAllByTestId('modern-question-card')).toHaveLength(10);
+    expect(generate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Load More'));
+
+    await waitFor(() => expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_BUDGET_PAUSED));
+    expect(screen.getAllByTestId('modern-question-card')).toHaveLength(12);
+    expect(screen.queryByText('Load More')).toBeNull();
+  });
+
+  it('keeps scrolling an anchored feed whose page is already full when only the anchor top-up is rate-limited', async () => {
+    mockSearchParams = new URLSearchParams('style=style1');
+    const dbQuestions = Array.from({ length: 10 }, (_, index) => ({
+      _id: `db-${index}`,
+      text: `Database ${index}`,
+      styleId: index < 3 ? 'style1' : 'style2',
+      toneId: 'tone1',
+    }));
+    (useConvex as any).mockReturnValue({
+      query: vi.fn(),
+      action: vi.fn().mockResolvedValue({ questions: dbQuestions, anchoredMatchCount: 3, targetAnchoredCount: 6 }),
+    });
+    const limited = new ConvexError({ code: ERROR_CODES.AI_RATE_LIMITED, message: ERROR_MESSAGES.AI_RATE_LIMITED });
+    const generate = vi.fn().mockRejectedValue(limited);
+    (useAction as any).mockReturnValue(generate);
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => 0);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_RATE_LIMITED));
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({ count: 3 }));
+    expect(await screen.findAllByTestId('modern-question-card')).toHaveLength(10);
+    expect(screen.getByText('Load More')).toBeInTheDocument();
+    expect(screen.queryByText('Generation Limit Reached')).toBeNull();
+
+    // Later pages don't ask again for the rest of the session.
+    fireEvent.click(screen.getByText('Load More'));
+    const dbAction = (useConvex as any)().action;
+    await waitFor(() => expect(dbAction).toHaveBeenCalledTimes(2));
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledTimes(1);
   });
 });

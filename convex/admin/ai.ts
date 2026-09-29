@@ -309,6 +309,7 @@ export const generateAIQuestions = action({
 		await ensureAdmin(ctx);
 		const count = args.count ?? 1;
 		const preview = await runPreviewQuestionGeneration(ctx, {
+			spendClass: "system",
 			styleId: args.styleId,
 			styleSlug: args.style,
 			toneId: args.toneId,

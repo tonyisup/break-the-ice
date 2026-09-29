@@ -14,6 +14,18 @@
 **Priority:** P1
 **Depends on:** Rate limiter / AI spend cap
 
+### Alert on an AI pause and decide how to protect the shared budget
+
+**What:** Email the owner (the existing `internal.email.sendEmail` notifier, `CRONS_NOTICE_EMAIL`) the first time user AI pauses each day, with the day's spend. Then decide how the shared user budget should be split. The specifics are in the owner's private plan doc ("v0.1.0.0 security follow-ups").
+
+**Why:** The user budget is shared, so it can run out early for everyone, and today nobody hears about it.
+
+**Context:** `convex/lib/aiSpend.ts` (caps), `convex/lib/aiSpendGuard.ts` (where a pause is detected). `generationRuns.requestedByUserId` and `costUsd` give per-user spend. Deferred by the owner during the v0.2.0.0 review.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
 ## Access control
 
 ### Route the remaining schedule path through the shared visibility rule

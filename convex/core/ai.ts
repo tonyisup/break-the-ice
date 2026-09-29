@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
+import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 
 export const generateAIQuestionForFeed = action({
 	args: {
@@ -31,6 +32,7 @@ export const generateAIQuestionForFeed = action({
 		if (!user) {
 			throw new Error("You must be logged in to generate AI questions.");
 		}
+		await ensureAiRequestAllowed(ctx);
 
 		const count = args.count || 1;
 		const takeoverTopics = await ctx.runQuery(api.core.topics.getActiveTakeoverTopics);

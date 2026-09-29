@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { TeamWorkspaceMenu } from "@/components/header/TeamWorkspaceMenu";
 import { toast } from "sonner";
+import { convexErrorData } from "../../../../convex/lib/errorData";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { TeamPromptComposer, type TeamTopicDraft } from "./TeamPromptComposer";
 
@@ -593,6 +594,13 @@ function DaySlot({ dayKey, dayLabel, dayAbbr, date, assignment, canEdit, onAssig
 // Main Page
 // ──────────────────────────────────────────────
 
+// A ConvexError carries a readable message in its data (AI budget paused, rate-limited).
+function readableError(e: unknown, fallback: string): string {
+  const dataMessage = convexErrorData(e)?.message;
+  if (typeof dataMessage === "string") return dataMessage;
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+
 export default function OrgWeeklyCurationPage() {
   const { activeWorkspace, setActiveWorkspace, workspaceHydrated } = useWorkspace();
   const { isSignedIn, isLoaded: authLoaded, orgId: clerkOrgId } = useAuth();
@@ -1136,7 +1144,7 @@ const questionPool = useQuery(
       });
       return result.questions;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to generate topic options");
+      toast.error(readableError(error, "Failed to generate topic options"));
       throw error;
     }
   };
@@ -1314,7 +1322,7 @@ const questionPool = useQuery(
       }
       toast.success(msg);
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to fill empty cells");
+      toast.error(readableError(e, "Failed to fill empty cells"));
     } finally {
       setIsFillingEmpty(false);
       setIsFillingOrRegen(false);
@@ -1348,7 +1356,7 @@ const questionPool = useQuery(
 
       toast.success(`Generated ${result.count} question${result.count !== 1 ? "s" : ""} for this cell`);
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to generate for this cell");
+      toast.error(readableError(e, "Failed to generate for this cell"));
     } finally {
       setFillingCellKey(null);
     }

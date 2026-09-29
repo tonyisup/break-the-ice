@@ -82,6 +82,13 @@ Confirm the workspace has active styles and tones and that the server has its
 AI provider credentials configured. A failed preview does not change the draft
 schedule, so you can retry without removing an assignment.
 
+If the planner says new AI questions are paused for today, the app's daily AI
+budget is spent, and topic options and matrix fill come back the next day. The
+same applies when it says you've used today's AI requests. If it says you've
+made a lot of AI requests in a short time, retry in a few minutes. If your team
+has used its matrix fills, more become available through the day. Library and
+**Write** assignments keep working either way.
+
 ### The week will not publish
 
 Every active delivery day needs an exact question. Fill any empty day or update

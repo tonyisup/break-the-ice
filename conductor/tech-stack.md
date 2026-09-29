@@ -14,4 +14,4 @@ This document outlines the technology stack used in the "Ice Breaker" project.
 
 *   **Testing**: Unit and integration tests are written and executed with [Vitest](https://vitest.dev/).
 
-*   **AI**: AI-powered question generation is handled by [OpenAI's GPT-4](https://openai.com/gpt-4).
+*   **AI**: AI-powered question generation runs through [OpenRouter](https://openrouter.ai/) with a saved model preset (`GENERATION_MODEL` in `convex/lib/generationRunner.ts`), under a daily spend cap.

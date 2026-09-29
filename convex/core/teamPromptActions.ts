@@ -5,6 +5,8 @@ import { action } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPreviewQuestionGeneration } from "../lib/generationRunner";
+import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
+import { wasAiCallBilled } from "../lib/aiSpendGuard";
 import { normalizePersistableTeamPromptText } from "../lib/teamPromptContract";
 
 const MAX_TOPIC_NAME_LENGTH = 100;
@@ -106,10 +108,13 @@ export async function runTopicPreviewWithUsage(
 
     return { questions, runId: preview.runId };
   } catch (error) {
-    await ctx.runMutation(internal.internal.users.decrementAIUsage, {
-      userId,
-      organizationId: args.organizationId,
-    });
+    // A preview the provider already charged for keeps its usage.
+    if (!wasAiCallBilled(error)) {
+      await ctx.runMutation(internal.internal.users.decrementAIUsage, {
+        userId,
+        organizationId: args.organizationId,
+      });
+    }
     throw error;
   }
 }
@@ -133,6 +138,7 @@ export const previewTopicQuestions = action({
   ): Promise<{ questions: string[]; runId: Id<"generationRuns"> }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    await ensureAiRequestAllowed(ctx);
     return await runTopicPreviewWithUsage(ctx, args);
   },
 });

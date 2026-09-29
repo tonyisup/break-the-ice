@@ -8,6 +8,16 @@ import {
   buildRemixPrompts,
   parseQuestionObjects,
 } from "./promptArchitecture";
+import { MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
+import { ConvexError } from "convex/values";
+import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
+import {
+  billedFailure,
+  ensureAiBudget,
+  releaseAiReservation,
+  reserveAiSpend,
+  settleAiCompletion,
+} from "./aiSpendGuard";
 
 export const GENERATION_MODEL = "@preset/break-the-ice-berg-default";
 export const GENERATION_PROVIDER = "openrouter";
@@ -96,16 +106,45 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Refuses a prompt over the size ceiling. Callers check before creating their run row. */
+function assertPromptSize(chars: number): void {
+  if (chars > MAX_PROMPT_CHARS) {
+    throw new ConvexError({ code: ERROR_CODES.AI_PROMPT_TOO_LARGE, message: ERROR_MESSAGES.AI_PROMPT_TOO_LARGE });
+  }
+}
+
+// Output is capped too, since the budget is charged after a call returns: a JSON batch
+// needs about 100 tokens per question with its short rationale.
+function maxOutputTokens(batchSize: number): number {
+  return 300 + 200 * batchSize;
+}
+
+// Callers check the budget with ensureAiBudget before creating their run. Here each
+// provider attempt reserves its estimated cost atomically (so a retry after backoff is
+// checked against the budget again), then settles it to the real cost on success or
+// releases it on failure.
 async function createChatCompletionWithRetry(
+  ctx: ActionCtx,
+  spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  assertPromptSize(
+    params.messages.reduce(
+      (total, message) => total + (typeof message.content === "string" ? message.content.length : 0),
+      0,
+    ),
+  );
+
   const maxAttempts = getOpenRouterMaxAttempts();
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const reservation = await reserveAiSpend(ctx, spend.spendClass);
+    let completion: OpenAI.Chat.Completions.ChatCompletion;
     try {
-      return await openRouterClient.chat.completions.create(params);
+      completion = await openRouterClient.chat.completions.create(params);
     } catch (error) {
+      await releaseAiReservation(ctx, reservation);
       lastError = error instanceof Error ? error : new Error(String(error));
 
       if (attempt >= maxAttempts || !shouldRetryOpenRouterError(error)) {
@@ -113,10 +152,30 @@ async function createChatCompletionWithRetry(
       }
 
       await sleep(getOpenRouterRetryDelayMs(error, attempt));
+      continue;
     }
+    await settleAiCompletion(ctx, reservation, spend.runId, completion);
+    return completion;
   }
 
   throw lastError ?? new Error("OpenRouter chat completion failed");
+}
+
+/**
+ * Whether the user should keep the usage for a call that then failed. A response cut off
+ * by our own output cap is our fault, so it doesn't count; the ledger still records it.
+ */
+function wasPaidInFull(completion: OpenAI.Chat.Completions.ChatCompletion): boolean {
+  return completion.choices?.[0]?.finish_reason !== "length";
+}
+
+/** Records a run's failure without letting a failed write replace the original error. */
+async function markRunFailed(ctx: ActionCtx, runId: Id<"generationRuns">, message: string): Promise<void> {
+  try {
+    await ctx.runMutation(internal.internal.generation.failGenerationRun, { runId, error: message });
+  } catch (error) {
+    console.error("Failed to mark generation run as failed", error);
+  }
 }
 
 function getChatCompletionContent(completion: OpenAI.Chat.Completions.ChatCompletion): string {
@@ -229,6 +288,12 @@ export async function runPersistedQuestionGeneration(
   };
   questions: any[];
 }> {
+  // Only the daily email and the admin-triggered pool are system spend. Everything
+  // else (feed generation, matrix fill, any purpose added later) is user spend.
+  const spendClass: SpendClass =
+    args.purpose === "newsletter" || args.purpose === "nightly_pool" ? "system" : "user";
+  await ensureAiBudget(ctx, spendClass);
+
   const temperature = args.temperature ?? 0.9;
   const prompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
     styleId: args.styleId,
@@ -244,6 +309,8 @@ export async function runPersistedQuestionGeneration(
     userContext: args.userContext,
   });
 
+  assertPromptSize(prompt.systemPrompt.length + prompt.userPrompt.length);
+
   const runId = await createRun(ctx, {
     purpose: args.purpose,
     requestedByUserId: args.requestedByUserId,
@@ -252,16 +319,20 @@ export async function runPersistedQuestionGeneration(
     temperature,
   });
 
+  let billed = false;
   try {
-    const completion = await createChatCompletionWithRetry({
+    const completion = await createChatCompletionWithRetry(ctx, { spendClass, runId }, {
       model: GENERATION_MODEL,
       temperature,
+      max_tokens: maxOutputTokens(prompt.batchSize),
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: prompt.systemPrompt },
         { role: "user", content: prompt.userPrompt },
       ],
     });
+
+    billed = wasPaidInFull(completion);
 
     const rawResponse = getChatCompletionContent(completion);
     const parsedQuestions = parseQuestionObjects(rawResponse).slice(0, prompt.batchSize);
@@ -302,11 +373,8 @@ export async function runPersistedQuestionGeneration(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown generation error";
-    await ctx.runMutation(internal.internal.generation.failGenerationRun, {
-      runId,
-      error: message,
-    });
-    throw error;
+    await markRunFailed(ctx, runId, message);
+    throw billed ? billedFailure(error) : error;
   }
 }
 
@@ -326,6 +394,8 @@ export async function runPreviewQuestionGeneration(
     userContext?: string;
     temperature?: number;
     batchSize?: number;
+    /** "system" for admin tools; team previews are user spend. */
+    spendClass?: SpendClass;
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -334,6 +404,9 @@ export async function runPreviewQuestionGeneration(
   previewText: string;
   previewTexts: string[];
 }> {
+  const spendClass = args.spendClass ?? "user";
+  await ensureAiBudget(ctx, spendClass);
+
   const temperature = args.temperature ?? 0.85;
   const prompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
     styleId: args.styleId,
@@ -349,6 +422,8 @@ export async function runPreviewQuestionGeneration(
     userContext: args.userContext,
   });
 
+  assertPromptSize(prompt.systemPrompt.length + prompt.userPrompt.length);
+
   const runId = await createRun(ctx, {
     purpose: "admin_preview",
     requestedByUserId: args.requestedByUserId,
@@ -357,16 +432,20 @@ export async function runPreviewQuestionGeneration(
     temperature,
   });
 
+  let billed = false;
   try {
-    const completion = await createChatCompletionWithRetry({
+    const completion = await createChatCompletionWithRetry(ctx, { spendClass, runId }, {
       model: GENERATION_MODEL,
       temperature,
+      max_tokens: maxOutputTokens(prompt.batchSize),
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: prompt.systemPrompt },
         { role: "user", content: prompt.userPrompt },
       ],
     });
+
+    billed = wasPaidInFull(completion);
 
     const rawResponse = getChatCompletionContent(completion);
     const parsed = parseQuestionObjects(rawResponse);
@@ -396,11 +475,8 @@ export async function runPreviewQuestionGeneration(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown generation error";
-    await ctx.runMutation(internal.internal.generation.failGenerationRun, {
-      runId,
-      error: message,
-    });
-    throw error;
+    await markRunFailed(ctx, runId, message);
+    throw billed ? billedFailure(error) : error;
   }
 }
 
@@ -414,8 +490,13 @@ export async function runRemixQuestion(
     topic?: Doc<"topics"> | null;
     sourceQuestionId?: Id<"questions">;
     temperature?: number;
+    /** "system" for the admin remix; a user's remix is user spend. */
+    spendClass?: SpendClass;
   },
 ): Promise<{ runId: Id<"generationRuns">; text: string }> {
+  const spendClass = args.spendClass ?? "user";
+  await ensureAiBudget(ctx, spendClass);
+
   const blueprint = await ctx.runQuery(internal.internal.generation.getDefaultPromptBlueprint, {});
   if (!blueprint) {
     throw new Error("Default prompt blueprint not found");
@@ -427,6 +508,8 @@ export async function runRemixQuestion(
     tone: args.tone,
     topic: args.topic,
   });
+
+  assertPromptSize(prompts.systemPrompt.length + prompts.userPrompt.length);
 
   const runId = await ctx.runMutation(internal.internal.generation.createGenerationRun, {
     purpose: "remix",
@@ -449,8 +532,9 @@ export async function runRemixQuestion(
     sourceQuestionId: args.sourceQuestionId,
   });
 
+  let billed = false;
   try {
-    const completion = await createChatCompletionWithRetry({
+    const completion = await createChatCompletionWithRetry(ctx, { spendClass, runId }, {
       model: GENERATION_MODEL,
       temperature: args.temperature ?? 0.9,
       messages: [
@@ -459,6 +543,8 @@ export async function runRemixQuestion(
       ],
       max_tokens: 150,
     });
+
+    billed = wasPaidInFull(completion);
 
     const rawResponse = getChatCompletionContent(completion);
     const remixedText = rawResponse.replace(/^["']|["']$/g, "").trim();
@@ -476,10 +562,7 @@ export async function runRemixQuestion(
     return { runId, text: remixedText };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown remix error";
-    await ctx.runMutation(internal.internal.generation.failGenerationRun, {
-      runId,
-      error: message,
-    });
-    throw error;
+    await markRunFailed(ctx, runId, message);
+    throw billed ? billedFailure(error) : error;
   }
 }

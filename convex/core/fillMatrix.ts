@@ -5,6 +5,8 @@ import { action, type ActionCtx } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration } from "../lib/generationRunner";
+import { ensureAiRateLimit, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
+import { ensureAiBudget } from "../lib/aiSpendGuard";
 
 async function pickRandomActiveTopicSlug(ctx: ActionCtx): Promise<string> {
 	const topics = await ctx.runQuery(api.core.topics.getTopics, {});
@@ -23,7 +25,7 @@ const axisValidator = v.union(
 );
 
 const PAGE_SIZE = 256;
-const MAX_CELLS_PER_REQUEST = 50;
+const MAX_CELLS_PER_REQUEST = MATRIX_FILL_MAX_CELLS;
 const MAX_COUNT_PER_CELL = 10;
 const MIN_COUNT = 1;
 
@@ -179,6 +181,8 @@ export const fillEmptyCells = action({
 			}
 
 			try {
+				await ensureAiBudget(ctx, "user");
+				await ensureAiRateLimit(ctx, { name: "matrixFillCell", key: args.organizationId });
 				const result = await runPersistedQuestionGeneration(ctx, {
 					purpose: "feed",
 					styleSlug: cell.styleSlug,
@@ -198,6 +202,8 @@ export const fillEmptyCells = action({
 					skippedExisting++;
 				}
 			} catch (err) {
+				// Out of budget or rate-limited: every remaining cell would fail the same way.
+				if (isAiStopError(err)) throw err;
 				const msg = err instanceof Error ? err.message : String(err);
 				if (msg.includes("No active") && msg.includes("entry found for slug")) {
 					skippedInvalidTaxonomy++;
@@ -283,6 +289,9 @@ export const fillSingleCell = action({
 		try {
 			// Clamp count to safe bounds
 			const clampedCount = Math.max(MIN_COUNT, Math.min(args.count ?? 1, MAX_COUNT_PER_CELL));
+
+			await ensureAiBudget(ctx, "user");
+			await ensureAiRateLimit(ctx, { name: "matrixFillCell", key: args.organizationId });
 
 			const result = await runPersistedQuestionGeneration(ctx, {
 				purpose: "feed",

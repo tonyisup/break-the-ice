@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { internal } from "../_generated/api";
 import { runTopicPreviewWithUsage } from "./teamPromptActions";
+import { billedFailure, wasAiCallBilled } from "../lib/aiSpendGuard";
 
 const args = {
   organizationId: "org-id" as any,
@@ -58,6 +59,20 @@ describe("runTopicPreviewWithUsage", () => {
       internal.internal.users.decrementAIUsage,
       { userId: "user-id", organizationId: "org-id" },
     );
+  });
+
+  it("keeps reserved usage when the failed preview was already paid for", async () => {
+    const ctx = {
+      runQuery: vi.fn().mockResolvedValue("user-id"),
+      runMutation: vi.fn().mockResolvedValue(1),
+    } as any;
+    const generate = vi.fn().mockRejectedValue(billedFailure(new Error("unparseable JSON")));
+
+    const error = await runTopicPreviewWithUsage(ctx, args, generate).catch((e: unknown) => e);
+    expect(wasAiCallBilled(error)).toBe(true);
+
+    // Only the usage charge ran; no refund followed.
+    expect(ctx.runMutation).toHaveBeenCalledTimes(1);
   });
 
   it("rejects generated wording that cannot be persisted", async () => {
