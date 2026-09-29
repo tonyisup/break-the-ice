@@ -428,7 +428,7 @@ export const generateAIQuestionForUser = internalAction({
 
 			const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId: user._id });
 			if (userEmb && userEmb.length > 0) {
-				const nearestQuestions = await ctx.runAction(api.core.questions.getNearestQuestionsByEmbedding, {
+				const nearestQuestions = await ctx.runAction(internal.core.questions.getNearestQuestionsByEmbedding, {
 					embedding: userEmb,
 					count: 5
 				});

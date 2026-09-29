@@ -49,8 +49,9 @@ export default defineSchema({
     timestamp: v.float64(),
     viewDuration: v.float64(),
   }).index("by_userId_event_timestamp", ["userId", "event", "timestamp"])
+    .index("by_userId_questionId_event", ["userId", "questionId", "event"])
     .index("by_questionId_event_timestamp", ["questionId", "event", "timestamp"])
-    .index("by_sessionId_timestamp", ["sessionId", "timestamp"])
+    .index("by_sessionId_questionId_event", ["sessionId", "questionId", "event"])
     .index("by_timestamp", ["timestamp"]),
   styles: defineTable({
     id: v.string(),

@@ -1,4 +1,4 @@
-import { internalMutation, action } from "./_generated/server";
+import { internalMutation, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
@@ -73,17 +73,11 @@ export const pickAndMarkQuestion = internalMutation({
     },
 });
 
-/*
-In `@scripts/n8n_workflow_instagram.json` around lines 5 - 8, The webhook
-definition for the route identified by parameters.path = "post-to-ig" currently
-has an empty options object and needs authentication; update the
-parameters.options for this webhook (the object under the parameters block where
-"path": "post-to-ig") to include an authentication property (e.g., add
-"authentication": { "type": "headerAuth", "headerName": "Authorization",
-"token": "<env or secret>" } or use "basicAuth" with credentials) so the webhook
-requires headerAuth or basicAuth instead of being publicly callable.
-*/
-export const postToInstagram = action({
+// Internal: nothing schedules it today. Call it from a cron, never from the client.
+// TODO: the n8n "post-to-ig" webhook takes unauthenticated calls, so its URL is the
+// only secret. Send a shared secret (like the N8N_WEBHOOK_SECRET http.ts checks)
+// and require it in the workflow before scheduling this.
+export const postToInstagram = internalAction({
     args: {},
     handler: async (ctx) => {
         // 1. Pick a question
@@ -125,7 +119,7 @@ export const postToInstagram = action({
             return;
         }
 
-        console.log(`Sending question ${question._id} to ${webhookUrl}: ${imageUrl}`);
+        console.log(`Sending question ${question._id} to the n8n webhook: ${imageUrl}`);
 
         const response = await fetch(webhookUrl, {
             method: "POST",

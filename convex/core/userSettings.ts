@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { Id } from "../_generated/dataModel";
 import {
 	findUserQuestionInWorkspace,
 	findUserStyleInWorkspace,
@@ -8,6 +9,8 @@ import {
 	resolveWorkspaceOrganizationId,
 } from "../lib/workspaceEngagement";
 import { getUserOrCreate } from "./users";
+import { canReadQuestion, readableQuestionIds } from "../lib/questionAccess";
+import { findCanonicalUser } from "../lib/users";
 
 const workspaceOrganizationIdArg = {
 	organizationId: v.optional(v.id("organizations")),
@@ -108,10 +111,11 @@ export const getQuestionHistory = query({
 			return [];
 		}
 
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
+		const user = await findCanonicalUser(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
 
 		if (!user) {
 			return [];
@@ -133,7 +137,7 @@ export const getQuestionHistory = query({
 		const results = [];
 		for (const h of history) {
 			const question = await ctx.db.get(h.questionId);
-			if (question) {
+			if (question && (await canReadQuestion(ctx, question, user._id))) {
 				results.push({
 					question,
 					viewedAt: h.updatedAt,
@@ -184,9 +188,20 @@ export const updateLikedQuestions = mutation({
 			)
 			.collect();
 
-		const newLikedSet = new Set(args.likedQuestions);
+		// Demote only what the client dropped; a like on a question the user can no
+		// longer read (say, an org that lapsed) survives. Check only the new ids, since
+		// the client sends its whole list on every change.
+		const requestedLiked = new Set<string>(args.likedQuestions);
+		const alreadyLiked = new Set<string>(existingLiked.map((uq) => uq.questionId));
+		const newLikedSet = new Set(
+			await readableQuestionIds(
+				ctx,
+				args.likedQuestions.filter((id) => !alreadyLiked.has(id)),
+				user._id,
+			),
+		);
 		for (const uq of existingLiked) {
-			if (!newLikedSet.has(uq.questionId)) {
+			if (!requestedLiked.has(uq.questionId)) {
 				// We don't delete, we just change status back to 'seen' or similar?
 				// Actually, if it's no longer liked, we can just mark it as seen.
 				await ctx.db.patch(uq._id, {
@@ -257,9 +272,18 @@ export const updateHiddenQuestions = mutation({
 			)
 			.collect();
 
-		const newHiddenSet = new Set(args.hiddenQuestions);
+		// Same rule as likes: un-hide only what the client dropped, check only new ids.
+		const requestedHidden = new Set<string>(args.hiddenQuestions);
+		const alreadyHidden = new Set<string>(existingHidden.map((uq) => uq.questionId));
+		const newHiddenSet = new Set(
+			await readableQuestionIds(
+				ctx,
+				args.hiddenQuestions.filter((id) => !alreadyHidden.has(id)),
+				user._id,
+			),
+		);
 		for (const uq of existingHidden) {
-			if (!newHiddenSet.has(uq.questionId)) {
+			if (!requestedHidden.has(uq.questionId)) {
 				await ctx.db.patch(uq._id, {
 					status: "seen",
 					updatedAt: Date.now(),
@@ -433,21 +457,27 @@ export const updateHiddenTones = mutation({
 	},
 });
 
+// The merge* mutations take plain strings: local storage can hold ids from another
+// deployment or a malformed entry, and one bad id must not block the rest. They
+// merge signed-out activity, which is always personal, so they take no workspace.
+const PERSONAL_WORKSPACE = undefined;
+// Still accepted, and ignored: clients cached before this change send it and clear
+// their local lists without waiting, so rejecting it (even a malformed one) would
+// lose that data.
+const ignoredWorkspaceArg = { organizationId: v.optional(v.string()) };
+
 export const mergeKnownLikedQuestions = mutation({
 	args: {
-		likedQuestions: v.array(v.id("questions")),
-		...workspaceOrganizationIdArg,
+		likedQuestions: v.array(v.string()),
+		...ignoredWorkspaceArg,
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
+		const organizationId = PERSONAL_WORKSPACE;
 
 		const now = Date.now();
-		const newLikedSet = new Set(args.likedQuestions);
+		const newLikedSet = new Set(await readableQuestionIds(ctx, args.likedQuestions, user._id));
 
 		const existingRelations = await Promise.all(
 			Array.from(newLikedSet).map(async (questionId) => {
@@ -487,19 +517,16 @@ export const mergeKnownLikedQuestions = mutation({
 
 export const mergeKnownHiddenQuestions = mutation({
 	args: {
-		hiddenQuestions: v.array(v.id("questions")),
-		...workspaceOrganizationIdArg,
+		hiddenQuestions: v.array(v.string()),
+		...ignoredWorkspaceArg,
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
+		const organizationId = PERSONAL_WORKSPACE;
 
 		const now = Date.now();
-		const newHiddenSet = new Set(args.hiddenQuestions);
+		const newHiddenSet = new Set(await readableQuestionIds(ctx, args.hiddenQuestions, user._id));
 
 		const existingRelations = await Promise.all(
 			Array.from(newHiddenSet).map(async (questionId) => {
@@ -540,42 +567,61 @@ export const mergeKnownHiddenQuestions = mutation({
 	},
 });
 
+// Local history timestamps come from the client. Admin analytics formats them as dates
+// and charts the last 30 days, so skip any that can't be a real view.
+const EARLIEST_VIEW_MS = Date.UTC(2020, 0, 1);
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+function isPlausibleViewTime(viewedAt: number): boolean {
+	return Number.isFinite(viewedAt) && viewedAt >= EARLIEST_VIEW_MS && viewedAt <= Date.now() + MAX_CLOCK_SKEW_MS;
+}
+
 export const mergeQuestionHistory = mutation({
 	args: {
 		history: v.array(
 			v.object({
-				questionId: v.id("questions"),
+				questionId: v.string(),
 				viewedAt: v.number(),
 			})
 		),
-		...workspaceOrganizationIdArg,
+		...ignoredWorkspaceArg,
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
+		const organizationId = PERSONAL_WORKSPACE;
+
+		const readable = new Set<string>(
+			await readableQuestionIds(ctx, args.history.map((h) => h.questionId), user._id),
 		);
 
-		// 1. Insert into analytics
-		// avoiding duplicate analytics entries for the exact same timestamp might be overkill but good practice
-		// For simplicity, we'll just insert.
+		// 1. Record each view once. A retried merge sends the same entries again, so an
+		// entry already stored (same question and timestamp) is not counted twice.
+		const newViews = new Map<Id<"questions">, number>();
 		for (const entry of args.history) {
+			const questionId = ctx.db.normalizeId("questions", entry.questionId);
+			if (!questionId || !readable.has(questionId) || !isPlausibleViewTime(entry.viewedAt)) continue;
+			const existing = await ctx.db
+				.query("analytics")
+				.withIndex("by_userId_event_timestamp", (q) =>
+					q.eq("userId", user._id).eq("event", "seen").eq("timestamp", entry.viewedAt),
+				)
+				.filter((q) => q.eq(q.field("questionId"), questionId))
+				.first();
+			if (existing) continue;
 			await ctx.db.insert("analytics", {
 				userId: user._id,
-				questionId: entry.questionId,
+				questionId,
 				event: "seen",
 				timestamp: entry.viewedAt,
 				viewDuration: 0, // Default since we don't have it in local history
 			});
+			newViews.set(questionId, (newViews.get(questionId) ?? 0) + 1);
 		}
 
 		// 2. Ensure they are marked as seen in userQuestions if not already there
-		const uniqueQuestionIds = new Set(args.history.map((h) => h.questionId));
-
 		const existingRelations = await Promise.all(
-			Array.from(uniqueQuestionIds).map(async (questionId) => {
+			Array.from(readable).map(async (id) => {
+				const questionId = id as Id<"questions">;
 				const relation = await findUserQuestionInWorkspace(
 					ctx,
 					user._id,
@@ -588,17 +634,20 @@ export const mergeQuestionHistory = mutation({
 
 		const now = Date.now();
 		for (const { questionId, relation } of existingRelations) {
+			const added = newViews.get(questionId) ?? 0;
 			if (relation) {
-				await ctx.db.patch(relation._id, {
-					seenCount: (relation.seenCount || 0) + 1,
-				});
+				if (added > 0) {
+					await ctx.db.patch(relation._id, {
+						seenCount: (relation.seenCount || 0) + added,
+					});
+				}
 			} else {
 				await ctx.db.insert("userQuestions", {
 					userId: user._id,
 					organizationId,
 					questionId,
 					status: "seen",
-					seenCount: 1,
+					seenCount: Math.max(added, 1),
 					updatedAt: now,
 				});
 			}

@@ -217,21 +217,6 @@ export const getFilteredStyles = query({
   },
 });
 
-export const getRandomStyle = query({
-  args: { seed: v.optional(v.number()) },
-  returns: v.object(publicStyleFields),
-  handler: async (ctx, args) => {
-    const styles = await getActiveStyles(ctx);
-    if (styles.length === 0) {
-      throw new Error("No styles found in the database");
-    }
-
-    const seed = args.seed ?? Math.random();
-    const index = Math.floor(seed * styles.length) % styles.length;
-    return styles[index];
-  },
-});
-
 export const getRandomStyleForUser = query({
   args: {},
   returns: v.object(publicStyleFields),
