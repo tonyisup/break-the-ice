@@ -78,13 +78,16 @@ without synchronizing it.
 
 - `npm run typecheck` checks the frontend, backend, API routes, and Vite configuration.
 - `npm run lint` runs ESLint across `src`, `convex`, and `api`.
-- `npm run test:run` runs the test suite once.
+- `npm run test:run` runs the Vitest suite once: Convex functions against the real schema
+  with `convex-test`, and React code with Testing Library.
 - `npm run build` builds the frontend.
 - `npm run check` runs all four checks and stops on the first failure.
 
 These checks do not synchronize or deploy backend code. ESLint currently exposes existing
 violations, including async event handlers and redundant type assertions; a failed lint
-run is a real failure to address, not a successful validation.
+run is a real failure to address, not a successful validation. Until those are fixed,
+`npm run check` stops at lint before the tests and build run, so run
+`npm run typecheck && npm run test:run` before shipping.
 
 AI allowances come from the Convex environment: `MAX_FREE_AIGEN` (default 10) and
 `MAX_TEAM_AIGEN` (default 100; falls back to legacy `MAX_CASUAL_AIGEN`). Usage is counted
