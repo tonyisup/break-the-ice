@@ -2,6 +2,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import OrgWeeklyCurationPage from "./page";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { ConvexError } from "convex/values";
+import { toast } from "sonner";
+import { ERROR_CODES, ERROR_MESSAGES } from "../../../../convex/constants";
 
 const workspaceState = vi.hoisted(() => ({ activeWorkspace: "org-1" }));
 
@@ -295,5 +298,75 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
         ),
       ).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("OrgWeeklyCurationPage matrix fill errors", () => {
+  const PAUSED = ERROR_MESSAGES.AI_BUDGET_PAUSED;
+  const RATE_LIMITED = ERROR_MESSAGES.AI_RATE_LIMITED;
+
+  function matrixWithOneEmptyCell() {
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
+      if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
+      if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
+      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
+      if (fn === "getCurationPreview") return { totalResponses: 0, coachCount: 0, confidence: "insufficient", recommendations: [] };
+      if (fn === "getStyles") return [{ id: "rapid-fire-either", slug: "rapid-fire-either", name: "Rapid fire", icon: "zap", color: "#888888" }];
+      if (fn === "getTones") {
+        return [
+          { id: "cozy", slug: "cozy", name: "Cozy", icon: "heart", color: "#888888" },
+          { id: "bold", slug: "bold", name: "Bold", icon: "flame", color: "#888888" },
+        ];
+      }
+      if (fn === "getTopics") return [];
+      if (fn === "getPublicQuestions") {
+        return [{ _id: "q-cozy", text: "A cozy question?", style: "rapid-fire-either", tone: "cozy", topic: "music" }];
+      }
+      return undefined;
+    });
+  }
+
+  function failingActions(failures: Partial<Record<"fillEmptyCells" | "fillSingleCell", unknown>>) {
+    (useAction as ReturnType<typeof vi.fn>).mockImplementation((fn: string) =>
+      fn in failures
+        ? vi.fn().mockRejectedValue(failures[fn as keyof typeof failures])
+        : vi.fn().mockResolvedValue(undefined),
+    );
+  }
+
+  it("shows the readable budget message, not the raw error payload, when filling empty cells is paused", async () => {
+    matrixWithOneEmptyCell();
+    failingActions({ fillEmptyCells: new ConvexError({ code: ERROR_CODES.AI_BUDGET_PAUSED, message: PAUSED }) });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Fill Empty Cells" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(PAUSED));
+    expect(screen.getByRole("button", { name: "Fill Empty Cells" })).toBeEnabled();
+  });
+
+  it("shows the rate-limit message when generating a single cell is refused, and frees the cell button", async () => {
+    matrixWithOneEmptyCell();
+    failingActions({ fillSingleCell: new ConvexError({ code: ERROR_CODES.AI_RATE_LIMITED, message: RATE_LIMITED, retryAt: 1 }) });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(RATE_LIMITED));
+    expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled();
+  });
+
+  it("falls back to a generic message when a fill fails without a readable one", async () => {
+    matrixWithOneEmptyCell();
+    failingActions({ fillEmptyCells: new Error(""), fillSingleCell: new Error("Cell is locked") });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Fill Empty Cells" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Failed to fill empty cells"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Cell is locked"));
   });
 });

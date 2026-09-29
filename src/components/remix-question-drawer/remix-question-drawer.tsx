@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { convexErrorData } from "../../../convex/lib/errorData";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { toast } from "sonner";
@@ -216,7 +217,9 @@ export function RemixQuestionDrawer({
 			// Final check before marking as remixed
 			setRemixState(current => current === "remixing" ? "remixed" : current);
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
+			// A ConvexError carries a readable message in its data (e.g. the AI budget is paused).
+			const dataMessage = convexErrorData(error)?.message;
+			const message = typeof dataMessage === "string" ? dataMessage : error instanceof Error ? error.message : String(error);
 			toast.error(`Remix failed: ${message}`);
 			setSaveFailed(true);
 			setRemixState(current => {

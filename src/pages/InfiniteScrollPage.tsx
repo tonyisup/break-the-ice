@@ -21,7 +21,7 @@ import { UpgradeCTA } from "@/components/UpgradeCTA";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
 import { RefineResultsCTA } from "@/components/RefineResultsCTA";
 import { ERROR_MESSAGES, ERROR_CODES } from "../../convex/constants";
-import { ConvexError } from "convex/values";
+import { convexErrorData } from "../../convex/lib/errorData";
 import { cn } from "@/lib/utils";
 
 const compareByTextLength = (a: Doc<"questions">, b: Doc<"questions">) =>
@@ -248,6 +248,9 @@ export default function InfiniteScrollPage() {
   }, []);
 
   // Track view duration
+  // Set once AI generation is paused (daily budget) or rate-limited, so later pages
+  // stop asking for AI questions for the rest of the session.
+  const aiPausedRef = useRef(false);
   const activeQuestionRef = useRef<Doc<"questions"> | null>(null);
   const startTimeRef = useRef<number>(Date.now());
 
@@ -342,7 +345,7 @@ export default function InfiniteScrollPage() {
         const generationCount = Math.min(5, Math.max(anchorShortfall, totalShortfall));
         let generatedQuestions: Doc<"questions">[] = [];
 
-        if (generationCount > 0 && user.isSignedIn && !currentUser?.isAiLimitReached) {
+        if (generationCount > 0 && user.isSignedIn && !currentUser?.isAiLimitReached && !aiPausedRef.current) {
           try {
             const generated = await generateAIQuestions({
               count: generationCount,
@@ -358,8 +361,8 @@ export default function InfiniteScrollPage() {
             if (currentRequestId !== requestIdRef.current) return;
 
             const errorMessage = typeof err === "string" ? err : err instanceof Error ? err.message : JSON.stringify(err);
-            const errorCode = err instanceof ConvexError ? err.data?.code : null;
-            const errorDataMessage = err instanceof ConvexError ? err.data?.message : null;
+            const errorCode = convexErrorData(err)?.code ?? null;
+            const errorDataMessage = convexErrorData(err)?.message ?? null;
             const isLimitError =
               errorCode === ERROR_CODES.AI_LIMIT_REACHED ||
               errorMessage === ERROR_MESSAGES.AI_LIMIT_REACHED ||
@@ -369,6 +372,12 @@ export default function InfiniteScrollPage() {
             if (totalShortfall > 0 && isLimitError) {
               setShowUpgradeCTA(true);
               setHasMore(false);
+            } else if (errorCode === ERROR_CODES.AI_BUDGET_PAUSED || errorCode === ERROR_CODES.AI_RATE_LIMITED || errorCode === ERROR_CODES.AI_PROMPT_TOO_LARGE) {
+              // The daily AI budget is spent or this user is rate-limited: show what's left
+              // and stop asking for more, including anchor top-ups on later pages.
+              aiPausedRef.current = true;
+              if (totalShortfall > 0) setHasMore(false);
+              toast.info(typeof errorDataMessage === "string" ? errorDataMessage : ERROR_MESSAGES.AI_BUDGET_PAUSED);
             } else if (dbQuestions.length === 0) {
               toast.error("Failed to generate more questions. Scroll to retry.");
             }
@@ -463,6 +472,17 @@ export default function InfiniteScrollPage() {
           return;
         }
 
+        // AI was paused or rate-limited earlier this session: show what the database had.
+        if (aiPausedRef.current) {
+          setHasMore(false);
+          if (isFirstPull && combinedQuestions.length > 0) {
+            combinedQuestions.sort(compareByTextLength);
+            setQuestions(combinedQuestions);
+            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
+          }
+          return;
+        }
+
         // Proactively check for AI limit if we need more
         if (currentUser?.isAiLimitReached) {
           setShowUpgradeCTA(true);
@@ -524,8 +544,8 @@ export default function InfiniteScrollPage() {
           if (currentRequestId !== requestIdRef.current) return;
 
           const errorMessage = typeof err === 'string' ? err : (err instanceof Error ? err.message : JSON.stringify(err));
-          const errorCode = err instanceof ConvexError ? err.data?.code : null;
-          const errorDataMessage = err instanceof ConvexError ? err.data?.message : null;
+          const errorCode = convexErrorData(err)?.code ?? null;
+          const errorDataMessage = convexErrorData(err)?.message ?? null;
 
           // Use structured error code if available, otherwise fall back to exact constant match or conservative substring check
           const isLimitError = errorCode === ERROR_CODES.AI_LIMIT_REACHED ||
@@ -539,6 +559,12 @@ export default function InfiniteScrollPage() {
           } else if (isLimitError) {
             setShowUpgradeCTA(true);
             setHasMore(false);
+          } else if (errorCode === ERROR_CODES.AI_BUDGET_PAUSED || errorCode === ERROR_CODES.AI_RATE_LIMITED || errorCode === ERROR_CODES.AI_PROMPT_TOO_LARGE) {
+            // The daily AI budget is spent or this user is rate-limited: stop asking for
+            // more. The block below still shows what the database had on the first pull.
+            aiPausedRef.current = true;
+            setHasMore(false);
+            toast.info(typeof errorDataMessage === "string" ? errorDataMessage : ERROR_MESSAGES.AI_BUDGET_PAUSED);
           } else if (dbQuestions.length === 0) {
             // Generic AI failure and no DB questions — reset seen IDs so
             // the next scroll attempt can re-sample the pool instead of
