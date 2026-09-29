@@ -16,3 +16,7 @@ Key routing rules:
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
 - Author a backlog-ready spec/issue → invoke /spec
+
+## Testing
+
+Run `npm run typecheck && npm run test:run` before shipping. Vitest covers `convex/` (convex-test against the real schema) and `src/` (Testing Library). `npm run lint` still has pre-existing errors, so it is not yet part of the gate.
