@@ -161,18 +161,6 @@ export const getFilteredTones = query({
   },
 });
 
-export const getRandomTone = query({
-  args: { seed: v.optional(v.number()) },
-  returns: v.object(publicToneFields),
-  handler: async (ctx, args) => {
-    const tones = await getActiveTones(ctx);
-    if (tones.length === 0) throw new Error("No tones found in the database");
-    const seed = args.seed ?? Math.random();
-    const index = Math.floor(seed * tones.length) % tones.length;
-    return tones[index];
-  },
-});
-
 export const getRandomToneForUser = query({
   args: {},
   returns: v.object(publicToneFields),

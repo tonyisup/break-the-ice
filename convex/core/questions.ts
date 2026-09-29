@@ -3,7 +3,6 @@ import { v } from "convex/values";
 import {
 	mutation,
 	query,
-	QueryCtx,
 	action,
 	ActionCtx,
 	internalAction,
@@ -14,43 +13,11 @@ import { api, internal } from "../_generated/api";
 import {
 	ensureAdmin,
 	ensurePaidOrganizationMember,
-	isOrganizationPaid,
 } from "../auth";
-import { embed } from "../lib/retriever";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
 import { findCanonicalUser } from "../lib/users";
-
-export const discardQuestion = mutation({
-	args: {
-		questionId: v.id("questions"),
-		startTime: v.number(),
-	},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		const { questionId, startTime } = args;
-
-		const question = await ctx.db.get(questionId);
-		if (question) {
-
-			const analytics = ctx.db.insert("analytics", {
-				questionId,
-				viewDuration: Date.now() - startTime,
-				event: "seen",
-				timestamp: Date.now(),
-			});
-
-			const updateQuestion = ctx.db.patch(questionId, {
-				totalShows: question.totalShows + 1,
-				totalThumbsDown: (question.totalThumbsDown ?? 0) + 1,
-				lastShownAt: Date.now(),
-			});
-
-			await Promise.all([analytics, updateQuestion]);
-		}
-		return null;
-	},
-});
+import { canReadQuestion, isQuestionPublic } from "../lib/questionAccess";
 
 export const addPersonalQuestion = mutation({
 	args: {
@@ -132,58 +99,6 @@ const shuffleArray = (array: any[], seed?: number) => {
 		array[j] = temp;
 	}
 }
-
-export const getSimilarQuestions = query({
-	args: {
-		count: v.float64(),
-		style: v.string(),
-		tone: v.string(),
-		seen: v.optional(v.array(v.id("questions"))),
-		hidden: v.optional(v.array(v.id("questions"))),
-		organizationId: v.optional(v.id("organizations")),
-	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args): Promise<any[]> => {
-		const { count, style, tone, seen, hidden, organizationId } = args;
-
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) {
-			return [];
-		}
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
-		if (!user) {
-			return [];
-		}
-		const likedQuestionsDocs = await ctx.db
-			.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
-				q.eq("userId", user._id).eq("status", "liked")
-			)
-			.collect();
-
-		const likedQuestionIds = likedQuestionsDocs.map((uq) => uq.questionId);
-
-		// Use regular query with filter instead of vectorSearch since it's not available in queries
-		const candidates = await ctx.db
-			.query("questions")
-			.withIndex("by_style_and_tone", (q: any) => q.eq("style", style).eq("tone", tone))
-			.filter((q: any) => q.eq(q.field("organizationId"), organizationId))
-			.filter((q: any) => q.eq(q.field("prunedAt"), undefined))
-			.filter((q: any) => q.and(
-				q.neq(q.field("text"), undefined),
-				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined)),
-				...(hidden ?? []).map((id: any) => q.neq(q.field("_id"), id)),
-				...(seen ?? []).map((id: any) => q.neq(q.field("_id"), id)),
-				...likedQuestionIds.map((id: any) => q.neq(q.field("_id"), id))
-			))
-			.take(count * 4);
-
-		return candidates;
-	},
-});
 
 /**
  * Shared logic for getting random questions.
@@ -284,8 +199,8 @@ export const getNextRandomQuestions = action({
 });
 
 /**
- * Shared logic for finding nearest questions by embedding.
- * Extracted into a helper to avoid action-to-action chaining.
+ * Finds the questions nearest to an embedding. Used by the
+ * getNearestQuestionsByEmbedding internal action.
  */
 async function getNearestQuestionsByEmbeddingInternal(
 	ctx: ActionCtx,
@@ -370,6 +285,14 @@ export const getNextQuestions = query({
 	}
 })
 
+const MAX_VIEW_DURATION_MS = 10 * 60 * 1000;
+// Client session ids are UUIDs; a longer string is not one, and it would be stored and indexed.
+const MAX_SESSION_ID_LENGTH = 64;
+// Anonymous likes on one question are capped per window: a caller can mint a new session
+// id per like, so the per-session check alone does not bound them.
+const ANONYMOUS_LIKE_WINDOW_MS = 60 * 60 * 1000;
+const MAX_ANONYMOUS_LIKES_PER_WINDOW = 20;
+
 export const recordAnalytics = mutation({
 	args: {
 		questionId: v.id("questions"),
@@ -384,21 +307,70 @@ export const recordAnalytics = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const { questionId, event, viewDuration, sessionId } = args;
+		const { questionId, event } = args;
+		const sessionId =
+			args.sessionId && args.sessionId.length <= MAX_SESSION_ID_LENGTH ? args.sessionId : undefined;
 		const question = await ctx.db.get(questionId);
-		if (!question) return;
+		if (!question) return null;
 
 		const identity = await ctx.auth.getUserIdentity();
-		let userId = null;
-		if (identity) {
-			const user = await ctx.db
-				.query("users")
-				.withIndex("email", (q) => q.eq("email", identity.email))
-				.unique();
-			if (user) {
-				userId = user._id;
+		const user = identity
+			? await findCanonicalUser(ctx, {
+				clerkId: identity.subject,
+				tokenIdentifier: identity.tokenIdentifier,
+				email: identity.email,
+			})
+			: null;
+		const userId = user?._id ?? null;
+
+		// An event on a question this caller cannot see would create a like or history
+		// link that later returns the question to them, so ignore it.
+		if (!(await canReadQuestion(ctx, question, userId ?? undefined))) return null;
+
+		// The duration is reported by the client; bound it so one call cannot skew the average.
+		const viewDuration = Number.isFinite(args.viewDuration)
+			? Math.min(Math.max(args.viewDuration, 0), MAX_VIEW_DURATION_MS)
+			: 0;
+
+		// A like counts once per signed-in user, or once per anonymous session. Checked
+		// against earlier like events, not the liked list: the client updates the list
+		// just before sending this event.
+		let countLike = false;
+		if (event === "liked") {
+			if (userId) {
+				const priorLike = await ctx.db
+					.query("analytics")
+					.withIndex("by_userId_questionId_event", (q) =>
+						q.eq("userId", userId).eq("questionId", questionId).eq("event", "liked"),
+					)
+					.first();
+				countLike = priorLike === null;
+			} else if (sessionId) {
+				const priorLike = await ctx.db
+					.query("analytics")
+					.withIndex("by_sessionId_questionId_event", (q) =>
+						q.eq("sessionId", sessionId).eq("questionId", questionId).eq("event", "liked"),
+					)
+					.first();
+				if (priorLike === null) {
+					const recentAnonymousLikes = await ctx.db
+						.query("analytics")
+						.withIndex("by_questionId_event_timestamp", (q) =>
+							q
+								.eq("questionId", questionId)
+								.eq("event", "liked")
+								.gte("timestamp", Date.now() - ANONYMOUS_LIKE_WINDOW_MS),
+						)
+						.filter((q) => q.eq(q.field("userId"), undefined))
+						.take(MAX_ANONYMOUS_LIKES_PER_WINDOW);
+					countLike = recentAnonymousLikes.length < MAX_ANONYMOUS_LIKES_PER_WINDOW;
+				}
 			}
 		}
+
+		// A like that doesn't count changes nothing else either: no event row (the admin
+		// like count and rate read these) and no extra show in the pruning stats.
+		if (event === "liked" && !countLike) return null;
 
 		await ctx.db.insert("analytics", {
 			questionId,
@@ -406,10 +378,12 @@ export const recordAnalytics = mutation({
 			viewDuration,
 			timestamp: Date.now(),
 			userId: userId ?? undefined,
-			sessionId,
+			// Signed-in events are tied to the user; storing the device's session id too
+			// would link the account to anyone's signed-out activity on that device.
+			sessionId: userId ? undefined : sessionId,
 		});
 
-		if (event === "liked") {
+		if (countLike) {
 			await ctx.db.patch(questionId, {
 				totalLikes: question.totalLikes + 1,
 			});
@@ -436,15 +410,6 @@ export const recordAnalytics = mutation({
 				.first();
 
 			if (userQuestion) {
-				let newStatus = userQuestion.status;
-				if (event === "liked") {
-					newStatus = "liked";
-				} else if (event === "hidden") {
-					newStatus = "hidden";
-				} else if (userQuestion.status === "unseen") {
-					newStatus = "seen";
-				}
-
 				await ctx.db.patch(userQuestion._id, {
 					viewDuration: userQuestion.viewDuration ? userQuestion.viewDuration + viewDuration : viewDuration,
 					seenCount: userQuestion.seenCount ? userQuestion.seenCount + 1 : 1,
@@ -664,10 +629,11 @@ export const getLikedQuestions = query({
 			return [];
 		}
 
-		const user = await ctx.db
-			.query("users")
-			.withIndex("email", (q) => q.eq("email", identity.email))
-			.unique();
+		const user = await findCanonicalUser(ctx, {
+			clerkId: identity.subject,
+			tokenIdentifier: identity.tokenIdentifier,
+			email: identity.email,
+		});
 
 		if (!user) {
 			return [];
@@ -688,9 +654,12 @@ export const getLikedQuestions = query({
 			likedUserQuestions.map((uq) => ctx.db.get(uq.questionId))
 		);
 
-		return questions
-			.filter((q): q is Doc<"questions"> => q !== null)
-			.filter((q) => q.organizationId === args.organizationId);
+		const liked: Doc<"questions">[] = [];
+		for (const question of questions) {
+			if (!question || question.organizationId !== args.organizationId) continue;
+			if (await canReadQuestion(ctx, question, user._id)) liked.push(question);
+		}
+		return liked;
 	},
 });
 
@@ -720,58 +689,6 @@ export const getQuestionById = query({
 		}
 	},
 });
-
-function isQuestionPublic(question: Doc<"questions">): boolean {
-    const status = question.status;
-    // Duplicate retirement preserves the original public URL and content.
-    return (Boolean(question.duplicateOf) && question.duplicateWasPublic === true && status === "pruned") || status === "public" || status === "approved" || status === undefined;
-}
-
-async function canReadQuestion(
-	ctx: QueryCtx,
-	question: Doc<"questions">,
-	userId?: Id<"users">,
-): Promise<boolean> {
-	if (isQuestionPublic(question)) return true;
-	if (!userId) return false;
-	if (question.kind === "team_prompt") {
-		if (!question.organizationId) return false;
-		if (!(await isOrganizationPaid(ctx, question.organizationId))) return false;
-		const membership = await ctx.db
-			.query("organization_members")
-			.withIndex("by_userId_organizationId", (q) =>
-				q.eq("userId", userId).eq("organizationId", question.organizationId!),
-			)
-			.unique();
-		if (!membership) return false;
-		if (membership.role === "admin" || membership.role === "manager") return true;
-
-		const assignments = await ctx.db
-			.query("scheduledQuestions")
-			.withIndex("by_question", (q) => q.eq("questionId", question._id))
-			.take(50);
-		for (const assignment of assignments) {
-			const schedule = await ctx.db.get(assignment.scheduleId);
-			if (
-				schedule?.organizationId === question.organizationId &&
-				(schedule.status === "published" || schedule.status === "completed")
-			) {
-				return true;
-			}
-		}
-		return false;
-	}
-	if (!question.organizationId) return question.authorId === userId;
-	if (!(await isOrganizationPaid(ctx, question.organizationId))) return false;
-
-	const membership = await ctx.db
-		.query("organization_members")
-		.withIndex("by_userId_organizationId", (q) =>
-			q.eq("userId", userId).eq("organizationId", question.organizationId!),
-		)
-		.unique();
-	return membership !== null;
-}
 
 export const getQuestionImageUrl = query({
 	args: { questionId: v.id("questions") },
@@ -989,22 +906,31 @@ export const remixQuestionForUser = action({
 		if (!identity) {
 			throw new Error("You must be logged in to remix a question.");
 		}
-
-		if (!identity.email) {
-			throw new Error("You must have an email to remix a question.");
-		}
 		
-		const user = await ctx.runQuery(internal.internal.users.getUserByEmail, {
-			email: identity.email,
-		});
+		// Same user lookup as getQuestionById below, so usage and visibility agree on who is asking.
+		const user: Doc<"users"> | null = await ctx.runQuery(api.core.users.getCurrentUser, {});
 
 		if (!user) {
 			throw new Error("User not found.");
 		}
 
-		const question = await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.questionId });
+		// The public query applies this caller's visibility, so another user's private
+		// question reads as not found instead of being sent to the model.
+		const question: Doc<"questions"> | null = await ctx.runQuery(api.core.questions.getQuestionById, {
+			id: args.questionId,
+		});
 		if (!question) {
 			throw new Error("Question not found.");
+		}
+
+		// Bill the question's org only for its members, as generateAIQuestionForFeed does.
+		// Anyone else is charged personally, so a public gym question isn't a fresh allowance.
+		let usageOrganizationId: Id<"organizations"> | undefined;
+		if (question.organizationId) {
+			const organizations = await ctx.runQuery(api.core.organizations.getOrganizations, {});
+			if (organizations.some((organization: { _id: Id<"organizations"> }) => organization._id === question.organizationId)) {
+				usageOrganizationId = question.organizationId;
+			}
 		}
 
 		const topicIdToUse = args.topicId || question.topicId;
@@ -1016,7 +942,7 @@ export const remixQuestionForUser = action({
 			if (!isTakeover) {
 				await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
 					userId: user._id,
-					organizationId: question.organizationId,
+					organizationId: usageOrganizationId,
 				});
 				usageIncremented = true;
 			}
@@ -1036,8 +962,10 @@ export const remixQuestionForUser = action({
 			return remixText;
 		} catch (error) {
 			if (usageIncremented) {
+				// Refund the same counter the charge above used.
 				await ctx.runMutation(internal.internal.users.decrementAIUsage, {
 					userId: user._id,
+					organizationId: usageOrganizationId,
 				});
 			}
 			throw error;
@@ -1184,7 +1112,7 @@ export const makeQuestionPublic = mutation({
 	},
 });
 
-export const getNearestQuestionsByEmbedding = action({
+export const getNearestQuestionsByEmbedding = internalAction({
 	args: {
 		embedding: v.array(v.number()),
 		style: v.optional(v.string()),
@@ -1194,40 +1122,6 @@ export const getNearestQuestionsByEmbedding = action({
 	returns: v.array(v.any()),
 	handler: async (ctx, args): Promise<any[]> => {
 		return await getNearestQuestionsByEmbeddingInternal(ctx, args);
-	},
-});
-
-export const getNextQuestionsByEmbedding = action({
-	args: {
-		style: v.optional(v.string()),
-		tone: v.optional(v.string()),
-		count: v.optional(v.number()),
-		userId: v.optional(v.id("users")),
-	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args): Promise<any[]> => {
-		const { style, tone, count, userId } = args;
-		if (!userId) {
-			return [];
-		}
-		const user: Doc<"users"> | null = await ctx.runQuery(internal.internal.users.getUserById, {
-			id: userId,
-		});
-		if (!user) {
-			return [];
-		}
-		const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId });
-		const embedding = await embed(style + " " + tone);
-		if (!embedding) {
-			return [];
-		}
-		const averageEmbedding = calculateAverageEmbedding([embedding, userEmb ?? []] as number[][]);
-
-		// Use the helper instead of calling the action to avoid action-to-action chaining
-		return await getNearestQuestionsByEmbeddingInternal(ctx, {
-			embedding: averageEmbedding,
-			count: count,
-		});
 	},
 });
 

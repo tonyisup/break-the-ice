@@ -16,7 +16,7 @@ export default function QuestionPage() {
   const navigate = useNavigate();
   const { effectiveTheme } = useTheme();
   const { addQuestionHistoryEntry } = useQuestionHistory();
-  const { likedQuestions, addLikedQuestion, removeLikedQuestion, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
+  const { likedQuestions, addLikedQuestion, removeLikedQuestion, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone, sessionId } = useStorageContext();
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
 
   const question = useQuery(api.core.questions.getQuestionById, id ? { id } : "skip");
@@ -44,6 +44,7 @@ export default function QuestionPage() {
         questionId,
         event: "liked",
         viewDuration: 0, // No view duration for shared questions
+        sessionId: sessionId || undefined,
       });
       toast.success("Added to favorites!");
     }

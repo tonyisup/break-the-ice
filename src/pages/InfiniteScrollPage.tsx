@@ -62,6 +62,7 @@ export default function InfiniteScrollPage() {
     addHiddenStyle,
     addHiddenTone,
     addQuestionToHistory,
+    sessionId: localSessionId,
   } = useStorageContext();
 
   const [questions, setQuestions] = useState<Doc<"questions">[]>([]);
@@ -265,7 +266,7 @@ export default function InfiniteScrollPage() {
           questionId: activeQuestionRef.current._id,
           event: "seen",
           viewDuration: duration,
-          sessionId: user.sessionId ?? undefined,
+          sessionId: localSessionId || undefined,
         }); // No catch here as it might run during unmount
 
         if (duration > 1000) {
@@ -276,7 +277,7 @@ export default function InfiniteScrollPage() {
         }
       }
     };
-  }, [activeQuestion, recordAnalytics, addQuestionToHistory, user.sessionId]);
+  }, [activeQuestion, recordAnalytics, addQuestionToHistory, localSessionId]);
 
 
   // Check if all styles or tones are blocked
@@ -655,6 +656,9 @@ export default function InfiniteScrollPage() {
           questionId,
           event: "liked",
           viewDuration: 0, // Not tracking duration in list view accurately
+          // The local session id, not Clerk's: signed-out visitors have no Clerk session,
+          // and an anonymous like only counts once per local session.
+          sessionId: localSessionId || undefined,
         });
         toast.success("Added to favorites!", {
           action: {

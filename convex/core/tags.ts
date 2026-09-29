@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, internalMutation } from "../_generated/server";
 
 // Shared predefined tags configuration
 export const PREDEFINED_TAGS = [
@@ -195,7 +195,7 @@ export const getTags = query({
 });
 
 // Initialize tags in the database
-export const initializeTags = mutation({
+export const initializeTags = internalMutation({
 	args: {},
 	returns: v.null(),
 	handler: async (ctx) => {
