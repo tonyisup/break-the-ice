@@ -12,6 +12,7 @@ import {
 } from "./lib/taxonomy";
 
 import { editorialReason, reviewSnapshot } from "./lib/questionReviewValidators";
+import { rateLimitTables } from "convex-helpers/server/rateLimit";
 
 const questionSource = v.union(
   v.literal("ai"),
@@ -36,6 +37,8 @@ const generationRunPurpose = v.union(
 );
 
 export default defineSchema({
+  // Token buckets for the AI rate limits (lib/aiRateLimit.ts).
+  ...rateLimitTables,
   analytics: defineTable({
     event: v.union(
       v.literal("seen"),
@@ -160,10 +163,24 @@ export default defineSchema({
     resultQuestionIds: v.array(v.id("questions")),
     createdAt: v.number(),
     finishedAt: v.optional(v.number()),
+    // What the provider reported for the completion: the model behind the preset,
+    // token counts and the charge in USD.
+    resolvedModel: v.optional(v.string()),
+    promptTokens: v.optional(v.number()),
+    completionTokens: v.optional(v.number()),
+    costUsd: v.optional(v.number()),
   })
     .index("by_status", ["status"])
     .index("by_purpose", ["purpose"])
     .index("by_style_tone_topic", ["styleSlug", "toneSlug", "topicSlug"]),
+  // Daily AI spend (Los Angeles days) for the spend cap. "user" is anything a user
+  // can trigger; "system" is the daily email and admin tools.
+  aiSpendDays: defineTable({
+    day: v.string(),
+    spendClass: v.union(v.literal("user"), v.literal("system")),
+    costUsd: v.number(),
+    calls: v.number(),
+  }).index("by_day_class", ["day", "spendClass"]),
   questions: defineTable({
     organizationId: v.optional(v.id("organizations")),
     averageViewDuration: v.number(),

@@ -18,6 +18,12 @@ import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
 import { findCanonicalUser } from "../lib/users";
 import { canReadQuestion, isQuestionPublic } from "../lib/questionAccess";
+import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
+import { wasAiCallBilled } from "../lib/aiSpendGuard";
+import { ConvexError } from "convex/values";
+import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
+
+const MAX_REMIX_QUESTION_CHARS = 1_000;
 
 export const addPersonalQuestion = mutation({
 	args: {
@@ -906,7 +912,9 @@ export const remixQuestionForUser = action({
 		if (!identity) {
 			throw new Error("You must be logged in to remix a question.");
 		}
-		
+		// Before anything else, including the takeover check that skips the usage quota.
+		await ensureAiRequestAllowed(ctx);
+
 		// Same user lookup as getQuestionById below, so usage and visibility agree on who is asking.
 		const user: Doc<"users"> | null = await ctx.runQuery(api.core.users.getCurrentUser, {});
 
@@ -921,6 +929,10 @@ export const remixQuestionForUser = action({
 		});
 		if (!question) {
 			throw new Error("Question not found.");
+		}
+		// The whole question goes into the prompt, and a user's own question has no length limit.
+		if ((question.text ?? question.customText ?? "").length > MAX_REMIX_QUESTION_CHARS) {
+			throw new ConvexError({ code: ERROR_CODES.AI_PROMPT_TOO_LARGE, message: ERROR_MESSAGES.AI_REMIX_TOO_LONG });
 		}
 
 		// Bill the question's org only for its members, as generateAIQuestionForFeed does.
@@ -961,7 +973,8 @@ export const remixQuestionForUser = action({
 
 			return remixText;
 		} catch (error) {
-			if (usageIncremented) {
+			// Refund only a call the provider didn't charge for.
+			if (usageIncremented && !wasAiCallBilled(error)) {
 				// Refund the same counter the charge above used.
 				await ctx.runMutation(internal.internal.users.decrementAIUsage, {
 					userId: user._id,

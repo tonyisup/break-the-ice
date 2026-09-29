@@ -6,6 +6,8 @@ import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { createPopulateMissingEmbeddingsEmail, createPopulateMissingStyleEmbeddingsEmail, createPopulateMissingToneEmbeddingsEmail } from "../lib/emails";
 import { runPersistedQuestionGeneration, runRemixQuestion } from "../lib/generationRunner";
+import type { SpendClass } from "../lib/aiSpend";
+import { wasAiCallBilled } from "../lib/aiSpendGuard";
 import { normalizeSelectionSeed } from "../lib/random";
 
 export const populateMissingEmbeddings = internalAction({
@@ -305,6 +307,7 @@ const remixQuestionHelper = async (
 		topicId?: Id<"topics">;
 		requestedByUserId?: string;
 		sourceQuestionId?: Id<"questions">;
+		spendClass?: SpendClass;
 	}
 ): Promise<string> => {
 	const { questionText, styleId, toneId, topicId } = args;
@@ -322,6 +325,7 @@ const remixQuestionHelper = async (
 		tone,
 		topic,
 		sourceQuestionId: args.sourceQuestionId,
+		spendClass: args.spendClass,
 	});
 	return result.text;
 };
@@ -359,6 +363,8 @@ export const remixQuestion = internalAction({
 			toneId: question.toneId,
 			topicId: question.topicId,
 			sourceQuestionId: question._id,
+			// Only admins reach this remix (admin/questions.ts).
+			spendClass: "system",
 		});
 	},
 });
@@ -451,7 +457,9 @@ export const generateAIQuestionForUser = internalAction({
 			});
 			return result.questions as (Doc<"questions"> | null)[];
 		} catch (error) {
-			if (usageIncremented) {
+			// A call the provider already charged for keeps its usage: otherwise a free
+			// account could get paid generations without spending quota.
+			if (usageIncremented && !wasAiCallBilled(error)) {
 				await ctx.runMutation(internal.internal.users.decrementAIUsage, {
 					userId: user._id,
 					organizationId: args.organizationId,

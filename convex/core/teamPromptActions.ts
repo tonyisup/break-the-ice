@@ -5,6 +5,7 @@ import { action } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPreviewQuestionGeneration } from "../lib/generationRunner";
+import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 import { normalizePersistableTeamPromptText } from "../lib/teamPromptContract";
 
 const MAX_TOPIC_NAME_LENGTH = 100;
@@ -133,6 +134,7 @@ export const previewTopicQuestions = action({
   ): Promise<{ questions: string[]; runId: Id<"generationRuns"> }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    await ensureAiRequestAllowed(ctx);
     return await runTopicPreviewWithUsage(ctx, args);
   },
 });
