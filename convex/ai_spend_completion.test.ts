@@ -584,3 +584,37 @@ describe("delta review follow-ups", () => {
     expect(usage.map((row) => row.count)).toEqual([0]);
   });
 });
+
+describe("provider retries", () => {
+  // The retry backoff uses setTimeout, so these run on the real clock.
+  test("a failed attempt releases its reservation; the successful retry is settled once", async () => {
+    vi.useRealTimers();
+    const { t, questionId } = await setup();
+    create
+      .mockRejectedValueOnce(new Error("429 Too Many Requests") as never)
+      .mockResolvedValueOnce(completion("A quicker take on breakfast?", { cost: 0.004 }) as never);
+
+    await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.004, 1]]);
+  });
+
+  test("each retry is checked against the budget again", async () => {
+    vi.useRealTimers();
+    const { t, questionId } = await setup();
+    create.mockImplementationOnce((async () => {
+      // Other spend uses up the budget while this attempt is failing.
+      await t.run(async (ctx) => {
+        await ctx.db.insert("aiSpendDays", { day: spendDay(Date.now()), spendClass: "user", costUsd: 5, calls: 1 });
+      });
+      throw new Error("503 Service Unavailable");
+    }) as never);
+
+    await expect(
+      t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId }),
+    ).rejects.toThrow(PAUSED);
+
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+});

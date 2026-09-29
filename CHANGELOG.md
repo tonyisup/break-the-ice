@@ -5,8 +5,8 @@ All notable changes to Break the Ice are recorded here.
 ## [0.2.0.0] - 2026-09-29
 
 ### Added
-- A daily spending cap on AI. Anything a signed-in user can start (new feed questions, remix, matrix fill, team topic previews) pauses for the rest of the day once it has spent the daily budget ($1 by default). The daily email and admin tools keep working up to a separate hard cap ($5 by default). Both are Convex environment variables (`AI_DAILY_BUDGET_USD`, `AI_DAILY_HARD_CAP_USD`) you can change without a deploy.
-- Every AI call records what it actually cost, which model answered, and its token counts, on its generation run.
+- A daily spending cap on AI. The daily budget ($1 by default) is one shared pool for all signed-in users, not an allowance per person: once their combined spend on generation they can start (new feed questions, remix, matrix fill, team topic previews) reaches it, that generation pauses for everyone for the rest of the day. The daily email and admin tools keep working up to a separate hard cap ($5 by default). Both are Convex environment variables (`AI_DAILY_BUDGET_USD`, `AI_DAILY_HARD_CAP_USD`) you can change without a deploy.
+- Every tracked generation call (feed questions, remix, matrix fill, team and admin previews, the daily email) records what it actually cost, which model answered, and its token counts, on its generation run. Embedding calls and the admin image generator are not tracked or counted toward the cap.
 - Limits on how fast one person can ask for AI: a burst of 10, then about one every two minutes, and at most 40 a day. Matrix fill is limited per team: one full grid at once, then 100 cells a day.
 
 ### Changed

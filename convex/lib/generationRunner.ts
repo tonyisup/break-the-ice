@@ -119,9 +119,10 @@ function maxOutputTokens(batchSize: number): number {
   return 300 + 200 * batchSize;
 }
 
-// Callers check the budget with ensureAiBudget before creating their run. Here the
-// call's estimated cost is reserved atomically right before the provider call, then
-// settled to the real cost, or released if the call failed.
+// Callers check the budget with ensureAiBudget before creating their run. Here each
+// provider attempt reserves its estimated cost atomically (so a retry after backoff is
+// checked against the budget again), then settles it to the real cost on success or
+// releases it on failure.
 async function createChatCompletionWithRetry(
   ctx: ActionCtx,
   spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
@@ -134,28 +135,16 @@ async function createChatCompletionWithRetry(
     ),
   );
 
-  const reservation = await reserveAiSpend(ctx, spend.spendClass);
-  let completion: OpenAI.Chat.Completions.ChatCompletion;
-  try {
-    completion = await requestChatCompletion(params);
-  } catch (error) {
-    await releaseAiReservation(ctx, reservation);
-    throw error;
-  }
-  await settleAiCompletion(ctx, reservation, spend.runId, completion);
-  return completion;
-}
-
-async function requestChatCompletion(
-  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
-): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   const maxAttempts = getOpenRouterMaxAttempts();
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const reservation = await reserveAiSpend(ctx, spend.spendClass);
+    let completion: OpenAI.Chat.Completions.ChatCompletion;
     try {
-      return await openRouterClient.chat.completions.create(params);
+      completion = await openRouterClient.chat.completions.create(params);
     } catch (error) {
+      await releaseAiReservation(ctx, reservation);
       lastError = error instanceof Error ? error : new Error(String(error));
 
       if (attempt >= maxAttempts || !shouldRetryOpenRouterError(error)) {
@@ -163,7 +152,10 @@ async function requestChatCompletion(
       }
 
       await sleep(getOpenRouterRetryDelayMs(error, attempt));
+      continue;
     }
+    await settleAiCompletion(ctx, reservation, spend.runId, completion);
+    return completion;
   }
 
   throw lastError ?? new Error("OpenRouter chat completion failed");

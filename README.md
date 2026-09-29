@@ -100,8 +100,9 @@ matrix fill, team topic previews) reaches `AI_DAILY_BUDGET_USD` (default 1), tha
 generation pauses for the rest of the day. Once the day's total spend reaches
 `AI_DAILY_HARD_CAP_USD` (default 5), generation for the daily email and admin tools stops
 too. Keep the budget below the hard cap. Days run on Los
-Angeles time, each call is charged what OpenRouter reports it cost (a flat $0.02 when it
-reports none), and each day's totals are in the `aiSpendDays` table. Per-person and
+Angeles time, each tracked generation call is charged what OpenRouter reports it cost (a
+flat $0.02 when it reports none), and each day's totals are in the `aiSpendDays` table.
+Embedding calls and the admin image generator are not tracked or counted toward the cap. Per-person and
 per-team request limits are defined in
 [`convex/lib/aiRateLimit.ts`](./convex/lib/aiRateLimit.ts).
 
