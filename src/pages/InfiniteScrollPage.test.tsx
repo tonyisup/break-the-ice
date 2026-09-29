@@ -215,6 +215,28 @@ describe('InfiniteScrollPage', () => {
     });
   });
 
+  it('sends the local session id with a signed-out like so it counts once per session', async () => {
+    mockUseAuth.mockReturnValue({ isSignedIn: false, userId: null, isLoaded: true });
+    mockUseStorageContext.mockReturnValue({
+      ...mockUseStorageContext(),
+      sessionId: 'local-session-1',
+    });
+    const recordAnalytics = vi.fn().mockResolvedValue(null);
+    vi.mocked(useMutation).mockImplementation(((ref: unknown) =>
+      ref === 'recordAnalytics' ? recordAnalytics : vi.fn()) as unknown as typeof useMutation);
+
+    render(<WorkspaceProvider><InfiniteScrollPage /></WorkspaceProvider>);
+    await waitFor(() => expect(ModernQuestionCard).toHaveBeenCalled());
+
+    const cardProps = vi.mocked(ModernQuestionCard).mock.calls[0][0] as { onToggleFavorite: () => void };
+    await act(async () => { cardProps.onToggleFavorite(); });
+
+    await waitFor(() => expect(recordAnalytics).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'liked',
+      sessionId: 'local-session-1',
+    })));
+  });
+
   it('hides the public feed banner for Team subscribers', async () => {
     (useQuery as any).mockImplementation((queryFn: any) => {
       if (queryFn === 'getStyles') return mockStyles;

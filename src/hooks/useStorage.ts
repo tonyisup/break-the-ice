@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { useWorkspace } from "./useWorkspace";
 import { HistoryEntry } from "./useQuestionHistory";
@@ -68,14 +68,30 @@ export const MAX_ANON_LIKED = Number(import.meta.env.VITE_MAX_ANON_LIKED) || 100
 export const MAX_ANON_BLOCKED = Number(import.meta.env.VITE_MAX_ANON_BLOCKED) || 100;
 export const MAX_ANON_HISTORY = Number(import.meta.env.VITE_MAX_ANON_HISTORY) || 100;
 
+// useLocalStorage only writes on set, so the generated id is saved here once (with
+// consent). Otherwise every page load is a new session, and a signed-out like would
+// count again after a reload.
+function useSessionId(hasConsented: boolean): string {
+  const [sessionId, setSessionId] = useLocalStorage<string>(
+    "sessionId",
+    crypto.randomUUID?.() || Math.random().toString(36).substring(2),
+    hasConsented,
+  );
+  useEffect(() => {
+    if (!hasConsented) return;
+    try {
+      if (!window.localStorage.getItem("sessionId")) setSessionId(sessionId);
+    } catch {
+      // Storage is unavailable: the id lasts for this page load.
+    }
+  }, [hasConsented, sessionId, setSessionId]);
+  return sessionId;
+}
+
 export const useLocalStorageContext = (
   hasConsented: boolean,
 ): StorageContextType => {
-  const [sessionId] = useLocalStorage<string>(
-    "sessionId",
-    crypto.randomUUID?.() || Math.random().toString(36).substring(2),
-    hasConsented
-  );
+  const sessionId = useSessionId(hasConsented);
 
   const [theme, setTheme] = useLocalStorage<Theme>(
     "theme",
@@ -294,11 +310,7 @@ export const useConvexStorageContext = (
     [activeWorkspace],
   );
 
-  const [sessionId] = useLocalStorage<string>(
-    "sessionId",
-    crypto.randomUUID?.() || Math.random().toString(36).substring(2),
-    hasConsented
-  );
+  const sessionId = useSessionId(hasConsented);
 
   const [theme, setTheme] = useLocalStorage<Theme>(
     "theme",
@@ -339,66 +351,70 @@ export const useConvexStorageContext = (
   const addHiddenToneId = useMutation(api.core.userSettings.addHiddenToneId);
   const removeHiddenToneId = useMutation(api.core.userSettings.removeHiddenToneId);
 
+  const mergeInFlight = useRef(false);
   useEffect(() => {
-    // Merge local likes if they exist
-    const rawLocalLikes = localStorage.getItem("likedQuestions");
-    if (rawLocalLikes) {
-      try {
-        const localLikes = JSON.parse(rawLocalLikes);
-        if (Array.isArray(localLikes) && localLikes.length > 0) {
-          void mergeKnownLikedQuestions({
-            likedQuestions: localLikes,
-            ...workspaceArgs,
-          });
-          localStorage.removeItem("likedQuestions");
-        }
-      } catch (e) {
-        console.error("Failed to parse local liked questions for merging", e);
-      }
-    }
+    if (mergeInFlight.current) return;
 
-    // Merge local hidden questions if they exist
-    const rawLocalHidden = localStorage.getItem("hiddenQuestions");
-    if (rawLocalHidden) {
+    const readLocalList = (key: string): { raw: string; list: unknown[] } | null => {
       try {
-        const localHidden = JSON.parse(rawLocalHidden);
-        if (Array.isArray(localHidden) && localHidden.length > 0) {
-          void mergeKnownHiddenQuestions({
-            hiddenQuestions: localHidden,
-            ...workspaceArgs,
-          });
-          localStorage.removeItem("hiddenQuestions");
-        }
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed: unknown = JSON.parse(raw);
+        return Array.isArray(parsed) && parsed.length > 0 ? { raw, list: parsed } : null;
       } catch (e) {
-        console.error("Failed to parse local hidden questions for merging", e);
+        console.error(`Failed to read local ${key} for merging`, e);
+        return null;
       }
-    }
+    };
+    const localLikes = readLocalList("likedQuestions");
+    const localHidden = readLocalList("hiddenQuestions");
+    const localHistory = readLocalList("questionHistory");
+    if (!localLikes && !localHidden && !localHistory) return;
 
-    // Merge local question history if it exists
-    const rawLocalHistory = localStorage.getItem("questionHistory");
-    if (rawLocalHistory) {
+    // Clear each local list only after the server confirms the merge, and only if it
+    // still holds what was sent: a sign-out or another tab can add entries meanwhile.
+    // Otherwise it stays for the next visit; the merges are safe to retry.
+    // Signed-out activity is personal, so it always merges into the personal
+    // workspace, whichever workspace is selected.
+    const mergeThenClear = async (key: string, raw: string, merge: () => Promise<unknown>) => {
       try {
-        const localHistory = JSON.parse(rawLocalHistory);
-        if (Array.isArray(localHistory) && localHistory.length > 0) {
-          const historyToMerge = localHistory.map((entry: any) => ({
-            questionId: entry.question._id,
-            viewedAt: entry.viewedAt,
-          }));
-          void mergeQuestionHistory({
-            history: historyToMerge,
-            ...workspaceArgs,
-          });
-          localStorage.removeItem("questionHistory");
-        }
+        await merge();
+        if (localStorage.getItem(key) === raw) localStorage.removeItem(key);
       } catch (e) {
-        console.error("Failed to parse local question history for merging", e);
+        console.error(`Failed to merge local ${key}; keeping it for the next visit`, e);
       }
-    }
+    };
+    const ids = (list: unknown[]) => list.filter((id): id is string => typeof id === "string");
+
+    mergeInFlight.current = true;
+    void (async () => {
+      if (localLikes) {
+        await mergeThenClear("likedQuestions", localLikes.raw, () =>
+          mergeKnownLikedQuestions({ likedQuestions: ids(localLikes.list) }),
+        );
+      }
+      if (localHidden) {
+        await mergeThenClear("hiddenQuestions", localHidden.raw, () =>
+          mergeKnownHiddenQuestions({ hiddenQuestions: ids(localHidden.list) }),
+        );
+      }
+      if (localHistory) {
+        const historyToMerge = localHistory.list.flatMap((entry) => {
+          const { question, viewedAt } = (entry ?? {}) as { question?: { _id?: unknown }; viewedAt?: unknown };
+          return typeof question?._id === "string" && typeof viewedAt === "number"
+            ? [{ questionId: question._id, viewedAt }]
+            : [];
+        });
+        await mergeThenClear("questionHistory", localHistory.raw, () =>
+          mergeQuestionHistory({ history: historyToMerge }),
+        );
+      }
+      mergeInFlight.current = false;
+    })();
   }, [
     mergeKnownLikedQuestions,
     mergeKnownHiddenQuestions,
     mergeQuestionHistory,
-    workspaceArgs,
   ]);
 
   useEffect(() => {

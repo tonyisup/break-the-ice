@@ -33,6 +33,7 @@ function HistoryPageContent() {
     hiddenTones,
     addHiddenStyle,
     addHiddenTone,
+    sessionId,
   } = useStorageContext();
   const [searchText, setSearchText] = useState("");
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
@@ -79,6 +80,7 @@ function HistoryPageContent() {
         questionId,
         event: "liked",
         viewDuration: 0, // Not applicable in history page
+        sessionId: sessionId || undefined,
       });
       toast.success("Added to favorites!");
     }
