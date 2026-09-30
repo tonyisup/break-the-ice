@@ -1,3 +1,6 @@
+/** How many pending questions the admin review queue shows at once, oldest first. */
+export const PENDING_QUEUE_LIMIT = 200;
+
 export const ERROR_CODES = {
   AI_LIMIT_REACHED: "AI_LIMIT_REACHED",
   AI_BUDGET_PAUSED: "AI_BUDGET_PAUSED",

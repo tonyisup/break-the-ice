@@ -30,5 +30,6 @@ export const reviewSnapshot = v.object({
   prunedAt: v.optional(v.number()),
   duplicateOf: v.optional(v.id("questions")),
   duplicateWasPublic: v.optional(v.boolean()),
+  heldForReview: v.optional(v.boolean()),
   reviewRevision: v.optional(v.number()),
 });
