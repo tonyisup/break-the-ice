@@ -2,6 +2,12 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.3.2.0] - 2026-09-30
+
+### Fixed
+- AI questions generate again. The AI model thinks before it answers, and that thinking counted against the length limit added in 0.2.0.0, so most answers were cut off partway: feed questions, the daily email's fallback question and admin previews failed. The limit now leaves room for the thinking. On the development server, one-question requests went from 0 of 6 to 8 of 8 succeeding, and five-question batches from about half failing to 6 of 6.
+- A remix that gets cut off now fails and can be tried again, instead of showing half a question.
+
 ## [0.3.1.0] - 2026-09-30
 
 ### Fixed

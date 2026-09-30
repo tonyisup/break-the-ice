@@ -503,8 +503,17 @@ describe("adversarial review follow-ups", () => {
 
     await t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId });
 
-    // One question: 300 + 200 per question.
-    expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 500 });
+    // One question: 2,000 for a thinking model's reasoning, then 300 + 200 per question.
+    expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 2500 });
+  });
+
+  test("a remix leaves room for a thinking model's reasoning", async () => {
+    const { t, questionId } = await setup();
+    create.mockResolvedValue(completion("What breakfast would you happily eat every day?", { cost: 0.0042 }) as never);
+
+    await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+
+    expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 2150 });
   });
 
   test("an oversized prompt leaves no run row behind", async () => {
@@ -587,6 +596,169 @@ describe("delta review follow-ups", () => {
       (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
     );
     expect(usage.map((row) => row.count)).toEqual([0]);
+  });
+});
+
+describe("room for a thinking model's reasoning", () => {
+  const questionsJson = (...texts: string[]) => JSON.stringify({ questions: texts.map((text) => ({ text })) });
+  const cutOff = (content: string, cost: number) => {
+    const truncated = completion(content, { cost });
+    truncated.choices[0].finish_reason = "length";
+    return truncated;
+  };
+
+  test("a five-question feed batch asks for the reasoning allowance plus room for every question", async () => {
+    const { t, styleId, toneId } = await setup();
+    create.mockResolvedValue(
+      completion(
+        questionsJson(
+          "What small win are you proud of this week?",
+          "Which smell takes you straight back to childhood?",
+          "What habit would you keep if you moved abroad?",
+          "Which song do you skip every single time?",
+          "What chore do you secretly enjoy doing?",
+        ),
+        { cost: 0.01 },
+      ) as never,
+    );
+
+    const questions = await t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, {
+      count: 5,
+      anchoredStyleId: styleId,
+      anchoredToneId: toneId,
+    });
+
+    expect(questions).toHaveLength(5);
+    // 2,000 for the reasoning, then 300 + 200 per question.
+    expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 3300 });
+  });
+
+  test("a team's three-question topic preview asks for room for all three", async () => {
+    const { t, meId, styleId, toneId } = await setup();
+    const organizationId = await t.run(async (ctx) => {
+      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
+      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
+      return orgId;
+    });
+    create.mockResolvedValue(
+      completion(
+        questionsJson(
+          "What does a good rest day look like for you?",
+          "Which recovery habit have you stuck with longest?",
+          "When did skipping a rest day cost you?",
+        ),
+        { cost: 0.01 },
+      ) as never,
+    );
+
+    const preview = await t.withIdentity(ME).action(api.core.teamPromptActions.previewTopicQuestions, {
+      organizationId,
+      name: "Recovery",
+      guidance: "Talk about rest days",
+      styleId,
+      toneId,
+    });
+
+    expect(preview.questions).toHaveLength(3);
+    expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 2900 });
+  });
+
+  test("the cap follows the batch size the prompt was built for, from one question up to the ten-question limit", async () => {
+    const { t, styleId, toneId } = await setup();
+    create.mockResolvedValue(completion(questionsJson("What small win are you proud of?"), { cost: 0.01 }) as never);
+
+    for (const count of [0, 10, 50]) {
+      await t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId, count });
+    }
+
+    // A count of 0 builds a one-question prompt, and 50 is held to the ten-question batch limit.
+    expect(create.mock.calls.map((call: unknown[]) => (call[0] as { max_tokens: number }).max_tokens)).toEqual([2500, 4300, 4300]);
+  });
+
+  test("a batch cut off mid-JSON isn't retried: the run keeps the partial answer, the cost is recorded and the quota is refunded", async () => {
+    const { t, meId, styleId, toneId } = await setup();
+    const partial = '{"questions":[{"text":"What small win are you pro';
+    create.mockResolvedValue(cutOff(partial, 0.006) as never);
+
+    await expect(
+      t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { anchoredStyleId: styleId, anchoredToneId: toneId }),
+    ).rejects.toThrow(/could not be read/);
+
+    // The same request under the same cap would be cut off again.
+    expect(create).toHaveBeenCalledTimes(1);
+    const { runs, usage, questions } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+      questions: await ctx.db.query("questions").collect(),
+    }));
+    expect(runs.map((run) => [run.purpose, run.status, run.rawResponse, run.costUsd])).toEqual([
+      ["feed", "failed", partial, 0.006],
+    ]);
+    expect(runs[0].error).toMatch(/could not be read/);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.006, 1]]);
+    expect(usage.map((row) => row.count)).toEqual([0]);
+    // Only the question the setup made: nothing from the cut-off answer was saved.
+    expect(questions.map((question) => question.text)).toEqual(["What is your favorite breakfast?"]);
+  });
+
+  test("a remix cut off partway through fails instead of returning half a question", async () => {
+    const { t, meId, questionId } = await setup();
+    create.mockResolvedValue(cutOff("What breakfast would you happ", 0.004) as never);
+
+    await expect(t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId })).rejects.toThrow(
+      /cut off/,
+    );
+
+    expect(create).toHaveBeenCalledTimes(1);
+    const { runs, usage } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    }));
+    expect(runs.map((run) => [run.purpose, run.status, run.rawResponse, run.costUsd])).toEqual([
+      ["remix", "failed", "What breakfast would you happ", 0.004],
+    ]);
+    expect(runs[0].error).toMatch(/cut off/);
+    expect(runs[0].previewText).toBeUndefined();
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.004, 1]]);
+    // Our cap cut it off, so the person keeps their quota.
+    expect(usage.map((row) => row.count)).toEqual([0]);
+  });
+
+  test("a paid-for unusable remix keeps the quota use even when its retry was cut off", async () => {
+    const { t, meId, questionId } = await setup();
+    create
+      .mockResolvedValueOnce(completion('""', { cost: 0.004 }) as never)
+      .mockResolvedValueOnce(cutOff("What breakfast would you happ", 0.004) as never);
+
+    await expect(t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId })).rejects.toThrow(
+      /couldn't use/,
+    );
+
+    expect(create).toHaveBeenCalledTimes(2);
+    const { runs, usage } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    }));
+    expect(runs.map((run) => [run.status, run.rawResponse])).toEqual([
+      ["failed", '""'],
+      ["failed", "What breakfast would you happ"],
+    ]);
+    // The first answer was paid for in full, so the use counts.
+    expect(usage.map((row) => row.count)).toEqual([1]);
+  });
+
+  test("an admin preview cut off by the cap isn't retried, fails its run and is charged to system spend", async () => {
+    const { t, styleId, toneId } = await setup();
+    create.mockResolvedValue(cutOff("", 0.005) as never);
+
+    await expect(
+      t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId }),
+    ).rejects.toThrow(/empty completion.*finish_reason=length/);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => [run.purpose, run.status, run.costUsd])).toEqual([["admin_preview", "failed", 0.005]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.005, 1]]);
   });
 });
 
