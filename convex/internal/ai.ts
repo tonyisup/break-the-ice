@@ -430,9 +430,7 @@ export const generateAIQuestionForUser = internalAction({
 			throw new Error("Failed to generate AI question: That topic isn't available");
 		}
 
-		const recentlySeenQuestions = await ctx.runQuery(internal.internal.users.getRecentlySeenQuestions, { userId: user._id });
-		const recentlySeen = recentlySeenQuestions.filter((q: string) => q !== undefined);
-
+		const recentlySeen = await ctx.runQuery(internal.internal.users.getRecentlySeenQuestions, { userId: user._id });
 		const blockedQuestions = await ctx.runQuery(internal.internal.users.getBlockedQuestions, { userId: user._id });
 
 		let usageIncremented = false;
