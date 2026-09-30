@@ -33,6 +33,7 @@ if (!OPEN_ROUTER_API_KEY) {
 export const openRouterClient = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: OPEN_ROUTER_API_KEY,
+  // gstack-shortcut(dec-da9ce3c3-49b9-4c2e-b9c6-2948f4f723a6): timeout sizing deferred, upgrade when large batches time out.
   timeout: 30000,
   defaultHeaders: {
     "HTTP-Referer": "https://breaktheiceberg.com",
@@ -113,10 +114,21 @@ function assertPromptSize(chars: number): void {
   }
 }
 
-// Output is capped too, since the budget is charged after a call returns: a JSON batch
-// needs about 100 tokens per question with its short rationale.
+// The router preset can resolve to a thinking model, whose hidden reasoning counts toward
+// max_tokens. On google/gemini-3.8-flash it spent 500 to 1,000 tokens before writing any JSON,
+// so a cap sized for the JSON alone cut off most answers.
+const REASONING_ALLOWANCE_TOKENS = 2000;
+// A remix answers with one plain-text question.
+const REMIX_ANSWER_TOKENS = 150;
+
+// Output is capped too, since the budget is charged after a call returns. On top of the
+// reasoning, a question and its short rationale take about 100 tokens; each gets twice that.
+const JSON_BASE_TOKENS = 300;
+const TOKENS_PER_QUESTION = 200;
+
+// gstack-shortcut(dec-9ce5b30c-9525-4ac7-89c5-ce1039af4faa): spend reservation sizing deferred, upgrade when the preset model changes.
 function maxOutputTokens(batchSize: number): number {
-  return 300 + 200 * batchSize;
+  return REASONING_ALLOWANCE_TOKENS + JSON_BASE_TOKENS + TOKENS_PER_QUESTION * batchSize;
 }
 
 // Callers check the budget with ensureAiBudget before creating their run. Here each
@@ -166,6 +178,7 @@ function wasCutOff(completion: OpenAI.Chat.Completions.ChatCompletion): boolean 
   return completion.choices?.[0]?.finish_reason === "length";
 }
 
+// gstack-shortcut(dec-3aab4fc9-4154-427c-880c-4f302716a8ee): refund rule unchanged here, upgrade when it is revisited for all generation paths.
 /**
  * Whether the user should keep the usage for a call that then failed. A response cut off
  * by our own output cap is our fault, so it doesn't count; the ledger still records it.
@@ -187,7 +200,10 @@ async function markRunFailed(ctx: ActionCtx, runId: Id<"generationRuns">, error:
   }
 }
 
-/** The model answered, but with nothing we can use: empty, not JSON, or no questions in it. */
+/**
+ * The model answered, but with nothing we can use: empty, not JSON, no questions in it, or
+ * cut off by our output cap partway through.
+ */
 class UnusableOutputError extends Error {
   constructor(
     message: string,
@@ -202,6 +218,7 @@ class UnusableOutputError extends Error {
 // An empty or unreadable answer is usually a one-off, so it gets one more try.
 const UNUSABLE_OUTPUT_ATTEMPTS = 2;
 
+// gstack-shortcut(dec-ede332ff-223c-47b1-9d49-270141aa91e0): cut-off handling kept as is, upgrade in the generation follow-ups (retry, error message, run labelling).
 /**
  * Runs `attempt` once more when the model's answer couldn't be used, unless our output cap
  * cut it off. Each attempt creates and closes its own run, so every run's cost is still
@@ -627,15 +644,19 @@ export async function runRemixQuestion(
           { role: "system", content: prompts.systemPrompt },
           { role: "user", content: prompts.userPrompt },
         ],
-        max_tokens: 150,
+        max_tokens: REASONING_ALLOWANCE_TOKENS + REMIX_ANSWER_TOKENS,
       });
 
       if (wasPaidInFull(completion)) markBilled();
 
       const rawResponse = getChatCompletionContent(completion);
+      if (wasCutOff(completion)) {
+        // Cut off by the cap, the text is half a question: fail rather than show it.
+        throw new UnusableOutputError("The remix was cut off before it finished", rawResponse, true);
+      }
       const remixedText = rawResponse.replace(/^["']|["']$/g, "").trim();
       if (!remixedText) {
-        throw new UnusableOutputError("AI failed to generate a remix", rawResponse, wasCutOff(completion));
+        throw new UnusableOutputError("AI failed to generate a remix", rawResponse);
       }
 
       await ctx.runMutation(internal.internal.generation.completeGenerationRun, {
