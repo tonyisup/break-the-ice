@@ -102,9 +102,18 @@ generation pauses for the rest of the day. Once the day's total spend reaches
 too. Keep the budget below the hard cap. Days run on Los
 Angeles time, each tracked generation call is charged what OpenRouter reports it cost (a
 flat $0.02 when it reports none), and each day's totals are in the `aiSpendDays` table.
+An empty or unreadable AI answer is retried once. The retry is a second call with its own
+generation run, charged and checked against the cap like the first; answers cut off by the
+length limit are not retried.
 Embedding calls and the admin image generator are not tracked or counted toward the cap. Per-person and
 per-team request limits are defined in
 [`convex/lib/aiRateLimit.ts`](./convex/lib/aiRateLimit.ts).
+
+New AI questions from the feed and the daily email wait for review in the admin queue at
+`/admin/questions`. The person they were made for still gets them, and anyone with the link
+can open them, but they stay out of the shared feed, collections, daily-email picks and team
+schedules until an admin approves them. Matrix fill, the nightly pool and admin tools
+publish directly.
 
 ## Stack
 

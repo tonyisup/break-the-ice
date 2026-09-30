@@ -50,10 +50,11 @@ is `AI_RATE_LIMITED`. Neither failure uses the workspace's AI usage, and the
 error's `message` is ready to show.
 
 The action requests three candidates and reserves one unit of the workspace's AI
-usage before calling the provider. Empty, duplicate, and over-500-character
-candidates are discarded. If three distinct persistable questions do not remain,
-the action returns a retryable error and releases the usage reservation. `runId`
-identifies the generation audit record.
+usage before calling the provider. An empty or unreadable provider answer is
+retried once, as a second provider call with its own generation run. Empty,
+duplicate, and over-500-character candidates are discarded. If three distinct
+persistable questions do not remain, the action returns a retryable error and
+releases the usage reservation. `runId` identifies the generation audit record.
 
 ### `core.teamPrompts.createAndAssign`
 
@@ -217,7 +218,9 @@ and a billing status of `active` or `trialing`.
 Draft Team Prompt assignments are visible only to admins and managers. Ordinary
 members receive Team Prompt wording through published schedule readers. Shared
 question-by-ID readers enforce the same boundary. Schedule assignment also
-rejects private or organization-owned questions from another workspace.
+rejects private or organization-owned questions from another workspace, and
+library questions that are not public yet, such as AI questions waiting for
+admin review.
 
 ## Related documentation
 
