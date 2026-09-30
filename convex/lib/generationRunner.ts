@@ -115,8 +115,8 @@ function assertPromptSize(chars: number): void {
 }
 
 // The router preset can resolve to a thinking model, whose hidden reasoning counts toward
-// max_tokens. On google/gemini-3.8-flash it spent 500 to 1,000 tokens before writing any JSON,
-// so a cap sized for the JSON alone cut off most answers.
+// max_tokens. On google/gemini-3.8-flash it spent about 500 to 1,600 tokens before writing any
+// JSON, so a cap sized for the JSON alone cut off most answers.
 const REASONING_ALLOWANCE_TOKENS = 2000;
 // A remix answers with one plain-text question.
 const REMIX_ANSWER_TOKENS = 150;

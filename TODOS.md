@@ -97,7 +97,7 @@
 
 **What:** Run the Phase 0 eval seeds with and without OpenRouter's `reasoning` limit (for example low effort, or a token budget) and compare question quality, latency and cost.
 
-**Why:** v0.3.2.0 leaves room for the model's thinking but doesn't limit it. Every feed fill and remix spends 500 to 2,700 thinking tokens first, which costs a few seconds and some money. Capping it blind could make questions worse.
+**Why:** v0.3.2.0 leaves room for the model's thinking but doesn't limit it. Every feed fill and remix spends about 500 to 1,600 thinking tokens first, which costs a few seconds and some money. Capping it blind could make questions worse.
 
 **Context:** The eval harness is on branch feat/phase0-eval-harness (`evals/`). The preset is `@preset/break-the-ice-berg-default` in `convex/lib/generationRunner.ts`.
 
