@@ -168,6 +168,18 @@
 **Priority:** P3
 **Depends on:** Real gym usage
 
+### Batch the cleanup when a popular question is deleted
+
+**What:** `removeQuestionReferences` deletes every `userQuestions` row for the question and reads every pending duplicate group, all in the delete's own transaction. Delete the question (and its embedding) inline, then clean the rest with a scheduled, paginated internal mutation, like `cleanDanglingQuestionReferencesPage`.
+
+**Why:** A question seen by many thousands of people, or a very large duplicate backlog, would make the delete exceed Convex's per-transaction limits and fail. Reading every pending group also makes deletes conflict with a running duplicate-detection job.
+
+**Context:** `convex/lib/questionReferences.ts`, called by admin `deleteQuestion` and `deletePersonalQuestion`. About 3 rows per question and ~70 pending groups today. Deferred in the v0.3.1.0 review.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** Real usage growth
+
 ### Read reviewed questions for the admin list by index
 
 **What:** `getQuestions` walks `by_creation_time` newest first and filters out pending rows, so each load reads every pending question newer than the 100th reviewed one.

@@ -1,6 +1,8 @@
-import { v } from "convex/values";
-import { internalMutation } from "../_generated/server";
+import { v, type Infer } from "convex/values";
+import { internalAction, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
+import { settleDuplicateGroup } from "../lib/questionReferences";
 import { defaultIdealPromptLength, defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "../lib/promptArchitecture";
 
@@ -480,6 +482,112 @@ export const backfillPromptArchitecture = internalMutation({
 			questionsUpdated,
 			blueprintsInserted,
 		};
+	},
+});
+
+const DANGLING_CLEANUP_PAGE_SIZE = 100;
+const DANGLING_CLEANUP_TABLES = [
+	"question_embeddings",
+	"userQuestions",
+	"question_collections",
+	"pruning",
+	"duplicateDetections",
+] as const;
+const danglingCleanupTable = v.union(...DANGLING_CLEANUP_TABLES.map((table) => v.literal(table)));
+const danglingCleanupCounts = {
+	scanned: v.number(),
+	dangling: v.number(),
+	removed: v.number(),
+	updated: v.number(),
+};
+const danglingCleanupPageResult = v.object({
+	...danglingCleanupCounts,
+	continueCursor: v.string(),
+	isDone: v.boolean(),
+});
+
+/**
+ * One page of the dangling-reference cleanup: the same rows lib/questionReferences.ts removes
+ * when a question is deleted, and history is kept. With `dryRun` it writes nothing and reports
+ * what a real run would remove and update. (Two pending groups that shrink to the same pair
+ * both show as updated in a dry run; the real run drops the second.)
+ */
+export const cleanDanglingQuestionReferencesPage = internalMutation({
+	args: {
+		table: danglingCleanupTable,
+		dryRun: v.boolean(),
+		cursor: v.union(v.string(), v.null()),
+	},
+	returns: danglingCleanupPageResult,
+	handler: async (ctx, args) => {
+		const exists = async (questionId: Id<"questions">) => (await ctx.db.get(questionId)) !== null;
+		const paginationOpts = { numItems: DANGLING_CLEANUP_PAGE_SIZE, cursor: args.cursor };
+		let dangling = 0;
+		let removed = 0;
+		let updated = 0;
+
+		if (args.table === "duplicateDetections") {
+			const page = await ctx.db
+				.query("duplicateDetections")
+				.withIndex("by_status", (q) => q.eq("status", "pending"))
+				.paginate(paginationOpts);
+			for (const detection of page.page) {
+				const outcome = await settleDuplicateGroup(ctx, detection, exists, args.dryRun);
+				if (outcome === "unchanged") continue;
+				dangling += 1;
+				if (outcome === "deleted") removed += 1;
+				else updated += 1;
+			}
+			return { scanned: page.page.length, dangling, removed, updated, continueCursor: page.continueCursor, isDone: page.isDone };
+		}
+
+		const page =
+			args.table === "pruning"
+				? await ctx.db.query("pruning").withIndex("by_status", (q) => q.eq("status", "pending")).paginate(paginationOpts)
+				: await ctx.db.query(args.table).paginate(paginationOpts);
+		for (const row of page.page) {
+			if (await exists(row.questionId)) continue;
+			dangling += 1;
+			removed += 1;
+			if (!args.dryRun) await ctx.db.delete(row._id);
+		}
+		return { scanned: page.page.length, dangling, removed, updated, continueCursor: page.continueCursor, isDone: page.isDone };
+	},
+});
+
+/**
+ * Removes rows left pointing at hard-deleted questions: orphan embeddings, per-user rows,
+ * collection entries, pending pruning reviews and pending duplicate groups. Run it with dryRun
+ * first, and again after a real run (every table should then show dangling 0):
+ * `npx convex run internal/migrations:cleanDanglingQuestionReferences '{"dryRun":true}'`.
+ */
+export const cleanDanglingQuestionReferences = internalAction({
+	args: { dryRun: v.boolean() },
+	returns: v.array(v.object({ table: v.string(), ...danglingCleanupCounts })),
+	handler: async (ctx, args) => {
+		const summary = [];
+		for (const table of DANGLING_CLEANUP_TABLES) {
+			const totals = { table, scanned: 0, dangling: 0, removed: 0, updated: 0 };
+			const countKeys = Object.keys(danglingCleanupCounts) as Array<keyof typeof danglingCleanupCounts>;
+			let cursor: string | null = null;
+			for (;;) {
+				const page: Infer<typeof danglingCleanupPageResult> = await ctx.runMutation(
+					internal.internal.migrations.cleanDanglingQuestionReferencesPage,
+					{ table, dryRun: args.dryRun, cursor },
+				);
+				for (const key of countKeys) totals[key] += page[key];
+				// A record of each page that changed something, so a run that stops partway
+				// still shows what it did.
+				if (page.dangling > 0) {
+					console.log(`cleanDanglingQuestionReferences${args.dryRun ? " (dry run)" : ""} ${table} page: ${JSON.stringify(page)}`);
+				}
+				if (page.isDone) break;
+				cursor = page.continueCursor;
+			}
+			console.log(`cleanDanglingQuestionReferences${args.dryRun ? " (dry run)" : ""} ${table} total: ${JSON.stringify(totals)}`);
+			summary.push(totals);
+		}
+		return summary;
 	},
 });
 
