@@ -9,6 +9,7 @@ import { isQuestionPublic, isUnlistedAiQuestion } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { PENDING_QUEUE_LIMIT } from "../constants";
 import { recordReview, refreshQuestionText, reviewReason } from "../lib/questionReview";
+import { removeQuestionReferences } from "../lib/questionReferences";
 
 const FIX_EXISTING_QUESTIONS_BATCH_SIZE = 100;
 
@@ -390,13 +391,7 @@ export const deleteQuestion = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		await ensureAdmin(ctx);
-		const embeddingRows = await ctx.db
-			.query("question_embeddings")
-			.withIndex("by_questionId", (q) => q.eq("questionId", args.id))
-			.collect();
-		for (const row of embeddingRows) {
-			await ctx.db.delete(row._id);
-		}
+		await removeQuestionReferences(ctx, args.id);
 		await ctx.db.delete(args.id);
 		return null;
 	},

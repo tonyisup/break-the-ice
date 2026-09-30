@@ -85,6 +85,7 @@ import type * as lib_generationRunner from "../lib/generationRunner.js";
 import type * as lib_newsletterSubscription from "../lib/newsletterSubscription.js";
 import type * as lib_promptArchitecture from "../lib/promptArchitecture.js";
 import type * as lib_questionAccess from "../lib/questionAccess.js";
+import type * as lib_questionReferences from "../lib/questionReferences.js";
 import type * as lib_questionReview from "../lib/questionReview.js";
 import type * as lib_questionReviewValidators from "../lib/questionReviewValidators.js";
 import type * as lib_random from "../lib/random.js";
@@ -186,6 +187,7 @@ declare const fullApi: ApiFromModules<{
   "lib/newsletterSubscription": typeof lib_newsletterSubscription;
   "lib/promptArchitecture": typeof lib_promptArchitecture;
   "lib/questionAccess": typeof lib_questionAccess;
+  "lib/questionReferences": typeof lib_questionReferences;
   "lib/questionReview": typeof lib_questionReview;
   "lib/questionReviewValidators": typeof lib_questionReviewValidators;
   "lib/random": typeof lib_random;

@@ -18,6 +18,7 @@ import { fingerprintText } from "../lib/promptArchitecture";
 import { findCanonicalUser } from "../lib/users";
 import { canReadQuestion, isQuestionPublic, isReadableByLink } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
+import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 import { wasAiCallBilled } from "../lib/aiSpendGuard";
 import { ConvexError } from "convex/values";
@@ -1033,6 +1034,7 @@ export const deletePersonalQuestion = mutation({
 			throw new Error("You are not authorized to delete this question.");
 		}
 		assertPersonalQuestionLifecycle(question);
+		await removeQuestionReferences(ctx, args.questionId);
 		await ctx.db.delete(args.questionId);
 		return null;
 	},
