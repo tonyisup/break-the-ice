@@ -472,13 +472,16 @@ export const updateCategories = mutation({
 		const results = [];
 		for (const update of args.updates) {
 			try {
+				// Resolve slugs in the question's own organization, as updateQuestion does.
+				const question = await ctx.db.get(update.id);
+				if (!question) throw new Error("Question not found");
 				let styleId: Id<"styles"> | undefined;
 				let toneId: Id<"tones"> | undefined;
 				if (update.style !== undefined) {
-					styleId = (await resolveTaxonomySlug(ctx.db, "styles", update.style))?._id;
+					styleId = (await resolveTaxonomySlug(ctx.db, "styles", update.style, question.organizationId))?._id;
 				}
 				if (update.tone !== undefined) {
-					toneId = (await resolveTaxonomySlug(ctx.db, "tones", update.tone))?._id;
+					toneId = (await resolveTaxonomySlug(ctx.db, "tones", update.tone, question.organizationId))?._id;
 				}
 				await ctx.db.patch(update.id, {
 					style: update.style,

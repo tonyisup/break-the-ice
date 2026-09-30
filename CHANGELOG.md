@@ -8,7 +8,7 @@ All notable changes to Break the Ice are recorded here.
 - New AI questions from the feed and the daily email now wait for review before anyone else sees them. The person they were made for still gets them, and anyone with the link or the email can open them, but they stay out of the shared feed, collections, daily-email picks and team schedules until an admin approves them. Matrix fill, the nightly pool and admin tools still publish directly.
 - AI questions are written from the current version of each style, tone and topic, including its example questions. An older style, tone or topic ID (from before an admin edit) now resolves to the current version in prompts, remix and feed requests.
 - New questions are no longer steered toward ones you liked before, which was producing near-duplicates.
-- An empty or unreadable AI answer gets one more try (a second generation call, counted toward the daily AI spend cap). Answers cut off by the length limit, and requests the AI provider rejects, are not retried.
+- An AI answer that is empty, unreadable or has no questions in it gets one more try (a second generation call, counted toward the daily AI spend cap). Answers cut off by the length limit, and requests the AI provider rejects, are not retried.
 - The admin review queue has its own list, oldest first, and shows when more questions are waiting than it lists. AI questions are labelled, and their Reject button hides the question from everyone. Approving or rejecting ends the hold: moving a question back to pending later hides it.
 - Share pages and share images for questions waiting for review are kept out of search engines and aren't cached for long, so a rejected question doesn't linger.
 

@@ -1195,3 +1195,37 @@ describe("duplicate resolution keeps public content public", () => {
     expect((await t.run(async (ctx) => ctx.db.get(publicId)))?.status).toBe("public");
   });
 });
+
+describe("bulk category updates", () => {
+  test("an organization's question picks up the organization's own style for a slug", async () => {
+    const { t } = await setup();
+    const { questionId, orgStyleId } = await t.run(async (ctx) => {
+      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
+      const orgStyleId = await ctx.db.insert("styles", {
+        id: "gym-only",
+        slug: "gym-only",
+        name: "Gym only",
+        structure: "x",
+        color: "#444444",
+        icon: "dumbbell",
+        status: "active",
+        version: 1,
+        organizationId: orgId,
+      });
+      const questionId = await ctx.db.insert("questions", {
+        text: "Which workout do you secretly love?",
+        status: "public",
+        organizationId: orgId,
+        ...counters,
+      });
+      return { questionId, orgStyleId };
+    });
+
+    const [result] = await t.withIdentity(ADMIN).mutation(api.admin.questions.updateCategories, {
+      updates: [{ id: questionId, style: "gym-only" }],
+    });
+
+    expect(result.success).toBe(true);
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ style: "gym-only", styleId: orgStyleId });
+  });
+});
