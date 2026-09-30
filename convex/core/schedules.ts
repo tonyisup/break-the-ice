@@ -4,6 +4,7 @@ import { mutation, query } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import { ensurePaidOrganizationMember, isOrganizationPaid } from "../auth";
 import { findCanonicalUser } from "../lib/users";
+import { isQuestionPublic } from "../lib/questionAccess";
 import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
   getZonedCalendarDate,
@@ -386,6 +387,9 @@ export const assignQuestion = mutation({
     if (!question) throw new Error("Question not found");
     if (
       (question.organizationId && question.organizationId !== schedule.organizationId) ||
+      // Library questions must be public: one held for review (or someone's pending
+      // submission) can't go on a team schedule before it is approved.
+      (!question.organizationId && !isQuestionPublic(question)) ||
       (question.status === "private" &&
         (question.kind !== "team_prompt" || question.organizationId !== schedule.organizationId))
     ) {

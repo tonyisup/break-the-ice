@@ -229,6 +229,10 @@ export const updateStyle = mutation({
     }
 
     const now = Date.now();
+    // Prompt fields the edit form doesn't send (examples, failure modes, quality and the rest
+    // below) keep the current version's value: falling back to empty defaults wiped a style's
+    // examples and left prompts with "Good examples: none". structuralInstruction and
+    // aiGuidance still follow the structure and guidance the form sends.
     if ((existingStyle.status ?? "active") === "draft") {
       await ctx.db.patch(args._id, {
         name: args.name,
@@ -241,16 +245,16 @@ export const updateStyle = mutation({
         promptGuidanceForAI: args.promptGuidanceForAI,
         aiGuidance: args.aiGuidance ?? args.promptGuidanceForAI ?? "",
         order: args.order,
-        commonFailureModes: args.commonFailureModes ?? [],
-        distinctFrom: args.distinctFrom ?? [],
-        examples: args.examples ?? [],
-        antiExamples: args.antiExamples ?? [],
-        quality: args.quality ?? defaultQualityRubric(),
-        cognitiveMove: args.cognitiveMove ?? "reflect",
-        socialFunction: args.socialFunction ?? "Reveals taste and priorities through conversation.",
-        answerShape: args.answerShape ?? "short conversational answer",
-        idealPromptLength: args.idealPromptLength ?? defaultIdealPromptLength(),
-        riskLevel: args.riskLevel ?? "low",
+        commonFailureModes: args.commonFailureModes ?? existingStyle.commonFailureModes ?? [],
+        distinctFrom: args.distinctFrom ?? existingStyle.distinctFrom ?? [],
+        examples: args.examples ?? existingStyle.examples ?? [],
+        antiExamples: args.antiExamples ?? existingStyle.antiExamples ?? [],
+        quality: args.quality ?? existingStyle.quality ?? defaultQualityRubric(),
+        cognitiveMove: args.cognitiveMove ?? existingStyle.cognitiveMove ?? "reflect",
+        socialFunction: args.socialFunction ?? existingStyle.socialFunction ?? "Reveals taste and priorities through conversation.",
+        answerShape: args.answerShape ?? existingStyle.answerShape ?? "short conversational answer",
+        idealPromptLength: args.idealPromptLength ?? existingStyle.idealPromptLength ?? defaultIdealPromptLength(),
+        riskLevel: args.riskLevel ?? existingStyle.riskLevel ?? "low",
         updatedAt: now,
       });
       return null;
@@ -264,6 +268,7 @@ export const updateStyle = mutation({
     await ctx.db.insert("styles", {
       id: existingStyle.slug ?? existingStyle.id,
       slug: existingStyle.slug ?? existingStyle.id,
+      safetyNotes: existingStyle.safetyNotes,
       name: args.name,
       description: args.description,
       structure: args.structure,
@@ -276,16 +281,16 @@ export const updateStyle = mutation({
       order: args.order,
       version: nextVersion,
       status: "draft",
-      commonFailureModes: args.commonFailureModes ?? [],
-      distinctFrom: args.distinctFrom ?? [],
-      examples: args.examples ?? [],
-      antiExamples: args.antiExamples ?? [],
-      quality: args.quality ?? defaultQualityRubric(),
-      cognitiveMove: args.cognitiveMove ?? "reflect",
-      socialFunction: args.socialFunction ?? "Reveals taste and priorities through conversation.",
-      answerShape: args.answerShape ?? "short conversational answer",
-      idealPromptLength: args.idealPromptLength ?? defaultIdealPromptLength(),
-      riskLevel: args.riskLevel ?? "low",
+      commonFailureModes: args.commonFailureModes ?? existingStyle.commonFailureModes ?? [],
+      distinctFrom: args.distinctFrom ?? existingStyle.distinctFrom ?? [],
+      examples: args.examples ?? existingStyle.examples ?? [],
+      antiExamples: args.antiExamples ?? existingStyle.antiExamples ?? [],
+      quality: args.quality ?? existingStyle.quality ?? defaultQualityRubric(),
+      cognitiveMove: args.cognitiveMove ?? existingStyle.cognitiveMove ?? "reflect",
+      socialFunction: args.socialFunction ?? existingStyle.socialFunction ?? "Reveals taste and priorities through conversation.",
+      answerShape: args.answerShape ?? existingStyle.answerShape ?? "short conversational answer",
+      idealPromptLength: args.idealPromptLength ?? existingStyle.idealPromptLength ?? defaultIdealPromptLength(),
+      riskLevel: args.riskLevel ?? existingStyle.riskLevel ?? "low",
       createdAt: now,
       updatedAt: now,
     });

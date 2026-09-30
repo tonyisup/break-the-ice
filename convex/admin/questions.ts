@@ -5,6 +5,9 @@ import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 
 import { fingerprintText } from "../lib/promptArchitecture";
+import { isQuestionPublic, isUnlistedAiQuestion } from "../lib/questionAccess";
+import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
+import { PENDING_QUEUE_LIMIT } from "../constants";
 import { recordReview, refreshQuestionText, reviewReason } from "../lib/questionReview";
 
 const FIX_EXISTING_QUESTIONS_BATCH_SIZE = 100;
@@ -22,11 +25,33 @@ export const getQuestions = query({
 	returns: v.array(v.any()),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
+		// Pending questions have their own queue (getPendingQuestions), so they don't
+		// crowd reviewed questions out of this list.
 		return await ctx.db
 			.query("questions")
 			.withIndex("by_creation_time")
 			.order("desc")
+			.filter((q) => q.neq(q.field("status"), "pending"))
 			.take(100);
+	},
+});
+
+/**
+ * The review queue, oldest first: up to PENDING_QUEUE_LIMIT pending questions, plus one more
+ * so the page can tell when there are others waiting. Oldest first means new arrivals can't
+ * push waiting questions out of view, and reading the status index means reviewed questions
+ * don't either.
+ */
+export const getPendingQuestions = query({
+	args: {},
+	returns: v.array(v.any()),
+	handler: async (ctx) => {
+		await ensureAdmin(ctx);
+		return await ctx.db
+			.query("questions")
+			.withIndex("by_status", (q) => q.eq("status", "pending"))
+			.order("asc")
+			.take(PENDING_QUEUE_LIMIT + 1);
 	},
 });
 
@@ -54,14 +79,12 @@ export const createQuestion = mutation({
 
 		let styleId = args.styleId;
 		if (args.style && !styleId) {
-			const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", q => q.eq("id", args.style!)).first();
-			if (styleDoc) styleId = styleDoc._id;
+			styleId = (await resolveTaxonomySlug(ctx.db, "styles", args.style))?._id;
 		}
 
 		let toneId = args.toneId;
 		if (args.tone && !toneId) {
-			const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", q => q.eq("id", args.tone!)).first();
-			if (toneDoc) toneId = toneDoc._id;
+			toneId = (await resolveTaxonomySlug(ctx.db, "tones", args.tone))?._id;
 		}
 
 		const questionId = await ctx.db.insert("questions", {
@@ -171,10 +194,12 @@ export const updateQuestion = mutation({
 			updateData.tags = tags;
 		}
 
+		// Only a changed slug is resolved again. Approve and Reject resend the current slugs,
+		// and the question keeps the version it was written for.
 		if (style !== undefined) {
 			updateData.style = style;
-			if (!styleId) {
-				const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", q => q.eq("id", style)).first();
+			if (!styleId && (style !== before.style || !before.styleId)) {
+				const styleDoc = await resolveTaxonomySlug(ctx.db, "styles", style, before.organizationId);
 				if (styleDoc) updateData.styleId = styleDoc._id;
 			}
 		}
@@ -185,8 +210,8 @@ export const updateQuestion = mutation({
 
 		if (tone !== undefined) {
 			updateData.tone = tone;
-			if (!toneId) {
-				const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", q => q.eq("id", tone)).first();
+			if (!toneId && (tone !== before.tone || !before.toneId)) {
+				const toneDoc = await resolveTaxonomySlug(ctx.db, "tones", tone, before.organizationId);
 				if (toneDoc) updateData.toneId = toneDoc._id;
 			}
 		}
@@ -197,8 +222,8 @@ export const updateQuestion = mutation({
 
 		if (topic !== undefined) {
 			updateData.topic = topic;
-			if (!topicId) {
-				const topicDoc = await ctx.db.query("topics").withIndex("by_my_id", q => q.eq("id", topic)).first();
+			if (!topicId && (topic !== before.topic || !before.topicId)) {
+				const topicDoc = await resolveTaxonomySlug(ctx.db, "topics", topic, before.organizationId);
 				if (topicDoc) updateData.topicId = topicDoc._id;
 			}
 		}
@@ -210,6 +235,9 @@ export const updateQuestion = mutation({
 		if (status !== undefined) {
 			if (before.duplicateOf) throw new Error("Undo duplicate resolution before changing its status");
             updateData.status = status;
+            // Approving or rejecting ends the hold: moving the question back to pending later
+            // hides it instead of reopening its link. Undo restores the marker from the snapshot.
+            if (status !== before.status) updateData.heldForReview = undefined;
             updateData.prunedAt = status === "pruned" ? (before.prunedAt ?? Date.now()) : undefined;
 		}
 
@@ -447,12 +475,10 @@ export const updateCategories = mutation({
 				let styleId: Id<"styles"> | undefined;
 				let toneId: Id<"tones"> | undefined;
 				if (update.style !== undefined) {
-					const styleDoc = await ctx.db.query("styles").withIndex("by_my_id", (q) => q.eq("id", update.style!)).first();
-					if (styleDoc) styleId = styleDoc._id;
+					styleId = (await resolveTaxonomySlug(ctx.db, "styles", update.style))?._id;
 				}
 				if (update.tone !== undefined) {
-					const toneDoc = await ctx.db.query("tones").withIndex("by_my_id", (q) => q.eq("id", update.tone!)).first();
-					if (toneDoc) toneId = toneDoc._id;
+					toneId = (await resolveTaxonomySlug(ctx.db, "tones", update.tone))?._id;
 				}
 				await ctx.db.patch(update.id, {
 					style: update.style,
@@ -734,8 +760,13 @@ export const deleteDuplicateQuestions = mutation({
             if (!args.expectedRevisions.some(item => item.questionId === id && item.revision === (question.reviewRevision ?? 0))) throw new Error("Question changed during review. Reload first.");
             questions.push(question);
         }
+        // A held AI question is reviewed first: retiring it would break its email link, and
+        // keeping it over a public copy would take that content out of every shared list.
+        if (questions.some(isUnlistedAiQuestion)) throw new Error("Approve or reject the question held for review before resolving these duplicates");
         const keep = questions.find(q => q._id === args.keepQuestionId)!;
         if (questions.some(q => q.organizationId !== keep.organizationId || q.kind !== keep.kind)) throw new Error("Cannot resolve duplicates across question workspaces");
+        // Retiring a public copy in favor of a hidden one would take that content out of every shared list.
+        if (!isQuestionPublic(keep) && questions.some(q => retiring.has(q._id) && isQuestionPublic(q))) throw new Error("Keep a public question when retiring a public copy");
         for (const question of questions) {
             if (!retiring.has(question._id)) continue;
             await ctx.db.patch(question._id, {

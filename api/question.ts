@@ -75,6 +75,13 @@ export default async function handler(
       { name: "twitter:image", content: `${baseUrl}/og-image/${id}.png` },
     ];
 
+    // A question held for review is unlisted: open by link, but not for search engines.
+    const heldForReview = question.status === "pending";
+    if (heldForReview) {
+      document.querySelector('meta[name="robots"]')?.setAttribute("content", "noindex, nofollow");
+      response.setHeader("X-Robots-Tag", "noindex");
+    }
+
     metaTags.forEach(tagData => {
       const tag = document.createElement("meta");
       Object.entries(tagData).forEach(([key, value]) => {
