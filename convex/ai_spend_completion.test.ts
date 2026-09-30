@@ -356,12 +356,16 @@ describe("review follow-ups", () => {
       t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId }),
     ).rejects.toThrow(/couldn't use/);
 
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.007, 1]]);
+    // An empty answer gets one retry, and each attempt is charged on its own run.
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.014, 2]]);
     const { runs, usage } = await t.run(async (ctx) => ({
       runs: await ctx.db.query("generationRuns").collect(),
       usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
     }));
-    expect(runs.map((run) => [run.status, run.costUsd])).toEqual([["failed", 0.007]]);
+    expect(runs.map((run) => [run.status, run.costUsd])).toEqual([
+      ["failed", 0.007],
+      ["failed", 0.007],
+    ]);
     // Paid for, so the quota isn't refunded.
     expect(usage.map((row) => row.count)).toEqual([1]);
   });
@@ -404,7 +408,7 @@ describe("review follow-ups", () => {
     });
     await t.mutation(internal.internal.aiRateLimit.consumeAiRateLimit, { name: "matrixFillCell", key: orgId, count: 49 });
     create.mockResolvedValue(
-      completion(JSON.stringify({ questions: [{ text: "What made you smile today?" }] }), { cost: 0.01 }) as never,
+      completion(JSON.stringify({ questions: [{ text: "What small thing made you smile today?" }] }), { cost: 0.01 }) as never,
     );
 
     await expect(
@@ -577,6 +581,7 @@ describe("delta review follow-ups", () => {
       t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId }),
     ).rejects.toThrow();
 
+    // Cut off by our own cap, so it isn't retried.
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.006, 1]]);
     const usage = await t.run(async (ctx) =>
       (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),

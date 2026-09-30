@@ -312,10 +312,18 @@ const remixQuestionHelper = async (
 ): Promise<string> => {
 	const { questionText, styleId, toneId, topicId } = args;
 
+	// A question keeps the style/tone/topic version it was written with; remix uses the
+	// active version of each, and none if the entry has no active version any more.
 	const [style, tone, topic] = await Promise.all([
-		styleId ? ctx.runQuery(internal.internal.styles.getStyleById, { id: styleId }) : null,
-		toneId ? ctx.runQuery(internal.internal.tones.getToneById, { id: toneId }) : null,
-		topicId ? ctx.runQuery(internal.internal.topics.getTopicById, { id: topicId }) : null,
+		styleId
+			? (ctx.runQuery(internal.internal.generation.getActiveTaxonomyById, { table: "styles", id: styleId }) as Promise<Doc<"styles"> | null>)
+			: null,
+		toneId
+			? (ctx.runQuery(internal.internal.generation.getActiveTaxonomyById, { table: "tones", id: toneId }) as Promise<Doc<"tones"> | null>)
+			: null,
+		topicId
+			? (ctx.runQuery(internal.internal.generation.getActiveTaxonomyById, { table: "topics", id: topicId }) as Promise<Doc<"topics"> | null>)
+			: null,
 	]);
 
 	const result = await runRemixQuestion(ctx, {
@@ -397,29 +405,35 @@ export const generateAIQuestionForUser = internalAction({
 		const count = args.count || 1;
 		const selectionSeed = normalizeSelectionSeed(args.seed);
 
+		// An anchored id may be an older version (the client keeps the id it was shown), so
+		// resolve it to the active version, as prompt building does.
 		const style = args.anchoredStyleId
-			? (await ctx.runQuery(api.core.styles.getStyleById, { id: args.anchoredStyleId }))
+			? await (ctx.runQuery(internal.internal.generation.getActiveTaxonomyById, { table: "styles", id: args.anchoredStyleId }) as Promise<Doc<"styles"> | null>)
 			: (await ctx.runQuery(internal.internal.styles.getRandomStyleForUserId, {
 				userId: user._id,
 				seed: selectionSeed,
 			}));
 		const tone = args.anchoredToneId
-			? (await ctx.runQuery(internal.internal.tones.getToneById, { id: args.anchoredToneId }))
+			? await (ctx.runQuery(internal.internal.generation.getActiveTaxonomyById, { table: "tones", id: args.anchoredToneId }) as Promise<Doc<"tones"> | null>)
 			: (await ctx.runQuery(internal.internal.tones.getRandomToneForUserId, {
 				userId: user._id,
 				seed: selectionSeed,
 			}));
-		const topic = args.topicId ? (await ctx.runQuery(api.core.topics.getTopicById, { id: args.topicId })) : null;
+		const topic = args.topicId
+			? await (ctx.runQuery(internal.internal.generation.getActiveTaxonomyById, { table: "topics", id: args.topicId }) as Promise<Doc<"topics"> | null>)
+			: null;
 
 		if (!style || !tone) {
 			throw new Error("Failed to generate AI question: No style or tone found for user");
+		}
+		if (args.topicId && !topic) {
+			throw new Error("Failed to generate AI question: That topic isn't available");
 		}
 
 		const recentlySeenQuestions = await ctx.runQuery(internal.internal.users.getRecentlySeenQuestions, { userId: user._id });
 		const recentlySeen = recentlySeenQuestions.filter((q: string) => q !== undefined);
 
 		const blockedQuestions = await ctx.runQuery(internal.internal.users.getBlockedQuestions, { userId: user._id });
-		let userContext = "";
 
 		let usageIncremented = false;
 		try {
@@ -430,21 +444,9 @@ export const generateAIQuestionForUser = internalAction({
 				});
 				usageIncremented = true;
 			}
-						
 
-			const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId: user._id });
-			if (userEmb && userEmb.length > 0) {
-				const nearestQuestions = await ctx.runAction(internal.core.questions.getNearestQuestionsByEmbedding, {
-					embedding: userEmb,
-					count: 5
-				});
-				const examples = nearestQuestions.map((q: any) => q.text).filter((t: any): t is string => !!t);
-				// Fallback if vector search returns empty (e.g. strict filter with no results)
-				if (examples.length > 0) {
-					userContext = "User likes questions similar to: " + examples.join("; ");
-				}
-			}
-
+			// No "User likes questions similar to" context: it steered new questions toward
+			// existing ones and produced near-duplicate clusters.
 			const result = await runPersistedQuestionGeneration(ctx, {
 				purpose: args.purpose ?? "feed",
 				requestedByUserId: user._id.toString(),
@@ -453,7 +455,9 @@ export const generateAIQuestionForUser = internalAction({
 				topicId: topic?._id,
 				batchSize: count,
 				excludedQuestions: [...recentlySeen, ...blockedQuestions],
-				userContext,
+				// Feed and daily-email questions wait for review before anyone else sees them
+				// in a shared list; the person they were made for still gets them.
+				status: "pending",
 			});
 			return result.questions as (Doc<"questions"> | null)[];
 		} catch (error) {
