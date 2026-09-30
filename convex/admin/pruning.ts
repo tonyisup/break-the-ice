@@ -542,6 +542,7 @@ export const undoReview = mutation({
         text: change.before.text, fingerprint: change.before.fingerprint,
         status: change.before.status, prunedAt: change.before.prunedAt,
         duplicateOf: change.before.duplicateOf, duplicateWasPublic: change.before.duplicateWasPublic,
+        heldForReview: change.before.heldForReview,
         reviewRevision: (change.after.reviewRevision ?? 0) + 1,
       });
       if (change.before.text !== change.after.text) await refreshQuestionText(ctx, change.questionId);

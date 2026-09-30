@@ -27,8 +27,6 @@ export const getStyleBySystemId = internalQuery({
   },
 });
 
-export const getStyleById = getStyleBySystemId;
-
 export const addStyleEmbedding = internalMutation({
   args: {
     styleId: v.id("styles"),

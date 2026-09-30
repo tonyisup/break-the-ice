@@ -36,10 +36,16 @@ async function getLatestActiveBySlug(
   table: "styles" | "tones" | "topics" | "promptBlueprints",
   slug: string,
 ) {
-  const docs = await ctx.db
+  const bySlug = await ctx.db
     .query(table)
     .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
+  // Legacy style, tone and topic rows may carry only the old `id` field.
+  const byLegacyId =
+    table === "promptBlueprints"
+      ? []
+      : await ctx.db.query(table as "styles").withIndex("by_my_id", (q) => q.eq("id", slug)).collect();
+  const docs = [...new Map([...bySlug, ...byLegacyId].map((doc) => [doc._id, doc])).values()];
 
   const latest = docs
     .filter((doc) => (doc.status ?? "active") === "active")
@@ -50,6 +56,39 @@ async function getLatestActiveBySlug(
   }
 
   return latest;
+}
+
+type TaxonomyTable = "styles" | "tones" | "topics";
+type TaxonomyDoc = Doc<"styles"> | Doc<"tones"> | Doc<"topics">;
+
+/**
+ * The latest active version of the entry an id points to. Versions of one entry share
+ * a slug (legacy rows only an `id`), so both are searched, within the same
+ * organization. An id is only a way to find the entry: prompts must never be built
+ * from a draft or archived version, which is why they said "Good examples: none".
+ * Returns null when the id doesn't exist or the entry has no active version.
+ */
+async function getLatestActiveSibling(
+  ctx: QueryCtx,
+  table: TaxonomyTable,
+  id: Id<TaxonomyTable>,
+): Promise<TaxonomyDoc | null> {
+  const doc = (await ctx.db.get(id)) as TaxonomyDoc | null;
+  if (!doc) return null;
+  const key = doc.slug ?? doc.id;
+  const query = ctx.db.query(table as "styles");
+  const [bySlug, byLegacyId] = await Promise.all([
+    query.withIndex("by_slug", (q) => q.eq("slug", key)).collect(),
+    ctx.db.query(table as "styles").withIndex("by_my_id", (q) => q.eq("id", key)).collect(),
+  ]);
+  const siblings = new Map<string, TaxonomyDoc>();
+  for (const sibling of [...bySlug, ...byLegacyId] as TaxonomyDoc[]) siblings.set(sibling._id, sibling);
+  return (
+    [...siblings.values()]
+      .filter((sibling) => sibling.organizationId === doc.organizationId)
+      .filter((sibling) => (sibling.status ?? "active") === "active")
+      .sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0] ?? null
+  );
 }
 
 async function getTaxonomyDoc(
@@ -69,7 +108,7 @@ async function getTaxonomyDoc(
 ): Promise<Doc<"topics"> | null>;
 async function getTaxonomyDoc(
   ctx: QueryCtx,
-  table: "styles" | "tones" | "topics",
+  table: TaxonomyTable,
   args: { id?: Id<"styles"> | Id<"tones"> | Id<"topics">; slug?: string } | undefined,
 ) {
   if (!args?.id && !args?.slug) {
@@ -77,8 +116,14 @@ async function getTaxonomyDoc(
   }
 
   if (args?.id) {
-    const doc = await ctx.db.get(args.id as any);
-    if (doc) return doc;
+    const doc = await ctx.db.get(args.id as Id<TaxonomyTable>);
+    if (doc) {
+      const active = await getLatestActiveSibling(ctx, table, args.id as Id<TaxonomyTable>);
+      if (!active) {
+        throw new ConvexError(`No active ${table} entry found for slug "${doc.slug ?? doc.id}".`);
+      }
+      return active;
+    }
   }
 
   if (args?.slug) {
@@ -87,6 +132,19 @@ async function getTaxonomyDoc(
 
   return null;
 }
+
+/** For remix: the active version of a question's stored style, tone or topic, or null. */
+export const getActiveTaxonomyById = internalQuery({
+  args: {
+    table: v.union(v.literal("styles"), v.literal("tones"), v.literal("topics")),
+    id: v.string(),
+  },
+  returns: v.union(v.null(), v.any()),
+  handler: async (ctx, args) => {
+    const id = ctx.db.normalizeId(args.table, args.id);
+    return id ? await getLatestActiveSibling(ctx, args.table, id) : null;
+  },
+});
 
 export const getDefaultPromptBlueprint = internalQuery({
   args: {},
@@ -280,6 +338,13 @@ export const createGenerationRun = internalMutation({
   },
 });
 
+const runCounts = {
+  parsedCount: v.optional(v.number()),
+  insertedCount: v.optional(v.number()),
+  duplicateCount: v.optional(v.number()),
+  rejectedCount: v.optional(v.number()),
+};
+
 export const completeGenerationRun = internalMutation({
   args: {
     runId: v.id("generationRuns"),
@@ -287,6 +352,7 @@ export const completeGenerationRun = internalMutation({
     resultQuestionIds: v.optional(v.array(v.id("questions"))),
     previewText: v.optional(v.string()),
     acceptedQuestionId: v.optional(v.id("questions")),
+    ...runCounts,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -296,6 +362,10 @@ export const completeGenerationRun = internalMutation({
       resultQuestionIds: args.resultQuestionIds ?? [],
       previewText: args.previewText,
       acceptedQuestionId: args.acceptedQuestionId,
+      parsedCount: args.parsedCount,
+      insertedCount: args.insertedCount,
+      duplicateCount: args.duplicateCount,
+      rejectedCount: args.rejectedCount,
       finishedAt: Date.now(),
     });
     return null;
@@ -306,12 +376,19 @@ export const failGenerationRun = internalMutation({
   args: {
     runId: v.id("generationRuns"),
     error: v.string(),
+    rawResponse: v.optional(v.string()),
+    ...runCounts,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.db.patch(args.runId, {
       status: "failed",
       error: args.error,
+      rawResponse: args.rawResponse,
+      parsedCount: args.parsedCount,
+      insertedCount: args.insertedCount,
+      duplicateCount: args.duplicateCount,
+      rejectedCount: args.rejectedCount,
       finishedAt: Date.now(),
     });
     return null;
@@ -440,6 +517,7 @@ export const insertGeneratedQuestions = internalMutation({
         moderationNotes: candidate.rationale,
         quality: {},
         status: args.status ?? "public",
+        heldForReview: args.status === "pending" ? true : undefined,
         poolDate: args.poolDate,
         poolStatus: args.poolStatus,
         totalLikes: 0,

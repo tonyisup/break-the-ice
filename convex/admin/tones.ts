@@ -287,6 +287,8 @@ export const updateTone = mutation({
     if (!existingTone) throw new Error("Tone not found");
 
     const now = Date.now();
+    // Fields the edit form doesn't send keep the current version's value instead of
+    // falling back to empty defaults.
     if ((existingTone.status ?? "active") === "draft") {
       await ctx.db.patch(args._id, {
         name: args.name,
@@ -296,14 +298,14 @@ export const updateTone = mutation({
         color: args.color,
         icon: args.icon,
         order: args.order,
-        commonFailureModes: args.commonFailureModes ?? [],
-        distinctFrom: args.distinctFrom ?? [],
-        examples: args.examples ?? [],
-        antiExamples: args.antiExamples ?? [],
-        quality: args.quality ?? defaultQualityRubric(),
-        languageCues: args.languageCues ?? [],
-        avoidCues: args.avoidCues ?? [],
-        emotionalAxes: args.emotionalAxes ?? defaultToneAxesValue(),
+        commonFailureModes: args.commonFailureModes ?? existingTone.commonFailureModes ?? [],
+        distinctFrom: args.distinctFrom ?? existingTone.distinctFrom ?? [],
+        examples: args.examples ?? existingTone.examples ?? [],
+        antiExamples: args.antiExamples ?? existingTone.antiExamples ?? [],
+        quality: args.quality ?? existingTone.quality ?? defaultQualityRubric(),
+        languageCues: args.languageCues ?? existingTone.languageCues ?? [],
+        avoidCues: args.avoidCues ?? existingTone.avoidCues ?? [],
+        emotionalAxes: args.emotionalAxes ?? existingTone.emotionalAxes ?? defaultToneAxesValue(),
         updatedAt: now,
       });
       return null;
@@ -318,6 +320,7 @@ export const updateTone = mutation({
     await ctx.db.insert("tones", {
       id: existingTone.slug ?? existingTone.id,
       slug: existingTone.slug ?? existingTone.id,
+      safetyNotes: existingTone.safetyNotes,
       name: args.name,
       description: args.description,
       promptGuidanceForAI: args.promptGuidanceForAI,
@@ -327,14 +330,14 @@ export const updateTone = mutation({
       order: args.order,
       version: nextVersion,
       status: "draft",
-      commonFailureModes: args.commonFailureModes ?? [],
-      distinctFrom: args.distinctFrom ?? [],
-      examples: args.examples ?? [],
-      antiExamples: args.antiExamples ?? [],
-      quality: args.quality ?? defaultQualityRubric(),
-      languageCues: args.languageCues ?? [],
-      avoidCues: args.avoidCues ?? [],
-      emotionalAxes: args.emotionalAxes ?? defaultToneAxesValue(),
+      commonFailureModes: args.commonFailureModes ?? existingTone.commonFailureModes ?? [],
+      distinctFrom: args.distinctFrom ?? existingTone.distinctFrom ?? [],
+      examples: args.examples ?? existingTone.examples ?? [],
+      antiExamples: args.antiExamples ?? existingTone.antiExamples ?? [],
+      quality: args.quality ?? existingTone.quality ?? defaultQualityRubric(),
+      languageCues: args.languageCues ?? existingTone.languageCues ?? [],
+      avoidCues: args.avoidCues ?? existingTone.avoidCues ?? [],
+      emotionalAxes: args.emotionalAxes ?? existingTone.emotionalAxes ?? defaultToneAxesValue(),
       createdAt: now,
       updatedAt: now,
     });

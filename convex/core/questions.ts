@@ -5,7 +5,6 @@ import {
 	query,
 	action,
 	ActionCtx,
-	internalAction,
 	internalQuery,
 } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
@@ -17,7 +16,8 @@ import {
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
 import { findCanonicalUser } from "../lib/users";
-import { canReadQuestion, isQuestionPublic } from "../lib/questionAccess";
+import { canReadQuestion, isQuestionPublic, isReadableByLink } from "../lib/questionAccess";
+import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 import { wasAiCallBilled } from "../lib/aiSpendGuard";
 import { ConvexError } from "convex/values";
@@ -203,55 +203,6 @@ export const getNextRandomQuestions = action({
 		return await getNextRandomQuestionsInternal(ctx, args);
 	},
 });
-
-/**
- * Finds the questions nearest to an embedding. Used by the
- * getNearestQuestionsByEmbedding internal action.
- */
-async function getNearestQuestionsByEmbeddingInternal(
-	ctx: ActionCtx,
-	args: {
-		embedding: number[];
-		style?: string;
-		tone?: string;
-		count?: number;
-	}
-) {
-	const { embedding, style, tone, count } = args;
-	if (!embedding || embedding.length === 0) {
-		return [];
-	}
-	const requestedCount = count ?? 10;
-	const limit = requestedCount * 10;
-
-	const results = await ctx.vectorSearch("question_embeddings", "by_embedding", {
-		vector: embedding,
-		limit,
-	});
-
-	const embeddingRowIds = results.map((r) => r._id);
-	const idsRaw = await ctx.runQuery(internal.internal.questions.getQuestionIdsByEmbeddingRowIds, {
-		embeddingRowIds,
-	});
-	const ids = idsRaw.filter((id: Id<"questions"> | null): id is Id<"questions"> => id !== null);
-	if (ids.length === 0) return [];
-
-	const questions = (await ctx.runQuery(api.core.questions.getQuestionsByIds, { ids })) as any[];
-
-	const filtered = questions.filter((q) => {
-		if (q.prunedAt !== undefined) return false;
-		if (q.text === undefined) return false;
-		if (q.status !== "approved" && q.status !== undefined) return false;
-
-		if (style && q.style !== style) return false;
-		if (tone && q.tone !== tone) return false;
-
-		return true;
-	});
-
-	return filtered.slice(0, requestedCount);
-}
-
 
 export const getNextQuestions = query({
 	args: {
@@ -702,7 +653,7 @@ export const getQuestionImageUrl = query({
 	handler: async (ctx, args) => {
 		const question = await ctx.db.get(args.questionId);
 		if (!question?.imageStorageId) return null;
-		if (!isQuestionPublic(question)) return null;
+		if (!isReadableByLink(question)) return null;
 		return await ctx.storage.getUrl(question.imageStorageId);
 	},
 });
@@ -723,6 +674,8 @@ export const getQuestionForOgImage = query({
 			gradientStart: v.string(),
 			gradientEnd: v.string(),
 			imageUrl: v.optional(v.string()),
+			// Held for review: callers must not cache or index it, since it may yet be rejected.
+			heldForReview: v.boolean(),
 		}),
 		v.null()
 	),
@@ -737,20 +690,18 @@ export const getQuestionForOgImage = query({
 			console.log(`Question not found in DB for normalized ID: ${questionId}`);
 			return null;
 		}
-		if (!isQuestionPublic(question)) return null;
+		// The daily email embeds this image, and its question may still be held for review.
+		if (!isReadableByLink(question)) return null;
 
-		let styleDoc = null;
-		if (question.style) {
-			styleDoc = await ctx.db.query("styles").withIndex("by_my_id", (q) => q.eq("id", question.style!)).unique();
-		}
-
-		let toneDoc = null;
-		if (question.tone) {
-			toneDoc = await ctx.db.query("tones").withIndex("by_my_id", (q) => q.eq("id", question.tone!)).unique();
-		}
+		const styleDoc = question.style
+			? await resolveTaxonomySlug(ctx.db, "styles", question.style, question.organizationId)
+			: null;
+		const toneDoc = question.tone
+			? await resolveTaxonomySlug(ctx.db, "tones", question.tone, question.organizationId)
+			: null;
 
 		const imageUrl =
-			question.imageStorageId && isQuestionPublic(question)
+			question.imageStorageId
 				? await ctx.storage.getUrl(question.imageStorageId)
 				: undefined;
 
@@ -765,6 +716,7 @@ export const getQuestionForOgImage = query({
 			gradientStart: styleDoc?.color || "#f0f0f0",
 			gradientEnd: toneDoc?.color || "#d0d0d0",
 			imageUrl: imageUrl ?? undefined,
+			heldForReview: !isQuestionPublic(question),
 		};
 	},
 });
@@ -1122,19 +1074,6 @@ export const makeQuestionPublic = mutation({
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: args.questionId,
 		});
-	},
-});
-
-export const getNearestQuestionsByEmbedding = internalAction({
-	args: {
-		embedding: v.array(v.number()),
-		style: v.optional(v.string()),
-		tone: v.optional(v.string()),
-		count: v.optional(v.number()),
-	},
-	returns: v.array(v.any()),
-	handler: async (ctx, args): Promise<any[]> => {
-		return await getNearestQuestionsByEmbeddingInternal(ctx, args);
 	},
 });
 

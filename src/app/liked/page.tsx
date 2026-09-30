@@ -214,6 +214,9 @@ function LikedQuestionsPageContent() {
   const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
 
   const showCollectionActions = isSignedIn && !!activeWorkspace;
+  // Mirrors the server's rule in convex/core/collections.ts (isPubliclyAvailableStatus).
+  const isCollectable = (question: Doc<"questions">) =>
+    question.status === "public" || question.status === "approved" || question.status === undefined;
 
   const renderCard = (question: Doc<"questions">, onDelete?: () => void) => {
     const style = stylesMap.get(question.styleId || (question.style as string) || "");
@@ -224,7 +227,8 @@ function LikedQuestionsPageContent() {
 
     return (
       <div className="relative h-full">
-        {showCollectionActions && (
+        {/* Collections only take public questions; a held AI question joins once approved. */}
+        {showCollectionActions && isCollectable(question) && (
           <div className="absolute top-3 right-3 z-10">
             <AddToCollectionMenu questionId={question._id} />
           </div>

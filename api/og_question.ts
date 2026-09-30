@@ -300,7 +300,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const buffer = Buffer.from(arrayBuffer);
 
     res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    // A held question may still be rejected, so its image must not outlive that for a year,
+    // and image search must not index its unreviewed text.
+    res.setHeader('Cache-Control', questionInfo.heldForReview ? 'public, max-age=300' : 'public, max-age=31536000, immutable');
+    if (questionInfo.heldForReview) res.setHeader('X-Robots-Tag', 'noindex');
     res.status(200).send(buffer);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Unknown error';

@@ -144,6 +144,8 @@ The chosen candidate is persisted only when the manager assigns it.
 - Question and topic fields have server-enforced length limits.
 - A question can only be assigned to a draft schedule in the same organization.
 - A custom question cannot be assigned to another organization's schedule.
+- A library question must be public: an AI question still waiting for admin
+  review cannot be assigned.
 - Shared question readers do not reveal unpublished Team Prompt wording to
   members, including the original author after a role change.
 - Topic previews do not modify a schedule.

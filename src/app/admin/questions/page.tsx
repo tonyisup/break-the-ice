@@ -4,6 +4,7 @@ import * as React from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
+import { PENDING_QUEUE_LIMIT } from "../../../../convex/constants";
 import {
   Search,
   Plus,
@@ -51,7 +52,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 export default function QuestionsPage() {
   const isMobile = useIsMobile();
-  const allQuestions = useQuery(api.admin.questions.getQuestions);
+  // Reviewed questions (the newest 100); pending ones come from the review queue.
+  const reviewedQuestions = useQuery(api.admin.questions.getQuestions);
+  const pendingQueue = useQuery(api.admin.questions.getPendingQuestions);
   const styles = useQuery(api.core.styles.getStyles, {});
   const tones = useQuery(api.core.tones.getTones, {});
 
@@ -79,12 +82,14 @@ export default function QuestionsPage() {
   });
 
   // Pending Questions
-  const pendingQuestions =
-    allQuestions?.filter((q) => q.status === "pending") ?? [];
-  const activeQuestions =
-    allQuestions?.filter((q) => q.status !== "pending") ?? [];
+  // The queue query returns one extra question when more are waiting than the page shows.
+  const pendingQuestions = (pendingQueue ?? []).slice(0, PENDING_QUEUE_LIMIT);
+  const morePending = (pendingQueue?.length ?? 0) > PENDING_QUEUE_LIMIT;
+  // The queue and the main list are separate queries, so look in both.
+  const findQuestion = (id: Id<"questions">) =>
+    pendingQueue?.find((q) => q._id === id) ?? reviewedQuestions?.find((q) => q._id === id);
 
-  const filteredQuestions = activeQuestions.filter((q) => {
+  const filteredQuestions = (reviewedQuestions ?? []).filter((q) => {
     const text = q.text?.toLowerCase() || q.customText?.toLowerCase() || "";
     const styleName =
       styles?.find((s) => s.id === q.style)?.name.toLowerCase() || "";
@@ -130,7 +135,7 @@ export default function QuestionsPage() {
   };
 
   const handleUpdateField = async (id: Id<"questions">, updates: any) => {
-    const question = allQuestions?.find(q => q._id === id);
+    const question = findQuestion(id);
     if (!question) return;
     const reason = updates.text !== undefined || updates.status !== undefined
       ? window.prompt("Why are you changing this question?")?.trim()
@@ -182,7 +187,13 @@ export default function QuestionsPage() {
     q: Doc<"questions">,
     status: "public" | "personal",
   ) => {
-    const reason = window.prompt("Why are you changing this question’s status?")?.trim();
+    const reason = window
+      .prompt(
+        status === "personal" && q.isAIGenerated
+          ? "Reject this AI question? It will be hidden from everyone, including anyone it was sent to. Why?"
+          : "Why are you changing this question’s status?",
+      )
+      ?.trim();
     if (!reason) return;
     try {
       await updateQuestion({
@@ -194,7 +205,13 @@ export default function QuestionsPage() {
         tone: q.tone || undefined,
         status: status === "public" ? "public" : "private",
       });
-      toast.success(`Question marked as ${status}`);
+      toast.success(
+        status === "public"
+          ? "Question marked as public"
+          : q.isAIGenerated
+            ? "Question rejected and made private"
+            : "Question marked as personal",
+      );
     } catch (error) {
       toast.error("Failed to process question");
     }
@@ -212,7 +229,7 @@ export default function QuestionsPage() {
   };
 
   const handleRemix = async (id: Id<"questions">) => {
-    const question = allQuestions?.find(q => q._id === id);
+    const question = findQuestion(id);
     if (!question) return;
     const expectedRevision = question.reviewRevision ?? 0;
     setRemixingIds((prev) => {
@@ -244,7 +261,7 @@ export default function QuestionsPage() {
     }
   };
 
-  if (!allQuestions || !styles || !tones) {
+  if (!reviewedQuestions || !pendingQueue || !styles || !tones) {
     return (
       <div className="flex flex-col gap-4 animate-pulse">
         <div className="h-10 bg-muted rounded w-1/4" />
@@ -365,6 +382,7 @@ export default function QuestionsPage() {
             <h3 className="text-xl font-semibold">Pending Review</h3>
             <Badge variant="secondary" className="rounded-full">
               {pendingQuestions.length}
+              {morePending ? "+" : ""}
             </Badge>
           </div>
           <div className="grid gap-4">
@@ -375,8 +393,8 @@ export default function QuestionsPage() {
               >
                 <div className="space-y-4 flex-1 w-full">
                   <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-widest">
-                    <UserCircle className="size-3" />
-                    User Submitted
+                    {q.isAIGenerated ? <Sparkles className="size-3" /> : <UserCircle className="size-3" />}
+                    {q.isAIGenerated ? "AI generated" : "User Submitted"}
                   </div>
                   <textarea
                     className="w-full min-h-[80px] p-3 rounded-md border bg-background text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none resize-none"
@@ -447,10 +465,16 @@ export default function QuestionsPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="!h-11 w-full shrink-0 justify-center text-blue-400 hover:bg-blue-50 hover:text-blue-500 sm:!h-9 sm:w-auto"
+                    className={cn(
+                      "!h-11 w-full shrink-0 justify-center sm:!h-9 sm:w-auto",
+                      q.isAIGenerated
+                        ? "border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        : "text-blue-400 hover:bg-blue-50 hover:text-blue-500",
+                    )}
                     onClick={() => handleApprove(q, "personal")}
                   >
-                    Mark Personal
+                    {/* An AI question has no author, so making it private removes it for everyone. */}
+                    {q.isAIGenerated ? "Reject" : "Mark Personal"}
                   </Button>
                   <Button
                     size="sm"

@@ -10,6 +10,7 @@ export function snapshot(question: Doc<"questions">) {
     prunedAt: question.prunedAt,
     duplicateOf: question.duplicateOf,
     duplicateWasPublic: question.duplicateWasPublic,
+    heldForReview: question.heldForReview,
     reviewRevision: question.reviewRevision,
   };
 }

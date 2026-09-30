@@ -1,4 +1,4 @@
-import { ConvexError } from "convex/values";
+import { ConvexError, type Value } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
@@ -72,7 +72,12 @@ export async function settleAiCompletion(
 
 /** A generation that failed after the provider was paid: the caller shouldn't refund usage. */
 export function billedFailure(error: unknown): unknown {
-  if (error instanceof ConvexError) return error;
+  // Keep a ConvexError's code and message (a paused budget still reads as one), but mark it
+  // billed: the paid attempt may be followed by a retry that fails this way.
+  if (error instanceof ConvexError) {
+    const data = convexErrorData(error);
+    return data ? new ConvexError({ ...(data as Record<string, Value>), billed: true }) : error;
+  }
   return new ConvexError({
     code: ERROR_CODES.AI_GENERATION_FAILED,
     message: ERROR_MESSAGES.AI_GENERATION_FAILED,

@@ -46,6 +46,7 @@ In many fitness group training classes, the coach starts with a "Question of the
 - ✅ Embedding-based similarity/duplicate detection (384-dim vectors)
 - ✅ Nightly generation pool system for batch AI generation
 - ✅ Daily AI spend cap, per-call cost tracking, and per-person/per-team AI rate limits
+- ✅ Admin review queue for new feed and daily-email AI questions, held out of shared lists until approved
 - ✅ Configurable pruning pipeline with settings
 - ✅ Analytics with view duration tracking
 - ✅ PostHog integration

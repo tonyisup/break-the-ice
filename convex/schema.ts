@@ -169,6 +169,12 @@ export default defineSchema({
     promptTokens: v.optional(v.number()),
     completionTokens: v.optional(v.number()),
     costUsd: v.optional(v.number()),
+    // What became of the model's answer: questions parsed from it (up to batchSize, which
+    // is what was asked for), saved, skipped as duplicates, and rejected by validation.
+    parsedCount: v.optional(v.number()),
+    insertedCount: v.optional(v.number()),
+    duplicateCount: v.optional(v.number()),
+    rejectedCount: v.optional(v.number()),
   })
     .index("by_status", ["status"])
     .index("by_purpose", ["purpose"])
@@ -190,6 +196,9 @@ export default defineSchema({
     totalThumbsDown: v.optional(v.number()),
     totalShows: v.number(),
     isAIGenerated: v.optional(v.boolean()),
+    // Set only when feed or daily-email generation saves a question to wait for review.
+    // Such a pending question is unlisted (open by link); other pending rows stay hidden.
+    heldForReview: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),
     style: v.optional(v.string()),
     styleId: v.optional(v.id("styles")),

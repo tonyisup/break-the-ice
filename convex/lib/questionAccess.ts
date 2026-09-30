@@ -9,6 +9,28 @@ export function isQuestionPublic(question: Doc<"questions">): boolean {
 }
 
 /**
+ * An AI question held for review. It is never listed anywhere shared (feed, collections,
+ * email pools and team pickers only list public questions), but it is unlisted rather than
+ * private: the person it was generated for gets it straight from generation, and the daily
+ * email links to it, often opened signed out. Only generation sets `heldForReview`, so a
+ * question an admin moved to pending stays hidden.
+ */
+export function isUnlistedAiQuestion(question: Doc<"questions">): boolean {
+	return (
+		question.heldForReview === true &&
+		question.status === "pending" &&
+		question.isAIGenerated === true &&
+		!question.authorId &&
+		!question.organizationId
+	);
+}
+
+/** Anyone with the link can open it, signed in or not: public, or an AI question held for review. */
+export function isReadableByLink(question: Doc<"questions">): boolean {
+	return isQuestionPublic(question) || isUnlistedAiQuestion(question);
+}
+
+/**
  * Whether `userId` (or an anonymous caller, when undefined) may see this question.
  * Used by getQuestionById, getLikedQuestions, recordAnalytics, the question history
  * and the liked/hidden update and merge mutations. Some older paths (collections.ts,
@@ -19,7 +41,7 @@ export async function canReadQuestion(
 	question: Doc<"questions">,
 	userId?: Id<"users">,
 ): Promise<boolean> {
-	if (isQuestionPublic(question)) return true;
+	if (isReadableByLink(question)) return true;
 	if (!userId) return false;
 	if (question.kind === "team_prompt") {
 		if (!question.organizationId) return false;

@@ -21,6 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let toneName = searchParams.get('toneName') || 'Casual';
     let toneColor = searchParams.get('toneColor') || '#000000';
     let toneIcon = searchParams.get('toneIcon') || 'CircleHelp';
+    let heldForReview = false;
 
     if (id) {
       const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -39,6 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         toneIcon = questionInfo.toneIcon || toneIcon;
         gradientStart = questionInfo.gradientStart;
         gradientEnd = questionInfo.gradientEnd;
+        heldForReview = questionInfo.heldForReview === true;
       }
     }
 
@@ -212,7 +214,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const buffer = Buffer.from(arrayBuffer);
 
     res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    // A held question may still be rejected, so its image must not outlive that for a year,
+    // and image search must not index its unreviewed text.
+    res.setHeader('Cache-Control', heldForReview ? 'public, max-age=300' : 'public, max-age=31536000, immutable');
+    if (heldForReview) res.setHeader('X-Robots-Tag', 'noindex');
     res.status(200).send(buffer);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Unknown error';

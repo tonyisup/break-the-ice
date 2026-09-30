@@ -2,6 +2,32 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.3.0.0] - 2026-09-30
+
+### Changed
+- New AI questions from the feed and the daily email now wait for review before anyone else sees them. The person they were made for still gets them, and anyone with the link or the email can open them, but they stay out of the shared feed, collections, daily-email picks and team schedules until an admin approves them. Matrix fill, the nightly pool and admin tools still publish directly.
+- AI questions are written from the current version of each style, tone and topic, including its example questions. An older style, tone or topic ID (from before an admin edit) now resolves to the current version in prompts, remix and feed requests.
+- New questions are no longer steered toward ones you liked before, which was producing near-duplicates.
+- An AI answer that is empty, unreadable or has no questions in it gets one more try (a second generation call, counted toward the daily AI spend cap). Answers cut off by the length limit, and requests the AI provider rejects, are not retried.
+- The admin review queue has its own list, oldest first, and shows when more questions are waiting than it lists. AI questions are labelled, and their Reject button hides the question from everyone. Approving or rejecting ends the hold: moving a question back to pending later hides it.
+- Share pages and share images for questions waiting for review are kept out of search engines and aren't cached for long, so a rejected question doesn't linger.
+
+### Added
+- Each AI generation run records how many questions it parsed, saved, skipped as duplicates and rejected. A run that saves nothing is marked failed with the reason.
+
+### Fixed
+- Editing a style or tone in admin no longer wipes its example questions, failure modes and other prompt settings, and the new version keeps its safety notes.
+- Share images no longer fail for a style or tone that has more than one version, and never show another organization's copy of a style.
+- Approving or editing a question keeps its style and tone version instead of switching to an old one.
+- An AI answer that was paid for but couldn't be used keeps counting toward your allowance, even when its retry is stopped by the daily pause.
+- Resolving duplicates can't retire a public question in favor of a hidden one, and waits until a question held for review has been approved or rejected.
+- Inline edits and Remix in the admin review queue work for every queued question, not just recent ones.
+- A feed request for a topic that is no longer available fails clearly instead of quietly ignoring the topic.
+- The Liked page no longer offers "Add to collection" for a question waiting for review (it failed and could leave an empty collection behind).
+
+### Removed
+- The internal "questions similar to ones you liked" lookup, and three unused internal style and topic lookups.
+
 ## [0.2.0.0] - 2026-09-29
 
 ### Added

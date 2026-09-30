@@ -101,17 +101,6 @@ export const addTopicEmbedding = internalMutation({
   },
 });
 
-export const getTopicBySystemId = internalQuery({
-  args: { id: v.id("topics") },
-  returns: v.nullable(topicFields),
-  handler: async (ctx, args) => {
-    const topic = await ctx.db.get(args.id);
-    return topic ? mapTopic(topic) : null;
-  },
-});
-
-export const getTopicById = getTopicBySystemId;
-
 export const getTopCurrentTopic = internalQuery({
   args: {},
   returns: v.nullable(topicFields),
