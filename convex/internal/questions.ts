@@ -7,6 +7,7 @@ import { getActiveTakeoverTopicsHelper } from "../lib/takeover";
 import { cosineSimilarity } from "../lib/embeddings";
 import { doc } from "convex-helpers/validators";
 import schema from "../schema";
+import { duplicateGroup } from "../lib/questionReferences";
 
 export const questionByIdResultValidator = v.nullable(doc(schema, "questions"));
 
@@ -137,8 +138,14 @@ export const saveDuplicateDetection = internalMutation({
 	},
 	returns: v.union(v.id("duplicateDetections"), v.null()),
 	handler: async (ctx, args) => {
-		const sortedIds = [...args.questionIds].sort();
-		const uniqueKey = sortedIds.join("_");
+		// Detection runs across many batches in an action, so a member can be deleted between
+		// the batch read and this save.
+		const liveIds: typeof args.questionIds = [];
+		for (const questionId of args.questionIds) {
+			if (await ctx.db.get(questionId)) liveIds.push(questionId);
+		}
+		if (liveIds.length < 2) return null;
+		const { questionIds: sortedIds, uniqueKey } = duplicateGroup(liveIds);
 		const existing = await ctx.db
 			.query("duplicateDetections")
 			.withIndex("by_uniqueKey", (q) => q.eq("uniqueKey", uniqueKey))
@@ -384,7 +391,8 @@ export const markPoolQuestionsDistributed = internalMutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		for (const id of args.questionIds) {
-			await ctx.db.patch(id, { poolStatus: "distributed" });
+			// Skip a question deleted since the pool was read.
+			if (await ctx.db.get(id)) await ctx.db.patch(id, { poolStatus: "distributed" });
 		}
 		return null;
 	},
@@ -402,6 +410,8 @@ export const assignPoolQuestionsToUser = internalMutation({
 		let assigned = 0;
 
 		for (const questionId of questionIds) {
+			// The pool is read once for every subscriber, so a question can be deleted meanwhile.
+			if (!(await ctx.db.get(questionId))) continue;
 			const existing = await ctx.db
 				.query("userQuestions")
 				.withIndex("by_userIdAndQuestionId", (q) =>
@@ -1317,19 +1327,25 @@ export const getQuestionForNewsletter = internalQuery({
 });
 
 
+/** Returns false when the question was deleted while its email was being prepared. */
 export const markUserQuestionAsSent = internalMutation({
 	args: {
 		userId: v.id("users"),
 		questionId: v.id("questions"),
 	},
+	returns: v.boolean(),
 	handler: async (ctx, args) => {	
-		const userQuestion = await ctx.db.query("userQuestions").filter((q) => q.eq(q.field("userId"), args.userId)).filter((q) => q.eq(q.field("questionId"), args.questionId)).first();
+		if (!(await ctx.db.get(args.questionId))) return false;
+		const userQuestion = await ctx.db
+			.query("userQuestions")
+			.withIndex("by_userIdAndQuestionId", (q) => q.eq("userId", args.userId).eq("questionId", args.questionId))
+			.first();
 		if (userQuestion) {
 			await ctx.db.patch(userQuestion._id, {
 				status: "sent",
 				updatedAt: Date.now(),
 			});
-			return;
+			return true;
 		}	
 
 		await ctx.db.insert("userQuestions", {
@@ -1340,5 +1356,6 @@ export const markUserQuestionAsSent = internalMutation({
 			seenCount: 0,
 			updatedAt: Date.now(),
 		});
+		return true;
 	},
 });
