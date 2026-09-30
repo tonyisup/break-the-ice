@@ -2,6 +2,19 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.3.1.0] - 2026-09-30
+
+### Fixed
+- Deleting a question now removes what only made sense for it: its search vector, people's seen, liked, hidden and emailed marks, its collection entries, and pending pruning reviews and duplicate groups, so those admin queues no longer fill with items that can't be resolved. Analytics and review history are kept.
+- The daily email picks another question if the one it chose is deleted while the email is being prepared, instead of sending a link that doesn't open.
+- Duplicate detection, the daily email and pool assignment no longer create new rows for a question that was just deleted.
+
+### Added
+- A one-time cleanup for references left behind by questions deleted before this release (orphan search vectors, per-person marks, collection entries, pending pruning reviews and duplicate groups). Its dry run reports what it would change: `npx convex run internal/migrations:cleanDanglingQuestionReferences '{"dryRun":true}'`.
+
+### Changed
+- Marking a question as emailed looks its row up by index instead of scanning every row.
+
 ## [0.3.0.0] - 2026-09-30
 
 ### Changed
