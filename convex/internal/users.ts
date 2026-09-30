@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, internalAction } from "../_generated/server";
+import { internalMutation, internalQuery, internalAction, type QueryCtx } from "../_generated/server";
+import type { Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
@@ -361,6 +362,33 @@ export const updateUsersWithMissingEmbeddingsAction = internalAction({
 	},
 });
 
+// Rows whose question was deleted, or has no text, are skipped, so read a few extra.
+const EXCLUSION_ROWS_PER_TEXT = 4;
+
+// The texts of the questions a user most recently gave `status`, newest first. Personal
+// questions keep their text in `customText`.
+async function recentQuestionTexts(
+	ctx: QueryCtx,
+	userId: Id<"users">,
+	status: "seen" | "hidden",
+	limit: number,
+): Promise<string[]> {
+	const rows = await ctx.db.query("userQuestions")
+		.withIndex("by_userId_status_updatedAt", (q) =>
+			q.eq("userId", userId).eq("status", status)
+		)
+		.order("desc")
+		.take(limit * EXCLUSION_ROWS_PER_TEXT);
+
+	const questions = await Promise.all(rows.map((row) => ctx.db.get(row.questionId)));
+	return questions
+		.flatMap((q) => {
+			const text = q?.text ?? q?.customText;
+			return text ? [text] : [];
+		})
+		.slice(0, limit);
+}
+
 export const getRecentlySeenQuestions = internalQuery({
 	args: {
 		userId: v.id("users"),
@@ -368,24 +396,7 @@ export const getRecentlySeenQuestions = internalQuery({
 	},
 	returns: v.array(v.string()),
 	handler: async (ctx, args) => {
-		const seen = await ctx.db.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
-				q.eq("userId", args.userId).eq("status", "seen")
-			)
-			.order("desc")
-			.take(args.limit ?? 3);
-
-		const seenQuestions = await Promise.all(
-			seen.map(async (relation) => {
-				const question = await ctx.db.query("questions")
-					.withIndex("by_id", (q) => q.eq("_id", relation.questionId))
-					.first();
-				return question;
-			})
-		);
-		return seenQuestions
-			.filter((q) => q !== null)
-			.map((q) => q.text!);
+		return await recentQuestionTexts(ctx, args.userId, "seen", args.limit ?? 3);
 	},
 });
 
@@ -396,24 +407,7 @@ export const getBlockedQuestions = internalQuery({
 	},
 	returns: v.array(v.string()),
 	handler: async (ctx, args) => {
-		const hidden = await ctx.db.query("userQuestions")
-			.withIndex("by_userId_status_updatedAt", (q) =>
-				q.eq("userId", args.userId).eq("status", "hidden")
-			)
-			.order("desc")
-			.take(args.limit ?? 3);
-
-		const hiddenQuestions = await Promise.all(
-			hidden.map(async (relation) => {
-				const question = await ctx.db.query("questions")
-					.withIndex("by_id", (q) => q.eq("_id", relation.questionId))
-					.first();
-				return question;
-			})
-		);
-		return hiddenQuestions
-			.filter((q) => q !== null)
-			.map((q) => q.text!);
+		return await recentQuestionTexts(ctx, args.userId, "hidden", args.limit ?? 3);
 	},
 });
 

@@ -187,6 +187,34 @@ describe("prompt context", () => {
     expect(prompt).not.toContain("User likes");
     expect(prompt).not.toContain("Which liked question is nearest?");
   });
+
+  test("a personal question the user saw or hid is avoided by its custom text", async () => {
+    const { t, styleV2, toneId } = await setup();
+    const userId = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", { email: "reader@example.com", clerkId: "reader-clerk" });
+      for (const [status, customText] of [
+        ["seen", "What should our team be called?"],
+        ["hidden", "Who would you trust with your passwords?"],
+      ] as const) {
+        const questionId = await ctx.db.insert("questions", { authorId: userId, customText, status: "private", ...counters });
+        await ctx.db.insert("userQuestions", { userId, questionId, status, updatedAt: 1 });
+      }
+      return userId;
+    });
+    create.mockResolvedValue(completion(questionsJson("What made you laugh this week?")) as never);
+
+    await t.action(internal.internal.ai.generateAIQuestionForUser, {
+      userId,
+      bypassAIUsage: true,
+      purpose: "newsletter",
+      anchoredStyleId: styleV2,
+      anchoredToneId: toneId,
+    });
+
+    const prompt = JSON.stringify(create.mock.calls[0][0]);
+    expect(prompt).toContain("What should our team be called?");
+    expect(prompt).toContain("Who would you trust with your passwords?");
+  });
 });
 
 describe("new feed and daily-email questions wait for review", () => {
