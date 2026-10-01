@@ -125,7 +125,7 @@ export const evalLibraryStats = internalQuery({
  * the generator makes inside one call. Runs are tagged `eval:<run>:<seed>`.
  */
 export const evalRunAttempts = internalQuery({
-  args: { runLabel: v.string(), since: v.number() },
+  args: { runLabel: v.string(), since: v.number(), until: v.optional(v.number()) },
   returns: v.array(
     v.object({
       runId: v.id("generationRuns"),
@@ -142,7 +142,9 @@ export const evalRunAttempts = internalQuery({
     const prefix = `eval:${args.runLabel}:`;
     const runs = await ctx.db
       .query("generationRuns")
-      .withIndex("by_creation_time", (q) => q.gte("_creationTime", args.since))
+      .withIndex("by_creation_time", (q) =>
+        args.until === undefined ? q.gte("_creationTime", args.since) : q.gte("_creationTime", args.since).lte("_creationTime", args.until),
+      )
       .collect();
     return runs
       .filter((run) => run.requestedByUserId?.startsWith(prefix))

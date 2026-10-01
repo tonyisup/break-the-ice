@@ -166,7 +166,7 @@ export const pick = (object, path) => path.split(".").reduce((value, key) => val
  * Bump when the logic that turns answers into rates changes (verdicts, denominators, which
  * questions count). Runs scored under different versions aren't comparable: rescore the baseline.
  */
-export const SCORING_VERSION = 2;
+export const SCORING_VERSION = 3;
 
 /** What must match for a run to be compared with a baseline at all: the measuring stick. */
 export const COMPARABLE_KEYS = [

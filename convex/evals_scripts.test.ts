@@ -28,7 +28,7 @@ import {
   gateVerdict,
 } from "../evals/jev.mjs";
 import { mapLimit } from "../evals/async.mjs";
-import { classifyFailure, cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess } from "../evals/runRecord.mjs";
+import { classifyFailure, cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess, writeJson } from "../evals/runRecord.mjs";
 import {
   COMPARABLE_KEYS,
   REPLICATE_KEYS,
@@ -502,6 +502,16 @@ describe("run record", () => {
     expect(mergeAttempts([failed, b], [])).toEqual([failed, b]);
   });
 
+  test("JSON is written whole, through a temp file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "write-json-"));
+    const path = join(dir, "generated.json");
+    writeJson(path, { a: 1 });
+    writeJson(path, { a: 2 });
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ a: 2 });
+    expect(readdirSync(dir)).toEqual(["generated.json"]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   test("a CLI failure is reported by the last lines of its output", () => {
     const error = { message: "Command failed: npx convex run internal/evalData:evalRunAttempts {...}", stderr: "npm notice\nline 2\n✖ Failed\nUncaught ConvexError: Evals are off\n" };
     expect(cliError(error)).toBe("line 2 ✖ Failed Uncaught ConvexError: Evals are off");
@@ -599,6 +609,20 @@ describe("scripts", () => {
       expect(result.status).toBe(1);
       expect(result.stderr).toMatch(/convex\/ has uncommitted changes/);
     });
+
+    test("won't resume a run at a different commit", () => {
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd: root });
+      git("init", "-q");
+      git("commit", "-q", "--allow-empty", "-m", "start");
+      writeRun("resumed", {
+        "generated.json": { run: "resumed", invocations: [{ startedAtMs: 0, commit: "0ld0ld0", generated: [], attemptsComplete: true }], attempts: [], batches: [] },
+      });
+
+      const result = runScript("generate.mjs", ["resumed"], { PATH: "/usr/bin:/bin" });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/was generated at 0ld0ld0 .* Resuming would mix code versions/);
+    });
   });
 
   describe("score", () => {
@@ -639,6 +663,11 @@ describe("scripts", () => {
       const unfinished = runScript("score.mjs", ["unfinished"]);
       expect(unfinished.status).toBe(1);
       expect(unfinished.stderr).toMatch(/hadn't finished/);
+
+      writeRun("unread", { "generated.json": { batches: [batch], invocations: [{ attemptsComplete: false }], attempts: [{ runId: "r1", status: "succeeded" }] } });
+      const unread = runScript("score.mjs", ["unread"]);
+      expect(unread.status).toBe(1);
+      expect(unread.stderr).toMatch(/Generation records for 1 invocation\(s\) are incomplete/);
     });
 
     test("computes every primary rate from its own units, end to end from cached Jev answers", () => {
@@ -675,6 +704,7 @@ describe("scripts", () => {
         attempts: [
           { runId: "r0", seedId: "s01", status: "failed", error: "Model output could not be read: Unterminated string in JSON", resolvedModel: "m1", costUsd: 0.01, completionTokens: 900 },
           { runId: "r1", seedId: "s01", status: "succeeded", error: null, resolvedModel: "m1", costUsd: 0.01, completionTokens: 900 },
+          { runId: "rc", seedId: "s01", status: "failed", error: "AI provider returned an empty completion (model=m1, finish_reason=content_filter)", resolvedModel: "m1", costUsd: 0, completionTokens: 0 },
           { runId: "rx", seedId: "s02", status: "failed", error: "AI provider returned an empty completion (model=m1, finish_reason=error)", resolvedModel: "m1", costUsd: 0, completionTokens: 0 },
           { runId: "r2", seedId: "s02", status: "succeeded", error: null, resolvedModel: "m1", costUsd: 0.01, completionTokens: 900 },
         ],
@@ -734,6 +764,10 @@ describe("scripts", () => {
         ["Q1?", "Q2?", 0.1],
         ["Q1?", "Q4?", 1.6],
         ["Q2?", "Q4?", 0],
+        // The library copy L3 still pairs with the other questions.
+        ["Q4?", "L3?", 0],
+        ["Q1?", "L3?", 0],
+        ["Q2?", "L3?", 0],
       ];
       const cache = [
         ...gate.map(([text, overrides]) => cacheLine(gateRequest({ text, definitions }), gateAnswers(overrides))),
@@ -758,11 +792,12 @@ describe("scripts", () => {
         libraryLikelyRate: { k: 2, n: 4 },
         // s01 has an exact copy within the batch; s02 has neither a copy nor a likely pair.
         batchLikelyRate: { k: 1, n: 2 },
-        unusableOutputRate: { k: 1, n: 4 },
-        providerErrorRate: { k: 1, n: 4 },
+        // A content-filter empty is the output's fault; a provider error isn't.
+        unusableOutputRate: { k: 2, n: 5 },
+        providerErrorRate: { k: 1, n: 5 },
         yieldRate: { k: 5, n: 6 },
-        withinBatchLikelyPairRate: { k: 0, n: 1 },
-        crossBatchLikelyRate: { k: 1, n: 2 },
+        withinBatchLikelyPairRate: { k: 0, n: 2 },
+        crossBatchLikelyRate: { k: 1, n: 4 },
         savedRate: { k: 2, n: 5 },
         s_traumaFlagRate: { k: 1, n: 5 },
       });
@@ -799,7 +834,7 @@ describe("scripts", () => {
       ...identity,
       run,
       judge: { ...identity.judge, ...overrides.judge },
-      generator: { ...identity.generator, ...overrides.generator },
+      generator: { ...identity.generator, runIdsHash: `ids-${run}`, ...overrides.generator },
       library: { ...identity.library, ...overrides.library },
       batches: { ...identity.batches, ...overrides.batches },
       rates: { passRate: rate(pass, 100), passRateWithoutFit: rate(pass, 100), libraryLikelyRate: rate(3, 100), ...overrides.rates },
@@ -818,8 +853,21 @@ describe("scripts", () => {
       expect(baseline.identity["generator.promptSetHash"]).toBe("prompts");
     });
 
+    test("baseline won't count a run twice or replace a baseline unless forced", () => {
+      const twice = baselineOf(["a", 80], ["b", 82, { generator: { runIdsHash: "ids-a" } }]);
+      expect(twice.status).toBe(1);
+      expect(twice.stderr).toMatch(/a run is listed twice/);
+
+      expect(baselineOf(["a", 80], ["b", 82]).status).toBe(0);
+      const again = runScript("baseline.mjs", ["base", "a", "b"]);
+      expect(again.status).toBe(1);
+      expect(again.stderr).toMatch(/already exists/);
+      expect(runScript("baseline.mjs", ["base", "a", "b", "--force"]).status).toBe(0);
+    });
+
     test("baseline refuses runs that aren't replicates of one setup", () => {
       const cases: Array<[Overrides, RegExp]> = [
+        [{ generator: { commits: ["abc", "def"] } }, /mixes code versions/],
         [{ generator: { promptSetHash: "other" } }, /generator.promptSetHash differs/],
         [{ generator: { resolvedModelSet: ["m2"] } }, /generator.resolvedModelSet differs/],
         [{ generator: { resolvedModelSet: ["m1", "m2"] } }, /mixes models/],
@@ -881,6 +929,9 @@ describe("scripts", () => {
         [["rescored"], [{ judge: { scoringVersion: SCORING_VERSION + 1 } }], /judge.scoringVersion differs/],
         [["failed"], [{ batches: { failed: ["s03"] } }], /failed has failed seeds/],
         [["m1", "m2"], [{}, { generator: { promptSetHash: "other" } }], /aren't one setup/],
+        [["c1", "c2"], [{}, { generator: { runIdsHash: "ids-c1" } }], /a run is listed twice/],
+        [["a"], [{}], /a is one of base's own runs/],
+        [["mixed"], [{ generator: { commits: ["abc", "def"] } }], /mixed mixes code versions/],
       ];
       for (const [runs, overrides, message] of cases) {
         runs.forEach((run, i) => writeRun(run, { "summary.json": summary(run, 80, overrides[i]) }));

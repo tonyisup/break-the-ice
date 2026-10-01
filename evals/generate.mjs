@@ -4,16 +4,19 @@
 // (npx convex dev --once) first: --allow-local runs with uncommitted convex/ changes, for trying
 // things out, and marks the run "+local".
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { parse } from "dotenv";
 import { mapLimit } from "./async.mjs";
-import { cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess } from "./runRecord.mjs";
+import { cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess, writeJson } from "./runRecord.mjs";
 
 // Two at a time keeps a run to a few minutes without bursting the provider's rate limit.
 const GENERATION_CONCURRENCY = 2;
+// The laptop's clock and the deployment's can differ; generation records are read with this much
+// slack on each side (the run label keeps other runs out).
+const CLOCK_SLACK_MS = 60_000;
 
 const [run, ...flags] = process.argv.slice(2);
 if (!run || !/^[a-z0-9-]+$/.test(run)) {
@@ -69,6 +72,11 @@ if (dirty && !flags.includes("--allow-local")) {
   process.exit(1);
 }
 const commit = `${git("rev-parse", "--short", "HEAD")}${dirty ? "+local" : ""}`;
+const earlierCommits = [...new Set((previous?.invocations ?? []).map((inv) => inv.commit))];
+if (todo.length && earlierCommits.some((earlier) => earlier !== commit)) {
+  console.error(`Run "${run}" was generated at ${earlierCommits.join(", ")} and the checkout is at ${commit}. Resuming would mix code versions; start a new run name.`);
+  process.exit(1);
+}
 
 const exec = promisify(execFile);
 async function convexRun(fn, args) {
@@ -80,28 +88,40 @@ async function convexRun(fn, args) {
 const invocations = previous?.invocations ?? [];
 let attempts = previous?.attempts ?? [];
 function save() {
-  const record = { run, deployment: "dev", createdAt: previous?.createdAt ?? new Date().toISOString(), batchSize, invocations, attempts, batches: orderedBatches(seeds, batches) };
-  writeFileSync(outPath, `${JSON.stringify(record, null, 2)}\n`);
+  writeJson(outPath, { run, deployment: "dev", createdAt: previous?.createdAt ?? new Date().toISOString(), batchSize, invocations, attempts, batches: orderedBatches(seeds, batches) });
 }
 
-/** Fetches the generation runs made since an invocation started, and marks whether that worked. */
+/**
+ * Reads the generation runs an invocation made, and marks it complete only when every one has
+ * finished and every batch it generated is among them. Otherwise a later rerun reads it again.
+ */
 async function collectAttempts(invocation) {
   try {
-    attempts = mergeAttempts(attempts, await convexRun("internal/evalData:evalRunAttempts", { runLabel: run, since: invocation.startedAtMs }));
-    invocation.attemptsComplete = true;
+    const fresh = await convexRun("internal/evalData:evalRunAttempts", {
+      runLabel: run,
+      since: invocation.startedAtMs - CLOCK_SLACK_MS,
+      ...(invocation.endedAtMs ? { until: invocation.endedAtMs + CLOCK_SLACK_MS } : {}),
+    });
+    attempts = mergeAttempts(attempts, fresh);
+    const settled = fresh.every((attempt) => attempt.status === "succeeded" || attempt.status === "failed");
+    const ok = (invocation.generated ?? []).map((id) => batches.get(id));
+    const found = new Set(fresh.map((attempt) => attempt.runId));
+    invocation.attemptsComplete = settled && ok.every((batch) => found.has(batch.result.runId));
+    if (!invocation.attemptsComplete) console.log("Some generation runs hadn't finished when read. Rerun in a minute to refresh them.");
   } catch (error) {
     invocation.attemptsComplete = false;
     console.log(`Couldn't read this run's generation records (${cliError(error)}). Rerun to retry.`);
   }
 }
 
-// An earlier invocation whose records couldn't be read gets another try, from its start onward
-// (mergeAttempts keeps each run once).
-for (const invocation of invocations.filter((inv) => inv.attemptsComplete === false)) await collectAttempts(invocation);
+// An earlier invocation whose records were unreadable or unfinished gets read again, over its window.
+for (const invocation of invocations.filter((inv) => inv.attemptsComplete !== true)) await collectAttempts(invocation);
 
 if (todo.length) {
-  const invocation = { startedAtMs: Date.now(), commit, seeds: todo.map((seed) => seed.id), library: null, attemptsComplete: false };
+  const invocation = { startedAtMs: Date.now(), commit, seeds: todo.map((seed) => seed.id), generated: [], library: null, attemptsComplete: false };
   invocations.push(invocation);
+  // Saved before any model call, so an interrupted run still knows when its calls started.
+  save();
   invocation.library = await convexRun("internal/evalData:evalLibraryStats", {});
   console.log(`${todo.length} of ${seeds.length} seeds to generate for run "${run}" at ${commit}.`);
   await mapLimit(todo, GENERATION_CONCURRENCY, async (seed) => {
@@ -116,6 +136,7 @@ if (todo.length) {
     try {
       const result = await convexRun("internal/evals:generateEvalBatch", args);
       recordSuccess(batches, seed, result, commit);
+      invocation.generated.push(seed.id);
       console.log(`${seed.id} ${seed.style}/${seed.tone}${seed.topic ? `/${seed.topic}` : ""}: ${result.candidates.length} questions`);
     } catch (error) {
       const message = cliError(error);
@@ -124,9 +145,10 @@ if (todo.length) {
     }
     save();
   });
+  invocation.endedAtMs = Date.now();
   await collectAttempts(invocation);
 }
 save();
 const failed = pendingSeeds(seeds, batches).length;
-const incomplete = invocations.some((inv) => inv.attemptsComplete === false);
+const incomplete = invocations.some((inv) => inv.attemptsComplete !== true);
 console.log(failed ? `${failed} seeds failed; rerun to retry them.` : incomplete ? "Generation records incomplete; rerun to fetch them." : "All seeds generated.");

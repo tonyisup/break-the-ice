@@ -2,7 +2,7 @@
 // it. Usage: node evals/score.mjs <run-name> [--force]   (needs TYPESAFE_API_KEY in the environment)
 // --force overwrites a summary scored with a different Jev version, question wording, cutoffs or
 // scoring version.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -26,6 +26,7 @@ import {
   gateVerdict,
 } from "./jev.mjs";
 import { mapLimit } from "./async.mjs";
+import { writeJson } from "./runRecord.mjs";
 import { SCORING_VERSION, failureReason, frameStats, hashOf, mean, median, rate, round, tally, wilson } from "./stats.mjs";
 
 // Jev requests in flight at once, however the steps below nest them.
@@ -33,9 +34,10 @@ const CONCURRENCY = 8;
 // The admin duplicate scan flags a pair above this cosine (detectDuplicateQuestionsStreaming).
 const DETECTOR_COSINE_CUTOFF = 0.95;
 // Failures the prompt or the model's output can cause: an answer that can't be read, has no
-// questions, or was cut off by the cap. Everything else (a provider error, an empty answer ending
-// in error) is infrastructure and is reported separately.
-const UNUSABLE_OUTPUT = /could not be read|had no questions|finish_reason=length|cut off/;
+// questions, was cut off by the cap, or came back empty because the model stopped or a content
+// filter fired. Everything else (a provider error, an empty answer ending in error) is
+// infrastructure and is reported separately.
+const UNUSABLE_OUTPUT = /could not be read|had no questions|cut off|finish_reason=(length|content_filter|stop)/;
 
 const [run, ...flags] = process.argv.slice(2);
 if (!run) {
@@ -63,6 +65,11 @@ if (existsSync(summaryPath) && !flags.includes("--force")) {
 // Every successful batch's model call must be in the run's generation records, or the cost,
 // model and failure counts would silently undercount.
 const okBatches = generated.batches.filter((batch) => batch.ok);
+const incomplete = (generated.invocations ?? []).filter((inv) => inv.attemptsComplete !== true);
+if (incomplete.length) {
+  console.error(`Generation records for ${incomplete.length} invocation(s) are incomplete. Rerun node evals/generate.mjs ${run} to read them.`);
+  process.exit(1);
+}
 const unsettled = (generated.attempts ?? []).filter((a) => a.status !== "succeeded" && a.status !== "failed");
 if (unsettled.length) {
   console.error(`${unsettled.length} generation run(s) hadn't finished when they were read. Rerun node evals/generate.mjs ${run} to refresh them.`);
@@ -122,6 +129,9 @@ await mapLimit(candidates, CONCURRENCY, async (candidate) => {
 // including questions the code checks rejected, so a prompt can't hide duplicates behind them.
 const saved = candidates.filter((candidate) => candidate.outcome === "saved");
 const compared = candidates.filter((candidate) => candidate.outcome !== "duplicate");
+// Pairs include library copies (a copy can still duplicate another question in the batch); an
+// exact copy of an earlier question in the same batch is already represented by that question.
+const paired = candidates.filter((candidate) => candidate.duplicateOf !== "batch");
 await mapLimit(compared, CONCURRENCY, async (candidate) => {
   candidate.library = await Promise.all(
     (candidate.neighbours ?? []).map(async (neighbour) => ({
@@ -130,9 +140,9 @@ await mapLimit(compared, CONCURRENCY, async (candidate) => {
     })),
   );
 });
-const batchPairs = okBatches.flatMap((batch) => pairsWithin(compared.filter((c) => c.seed.id === batch.seed.id)));
-const crossPairs = [...new Set(compared.map((c) => c.seed.style))].flatMap((style) =>
-  pairsWithin(compared.filter((c) => c.seed.style === style)).filter((pair) => pair.a.seed.id !== pair.b.seed.id),
+const batchPairs = okBatches.flatMap((batch) => pairsWithin(paired.filter((c) => c.seed.id === batch.seed.id)));
+const crossPairs = [...new Set(paired.map((c) => c.seed.style))].flatMap((style) =>
+  pairsWithin(paired.filter((c) => c.seed.style === style)).filter((pair) => pair.a.seed.id !== pair.b.seed.id),
 );
 await mapLimit([...batchPairs, ...crossPairs], CONCURRENCY, async (pair) => {
   Object.assign(pair, await comparePair(pair.a.text, pair.b.text));
@@ -213,6 +223,8 @@ const summary = {
     settingsHash: hashOf(okBatches.map((batch) => [seedKey(batch), batch.result.settings ?? null]).sort()),
     neighbours: settings.length === 1 ? (settings[0]?.neighbours ?? null) : null,
     commits: [...new Set(okBatches.map((batch) => batch.commit).filter(Boolean))],
+    // Identifies this run's observations, so the same run can't be counted twice under two names.
+    runIdsHash: hashOf(okBatches.map((batch) => batch.result.runId).sort()),
     // Fingerprints that tell replicates apart from runs of a changed prompt, seed set or taxonomy.
     promptSetHash: hashOf(okBatches.map((batch) => [seedKey(batch), batch.result.promptHash]).sort()),
     definitionsHash: hashOf(okBatches.map((batch) => [seedKey(batch), batch.result.definitions]).sort()),
@@ -309,6 +321,6 @@ const scores = {
   batchPairs: batchPairs.map(strip),
   crossPairs: crossPairs.map(strip),
 };
-writeFileSync(join(runDir, "scores.json"), `${JSON.stringify(scores, null, 2)}\n`);
-writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
+writeJson(join(runDir, "scores.json"), scores);
+writeJson(summaryPath, summary);
 console.log(JSON.stringify(summary, null, 2));

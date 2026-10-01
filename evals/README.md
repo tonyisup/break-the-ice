@@ -69,3 +69,8 @@ and about $0.05 of Jev.
   changes; summaries record its size. Dev's taxonomy versions can also differ from production's.
 - Sentence frames are informational: the pooled share mostly reflects styles that require their
   opener, and the cross-style share swings a lot between replicates.
+- `baseline.mjs` and `compare.mjs` refuse a run listed twice, a compare run that is one of the
+  baseline's own, and a run generated at more than one commit (resuming at a new commit is
+  refused too: use a new run name).
+- The repo is public. `generated.json` keeps provider and CLI error text from failed calls word
+  for word; check it before committing a run that had failures.

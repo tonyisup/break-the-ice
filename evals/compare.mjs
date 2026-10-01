@@ -3,9 +3,10 @@
 // Several runs of the same setup are pooled first. Each primary rate gets Fisher's exact test,
 // Bonferroni-corrected across the primaries; other rates are exploratory. Writes
 // evals/runs/<first run>/comparison-<baseline-name>.json.
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeJson } from "./runRecord.mjs";
 import {
   COMPARABLE_KEYS,
   FAMILY_ALPHA,
@@ -30,7 +31,12 @@ const baseline = JSON.parse(readFileSync(join(here, "runs", `${baselineName}.jso
 const summaries = runs.map((run) => JSON.parse(readFileSync(join(here, "runs", run, "summary.json"), "utf8")));
 const first = summaries[0];
 
+const runIds = summaries.map((summary) => summary.generator.runIdsHash);
 const problems = [
+  // Counting the same observations twice, or the baseline's own, would fake a difference.
+  ...(new Set(runIds).size < runIds.length ? ["a run is listed twice"] : []),
+  ...summaries.filter((summary) => (baseline.runIdsHashes ?? []).includes(summary.generator.runIdsHash)).map((summary) => `${summary.run} is one of ${baselineName}'s own runs`),
+  ...summaries.filter((summary) => summary.generator.commits.length !== 1).map((summary) => `${summary.run} mixes code versions`),
   ...identityMismatches(summaries, REPLICATE_KEYS).map((key) => `the runs differ in ${key}, so they aren't one setup`),
   ...COMPARABLE_KEYS.filter((key) => JSON.stringify(baseline.identity[key]) !== JSON.stringify(pick(first, key))).map(
     (key) => `${key} differs from ${baselineName}'s (rescore or regenerate the baseline under the same judge, scoring and seeds)`,
@@ -58,6 +64,9 @@ const warnings = [
     .filter((summary) => JSON.stringify(summary.library.sizes) !== JSON.stringify([baseline.library]))
     .map((summary) => `${summary.run} searched a different library, so library duplicate rates aren't like for like.`),
   ...summaries.filter((summary) => summary.library.searchErrors).map((summary) => `${summary.run} had library search errors.`),
+  ...summaries
+    .filter((summary) => summary.batches.fingerprintCollisions)
+    .map((summary) => `${summary.run} has questions matching more than one library row; the real save step would fail those batches.`),
 ];
 
 const pooled = poolRates(summaries.map((summary) => summary.rates));
@@ -108,7 +117,7 @@ const comparison = {
   exploratory,
   qualityShift,
 };
-writeFileSync(join(here, "runs", runs[0], `comparison-${baselineName}.json`), `${JSON.stringify(comparison, null, 2)}\n`);
+writeJson(join(here, "runs", runs[0], `comparison-${baselineName}.json`), comparison);
 console.log(`Changed: ${changed.join(", ") || "nothing in the setup"}`);
 for (const warning of warnings) console.log(`Warning: ${warning}`);
 for (const [name, test] of Object.entries(primary)) {

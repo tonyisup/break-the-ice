@@ -1,3 +1,11 @@
+import { renameSync, writeFileSync } from "node:fs";
+
+/** Writes JSON through a temp file and a rename, so an interrupted write never leaves half a file. */
+export function writeJson(path, value) {
+  writeFileSync(`${path}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
+  renameSync(`${path}.tmp`, path);
+}
+
 // How generate.mjs keeps a run's record across reruns. Pure, so the resume rule can be tested.
 
 /** Seeds still to generate: those without a successful batch. */
