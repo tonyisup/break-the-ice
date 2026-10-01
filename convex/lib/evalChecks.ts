@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { fingerprintText, normalizeQuestion, validateGeneratedQuestion } from "./promptArchitecture";
+import { CURLY_QUOTE, fingerprintText, normalizeQuestion, validateGeneratedQuestion } from "./promptArchitecture";
 
 /**
  * Evals spend AI budget and write generation runs, so they only run where a deployment opts in
@@ -50,7 +50,7 @@ export function checkEvalCandidates(texts: string[], libraryFingerprints: Readon
     }
     seen.add(fingerprint);
     const outcome: EvalPipelineOutcome = duplicateOf ? "duplicate" : codeRejections.length > 0 ? "rejected" : "saved";
-    return { text, hadCurlyQuotes: /[\u2018\u2019\u201C\u201D]/.test(raw), fingerprint, outcome, duplicateOf, codeRejections };
+    return { text, hadCurlyQuotes: CURLY_QUOTE.test(raw), fingerprint, outcome, duplicateOf, codeRejections };
   });
 }
 

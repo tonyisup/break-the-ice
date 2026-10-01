@@ -5,7 +5,7 @@ import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { checkEvalCandidates } from "./lib/evalChecks";
-import { FINGERPRINT_SCAN_PAGE_SIZE, FINGERPRINT_WRITE_BATCH_SIZE } from "./internal/migrations";
+import { FINGERPRINT_RECOMPUTE_PAGE_SIZE } from "./internal/migrations";
 import { fingerprintText } from "./lib/promptArchitecture";
 
 type TestConvex = ReturnType<typeof convexTest>;
@@ -184,10 +184,16 @@ describe("recomputing stored fingerprints", () => {
       roadTripCurly: await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" }),
       smellCurly: await insertQuestion(t, { text: smellCurly, fingerprint: "q_old_smell" }),
       bus: await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus) }),
-      // Personal questions get no fingerprint now; an older backfill gave some one from custom text.
-      personal: await insertQuestion(t, { customText: smellCurly, status: "private" }),
-      backfilledPersonal: await insertQuestion(t, { customText: roadTripCurly, status: "private", fingerprint: "q_old_personal" }),
+      // Personal questions get no fingerprint when created; an older backfill gave some one.
+      personal: await insertQuestion(t, { authorId: "author-1", customText: smellCurly, status: "private" }),
+      backfilledPersonal: await insertQuestion(t, {
+        authorId: "author-1",
+        customText: roadTripCurly,
+        status: "private",
+        fingerprint: "q_old_personal",
+      }),
       withoutText: await insertQuestion(t, { fingerprint: "q_old_no_text" }),
+      withoutFingerprint: await insertQuestion(t, { text: "Which song would you queue first on a long drive?" }),
     };
   }
 
@@ -199,13 +205,11 @@ describe("recomputing stored fingerprints", () => {
     const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: true });
 
     expect(summary).toEqual({
-      scanned: 7,
+      scanned: 8,
+      userWritten: 2,
       withoutFingerprint: 1,
-      userWritten: 1,
       withoutText: 1,
       changed: 2,
-      updated: 2,
-      skippedAtWrite: 0,
       collisions: [
         {
           fingerprint: fingerprintText(roadTrip),
@@ -220,19 +224,20 @@ describe("recomputing stored fingerprints", () => {
     expect(after).toEqual(before);
   });
 
-  test("a real run fixes every changed library question and leaves user-written ones alone", async () => {
+  test("a real run fixes every changed library question and leaves the rest alone", async () => {
     const { t, insertGenerated } = await setup();
     const ids = await setupLibrary(t);
 
     const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
 
-    expect(summary).toMatchObject({ changed: 2, updated: 2, skippedAtWrite: 0 });
+    expect(summary).toMatchObject({ changed: 2 });
     expect(await fingerprintOf(t, ids.smellCurly)).toBe(fingerprintText(smell));
     // Shares the straight twin's fingerprint: the two are duplicates, and generation takes either.
     expect(await fingerprintOf(t, ids.roadTripCurly)).toBe(fingerprintText(roadTrip));
     expect(await fingerprintOf(t, ids.personal)).toBeNull();
     expect(await fingerprintOf(t, ids.backfilledPersonal)).toBe("q_old_personal");
     expect(await fingerprintOf(t, ids.withoutText)).toBe("q_old_no_text");
+    expect(await fingerprintOf(t, ids.withoutFingerprint)).toBeNull();
 
     const generated = await insertGenerated(smell, roadTrip);
     expect(generated.duplicates).toEqual([
@@ -242,14 +247,40 @@ describe("recomputing stored fingerprints", () => {
 
     // Nothing left to change; the duplicates stay listed until a copy is retired.
     const again = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
-    expect(again).toMatchObject({ changed: 0, updated: 0 });
+    expect(again).toMatchObject({ changed: 0 });
     expect(again.collisions).toHaveLength(1);
+
+    await t.run(async (ctx) => ctx.db.patch(ids.roadTripCurly, { status: "pruned", duplicateOf: ids.roadTrip }));
+    const retired = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: true });
+    expect(retired).toMatchObject({ changed: 0, collisions: [] });
+  });
+
+  test("a straight copy generated before the run is listed with the curly question it duplicates", async () => {
+    const { t, insertGenerated } = await setup();
+    const curly = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
+    // Until the run, the curly question's old fingerprint doesn't catch a straight copy.
+    const generated = await insertGenerated(roadTrip);
+    expect(generated.insertedCount).toBe(1);
+
+    const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
+
+    expect(summary).toMatchObject({ changed: 1 });
+    expect(summary.collisions).toEqual([
+      {
+        fingerprint: fingerprintText(roadTrip),
+        questions: [
+          { questionId: curly, status: "public" },
+          { questionId: generated.insertedQuestionIds[0], status: "public" },
+        ],
+      },
+    ]);
+    expect((await insertGenerated(roadTrip)).duplicates).toEqual([{ text: roadTrip, reason: "duplicate of existing question" }]);
   });
 
   test("two changed questions on different pages that end up alike both get the new fingerprint", async () => {
     const { t } = await setup();
     const first = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_right_quote" });
-    for (let i = 0; i < FINGERPRINT_SCAN_PAGE_SIZE; i++) {
+    for (let i = 0; i < FINGERPRINT_RECOMPUTE_PAGE_SIZE; i++) {
       const text = `Filler question number ${i} for paging?`;
       await insertQuestion(t, { text, fingerprint: fingerprintText(text) });
     }
@@ -257,7 +288,7 @@ describe("recomputing stored fingerprints", () => {
     const second = await insertQuestion(t, { text: roadTripCurly.replace("\u2019s", "\u2018s"), fingerprint: "q_old_left_quote" });
 
     const dryRun = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: true });
-    expect(dryRun).toMatchObject({ scanned: FINGERPRINT_SCAN_PAGE_SIZE + 2, changed: 2, updated: 2 });
+    expect(dryRun).toMatchObject({ scanned: FINGERPRINT_RECOMPUTE_PAGE_SIZE + 2, changed: 2 });
     expect(dryRun.collisions).toEqual([
       {
         fingerprint: fingerprintText(roadTrip),
@@ -267,97 +298,31 @@ describe("recomputing stored fingerprints", () => {
         ],
       },
     ]);
+    expect(await fingerprintOf(t, second)).toBe("q_old_left_quote");
 
     await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
     expect(await fingerprintOf(t, first)).toBe(fingerprintText(roadTrip));
     expect(await fingerprintOf(t, second)).toBe(fingerprintText(roadTrip));
   });
 
-  test("a write skips a question whose fingerprint changed after the scan", async () => {
-    const { t } = await setup();
-    // Text unchanged and nobody holds the new fingerprint: only the stored fingerprint differs.
-    const edited = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_set_after_scan" });
-
-    const result = await t.mutation(internal.internal.migrations.writeQuestionFingerprints, {
-      updates: [{ questionId: edited, from: "q_old_road_trip", to: fingerprintText(roadTrip) }],
-    });
-
-    expect(result).toEqual({ updated: 0, skippedAtWrite: 1 });
-    expect(await fingerprintOf(t, edited)).toBe("q_set_after_scan");
-  });
-
-  test("a write gives a question a fingerprint its duplicate already holds", async () => {
-    const { t } = await setup();
-    const straight = await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip) });
-    const curly = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
-
-    const result = await t.mutation(internal.internal.migrations.writeQuestionFingerprints, {
-      updates: [{ questionId: curly, from: "q_old_road_trip", to: fingerprintText(roadTrip) }],
-    });
-
-    expect(result).toEqual({ updated: 1, skippedAtWrite: 0 });
-    expect(await fingerprintOf(t, curly)).toBe(fingerprintText(roadTrip));
-    expect(await fingerprintOf(t, straight)).toBe(fingerprintText(roadTrip));
-  });
-
-  test("a straight copy generated mid-run doesn't stop the write, and the next run lists the pair", async () => {
-    const { t, insertGenerated } = await setup();
-    const curly = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
-    // The run scans before generation saves anything.
-    const scan = await t.query(internal.internal.migrations.scanQuestionFingerprintsPage, { cursor: null });
-    expect(scan.rows).toEqual([{ questionId: curly, status: "public", stored: "q_old_road_trip", recomputed: fingerprintText(roadTrip) }]);
-
-    // On its old fingerprint, the curly question doesn't catch the straight copy.
-    const generated = await insertGenerated(roadTrip);
-    expect(generated.insertedCount).toBe(1);
-
-    const written = await t.mutation(internal.internal.migrations.writeQuestionFingerprints, {
-      updates: [{ questionId: curly, from: "q_old_road_trip", to: fingerprintText(roadTrip) }],
-    });
-    expect(written).toEqual({ updated: 1, skippedAtWrite: 0 });
-    expect((await insertGenerated(roadTrip)).duplicates).toEqual([{ text: roadTrip, reason: "duplicate of existing question" }]);
-
-    const rerun = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: true });
-    expect(rerun).toMatchObject({ changed: 0, updated: 0 });
-    expect(rerun.collisions).toEqual([
-      {
-        fingerprint: fingerprintText(roadTrip),
-        questions: [
-          { questionId: curly, status: "public" },
-          { questionId: generated.insertedQuestionIds[0], status: "public" },
-        ],
-      },
-    ]);
-  });
-
-  test("a write skips a question deleted after the scan, or whose text no longer gives the new fingerprint", async () => {
-    const { t } = await setup();
-    const deleted = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
-    const rewritten = await insertQuestion(t, { text: smellCurly, fingerprint: "q_old_smell" });
-    const emptied = await insertQuestion(t, { text: bus, fingerprint: "q_old_bus" });
-    // What changed between the scan and the write.
-    await t.run(async (ctx) => {
-      await ctx.db.delete(deleted);
-      await ctx.db.patch(rewritten, { text: "What\u2019s a sound that takes you straight back to being a kid?" });
-      await ctx.db.patch(emptied, { text: undefined });
-    });
-
-    const result = await t.mutation(internal.internal.migrations.writeQuestionFingerprints, {
-      updates: [
-        { questionId: deleted, from: "q_old_road_trip", to: fingerprintText(roadTrip) },
-        { questionId: rewritten, from: "q_old_smell", to: fingerprintText(smell) },
-        { questionId: emptied, from: "q_old_bus", to: fingerprintText(bus) },
-      ],
-    });
-
-    expect(result).toEqual({ updated: 0, skippedAtWrite: 3 });
-    expect(await fingerprintOf(t, rewritten)).toBe("q_old_smell");
-    expect(await fingerprintOf(t, emptied)).toBe("q_old_bus");
-  });
-
-  test("a fingerprinted user-written question is left alone and not listed", async () => {
+  test("a personal question kept private stays alone, and one approved into the library is recomputed", async () => {
     const { t } = await setup();
     await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip) });
+    // Reviewing a submission copies its custom text into text (the admin page sends q.text || q.customText).
+    const keptPrivate = await insertQuestion(t, {
+      authorId: "author-1",
+      customText: roadTripCurly,
+      text: roadTripCurly,
+      status: "private",
+      fingerprint: "q_old_kept_private",
+    });
+    const approved = await insertQuestion(t, {
+      authorId: "author-2",
+      customText: smellCurly,
+      text: smellCurly,
+      status: "public",
+      fingerprint: "q_old_approved",
+    });
     const teamPrompt = await insertQuestion(t, {
       customText: roadTripCurly,
       kind: "team_prompt",
@@ -367,33 +332,34 @@ describe("recomputing stored fingerprints", () => {
 
     const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
 
-    expect(summary).toMatchObject({ scanned: 2, userWritten: 1, changed: 0, collisions: [] });
+    expect(summary).toMatchObject({ scanned: 4, userWritten: 2, changed: 1, collisions: [] });
+    expect(await fingerprintOf(t, keptPrivate)).toBe("q_old_kept_private");
+    expect(await fingerprintOf(t, approved)).toBe(fingerprintText(smell));
     expect(await fingerprintOf(t, teamPrompt)).toBe(fingerprintText(roadTrip));
   });
 
-  test("collisions include unchanged duplicates and questions without text, in any status", async () => {
+  test("collisions include unchanged duplicates and questions without text, but not retired copies", async () => {
     const { t } = await setup();
     const busPublic = await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus) });
-    const busPruned = await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "pruned" });
+    const busPending = await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "pending" });
+    await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "pruned" });
     const noText = await insertQuestion(t, { fingerprint: fingerprintText(roadTrip), status: "pending" });
     const curly = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
 
     const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
 
     expect(summary).toEqual({
-      scanned: 4,
-      withoutFingerprint: 0,
+      scanned: 5,
       userWritten: 0,
+      withoutFingerprint: 0,
       withoutText: 1,
       changed: 1,
-      updated: 1,
-      skippedAtWrite: 0,
       collisions: [
         {
           fingerprint: fingerprintText(bus),
           questions: [
             { questionId: busPublic, status: "public" },
-            { questionId: busPruned, status: "pruned" },
+            { questionId: busPending, status: "pending" },
           ],
         },
         {
@@ -408,9 +374,9 @@ describe("recomputing stored fingerprints", () => {
     expect(await fingerprintOf(t, curly)).toBe(fingerprintText(roadTrip));
   });
 
-  test("a run with more changes than one write batch fixes them all", async () => {
+  test("a run with changes on more than one page fixes them all", async () => {
     const { t } = await setup();
-    const count = FINGERPRINT_WRITE_BATCH_SIZE + 1;
+    const count = FINGERPRINT_RECOMPUTE_PAGE_SIZE + 1;
     const ids: Array<Id<"questions">> = [];
     for (let i = 0; i < count; i++) {
       ids.push(await insertQuestion(t, { text: `What\u2019s question number ${i} on the list?`, fingerprint: `q_old_${i}` }));
@@ -418,7 +384,7 @@ describe("recomputing stored fingerprints", () => {
 
     const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
 
-    expect(summary).toMatchObject({ scanned: count, changed: count, updated: count, skippedAtWrite: 0 });
+    expect(summary).toMatchObject({ scanned: count, changed: count });
     expect(await fingerprintOf(t, ids[0])).toBe(fingerprintText("What's question number 0 on the list?"));
     expect(await fingerprintOf(t, ids[count - 1])).toBe(fingerprintText(`What's question number ${count - 1} on the list?`));
   });

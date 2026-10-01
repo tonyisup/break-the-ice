@@ -1,7 +1,8 @@
 import { v, type Infer } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
+import { isQuestionPublic } from "../lib/questionAccess";
 import { settleDuplicateGroup } from "../lib/questionReferences";
 import { defaultIdealPromptLength, defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "../lib/promptArchitecture";
@@ -591,91 +592,65 @@ export const cleanDanglingQuestionReferences = internalAction({
 	},
 });
 
-export const FINGERPRINT_SCAN_PAGE_SIZE = 100;
-export const FINGERPRINT_WRITE_BATCH_SIZE = 100;
-const fingerprintScanRow = v.object({
-	questionId: v.id("questions"),
-	status: v.optional(v.string()),
-	stored: v.string(),
-	// Missing when the question has no text to fingerprint.
-	recomputed: v.optional(v.string()),
-});
-const fingerprintScanPageResult = v.object({
+export const FINGERPRINT_RECOMPUTE_PAGE_SIZE = 100;
+const fingerprintRecomputeCounts = {
 	scanned: v.number(),
 	userWritten: v.number(),
-	rows: v.array(fingerprintScanRow),
+	withoutFingerprint: v.number(),
+	withoutText: v.number(),
+	changed: v.number(),
+};
+const fingerprintRecomputePageResult = v.object({
+	...fingerprintRecomputeCounts,
+	// Each live library question's fingerprint once the page is done, for the collision report.
+	live: v.array(v.object({ questionId: v.id("questions"), status: v.optional(v.string()), fingerprint: v.string() })),
 	continueCursor: v.string(),
 	isDone: v.boolean(),
 });
-const fingerprintUpdate = v.object({ questionId: v.id("questions"), from: v.string(), to: v.string() });
-
-/** One page of the fingerprint recompute: each fingerprinted library question's stored and recomputed fingerprint. */
-export const scanQuestionFingerprintsPage = internalQuery({
-	args: { cursor: v.union(v.string(), v.null()) },
-	returns: fingerprintScanPageResult,
-	handler: async (ctx, args) => {
-		const page = await ctx.db.query("questions").paginate({ numItems: FINGERPRINT_SCAN_PAGE_SIZE, cursor: args.cursor });
-		const rows: Array<Infer<typeof fingerprintScanRow>> = [];
-		let userWritten = 0;
-		for (const question of page.page) {
-			// Only stored fingerprints are recomputed. Personal questions don't get one any more,
-			// but an older backfill fingerprinted some from their custom text.
-			if (question.fingerprint === undefined) continue;
-			// User-written rows (personal questions, team prompts) have only custom text. They aren't
-			// library questions, so they are neither rewritten nor listed.
-			if (question.text === undefined && question.customText !== undefined) {
-				userWritten += 1;
-				continue;
-			}
-			rows.push({
-				questionId: question._id,
-				status: question.status,
-				stored: question.fingerprint,
-				recomputed: question.text ? fingerprintText(question.text) : undefined,
-			});
-		}
-		return { scanned: page.page.length, userWritten, rows, continueCursor: page.continueCursor, isDone: page.isDone };
-	},
-});
 
 /**
- * Writes planned fingerprints. A row that changed after the scan (deleted, or its fingerprint or
- * text edited) is skipped. A fingerprint another question holds is written anyway: duplicate
- * questions may share one.
+ * A personal question or team prompt that isn't public. It isn't a library question, so the
+ * recompute neither rewrites nor lists it, even where an older backfill fingerprinted it.
  */
-export const writeQuestionFingerprints = internalMutation({
-	args: { updates: v.array(fingerprintUpdate) },
-	returns: v.object({ updated: v.number(), skippedAtWrite: v.number() }),
+function isPrivateUserQuestion(question: Doc<"questions">) {
+	const userWritten = question.authorId !== undefined || question.kind !== undefined || question.organizationId !== undefined;
+	return userWritten && !isQuestionPublic(question);
+}
+
+/**
+ * One page of the fingerprint recompute. With `dryRun` it writes nothing and reports what a real
+ * run would change.
+ */
+export const recomputeQuestionFingerprintsPage = internalMutation({
+	args: { dryRun: v.boolean(), cursor: v.union(v.string(), v.null()) },
+	returns: fingerprintRecomputePageResult,
 	handler: async (ctx, args) => {
-		let updated = 0;
-		let skippedAtWrite = 0;
-		for (const { questionId, from, to } of args.updates) {
-			const question = await ctx.db.get(questionId);
-			if (question?.fingerprint !== from || !question.text || fingerprintText(question.text) !== to) {
-				skippedAtWrite += 1;
+		const page = await ctx.db.query("questions").paginate({ numItems: FINGERPRINT_RECOMPUTE_PAGE_SIZE, cursor: args.cursor });
+		const counts = { scanned: page.page.length, userWritten: 0, withoutFingerprint: 0, withoutText: 0, changed: 0 };
+		const live: Infer<typeof fingerprintRecomputePageResult>["live"] = [];
+		for (const question of page.page) {
+			if (isPrivateUserQuestion(question)) {
+				counts.userWritten += 1;
 				continue;
 			}
-			await ctx.db.patch(questionId, { fingerprint: to });
-			updated += 1;
+			// Only stored fingerprints are recomputed; a library question without one stays without.
+			if (question.fingerprint === undefined) {
+				counts.withoutFingerprint += 1;
+				continue;
+			}
+			let fingerprint = question.fingerprint;
+			if (!question.text) {
+				counts.withoutText += 1;
+			} else if (fingerprintText(question.text) !== fingerprint) {
+				fingerprint = fingerprintText(question.text);
+				counts.changed += 1;
+				if (!args.dryRun) await ctx.db.patch(question._id, { fingerprint });
+			}
+			// A retired (pruned) copy keeps its fingerprint but no longer counts as a collision.
+			if (question.status !== "pruned") live.push({ questionId: question._id, status: question.status, fingerprint });
 		}
-		return { updated, skippedAtWrite };
+		return { ...counts, live, continueCursor: page.continueCursor, isDone: page.isDone };
 	},
-});
-
-const fingerprintRecomputeSummary = v.object({
-	scanned: v.number(),
-	withoutFingerprint: v.number(),
-	userWritten: v.number(),
-	withoutText: v.number(),
-	changed: v.number(),
-	updated: v.number(),
-	skippedAtWrite: v.number(),
-	collisions: v.array(
-		v.object({
-			fingerprint: v.string(),
-			questions: v.array(v.object({ questionId: v.id("questions"), status: v.optional(v.string()) })),
-		}),
-	),
 });
 
 /**
@@ -683,81 +658,55 @@ const fingerprintRecomputeSummary = v.object({
  * before curly quotes were normalized don't match a recomputation, so generation doesn't see a
  * candidate as a duplicate of a library question that differs only in quote style.
  *
- * Only library questions are recomputed: rows without a fingerprint and user-written rows
- * (only custom text) are counted and left alone. `collisions` lists every fingerprint that two
- * or more library questions share after the run, in any status (question IDs only): they are
- * duplicates by text. Generation treats any of them as the existing copy, so nothing breaks if
- * they stay; retire extra copies from the admin duplicates page if you want. `skippedAtWrite`
- * counts rows that changed between the scan and the write; another run picks them up (a dry run
- * counts them as updated). Run it with dryRun first:
+ * Only library questions are recomputed: personal questions and team prompts that aren't public,
+ * and library questions with no stored fingerprint, are counted and left alone. `collisions`
+ * lists every fingerprint that two or more live (not pruned) library questions share after the
+ * run, with their IDs and status and no text: they are duplicates by text. Generation treats any
+ * of them as the existing copy, so nothing breaks if they stay; to retire a copy, set it to
+ * pruned (the admin duplicates or questions page). Undoing an admin text edit made before a run
+ * restores the old fingerprint, so run it again after such an undo. Run it with dryRun first,
+ * and again after a real run (changed should then be 0):
  * `npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'`.
  */
 export const recomputeQuestionFingerprints = internalAction({
 	args: { dryRun: v.boolean() },
-	returns: fingerprintRecomputeSummary,
+	returns: v.object({
+		...fingerprintRecomputeCounts,
+		collisions: v.array(
+			v.object({
+				fingerprint: v.string(),
+				questions: v.array(v.object({ questionId: v.id("questions"), status: v.optional(v.string()) })),
+			}),
+		),
+	}),
 	handler: async (ctx, args) => {
 		const label = `recomputeQuestionFingerprints${args.dryRun ? " (dry run)" : ""}`;
-		const rows: Array<Infer<typeof fingerprintScanRow>> = [];
-		let scanned = 0;
-		let userWritten = 0;
+		const totals = { scanned: 0, userWritten: 0, withoutFingerprint: 0, withoutText: 0, changed: 0 };
+		const countKeys = Object.keys(fingerprintRecomputeCounts) as Array<keyof typeof fingerprintRecomputeCounts>;
+		const groups = new Map<string, Array<{ questionId: Id<"questions">; status?: string }>>();
 		let cursor: string | null = null;
 		for (;;) {
-			const page: Infer<typeof fingerprintScanPageResult> = await ctx.runQuery(
-				internal.internal.migrations.scanQuestionFingerprintsPage,
-				{ cursor },
+			const page: Infer<typeof fingerprintRecomputePageResult> = await ctx.runMutation(
+				internal.internal.migrations.recomputeQuestionFingerprintsPage,
+				{ dryRun: args.dryRun, cursor },
 			);
-			scanned += page.scanned;
-			userWritten += page.userWritten;
-			rows.push(...page.rows);
+			for (const key of countKeys) totals[key] += page[key];
+			for (const { fingerprint, questionId, status } of page.live) {
+				const group = groups.get(fingerprint);
+				if (group) group.push({ questionId, status });
+				else groups.set(fingerprint, [{ questionId, status }]);
+			}
+			// A record of each page that changed something, so a run that stops partway still shows what it did.
+			if (page.changed > 0) {
+				console.log(`${label} page: ${JSON.stringify({ scanned: page.scanned, changed: page.changed })}`);
+			}
 			if (page.isDone) break;
 			cursor = page.continueCursor;
 		}
-
-		const updates = rows.flatMap((row) =>
-			row.recomputed !== undefined && row.recomputed !== row.stored
-				? [{ questionId: row.questionId, from: row.stored, to: row.recomputed }]
-				: [],
-		);
-		// Grouped by the fingerprint each row ends up with. A row without text keeps its stored one.
-		const groups = new Map<string, Array<Infer<typeof fingerprintScanRow>>>();
-		for (const row of rows) {
-			const fingerprint = row.recomputed ?? row.stored;
-			const group = groups.get(fingerprint);
-			if (group) group.push(row);
-			else groups.set(fingerprint, [row]);
-		}
 		const collisions = [...groups]
-			.filter(([, members]) => members.length > 1)
-			.map(([fingerprint, members]) => ({
-				fingerprint,
-				questions: members.map(({ questionId, status }) => ({ questionId, status })),
-			}));
-
-		let updated = args.dryRun ? updates.length : 0;
-		let skippedAtWrite = 0;
-		if (!args.dryRun) {
-			for (let i = 0; i < updates.length; i += FINGERPRINT_WRITE_BATCH_SIZE) {
-				const batch = await ctx.runMutation(internal.internal.migrations.writeQuestionFingerprints, {
-					updates: updates.slice(i, i + FINGERPRINT_WRITE_BATCH_SIZE),
-				});
-				updated += batch.updated;
-				skippedAtWrite += batch.skippedAtWrite;
-				// A record of each batch, so a run that stops partway still shows what it did.
-				console.log(`${label} batch: ${JSON.stringify(batch)}`);
-			}
-		}
-
-		const summary = {
-			scanned,
-			withoutFingerprint: scanned - userWritten - rows.length,
-			userWritten,
-			withoutText: rows.filter((row) => row.recomputed === undefined).length,
-			changed: updates.length,
-			updated,
-			skippedAtWrite,
-			collisions,
-		};
-		console.log(`${label} total: ${JSON.stringify({ ...summary, collisions: collisions.length })}`);
-		return summary;
+			.filter(([, questions]) => questions.length > 1)
+			.map(([fingerprint, questions]) => ({ fingerprint, questions }));
+		console.log(`${label} total: ${JSON.stringify({ ...totals, collisions: collisions.length })}`);
+		return { ...totals, collisions };
 	},
 });

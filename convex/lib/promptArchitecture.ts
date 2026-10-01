@@ -69,6 +69,9 @@ function formatExamples(examples: PromptExample[] | undefined) {
 
 // Curly quotes are written as escapes. Typed literally, an editor or paste can turn them into
 // straight ones, and the replace then does nothing.
+/** The curly quotes normalizeQuestion straightens. */
+export const CURLY_QUOTE = /[\u2018\u2019\u201C\u201D]/;
+
 export function normalizeQuestion(text: string) {
   return text
     .replace(/[\u201C\u201D]/g, "\"")
