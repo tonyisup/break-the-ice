@@ -8,6 +8,7 @@ import { cosineSimilarity } from "../lib/embeddings";
 import schema from "../schema";
 import { editorialReason } from "../lib/questionReviewValidators";
 import { recordReview, refreshQuestionText, reviewReason, snapshot } from "../lib/questionReview";
+import { isPrivateUserQuestion } from "../lib/questionAccess";
 
 // Shared return validators for type safety
 export const pruningSettingsValidator = v.object({
@@ -349,6 +350,8 @@ export const approvePruning = mutation({
 		await ctx.db.patch(target.questionId, {
 			status: "pruned",
 			prunedAt: Date.now(),
+			// A pruned submission is no longer public, so it loses its fingerprint (see isPrivateUserQuestion).
+			fingerprint: isPrivateUserQuestion({ ...before, status: "pruned" }) ? undefined : before.fingerprint,
 		});
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: target.questionId,
@@ -538,13 +541,17 @@ export const undoReview = mutation({
     }
     for (const change of changes) {
       // Explicit keys restore absent optional fields as well as defined values.
-      await ctx.db.patch(change.questionId, {
+      const restored = {
         text: change.before.text, fingerprint: change.before.fingerprint,
         status: change.before.status, prunedAt: change.before.prunedAt,
         duplicateOf: change.before.duplicateOf, duplicateWasPublic: change.before.duplicateWasPublic,
         heldForReview: change.before.heldForReview,
         reviewRevision: (change.after.reviewRevision ?? 0) + 1,
-      });
+      };
+      // Undo never puts a fingerprint back on a private question (see isPrivateUserQuestion).
+      const question = (await ctx.db.get(change.questionId))!;
+      if (isPrivateUserQuestion({ ...question, ...restored })) restored.fingerprint = undefined;
+      await ctx.db.patch(change.questionId, restored);
       if (change.before.text !== change.after.text) await refreshQuestionText(ctx, change.questionId);
       await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: change.questionId });
     }
