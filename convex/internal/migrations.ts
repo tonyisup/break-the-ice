@@ -595,8 +595,10 @@ export const cleanDanglingQuestionReferences = internalAction({
 export const FINGERPRINT_RECOMPUTE_PAGE_SIZE = 100;
 // Convex keeps at most 256 log lines per run, so progress is logged every this many pages.
 const FINGERPRINT_PROGRESS_LOG_PAGES = 50;
-// Convex arrays hold at most 8,192 values, so the report lists this many groups and counts the rest.
+// Convex arrays hold at most 8,192 values, so the report lists this many groups, and this many
+// questions in each, and counts the rest.
 export const FINGERPRINT_MAX_REPORTED_COLLISIONS = 1000;
+export const FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS = 50;
 const fingerprintRecomputeCounts = {
 	scanned: v.number(),
 	privateUserQuestions: v.number(),
@@ -611,7 +613,7 @@ const fingerprintCollisionQuestion = v.object({
 });
 const fingerprintRecomputePageResult = v.object({
 	...fingerprintRecomputeCounts,
-	// Each live library question's fingerprint once the page is done, for the collision report.
+	// Each public library question's fingerprint once the page is done, for the collision report.
 	live: v.array(v.object({ ...fingerprintCollisionQuestion.fields, fingerprint: v.string() })),
 	continueCursor: v.string(),
 	isDone: v.boolean(),
@@ -658,8 +660,9 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
 				counts.changed += 1;
 				if (!args.dryRun) await ctx.db.patch(question._id, { fingerprint });
 			}
-			// A retired (pruned) copy keeps its fingerprint but no longer counts as a collision.
-			if (question.status !== "pruned") {
+			// Only public questions can collide. Retired (pruned), rejected and held copies keep their
+			// fingerprints, so generation still won't recreate them, but aren't listed.
+			if (isQuestionPublic(question) && question.status !== "pruned") {
 				live.push({ questionId: question._id, status: question.status, organizationId: question.organizationId, fingerprint });
 			}
 		}
@@ -674,11 +677,17 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  *
  * Only library questions are recomputed. Personal, team and organization questions that aren't
  * public (`privateUserQuestions`), library questions with no stored fingerprint, and ones with no
- * text to fingerprint are counted and left alone. `collisionGroups` counts the fingerprints that
- * two or more live (not pruned) library questions share after the run, and `collisions` lists the
- * first 1,000 with their IDs, status and organization and no text: they are duplicates by text. Generation treats any of them as the
- * existing copy, so nothing breaks if they stay. Retire copies on the admin duplicates page,
- * which keeps their links working; pruning one on the questions page breaks them.
+ * text to fingerprint are counted and left alone. Until it has run after the quote fix deploys,
+ * generation can save copies of curly-quoted library questions, so run it soon after deploying
+ * (on dev too, before evals).
+ *
+ * `collisionGroups` counts the fingerprints that two or more public, unpruned library questions
+ * share after the run. `collisions` lists the first FINGERPRINT_MAX_REPORTED_COLLISIONS of them,
+ * each with its `size` and up to FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS questions (IDs, status
+ * and organization, no text). A fingerprint is a short hash, so compare the wording before
+ * treating a group as duplicates. Generation treats any of them as the existing copy, so nothing
+ * breaks if they stay. Retire copies on the admin duplicates page, which keeps their links
+ * working; pruning one on the questions page breaks them.
  *
  * A run is safe to repeat. A fingerprint can go stale again later (an undo can restore an old
  * one, and a question that was private during a run can be published without a text change),
@@ -692,10 +701,7 @@ export const recomputeQuestionFingerprints = internalAction({
 		...fingerprintRecomputeCounts,
 		collisionGroups: v.number(),
 		collisions: v.array(
-			v.object({
-				fingerprint: v.string(),
-				questions: v.array(fingerprintCollisionQuestion),
-			}),
+			v.object({ fingerprint: v.string(), size: v.number(), questions: v.array(fingerprintCollisionQuestion) }),
 		),
 	}),
 	handler: async (ctx, args) => {
@@ -720,10 +726,16 @@ export const recomputeQuestionFingerprints = internalAction({
 			if (pages % FINGERPRINT_PROGRESS_LOG_PAGES === 0) console.log(`${label} progress: ${JSON.stringify(totals)}`);
 			cursor = page.continueCursor;
 		}
-		const collisions = [...groups]
-			.filter(([, questions]) => questions.length > 1)
-			.map(([fingerprint, questions]) => ({ fingerprint, questions }));
-		console.log(`${label} total: ${JSON.stringify({ ...totals, collisions: collisions.length })}`);
-		return { ...totals, collisionGroups: collisions.length, collisions: collisions.slice(0, FINGERPRINT_MAX_REPORTED_COLLISIONS) };
+		const collisions = [...groups].filter(([, questions]) => questions.length > 1);
+		console.log(`${label} total: ${JSON.stringify({ ...totals, collisionGroups: collisions.length })}`);
+		return {
+			...totals,
+			collisionGroups: collisions.length,
+			collisions: collisions.slice(0, FINGERPRINT_MAX_REPORTED_COLLISIONS).map(([fingerprint, questions]) => ({
+				fingerprint,
+				size: questions.length,
+				questions: questions.slice(0, FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS),
+			})),
+		};
 	},
 });

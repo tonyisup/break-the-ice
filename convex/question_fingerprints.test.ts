@@ -5,7 +5,11 @@ import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { checkEvalCandidates } from "./lib/evalChecks";
-import { FINGERPRINT_MAX_REPORTED_COLLISIONS, FINGERPRINT_RECOMPUTE_PAGE_SIZE } from "./internal/migrations";
+import {
+  FINGERPRINT_MAX_REPORTED_COLLISIONS,
+  FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS,
+  FINGERPRINT_RECOMPUTE_PAGE_SIZE,
+} from "./internal/migrations";
 import { fingerprintText } from "./lib/promptArchitecture";
 
 type TestConvex = ReturnType<typeof convexTest>;
@@ -215,6 +219,7 @@ describe("recomputing stored fingerprints", () => {
       collisions: [
         {
           fingerprint: fingerprintText(roadTrip),
+          size: 2,
           questions: [
             { questionId: ids.roadTrip, status: "public" },
             { questionId: ids.roadTripCurly, status: "public" },
@@ -270,6 +275,7 @@ describe("recomputing stored fingerprints", () => {
     expect(summary.collisions).toEqual([
       {
         fingerprint: fingerprintText(roadTrip),
+        size: 2,
         questions: [
           { questionId: curly, status: "public" },
           { questionId: generated.insertedQuestionIds[0], status: "public" },
@@ -294,6 +300,7 @@ describe("recomputing stored fingerprints", () => {
     expect(dryRun.collisions).toEqual([
       {
         fingerprint: fingerprintText(roadTrip),
+        size: 2,
         questions: [
           { questionId: first, status: "public" },
           { questionId: second, status: "public" },
@@ -345,18 +352,21 @@ describe("recomputing stored fingerprints", () => {
     expect(await fingerprintOf(t, orgQuestion)).toBe("q_old_org");
   });
 
-  test("collisions include unchanged duplicates and questions without text, but not retired copies", async () => {
+  test("collisions list public duplicates, unchanged ones and ones without text included, but not retired, rejected or held copies", async () => {
     const { t } = await setup();
     const busPublic = await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus) });
-    const busPending = await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "pending" });
+    const busApproved = await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "approved" });
     await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "pruned" });
-    const noText = await insertQuestion(t, { fingerprint: fingerprintText(roadTrip), status: "pending" });
+    // A rejected AI copy and one held for review keep blocking regeneration but aren't clean-up targets.
+    await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "private", isAIGenerated: true });
+    await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip), status: "pending", heldForReview: true, isAIGenerated: true });
+    const noText = await insertQuestion(t, { fingerprint: fingerprintText(roadTrip) });
     const curly = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
 
     const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
 
     expect(summary).toEqual({
-      scanned: 5,
+      scanned: 7,
       privateUserQuestions: 0,
       withoutFingerprint: 0,
       withoutText: 1,
@@ -365,15 +375,17 @@ describe("recomputing stored fingerprints", () => {
       collisions: [
         {
           fingerprint: fingerprintText(bus),
+          size: 2,
           questions: [
             { questionId: busPublic, status: "public" },
-            { questionId: busPending, status: "pending" },
+            { questionId: busApproved, status: "approved" },
           ],
         },
         {
           fingerprint: fingerprintText(roadTrip),
+          size: 2,
           questions: [
-            { questionId: noText, status: "pending" },
+            { questionId: noText, status: "public" },
             { questionId: curly, status: "public" },
           ],
         },
@@ -412,6 +424,7 @@ describe("recomputing stored fingerprints", () => {
     expect(summary.collisions).toEqual([
       {
         fingerprint: fingerprintText(roadTrip),
+        size: 2,
         questions: [
           { questionId: global, status: "public" },
           { questionId: orgCopy, status: "public", organizationId },
@@ -533,7 +546,7 @@ describe("recomputing stored fingerprints", () => {
 
     expect(summary).toMatchObject({ privateUserQuestions: 0, changed: 1 });
     expect(summary.collisions).toEqual([
-      { fingerprint: fingerprintText(roadTrip), questions: [{ questionId: straight }, { questionId: curly }] },
+      { fingerprint: fingerprintText(roadTrip), size: 2, questions: [{ questionId: straight }, { questionId: curly }] },
     ]);
   });
 
@@ -553,7 +566,7 @@ describe("recomputing stored fingerprints", () => {
           withoutFingerprint: 0,
           withoutText: 0,
           changed: 1,
-          collisions: 0,
+          collisionGroups: 0,
         })}`,
       ]);
     } finally {
@@ -586,7 +599,7 @@ describe("recomputing stored fingerprints", () => {
       const lines = log.mock.calls.map(([line]) => String(line)).filter((line) => line.startsWith("recomputeQuestionFingerprints"));
       expect(lines).toEqual([
         `recomputeQuestionFingerprints progress: ${JSON.stringify(counts(filler, 0))}`,
-        `recomputeQuestionFingerprints total: ${JSON.stringify({ ...counts(filler + 1, 1), collisions: 0 })}`,
+        `recomputeQuestionFingerprints total: ${JSON.stringify({ ...counts(filler + 1, 1), collisionGroups: 0 })}`,
       ]);
     } finally {
       log.mockRestore();
@@ -701,5 +714,21 @@ describe("recomputing stored fingerprints", () => {
     expect(summary.collisionGroups).toBe(groups);
     expect(summary.collisions).toHaveLength(FINGERPRINT_MAX_REPORTED_COLLISIONS);
     expect(summary.collisions[0].fingerprint).toBe(fingerprintText("Duplicate question number 0 on the list?"));
+  });
+
+  test("a group with more questions than it can list gives its size and lists the first ones", async () => {
+    const { t } = await setup();
+    const copies = FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS + 1;
+    await t.run(async (ctx) => {
+      for (let i = 0; i < copies; i++) {
+        await ctx.db.insert("questions", { text: bus, fingerprint: fingerprintText(bus), status: "public", ...counters });
+      }
+    });
+
+    const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: true });
+
+    expect(summary.collisionGroups).toBe(1);
+    expect(summary.collisions[0].size).toBe(copies);
+    expect(summary.collisions[0].questions).toHaveLength(FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS);
   });
 });
