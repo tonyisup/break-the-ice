@@ -178,7 +178,8 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_purpose", ["purpose"])
-    .index("by_style_tone_topic", ["styleSlug", "toneSlug", "topicSlug"]),
+    .index("by_style_tone_topic", ["styleSlug", "toneSlug", "topicSlug"])
+    .index("by_requestedByUserId", ["requestedByUserId"]),
   // Daily AI spend (Los Angeles days) for the spend cap. "user" is anything a user
   // can trigger; "system" is the daily email and admin tools.
   aiSpendDays: defineTable({

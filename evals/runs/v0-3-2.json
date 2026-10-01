@@ -1,0 +1,455 @@
+{
+  "name": "v0-3-2",
+  "runs": [
+    "v0-3-2-r1",
+    "v0-3-2-r2",
+    "v0-3-2-r3"
+  ],
+  "note": "Rates pool every run's counts; interval95 is a Wilson interval. compare.mjs tests later runs against these counts.",
+  "identity": {
+    "judge.questionSetHash": "3d3af9d6f07bfdab",
+    "judge.cutoffsHash": "7308cb89eb069148",
+    "judge.scoringVersion": 3,
+    "generator.seedSetHash": "173badd8adb52306",
+    "generator.batchSize": 5,
+    "generator.neighbours": 5,
+    "generator.promptSetHash": "ee11a03a8e955274",
+    "generator.definitionsHash": "2bca5a7ea7192430",
+    "generator.taxonomyHash": "3a2ff9f6ace6fe0b",
+    "generator.temperatures": [
+      0.9
+    ],
+    "generator.resolvedModelSet": [
+      "google/gemini-3.8-flash"
+    ],
+    "generator.settingsHash": "d0c023a07a20979d"
+  },
+  "library": {
+    "publicQuestions": 205,
+    "withEmbedding": 205
+  },
+  "runIdsHashes": [
+    "cd06fff2f5d4efb0",
+    "61d08631e58e80e7",
+    "2077e5b17731eb10"
+  ],
+  "generator": {
+    "commits": [
+      "b0a56b5"
+    ],
+    "resolvedModels": [
+      {
+        "google/gemini-3.8-flash": 20
+      },
+      {
+        "google/gemini-3.8-flash": 20
+      },
+      {
+        "google/gemini-3.8-flash": 20
+      }
+    ],
+    "costUsd": 0.3321
+  },
+  "primaryRates": [
+    "passRate",
+    "reviewRate",
+    "blockRate",
+    "libraryLikelyRate",
+    "batchLikelyRate",
+    "unusableOutputRate",
+    "yieldRate"
+  ],
+  "rates": {
+    "batchLikelyRate": {
+      "k": 0,
+      "n": 60,
+      "rate": 0,
+      "interval95": [
+        0,
+        0.06
+      ],
+      "perRun": [
+        0,
+        0,
+        0
+      ]
+    },
+    "blockRate": {
+      "k": 3,
+      "n": 300,
+      "rate": 0.01,
+      "interval95": [
+        0.003,
+        0.029
+      ],
+      "perRun": [
+        0.02,
+        0,
+        0.01
+      ]
+    },
+    "codeRejectRate": {
+      "k": 1,
+      "n": 300,
+      "rate": 0.003,
+      "interval95": [
+        0.001,
+        0.019
+      ],
+      "perRun": [
+        0,
+        0,
+        0.01
+      ]
+    },
+    "crossBatchLikelyRate": {
+      "k": 7,
+      "n": 525,
+      "rate": 0.013,
+      "interval95": [
+        0.006,
+        0.027
+      ],
+      "perRun": [
+        0.011,
+        0.023,
+        0.006
+      ]
+    },
+    "exactDuplicateRate": {
+      "k": 0,
+      "n": 300,
+      "rate": 0,
+      "interval95": [
+        0,
+        0.013
+      ],
+      "perRun": [
+        0,
+        0,
+        0
+      ]
+    },
+    "libraryLikelyRate": {
+      "k": 10,
+      "n": 300,
+      "rate": 0.033,
+      "interval95": [
+        0.018,
+        0.06
+      ],
+      "perRun": [
+        0.05,
+        0.02,
+        0.03
+      ]
+    },
+    "libraryReviewRate": {
+      "k": 10,
+      "n": 300,
+      "rate": 0.033,
+      "interval95": [
+        0.018,
+        0.06
+      ],
+      "perRun": [
+        0.04,
+        0.03,
+        0.03
+      ]
+    },
+    "passRate": {
+      "k": 235,
+      "n": 300,
+      "rate": 0.783,
+      "interval95": [
+        0.733,
+        0.826
+      ],
+      "perRun": [
+        0.75,
+        0.81,
+        0.79
+      ]
+    },
+    "passRateWithoutFit": {
+      "k": 258,
+      "n": 300,
+      "rate": 0.86,
+      "interval95": [
+        0.816,
+        0.895
+      ],
+      "perRun": [
+        0.82,
+        0.87,
+        0.89
+      ]
+    },
+    "providerErrorRate": {
+      "k": 0,
+      "n": 60,
+      "rate": 0,
+      "interval95": [
+        0,
+        0.06
+      ],
+      "perRun": [
+        0,
+        0,
+        0
+      ]
+    },
+    "reviewRate": {
+      "k": 62,
+      "n": 300,
+      "rate": 0.207,
+      "interval95": [
+        0.165,
+        0.256
+      ],
+      "perRun": [
+        0.23,
+        0.19,
+        0.2
+      ]
+    },
+    "reviewRateWithoutFit": {
+      "k": 39,
+      "n": 300,
+      "rate": 0.13,
+      "interval95": [
+        0.097,
+        0.173
+      ],
+      "perRun": [
+        0.16,
+        0.13,
+        0.1
+      ]
+    },
+    "s_humiliationFlagRate": {
+      "k": 16,
+      "n": 300,
+      "rate": 0.053,
+      "interval95": [
+        0.033,
+        0.085
+      ],
+      "perRun": [
+        0.05,
+        0.06,
+        0.05
+      ]
+    },
+    "s_politics_religionFlagRate": {
+      "k": 0,
+      "n": 300,
+      "rate": 0,
+      "interval95": [
+        0,
+        0.013
+      ],
+      "perRun": [
+        0,
+        0,
+        0
+      ]
+    },
+    "s_sexual_illegalFlagRate": {
+      "k": 4,
+      "n": 300,
+      "rate": 0.013,
+      "interval95": [
+        0.005,
+        0.034
+      ],
+      "perRun": [
+        0.02,
+        0.01,
+        0.01
+      ]
+    },
+    "s_targets_personFlagRate": {
+      "k": 1,
+      "n": 300,
+      "rate": 0.003,
+      "interval95": [
+        0.001,
+        0.019
+      ],
+      "perRun": [
+        0.01,
+        0,
+        0
+      ]
+    },
+    "s_traumaFlagRate": {
+      "k": 4,
+      "n": 300,
+      "rate": 0.013,
+      "interval95": [
+        0.005,
+        0.034
+      ],
+      "perRun": [
+        0.01,
+        0.02,
+        0.01
+      ]
+    },
+    "savedPassRate": {
+      "k": 235,
+      "n": 299,
+      "rate": 0.786,
+      "interval95": [
+        0.736,
+        0.829
+      ],
+      "perRun": [
+        0.75,
+        0.81,
+        0.798
+      ]
+    },
+    "savedRate": {
+      "k": 299,
+      "n": 300,
+      "rate": 0.997,
+      "interval95": [
+        0.981,
+        0.999
+      ],
+      "perRun": [
+        1,
+        1,
+        0.99
+      ]
+    },
+    "unusableOutputRate": {
+      "k": 0,
+      "n": 60,
+      "rate": 0,
+      "interval95": [
+        0,
+        0.06
+      ],
+      "perRun": [
+        0,
+        0,
+        0
+      ]
+    },
+    "withinBatchLikelyPairRate": {
+      "k": 0,
+      "n": 600,
+      "rate": 0,
+      "interval95": [
+        0,
+        0.006
+      ],
+      "perRun": [
+        0,
+        0,
+        0
+      ]
+    },
+    "yieldRate": {
+      "k": 300,
+      "n": 300,
+      "rate": 1,
+      "interval95": [
+        0.987,
+        1
+      ],
+      "perRun": [
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "qualityMeans": {
+    "readability": {
+      "perRun": [
+        2.5,
+        2.47,
+        2.48
+      ],
+      "mean": 2.483,
+      "sd": 0.015
+    },
+    "specificity": {
+      "perRun": [
+        2.39,
+        2.43,
+        2.42
+      ],
+      "mean": 2.413,
+      "sd": 0.021
+    },
+    "story_yield": {
+      "perRun": [
+        1.55,
+        1.59,
+        1.56
+      ],
+      "mean": 1.567,
+      "sd": 0.021
+    },
+    "fit_style": {
+      "perRun": [
+        1.7,
+        1.65,
+        1.67
+      ],
+      "mean": 1.673,
+      "sd": 0.025
+    },
+    "fit_tone": {
+      "perRun": [
+        1.78,
+        1.8,
+        1.77
+      ],
+      "mean": 1.783,
+      "sd": 0.015
+    },
+    "single_ask": {
+      "perRun": [
+        0.882,
+        0.889,
+        0.895
+      ],
+      "mean": 0.889,
+      "sd": 0.007
+    },
+    "answerable": {
+      "perRun": [
+        0.961,
+        0.953,
+        0.956
+      ],
+      "mean": 0.957,
+      "sd": 0.004
+    },
+    "light_answer_ok": {
+      "perRun": [
+        0.811,
+        0.815,
+        0.81
+      ],
+      "mean": 0.812,
+      "sd": 0.003
+    },
+    "fit_topic": {
+      "perRun": [
+        0.861,
+        0.865,
+        0.855
+      ],
+      "mean": 0.86,
+      "sd": 0.005
+    }
+  }
+}

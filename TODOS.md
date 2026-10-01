@@ -26,6 +26,121 @@
 **Priority:** P2
 **Depends on:** None
 
+### Decide how AI answers cut off by the length limit are charged
+
+**What:** Settle one rule for whether a person keeps their AI use when an answer is cut off by our output cap, for the feed, the daily email, previews and remix alike. The specifics are in the owner's private plan doc ("Security follow-ups (private)").
+
+**Why:** Today every cut-off gives the use back. That made sense when the cap was too small for the model, but since v0.3.2.0 the cap leaves room for the model's thinking.
+
+**Context:** `wasPaidInFull` and `retryUnusableOutput` in `convex/lib/generationRunner.ts`; the refunds happen in the callers (`convex/internal/ai.ts`, `convex/core/questions.ts`) through `wasAiCallBilled`. Deferred by the owner during the v0.3.2.0 review (decision 3aab4fc9).
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Size the per-call spend reservation from the output cap
+
+**What:** Reserve each AI call's budget from its `max_tokens` (times a worst-case price) instead of a flat `RESERVE_PER_CALL_USD` of $0.02.
+
+**Why:** The worst-case call is now 4,300 output tokens, about $0.017 on today's model. If the OpenRouter preset is pointed at a pricier model, which needs no deploy, calls could cost more than they reserve and overshoot the daily cap before settling.
+
+**Context:** `reserveAiSpend` in `convex/lib/aiSpendGuard.ts`, `convex/lib/aiSpend.ts`, `maxOutputTokens` in `convex/lib/generationRunner.ts`. Deferred during the v0.3.2.0 review (decision 9ce5b30c).
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** None
+
+### Size the AI provider timeout from the output cap
+
+**What:** Give each OpenRouter call a timeout based on its `max_tokens`, and set `maxRetries: 0` on `openRouterClient` so only `createChatCompletionWithRetry` retries, with a spend reservation per attempt.
+
+**Why:** The client times out at a flat 30 seconds and the SDK quietly retries twice. A 10-question batch takes about 20 seconds today, but a slower model could make someone wait about 90 seconds, and the abandoned attempts aren't recorded as spend.
+
+**Context:** `openRouterClient` in `convex/lib/generationRunner.ts`. Deferred during the v0.3.2.0 review (decision da9ce3c3).
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+## Generation
+
+### Label questions for Phase 0, then compare Claude and Jev against the labels
+
+**What:** The owner labels about 200 production questions (keep or reject, the four review reasons, safety concerns) in the Question Labels page. Then measure the owner's keep rate and reason mix, how often Claude's blind labels and the Jev gate agree with the owner, and refit the quality cutoffs in `evals/jev.mjs` on those labels.
+
+**Why:** Phase 0's gate needs the labels, and the Jev quality cutoffs are provisional until they're fit to the owner's judgment. Refitting changes `CUTOFFS_HASH`, so rescore the baseline (`node evals/score.mjs v0-3-2-r1 --force` and so on, then `evals/baseline.mjs`) afterwards.
+
+**Context:** Deferred from plan: Phase 0 spec (the plan doc's "Phase 0 spec" tab). The labeling page and Claude's blind labels are in the owner's private Question Labels artifact; labels are not stored in this repo.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** The owner's labels
+
+### Handle answers cut off by the length limit better
+
+**What:** Three changes:
+- Retry a cut-off once. The model's thinking varies from call to call, so a second try usually fits.
+- Show people the readable "couldn't use the answer" message instead of a bare server error.
+- Record on the run that it was cut off: `finish_reason`, `max_tokens` and the reasoning-token count.
+
+**Why:**
+- The daily email makes one generation attempt per reader, so a single overrun means no email that day.
+- Cut-offs currently read as "Unterminated string in JSON", so nobody can tell how close calls get to the cap.
+
+**Context:** `retryUnusableOutput`, `UnusableOutputError` and `parseCandidates` in `convex/lib/generationRunner.ts`; `settleAiCompletion` in `convex/lib/aiSpendGuard.ts` stores the usage. Deferred during the v0.3.2.0 review (decision ede332ff).
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** Decide how AI answers cut off by the length limit are charged
+
+### Harden generation input handling
+
+**What:** Close a gap in how generation requests are validated. The specifics are in the owner's private plan doc ("Security follow-ups (private)").
+
+**Why:** Found in the v0.3.2.0 review; older than that release.
+
+**Context:** `convex/lib/promptArchitecture.ts` and the generation callers in `convex/core/fillMatrix.ts` and `convex/admin/ai.ts`.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Measure a reasoning limit with the eval before setting one
+
+**What:** Run the Phase 0 eval seeds with and without OpenRouter's `reasoning` limit (for example low effort, or a token budget) and compare question quality, latency and cost.
+
+**Why:** v0.3.2.0 leaves room for the model's thinking but doesn't limit it. Every feed fill and remix spends about 500 to 1,600 thinking tokens first, which costs a few seconds and some money. Capping it blind could make questions worse.
+
+**Context:** The eval harness is on branch feat/phase0-eval-harness (`evals/`). The preset is `@preset/break-the-ice-berg-default` in `convex/lib/generationRunner.ts`.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** Phase 0 eval harness merged
+
+### Check remix output before showing it
+
+**What:** Reject a remix whose `finish_reason` isn't "stop", not just "length". Run the generation text checks on it too: length, one question mark, a single line.
+
+**Why:** A "content_filter" or "error" ending with partial text still comes back as a successful remix. Since v0.3.2.0 the cap no longer limits how long the visible text can be.
+
+**Context:** `runRemixQuestion` in `convex/lib/generationRunner.ts`; `validateGeneratedQuestion` in `convex/lib/promptArchitecture.ts`. The remix source can be a personal question of up to 1,000 characters, so a length limit needs care.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Expire stale matrix-fill locks
+
+**What:** Treat matrix-fill cell locks older than about 15 minutes as stale in `claimMatrixFillCell`. Stop `fillEmptyCells` at an elapsed-time budget of about 8 minutes and return partial counts.
+
+**Why:** A fill runs up to 50 generations in one action. If Convex kills it at the 10-minute limit, the `finally` that releases the lock never runs, and that cell stays locked for the organization forever.
+
+**Context:** `convex/core/fillMatrix.ts`, `convex/internal/matrixFillLocks.ts`. No team uses matrix fill yet. Found in the v0.3.2.0 adversarial review.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## Access control
 
 ### Check gym membership across duplicate user records in canReadQuestion

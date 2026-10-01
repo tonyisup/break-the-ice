@@ -2,6 +2,18 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.0.0] - 2026-10-01
+
+### Added
+- You can now measure what the question generator produces and test a prompt or model change against a baseline. `evals/` runs 20 fixed seeds through today's prompt builder and model on the dev deployment, without saving anything, and scores every question with Jev for quality, safety and duplicates (within a batch, across batches of the same style, and against the library). Three replicate runs are pooled into the baseline `evals/runs/v0-3-2.json` (pass rate 78.3%, 95% interval 73.3–82.6%), and `evals/compare.mjs` tests later runs against it on seven primary rates with an exact test. See `evals/README.md`.
+- The eval's Convex functions only run on a deployment that sets `EVALS_ENABLED=true` (dev).
+
+## [0.3.2.0] - 2026-09-30
+
+### Fixed
+- AI questions generate again. The AI model thinks before it answers, and that thinking counted against the length limit added in 0.2.0.0, so most answers were cut off partway: feed questions, the daily email's fallback question and admin previews failed. The limit now leaves room for the thinking. On the development server, one-question requests went from 0 of 6 to 8 of 8 succeeding, and five-question batches from about half failing to 6 of 6.
+- A remix that gets cut off now fails and can be tried again, instead of showing half a question.
+
 ## [0.3.1.0] - 2026-09-30
 
 ### Fixed

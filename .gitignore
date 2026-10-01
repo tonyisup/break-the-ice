@@ -71,3 +71,6 @@ dist-ssr
 *.sln
 *.sw?
 .gstack/
+
+# eval harness: Jev response cache (rerun without paying again)
+evals/runs/*/jev-cache.jsonl

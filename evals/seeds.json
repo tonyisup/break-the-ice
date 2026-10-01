@@ -1,0 +1,116 @@
+{
+  "description": "Fixed inputs for the generation eval. Every style active on both dev and production (as of 2026-09-30) at least once, tones stepped through all 19, a topic on every other batch. Do not edit: later runs compare against the baseline on these same seeds.",
+  "batchSize": 5,
+  "seeds": [
+    {
+      "id": "s01",
+      "style": "desert-island",
+      "tone": "bold"
+    },
+    {
+      "id": "s02",
+      "style": "formative-moment",
+      "tone": "mysterious-intriguing",
+      "topic": "childhood-nostalgia"
+    },
+    {
+      "id": "s03",
+      "style": "future-chapter",
+      "tone": "tender"
+    },
+    {
+      "id": "s04",
+      "style": "gratitude-lightning",
+      "tone": "fun-silly",
+      "topic": "food"
+    },
+    {
+      "id": "s05",
+      "style": "how-to-know-me",
+      "tone": "professional"
+    },
+    {
+      "id": "s06",
+      "style": "if-this-but-that",
+      "tone": "cozy",
+      "topic": "home-life"
+    },
+    {
+      "id": "s07",
+      "style": "one-word-whip-around",
+      "tone": "nostalgic"
+    },
+    {
+      "id": "s08",
+      "style": "open-ended",
+      "tone": "witty",
+      "topic": "internet-habits"
+    },
+    {
+      "id": "s09",
+      "style": "rapid-fire-either",
+      "tone": "health-fitness"
+    },
+    {
+      "id": "s10",
+      "style": "super-power-caveats",
+      "tone": "reflective",
+      "topic": "music"
+    },
+    {
+      "id": "s11",
+      "style": "time-capsule-snapshot",
+      "tone": "edgy-provocative"
+    },
+    {
+      "id": "s12",
+      "style": "values-in-practice",
+      "tone": "playful",
+      "topic": "technology"
+    },
+    {
+      "id": "s13",
+      "style": "would-you-rather",
+      "tone": "candid"
+    },
+    {
+      "id": "s14",
+      "style": "desert-island",
+      "tone": "nerdy-geeky",
+      "topic": "travel"
+    },
+    {
+      "id": "s15",
+      "style": "formative-moment",
+      "tone": "wholesome-uplifting"
+    },
+    {
+      "id": "s16",
+      "style": "future-chapter",
+      "tone": "grounded",
+      "topic": "work"
+    },
+    {
+      "id": "s17",
+      "style": "gratitude-lightning",
+      "tone": "quick-energizer"
+    },
+    {
+      "id": "s18",
+      "style": "how-to-know-me",
+      "tone": "deep-thoughtful",
+      "topic": "childhood-nostalgia"
+    },
+    {
+      "id": "s19",
+      "style": "if-this-but-that",
+      "tone": "outdoorsy-adventurous"
+    },
+    {
+      "id": "s20",
+      "style": "one-word-whip-around",
+      "tone": "bold",
+      "topic": "food"
+    }
+  ]
+}
