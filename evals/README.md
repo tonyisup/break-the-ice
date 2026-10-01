@@ -40,6 +40,12 @@ node evals/score.mjs v0-3-2-r1
 node evals/baseline.mjs v0-3-2 v0-3-2-r1 v0-3-2-r2 v0-3-2-r3
 ```
 
+Exact library copies are matched on each question's stored fingerprint. After a change to how
+fingerprints are computed (v0.4.1.0's quote fix was one), recompute dev's before generating, or
+library questions saved under an older fingerprint aren't recognized as exact copies:
+`npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'`, then again
+with `false`.
+
 A run costs about $0.15 of generation on dev (charged to the dev deployment's system AI budget)
 and about $0.05 of Jev.
 
