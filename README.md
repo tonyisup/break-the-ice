@@ -15,6 +15,7 @@ and [prompt architecture](./convex/lib/promptArchitecture.ts).
 - [Team Prompts product and engineering spec](./docs/team-prompts/product-spec.md)
 - [How to schedule a Team Prompt](./docs/team-prompts/how-to-schedule-team-prompts.md)
 - [Team Prompts reference](./docs/team-prompts/reference.md)
+- [Generation eval: test a prompt or model change against the baseline (dev only)](./evals/README.md)
 
 ## Development
 
