@@ -64,6 +64,18 @@
 
 ## Generation
 
+### Label questions for Phase 0, then compare Claude and Jev against the labels
+
+**What:** The owner labels about 200 production questions (keep or reject, the four review reasons, safety concerns) in the Question Labels page. Then measure the owner's keep rate and reason mix, how often Claude's blind labels and the Jev gate agree with the owner, and refit the quality cutoffs in `evals/jev.mjs` on those labels.
+
+**Why:** Phase 0's gate needs the labels, and the Jev quality cutoffs are provisional until they're fit to the owner's judgment. Refitting changes `CUTOFFS_HASH`, so rescore the baseline (`node evals/score.mjs v0-3-2-r1 --force` and so on, then `evals/baseline.mjs`) afterwards.
+
+**Context:** Deferred from plan: Phase 0 spec (the plan doc's "Phase 0 spec" tab). The labeling page and Claude's blind labels are in the owner's private Question Labels artifact; labels are not stored in this repo.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** The owner's labels
+
 ### Handle answers cut off by the length limit better
 
 **What:** Three changes:

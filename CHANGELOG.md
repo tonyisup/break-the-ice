@@ -2,6 +2,12 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.0.0] - 2026-10-01
+
+### Added
+- You can now measure what the question generator produces and test a prompt or model change against a baseline. `evals/` runs 20 fixed seeds through today's prompt builder and model on the dev deployment, without saving anything, and scores every question with Jev for quality, safety and duplicates (within a batch, across batches of the same style, and against the library). Three replicate runs are pooled into the baseline `evals/runs/v0-3-2.json` (pass rate 78.3%, 95% interval 73.3–82.6%), and `evals/compare.mjs` tests later runs against it on seven primary rates with an exact test. See `evals/README.md`.
+- The eval's Convex functions only run on a deployment that sets `EVALS_ENABLED=true` (dev).
+
 ## [0.3.2.0] - 2026-09-30
 
 ### Fixed
