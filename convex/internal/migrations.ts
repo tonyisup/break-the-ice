@@ -605,7 +605,14 @@ const fingerprintRecomputeCounts = {
 const fingerprintRecomputePageResult = v.object({
 	...fingerprintRecomputeCounts,
 	// Each live library question's fingerprint once the page is done, for the collision report.
-	live: v.array(v.object({ questionId: v.id("questions"), status: v.optional(v.string()), fingerprint: v.string() })),
+	live: v.array(
+		v.object({
+			questionId: v.id("questions"),
+			status: v.optional(v.string()),
+			organizationId: v.optional(v.id("organizations")),
+			fingerprint: v.string(),
+		}),
+	),
 	continueCursor: v.string(),
 	isDone: v.boolean(),
 });
@@ -652,7 +659,9 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
 				if (!args.dryRun) await ctx.db.patch(question._id, { fingerprint });
 			}
 			// A retired (pruned) copy keeps its fingerprint but no longer counts as a collision.
-			if (question.status !== "pruned") live.push({ questionId: question._id, status: question.status, fingerprint });
+			if (question.status !== "pruned") {
+				live.push({ questionId: question._id, status: question.status, organizationId: question.organizationId, fingerprint });
+			}
 		}
 		return { ...counts, live, continueCursor: page.continueCursor, isDone: page.isDone };
 	},
@@ -666,16 +675,19 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  * Only library questions are recomputed. Personal, team and organization questions that aren't
  * public (`privateUserQuestions`), library questions with no stored fingerprint, and ones with no
  * text to fingerprint are counted and left alone. `collisions` lists every fingerprint that two
- * or more live (not pruned) library questions share after the run, with their IDs and status and
- * no text: they are duplicates by text. Generation treats any of them as the existing copy, so
- * nothing breaks if they stay; to retire a copy, set it to pruned (the admin duplicates or
- * questions page).
+ * or more live (not pruned) library questions share after the run, with their IDs, status and
+ * organization and no text: they are duplicates by text. Generation treats any of them as the
+ * existing copy, so nothing breaks if they stay. To retire a copy, use the admin duplicates page
+ * once its duplicate scan has grouped the pair; it keeps the copy's links working, which pruning
+ * it on the questions page doesn't. Pairs from different organizations can't be merged there,
+ * so leave them.
  *
- * Undo after a run: undoing an earlier review that sent the text (an edit, or Approve or Reject
- * on the questions page, which resend it) restores the old fingerprint, so run this again
- * afterwards; undoing an earlier prune or duplicate resolution of a recomputed question is
- * refused as a newer change. Run it with dryRun first, and again after a real run (changed
- * should then be 0):
+ * Run this again after undoing an earlier review that sent the text (an edit, or Approve or
+ * Reject on the questions page, which resend it), since the undo restores the old fingerprint,
+ * and after publishing a question that was private during a run without changing its text (the
+ * question detail page sends only the status). Undoing an earlier prune or duplicate resolution
+ * of a recomputed question is refused as a newer change. Run it with dryRun first, and again
+ * after a real run (changed should then be 0):
  * `npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'`.
  */
 export const recomputeQuestionFingerprints = internalAction({
@@ -685,7 +697,13 @@ export const recomputeQuestionFingerprints = internalAction({
 		collisions: v.array(
 			v.object({
 				fingerprint: v.string(),
-				questions: v.array(v.object({ questionId: v.id("questions"), status: v.optional(v.string()) })),
+				questions: v.array(
+					v.object({
+						questionId: v.id("questions"),
+						status: v.optional(v.string()),
+						organizationId: v.optional(v.id("organizations")),
+					}),
+				),
 			}),
 		),
 	}),
@@ -693,7 +711,7 @@ export const recomputeQuestionFingerprints = internalAction({
 		const label = `recomputeQuestionFingerprints${args.dryRun ? " (dry run)" : ""}`;
 		const totals = { scanned: 0, privateUserQuestions: 0, withoutFingerprint: 0, withoutText: 0, changed: 0 };
 		const countKeys = Object.keys(fingerprintRecomputeCounts) as Array<keyof typeof fingerprintRecomputeCounts>;
-		const groups = new Map<string, Array<{ questionId: Id<"questions">; status?: string }>>();
+		const groups = new Map<string, Array<{ questionId: Id<"questions">; status?: string; organizationId?: Id<"organizations"> }>>();
 		let cursor: string | null = null;
 		for (let pages = 1; ; pages++) {
 			const page: Infer<typeof fingerprintRecomputePageResult> = await ctx.runMutation(
@@ -701,10 +719,10 @@ export const recomputeQuestionFingerprints = internalAction({
 				{ dryRun: args.dryRun, cursor },
 			);
 			for (const key of countKeys) totals[key] += page[key];
-			for (const { fingerprint, questionId, status } of page.live) {
+			for (const { fingerprint, ...question } of page.live) {
 				const group = groups.get(fingerprint);
-				if (group) group.push({ questionId, status });
-				else groups.set(fingerprint, [{ questionId, status }]);
+				if (group) group.push(question);
+				else groups.set(fingerprint, [question]);
 			}
 			if (page.isDone) break;
 			// Running totals, so a run that stops partway still shows how far it got.

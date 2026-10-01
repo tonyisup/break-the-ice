@@ -395,6 +395,29 @@ describe("recomputing stored fingerprints", () => {
     expect(await fingerprintOf(t, ids[count - 1])).toBe(fingerprintText(`What's question number ${count - 1} on the list?`));
   });
 
+  test("a public organization question is recomputed and listed with its organization", async () => {
+    const { t } = await setup();
+    const global = await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip) });
+    const organizationId = await t.run(async (ctx) =>
+      ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }),
+    );
+    const orgCopy = await insertQuestion(t, { organizationId, text: roadTripCurly, status: "public", fingerprint: "q_old_org" });
+
+    const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
+
+    expect(summary).toMatchObject({ privateUserQuestions: 0, changed: 1 });
+    // The duplicates page won't merge across organizations, so the report says which side each is on.
+    expect(summary.collisions).toEqual([
+      {
+        fingerprint: fingerprintText(roadTrip),
+        questions: [
+          { questionId: global, status: "public" },
+          { questionId: orgCopy, status: "public", organizationId },
+        ],
+      },
+    ]);
+  });
+
   test("a submission that is approved, has no status, or keeps its wording only in custom text is recomputed", async () => {
     const { t } = await setup();
     const approved = await insertQuestion(t, {
