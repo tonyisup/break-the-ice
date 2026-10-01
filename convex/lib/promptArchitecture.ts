@@ -67,10 +67,12 @@ function formatExamples(examples: PromptExample[] | undefined) {
     .join("\n");
 }
 
+// Curly quotes are written as escapes. Typed literally, an editor or paste can turn them into
+// straight ones, and the replace then does nothing.
 export function normalizeQuestion(text: string) {
   return text
-    .replace(/[""]/g, "\"")
-    .replace(/['']/g, "'")
+    .replace(/[\u201C\u201D]/g, "\"")
+    .replace(/[\u2018\u2019]/g, "'")
     .replace(/\s+/g, " ")
     .trim();
 }
