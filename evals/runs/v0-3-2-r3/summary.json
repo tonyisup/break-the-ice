@@ -1,0 +1,410 @@
+{
+  "run": "v0-3-2-r3",
+  "deployment": "dev",
+  "generatedAt": "2026-10-01T16:19:23.052Z",
+  "scoredAt": "2026-10-01T16:33:40.205Z",
+  "generator": {
+    "regime": "admin preview path, a batch of 5 per call, no per-person exclusion list (the feed usually asks for 1 and excludes recently seen questions)",
+    "model": "@preset/break-the-ice-berg-default",
+    "resolvedModels": {
+      "google/gemini-3.8-flash": 20
+    },
+    "resolvedModelSet": [
+      "google/gemini-3.8-flash"
+    ],
+    "settings": [
+      {
+        "maxOutputTokens": 3300,
+        "neighbours": 5,
+        "unusableOutputAttempts": 2
+      }
+    ],
+    "settingsHash": "d0c023a07a20979d",
+    "neighbours": 5,
+    "commits": [
+      "b0a56b5"
+    ],
+    "runIdsHash": "2077e5b17731eb10",
+    "promptSetHash": "ee11a03a8e955274",
+    "definitionsHash": "2bca5a7ea7192430",
+    "taxonomyHash": "3a2ff9f6ace6fe0b",
+    "seedSetHash": "173badd8adb52306",
+    "temperatures": [
+      0.9
+    ],
+    "batchSize": 5,
+    "costUsd": 0.1064,
+    "maxCompletionTokens": 1994
+  },
+  "batches": {
+    "ok": 20,
+    "failed": [],
+    "generationRuns": {
+      "total": 20,
+      "failed": 0,
+      "unusableOutput": 0,
+      "providerErrors": 0,
+      "failureReasons": {}
+    },
+    "otherFailures": {},
+    "fingerprintCollisions": 0
+  },
+  "library": {
+    "sizes": [
+      {
+        "publicQuestions": 205,
+        "withEmbedding": 205
+      }
+    ],
+    "questionsChecked": 100,
+    "questionsWithoutNeighbours": 0,
+    "searchErrors": 0
+  },
+  "rates": {
+    "passRate": {
+      "k": 79,
+      "n": 100,
+      "rate": 0.79
+    },
+    "reviewRate": {
+      "k": 20,
+      "n": 100,
+      "rate": 0.2
+    },
+    "blockRate": {
+      "k": 1,
+      "n": 100,
+      "rate": 0.01
+    },
+    "libraryLikelyRate": {
+      "k": 3,
+      "n": 100,
+      "rate": 0.03
+    },
+    "batchLikelyRate": {
+      "k": 0,
+      "n": 20,
+      "rate": 0
+    },
+    "unusableOutputRate": {
+      "k": 0,
+      "n": 20,
+      "rate": 0
+    },
+    "yieldRate": {
+      "k": 100,
+      "n": 100,
+      "rate": 1
+    },
+    "passRateWithoutFit": {
+      "k": 89,
+      "n": 100,
+      "rate": 0.89
+    },
+    "reviewRateWithoutFit": {
+      "k": 10,
+      "n": 100,
+      "rate": 0.1
+    },
+    "providerErrorRate": {
+      "k": 0,
+      "n": 20,
+      "rate": 0
+    },
+    "savedRate": {
+      "k": 99,
+      "n": 100,
+      "rate": 0.99
+    },
+    "codeRejectRate": {
+      "k": 1,
+      "n": 100,
+      "rate": 0.01
+    },
+    "exactDuplicateRate": {
+      "k": 0,
+      "n": 100,
+      "rate": 0
+    },
+    "savedPassRate": {
+      "k": 79,
+      "n": 99,
+      "rate": 0.798
+    },
+    "libraryReviewRate": {
+      "k": 3,
+      "n": 100,
+      "rate": 0.03
+    },
+    "withinBatchLikelyPairRate": {
+      "k": 0,
+      "n": 200,
+      "rate": 0
+    },
+    "crossBatchLikelyRate": {
+      "k": 1,
+      "n": 175,
+      "rate": 0.006
+    },
+    "s_traumaFlagRate": {
+      "k": 1,
+      "n": 100,
+      "rate": 0.01
+    },
+    "s_targets_personFlagRate": {
+      "k": 0,
+      "n": 100,
+      "rate": 0
+    },
+    "s_sexual_illegalFlagRate": {
+      "k": 1,
+      "n": 100,
+      "rate": 0.01
+    },
+    "s_politics_religionFlagRate": {
+      "k": 0,
+      "n": 100,
+      "rate": 0
+    },
+    "s_humiliationFlagRate": {
+      "k": 5,
+      "n": 100,
+      "rate": 0.05
+    }
+  },
+  "pipeline": {
+    "parsed": 100,
+    "saved": 99,
+    "duplicate": {},
+    "rejected": 1,
+    "rejectionReasons": {
+      "unsafe topic": 1
+    },
+    "curlyQuotes": 0
+  },
+  "gate": {
+    "note": "Safety cutoffs are the plan's; quality cutoffs are provisional until refit on the owner's labels.",
+    "cutoffs": {
+      "safetyBlock": 0.7,
+      "safetyReview": 0.35,
+      "quality": {
+        "readability": 1.5,
+        "single_ask": 0.5,
+        "answerable": 0.5,
+        "light_answer_ok": 0.5,
+        "fit_style": 1,
+        "fit_tone": 1,
+        "fit_topic": 0.5
+      }
+    },
+    "allParsed": {
+      "pass": 79,
+      "review": 20,
+      "block": 1,
+      "passRate95": [
+        0.7,
+        0.858
+      ]
+    },
+    "saved": {
+      "pass": 79,
+      "review": 19,
+      "block": 1
+    },
+    "reasons": {
+      "fit_style": 7,
+      "s_humiliation": 5,
+      "light_answer_ok": 4,
+      "fit_topic": 4,
+      "readability": 1,
+      "s_sexual_illegal": 1,
+      "s_trauma": 1,
+      "single_ask": 1
+    }
+  },
+  "safety": {
+    "s_trauma": {
+      "mean": 0.068,
+      "review": 1,
+      "block": 0
+    },
+    "s_targets_person": {
+      "mean": 0.027,
+      "review": 0,
+      "block": 0
+    },
+    "s_sexual_illegal": {
+      "mean": 0.029,
+      "review": 0,
+      "block": 1
+    },
+    "s_politics_religion": {
+      "mean": 0.019,
+      "review": 0,
+      "block": 0
+    },
+    "s_humiliation": {
+      "mean": 0.171,
+      "review": 5,
+      "block": 0
+    }
+  },
+  "quality": {
+    "readability": {
+      "mean": 2.48,
+      "levels": {
+        "1": 1,
+        "2": 44,
+        "3": 54
+      }
+    },
+    "specificity": {
+      "mean": 2.42,
+      "levels": {
+        "1": 2,
+        "2": 56,
+        "3": 41
+      }
+    },
+    "story_yield": {
+      "mean": 1.56,
+      "levels": {
+        "0": 12,
+        "1": 31,
+        "2": 39,
+        "3": 17
+      }
+    },
+    "fit_style": {
+      "mean": 1.67,
+      "levels": {
+        "0": 2,
+        "1": 23,
+        "2": 74
+      }
+    },
+    "fit_tone": {
+      "mean": 1.77,
+      "levels": {
+        "1": 14,
+        "2": 85
+      }
+    },
+    "single_ask": {
+      "n": 99,
+      "mean": 0.895,
+      "below05": 1
+    },
+    "answerable": {
+      "n": 99,
+      "mean": 0.956,
+      "below05": 0
+    },
+    "light_answer_ok": {
+      "n": 99,
+      "mean": 0.81,
+      "below05": 4
+    },
+    "fit_topic": {
+      "n": 49,
+      "mean": 0.855,
+      "below05": 4
+    }
+  },
+  "duplicates": {
+    "note": "Mean dup_level over both orders: 1.5 and up likely, 1 to 1.5 review.",
+    "withinBatch": {
+      "batches": 20,
+      "withDuplicate": 0,
+      "pairs": 200,
+      "different": 198,
+      "review": 2
+    },
+    "acrossBatchesSameStyle": {
+      "pairs": 175,
+      "different": 174,
+      "likely": 1
+    },
+    "library": {
+      "questions": 100,
+      "exactCopies": 0,
+      "likely": 3,
+      "review": 3,
+      "topCosineMedian": 0.495,
+      "topCosineOverDetectorCutoff": 0
+    }
+  },
+  "frames": {
+    "repeatAt": 5,
+    "distinct": 66,
+    "repeatedShare": 0.253,
+    "crossStyleShare": 0.051,
+    "top": [
+      [
+        "you're stranded on",
+        10
+      ],
+      [
+        "one word only",
+        10
+      ],
+      [
+        "would you rather",
+        5
+      ],
+      [
+        "would you want",
+        4
+      ],
+      [
+        "what kind of",
+        3
+      ],
+      [
+        "if you could",
+        3
+      ],
+      [
+        "what is something",
+        2
+      ],
+      [
+        "what's the strangest",
+        2
+      ],
+      [
+        "what's the worst",
+        2
+      ],
+      [
+        "if you were",
+        2
+      ]
+    ],
+    "topCrossStyle": [
+      [
+        "what kind of",
+        3
+      ],
+      [
+        "what is something",
+        2
+      ]
+    ]
+  },
+  "judge": {
+    "model": "jev-1.13.0",
+    "questionSetHash": "3d3af9d6f07bfdab",
+    "cutoffsHash": "7308cb89eb069148",
+    "scoringVersion": 3
+  },
+  "jev": {
+    "requests": 0,
+    "cached": 1850,
+    "inputTokens": 1167068,
+    "outputTokens": 115050,
+    "models": {
+      "jev-1.13.0": 1850
+    }
+  }
+}
