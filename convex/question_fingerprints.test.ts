@@ -305,7 +305,7 @@ describe("recomputing stored fingerprints", () => {
     expect(await fingerprintOf(t, second)).toBe(fingerprintText(roadTrip));
   });
 
-  test("a personal question kept private stays alone, and one approved into the library is recomputed", async () => {
+  test("private personal, team and organization questions stay alone; an approved submission is recomputed", async () => {
     const { t } = await setup();
     await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip) });
     // Reviewing a submission copies its custom text into text (the admin page sends q.text || q.customText).
@@ -329,13 +329,18 @@ describe("recomputing stored fingerprints", () => {
       status: "private",
       fingerprint: fingerprintText(roadTrip),
     });
+    const organizationId = await t.run(async (ctx) =>
+      ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }),
+    );
+    const orgQuestion = await insertQuestion(t, { organizationId, text: roadTripCurly, status: "private", fingerprint: "q_old_org" });
 
     const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
 
-    expect(summary).toMatchObject({ scanned: 4, userWritten: 2, changed: 1, collisions: [] });
+    expect(summary).toMatchObject({ scanned: 5, userWritten: 3, changed: 1, collisions: [] });
     expect(await fingerprintOf(t, keptPrivate)).toBe("q_old_kept_private");
     expect(await fingerprintOf(t, approved)).toBe(fingerprintText(smell));
     expect(await fingerprintOf(t, teamPrompt)).toBe(fingerprintText(roadTrip));
+    expect(await fingerprintOf(t, orgQuestion)).toBe("q_old_org");
   });
 
   test("collisions include unchanged duplicates and questions without text, but not retired copies", async () => {
