@@ -66,7 +66,7 @@ const warnings = [
   ...summaries.filter((summary) => summary.library.searchErrors).map((summary) => `${summary.run} had library search errors.`),
   ...summaries
     .filter((summary) => summary.batches.fingerprintCollisions)
-    .map((summary) => `${summary.run} has questions matching more than one library row (duplicate library questions).`),
+    .map((summary) => `${summary.run} has questions matching more than one stored question (duplicates, retired copies included).`),
 ];
 
 const pooled = poolRates(summaries.map((summary) => summary.rates));

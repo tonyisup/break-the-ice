@@ -46,7 +46,7 @@ const evalBatch = v.object({
   tone: taxonomyRef,
   topic: v.union(v.null(), taxonomyRef),
   definitions: evalDefinitionsResult,
-  /** Questions whose fingerprint matches more than one library row (duplicate library questions). */
+  /** Questions whose fingerprint more than one stored question holds (duplicates, retired copies included). */
   fingerprintCollisions: v.number(),
   candidates: v.array(
     v.object({

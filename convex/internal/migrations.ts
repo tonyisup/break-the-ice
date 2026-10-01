@@ -593,9 +593,11 @@ export const cleanDanglingQuestionReferences = internalAction({
 });
 
 export const FINGERPRINT_RECOMPUTE_PAGE_SIZE = 100;
+// Convex keeps at most 256 log lines per run, so progress is logged every this many pages.
+const FINGERPRINT_PROGRESS_LOG_PAGES = 50;
 const fingerprintRecomputeCounts = {
 	scanned: v.number(),
-	userWritten: v.number(),
+	privateUserQuestions: v.number(),
 	withoutFingerprint: v.number(),
 	withoutText: v.number(),
 	changed: v.number(),
@@ -609,8 +611,9 @@ const fingerprintRecomputePageResult = v.object({
 });
 
 /**
- * A personal question or team prompt that isn't public. It isn't a library question, so the
- * recompute neither rewrites nor lists it, even where an older backfill fingerprinted it.
+ * A personal question, team prompt or organization question that isn't public. It isn't a
+ * library question, so the recompute neither rewrites nor lists it, even where it has a
+ * fingerprint (an older backfill and admin reviews give some one).
  */
 function isPrivateUserQuestion(question: Doc<"questions">) {
 	const userWritten = question.authorId !== undefined || question.kind !== undefined || question.organizationId !== undefined;
@@ -626,11 +629,11 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
 	returns: fingerprintRecomputePageResult,
 	handler: async (ctx, args) => {
 		const page = await ctx.db.query("questions").paginate({ numItems: FINGERPRINT_RECOMPUTE_PAGE_SIZE, cursor: args.cursor });
-		const counts = { scanned: page.page.length, userWritten: 0, withoutFingerprint: 0, withoutText: 0, changed: 0 };
+		const counts = { scanned: page.page.length, privateUserQuestions: 0, withoutFingerprint: 0, withoutText: 0, changed: 0 };
 		const live: Infer<typeof fingerprintRecomputePageResult>["live"] = [];
 		for (const question of page.page) {
 			if (isPrivateUserQuestion(question)) {
-				counts.userWritten += 1;
+				counts.privateUserQuestions += 1;
 				continue;
 			}
 			// Only stored fingerprints are recomputed; a library question without one stays without.
@@ -638,11 +641,13 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
 				counts.withoutFingerprint += 1;
 				continue;
 			}
+			// An approved submission can keep its wording in customText only, as the backfill read it.
+			const text = question.text ?? question.customText;
 			let fingerprint = question.fingerprint;
-			if (!question.text) {
+			if (!text) {
 				counts.withoutText += 1;
-			} else if (fingerprintText(question.text) !== fingerprint) {
-				fingerprint = fingerprintText(question.text);
+			} else if (fingerprintText(text) !== fingerprint) {
+				fingerprint = fingerprintText(text);
 				counts.changed += 1;
 				if (!args.dryRun) await ctx.db.patch(question._id, { fingerprint });
 			}
@@ -658,14 +663,19 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  * before curly quotes were normalized don't match a recomputation, so generation doesn't see a
  * candidate as a duplicate of a library question that differs only in quote style.
  *
- * Only library questions are recomputed: personal questions and team prompts that aren't public,
- * and library questions with no stored fingerprint, are counted and left alone. `collisions`
- * lists every fingerprint that two or more live (not pruned) library questions share after the
- * run, with their IDs and status and no text: they are duplicates by text. Generation treats any
- * of them as the existing copy, so nothing breaks if they stay; to retire a copy, set it to
- * pruned (the admin duplicates or questions page). Undoing an admin text edit made before a run
- * restores the old fingerprint, so run it again after such an undo. Run it with dryRun first,
- * and again after a real run (changed should then be 0):
+ * Only library questions are recomputed. Personal, team and organization questions that aren't
+ * public (`privateUserQuestions`), library questions with no stored fingerprint, and ones with no
+ * text to fingerprint are counted and left alone. `collisions` lists every fingerprint that two
+ * or more live (not pruned) library questions share after the run, with their IDs and status and
+ * no text: they are duplicates by text. Generation treats any of them as the existing copy, so
+ * nothing breaks if they stay; to retire a copy, set it to pruned (the admin duplicates or
+ * questions page).
+ *
+ * Undo after a run: undoing an earlier review that sent the text (an edit, or Approve or Reject
+ * on the questions page, which resend it) restores the old fingerprint, so run this again
+ * afterwards; undoing an earlier prune or duplicate resolution of a recomputed question is
+ * refused as a newer change. Run it with dryRun first, and again after a real run (changed
+ * should then be 0):
  * `npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'`.
  */
 export const recomputeQuestionFingerprints = internalAction({
@@ -681,11 +691,11 @@ export const recomputeQuestionFingerprints = internalAction({
 	}),
 	handler: async (ctx, args) => {
 		const label = `recomputeQuestionFingerprints${args.dryRun ? " (dry run)" : ""}`;
-		const totals = { scanned: 0, userWritten: 0, withoutFingerprint: 0, withoutText: 0, changed: 0 };
+		const totals = { scanned: 0, privateUserQuestions: 0, withoutFingerprint: 0, withoutText: 0, changed: 0 };
 		const countKeys = Object.keys(fingerprintRecomputeCounts) as Array<keyof typeof fingerprintRecomputeCounts>;
 		const groups = new Map<string, Array<{ questionId: Id<"questions">; status?: string }>>();
 		let cursor: string | null = null;
-		for (;;) {
+		for (let pages = 1; ; pages++) {
 			const page: Infer<typeof fingerprintRecomputePageResult> = await ctx.runMutation(
 				internal.internal.migrations.recomputeQuestionFingerprintsPage,
 				{ dryRun: args.dryRun, cursor },
@@ -696,11 +706,9 @@ export const recomputeQuestionFingerprints = internalAction({
 				if (group) group.push({ questionId, status });
 				else groups.set(fingerprint, [{ questionId, status }]);
 			}
-			// A record of each page that changed something, so a run that stops partway still shows what it did.
-			if (page.changed > 0) {
-				console.log(`${label} page: ${JSON.stringify({ scanned: page.scanned, changed: page.changed })}`);
-			}
 			if (page.isDone) break;
+			// Running totals, so a run that stops partway still shows how far it got.
+			if (pages % FINGERPRINT_PROGRESS_LOG_PAGES === 0) console.log(`${label} progress: ${JSON.stringify(totals)}`);
 			cursor = page.continueCursor;
 		}
 		const collisions = [...groups]

@@ -1015,7 +1015,7 @@ describe("scripts", () => {
       const result = runScript("compare.mjs", ["base", "dupes"]);
       expect(result.status, result.stderr).toBe(0);
       expect(readRunFile("dupes/comparison-base.json").warnings).toEqual([
-        "dupes has questions matching more than one library row (duplicate library questions).",
+        "dupes has questions matching more than one stored question (duplicates, retired copies included).",
       ]);
     });
 
