@@ -5,7 +5,7 @@ import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { checkEvalCandidates } from "./lib/evalChecks";
-import { FINGERPRINT_RECOMPUTE_PAGE_SIZE } from "./internal/migrations";
+import { FINGERPRINT_MAX_REPORTED_COLLISIONS, FINGERPRINT_RECOMPUTE_PAGE_SIZE } from "./internal/migrations";
 import { fingerprintText } from "./lib/promptArchitecture";
 
 type TestConvex = ReturnType<typeof convexTest>;
@@ -211,6 +211,7 @@ describe("recomputing stored fingerprints", () => {
       withoutFingerprint: 1,
       withoutText: 1,
       changed: 2,
+      collisionGroups: 1,
       collisions: [
         {
           fingerprint: fingerprintText(roadTrip),
@@ -360,6 +361,7 @@ describe("recomputing stored fingerprints", () => {
       withoutFingerprint: 0,
       withoutText: 1,
       changed: 1,
+      collisionGroups: 2,
       collisions: [
         {
           fingerprint: fingerprintText(bus),
@@ -680,5 +682,24 @@ describe("recomputing stored fingerprints", () => {
 
     const after = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: true });
     expect(after).toMatchObject({ changed: 0, collisions: [] });
+  });
+
+  test("a report with more collisions than it can list counts them all and lists the first ones", async () => {
+    const { t } = await setup();
+    const groups = FINGERPRINT_MAX_REPORTED_COLLISIONS + 1;
+    await t.run(async (ctx) => {
+      for (let i = 0; i < groups; i++) {
+        const text = `Duplicate question number ${i} on the list?`;
+        for (let copy = 0; copy < 2; copy++) {
+          await ctx.db.insert("questions", { text, fingerprint: fingerprintText(text), status: "public", ...counters });
+        }
+      }
+    });
+
+    const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: true });
+
+    expect(summary.collisionGroups).toBe(groups);
+    expect(summary.collisions).toHaveLength(FINGERPRINT_MAX_REPORTED_COLLISIONS);
+    expect(summary.collisions[0].fingerprint).toBe(fingerprintText("Duplicate question number 0 on the list?"));
   });
 });

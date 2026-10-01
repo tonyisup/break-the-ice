@@ -595,6 +595,8 @@ export const cleanDanglingQuestionReferences = internalAction({
 export const FINGERPRINT_RECOMPUTE_PAGE_SIZE = 100;
 // Convex keeps at most 256 log lines per run, so progress is logged every this many pages.
 const FINGERPRINT_PROGRESS_LOG_PAGES = 50;
+// Convex arrays hold at most 8,192 values, so the report lists this many groups and counts the rest.
+export const FINGERPRINT_MAX_REPORTED_COLLISIONS = 1000;
 const fingerprintRecomputeCounts = {
 	scanned: v.number(),
 	privateUserQuestions: v.number(),
@@ -672,9 +674,9 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  *
  * Only library questions are recomputed. Personal, team and organization questions that aren't
  * public (`privateUserQuestions`), library questions with no stored fingerprint, and ones with no
- * text to fingerprint are counted and left alone. `collisions` lists every fingerprint that two
- * or more live (not pruned) library questions share after the run, with their IDs, status and
- * organization and no text: they are duplicates by text. Generation treats any of them as the
+ * text to fingerprint are counted and left alone. `collisionGroups` counts the fingerprints that
+ * two or more live (not pruned) library questions share after the run, and `collisions` lists the
+ * first 1,000 with their IDs, status and organization and no text: they are duplicates by text. Generation treats any of them as the
  * existing copy, so nothing breaks if they stay. Retire copies on the admin duplicates page,
  * which keeps their links working; pruning one on the questions page breaks them.
  *
@@ -688,6 +690,7 @@ export const recomputeQuestionFingerprints = internalAction({
 	args: { dryRun: v.boolean() },
 	returns: v.object({
 		...fingerprintRecomputeCounts,
+		collisionGroups: v.number(),
 		collisions: v.array(
 			v.object({
 				fingerprint: v.string(),
@@ -721,6 +724,6 @@ export const recomputeQuestionFingerprints = internalAction({
 			.filter(([, questions]) => questions.length > 1)
 			.map(([fingerprint, questions]) => ({ fingerprint, questions }));
 		console.log(`${label} total: ${JSON.stringify({ ...totals, collisions: collisions.length })}`);
-		return { ...totals, collisions };
+		return { ...totals, collisionGroups: collisions.length, collisions: collisions.slice(0, FINGERPRINT_MAX_REPORTED_COLLISIONS) };
 	},
 });

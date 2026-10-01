@@ -1008,15 +1008,14 @@ describe("scripts", () => {
       expect(result.stdout).toMatch(/NO DATA\s+libraryLikelyRate/);
     });
 
-    test("compare warns about a run whose questions matched duplicate library questions", () => {
+    test("compare doesn't warn about questions matching more than one library question", () => {
+      // The save step treats any of them as the existing copy, so the comparison stays fair.
       baselineOf(["a", 80], ["b", 82]);
       writeRun("dupes", { "summary.json": summary("dupes", 80, { batches: { fingerprintCollisions: 2 } }) });
 
       const result = runScript("compare.mjs", ["base", "dupes"]);
       expect(result.status, result.stderr).toBe(0);
-      expect(readRunFile("dupes/comparison-base.json").warnings).toEqual([
-        "dupes has questions matching more than one stored question (duplicates, retired copies included).",
-      ]);
+      expect(readRunFile("dupes/comparison-base.json").warnings).toEqual([]);
     });
 
     test("compare refuses runs it can't fairly compare", () => {
