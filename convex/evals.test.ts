@@ -507,6 +507,7 @@ describe("generateEvalBatch", () => {
     expect(batch.candidates).toEqual([
       {
         text: "Which dish would you cook for a stranger on a desert island?",
+        hadCurlyQuotes: false,
         outcome: "saved",
         duplicateOf: null,
         codeRejections: [],
