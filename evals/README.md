@@ -19,16 +19,19 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
 - `baseline.mjs <name> <run>...`: pools replicate runs of one setup into a baseline (each rate's
   counts added up, with a 95% interval). Refuses runs that aren't replicates: a different judge,
   cutoffs, seeds, prompts, definitions or library, or failed seeds.
-- `compare.mjs <baseline> <run>`: tests a later run against a baseline (see below).
+- `compare.mjs <baseline> <run>...`: tests one or more runs of a changed setup against a baseline
+  (see below).
 - `jev.mjs`: the Jev questions and cutoffs. The judge is pinned (`JEV_MODEL`), and summaries
-  record hashes of the question wording and of the cutoffs; `score.mjs` refuses to overwrite a
-  summary scored under different ones unless given `--force`. Safety cutoffs are the plan's;
-  quality cutoffs are provisional until refit on the owner's labels.
+  record hashes of the question wording and of the cutoffs, plus `SCORING_VERSION` (in
+  `stats.mjs`, bumped when the rate logic changes); `score.mjs` refuses to overwrite a summary
+  scored under different ones unless given `--force`. Safety cutoffs are the plan's; quality
+  cutoffs are provisional until refit on the owner's labels.
 
 ## Running it
 
 The deployment must opt in, so production never runs it: `npx convex env set EVALS_ENABLED true`
-on dev only. Then push the current code and run:
+on dev only. Commit `convex/` and push it to dev first (`generate.mjs` refuses uncommitted
+`convex/` changes unless given `--allow-local`), then run:
 
 ```bash
 npx convex dev --once
@@ -44,15 +47,22 @@ and about $0.05 of Jev.
 
 - The official baseline is `runs/v0-3-2.json`: three replicate runs of the same seeds
   (`v0-3-2-r1` to `-r3`) pooled. Compare a later run with `node evals/compare.mjs v0-3-2 <run>`.
-- Six primary rates decide a comparison, chosen up front: pass, review and block rates (over every
-  generated question, before the code checks), the library and within-batch likely-duplicate
-  rates, and the generation failure rate. Each gets a two-proportion test against the pooled
-  baseline, Bonferroni-corrected across the six. Everything else is exploratory. Questions in one
-  batch are correlated, so p-values are optimistic: confirm a borderline result with a second run.
-- A comparison refuses runs judged with a different Jev version, question wording or cutoffs, or
-  on different seeds: rescore or regenerate the baseline first. It reports what else changed
-  (prompts, taxonomy, definitions, library) and warns when definitions changed, since fit scores
-  are then graded against different text.
+- Seven primary rates decide a comparison, chosen up front, each over independent units: pass,
+  review and block rates (over every generated question, before the code checks); the library
+  likely-duplicate rate (exact library copies count as duplicates); the share of batches with a
+  duplicate pair; the share of model calls that came back unusable (provider errors are reported
+  separately); and yield (questions returned per question asked for). Each gets Fisher's exact
+  test against the pooled baseline, Bonferroni-corrected across the seven. Everything else is
+  exploratory.
+- "not detected" isn't "the same": each primary rate shows how far a run of that size would have
+  to move before it could be detected. Pass several runs of the changed setup to pool them and
+  detect smaller changes. Questions in a batch are correlated, so treat results near the
+  threshold as needing more runs.
+- A comparison refuses runs judged with a different Jev version, question wording, cutoffs or
+  scoring version, on different seeds or neighbour counts, or with failed seeds: rescore or
+  regenerate the baseline first. It reports what else changed (prompts, taxonomy, definitions,
+  resolved model, deployed settings, library). When definitions changed, pass and review are
+  decided without the fit questions, which are then graded against different text.
 - The regime is the admin preview path with a batch of 5 and no per-person exclusion list. The
   feed usually asks for 1 question and excludes recently seen ones.
 - Library duplicates are counted against dev's library, which is smaller than production's and

@@ -129,7 +129,7 @@ const JSON_BASE_TOKENS = 300;
 const TOKENS_PER_QUESTION = 200;
 
 // gstack-shortcut(dec-9ce5b30c-9525-4ac7-89c5-ce1039af4faa): spend reservation sizing deferred, upgrade when the preset model changes.
-function maxOutputTokens(batchSize: number): number {
+export function maxOutputTokens(batchSize: number): number {
   return REASONING_ALLOWANCE_TOKENS + JSON_BASE_TOKENS + TOKENS_PER_QUESTION * batchSize;
 }
 
@@ -218,7 +218,7 @@ class UnusableOutputError extends Error {
 }
 
 // An empty or unreadable answer is usually a one-off, so it gets one more try.
-const UNUSABLE_OUTPUT_ATTEMPTS = 2;
+export const UNUSABLE_OUTPUT_ATTEMPTS = 2;
 
 // gstack-shortcut(dec-ede332ff-223c-47b1-9d49-270141aa91e0): cut-off handling kept as is, upgrade in the generation follow-ups (retry, error message, run labelling).
 /**

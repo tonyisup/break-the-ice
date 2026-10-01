@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
+import type { Doc } from "../_generated/dataModel";
 import { internalQuery } from "../_generated/server";
-import { assertEvalsEnabled } from "../lib/evalChecks";
+import { assertEvalsEnabled, evalDefinitionsResult } from "../lib/evalChecks";
 import { isQuestionPublic } from "../lib/questionAccess";
 
 /** Jev reads these next to each question, and gets less accurate as its input grows. */
@@ -12,7 +13,11 @@ function shortDefinition(parts: Array<string | undefined>): string {
 }
 
 
-const definition = v.object({ slug: v.string(), name: v.string(), definition: v.string() });
+
+/** The shared library a duplicate check searches: public, global, non-personal questions with text. */
+function isSharedLibraryQuestion(question: Doc<"questions">): boolean {
+  return Boolean(question.text) && !question.authorId && !question.organizationId && !question.duplicateOf && isQuestionPublic(question);
+}
 
 /**
  * Short definitions of the exact style, tone and topic versions a prompt was built from, using
@@ -20,7 +25,7 @@ const definition = v.object({ slug: v.string(), name: v.string(), definition: v.
  */
 export const evalDefinitions = internalQuery({
   args: { styleId: v.id("styles"), toneId: v.id("tones"), topicId: v.optional(v.id("topics")) },
-  returns: v.object({ style: definition, tone: definition, topic: v.union(v.null(), definition) }),
+  returns: evalDefinitionsResult,
   handler: async (ctx, args) => {
     const [style, tone, topic] = await Promise.all([
       ctx.db.get(args.styleId),
@@ -94,8 +99,7 @@ export const publicLibraryTexts = internalQuery({
     await Promise.all(
       args.questionIds.map(async (questionId) => {
         const question = await ctx.db.get(questionId);
-        if (!question || !question.text || question.authorId || question.organizationId) return null;
-        return isQuestionPublic(question) && !question.duplicateOf ? question.text : null;
+        return question && isSharedLibraryQuestion(question) ? question.text! : null;
       }),
     ),
 });
@@ -109,20 +113,10 @@ export const evalLibraryStats = internalQuery({
   returns: v.object({ publicQuestions: v.number(), withEmbedding: v.number() }),
   handler: async (ctx) => {
     assertEvalsEnabled();
-    const questions = await ctx.db.query("questions").collect();
-    const library = questions.filter(
-      (question) =>
-        question.text && !question.authorId && !question.organizationId && !question.duplicateOf && isQuestionPublic(question),
-    );
-    const embedded = await Promise.all(
-      library.map((question) =>
-        ctx.db
-          .query("question_embeddings")
-          .withIndex("by_questionId", (q) => q.eq("questionId", question._id))
-          .first(),
-      ),
-    );
-    return { publicQuestions: library.length, withEmbedding: embedded.filter(Boolean).length };
+    const library = (await ctx.db.query("questions").collect()).filter(isSharedLibraryQuestion);
+    // One scan of the embeddings, not a lookup per question, so this stays within a query's limits.
+    const embedded = new Set((await ctx.db.query("question_embeddings").collect()).map((row) => row.questionId));
+    return { publicQuestions: library.length, withEmbedding: library.filter((question) => embedded.has(question._id)).length };
   },
 });
 

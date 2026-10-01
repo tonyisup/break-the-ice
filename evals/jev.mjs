@@ -2,6 +2,7 @@
 // the AI overhaul plan's "Jev question sets" table. Code applies the cutoffs; Jev only answers.
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { hashOf } from "./stats.mjs";
 
 const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 // Pinned, so a Jev release can't show up as a change in the generator. Bump it deliberately and
@@ -143,16 +144,10 @@ export const DUP_QUESTIONS = {
  * Identifies the judge and the exact question wording. Runs scored under different hashes aren't
  * comparable: rescore the baseline after any wording change.
  */
-export const QUESTION_SET_HASH = createHash("sha256")
-  .update(JSON.stringify({ JEV_MODEL, GATE_QUESTIONS, FIT_TOPIC, DUP_QUESTIONS }))
-  .digest("hex")
-  .slice(0, 16);
+export const QUESTION_SET_HASH = hashOf({ JEV_MODEL, GATE_QUESTIONS, FIT_TOPIC, DUP_QUESTIONS });
 
 /** Identifies the cutoffs that turn answers into verdicts. Refitting them makes runs incomparable. */
-export const CUTOFFS_HASH = createHash("sha256")
-  .update(JSON.stringify({ SAFETY_BLOCK, SAFETY_REVIEW, QUALITY_CUTOFFS, DUP_LIKELY, DUP_REVIEW }))
-  .digest("hex")
-  .slice(0, 16);
+export const CUTOFFS_HASH = hashOf({ SAFETY_BLOCK, SAFETY_REVIEW, QUALITY_CUTOFFS, DUP_LIKELY, DUP_REVIEW });
 
 /** Gate state: only the question and the short definitions, since Jev gets less accurate as state grows. */
 export function gateRequest({ text, definitions }) {
@@ -180,27 +175,28 @@ export function answerValues(answers) {
   );
 }
 
-function answersValid(questions, answers) {
-  try {
-    assertAnswers(questions, answers);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Throws unless every question asked came back as a finite number of the type asked. */
-function assertAnswers(questions, answers) {
+/** Why an answer set can't be used (a question missing or not a finite number of its type), or null. */
+function answerProblem(questions, answers) {
   for (const [id, question] of Object.entries(questions)) {
     const answer = answers?.[id];
     const value = question.type === "noul" ? answer?.noul : answer?.score;
     if (answer?.type !== question.type || !Number.isFinite(value)) {
-      throw new Error(`Jev answered "${id}" with ${JSON.stringify(answer)?.slice(0, 120)}`);
+      return `Jev answered "${id}" with ${JSON.stringify(answer)?.slice(0, 120)}`;
     }
   }
+  return null;
 }
 
-export function gateVerdict(values) {
+/** The fit questions, graded against the style, tone and topic definitions. */
+export const FIT_IDS = ["fit_style", "fit_tone", "fit_topic"];
+
+/**
+ * The verdict for one question's answers. `ignore` leaves questions out, e.g. FIT_IDS when
+ * definitions changed.
+ * @param {Record<string, number | undefined>} values
+ * @param {{ ignore?: string[] }} [options]
+ */
+export function gateVerdict(values, { ignore = [] } = {}) {
   const reasons = [];
   let verdict = "pass";
   const review = (id) => {
@@ -220,6 +216,7 @@ export function gateVerdict(values) {
     }
   }
   for (const [id, cutoff] of Object.entries(QUALITY_CUTOFFS)) {
+    if (ignore.includes(id)) continue;
     const value = values[id];
     // fit_topic is only asked when the seed has a topic.
     if (value === undefined && id === "fit_topic") continue;
@@ -271,7 +268,7 @@ export class JevClient {
     const body = JSON.stringify({ model: JEV_MODEL, state, questions });
     const key = createHash("sha256").update(body).digest("hex");
     const hit = this.cache.get(key);
-    if (hit && answersValid(questions, hit.answers)) {
+    if (hit && !answerProblem(questions, hit.answers)) {
       this.usage.cached++;
       this.count(hit);
       return hit;
@@ -298,7 +295,8 @@ export class JevClient {
         if (response.ok) {
           const json = await response.json();
           // A malformed answer would otherwise be cached and read as "no duplicate" or "pass".
-          assertAnswers(questions, json.answers);
+          const problem = answerProblem(questions, json.answers);
+          if (problem) throw new Error(problem);
           const result = { model: json.model, answers: json.answers, usage: json.usage };
           this.cache.set(key, result);
           appendFileSync(this.cachePath, `${JSON.stringify({ key, response: result })}\n`);
@@ -336,18 +334,4 @@ export class JevClient {
     this.usage.outputTokens += result.usage?.output_tokens ?? 0;
     this.usage.models[result.model] = (this.usage.models[result.model] ?? 0) + 1;
   }
-}
-
-/** Runs `fn` over `items` with at most `limit` in flight, keeping order. */
-export async function mapLimit(items, limit, fn) {
-  const results = new Array(items.length);
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i], i);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
 }

@@ -1,4 +1,4 @@
-import { ConvexError } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { fingerprintText, normalizeQuestion, validateGeneratedQuestion } from "./promptArchitecture";
 
 /**
@@ -13,6 +13,10 @@ export function assertEvalsEnabled(): void {
     });
   }
 }
+
+const definition = v.object({ slug: v.string(), name: v.string(), definition: v.string() });
+/** The short style, tone and topic definitions Jev grades fit against. */
+export const evalDefinitionsResult = v.object({ style: definition, tone: definition, topic: v.union(v.null(), definition) });
 
 export type EvalPipelineOutcome = "saved" | "duplicate" | "rejected";
 

@@ -1,7 +1,8 @@
 // The eval harness's local Node tooling (evals/*.mjs). Nothing here touches the network: fetch is
 // stubbed, and generate.mjs is only run far enough to hit its guards.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -12,6 +13,7 @@ import {
   JevClient,
   MAX_RETRIES,
   CUTOFFS_HASH,
+  FIT_IDS,
   GATE_QUESTIONS,
   QUALITY_CUTOFFS,
   QUESTION_SET_HASH,
@@ -24,9 +26,9 @@ import {
   dupVerdict,
   gateRequest,
   gateVerdict,
-  mapLimit,
 } from "../evals/jev.mjs";
-import { classifyFailure, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess } from "../evals/runRecord.mjs";
+import { mapLimit } from "../evals/async.mjs";
+import { classifyFailure, cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess } from "../evals/runRecord.mjs";
 import {
   COMPARABLE_KEYS,
   REPLICATE_KEYS,
@@ -34,15 +36,17 @@ import {
   frame,
   frameStats,
   hashOf,
+  SCORING_VERSION,
+  detectableRange,
+  differenceInterval,
+  fisherExact,
   identityMismatches,
   median,
-  normalCdf,
   poolRates,
   rate,
   round,
   sd,
   tally,
-  twoProportionTest,
   wilson,
 } from "../evals/stats.mjs";
 
@@ -96,6 +100,14 @@ describe("gateVerdict", () => {
     }
     expect(clean.fit_topic).toBeUndefined();
     expect(gateVerdict(clean).verdict).toBe("pass");
+  });
+
+  test("leaving out the fit questions decides on safety and the rest of quality", () => {
+    expect(gateVerdict({ ...clean, fit_style: 0 })).toEqual({ verdict: "review", reasons: ["fit_style"] });
+    expect(gateVerdict({ ...clean, fit_style: 0 }, { ignore: FIT_IDS })).toEqual({ verdict: "pass", reasons: [] });
+    const { fit_style: _, fit_tone: __, ...withoutFit } = clean;
+    expect(gateVerdict(withoutFit, { ignore: FIT_IDS }).verdict).toBe("pass");
+    expect(gateVerdict({ ...clean, s_trauma: 0.9 }, { ignore: FIT_IDS }).verdict).toBe("block");
   });
 
   test("a missing or non-numeric answer is never a pass", () => {
@@ -408,14 +420,24 @@ describe("summary helpers", () => {
 });
 
 describe("comparison statistics", () => {
-  test("the two-proportion test matches known values", () => {
-    expect(normalCdf(1.96)).toBeCloseTo(0.975, 4);
-    expect(twoProportionTest(50, 100, 50, 100)).toEqual({ diff: 0, p: 1 });
-    const drop = twoProportionTest(80, 100, 60, 100);
-    expect(drop.diff).toBe(-0.2);
-    expect(drop.p).toBeCloseTo(0.0019, 3);
-    expect(twoProportionTest(0, 100, 0, 100)).toEqual({ diff: 0, p: 1 });
-    expect(twoProportionTest(1, 0, 1, 10)).toEqual({ diff: null, p: null });
+  test("Fisher's exact test matches known values, including small counts", () => {
+    // The tea-tasting table: 3 of 4 against 1 of 4.
+    expect(fisherExact(3, 4, 1, 4)).toBeCloseTo(0.4857, 4);
+    expect(fisherExact(50, 100, 50, 100)).toBeCloseTo(1, 6);
+    // Where the normal approximation would wrongly call a difference at 0.05 / 7.
+    expect(fisherExact(1, 61, 4, 20)).toBeCloseTo(0.0121, 3);
+    expect(fisherExact(0, 0, 1, 10)).toBeNull();
+  });
+
+  test("the difference interval and detectable range describe what a run could show", () => {
+    const interval = differenceInterval(162, 200, 70, 100)!;
+    expect(interval[0]).toBeLessThan(-0.11);
+    expect(interval[1]).toBeLessThan(0);
+    const range = detectableRange(233, 300, 100, 0.05 / 7)!;
+    expect(range.below).toBeLessThan(0.7);
+    expect(range.above).toBeGreaterThan(0.85);
+    expect(fisherExact(233, 300, Math.round(range.below! * 100), 100)).toBeLessThan(0.05 / 7);
+    expect(fisherExact(233, 300, Math.round(range.below! * 100) + 1, 100)).toBeGreaterThanOrEqual(0.05 / 7);
   });
 
   test("pooling adds up counts across runs, keeping each run's rate", () => {
@@ -472,138 +494,400 @@ describe("run record", () => {
     expect(classifyFailure("spawn npx ENOENT")).toBe("cli");
   });
 
-  test("fetched generation runs are added once each", () => {
-    const a = { runId: "r1", status: "failed" };
+  test("fetched generation runs are added once each, and a fresh read replaces an older one", () => {
+    const running = { runId: "r1", status: "running" };
+    const failed = { runId: "r1", status: "failed" };
     const b = { runId: "r2", status: "succeeded" };
-    expect(mergeAttempts([a], [a, b])).toEqual([a, b]);
+    expect(mergeAttempts([running], [failed, b])).toEqual([failed, b]);
+    expect(mergeAttempts([failed, b], [])).toEqual([failed, b]);
+  });
+
+  test("a CLI failure is reported by the last lines of its output", () => {
+    const error = { message: "Command failed: npx convex run internal/evalData:evalRunAttempts {...}", stderr: "npm notice\nline 2\n✖ Failed\nUncaught ConvexError: Evals are off\n" };
+    expect(cliError(error)).toBe("line 2 ✖ Failed Uncaught ConvexError: Evals are off");
+    expect(cliError(new Error("spawn npx ENOENT"))).toBe("spawn npx ENOENT");
   });
 });
 
-describe("script guards", () => {
-  const evalsDir = join(__dirname, "..", "evals");
-  const scratchRuns = ["guard-test", "Bad Name", "no-such-run", "guard-a", "guard-b", "guard-new"];
-  const scratchFiles = ["guard-base.json"];
-  // No inherited environment and an unusable PATH: if a guard ever regressed, the script would
-  // fail to find npx instead of generating (and paying for) a run on dev.
+describe("scripts", () => {
+  // Each test runs copies of the scripts in a temp directory, so nothing touches the real
+  // evals/runs or reads the real .env files. No inherited environment and an unusable PATH: if a
+  // guard ever regressed, a script would fail to find npx instead of generating (and paying for) a
+  // run on dev.
+  const repoRoot = join(__dirname, "..");
+  let root: string;
+  let evalsDir: string;
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "evals-scripts-"));
+    evalsDir = join(root, "evals");
+    mkdirSync(join(evalsDir, "runs"), { recursive: true });
+    for (const file of readdirSync(join(repoRoot, "evals"))) {
+      if (file.endsWith(".mjs") || file === "seeds.json") cpSync(join(repoRoot, "evals", file), join(evalsDir, file));
+    }
+    symlinkSync(join(repoRoot, "node_modules"), join(root, "node_modules"), "dir");
+  });
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
   const runScript = (name: string, args: string[], env: Record<string, string> = {}) =>
     spawnSync(process.execPath, [join(evalsDir, name), ...args], {
+      cwd: root,
       env: { PATH: "/nonexistent", ...env },
       encoding: "utf8",
       timeout: 10_000,
     });
-  afterEach(() => {
-    for (const run of scratchRuns) rmSync(join(evalsDir, "runs", run), { recursive: true, force: true });
-    for (const file of scratchFiles) rmSync(join(evalsDir, "runs", file), { force: true });
-  });
-  const writeRun = (run: string, summary: unknown, generated: unknown = { batches: [] }) => {
+  const writeRun = (run: string, files: Record<string, unknown>) => {
     const dir = join(evalsDir, "runs", run);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "generated.json"), JSON.stringify(generated));
-    if (summary) writeFileSync(join(dir, "summary.json"), JSON.stringify(summary));
-  };
-
-  test("generate refuses a bad run name and a non-dev deployment before doing anything", () => {
-    const badName = runScript("generate.mjs", ["Bad Name"]);
-    expect(badName.status).toBe(1);
-    expect(badName.stderr).toMatch(/Usage: node evals\/generate\.mjs/);
-    expect(existsSync(join(evalsDir, "runs", "Bad Name"))).toBe(false);
-
-    for (const [name, value] of [
-      ["CONVEX_DEPLOY_KEY", "prod:test-only|abc"],
-      ["CONVEX_DEPLOY_KEY", "preview:test-only|abc"],
-      ["CONVEX_DEPLOYMENT", "prod:happy-otter-123"],
-    ]) {
-      const result = runScript("generate.mjs", ["guard-test"], { [name]: value });
-      expect(result.status, value).toBe(1);
-      expect(result.stderr, value).toMatch(new RegExp(`${name} points at a non-dev deployment`));
+    for (const [name, content] of Object.entries(files)) {
+      writeFileSync(join(dir, name), typeof content === "string" ? content : JSON.stringify(content));
     }
-    expect(existsSync(join(evalsDir, "runs", "guard-test"))).toBe(false);
-  });
+  };
+  const readRunFile = (path: string) => JSON.parse(readFileSync(join(evalsDir, "runs", path), "utf8"));
 
-  test("score needs a run name and a generated run", () => {
-    const noRun = runScript("score.mjs", []);
-    expect(noRun.status).toBe(1);
-    expect(noRun.stderr).toMatch(/Usage: node evals\/score\.mjs/);
-
-    const notGenerated = runScript("score.mjs", ["no-such-run"]);
-    expect(notGenerated.status).toBe(1);
-    expect(notGenerated.stderr).toMatch(/Run node evals\/generate\.mjs no-such-run first/);
-  });
-
-  test("score won't overwrite a summary judged under other wording or cutoffs unless forced", () => {
-    writeRun("guard-test", { judge: { questionSetHash: "old", cutoffsHash: CUTOFFS_HASH } });
-
-    const refused = runScript("score.mjs", ["guard-test"]);
-    expect(refused.status).toBe(1);
-    expect(refused.stderr).toMatch(/different Jev version, question wording or cutoffs \(old\//);
-
-    // Forced, it gets past the guard and stops at the missing API key, before any request.
-    const forced = runScript("score.mjs", ["guard-test", "--force"]);
-    expect(forced.status).toBe(1);
-    expect(forced.stderr).toMatch(/TYPESAFE_API_KEY/);
-  });
-
-  test("score refuses a run whose generation records are missing", () => {
-    writeRun("guard-test", null, {
-      batches: [{ seed: { id: "s01" }, ok: true, result: { runId: "r1", candidates: [] } }],
-      attempts: [],
+  describe("generate", () => {
+    test("refuses a bad run name before doing anything", () => {
+      const result = runScript("generate.mjs", ["Bad Name"]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/Usage: node evals\/generate\.mjs/);
+      expect(existsSync(join(evalsDir, "runs", "Bad Name"))).toBe(false);
     });
 
-    const result = runScript("score.mjs", ["guard-test"]);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toMatch(/Generation records are missing for s01/);
+    test("refuses a non-dev deployment named in the shell", () => {
+      for (const [name, value] of [
+        ["CONVEX_DEPLOY_KEY", "prod:test-only|abc"],
+        ["CONVEX_DEPLOY_KEY", "preview:test-only|abc"],
+        ["CONVEX_DEPLOYMENT", "prod:happy-otter-123"],
+      ]) {
+        const result = runScript("generate.mjs", ["guard-test"], { [name]: value });
+        expect(result.status, value).toBe(1);
+        expect(result.stderr, value).toMatch(new RegExp(`${name} points at a non-dev deployment`));
+      }
+      expect(existsSync(join(evalsDir, "runs", "guard-test"))).toBe(false);
+    });
+
+    test("reads .env.local as the Convex CLI does, including YAML-style lines", () => {
+      for (const line of ["CONVEX_DEPLOYMENT=prod:happy-otter-123", "CONVEX_DEPLOYMENT: prod:happy-otter-123", 'export CONVEX_DEPLOYMENT="prod:x" # main']) {
+        writeFileSync(join(root, ".env.local"), `${line}\n`);
+        const result = runScript("generate.mjs", ["guard-test"]);
+        expect(result.status, line).toBe(1);
+        expect(result.stderr, line).toMatch(/CONVEX_DEPLOYMENT points at a non-dev deployment/);
+      }
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\nCONVEX_SELF_HOSTED_URL=https://convex.example\n");
+      const selfHosted = runScript("generate.mjs", ["guard-test"]);
+      expect(selfHosted.status).toBe(1);
+      expect(selfHosted.stderr).toMatch(/CONVEX_SELF_HOSTED_URL is set/);
+      // The shell wins over the file, as with the CLI.
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const shell = runScript("generate.mjs", ["guard-test"], { CONVEX_DEPLOYMENT: "prod:happy-otter-123" });
+      expect(shell.stderr).toMatch(/non-dev deployment/);
+    });
+
+    test("refuses when no deployment is configured", () => {
+      const result = runScript("generate.mjs", ["guard-test"]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/No Convex deployment is configured/);
+    });
+
+    test("refuses uncommitted convex/ changes unless allowed", () => {
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      spawnSync("git", ["init", "-q"], { cwd: root });
+      mkdirSync(join(root, "convex"));
+      writeFileSync(join(root, "convex", "draft.ts"), "export {};\n");
+
+      const result = runScript("generate.mjs", ["guard-test"], { PATH: "/usr/bin:/bin" });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/convex\/ has uncommitted changes/);
+    });
   });
 
-  test("baseline pools replicates and refuses non-replicates; compare tests a run against it", () => {
+  describe("score", () => {
+    test("needs a run name and a generated run", () => {
+      const noRun = runScript("score.mjs", []);
+      expect(noRun.status).toBe(1);
+      expect(noRun.stderr).toMatch(/Usage: node evals\/score\.mjs/);
+
+      const notGenerated = runScript("score.mjs", ["no-such-run"]);
+      expect(notGenerated.status).toBe(1);
+      expect(notGenerated.stderr).toMatch(/Run node evals\/generate\.mjs no-such-run first/);
+    });
+
+    test("won't overwrite a summary judged under other wording, cutoffs or scoring unless forced", () => {
+      writeRun("guard-test", {
+        "generated.json": { batches: [], attempts: [] },
+        "summary.json": { judge: { questionSetHash: "old", cutoffsHash: CUTOFFS_HASH, scoringVersion: SCORING_VERSION } },
+      });
+
+      const refused = runScript("score.mjs", ["guard-test"]);
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toMatch(/different Jev version, question wording, cutoffs or scoring version \(old\//);
+
+      // Forced, it gets past the guard and stops at the missing API key, before any request.
+      const forced = runScript("score.mjs", ["guard-test", "--force"]);
+      expect(forced.status).toBe(1);
+      expect(forced.stderr).toMatch(/TYPESAFE_API_KEY/);
+    });
+
+    test("refuses a run whose generation records are missing or unfinished", () => {
+      const batch = { seed: { id: "s01" }, ok: true, result: { runId: "r1", candidates: [] } };
+      writeRun("missing", { "generated.json": { batches: [batch], attempts: [] } });
+      writeRun("unfinished", { "generated.json": { batches: [batch], attempts: [{ runId: "r1", status: "running" }] } });
+
+      const missing = runScript("score.mjs", ["missing"]);
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toMatch(/Generation records are missing for s01/);
+      const unfinished = runScript("score.mjs", ["unfinished"]);
+      expect(unfinished.status).toBe(1);
+      expect(unfinished.stderr).toMatch(/hadn't finished/);
+    });
+
+    test("computes every primary rate from its own units, end to end from cached Jev answers", () => {
+      const definitions = { style: { slug: "a", name: "A", definition: "Ask A." }, tone: { slug: "t", name: "T", definition: "Light." }, topic: null };
+      const neighbour = (id: string, text: string, cosine: number) => ({ questionId: id, text, cosine });
+      const candidate = (text: string, outcome: string, duplicateOf: string | null, neighbours: unknown[], codeRejections: string[] = []) => ({
+        text,
+        outcome,
+        duplicateOf,
+        codeRejections,
+        neighbours,
+        neighbourError: null,
+      });
+      const result = (runId: string, candidates: unknown[]) => ({
+        runId,
+        model: "preset",
+        temperature: 0.9,
+        settings: { maxOutputTokens: 2900, unusableOutputAttempts: 2, neighbours: 5 },
+        promptHash: `hash-${runId}`,
+        blueprint: { slug: "b", version: 1 },
+        style: { slug: "a", version: 1, name: "A" },
+        tone: { slug: "t", version: 1, name: "T" },
+        topic: null,
+        definitions,
+        fingerprintCollisions: 0,
+        candidates,
+      });
+      const generated = {
+        run: "e2e",
+        deployment: "dev",
+        createdAt: "2026-10-01T00:00:00.000Z",
+        batchSize: 3,
+        invocations: [{ startedAtMs: 0, commit: "abc", library: { publicQuestions: 10, withEmbedding: 10 }, attemptsComplete: true }],
+        attempts: [
+          { runId: "r0", seedId: "s01", status: "failed", error: "Model output could not be read: Unterminated string in JSON", resolvedModel: "m1", costUsd: 0.01, completionTokens: 900 },
+          { runId: "r1", seedId: "s01", status: "succeeded", error: null, resolvedModel: "m1", costUsd: 0.01, completionTokens: 900 },
+          { runId: "rx", seedId: "s02", status: "failed", error: "AI provider returned an empty completion (model=m1, finish_reason=error)", resolvedModel: "m1", costUsd: 0, completionTokens: 0 },
+          { runId: "r2", seedId: "s02", status: "succeeded", error: null, resolvedModel: "m1", costUsd: 0.01, completionTokens: 900 },
+        ],
+        batches: [
+          {
+            seed: { id: "s01", style: "a", tone: "t" },
+            ok: true,
+            commit: "abc",
+            failures: [],
+            result: result("r1", [
+              candidate("Q1?", "saved", null, [neighbour("l1", "L1?", 0.8)]),
+              candidate("Q2?", "rejected", null, [neighbour("l2", "L2?", 0.6)], ["too long"]),
+              // An exact copy the save step caught (its text normalizes to Q1's).
+              candidate("Q1 again?", "duplicate", "batch", []),
+            ]),
+          },
+          {
+            seed: { id: "s02", style: "a", tone: "t" },
+            ok: true,
+            commit: "abc",
+            failures: [],
+            // Two questions where three were asked for.
+            result: result("r2", [candidate("Q4?", "saved", null, [neighbour("l1", "L1?", 0.97)]), candidate("L3?", "duplicate", "library", [])]),
+          },
+        ],
+      };
+
+      // Every answer the scorer will ask for, pre-seeded in its cache.
+      const gateAnswers = (overrides: Record<string, number>) =>
+        Object.fromEntries(
+          Object.entries(GATE_QUESTIONS).map(([id, question]) => {
+            const value = overrides[id] ?? clean[id];
+            return [id, question.type === "noul" ? { type: "noul", noul: value } : { type: "score", score: value }];
+          }),
+        );
+      const dupAnswers = (level: number) => ({
+        dup_level: { type: "score", score: level },
+        same_answer: { type: "noul", noul: 0.1 },
+        same_template: { type: "noul", noul: 0.1 },
+      });
+      const cacheLine = ({ state, questions }: { state: unknown; questions: unknown }, answers: unknown) =>
+        JSON.stringify({
+          key: createHash("sha256").update(JSON.stringify({ model: JEV_MODEL, state, questions })).digest("hex"),
+          response: { model: JEV_MODEL, answers, usage: { input_tokens: 1, output_tokens: 1 } },
+        });
+      const gate: Array<[string, Record<string, number>]> = [
+        ["Q1?", {}],
+        ["Q2?", { s_trauma: 0.9 }],
+        ["Q1 again?", { fit_style: 0.5 }],
+        ["Q4?", {}],
+        ["L3?", {}],
+      ];
+      const pairs: Array<[string, string, number]> = [
+        ["Q1?", "L1?", 0.2],
+        ["Q2?", "L2?", 1.8],
+        ["Q4?", "L1?", 1.2],
+        ["Q1?", "Q2?", 0.1],
+        ["Q1?", "Q4?", 1.6],
+        ["Q2?", "Q4?", 0],
+      ];
+      const cache = [
+        ...gate.map(([text, overrides]) => cacheLine(gateRequest({ text, definitions }), gateAnswers(overrides))),
+        ...pairs.flatMap(([a, b, level]) => [cacheLine(dupRequest(a, b), dupAnswers(level)), cacheLine(dupRequest(b, a), dupAnswers(level))]),
+      ];
+      writeRun("e2e", { "generated.json": generated, "jev-cache.jsonl": `${cache.join("\n")}\n` });
+
+      const scored = runScript("score.mjs", ["e2e"], { TYPESAFE_API_KEY: "test-only" });
+      expect(scored.status, scored.stderr).toBe(0);
+      const summary = readRunFile("e2e/summary.json");
+
+      expect(summary.jev).toMatchObject({ requests: 0 });
+      expect(summary.rates).toMatchObject({
+        // Over all 5 generated questions: Q1 and Q4 and L3 pass, the batch copy is review (style
+        // fit), Q2 is blocked (rejected by the code checks, still counted).
+        passRate: { k: 3, n: 5 },
+        reviewRate: { k: 1, n: 5 },
+        blockRate: { k: 1, n: 5 },
+        passRateWithoutFit: { k: 4, n: 5 },
+        reviewRateWithoutFit: { k: 0, n: 5 },
+        // The library copy counts as likely; of the 3 compared questions, Q2 is likely.
+        libraryLikelyRate: { k: 2, n: 4 },
+        // s01 has an exact copy within the batch; s02 has neither a copy nor a likely pair.
+        batchLikelyRate: { k: 1, n: 2 },
+        unusableOutputRate: { k: 1, n: 4 },
+        providerErrorRate: { k: 1, n: 4 },
+        yieldRate: { k: 5, n: 6 },
+        withinBatchLikelyPairRate: { k: 0, n: 1 },
+        crossBatchLikelyRate: { k: 1, n: 2 },
+        savedRate: { k: 2, n: 5 },
+        s_traumaFlagRate: { k: 1, n: 5 },
+      });
+      expect(summary.safety.s_trauma.block).toBe(1);
+      expect(summary.judge).toEqual({ model: JEV_MODEL, questionSetHash: QUESTION_SET_HASH, cutoffsHash: CUTOFFS_HASH, scoringVersion: SCORING_VERSION });
+      expect(summary.generator).toMatchObject({ resolvedModelSet: ["m1"], neighbours: 5, batchSize: 3 });
+      expect(summary.library).toMatchObject({ sizes: [{ publicQuestions: 10, withEmbedding: 10 }], questionsChecked: 3 });
+    });
+  });
+
+  describe("baseline and compare", () => {
     const identity = {
-      judge: { questionSetHash: QUESTION_SET_HASH, cutoffsHash: CUTOFFS_HASH },
+      judge: { questionSetHash: QUESTION_SET_HASH, cutoffsHash: CUTOFFS_HASH, scoringVersion: SCORING_VERSION },
       generator: {
         seedSetHash: "seeds",
+        batchSize: 5,
+        neighbours: 5,
         promptSetHash: "prompts",
         definitionsHash: "defs",
         taxonomyHash: "tax",
-        batchSize: 5,
         temperatures: [0.9],
+        resolvedModelSet: ["m1"],
+        settingsHash: "settings",
         commits: ["abc"],
-        resolvedModels: { m: 20 },
+        resolvedModels: { m1: 20 },
         costUsd: 0.1,
       },
-      batches: { failed: [] },
-      library: { sizes: [{ publicQuestions: 205, withEmbedding: 205 }] },
+      batches: { failed: [] as string[] },
+      library: { sizes: [{ publicQuestions: 205, withEmbedding: 205 }], searchErrors: 0 },
       quality: { readability: { mean: 2.5 } },
     };
-    const summary = (run: string, pass: number, block: number, overrides: Record<string, unknown> = {}) => ({
+    type Overrides = { generator?: Record<string, unknown>; judge?: Record<string, unknown>; library?: Record<string, unknown>; batches?: Record<string, unknown>; rates?: Record<string, unknown> };
+    const summary = (run: string, pass: number, overrides: Overrides = {}) => ({
       ...identity,
       run,
-      rates: { passRate: rate(pass, 100), blockRate: rate(block, 100) },
-      ...overrides,
+      judge: { ...identity.judge, ...overrides.judge },
+      generator: { ...identity.generator, ...overrides.generator },
+      library: { ...identity.library, ...overrides.library },
+      batches: { ...identity.batches, ...overrides.batches },
+      rates: { passRate: rate(pass, 100), passRateWithoutFit: rate(pass, 100), libraryLikelyRate: rate(3, 100), ...overrides.rates },
     });
-    writeRun("guard-a", summary("guard-a", 80, 1));
-    writeRun("guard-b", summary("guard-b", 82, 1));
+    const baselineOf = (...runs: Array<[string, number, Overrides?]>) => {
+      for (const [run, pass, overrides] of runs) writeRun(run, { "summary.json": summary(run, pass, overrides) });
+      return runScript("baseline.mjs", ["base", ...runs.map(([run]) => run)]);
+    };
 
-    const pooled = runScript("baseline.mjs", ["guard-base", "guard-a", "guard-b"]);
-    expect(pooled.status, pooled.stderr).toBe(0);
-    const baseline = JSON.parse(readFileSync(join(evalsDir, "runs", "guard-base.json"), "utf8"));
-    expect(baseline.rates.passRate).toMatchObject({ k: 162, n: 200, rate: 0.81, perRun: [0.8, 0.82] });
-    expect(baseline.qualityMeans.readability).toEqual({ perRun: [2.5, 2.5], mean: 2.5, sd: 0 });
+    test("baseline pools replicates", () => {
+      const pooled = baselineOf(["a", 80], ["b", 82]);
+      expect(pooled.status, pooled.stderr).toBe(0);
+      const baseline = readRunFile("base.json");
+      expect(baseline.rates.passRate).toMatchObject({ k: 162, n: 200, rate: 0.81, perRun: [0.8, 0.82] });
+      expect(baseline.qualityMeans.readability).toEqual({ perRun: [2.5, 2.5], mean: 2.5, sd: 0 });
+      expect(baseline.identity["generator.promptSetHash"]).toBe("prompts");
+    });
 
-    // A changed prompt is a different setup, not a replicate, but it can be compared.
-    writeRun("guard-new", summary("guard-new", 55, 9, { generator: { ...identity.generator, promptSetHash: "new-prompts" } }));
-    const notReplicates = runScript("baseline.mjs", ["guard-base", "guard-a", "guard-new"]);
-    expect(notReplicates.status).toBe(1);
-    expect(notReplicates.stderr).toMatch(/generator.promptSetHash differs/);
+    test("baseline refuses runs that aren't replicates of one setup", () => {
+      const cases: Array<[Overrides, RegExp]> = [
+        [{ generator: { promptSetHash: "other" } }, /generator.promptSetHash differs/],
+        [{ generator: { resolvedModelSet: ["m2"] } }, /generator.resolvedModelSet differs/],
+        [{ generator: { resolvedModelSet: ["m1", "m2"] } }, /mixes models/],
+        [{ batches: { failed: ["s03"] } }, /has failed seeds/],
+        [{ library: { sizes: [{ publicQuestions: 240, withEmbedding: 240 }] } }, /library sizes differ/],
+        [{ library: { sizes: [{ publicQuestions: 205, withEmbedding: 205 }, { publicQuestions: 206, withEmbedding: 206 }] } }, /spans library changes/],
+      ];
+      for (const [overrides, message] of cases) {
+        const result = baselineOf(["a", 80], ["b", 82, overrides]);
+        expect(result.status, String(message)).toBe(1);
+        expect(result.stderr, String(message)).toMatch(message);
+      }
+    });
 
-    const compared = runScript("compare.mjs", ["guard-base", "guard-new"]);
-    expect(compared.status, compared.stderr).toBe(0);
-    const comparison = JSON.parse(readFileSync(join(evalsDir, "runs", "guard-new", "comparison-guard-base.json"), "utf8"));
-    expect(comparison.changed).toEqual(["generator.promptSetHash"]);
-    expect(comparison.rates.passRate).toMatchObject({ primary: true, baseline: 0.81, run: 0.55, different: true });
-    expect(comparison.differentPrimaryRates).toContain("passRate");
+    test("compare decides primary rates with Bonferroni: a clear change is different, a borderline one isn't", () => {
+      baselineOf(["a", 80], ["b", 82]);
+      const changed = { generator: { promptSetHash: "new-prompts" } };
+      writeRun("clear", { "summary.json": summary("clear", 55, changed) });
+      writeRun("borderline", { "summary.json": summary("borderline", 70, changed) });
 
-    // A run judged with other cutoffs can't be compared at all.
-    writeRun("guard-new", summary("guard-new", 80, 1, { judge: { questionSetHash: QUESTION_SET_HASH, cutoffsHash: "refit" } }));
-    const incomparable = runScript("compare.mjs", ["guard-base", "guard-new"]);
-    expect(incomparable.status).toBe(1);
-    expect(incomparable.stderr).toMatch(/judge.cutoffsHash/);
+      const clear = runScript("compare.mjs", ["base", "clear"]);
+      expect(clear.status, clear.stderr).toBe(0);
+      const clearResult = readRunFile("clear/comparison-base.json");
+      expect(clearResult.changed).toEqual(["generator.promptSetHash"]);
+      expect(clearResult.primary.passRate).toMatchObject({ result: "different", baseline: 0.81, run: 0.55 });
+      expect(clearResult.different).toContain("passRate");
+
+      runScript("compare.mjs", ["base", "borderline"]);
+      const borderline = readRunFile("borderline/comparison-base.json").primary.passRate;
+      // p is about 0.04: below 0.05, but not below 0.05 / 7.
+      expect(borderline.p).toBeGreaterThan(0.05 / 7);
+      expect(borderline.p).toBeLessThan(0.05);
+      expect(borderline.result).toBe("not detected");
+      expect(borderline.detectable.below).toBeLessThan(0.7);
+    });
+
+    test("compare pools several runs, swaps in no-fit rates when definitions change, and flags missing data", () => {
+      baselineOf(["a", 80], ["b", 82]);
+      const newDefinitions = { generator: { definitionsHash: "new-defs" }, rates: { passRateWithoutFit: rate(80, 100), libraryLikelyRate: rate(0, 0) } };
+      writeRun("x1", { "summary.json": summary("x1", 50, newDefinitions) });
+      writeRun("x2", { "summary.json": summary("x2", 52, newDefinitions) });
+
+      const result = runScript("compare.mjs", ["base", "x1", "x2"]);
+      expect(result.status, result.stderr).toBe(0);
+      const comparison = readRunFile("x1/comparison-base.json");
+      expect(comparison.warnings.join(" ")).toMatch(/decided without the fit questions/);
+      expect(comparison.primary.passRate).toMatchObject({ decidedBy: "passRateWithoutFit", result: "not detected", runCounts: [160, 200] });
+      expect(comparison.primary.libraryLikelyRate.result).toBe("no data");
+      // The fixture only has a few rates; the point is that an empty rate isn't read as unchanged.
+      expect(comparison.noData).toContain("libraryLikelyRate");
+      expect(comparison.noData).not.toContain("passRate");
+      expect(result.stdout).toMatch(/NO DATA\s+libraryLikelyRate/);
+    });
+
+    test("compare refuses runs it can't fairly compare", () => {
+      baselineOf(["a", 80], ["b", 82]);
+      const cases: Array<[string[], Overrides[], RegExp]> = [
+        [["refit"], [{ judge: { cutoffsHash: "refit" } }], /judge.cutoffsHash differs from base's/],
+        [["rescored"], [{ judge: { scoringVersion: SCORING_VERSION + 1 } }], /judge.scoringVersion differs/],
+        [["failed"], [{ batches: { failed: ["s03"] } }], /failed has failed seeds/],
+        [["m1", "m2"], [{}, { generator: { promptSetHash: "other" } }], /aren't one setup/],
+      ];
+      for (const [runs, overrides, message] of cases) {
+        runs.forEach((run, i) => writeRun(run, { "summary.json": summary(run, 80, overrides[i]) }));
+        const result = runScript("compare.mjs", ["base", ...runs]);
+        expect(result.status, String(message)).toBe(1);
+        expect(result.stderr, String(message)).toMatch(message);
+      }
+    });
   });
 });

@@ -4,8 +4,14 @@ import { createHash } from "node:crypto";
 import { v, type Infer } from "convex/values";
 import { internalAction, type ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
-import { assertEvalsEnabled, checkEvalCandidates, evalFingerprint } from "../lib/evalChecks";
-import { DEFAULT_GENERATION_TEMPERATURE, GENERATION_MODEL, runPreviewQuestionGeneration } from "../lib/generationRunner";
+import { assertEvalsEnabled, checkEvalCandidates, evalDefinitionsResult, evalFingerprint } from "../lib/evalChecks";
+import {
+  DEFAULT_GENERATION_TEMPERATURE,
+  GENERATION_MODEL,
+  UNUSABLE_OUTPUT_ATTEMPTS,
+  maxOutputTokens,
+  runPreviewQuestionGeneration,
+} from "../lib/generationRunner";
 import { embed } from "../lib/retriever";
 
 const DEFAULT_NEIGHBOURS = 5;
@@ -13,7 +19,6 @@ const DEFAULT_NEIGHBOURS = 5;
 // and widen to vectorSearch's maximum when held-for-review questions crowd the public ones out.
 const NEIGHBOUR_SEARCH_LIMITS = [40, 256];
 
-const definition = v.object({ slug: v.string(), name: v.string(), definition: v.string() });
 const taxonomyRef = v.object({ slug: v.string(), version: v.number(), name: v.string() });
 const neighbour = v.object({ questionId: v.id("questions"), text: v.string(), cosine: v.number() });
 
@@ -21,13 +26,18 @@ const evalBatch = v.object({
   runId: v.id("generationRuns"),
   model: v.string(),
   temperature: v.number(),
+  /**
+   * Settings the deployed code used, so a run made against stale or different code on dev shows
+   * up as a different setup even when the local commit looks the same.
+   */
+  settings: v.object({ maxOutputTokens: v.number(), unusableOutputAttempts: v.number(), neighbours: v.number() }),
   /** The system and user prompt the model got, hashed, so runs can tell a prompt change from noise. */
   promptHash: v.string(),
   blueprint: v.object({ slug: v.string(), version: v.number() }),
   style: taxonomyRef,
   tone: taxonomyRef,
   topic: v.union(v.null(), taxonomyRef),
-  definitions: v.object({ style: definition, tone: definition, topic: v.union(v.null(), definition) }),
+  definitions: evalDefinitionsResult,
   /** Questions whose fingerprint matches more than one library row: the real save step would throw. */
   fingerprintCollisions: v.number(),
   candidates: v.array(
@@ -120,7 +130,7 @@ export const generateEvalBatch = internalAction({
 
     const neighbourCount = args.neighbours ?? DEFAULT_NEIGHBOURS;
     const candidates = [];
-    for (const check of checks) {
+    for (const { fingerprint: _fingerprint, ...check } of checks) {
       let neighbours: Neighbour[] = [];
       let neighbourError: string | null = null;
       if (neighbourCount > 0) {
@@ -131,20 +141,18 @@ export const generateEvalBatch = internalAction({
           neighbourError = error instanceof Error ? error.message : String(error);
         }
       }
-      candidates.push({
-        text: check.text,
-        outcome: check.outcome,
-        duplicateOf: check.duplicateOf,
-        codeRejections: check.codeRejections,
-        neighbours,
-        neighbourError,
-      });
+      candidates.push({ ...check, neighbours, neighbourError });
     }
 
     return {
       runId: preview.runId,
       model: GENERATION_MODEL,
       temperature,
+      settings: {
+        maxOutputTokens: maxOutputTokens(prompt.batchSize),
+        unusableOutputAttempts: UNUSABLE_OUTPUT_ATTEMPTS,
+        neighbours: neighbourCount,
+      },
       promptHash: createHash("sha256").update(`${prompt.systemPrompt}\n\n${prompt.userPrompt}`).digest("hex").slice(0, 16),
       blueprint: { slug: prompt.blueprint.slug, version: prompt.blueprint.version },
       style: { slug: prompt.style.slug, version: prompt.style.version, name: prompt.style.name },

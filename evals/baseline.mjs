@@ -21,6 +21,7 @@ const problems = [
   ...summaries.filter((summary) => summary.batches.failed.length).map((summary) => `${summary.run} has failed seeds`),
   ...(new Set(summaries.map((summary) => JSON.stringify(summary.library.sizes))).size > 1 ? ["library sizes differ"] : []),
   ...summaries.filter((summary) => summary.library.sizes.length !== 1).map((summary) => `${summary.run} spans library changes`),
+  ...summaries.filter((summary) => summary.generator.resolvedModelSet.length !== 1).map((summary) => `${summary.run} mixes models`),
 ];
 if (problems.length) {
   console.error(`These runs aren't replicates of one setup: ${problems.join("; ")}.`);
@@ -37,7 +38,7 @@ const qualityMeans = Object.fromEntries(
 const baseline = {
   name,
   runs,
-  note: "Rates pool every run's counts; interval95 is a Wilson interval. compare.mjs tests a later run against these counts.",
+  note: "Rates pool every run's counts; interval95 is a Wilson interval. compare.mjs tests later runs against these counts.",
   identity: Object.fromEntries(REPLICATE_KEYS.map((key) => [key, pick(summaries[0], key)])),
   library: summaries[0].library.sizes[0],
   generator: {

@@ -34,8 +34,14 @@ export function classifyFailure(message) {
   return "cli";
 }
 
-/** Adds newly fetched generation runs to the record, once each. */
+/** Adds newly fetched generation runs to the record, once each; a fresh read replaces an older one. */
 export function mergeAttempts(existing, fresh) {
-  const seen = new Set(existing.map((attempt) => attempt.runId));
-  return [...existing, ...fresh.filter((attempt) => !seen.has(attempt.runId))];
+  const byRun = new Map(existing.map((attempt) => [attempt.runId, attempt]));
+  for (const attempt of fresh) byRun.set(attempt.runId, attempt);
+  return [...byRun.values()];
+}
+
+/** The last lines of a failed CLI call's output, where the cause is. */
+export function cliError(error) {
+  return (error?.stderr || error?.message || String(error)).trim().split("\n").slice(-3).join(" ");
 }

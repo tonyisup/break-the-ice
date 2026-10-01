@@ -21,14 +21,18 @@ export const median = (xs) => {
 export const tally = (xs) =>
   Object.fromEntries([...xs.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map())].sort((a, b) => b[1] - a[1]));
 
-/** 95% Wilson interval for `k` of `n`, as [low, high]; null when n is 0. */
-export function wilson(k, n, z = 1.96) {
-  if (!n) return null;
+function wilsonBounds(k, n, z = 1.96) {
   const p = k / n;
   const denominator = 1 + (z * z) / n;
   const centre = (p + (z * z) / (2 * n)) / denominator;
   const half = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / denominator;
-  return [round(Math.max(0, centre - half)), round(Math.min(1, centre + half))];
+  return [Math.max(0, centre - half), Math.min(1, centre + half)];
+}
+
+/** 95% Wilson interval for `k` of `n`, as [low, high]; null when n is 0. */
+export function wilson(k, n, z = 1.96) {
+  if (!n) return null;
+  return wilsonBounds(k, n, z).map((bound) => round(bound));
 }
 
 /** A question's opening three words: the sentence frame it reuses most visibly. */
@@ -84,26 +88,64 @@ export function failureReason(message) {
 /** A count and its denominator, with the rate. */
 export const rate = (k, n) => ({ k, n, rate: n ? round(k / n) : null });
 
-/** Standard normal cumulative distribution (Abramowitz and Stegun 7.1.26, error under 1.5e-7). */
-export function normalCdf(z) {
-  const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2);
-  const erf = 1 - t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429)))) * Math.exp(-(z * z) / 2);
-  return z >= 0 ? (1 + erf) / 2 : (1 - erf) / 2;
+const logFactorials = [0];
+function logFactorial(n) {
+  for (let i = logFactorials.length; i <= n; i++) logFactorials[i] = logFactorials[i - 1] + Math.log(i);
+  return logFactorials[n];
 }
 
 /**
- * Two-proportion z-test of k2/n2 against k1/n1: the difference and its two-sided p-value. Questions
- * in one batch aren't independent, so treat p-values as optimistic.
+ * Fisher's exact test of k2 of n2 against k1 of n1, two-sided. Exact, so it stays honest for the
+ * small counts most of these rates have. Returns the unrounded p-value, for deciding.
  */
-export function twoProportionTest(k1, n1, k2, n2) {
-  if (!n1 || !n2) return { diff: null, p: null };
+export function fisherExact(k1, n1, k2, n2) {
+  if (!n1 || !n2) return null;
+  const total = n1 + n2;
+  const successes = k1 + k2;
+  const logChoose = (n, k) => logFactorial(n) - logFactorial(k) - logFactorial(n - k);
+  const probability = (x) => Math.exp(logChoose(successes, x) + logChoose(total - successes, n1 - x) - logChoose(total, n1));
+  const observed = probability(k1);
+  let p = 0;
+  for (let x = Math.max(0, successes - n2); x <= Math.min(successes, n1); x++) {
+    const px = probability(x);
+    if (px <= observed * (1 + 1e-7)) p += px;
+  }
+  return Math.min(1, p);
+}
+
+/** 95% interval for the difference k2/n2 minus k1/n1 (Newcombe's hybrid score method). */
+export function differenceInterval(k1, n1, k2, n2) {
+  if (!n1 || !n2) return null;
   const p1 = k1 / n1;
   const p2 = k2 / n2;
-  const pooled = (k1 + k2) / (n1 + n2);
-  const se = Math.sqrt(pooled * (1 - pooled) * (1 / n1 + 1 / n2));
-  if (se === 0) return { diff: round(p2 - p1), p: p1 === p2 ? 1 : 0 };
-  const z = (p2 - p1) / se;
-  return { diff: round(p2 - p1), p: round(2 * (1 - normalCdf(Math.abs(z))), 4) };
+  const [l1, u1] = wilsonBounds(k1, n1);
+  const [l2, u2] = wilsonBounds(k2, n2);
+  const diff = p2 - p1;
+  return [round(diff - Math.sqrt((p2 - l2) ** 2 + (u1 - p1) ** 2)), round(diff + Math.sqrt((u2 - p2) ** 2 + (p1 - l1) ** 2))];
+}
+
+/**
+ * The rates a run of size n2 would have to reach, below and above the baseline, before the test
+ * could call it different at `alpha`. Null on a side where no count would be enough.
+ */
+export function detectableRange(k1, n1, n2, alpha) {
+  if (!n1 || !n2) return null;
+  const expected = Math.round((k1 / n1) * n2);
+  let below = null;
+  for (let k2 = expected; k2 >= 0; k2--) {
+    if (fisherExact(k1, n1, k2, n2) < alpha) {
+      below = round(k2 / n2);
+      break;
+    }
+  }
+  let above = null;
+  for (let k2 = expected; k2 <= n2; k2++) {
+    if (fisherExact(k1, n1, k2, n2) < alpha) {
+      above = round(k2 / n2);
+      break;
+    }
+  }
+  return { below, above };
 }
 
 /** Adds up each rate's counts across runs into one pooled rate with a 95% interval. */
@@ -121,21 +163,34 @@ export function poolRates(rateSets) {
 export const pick = (object, path) => path.split(".").reduce((value, key) => value?.[key], object);
 
 /**
- * What must match for runs to be replicates of one setup: the judge, its cutoffs, the seeds, the
- * prompts (and the taxonomy and definitions they came from) and the sampling settings.
+ * Bump when the logic that turns answers into rates changes (verdicts, denominators, which
+ * questions count). Runs scored under different versions aren't comparable: rescore the baseline.
  */
-export const REPLICATE_KEYS = [
+export const SCORING_VERSION = 2;
+
+/** What must match for a run to be compared with a baseline at all: the measuring stick. */
+export const COMPARABLE_KEYS = [
   "judge.questionSetHash",
   "judge.cutoffsHash",
+  "judge.scoringVersion",
   "generator.seedSetHash",
+  "generator.batchSize",
+  "generator.neighbours",
+];
+/**
+ * What must also match for runs to be replicates of one setup. A comparison reports these as what
+ * changed: prompts, the taxonomy and definitions they came from, sampling, the model the preset
+ * resolved to, and the deployed code's settings.
+ */
+export const REPLICATE_KEYS = [
+  ...COMPARABLE_KEYS,
   "generator.promptSetHash",
   "generator.definitionsHash",
   "generator.taxonomyHash",
-  "generator.batchSize",
   "generator.temperatures",
+  "generator.resolvedModelSet",
+  "generator.settingsHash",
 ];
-/** What must match for a run to be compared with a baseline at all. The rest is what a change may change. */
-export const COMPARABLE_KEYS = ["judge.questionSetHash", "judge.cutoffsHash", "generator.seedSetHash", "generator.batchSize"];
 
 /** The keys whose values differ across summaries. */
 export function identityMismatches(summaries, keys) {
@@ -143,17 +198,21 @@ export function identityMismatches(summaries, keys) {
 }
 
 /**
- * The rates a comparison decides on, chosen before looking at any comparison. Tested together with a
- * Bonferroni correction; every other rate is reported as exploratory.
+ * The rates a comparison decides on, chosen before looking at any comparison. Each counts
+ * independent units (questions, batches or model calls), and they're tested together with a
+ * Bonferroni correction; every other rate is exploratory.
  */
 export const PRIMARY_RATES = [
   "passRate",
-  "blockRate",
   "reviewRate",
+  "blockRate",
   "libraryLikelyRate",
-  "withinBatchLikelyRate",
-  "generationFailureRate",
+  "batchLikelyRate",
+  "unusableOutputRate",
+  "yieldRate",
 ];
+/** When definitions change, fit is graded against different text, so these stand in for pass and review. */
+export const WITHOUT_FIT = { passRate: "passRateWithoutFit", reviewRate: "reviewRateWithoutFit" };
 export const FAMILY_ALPHA = 0.05;
 
 /** Sample standard deviation; null for fewer than two values. */
