@@ -352,25 +352,33 @@ describe("recomputing stored fingerprints", () => {
     expect(await fingerprintOf(t, orgQuestion)).toBe("q_old_org");
   });
 
-  test("collisions list public duplicates, unchanged ones and ones without text included, but not retired, rejected or held copies", async () => {
+  test("collisions list public duplicates, unchanged ones and ones without text included, but not retired, private or held copies", async () => {
     const { t } = await setup();
     const busPublic = await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus) });
     const busApproved = await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "approved" });
     await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "pruned" });
-    // A rejected AI copy and one held for review keep blocking regeneration but aren't clean-up targets.
-    await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "private", isAIGenerated: true });
-    await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip), status: "pending", heldForReview: true, isAIGenerated: true });
+    // A rejected AI copy and one held for review are recomputed, so they keep blocking regeneration,
+    // but aren't clean-up targets; nor is an older row retired by prunedAt alone.
+    const rejected = await insertQuestion(t, { text: busCurly, fingerprint: "q_old_rejected", status: "private", isAIGenerated: true });
+    const held = await insertQuestion(t, {
+      text: roadTripCurly,
+      fingerprint: "q_old_held",
+      status: "pending",
+      heldForReview: true,
+      isAIGenerated: true,
+    });
+    await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), prunedAt: 1 });
     const noText = await insertQuestion(t, { fingerprint: fingerprintText(roadTrip) });
     const curly = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
 
     const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
 
     expect(summary).toEqual({
-      scanned: 7,
+      scanned: 8,
       privateUserQuestions: 0,
       withoutFingerprint: 0,
       withoutText: 1,
-      changed: 1,
+      changed: 3,
       collisionGroups: 2,
       collisions: [
         {
@@ -392,6 +400,8 @@ describe("recomputing stored fingerprints", () => {
       ],
     });
     expect(await fingerprintOf(t, curly)).toBe(fingerprintText(roadTrip));
+    expect(await fingerprintOf(t, rejected)).toBe(fingerprintText(bus));
+    expect(await fingerprintOf(t, held)).toBe(fingerprintText(roadTrip));
   });
 
   test("a run with changes on more than one page fixes them all", async () => {
@@ -719,16 +729,20 @@ describe("recomputing stored fingerprints", () => {
   test("a group with more questions than it can list gives its size and lists the first ones", async () => {
     const { t } = await setup();
     const copies = FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS + 1;
-    await t.run(async (ctx) => {
+    const ids = await t.run(async (ctx) => {
+      const ids: Array<Id<"questions">> = [];
       for (let i = 0; i < copies; i++) {
-        await ctx.db.insert("questions", { text: bus, fingerprint: fingerprintText(bus), status: "public", ...counters });
+        ids.push(await ctx.db.insert("questions", { text: bus, fingerprint: fingerprintText(bus), status: "public", ...counters }));
       }
+      return ids;
     });
 
     const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: true });
 
     expect(summary.collisionGroups).toBe(1);
     expect(summary.collisions[0].size).toBe(copies);
-    expect(summary.collisions[0].questions).toHaveLength(FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS);
+    expect(summary.collisions[0].questions.map(({ questionId }) => questionId)).toEqual(
+      ids.slice(0, FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS),
+    );
   });
 });

@@ -660,9 +660,9 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
 				counts.changed += 1;
 				if (!args.dryRun) await ctx.db.patch(question._id, { fingerprint });
 			}
-			// Only public questions can collide. Retired (pruned), rejected and held copies keep their
+			// Only public, unretired questions can collide. Retired, private and held copies keep their
 			// fingerprints, so generation still won't recreate them, but aren't listed.
-			if (isQuestionPublic(question) && question.status !== "pruned") {
+			if (isQuestionPublic(question) && question.status !== "pruned" && question.prunedAt === undefined) {
 				live.push({ questionId: question._id, status: question.status, organizationId: question.organizationId, fingerprint });
 			}
 		}
@@ -684,15 +684,16 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  * `collisionGroups` counts the fingerprints that two or more public, unpruned library questions
  * share after the run. `collisions` lists the first FINGERPRINT_MAX_REPORTED_COLLISIONS of them,
  * each with its `size` and up to FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS questions (IDs, status
- * and organization, no text). A fingerprint is a short hash, so compare the wording before
- * treating a group as duplicates. Generation treats any of them as the existing copy, so nothing
- * breaks if they stay. Retire copies on the admin duplicates page, which keeps their links
- * working; pruning one on the questions page breaks them.
+ * and organization, no text), oldest first. A fingerprint is a short hash, so compare the
+ * wording before treating a group as duplicates. Generation treats any of them as the existing
+ * copy, so nothing breaks if they stay. Retire copies on the admin duplicates page, which keeps
+ * their links working; pruning one on the questions page breaks them.
  *
  * A run is safe to repeat. A fingerprint can go stale again later (an undo can restore an old
  * one, and a question that was private during a run can be published without a text change),
- * so a later dry run with changed above 0 means it's worth running again. Run it with dryRun
- * first, and again after a real run (changed should then be 0):
+ * and a copy held for review isn't listed until it's approved, so check later dry runs for
+ * changed above 0 or new collisions. Run it with dryRun first, and again after a real run
+ * (changed should then be 0); add --prod after `run` for production:
  * `npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'`.
  */
 export const recomputeQuestionFingerprints = internalAction({
