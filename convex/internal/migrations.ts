@@ -602,17 +602,15 @@ const fingerprintRecomputeCounts = {
 	withoutText: v.number(),
 	changed: v.number(),
 };
+const fingerprintCollisionQuestion = v.object({
+	questionId: v.id("questions"),
+	status: v.optional(v.string()),
+	organizationId: v.optional(v.id("organizations")),
+});
 const fingerprintRecomputePageResult = v.object({
 	...fingerprintRecomputeCounts,
 	// Each live library question's fingerprint once the page is done, for the collision report.
-	live: v.array(
-		v.object({
-			questionId: v.id("questions"),
-			status: v.optional(v.string()),
-			organizationId: v.optional(v.id("organizations")),
-			fingerprint: v.string(),
-		}),
-	),
+	live: v.array(v.object({ ...fingerprintCollisionQuestion.fields, fingerprint: v.string() })),
 	continueCursor: v.string(),
 	isDone: v.boolean(),
 });
@@ -677,17 +675,13 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  * text to fingerprint are counted and left alone. `collisions` lists every fingerprint that two
  * or more live (not pruned) library questions share after the run, with their IDs, status and
  * organization and no text: they are duplicates by text. Generation treats any of them as the
- * existing copy, so nothing breaks if they stay. To retire a copy, use the admin duplicates page
- * once its duplicate scan has grouped the pair; it keeps the copy's links working, which pruning
- * it on the questions page doesn't. Pairs from different organizations can't be merged there,
- * so leave them.
+ * existing copy, so nothing breaks if they stay. Retire copies on the admin duplicates page,
+ * which keeps their links working; pruning one on the questions page breaks them.
  *
- * Run this again after undoing an earlier review that sent the text (an edit, or Approve or
- * Reject on the questions page, which resend it), since the undo restores the old fingerprint,
- * and after publishing a question that was private during a run without changing its text (the
- * question detail page sends only the status). Undoing an earlier prune or duplicate resolution
- * of a recomputed question is refused as a newer change. Run it with dryRun first, and again
- * after a real run (changed should then be 0):
+ * A run is safe to repeat. A fingerprint can go stale again later (an undo can restore an old
+ * one, and a question that was private during a run can be published without a text change),
+ * so a later dry run with changed above 0 means it's worth running again. Run it with dryRun
+ * first, and again after a real run (changed should then be 0):
  * `npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'`.
  */
 export const recomputeQuestionFingerprints = internalAction({
@@ -697,13 +691,7 @@ export const recomputeQuestionFingerprints = internalAction({
 		collisions: v.array(
 			v.object({
 				fingerprint: v.string(),
-				questions: v.array(
-					v.object({
-						questionId: v.id("questions"),
-						status: v.optional(v.string()),
-						organizationId: v.optional(v.id("organizations")),
-					}),
-				),
+				questions: v.array(fingerprintCollisionQuestion),
 			}),
 		),
 	}),
@@ -711,7 +699,7 @@ export const recomputeQuestionFingerprints = internalAction({
 		const label = `recomputeQuestionFingerprints${args.dryRun ? " (dry run)" : ""}`;
 		const totals = { scanned: 0, privateUserQuestions: 0, withoutFingerprint: 0, withoutText: 0, changed: 0 };
 		const countKeys = Object.keys(fingerprintRecomputeCounts) as Array<keyof typeof fingerprintRecomputeCounts>;
-		const groups = new Map<string, Array<{ questionId: Id<"questions">; status?: string; organizationId?: Id<"organizations"> }>>();
+		const groups = new Map<string, Array<Infer<typeof fingerprintCollisionQuestion>>>();
 		let cursor: string | null = null;
 		for (let pages = 1; ; pages++) {
 			const page: Infer<typeof fingerprintRecomputePageResult> = await ctx.runMutation(
