@@ -423,6 +423,33 @@ describe("recomputing stored fingerprints", () => {
     expect(await fingerprintOf(t, customOnly)).toBe(fingerprintText(bus));
   });
 
+  test("a submission an admin reworded before approving keeps the fingerprint of its new wording", async () => {
+    const { t, insertGenerated } = await setup();
+    const admin = t.withIdentity({
+      subject: "editor",
+      tokenIdentifier: "https://issuer.test|editor",
+      metadata: { isAdmin: "true" },
+    });
+    const reworded = roadTrip.replace(" ever", "");
+    const submission = await insertQuestion(t, { authorId: "author-1", customText: roadTripCurly, status: "pending" });
+    // Approving with an edit saves the new wording in text; customText keeps what was submitted.
+    await admin.mutation(api.admin.questions.updateQuestion, {
+      id: submission,
+      expectedRevision: 0,
+      reviewReason: "Approve with tighter wording",
+      text: reworded,
+      status: "public",
+    });
+
+    const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
+
+    expect(summary).toMatchObject({ privateUserQuestions: 0, changed: 0 });
+    expect(await fingerprintOf(t, submission)).toBe(fingerprintText(reworded));
+    const generated = await insertGenerated(reworded, roadTrip);
+    expect(generated.duplicates).toEqual([{ text: reworded, reason: "duplicate of existing question" }]);
+    expect(generated.insertedCount).toBe(1);
+  });
+
   test("a pending submission stays alone; a retired copy of a public submission is recomputed but not listed", async () => {
     const { t } = await setup();
     const kept = await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip) });
@@ -509,6 +536,38 @@ describe("recomputing stored fingerprints", () => {
     }
   });
 
+  test("a long run logs its running totals every 50 pages, then its totals", async () => {
+    const { t } = await setup();
+    // 50 full pages of questions without a fingerprint, then a curly question on the next page.
+    const filler = FINGERPRINT_RECOMPUTE_PAGE_SIZE * 50;
+    await t.run(async (ctx) => {
+      for (let i = 0; i < filler; i++) {
+        await ctx.db.insert("questions", { text: `Filler question number ${i} for paging?`, status: "public", ...counters });
+      }
+    });
+    await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
+
+      const counts = (scanned: number, changed: number) => ({
+        scanned,
+        privateUserQuestions: 0,
+        withoutFingerprint: filler,
+        withoutText: 0,
+        changed,
+      });
+      const lines = log.mock.calls.map(([line]) => String(line)).filter((line) => line.startsWith("recomputeQuestionFingerprints"));
+      expect(lines).toEqual([
+        `recomputeQuestionFingerprints progress: ${JSON.stringify(counts(filler, 0))}`,
+        `recomputeQuestionFingerprints total: ${JSON.stringify({ ...counts(filler + 1, 1), collisions: 0 })}`,
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   test("undoing an admin text edit made before the run brings back the old fingerprint, and another run fixes it", async () => {
     const { t } = await setup();
     const admin = t.withIdentity({
@@ -532,6 +591,42 @@ describe("recomputing stored fingerprints", () => {
     const rerun = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
     expect(rerun).toMatchObject({ changed: 1 });
     expect(await fingerprintOf(t, curly)).toBe(fingerprintText(roadTrip));
+  });
+
+  test("undoing a duplicate resolution made before the run is refused, since the run changed the retired copy", async () => {
+    const { t } = await setup();
+    const admin = t.withIdentity({
+      subject: "editor",
+      tokenIdentifier: "https://issuer.test|editor",
+      metadata: { isAdmin: "true" },
+    });
+    const straight = await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip) });
+    const curly = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
+    const detectionId = await t.run(async (ctx) =>
+      ctx.db.insert("duplicateDetections", { questionIds: [straight, curly], reason: "Same text", confidence: 1, status: "pending" }),
+    );
+    await admin.mutation(api.admin.questions.deleteDuplicateQuestions, {
+      detectionId,
+      questionIdsToDelete: [curly],
+      keepQuestionId: straight,
+      reason: "Same question in curly quotes",
+      expectedRevisions: [
+        { questionId: straight, revision: 0 },
+        { questionId: curly, revision: 0 },
+      ],
+    });
+    expect(await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false })).toMatchObject({
+      changed: 1,
+      collisions: [],
+    });
+
+    const reviewId = await t.run(async (ctx) => (await ctx.db.query("questionReviews").first())!._id);
+    await expect(admin.mutation(api.admin.pruning.undoReview, { reviewId })).rejects.toThrow("newer work");
+    const retired = await t.run(async (ctx) => {
+      const question = await ctx.db.get(curly);
+      return { status: question?.status ?? null, fingerprint: question?.fingerprint ?? null };
+    });
+    expect(retired).toEqual({ status: "pruned", fingerprint: fingerprintText(roadTrip) });
   });
 
   test("retiring a copy on the admin duplicates page clears its collision", async () => {
