@@ -591,9 +591,8 @@ export const cleanDanglingQuestionReferences = internalAction({
 	},
 });
 
-
-const FINGERPRINT_SCAN_PAGE_SIZE = 100;
-const FINGERPRINT_WRITE_BATCH_SIZE = 100;
+export const FINGERPRINT_SCAN_PAGE_SIZE = 100;
+export const FINGERPRINT_WRITE_BATCH_SIZE = 100;
 const fingerprintScanRow = v.object({
 	questionId: v.id("questions"),
 	status: v.optional(v.string()),
@@ -603,37 +602,46 @@ const fingerprintScanRow = v.object({
 });
 const fingerprintScanPageResult = v.object({
 	scanned: v.number(),
+	userWritten: v.number(),
 	rows: v.array(fingerprintScanRow),
 	continueCursor: v.string(),
 	isDone: v.boolean(),
 });
 const fingerprintUpdate = v.object({ questionId: v.id("questions"), from: v.string(), to: v.string() });
 
-/** One page of the fingerprint recompute: each fingerprinted question's stored and recomputed fingerprint. */
+/** One page of the fingerprint recompute: each fingerprinted library question's stored and recomputed fingerprint. */
 export const scanQuestionFingerprintsPage = internalQuery({
 	args: { cursor: v.union(v.string(), v.null()) },
 	returns: fingerprintScanPageResult,
 	handler: async (ctx, args) => {
 		const page = await ctx.db.query("questions").paginate({ numItems: FINGERPRINT_SCAN_PAGE_SIZE, cursor: args.cursor });
 		const rows: Array<Infer<typeof fingerprintScanRow>> = [];
+		let userWritten = 0;
 		for (const question of page.page) {
-			// Only stored fingerprints are recomputed; rows never given one (personal questions) stay without.
+			// Only stored fingerprints are recomputed. Personal questions don't get one any more,
+			// but an older backfill fingerprinted some from their custom text.
 			if (question.fingerprint === undefined) continue;
-			const text = question.text ?? question.customText;
+			// User-written rows (personal questions, team prompts) have only custom text. They aren't
+			// library questions, so they are neither rewritten nor listed.
+			if (question.text === undefined && question.customText !== undefined) {
+				userWritten += 1;
+				continue;
+			}
 			rows.push({
 				questionId: question._id,
 				status: question.status,
 				stored: question.fingerprint,
-				recomputed: text ? fingerprintText(text) : undefined,
+				recomputed: question.text ? fingerprintText(question.text) : undefined,
 			});
 		}
-		return { scanned: page.page.length, rows, continueCursor: page.continueCursor, isDone: page.isDone };
+		return { scanned: page.page.length, userWritten, rows, continueCursor: page.continueCursor, isDone: page.isDone };
 	},
 });
 
 /**
- * Writes planned fingerprints. A row is skipped when it changed after the scan (deleted, or its
- * fingerprint or text edited) or another question already holds the new fingerprint.
+ * Writes planned fingerprints. A row that changed after the scan (deleted, or its fingerprint or
+ * text edited) is skipped. A fingerprint another question holds is written anyway: duplicate
+ * questions may share one.
  */
 export const writeQuestionFingerprints = internalMutation({
 	args: { updates: v.array(fingerprintUpdate) },
@@ -643,12 +651,7 @@ export const writeQuestionFingerprints = internalMutation({
 		let skippedAtWrite = 0;
 		for (const { questionId, from, to } of args.updates) {
 			const question = await ctx.db.get(questionId);
-			const text = question?.text ?? question?.customText;
-			const holder = await ctx.db
-				.query("questions")
-				.withIndex("by_fingerprint", (q) => q.eq("fingerprint", to))
-				.first();
-			if (question?.fingerprint !== from || !text || fingerprintText(text) !== to || holder) {
+			if (question?.fingerprint !== from || !question.text || fingerprintText(question.text) !== to) {
 				skippedAtWrite += 1;
 				continue;
 			}
@@ -662,10 +665,10 @@ export const writeQuestionFingerprints = internalMutation({
 const fingerprintRecomputeSummary = v.object({
 	scanned: v.number(),
 	withoutFingerprint: v.number(),
+	userWritten: v.number(),
 	withoutText: v.number(),
 	changed: v.number(),
 	updated: v.number(),
-	heldBack: v.number(),
 	skippedAtWrite: v.number(),
 	collisions: v.array(
 		v.object({
@@ -680,11 +683,13 @@ const fingerprintRecomputeSummary = v.object({
  * before curly quotes were normalized don't match a recomputation, so generation doesn't see a
  * candidate as a duplicate of a library question that differs only in quote style.
  *
- * `collisions` lists every fingerprint that two or more questions share once recomputed, in any
- * status (question IDs only). A changed row in one of those groups is held back, keeping its old
- * fingerprint: generation looks fingerprints up with .unique(), which throws when two rows share
- * one. Resolve those duplicates and run it again. `skippedAtWrite` counts rows that changed
- * between the scan and the write; another run picks them up. Run it with dryRun first:
+ * Only library questions are recomputed: rows without a fingerprint and user-written rows
+ * (only custom text) are counted and left alone. `collisions` lists every fingerprint that two
+ * or more library questions share after the run, in any status (question IDs only): they are
+ * duplicates by text. Generation treats any of them as the existing copy, so nothing breaks if
+ * they stay; retire extra copies from the admin duplicates page if you want. `skippedAtWrite`
+ * counts rows that changed between the scan and the write; another run picks them up (a dry run
+ * counts them as updated). Run it with dryRun first:
  * `npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'`.
  */
 export const recomputeQuestionFingerprints = internalAction({
@@ -694,6 +699,7 @@ export const recomputeQuestionFingerprints = internalAction({
 		const label = `recomputeQuestionFingerprints${args.dryRun ? " (dry run)" : ""}`;
 		const rows: Array<Infer<typeof fingerprintScanRow>> = [];
 		let scanned = 0;
+		let userWritten = 0;
 		let cursor: string | null = null;
 		for (;;) {
 			const page: Infer<typeof fingerprintScanPageResult> = await ctx.runQuery(
@@ -701,11 +707,17 @@ export const recomputeQuestionFingerprints = internalAction({
 				{ cursor },
 			);
 			scanned += page.scanned;
+			userWritten += page.userWritten;
 			rows.push(...page.rows);
 			if (page.isDone) break;
 			cursor = page.continueCursor;
 		}
 
+		const updates = rows.flatMap((row) =>
+			row.recomputed !== undefined && row.recomputed !== row.stored
+				? [{ questionId: row.questionId, from: row.stored, to: row.recomputed }]
+				: [],
+		);
 		// Grouped by the fingerprint each row ends up with. A row without text keeps its stored one.
 		const groups = new Map<string, Array<Infer<typeof fingerprintScanRow>>>();
 		for (const row of rows) {
@@ -714,12 +726,6 @@ export const recomputeQuestionFingerprints = internalAction({
 			if (group) group.push(row);
 			else groups.set(fingerprint, [row]);
 		}
-		const changes = rows.flatMap((row) =>
-			row.recomputed !== undefined && row.recomputed !== row.stored
-				? [{ questionId: row.questionId, from: row.stored, to: row.recomputed }]
-				: [],
-		);
-		const updates = changes.filter((change) => groups.get(change.to)?.length === 1);
 		const collisions = [...groups]
 			.filter(([, members]) => members.length > 1)
 			.map(([fingerprint, members]) => ({
@@ -743,11 +749,11 @@ export const recomputeQuestionFingerprints = internalAction({
 
 		const summary = {
 			scanned,
-			withoutFingerprint: scanned - rows.length,
+			withoutFingerprint: scanned - userWritten - rows.length,
+			userWritten,
 			withoutText: rows.filter((row) => row.recomputed === undefined).length,
-			changed: changes.length,
+			changed: updates.length,
 			updated,
-			heldBack: changes.length - updates.length,
 			skippedAtWrite,
 			collisions,
 		};

@@ -22,6 +22,8 @@ export type EvalPipelineOutcome = "saved" | "duplicate" | "rejected";
 
 export type EvalCandidateCheck = {
   text: string;
+  /** Whether the model's text had curly quotes before normalizeQuestion straightened them. */
+  hadCurlyQuotes: boolean;
   fingerprint: string;
   /** What the save step would do with this candidate. */
   outcome: EvalPipelineOutcome;
@@ -48,7 +50,7 @@ export function checkEvalCandidates(texts: string[], libraryFingerprints: Readon
     }
     seen.add(fingerprint);
     const outcome: EvalPipelineOutcome = duplicateOf ? "duplicate" : codeRejections.length > 0 ? "rejected" : "saved";
-    return { text, fingerprint, outcome, duplicateOf, codeRejections };
+    return { text, hadCurlyQuotes: /[\u2018\u2019\u201C\u201D]/.test(raw), fingerprint, outcome, duplicateOf, codeRejections };
   });
 }
 

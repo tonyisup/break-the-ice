@@ -479,10 +479,12 @@ export const insertGeneratedQuestions = internalMutation({
       }
       seenFingerprints.add(fingerprint);
 
+      // Not .unique(): duplicate library questions can share a fingerprint (an admin edit, an
+      // older copy), and any of them makes this candidate a duplicate.
       const existing = await ctx.db
         .query("questions")
         .withIndex("by_fingerprint", (q) => q.eq("fingerprint", fingerprint))
-        .unique();
+        .first();
 
       if (existing) {
         duplicates.push({ text, reason: "duplicate of existing question" });
