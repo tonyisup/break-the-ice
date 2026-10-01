@@ -300,6 +300,36 @@ describe("recomputing stored fingerprints", () => {
     expect(await fingerprintOf(t, straight)).toBe(fingerprintText(roadTrip));
   });
 
+  test("a straight copy generated mid-run doesn't stop the write, and the next run lists the pair", async () => {
+    const { t, insertGenerated } = await setup();
+    const curly = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
+    // The run scans before generation saves anything.
+    const scan = await t.query(internal.internal.migrations.scanQuestionFingerprintsPage, { cursor: null });
+    expect(scan.rows).toEqual([{ questionId: curly, status: "public", stored: "q_old_road_trip", recomputed: fingerprintText(roadTrip) }]);
+
+    // On its old fingerprint, the curly question doesn't catch the straight copy.
+    const generated = await insertGenerated(roadTrip);
+    expect(generated.insertedCount).toBe(1);
+
+    const written = await t.mutation(internal.internal.migrations.writeQuestionFingerprints, {
+      updates: [{ questionId: curly, from: "q_old_road_trip", to: fingerprintText(roadTrip) }],
+    });
+    expect(written).toEqual({ updated: 1, skippedAtWrite: 0 });
+    expect((await insertGenerated(roadTrip)).duplicates).toEqual([{ text: roadTrip, reason: "duplicate of existing question" }]);
+
+    const rerun = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: true });
+    expect(rerun).toMatchObject({ changed: 0, updated: 0 });
+    expect(rerun.collisions).toEqual([
+      {
+        fingerprint: fingerprintText(roadTrip),
+        questions: [
+          { questionId: curly, status: "public" },
+          { questionId: generated.insertedQuestionIds[0], status: "public" },
+        ],
+      },
+    ]);
+  });
+
   test("a write skips a question deleted after the scan, or whose text no longer gives the new fingerprint", async () => {
     const { t } = await setup();
     const deleted = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });

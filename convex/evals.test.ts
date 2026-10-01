@@ -134,6 +134,25 @@ describe("checkEvalCandidates mirrors the save step", () => {
     expect(evalFingerprint("  What would you   bring to a desert island? ")).toBe(fingerprintText(library));
   });
 
+  test("flags a question written with any kind of curly quote, though its text is straightened", () => {
+    // Curly quotes are written as escapes so an editor can't quietly turn them into straight ones.
+    // One kind of curly quote in each, then a straight one.
+    const quotes = ["\u2018", "\u2019", "\u201C", "\u201D", "'"];
+    const checks = checkEvalCandidates(
+      quotes.map((quote) => `Which song${quote}s chorus do you know every word of?`),
+      new Set(),
+    );
+
+    expect(checks.map((check) => check.hadCurlyQuotes)).toEqual([true, true, true, true, false]);
+    expect(checks.map((check) => check.text)).toEqual([
+      "Which song's chorus do you know every word of?",
+      "Which song's chorus do you know every word of?",
+      'Which song"s chorus do you know every word of?',
+      'Which song"s chorus do you know every word of?',
+      "Which song's chorus do you know every word of?",
+    ]);
+  });
+
   test("agrees with insertGeneratedQuestions on the same batch", async () => {
     const t = await setup();
     const library = "What would you bring to a desert island?";
@@ -518,6 +537,32 @@ describe("generateEvalBatch", () => {
     const spend = await t.run((ctx) => ctx.db.query("aiSpendDays").collect());
     expect(spend.find((row) => row.spendClass === "user")?.costUsd).toBe(1);
     expect(spend.find((row) => row.spendClass === "system")?.calls).toBe(1);
+  });
+
+  test("a curly-quoted copy of a question the library holds twice is flagged, a library duplicate and a collision", async () => {
+    const t = await setup();
+    const library = "What's one thing you would bring to a desert island?";
+    await t.run(async (ctx) => {
+      // Duplicate library questions may share a fingerprint.
+      for (const status of ["public", "pruned"] as const) {
+        await ctx.db.insert("questions", { text: library, fingerprint: fingerprintText(library), status, ...counters });
+      }
+    });
+    create.mockResolvedValue(completion(questionsJson("What\u2019s one thing you would bring to a desert island?")) as never);
+
+    const batch = await t.action(internal.internal.evals.generateEvalBatch, {
+      runLabel: "test",
+      seedId: "s01",
+      styleSlug: "desert-island",
+      toneSlug: "witty",
+      batchSize: 1,
+      neighbours: 0,
+    });
+
+    expect(
+      batch.candidates.map(({ text, hadCurlyQuotes, outcome, duplicateOf }) => ({ text, hadCurlyQuotes, outcome, duplicateOf })),
+    ).toEqual([{ text: library, hadCurlyQuotes: true, outcome: "duplicate", duplicateOf: "library" }]);
+    expect(batch.fingerprintCollisions).toBe(1);
   });
 
   test("a seed naming a missing style fails before anything is generated or charged", async () => {

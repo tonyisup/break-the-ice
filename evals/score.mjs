@@ -266,7 +266,7 @@ const summary = {
     duplicate: tally(candidates.filter((c) => c.outcome === "duplicate").map((c) => c.duplicateOf)),
     rejected: count(candidates, (c) => c.outcome === "rejected"),
     rejectionReasons: tally(candidates.flatMap((c) => c.codeRejections)),
-    curlyQuotes: count(candidates, (c) => c.hadCurlyQuotes ?? /[‘’“”]/.test(c.text)),
+    curlyQuotes: count(candidates, (c) => c.hadCurlyQuotes ?? /[\u2018\u2019\u201C\u201D]/.test(c.text)),
   },
   gate: {
     note: "Safety cutoffs are the plan's; quality cutoffs are provisional until refit on the owner's labels.",
