@@ -20,6 +20,8 @@ import {
 } from "./aiSpendGuard";
 
 export const GENERATION_MODEL = "@preset/break-the-ice-berg-default";
+/** Temperature for saved questions (feed, daily email) unless a caller sets one. */
+export const DEFAULT_GENERATION_TEMPERATURE = 0.9;
 export const GENERATION_PROVIDER = "openrouter";
 
 const DEFAULT_OPENROUTER_MAX_ATTEMPTS = 3;
@@ -383,7 +385,7 @@ export async function runPersistedQuestionGeneration(
     args.purpose === "newsletter" || args.purpose === "nightly_pool" ? "system" : "user";
   await ensureAiBudget(ctx, spendClass);
 
-  const temperature = args.temperature ?? 0.9;
+  const temperature = args.temperature ?? DEFAULT_GENERATION_TEMPERATURE;
   const prompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
     styleId: args.styleId,
     styleSlug: args.styleSlug,
