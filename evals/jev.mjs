@@ -32,6 +32,8 @@ export const MAX_RETRIES = 5;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_JITTER_MS = 250;
 const ERROR_DETAIL_CHARS = 300;
+// A stalled connection or a response body that never finishes is abandoned and retried.
+const REQUEST_TIMEOUT_MS = 60_000;
 
 const score = (instructions, criteria) => ({ type: "score", instructions, criteria });
 const noul = (instructions, whenTrue, whenFalse) => ({
@@ -290,6 +292,7 @@ export class JevClient {
           method: "POST",
           headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
           body,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
         status = response.status;
         if (response.ok) {
@@ -306,7 +309,10 @@ export class JevClient {
         }
         detail = (await response.text()).slice(0, ERROR_DETAIL_CHARS);
       } catch (error) {
-        if (status >= 200 && status < 300) throw error;
+        // A timeout, even one while reading a 200's body, is a network failure and retried.
+        const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+        if (timedOut) status = 0;
+        else if (status >= 200 && status < 300) throw error;
         detail = error instanceof Error ? error.message : String(error);
       }
       const retryable = status === 0 || status === 429 || status >= 500;

@@ -556,12 +556,41 @@ describe("generateEvalBatch", () => {
         neighbours: 0,
       }),
     ).rejects.toThrow(/Evals are off/);
-    const disabled = await t.query(internal.internal.evalData.evalLibraryStats, {}).catch((e: unknown) => e);
+    const disabled = await t.action(internal.internal.evals.evalLibraryStats, {}).catch((e: unknown) => e);
     expect(String(disabled)).toMatch(/Evals are off/);
     expect(classifyFailure(String(disabled))).toBe("setup");
-    await expect(t.query(internal.internal.evalData.evalRunAttempts, { runLabel: "test", since: 0 })).rejects.toThrow(
-      /Evals are off/,
-    );
+    const { styleId, toneId, questionId } = await t.run(async (ctx) => ({
+      styleId: (await ctx.db.query("styles").first())!._id,
+      toneId: (await ctx.db.query("tones").first())!._id,
+      questionId: await ctx.db.insert("questions", { text: "Public?", status: "public", ...counters }),
+    }));
+    // Every eval query is gated, not just the ones that spend or scan.
+    for (const call of [
+      () => t.query(internal.internal.evalData.evalRunAttempts, { runLabel: "test", since: 0 }),
+      () => t.query(internal.internal.evalData.evalLibraryPage, { cursor: null }),
+      () => t.query(internal.internal.evalData.evalDefinitions, { styleId, toneId }),
+      () => t.query(internal.internal.evalData.libraryFingerprintMatches, { fingerprints: ["q_x"] }),
+      () => t.query(internal.internal.evalData.publicLibraryTexts, { questionIds: [questionId] }),
+    ]) {
+      await expect(call()).rejects.toThrow(/Evals are off/);
+    }
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("rejects a batch size or neighbour count that isn't a sensible whole number, before generating", async () => {
+    const t = await setup();
+    const base = { runLabel: "test", seedId: "s01", styleSlug: "desert-island", toneSlug: "witty" };
+
+    for (const batchSize of [0, -1, 2.5, 11, Number.NaN]) {
+      await expect(t.action(internal.internal.evals.generateEvalBatch, { ...base, batchSize, neighbours: 0 })).rejects.toThrow(
+        /batchSize must be a whole number from 1 to 10/,
+      );
+    }
+    for (const neighbours of [-1, 1.5, 257]) {
+      await expect(t.action(internal.internal.evals.generateEvalBatch, { ...base, batchSize: 1, neighbours })).rejects.toThrow(
+        /neighbours must be a whole number from 0 to 256/,
+      );
+    }
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -654,6 +683,20 @@ describe("generateEvalBatch", () => {
       await ctx.db.insert("questions", { text: "Pruned?", status: "pruned", ...counters });
     });
 
-    expect(await t.query(internal.internal.evalData.evalLibraryStats, {})).toEqual({ publicQuestions: 2, withEmbedding: 1 });
+    expect(await t.action(internal.internal.evals.evalLibraryStats, {})).toEqual({ publicQuestions: 2, withEmbedding: 1 });
+  });
+
+  test("the library snapshot adds up pages, so it stays within a query's limits as the library grows", async () => {
+    const t = await setup();
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 503; i++) {
+        const questionId = await ctx.db.insert("questions", { text: `Question ${i}?`, status: "public", ...counters });
+        if (i % 100 === 0) await ctx.db.insert("question_embeddings", { questionId, embedding: atCosine(1) });
+      }
+    });
+
+    expect(await t.action(internal.internal.evals.evalLibraryStats, {})).toEqual({ publicQuestions: 503, withEmbedding: 6 });
+    const first = await t.query(internal.internal.evalData.evalLibraryPage, { cursor: null });
+    expect(first.isDone).toBe(false);
   });
 });

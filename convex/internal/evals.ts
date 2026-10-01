@@ -1,7 +1,7 @@
 "use node";
 
 import { createHash } from "node:crypto";
-import { v, type Infer } from "convex/values";
+import { ConvexError, v, type Infer } from "convex/values";
 import { internalAction, type ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { assertEvalsEnabled, checkEvalCandidates, evalDefinitionsResult, evalFingerprint } from "../lib/evalChecks";
@@ -12,12 +12,20 @@ import {
   maxOutputTokens,
   runPreviewQuestionGeneration,
 } from "../lib/generationRunner";
+import { MAX_BATCH_SIZE } from "../lib/promptArchitecture";
 import { embed } from "../lib/retriever";
 
 const DEFAULT_NEIGHBOURS = 5;
 // Personal, team and unpublished rows are dropped after the search, so search wider than needed,
 // and widen to vectorSearch's maximum when held-for-review questions crowd the public ones out.
 const NEIGHBOUR_SEARCH_LIMITS = [40, 256];
+const MAX_NEIGHBOURS = NEIGHBOUR_SEARCH_LIMITS[NEIGHBOUR_SEARCH_LIMITS.length - 1];
+
+function assertWhole(name: string, value: number, min: number, max: number): void {
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new ConvexError({ code: "EVAL_SETUP", message: `${name} must be a whole number from ${min} to ${max}.` });
+  }
+}
 
 const taxonomyRef = v.object({ slug: v.string(), version: v.number(), name: v.string() });
 const neighbour = v.object({ questionId: v.id("questions"), text: v.string(), cosine: v.number() });
@@ -99,12 +107,17 @@ export const generateEvalBatch = internalAction({
     topicSlug: v.optional(v.string()),
     batchSize: v.number(),
     temperature: v.optional(v.number()),
-    /** Library neighbours per question; 0 skips the search. Capped by the widest search. */
+    /** Library neighbours per question, 0 to 256; 0 skips the search. */
     neighbours: v.optional(v.number()),
   },
   returns: evalBatch,
   handler: async (ctx, args): Promise<EvalBatch> => {
     assertEvalsEnabled();
+    // Checked before anything is generated: a bad value would otherwise change the output cap,
+    // the spend, or how many searches run.
+    assertWhole("batchSize", args.batchSize, 1, MAX_BATCH_SIZE);
+    const neighbourCount = args.neighbours ?? DEFAULT_NEIGHBOURS;
+    assertWhole("neighbours", neighbourCount, 0, MAX_NEIGHBOURS);
     const temperature = args.temperature ?? DEFAULT_GENERATION_TEMPERATURE;
     // A seed naming a missing style, tone or topic fails while the prompt is built, before any
     // run row or spend.
@@ -128,7 +141,6 @@ export const generateEvalBatch = internalAction({
     const matches = await ctx.runQuery(internal.internal.evalData.libraryFingerprintMatches, { fingerprints });
     const checks = checkEvalCandidates(preview.previewTexts, new Set(fingerprints.filter((_, i) => matches[i] > 0)));
 
-    const neighbourCount = args.neighbours ?? DEFAULT_NEIGHBOURS;
     const candidates = [];
     for (const { fingerprint: _fingerprint, ...check } of checks) {
       let neighbours: Neighbour[] = [];
@@ -162,5 +174,26 @@ export const generateEvalBatch = internalAction({
       fingerprintCollisions: matches.filter((count) => count > 1).length,
       candidates,
     };
+  },
+});
+
+/** The size of the shared library a run's duplicate check searched, counted a page at a time. */
+export const evalLibraryStats = internalAction({
+  args: {},
+  returns: v.object({ publicQuestions: v.number(), withEmbedding: v.number() }),
+  handler: async (ctx): Promise<{ publicQuestions: number; withEmbedding: number }> => {
+    assertEvalsEnabled();
+    const totals = { publicQuestions: 0, withEmbedding: 0 };
+    let cursor: string | null = null;
+    for (;;) {
+      const page: { publicQuestions: number; withEmbedding: number; continueCursor: string; isDone: boolean } = await ctx.runQuery(
+        internal.internal.evalData.evalLibraryPage,
+        { cursor },
+      );
+      totals.publicQuestions += page.publicQuestions;
+      totals.withEmbedding += page.withEmbedding;
+      if (page.isDone) return totals;
+      cursor = page.continueCursor;
+    }
   },
 });

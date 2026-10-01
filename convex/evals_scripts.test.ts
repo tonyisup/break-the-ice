@@ -294,6 +294,23 @@ describe("JevClient", () => {
     expect(client.usage.requests).toBe(1);
   });
 
+  test("abandons and retries a request that times out, even while reading the body", async () => {
+    vi.useFakeTimers();
+    const timeout = () => Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+    fetchMock
+      .mockRejectedValueOnce(timeout())
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => Promise.reject(timeout()), text: async () => "" })
+      .mockResolvedValueOnce(okResponse({ model: "jev-1", answers, usage: {} }));
+    const client = new JevClient({ apiKey: "test-key", cachePath });
+
+    const pending = client.ask(dupRequest("Rock?", "Stone?"));
+    await vi.runAllTimersAsync();
+
+    expect((await pending).answers).toEqual(answers);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+
   test("fails at once on a client error, and after five retries on a server error", async () => {
     vi.useFakeTimers();
     const client = new JevClient({ apiKey: "test-key", cachePath });

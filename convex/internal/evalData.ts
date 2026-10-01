@@ -7,12 +7,13 @@ import { isQuestionPublic } from "../lib/questionAccess";
 /** Jev reads these next to each question, and gets less accurate as its input grows. */
 const MAX_DEFINITION_CHARS = 300;
 
+/** Questions read per page when measuring the library, to stay well within a query's limits. */
+const LIBRARY_PAGE_SIZE = 500;
+
 function shortDefinition(parts: Array<string | undefined>): string {
   const text = parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   return text.length > MAX_DEFINITION_CHARS ? `${text.slice(0, MAX_DEFINITION_CHARS - 1)}…` : text;
 }
-
-
 
 /** The shared library a duplicate check searches: public, global, non-personal questions with text. */
 function isSharedLibraryQuestion(question: Doc<"questions">): boolean {
@@ -27,6 +28,7 @@ export const evalDefinitions = internalQuery({
   args: { styleId: v.id("styles"), toneId: v.id("tones"), topicId: v.optional(v.id("topics")) },
   returns: evalDefinitionsResult,
   handler: async (ctx, args) => {
+    assertEvalsEnabled();
     const [style, tone, topic] = await Promise.all([
       ctx.db.get(args.styleId),
       ctx.db.get(args.toneId),
@@ -76,8 +78,9 @@ export const evalDefinitions = internalQuery({
 export const libraryFingerprintMatches = internalQuery({
   args: { fingerprints: v.array(v.string()) },
   returns: v.array(v.number()),
-  handler: async (ctx, args) =>
-    await Promise.all(
+  handler: async (ctx, args) => {
+    assertEvalsEnabled();
+    return await Promise.all(
       args.fingerprints.map(async (fingerprint) => {
         const existing = await ctx.db
           .query("questions")
@@ -85,7 +88,8 @@ export const libraryFingerprintMatches = internalQuery({
           .take(2);
         return existing.length;
       }),
-    ),
+    );
+  },
 });
 
 /**
@@ -95,28 +99,43 @@ export const libraryFingerprintMatches = internalQuery({
 export const publicLibraryTexts = internalQuery({
   args: { questionIds: v.array(v.id("questions")) },
   returns: v.array(v.union(v.null(), v.string())),
-  handler: async (ctx, args) =>
-    await Promise.all(
+  handler: async (ctx, args) => {
+    assertEvalsEnabled();
+    return await Promise.all(
       args.questionIds.map(async (questionId) => {
         const question = await ctx.db.get(questionId);
         return question && isSharedLibraryQuestion(question) ? question.text! : null;
       }),
-    ),
+    );
+  },
 });
 
 /**
- * The size of the shared library a run's duplicate check searched. Recorded with each run, since
- * the dev library changes and a duplicate rate means little without it.
+ * One page of the library-size count: how many shared library questions the page holds and how
+ * many of those have an embedding (so the duplicate search can find them). The evalLibraryStats
+ * action adds the pages up.
  */
-export const evalLibraryStats = internalQuery({
-  args: {},
-  returns: v.object({ publicQuestions: v.number(), withEmbedding: v.number() }),
-  handler: async (ctx) => {
+export const evalLibraryPage = internalQuery({
+  args: { cursor: v.union(v.null(), v.string()) },
+  returns: v.object({ publicQuestions: v.number(), withEmbedding: v.number(), continueCursor: v.string(), isDone: v.boolean() }),
+  handler: async (ctx, args) => {
     assertEvalsEnabled();
-    const library = (await ctx.db.query("questions").collect()).filter(isSharedLibraryQuestion);
-    // One scan of the embeddings, not a lookup per question, so this stays within a query's limits.
-    const embedded = new Set((await ctx.db.query("question_embeddings").collect()).map((row) => row.questionId));
-    return { publicQuestions: library.length, withEmbedding: library.filter((question) => embedded.has(question._id)).length };
+    const page = await ctx.db.query("questions").paginate({ numItems: LIBRARY_PAGE_SIZE, cursor: args.cursor });
+    const library = page.page.filter(isSharedLibraryQuestion);
+    const embedded = await Promise.all(
+      library.map((question) =>
+        ctx.db
+          .query("question_embeddings")
+          .withIndex("by_questionId", (q) => q.eq("questionId", question._id))
+          .first(),
+      ),
+    );
+    return {
+      publicQuestions: library.length,
+      withEmbedding: embedded.filter(Boolean).length,
+      continueCursor: page.continueCursor,
+      isDone: page.isDone,
+    };
   },
 });
 
@@ -140,14 +159,14 @@ export const evalRunAttempts = internalQuery({
   handler: async (ctx, args) => {
     assertEvalsEnabled();
     const prefix = `eval:${args.runLabel}:`;
+    // Only this eval run's rows (a few per seed), found by the tag's prefix, then the time window.
     const runs = await ctx.db
       .query("generationRuns")
-      .withIndex("by_creation_time", (q) =>
-        args.until === undefined ? q.gte("_creationTime", args.since) : q.gte("_creationTime", args.since).lte("_creationTime", args.until),
-      )
+      .withIndex("by_requestedByUserId", (q) => q.gte("requestedByUserId", prefix).lt("requestedByUserId", `${prefix}\uffff`))
       .collect();
     return runs
-      .filter((run) => run.requestedByUserId?.startsWith(prefix))
+      .filter((run) => run._creationTime >= args.since && (args.until === undefined || run._creationTime <= args.until))
+      .sort((a, b) => a._creationTime - b._creationTime)
       .map((run) => ({
         runId: run._id,
         seedId: run.requestedByUserId!.slice(prefix.length),

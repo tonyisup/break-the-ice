@@ -122,7 +122,7 @@ if (todo.length) {
   invocations.push(invocation);
   // Saved before any model call, so an interrupted run still knows when its calls started.
   save();
-  invocation.library = await convexRun("internal/evalData:evalLibraryStats", {});
+  invocation.library = await convexRun("internal/evals:evalLibraryStats", {});
   console.log(`${todo.length} of ${seeds.length} seeds to generate for run "${run}" at ${commit}.`);
   await mapLimit(todo, GENERATION_CONCURRENCY, async (seed) => {
     const args = {
