@@ -121,13 +121,13 @@
 
 **What:** Reject a remix whose `finish_reason` isn't "stop", not just "length". Run the generation text checks on it too: length, one question mark, a single line.
 
-**Why:** A "content_filter" or "error" ending with partial text still comes back as a successful remix. Since v0.3.2.0 the cap no longer limits how long the visible text can be.
+**Why:** A "content_filter" or "error" ending with partial text still comes back as a successful remix. Since v0.3.2.0 the cap no longer limits how long the visible text can be. Since v0.4.2.0, saving a remix applies the 500-character limit on question text (`MAX_QUESTION_TEXT_LENGTH`), so a remix over 500 characters is refused when the drawer saves it, after the AI request was counted. Checking the length in `remixQuestionForUser` before it returns would catch it earlier.
 
-**Context:** `runRemixQuestion` in `convex/lib/generationRunner.ts`; `validateGeneratedQuestion` in `convex/lib/promptArchitecture.ts`. The remix source can be a personal question of up to 1,000 characters, so a length limit needs care.
+**Context:** `runRemixQuestion` in `convex/lib/generationRunner.ts`; `validateGeneratedQuestion` in `convex/lib/promptArchitecture.ts`; `requireQuestionText` in `convex/lib/questionText.ts`. New questions people write are capped at 500 characters, but older and admin-written questions of up to 1,000 characters can still be remixed, so a length limit needs care. Deferred during the v0.4.2.0 review.
 
 **Effort:** S
 **Priority:** P3
-**Depends on:** None
+**Depends on:** Decide how AI answers cut off by the length limit are charged (for whether a refused remix gives the request back)
 
 ### Expire stale matrix-fill locks
 

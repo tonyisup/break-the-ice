@@ -1120,7 +1120,7 @@ const questionPool = useQuery(
       toast.success(`Custom question assigned to ${DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}`);
       setAssignTargetDay(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to assign custom question");
+      toast.error(readableError(error, "Failed to assign custom question"));
       throw error;
     }
   };
@@ -1162,7 +1162,7 @@ const questionPool = useQuery(
       toast.success(`Topic question assigned to ${DAYS_DISPLAY.find((day) => day.key === assignTargetDay)?.label ?? assignTargetDay}`);
       setAssignTargetDay(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to assign topic question");
+      toast.error(readableError(error, "Failed to assign topic question"));
       throw error;
     }
   };

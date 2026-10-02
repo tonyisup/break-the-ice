@@ -370,3 +370,94 @@ describe("OrgWeeklyCurationPage matrix fill errors", () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Cell is locked"));
   });
 });
+
+describe("OrgWeeklyCurationPage Team prompt input validation", () => {
+  const TOO_LONG = new ConvexError({
+    code: ERROR_CODES.QUESTION_TEXT_TOO_LONG,
+    message: ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG,
+  });
+
+  function refuseTeamPrompts(failure: unknown) {
+    const createAndAssign = vi.fn().mockRejectedValue(failure);
+    (useMutation as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "createAndAssignTeamPrompt") return createAndAssign;
+      if (fn === "createSchedule") return createSchedule;
+      return vi.fn().mockResolvedValue(undefined);
+    });
+    return createAndAssign;
+  }
+
+  it("shows the readable input validation message when written wording is refused, and keeps the draft", async () => {
+    const createAndAssign = refuseTeamPrompts(TOO_LONG);
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Write" }));
+
+    const questionInput = screen.getByLabelText("Exact question");
+    fireEvent.change(questionInput, { target: { value: "What should we challenge?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and assign" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG));
+    expect(createAndAssign).toHaveBeenCalledWith({
+      scheduleId: "schedule-new",
+      dayOfWeek: "monday",
+      questionText: "What should we challenge?",
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Exact question")).toHaveValue("What should we challenge?");
+    expect(screen.getByRole("button", { name: "Save and assign" })).toBeEnabled();
+  });
+
+  it.each([
+    ["the readable input validation message", TOO_LONG, ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG],
+    ["a generic message for an unreadable error", new Error(""), "Failed to assign topic question"],
+  ])("shows %s when chosen topic wording is refused, and keeps it", async (_label, failure, expected) => {
+    refuseTeamPrompts(failure);
+    const options = ["What feels ready?", "What concern needs airtime?", "Where would help land?"];
+    (useAction as ReturnType<typeof vi.fn>).mockImplementation((fn: string) =>
+      fn === "previewTopicQuestions"
+        ? vi.fn().mockResolvedValue({ questions: options, runId: "run-1" })
+        : vi.fn().mockResolvedValue(undefined),
+    );
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
+      if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
+      if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
+      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
+      if (fn === "getCurationPreview") return { totalResponses: 0, coachCount: 0, confidence: "insufficient", recommendations: [] };
+      if (fn === "getStyles") return [{ _id: "style-1", id: "reflective", slug: "reflective", name: "Reflective", icon: "zap", color: "#888888" }];
+      if (fn === "getTones") return [{ _id: "tone-1", id: "warm", slug: "warm", name: "Warm", icon: "heart", color: "#888888" }];
+      if (fn === "getPublicQuestions" || fn === "getTopics") return [];
+      return undefined;
+    });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Topic" }));
+    fireEvent.change(screen.getByLabelText("Topic name"), { target: { value: "Launch readiness" } });
+    fireEvent.change(screen.getByLabelText("What should this conversation surface?"), {
+      target: { value: "Surface unspoken concerns." },
+    });
+    const generateButton = screen.getByRole("button", { name: "Generate three options" });
+    await waitFor(() => expect(generateButton).toBeEnabled());
+    fireEvent.click(generateButton);
+    fireEvent.click(await screen.findByRole("button", { name: "What concern needs airtime?" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use this question" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expected));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Final wording")).toHaveValue("What concern needs airtime?");
+  });
+
+  it("falls back to a generic message when written wording fails without a readable one", async () => {
+    refuseTeamPrompts(new Error(""));
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Write" }));
+    fireEvent.change(screen.getByLabelText("Exact question"), { target: { value: "What should we challenge?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and assign" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Failed to assign custom question"));
+  });
+});

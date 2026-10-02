@@ -4,6 +4,8 @@ import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { convexFunctionModules } from "../../vitestConvexModules";
+import { ERROR_CODES, ERROR_MESSAGES, MAX_QUESTION_TEXT_LENGTH } from "../constants";
+import { convexErrorData } from "../lib/errorData";
 import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
   getZonedCalendarDate,
@@ -152,6 +154,73 @@ test("Team editors can create and assign an organization-private exact question"
   expect(savedAssignment?.questionTextSnapshot).toBe(
     "What assumption should we challenge this week?",
   );
+});
+
+test("Team prompts over the question length limit are rejected with a readable error", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  await admin.mutation(api.core.orgSettings.upsertOrgSettings, {
+    organizationId,
+    activeDeliveryDays: ["monday"],
+  });
+  const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  });
+
+  const error = await admin
+    .mutation(api.core.teamPrompts.createAndAssign, {
+      scheduleId,
+      dayOfWeek: "monday",
+      questionText: `${"a".repeat(MAX_QUESTION_TEXT_LENGTH)}?`,
+    })
+    .catch((caught: unknown) => caught);
+
+  expect(convexErrorData(error)).toEqual({
+    code: ERROR_CODES.QUESTION_TEXT_TOO_LONG,
+    message: ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG,
+  });
+  const teamPrompts = await t.run(async (ctx) =>
+    ctx.db
+      .query("questions")
+      .filter((q) => q.eq(q.field("kind"), "team_prompt"))
+      .collect(),
+  );
+  expect(teamPrompts).toHaveLength(0);
+});
+
+test("Team prompts without wording are rejected with a readable error and save no topic", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  await admin.mutation(api.core.orgSettings.upsertOrgSettings, {
+    organizationId,
+    activeDeliveryDays: ["monday"],
+  });
+  const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  });
+
+  const error = await admin
+    .mutation(api.core.teamPrompts.createAndAssign, {
+      scheduleId,
+      dayOfWeek: "monday",
+      questionText: " \n ",
+      sourceTopic: { name: "Launch readiness", guidance: "Surface unspoken concerns." },
+    })
+    .catch((caught: unknown) => caught);
+
+  expect(convexErrorData(error)).toEqual({
+    code: ERROR_CODES.QUESTION_TEXT_REQUIRED,
+    message: ERROR_MESSAGES.QUESTION_TEXT_REQUIRED,
+  });
+  const saved = await t.run(async (ctx) => ({
+    teamPrompts: await ctx.db
+      .query("questions")
+      .filter((q) => q.eq(q.field("kind"), "team_prompt"))
+      .collect(),
+    teamTopics: await ctx.db.query("teamTopics").collect(),
+    assignments: await ctx.db.query("scheduledQuestions").collect(),
+  }));
+  expect(saved).toEqual({ teamPrompts: [], teamTopics: [], assignments: [] });
 });
 
 test("schedule delivery retains exact Team Prompt wording if the source row is removed", async () => {

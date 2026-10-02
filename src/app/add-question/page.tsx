@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { ERROR_MESSAGES, MAX_QUESTION_TEXT_LENGTH } from "../../../convex/constants";
+import { convexErrorData } from "../../../convex/lib/errorData";
 import { Link } from "react-router-dom";
 import { toast } from 'sonner';
 import { Header } from "@/components/header";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
+import { QuestionLengthCounter } from "@/components/question-length-counter/QuestionLengthCounter";
 
 export default function AddQuestionPage() {
   const [questionText, setQuestionText] = useState("");
@@ -17,7 +20,7 @@ export default function AddQuestionPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (questionText.trim() === "") {
-      toast.error("Please enter a question.");
+      toast.error(ERROR_MESSAGES.QUESTION_TEXT_REQUIRED);
       return;
     }
     if (isEntitlementsLoading) {
@@ -38,7 +41,8 @@ export default function AddQuestionPage() {
         toast.success("Personal question added to your stash!");
       }
     } catch (error) {
-      toast.error("Failed to submit question. Please try again.");
+      const dataMessage = convexErrorData(error)?.message;
+      toast.error(typeof dataMessage === "string" ? dataMessage : "Failed to submit question. Please try again.");
       console.error(error);
     }
   };
@@ -67,9 +71,12 @@ export default function AddQuestionPage() {
             id="question"
             className="w-full h-40 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-900 dark:border-gray-800"
             value={questionText}
+            maxLength={MAX_QUESTION_TEXT_LENGTH}
+            aria-describedby="question-length"
             onChange={(e) => setQuestionText(e.target.value)}
             placeholder="What's on your mind?"
           />
+          <QuestionLengthCounter id="question-length" length={questionText.length} />
         </div>
 
         <div className="flex items-center space-x-3 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border dark:border-gray-800">

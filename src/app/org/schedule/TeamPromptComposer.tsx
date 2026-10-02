@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { QuestionLengthCounter } from "@/components/question-length-counter/QuestionLengthCounter";
+import { MAX_QUESTION_TEXT_LENGTH } from "../../../../convex/constants";
 
 export type TeamTopicDraft = {
   name: string;
@@ -168,9 +170,14 @@ export function TeamPromptComposer({
               <Textarea
                 id="team-question-text"
                 value={questionText}
-                maxLength={500}
+                maxLength={MAX_QUESTION_TEXT_LENGTH}
+                aria-describedby="team-question-text-length"
                 onChange={(event) => setQuestionText(event.target.value)}
                 placeholder="What is one assumption about our launch plan that we should challenge?"
+              />
+              <QuestionLengthCounter
+                id="team-question-text-length"
+                length={questionText.length}
               />
             </div>
             <Button
@@ -302,10 +309,15 @@ export function TeamPromptComposer({
                   <Textarea
                     id="selected-topic-question"
                     value={selectedQuestion}
-                    maxLength={500}
+                    maxLength={MAX_QUESTION_TEXT_LENGTH}
+                    aria-describedby="selected-topic-question-length"
                     onChange={(event) =>
                       setSelectedQuestion(event.target.value)
                     }
+                  />
+                  <QuestionLengthCounter
+                    id="selected-topic-question-length"
+                    length={selectedQuestion.length}
                   />
                 </div>
                 <Button

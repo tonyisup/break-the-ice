@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { ERROR_MESSAGES, MAX_QUESTION_TEXT_LENGTH } from "../../../convex/constants";
+import { convexErrorData } from "../../../convex/lib/errorData";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -15,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
+import { QuestionLengthCounter } from "@/components/question-length-counter/QuestionLengthCounter";
 
 interface AddPersonalQuestionDialogProps {
   isOpen: boolean;
@@ -32,7 +35,7 @@ export function AddPersonalQuestionDialog({
 
   const handleSubmit = async () => {
     if (questionText.trim() === "") {
-      toast.error("Question text cannot be empty.");
+      toast.error(ERROR_MESSAGES.QUESTION_TEXT_REQUIRED);
       return;
     }
     try {
@@ -49,7 +52,8 @@ export function AddPersonalQuestionDialog({
       setQuestionText("");
       onOpenChange(false);
     } catch (error) {
-      toast.error("Failed to add personal question.");
+      const dataMessage = convexErrorData(error)?.message;
+      toast.error(typeof dataMessage === "string" ? dataMessage : "Failed to add personal question.");
       console.error(error);
     }
   };
@@ -69,10 +73,13 @@ export function AddPersonalQuestionDialog({
             <Textarea
               id="dialog-question"
               value={questionText}
+              maxLength={MAX_QUESTION_TEXT_LENGTH}
+              aria-describedby="dialog-question-length"
               onChange={(e) => setQuestionText(e.target.value)}
               placeholder="Enter your question here..."
               className="min-h-[120px]"
             />
+            <QuestionLengthCounter id="dialog-question-length" length={questionText.length} />
           </div>
           <div className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border dark:border-gray-800">
             <Switch

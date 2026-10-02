@@ -1,7 +1,35 @@
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { api } from "../_generated/api";
 import schema from "../schema";
+import { convexFunctionModules } from "../../vitestConvexModules";
+import { ERROR_CODES, ERROR_MESSAGES, MAX_QUESTION_TEXT_LENGTH } from "../constants";
+import { convexErrorData } from "../lib/errorData";
+
+const AUTHOR_IDENTITY = {
+  subject: "question-author",
+  tokenIdentifier: "https://clerk.example|question-author",
+  email: "question-author@example.com",
+};
+
+const LONGEST_QUESTION = `${"a".repeat(MAX_QUESTION_TEXT_LENGTH - 1)}?`;
+const TOO_LONG_QUESTION = `${"a".repeat(MAX_QUESTION_TEXT_LENGTH)}?`;
+const TOO_LONG_ERROR = {
+  code: ERROR_CODES.QUESTION_TEXT_TOO_LONG,
+  message: ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG,
+};
+
+async function createAuthor() {
+  const t = convexTest(schema, convexFunctionModules);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("users", {
+      clerkId: AUTHOR_IDENTITY.subject,
+      tokenIdentifier: AUTHOR_IDENTITY.tokenIdentifier,
+      email: AUTHOR_IDENTITY.email,
+    });
+  });
+  return { t, author: t.withIdentity(AUTHOR_IDENTITY) };
+}
 
 test("public question reads hide private questions from other users", async () => {
   const t = convexTest(schema);
@@ -50,6 +78,150 @@ test("personal question creation always requires an authenticated author", async
       isPublic: false,
     }),
   ).rejects.toThrow("logged in");
+});
+
+test("personal questions are saved trimmed, up to the length limit", async () => {
+  const { t, author } = await createAuthor();
+  const questionId = await author.mutation(api.core.questions.addPersonalQuestion, {
+    customText: `  ${LONGEST_QUESTION}\n`,
+    isPublic: false,
+  });
+
+  expect(questionId).not.toBeNull();
+  const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
+  expect(saved?.customText).toBe(LONGEST_QUESTION);
+});
+
+test("custom questions are saved trimmed, up to the length limit", async () => {
+  const { t, author } = await createAuthor();
+  const questionId = await author.mutation(api.core.questions.addCustomQuestion, {
+    customText: `\t${LONGEST_QUESTION}  `,
+    isPublic: true,
+  });
+
+  const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
+  expect(saved).toMatchObject({ customText: LONGEST_QUESTION, status: "pending" });
+});
+
+test("blank new questions are skipped without an input validation error", async () => {
+  const { t, author } = await createAuthor();
+
+  expect(
+    await author.mutation(api.core.questions.addPersonalQuestion, { customText: " \n ", isPublic: false }),
+  ).toBeNull();
+  expect(
+    await author.mutation(api.core.questions.addCustomQuestion, { customText: " \n ", isPublic: true }),
+  ).toBeNull();
+  expect(await t.run(async (ctx) => ctx.db.query("questions").collect())).toHaveLength(0);
+});
+
+test("personal question updates save the trimmed text", async () => {
+  // The update schedules an embedding-filter sync, which must finish inside the test.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const { t, author } = await createAuthor();
+    const questionId = await author.mutation(api.core.questions.addPersonalQuestion, {
+      customText: "What did you learn this week?",
+      isPublic: false,
+    });
+
+    await author.mutation(api.core.questions.updatePersonalQuestion, {
+      questionId: questionId!,
+      customText: `  ${LONGEST_QUESTION}\n`,
+      isPublic: true,
+    });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
+    expect(saved).toMatchObject({ customText: LONGEST_QUESTION, status: "pending" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("new questions over the length limit are rejected with a readable error", async () => {
+  const { t, author } = await createAuthor();
+
+  const personalError = await author
+    .mutation(api.core.questions.addPersonalQuestion, {
+      customText: TOO_LONG_QUESTION,
+      isPublic: false,
+    })
+    .catch((error: unknown) => error);
+  const customError = await author
+    .mutation(api.core.questions.addCustomQuestion, {
+      customText: TOO_LONG_QUESTION,
+      isPublic: true,
+    })
+    .catch((error: unknown) => error);
+
+  expect(convexErrorData(personalError)).toEqual(TOO_LONG_ERROR);
+  expect(convexErrorData(customError)).toEqual(TOO_LONG_ERROR);
+  expect(await t.run(async (ctx) => ctx.db.query("questions").collect())).toHaveLength(0);
+});
+
+test("personal question updates reject blank or over-long text and keep the saved text", async () => {
+  const { t, author } = await createAuthor();
+  const questionId = await author.mutation(api.core.questions.addPersonalQuestion, {
+    customText: "What did you learn this week?",
+    isPublic: false,
+  });
+
+  for (const [customText, expected] of [
+    [TOO_LONG_QUESTION, TOO_LONG_ERROR],
+    [
+      "   ",
+      {
+        code: ERROR_CODES.QUESTION_TEXT_REQUIRED,
+        message: ERROR_MESSAGES.QUESTION_TEXT_REQUIRED,
+      },
+    ],
+  ] as const) {
+    const error = await author
+      .mutation(api.core.questions.updatePersonalQuestion, {
+        questionId: questionId!,
+        customText,
+        isPublic: false,
+      })
+      .catch((caught: unknown) => caught);
+    expect(convexErrorData(error)).toEqual(expected);
+  }
+
+  const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
+  expect(saved?.customText).toBe("What did you learn this week?");
+});
+
+test("personal question updates from someone other than the author are refused before the text is checked", async () => {
+  const { t, author } = await createAuthor();
+  const questionId = await author.mutation(api.core.questions.addPersonalQuestion, {
+    customText: "What did you learn this week?",
+    isPublic: false,
+  });
+  const otherIdentity = {
+    subject: "other-user",
+    tokenIdentifier: "https://clerk.example|other-user",
+    email: "other-user@example.com",
+  };
+  await t.run(async (ctx) => {
+    await ctx.db.insert("users", {
+      clerkId: otherIdentity.subject,
+      tokenIdentifier: otherIdentity.tokenIdentifier,
+      email: otherIdentity.email,
+    });
+  });
+
+  for (const customText of ["A different question?", TOO_LONG_QUESTION]) {
+    await expect(
+      t.withIdentity(otherIdentity).mutation(api.core.questions.updatePersonalQuestion, {
+        questionId: questionId!,
+        customText,
+        isPublic: false,
+      }),
+    ).rejects.toThrow("not authorized");
+  }
+
+  const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
+  expect(saved?.customText).toBe("What did you learn this week?");
 });
 
 test("getUserLikedAndPreferredEmbedding should ignore empty user embedding", async () => {

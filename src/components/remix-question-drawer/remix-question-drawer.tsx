@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { convexErrorData } from "../../../convex/lib/errorData";
+import { ERROR_CODES, ERROR_MESSAGES } from "../../../convex/constants";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { toast } from "sonner";
@@ -177,13 +178,6 @@ export function RemixQuestionDrawer({
 				toneId: selectedToneId,
 				topicId: question.topicId,
 			});
-			
-			// If user cancelled or closed during the await, don't update state
-			// We check remixState indirectly via its current closure or just trust the ref sync if we had one.
-			// However, since handleRemix is recreated on every render where questin/ids change, 
-			// it's safer to use the state setter with a check or a ref.
-			
-			setRemixedText(text);
 
 			let currentId = newQuestionId;
 			if (!currentId) {
@@ -214,11 +208,17 @@ export function RemixQuestionDrawer({
 				});
 			}
 
+			// Show the remix only once it is saved, so Save never sends text the server refused.
+			setRemixedText(text);
 			// Final check before marking as remixed
 			setRemixState(current => current === "remixing" ? "remixed" : current);
 		} catch (error) {
 			// A ConvexError carries a readable message in its data (e.g. the AI budget is paused).
-			const dataMessage = convexErrorData(error)?.message;
+			// The AI wrote an over-long remix, not the person, so point them to remixing again.
+			const errorData = convexErrorData(error);
+			const dataMessage = errorData?.code === ERROR_CODES.QUESTION_TEXT_TOO_LONG
+				? ERROR_MESSAGES.AI_REMIX_RESULT_TOO_LONG
+				: errorData?.message;
 			const message = typeof dataMessage === "string" ? dataMessage : error instanceof Error ? error.message : String(error);
 			toast.error(`Remix failed: ${message}`);
 			setSaveFailed(true);
@@ -247,7 +247,8 @@ export function RemixQuestionDrawer({
 			toast.success(isPublic ? "Question submitted for review!" : "Remixed question saved to your stash!");
 			forceClose();
 		} catch (error) {
-			toast.error("Failed to save remixed question.");
+			const dataMessage = convexErrorData(error)?.message;
+			toast.error(typeof dataMessage === "string" ? dataMessage : "Failed to save remixed question.");
 		}
 	};
 

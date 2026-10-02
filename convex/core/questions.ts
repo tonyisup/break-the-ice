@@ -21,6 +21,7 @@ import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 import { wasAiCallBilled } from "../lib/aiSpendGuard";
+import { requireQuestionText } from "../lib/questionText";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 
@@ -52,11 +53,12 @@ export const addPersonalQuestion = mutation({
 		});
 		if (!user) throw new Error("User not found.");
 
-		const { customText, isPublic, styleId, toneId } = args;
-		if (customText.trim().length === 0) {
+		const { isPublic, styleId, toneId } = args;
+		if (args.customText.trim().length === 0) {
 			// do not save empty questions
 			return null;
 		}
+		const customText = requireQuestionText(args.customText);
 
 		// Look up slugs for legacy support
 		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
@@ -834,10 +836,11 @@ export const addCustomQuestion = mutation({
 			throw new Error("User not found.");
 		}
 
-		const { customText, isPublic, organizationId } = args;
-		if (customText.trim().length === 0) {
+		const { isPublic, organizationId } = args;
+		if (args.customText.trim().length === 0) {
 			return;
 		}
+		const customText = requireQuestionText(args.customText);
 		return await ctx.db.insert("questions", {
 			authorId: user._id,
 			customText,
@@ -883,7 +886,8 @@ export const remixQuestionForUser = action({
 		if (!question) {
 			throw new Error("Question not found.");
 		}
-		// The whole question goes into the prompt, and a user's own question has no length limit.
+		// The whole question goes into the prompt. Admin-written text and questions saved before the
+		// length limit on user-written text can be longer.
 		if ((question.text ?? question.customText ?? "").length > MAX_REMIX_QUESTION_CHARS) {
 			throw new ConvexError({ code: ERROR_CODES.AI_PROMPT_TOO_LARGE, message: ERROR_MESSAGES.AI_REMIX_TOO_LONG });
 		}
@@ -980,6 +984,7 @@ export const updatePersonalQuestion = mutation({
 			throw new Error("You are not authorized to update this question.");
 		}
 		assertPersonalQuestionLifecycle(question);
+		const customText = requireQuestionText(args.customText);
 		// Look up slugs for legacy support
 		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
 			args.styleId ? ctx.db.get(args.styleId) : null,
@@ -988,7 +993,7 @@ export const updatePersonalQuestion = mutation({
 		]);
 
 		await ctx.db.patch(args.questionId, {
-			customText: args.customText,
+			customText,
 			status: args.isPublic ? "pending" : "private",
 			styleId: args.styleId,
 			style: styleDoc?.id,
