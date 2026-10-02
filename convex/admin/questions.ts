@@ -5,7 +5,7 @@ import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 
 import { fingerprintText } from "../lib/promptArchitecture";
-import { isQuestionPublic, isUnlistedAiQuestion } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic, isUnlistedAiQuestion } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { PENDING_QUEUE_LIMIT } from "../constants";
 import { recordReview, refreshQuestionText, reviewReason } from "../lib/questionReview";
@@ -90,6 +90,8 @@ export const createQuestion = mutation({
 
 		const questionId = await ctx.db.insert("questions", {
 			text: args.text,
+			// A library question, so generation treats a candidate with the same text as a duplicate.
+			fingerprint: fingerprintText(args.text),
 			tags: args.tags ?? [],
 			style: args.style ?? undefined,
 			styleId: styleId ?? undefined,
@@ -188,7 +190,6 @@ export const updateQuestion = mutation({
 		if (text !== undefined) {
 			if (!text.trim()) throw new Error("Question text cannot be empty");
             updateData.text = text.trim();
-            updateData.fingerprint = fingerprintText(text.trim());
 		}
 
 		if (tags !== undefined) {
@@ -241,6 +242,16 @@ export const updateQuestion = mutation({
             if (status !== before.status) updateData.heldForReview = undefined;
             updateData.prunedAt = status === "pruned" ? (before.prunedAt ?? Date.now()) : undefined;
 		}
+
+        // Only a library question keeps a fingerprint (see isPrivateUserQuestion). The questions
+        // page resends the text with every status change, Mark Personal included.
+        const after: Doc<"questions"> = { ...before, ...updateData };
+        if (isPrivateUserQuestion(after)) {
+            if (before.fingerprint !== undefined) updateData.fingerprint = undefined;
+        } else if (text !== undefined || isPrivateUserQuestion(before)) {
+            const fingerprintSource = after.text ?? after.customText;
+            updateData.fingerprint = fingerprintSource ? fingerprintText(fingerprintSource) : undefined;
+        }
 
 		if (imageStorageId !== undefined) {
 			const existing = await ctx.db.get(id);

@@ -9,6 +9,16 @@ export function isQuestionPublic(question: Doc<"questions">): boolean {
 }
 
 /**
+ * A personal question, team prompt or organization question that isn't public. It isn't a
+ * library question, so it keeps no fingerprint: generation dedupes its candidates against the
+ * library's fingerprints only.
+ */
+export function isPrivateUserQuestion(question: Doc<"questions">): boolean {
+	const userWritten = question.authorId !== undefined || question.kind !== undefined || question.organizationId !== undefined;
+	return userWritten && !isQuestionPublic(question);
+}
+
+/**
  * An AI question held for review. It is never listed anywhere shared (feed, collections,
  * email pools and team pickers only list public questions), but it is unlisted rather than
  * private: the person it was generated for gets it straight from generation, and the daily

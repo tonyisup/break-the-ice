@@ -1,13 +1,13 @@
 import { v, type Infer } from "convex/values";
 import { internalAction, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Doc, Id } from "../_generated/dataModel";
-import { isQuestionPublic } from "../lib/questionAccess";
+import type { Id } from "../_generated/dataModel";
+import { isPrivateUserQuestion, isQuestionPublic } from "../lib/questionAccess";
 import { settleDuplicateGroup } from "../lib/questionReferences";
 import { defaultIdealPromptLength, defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "../lib/promptArchitecture";
 
-const PROMPT_BACKFILL_BATCH_SIZE = 100;
+export const PROMPT_BACKFILL_BATCH_SIZE = 100;
 
 /**
  * One-time migration: copy embeddings from main tables into dedicated embedding tables.
@@ -219,6 +219,18 @@ export const removeOldTimestampFields = internalMutation({
 	},
 });
 
+/**
+ * Fills the prompt architecture fields older styles, tones, topics and questions lack (slugs,
+ * versions, fingerprint, source, safety flags, quality), then adds the default blueprint. Values
+ * already set are kept, apart from updatedAt on the styles, tones and topics it fills. Private
+ * personal, team and organization questions are left alone (see isPrivateUserQuestion). It has
+ * no dry run and schedules itself stage by stage. To fingerprint library questions that have
+ * none, start at the questions stage (add --prod after `run` for production), then check that a
+ * recomputeQuestionFingerprints dry run shows fewer `withoutFingerprint`:
+ * `npx convex run internal/migrations:backfillPromptArchitecture '{"stage":"questions"}'`.
+ * As with the recompute, undoing an earlier review of a question it fingerprints is then refused
+ * as a newer change.
+ */
 export const backfillPromptArchitecture = internalMutation({
 	args: {
 		stage: v.optional(
@@ -230,6 +242,9 @@ export const backfillPromptArchitecture = internalMutation({
 				v.literal("blueprints"),
 			),
 		),
+		// Where the questions stage got to. It reads pages rather than re-querying, so the
+		// questions it skips don't come back in every batch.
+		cursor: v.optional(v.string()),
 	},
 	returns: v.object({
 		stylesUpdated: v.number(),
@@ -253,6 +268,7 @@ export const backfillPromptArchitecture = internalMutation({
 			| "questions"
 			| "blueprints"
 			| null = null;
+		let nextCursor: string | undefined;
 
 		if (stage === "styles") {
 			const styles = await ctx.db
@@ -383,22 +399,26 @@ export const backfillPromptArchitecture = internalMutation({
 			const questionStyles = new Map(allStyles.map((style) => [style._id.toString(), style]));
 			const questionTones = new Map(allTones.map((tone) => [tone._id.toString(), tone]));
 			const questionTopics = new Map(allTopics.map((topic) => [topic._id.toString(), topic]));
-			const questions = await ctx.db
+			// Unfiltered, so each page reads one batch. A filtered page keeps reading until it has a
+			// batch of matches, which can be most of the table.
+			const page = await ctx.db
 				.query("questions")
-				.filter((q) =>
-					q.or(
-						q.eq(q.field("styleSlug"), undefined),
-						q.eq(q.field("toneSlug"), undefined),
-						q.eq(q.field("styleVersion"), undefined),
-						q.eq(q.field("toneVersion"), undefined),
-						q.eq(q.field("fingerprint"), undefined),
-						q.eq(q.field("source"), undefined),
-						q.eq(q.field("safetyFlags"), undefined),
-						q.eq(q.field("quality"), undefined),
-					),
-				)
-				.take(PROMPT_BACKFILL_BATCH_SIZE);
-			for (const question of questions) {
+				.paginate({ numItems: PROMPT_BACKFILL_BATCH_SIZE, cursor: args.cursor ?? null });
+			for (const question of page.page) {
+				const needsBackfill = [
+					question.styleSlug,
+					question.toneSlug,
+					question.styleVersion,
+					question.toneVersion,
+					question.fingerprint,
+					question.source,
+					question.safetyFlags,
+					question.quality,
+				].includes(undefined);
+				if (!needsBackfill) continue;
+				// Not a library question: the backfill leaves it alone, fingerprint included (see
+				// isPrivateUserQuestion).
+				if (isPrivateUserQuestion(question)) continue;
 				const style = question.styleId ? questionStyles.get(question.styleId.toString()) : null;
 				const tone = question.toneId ? questionTones.get(question.toneId.toString()) : null;
 				const topic = question.topicId ? questionTopics.get(question.topicId.toString()) : null;
@@ -423,7 +443,8 @@ export const backfillPromptArchitecture = internalMutation({
 				});
 				questionsUpdated++;
 			}
-			nextStage = questions.length === PROMPT_BACKFILL_BATCH_SIZE ? "questions" : "blueprints";
+			nextStage = page.isDone ? "blueprints" : "questions";
+			nextCursor = page.isDone ? undefined : page.continueCursor;
 		}
 
 		if (stage === "blueprints") {
@@ -473,6 +494,7 @@ export const backfillPromptArchitecture = internalMutation({
 		if (nextStage) {
 			await ctx.scheduler.runAfter(0, internal.internal.migrations.backfillPromptArchitecture, {
 				stage: nextStage,
+				cursor: nextCursor,
 			});
 		}
 
@@ -620,16 +642,6 @@ const fingerprintRecomputePageResult = v.object({
 });
 
 /**
- * A personal question, team prompt or organization question that isn't public. It isn't a
- * library question, so the recompute neither rewrites nor lists it, even where it has a
- * fingerprint (an older backfill and admin reviews give some one).
- */
-function isPrivateUserQuestion(question: Doc<"questions">) {
-	const userWritten = question.authorId !== undefined || question.kind !== undefined || question.organizationId !== undefined;
-	return userWritten && !isQuestionPublic(question);
-}
-
-/**
  * One page of the fingerprint recompute. With `dryRun` it writes nothing and reports what a real
  * run would change.
  */
@@ -679,7 +691,10 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  * public (`privateUserQuestions`), library questions with no stored fingerprint, and ones with no
  * text to fingerprint are counted and left alone. Until it has run after the quote fix deploys,
  * generation can save copies of curly-quoted library questions, so run it soon after deploying
- * (on dev too, before evals).
+ * (on dev too, before evals). `withoutFingerprint` includes questions added with admin
+ * createQuestion before it set a fingerprint, which generation can't see as duplicates; the
+ * backfill's questions stage fingerprints them. clearPrivateQuestionFingerprints removes the
+ * fingerprints private questions still hold.
  *
  * `collisionGroups` counts the fingerprints that two or more public, unpruned library questions
  * share after the run. `collisions` lists the first FINGERPRINT_MAX_REPORTED_COLLISIONS of them,
@@ -690,8 +705,7 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  * their links working; pruning one on the questions page breaks them.
  *
  * A run is safe to repeat. A fingerprint can go stale again later (an undo can restore an old
- * one, and a question that was private during a run can be published without a text change),
- * and a copy held for review isn't listed until it's approved, so check later dry runs for
+ * one), and a copy held for review isn't listed until it's approved, so check later dry runs for
  * changed above 0 or new collisions. Run it with dryRun first, and again after a real run
  * (changed should then be 0); add --prod after `run` for production:
  * `npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'`.
@@ -738,5 +752,73 @@ export const recomputeQuestionFingerprints = internalAction({
 				questions: questions.slice(0, FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS),
 			})),
 		};
+	},
+});
+
+export const PRIVATE_FINGERPRINT_CLEAR_PAGE_SIZE = 100;
+const privateFingerprintCounts = {
+	scanned: v.number(),
+	privateUserQuestions: v.number(),
+	cleared: v.number(),
+};
+const privateFingerprintPageResult = v.object({
+	...privateFingerprintCounts,
+	continueCursor: v.string(),
+	isDone: v.boolean(),
+});
+
+/**
+ * One page of the private fingerprint cleanup. With `dryRun` it writes nothing and reports what a
+ * real run would clear.
+ */
+export const clearPrivateQuestionFingerprintsPage = internalMutation({
+	args: { dryRun: v.boolean(), cursor: v.union(v.string(), v.null()) },
+	returns: privateFingerprintPageResult,
+	handler: async (ctx, args) => {
+		const page = await ctx.db.query("questions").paginate({ numItems: PRIVATE_FINGERPRINT_CLEAR_PAGE_SIZE, cursor: args.cursor });
+		const counts = { scanned: page.page.length, privateUserQuestions: 0, cleared: 0 };
+		for (const question of page.page) {
+			if (!isPrivateUserQuestion(question)) continue;
+			counts.privateUserQuestions += 1;
+			if (question.fingerprint === undefined) continue;
+			counts.cleared += 1;
+			if (!args.dryRun) await ctx.db.patch(question._id, { fingerprint: undefined });
+		}
+		return { ...counts, continueCursor: page.continueCursor, isDone: page.isDone };
+	},
+});
+
+/**
+ * Clears the fingerprint on personal, team and organization questions that aren't public: only
+ * library questions keep one (see isPrivateUserQuestion). It reports counts only. Making one of
+ * these questions public fingerprints it again.
+ *
+ * Earlier reviews of a cleared question can still be undone: undo doesn't compare a private
+ * question's fingerprint. Run the real cleanup once this deploy is settled, since older code
+ * fingerprints these questions again and refuses those undos. Run it with dryRun first, and
+ * again after a real run (cleared should then be 0); add --prod after `run` for production:
+ * `npx convex run internal/migrations:clearPrivateQuestionFingerprints '{"dryRun":true}'`.
+ */
+export const clearPrivateQuestionFingerprints = internalAction({
+	args: { dryRun: v.boolean() },
+	returns: v.object(privateFingerprintCounts),
+	handler: async (ctx, args) => {
+		const label = `clearPrivateQuestionFingerprints${args.dryRun ? " (dry run)" : ""}`;
+		const totals = { scanned: 0, privateUserQuestions: 0, cleared: 0 };
+		const countKeys = Object.keys(privateFingerprintCounts) as Array<keyof typeof privateFingerprintCounts>;
+		let cursor: string | null = null;
+		for (let pages = 1; ; pages++) {
+			const page: Infer<typeof privateFingerprintPageResult> = await ctx.runMutation(
+				internal.internal.migrations.clearPrivateQuestionFingerprintsPage,
+				{ dryRun: args.dryRun, cursor },
+			);
+			for (const key of countKeys) totals[key] += page[key];
+			if (page.isDone) break;
+			// Running totals, so a run that stops partway still shows how far it got.
+			if (pages % FINGERPRINT_PROGRESS_LOG_PAGES === 0) console.log(`${label} progress: ${JSON.stringify(totals)}`);
+			cursor = page.continueCursor;
+		}
+		console.log(`${label} total: ${JSON.stringify(totals)}`);
+		return totals;
 	},
 });
