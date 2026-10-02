@@ -2,6 +2,19 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.2.0] - 2026-10-02
+
+### Changed
+- Questions people write can be up to 500 characters: personal questions, questions submitted for the public feed, and Team prompts. The server checks the limit and the text is saved without leading or trailing spaces. Longer text, or a blank question, gets a clear message ("Questions can be up to 500 characters." or "Please enter a question."), and the draft stays in the box so it can be shortened.
+
+### Added
+- The question boxes on the add question page, the personal question dialog and the Team prompt composer show a character count (for example 120/500), so the limit is visible before you reach it. Screen readers hear a message when the limit is reached.
+
+### Fixed
+- When a question, remix or Team prompt is refused because of its text, the app now says why instead of showing a generic error.
+- If saving a remix fails, the remix drawer keeps showing the last remix that was saved, so Save never sends text that wasn't stored. A remix that comes back too long asks you to remix again.
+- Updating a personal question with blank text is refused instead of saving an empty question.
+
 ## [0.4.1.0] - 2026-10-01
 
 ### Fixed
