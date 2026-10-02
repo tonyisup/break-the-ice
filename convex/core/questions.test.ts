@@ -382,6 +382,68 @@ describe("author edits go back through review", () => {
     expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ customText: firstWording, status: "private" });
     expect(await t.run(async (ctx) => ctx.db.query("question_embeddings").collect())).toHaveLength(1);
   });
+
+  test("an edit kept private still starts a new review revision", async () => {
+    const { t, author, questionId } = await setup({ customText: firstWording, status: "private", reviewRevision: 2 });
+
+    await author.mutation(api.core.questions.updatePersonalQuestion, { questionId, customText: newWording, isPublic: false });
+
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ status: "private", reviewRevision: 3 });
+  });
+
+  test("an approval started before a private question was made public has to reload", async () => {
+    const { t, author, admin, questionId } = await setup({ customText: firstWording, status: "private" });
+    await author.mutation(api.core.questions.makeQuestionPublic, { questionId });
+
+    await expect(
+      admin.mutation(api.admin.questions.updateQuestion, {
+        id: questionId,
+        expectedRevision: 0,
+        reviewReason: "Approve",
+        status: "public",
+      }),
+    ).rejects.toThrow("changed during review");
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ status: "pending", reviewRevision: 1 });
+  });
+
+  async function setupMergedCopy() {
+    const context = await setup({
+      customText: firstWording,
+      text: firstWording,
+      status: "pruned",
+      prunedAt: 1,
+      duplicateWasPublic: false,
+    });
+    const canonical = await context.t.run(async (ctx) =>
+      ctx.db.insert("questions", { text: firstWording, status: "public", ...counters }),
+    );
+    await context.t.run(async (ctx) => ctx.db.patch(context.questionId, { duplicateOf: canonical }));
+    return { ...context, canonical };
+  }
+
+  test("a copy merged into a library question can't be resubmitted for review by its author", async () => {
+    const { t, author, questionId } = await setupMergedCopy();
+    const before = await t.run(async (ctx) => ctx.db.get(questionId));
+
+    const error = await author
+      .mutation(api.core.questions.makeQuestionPublic, { questionId })
+      .catch((caught: unknown) => caught);
+
+    expect(convexErrorData(error)).toEqual({
+      code: ERROR_CODES.QUESTION_MERGED_AS_DUPLICATE,
+      message: ERROR_MESSAGES.QUESTION_MERGED_AS_DUPLICATE,
+    });
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toEqual(before);
+  });
+
+  test("an author can still delete their copy merged into a library question, and the library question stays", async () => {
+    const { t, author, questionId, canonical } = await setupMergedCopy();
+
+    await author.mutation(api.core.questions.deletePersonalQuestion, { questionId });
+
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toBeNull();
+    expect(await t.run(async (ctx) => ctx.db.get(canonical))).toMatchObject({ text: firstWording, status: "public" });
+  });
 });
 
 test("getUserLikedAndPreferredEmbedding should ignore empty user embedding", async () => {
