@@ -6,7 +6,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPreviewQuestionGeneration } from "../lib/generationRunner";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
-import { wasAiCallBilled } from "../lib/aiSpendGuard";
+import { billedFailure, wasAiCallBilled } from "../lib/aiSpendGuard";
 import {
   normalizePersistableTeamPromptText,
   optionalTeamTopicText,
@@ -65,12 +65,14 @@ export async function runTopicPreviewWithUsage(
       .map(normalizePersistableTeamPromptText)
       .filter((question): question is string => question !== null);
     const distinctQuestions = [...new Set(persistableQuestions)];
+    // The provider has already charged for this answer, so an unusable one keeps its
+    // usage and reaches the manager as a readable error.
     if (distinctQuestions.length === 0) {
-      throw new Error("No persistable topic preview questions were generated.");
+      throw billedFailure(new Error("No persistable topic preview questions were generated."));
     }
     if (distinctQuestions.length < PREVIEW_COUNT) {
-      throw new Error(
-        "Exactly three distinct topic preview questions are required. Please retry.",
+      throw billedFailure(
+        new Error("Exactly three distinct topic preview questions are required."),
       );
     }
     const questions = distinctQuestions.slice(0, PREVIEW_COUNT);

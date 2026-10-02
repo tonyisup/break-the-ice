@@ -105,42 +105,25 @@ describe("runTopicPreviewWithUsage", () => {
     expect(ctx.runMutation).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects generated wording that cannot be persisted", async () => {
+  it.each([
+    ["wording that cannot be persisted", ["x".repeat(501)]],
+    ["incomplete or duplicate options", ["What should we revisit?", "What should we revisit?"]],
+  ])("refuses %s readably and keeps the paid usage", async (_case, previewTexts) => {
     const ctx = {
       runQuery: vi.fn().mockResolvedValue("user-id"),
       runMutation: vi.fn().mockResolvedValue(1),
     } as any;
-    const generate = vi.fn().mockResolvedValue({
-      previewTexts: ["x".repeat(501)],
-      runId: "run-id",
+    const generate = vi.fn().mockResolvedValue({ previewTexts, runId: "run-id" });
+
+    const error = await runTopicPreviewWithUsage(ctx, args, generate).catch((e: unknown) => e);
+
+    expect(convexErrorData(error)).toEqual({
+      code: ERROR_CODES.AI_GENERATION_FAILED,
+      message: ERROR_MESSAGES.AI_GENERATION_FAILED,
+      billed: true,
     });
-
-    await expect(runTopicPreviewWithUsage(ctx, args, generate)).rejects.toThrow(
-      "No persistable topic preview questions were generated",
-    );
-    expect(ctx.runMutation).toHaveBeenLastCalledWith(
-      internal.internal.users.decrementAIUsage,
-      { userId: "user-id", organizationId: "org-id" },
-    );
-  });
-
-  it("rejects incomplete or duplicate three-option responses", async () => {
-    const ctx = {
-      runQuery: vi.fn().mockResolvedValue("user-id"),
-      runMutation: vi.fn().mockResolvedValue(1),
-    } as any;
-    const generate = vi.fn().mockResolvedValue({
-      previewTexts: ["What should we revisit?", "What should we revisit?"],
-      runId: "run-id",
-    });
-
-    await expect(runTopicPreviewWithUsage(ctx, args, generate)).rejects.toThrow(
-      "Exactly three distinct topic preview questions are required",
-    );
-    expect(ctx.runMutation).toHaveBeenLastCalledWith(
-      internal.internal.users.decrementAIUsage,
-      { userId: "user-id", organizationId: "org-id" },
-    );
+    // Only the usage charge ran; no refund followed.
+    expect(ctx.runMutation).toHaveBeenCalledTimes(1);
   });
 });
 
