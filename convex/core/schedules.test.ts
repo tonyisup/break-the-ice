@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
@@ -931,7 +931,11 @@ test("coach feedback accepts only today's assignment from a published schedule",
   })).resolves.toBeNull();
 });
 
-test("schedule views keep showing an approved submission's reviewed wording after its author edits it", async () => {
+test.each([
+  ["with reviewed text", true],
+  ["approved without reviewed text", false],
+] as const)("schedule views keep showing an approved submission's wording (%s) after its author edits it", async (_case, hasReviewedText) => {
+  vi.useFakeTimers();
   const { t, admin, organizationId } = await createScheduleWorkspace();
   const reviewedWording = "What did you learn this week?";
   const authorWording = "What surprised you most this week?";
@@ -947,7 +951,7 @@ test("schedule views keep showing an approved submission's reviewed wording afte
     const questionId = await ctx.db.insert("questions", {
       authorId: author!._id,
       customText: reviewedWording,
-      text: reviewedWording,
+      ...(hasReviewedText ? { text: reviewedWording } : {}),
       status: "public",
       totalLikes: 0,
       totalShows: 0,
@@ -978,4 +982,7 @@ test("schedule views keep showing an approved submission's reviewed wording afte
   expect(detail.assignments.map((assignment) => assignment.question.text)).toEqual([reviewedWording]);
   const current = await admin.query(api.core.schedules.getCurrentWeekSchedule, { organizationId });
   expect(current.todayAssignment?.question.text).toBe(reviewedWording);
+  // Let the author edit's scheduled follow-ups finish inside the test.
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  vi.useRealTimers();
 });

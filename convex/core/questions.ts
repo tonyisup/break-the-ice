@@ -1022,9 +1022,14 @@ export const updatePersonalQuestion = mutation({
 			args.topicId ? ctx.db.get(args.topicId) : null,
 		]);
 
+		// A question approved without reviewed text shows its customText. Keep that approved
+		// wording as the reviewed text before the author's edit replaces customText.
+		const approvedWording =
+			question.text === undefined && isQuestionPublic(question) ? question.customText : undefined;
 		await ctx.db.patch(args.questionId, {
-			// The author edits their own wording. Reviewed text, if any, stays as it is, so views
-			// keep showing the reviewed wording.
+			// The author edits their own wording. Reviewed text stays as it is, so views keep
+			// showing the reviewed wording.
+			...(approvedWording !== undefined ? { text: approvedWording } : {}),
 			customText,
 			status: args.isPublic ? "pending" : "private",
 			// Pending or private, so not a library question: it keeps no fingerprint (see isPrivateUserQuestion).
