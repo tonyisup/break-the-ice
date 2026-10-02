@@ -471,6 +471,24 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
+  it("deletes the question when the drawer unmounts while it is being created", async () => {
+    const mutations = mockMutations();
+    const created = deferred<string>();
+    mutations.add.mockReturnValue(created.promise);
+    const { unmount } = renderDrawer(vi.fn().mockResolvedValue("A remix from an unmounted drawer?"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    await waitFor(() => {
+      expect(mutations.add).toHaveBeenCalled();
+    });
+    unmount();
+    created.resolve("q-unmounted");
+    await flush();
+
+    expect(mutations.remove).toHaveBeenCalledWith({ questionId: "q-unmounted" });
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it("shows no error when a cancelled remix's create fails afterwards", async () => {
     const mutations = mockMutations();
     const created = deferred<string>();
