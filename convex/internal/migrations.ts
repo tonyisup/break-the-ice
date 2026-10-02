@@ -219,6 +219,15 @@ export const removeOldTimestampFields = internalMutation({
 	},
 });
 
+/**
+ * Fills the prompt architecture fields older styles, tones, topics and questions lack (slugs,
+ * versions, fingerprint, source, safety flags, quality), then adds the default blueprint. Values
+ * already set are kept, apart from updatedAt on the styles, tones and topics it fills. Private
+ * personal, team and organization questions are left alone (see isPrivateUserQuestion). It has
+ * no dry run and schedules itself stage by stage; to fingerprint library questions that have
+ * none, start at the questions stage:
+ * `npx convex run internal/migrations:backfillPromptArchitecture '{"stage":"questions"}'`.
+ */
 export const backfillPromptArchitecture = internalMutation({
 	args: {
 		stage: v.optional(
@@ -680,8 +689,9 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  * text to fingerprint are counted and left alone. Until it has run after the quote fix deploys,
  * generation can save copies of curly-quoted library questions, so run it soon after deploying
  * (on dev too, before evals). `withoutFingerprint` includes questions added with admin
- * createQuestion before it set a fingerprint, which generation can't see as duplicates;
- * clearPrivateQuestionFingerprints removes the fingerprints private questions still hold.
+ * createQuestion before it set a fingerprint, which generation can't see as duplicates; the
+ * backfill's questions stage fingerprints them. clearPrivateQuestionFingerprints removes the
+ * fingerprints private questions still hold.
  *
  * `collisionGroups` counts the fingerprints that two or more public, unpruned library questions
  * share after the run. `collisions` lists the first FINGERPRINT_MAX_REPORTED_COLLISIONS of them,
@@ -780,8 +790,9 @@ export const clearPrivateQuestionFingerprintsPage = internalMutation({
  * these questions public fingerprints it again.
  *
  * Earlier reviews of a cleared question can still be undone: undo doesn't compare a private
- * question's fingerprint. Run it with dryRun first, and again after a real run (cleared should then be 0); add --prod
- * after `run` for production:
+ * question's fingerprint. Run the real cleanup once this deploy is settled, since older code
+ * fingerprints these questions again and refuses those undos. Run it with dryRun first, and
+ * again after a real run (cleared should then be 0); add --prod after `run` for production:
  * `npx convex run internal/migrations:clearPrivateQuestionFingerprints '{"dryRun":true}'`.
  */
 export const clearPrivateQuestionFingerprints = internalAction({

@@ -972,6 +972,19 @@ describe("private questions keep no fingerprint", () => {
     expect(await fingerprintOf(t, blank)).toBeNull();
   });
 
+  test("undoing a prune of a library question is still refused once the recompute changed its fingerprint", async () => {
+    const { t } = await setup();
+    const admin = t.withIdentity(editor);
+    const curly = await insertQuestion(t, { text: roadTripCurly, fingerprint: "q_old_road_trip" });
+    const pruningId = await t.run(async (ctx) => ctx.db.insert("pruning", { questionId: curly, status: "pending", reason: "Low engagement" }));
+    await admin.mutation(api.admin.pruning.approvePruning, { pruningId, reason: "Prune", expectedRevision: 0 });
+    expect(await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false })).toMatchObject({ changed: 1 });
+
+    const [review] = await admin.query(api.admin.pruning.getReviewHistory, { source: "pruning" });
+    await expect(admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id })).rejects.toThrow("newer work");
+    expect(await fingerprintOf(t, curly)).toBe(fingerprintText(roadTrip));
+  });
+
   test("undoing a prune gives a public submission its fingerprint back", async () => {
     const { t, insertGenerated } = await setup();
     const admin = t.withIdentity(editor);
