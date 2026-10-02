@@ -4,6 +4,11 @@ export const PENDING_QUEUE_LIMIT = 200;
 /** The longest question a person can write, in characters. */
 export const MAX_QUESTION_TEXT_LENGTH = 500;
 
+/** The longest Team topic name, outcome guidance and boundaries a manager can write. */
+export const MAX_TEAM_TOPIC_NAME_LENGTH = 100;
+export const MAX_TEAM_TOPIC_GUIDANCE_LENGTH = 1000;
+export const MAX_TEAM_TOPIC_BOUNDARIES_LENGTH = 1000;
+
 export const ERROR_CODES = {
   AI_LIMIT_REACHED: "AI_LIMIT_REACHED",
   AI_BUDGET_PAUSED: "AI_BUDGET_PAUSED",
@@ -14,6 +19,12 @@ export const ERROR_CODES = {
   QUESTION_TEXT_TOO_LONG: "QUESTION_TEXT_TOO_LONG",
   QUESTION_MERGED_AS_DUPLICATE: "QUESTION_MERGED_AS_DUPLICATE",
   QUESTION_HAS_MERGED_COPIES: "QUESTION_HAS_MERGED_COPIES",
+  SCHEDULE_NOT_DRAFT: "SCHEDULE_NOT_DRAFT",
+  SCHEDULE_DAY_INACTIVE: "SCHEDULE_DAY_INACTIVE",
+  TEAM_TOPIC_REQUIRED: "TEAM_TOPIC_REQUIRED",
+  TEAM_TOPIC_TOO_LONG: "TEAM_TOPIC_TOO_LONG",
+  STYLE_UNAVAILABLE: "STYLE_UNAVAILABLE",
+  TONE_UNAVAILABLE: "TONE_UNAVAILABLE",
 } as const;
 
 export const ERROR_MESSAGES = {
@@ -30,4 +41,15 @@ export const ERROR_MESSAGES = {
   QUESTION_TEXT_TOO_LONG: `Questions can be up to ${MAX_QUESTION_TEXT_LENGTH} characters.`,
   QUESTION_MERGED_AS_DUPLICATE: "This question was merged with a matching one in the library, so it can no longer be edited.",
   QUESTION_HAS_MERGED_COPIES: "Other questions were merged into this one, so ask an admin to change or remove it.",
+  // Team prompt refusals. A topic field shares one code per refusal, with a message
+  // that names the field.
+  SCHEDULE_NOT_DRAFT: "This schedule is already published or completed, so it can't be changed.",
+  SCHEDULE_DAY_INACTIVE: "That day is no longer a delivery day for this schedule.",
+  TEAM_TOPIC_NAME_REQUIRED: "Please enter a topic name.",
+  TEAM_TOPIC_GUIDANCE_REQUIRED: "Please describe what this conversation should surface.",
+  TEAM_TOPIC_NAME_TOO_LONG: `Topic names can be up to ${MAX_TEAM_TOPIC_NAME_LENGTH} characters.`,
+  TEAM_TOPIC_GUIDANCE_TOO_LONG: `Answers to "What should this conversation surface?" can be up to ${MAX_TEAM_TOPIC_GUIDANCE_LENGTH.toLocaleString("en-US")} characters.`,
+  TEAM_TOPIC_BOUNDARIES_TOO_LONG: `Boundaries can be up to ${MAX_TEAM_TOPIC_BOUNDARIES_LENGTH.toLocaleString("en-US")} characters.`,
+  STYLE_UNAVAILABLE: "That style isn't available to your workspace. Pick another one.",
+  TONE_UNAVAILABLE: "That tone isn't available to your workspace. Pick another one.",
 } as const;

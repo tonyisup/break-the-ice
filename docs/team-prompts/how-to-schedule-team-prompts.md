@@ -82,12 +82,24 @@ Confirm the workspace has active styles and tones and that the server has its
 AI provider credentials configured. A failed preview does not change the draft
 schedule, so you can retry without removing an assignment.
 
+If the planner says a style or tone isn't available to your workspace, pick
+another one. If it says the AI sent back an answer it couldn't use, select
+**Generate three options** again. That attempt still counts toward the
+workspace's AI usage, because the provider already charged for it.
+
 If the planner says new AI questions are paused for today, the app's daily AI
 budget is spent, and topic options and matrix fill come back the next day. The
 same applies when it says you've used today's AI requests. If it says you've
 made a lot of AI requests in a short time, retry in a few minutes. If your team
 has used its matrix fills, more become available through the day. Library and
 **Write** assignments keep working either way.
+
+### “This schedule is already published or completed”
+
+Published and completed weeks can't be changed. Someone may have published the
+week while you were composing. Open or create a draft week to assign a new
+question. If the planner says the day is no longer a delivery day, reload the
+planner and pick one of the days the week shows.
 
 ### The week will not publish
 

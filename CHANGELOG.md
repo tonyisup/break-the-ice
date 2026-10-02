@@ -15,6 +15,29 @@ All notable changes to Break the Ice are recorded here.
 - A one-time cleanup that removes embeddings non-public author-written questions still hold. Once this deploy is settled, run its dry run: `npx convex run internal/migrations:clearPrivateQuestionEmbeddings '{"dryRun":true}'` (add `--prod` after `run` for production), then run it with `false`, and run the dry run again to check that `cleared` is 0. It reports counts only.
 - A database index for finding the questions merged into a question.
 
+## [0.4.5.0] - 2026-10-02
+
+### Fixed
+- Team prompt refusals now say what went wrong instead of "Server Error". Managers see a readable message when the schedule is already published or completed, the day is no longer a delivery day, a topic field is blank or too long, or the chosen style or tone isn't available to their workspace.
+- When the AI's topic preview options can't be used, the manager gets a readable "try again" message, and the request counts toward usage because the provider already charged for it.
+- Topic previews refused for a blank or over-long field no longer use up one of the person's AI requests.
+- Team prompts, their topics and their assignments are now credited to the account whose manager role was checked, which matters for people with more than one sign-in linked to the same email.
+- The Team prompt composer switches to an available style or tone when the one it had picked stops being offered, so "Pick another one" works. It keeps your pick while the options briefly reload.
+- Error messages that pass through more than one server step are read correctly, so they show their readable text instead of a generic error.
+
+### Changed
+- The topic field limits (100 characters for the name, 1,000 for guidance and boundaries) live in one place shared by the composer and the server.
+
+## [0.4.4.0] - 2026-10-02
+
+### Fixed
+- Cancelling a remix now really cancels it. A cancelled remix no longer lands in your stash, and starting another remix right after cancelling creates one question instead of two. A cancelled remix can't finish the next remix's spinner or show its text with Save enabled. If the cancel arrives while the question is being created, that question is removed.
+- Closing the drawer or leaving the page while a remix is running no longer saves the remix in the background.
+
+### Changed
+- When you remix again and then cancel, the drawer goes back to your previous remix so you can still save or discard it. The button reads "Keep Previous Remix" in that case.
+- After a cancel, keyboard focus moves to the button that replaces Cancel (Save, Remix, or the drawer's Cancel when Remix isn't available), so keyboard and screen reader users keep their place.
+
 ## [0.4.3.0] - 2026-10-02
 
 ### Fixed
