@@ -450,6 +450,58 @@ describe("OrgWeeklyCurationPage Team prompt input validation", () => {
     expect(screen.getByLabelText("Final wording")).toHaveValue("What concern needs airtime?");
   });
 
+  it("shows the readable message when the schedule was published in another tab, not the redacted server error", async () => {
+    refuseTeamPrompts(new ConvexError({
+      code: ERROR_CODES.SCHEDULE_PUBLISHED,
+      message: ERROR_MESSAGES.SCHEDULE_PUBLISHED,
+    }));
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Write" }));
+    fireEvent.change(screen.getByLabelText("Exact question"), { target: { value: "What should we challenge?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and assign" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(ERROR_MESSAGES.SCHEDULE_PUBLISHED));
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("shows the readable message when a topic preview's style is refused", async () => {
+    (useAction as ReturnType<typeof vi.fn>).mockImplementation((fn: string) =>
+      fn === "previewTopicQuestions"
+        ? vi.fn().mockRejectedValue(new ConvexError({
+          code: ERROR_CODES.STYLE_UNAVAILABLE,
+          message: ERROR_MESSAGES.STYLE_UNAVAILABLE,
+        }))
+        : vi.fn().mockResolvedValue(undefined),
+    );
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
+      if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
+      if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
+      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
+      if (fn === "getCurationPreview") return { totalResponses: 0, coachCount: 0, confidence: "insufficient", recommendations: [] };
+      if (fn === "getStyles") return [{ _id: "style-1", id: "reflective", slug: "reflective", name: "Reflective", icon: "zap", color: "#888888" }];
+      if (fn === "getTones") return [{ _id: "tone-1", id: "warm", slug: "warm", name: "Warm", icon: "heart", color: "#888888" }];
+      if (fn === "getPublicQuestions" || fn === "getTopics") return [];
+      return undefined;
+    });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Topic" }));
+    fireEvent.change(screen.getByLabelText("Topic name"), { target: { value: "Launch readiness" } });
+    fireEvent.change(screen.getByLabelText("What should this conversation surface?"), {
+      target: { value: "Surface unspoken concerns." },
+    });
+    const generateButton = screen.getByRole("button", { name: "Generate three options" });
+    await waitFor(() => expect(generateButton).toBeEnabled());
+    fireEvent.click(generateButton);
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(ERROR_MESSAGES.STYLE_UNAVAILABLE));
+  });
+
   it("falls back to a generic message when written wording fails without a readable one", async () => {
     refuseTeamPrompts(new Error(""));
     render(<OrgWeeklyCurationPage />);

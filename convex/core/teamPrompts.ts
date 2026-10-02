@@ -1,13 +1,15 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internalQuery, mutation, query } from "../_generated/server";
 import { ensurePaidOrganizationMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 import { deliveryDaysForSchedule } from "../lib/deliveryDays";
 import { requireQuestionText } from "../lib/questionText";
+import {
+  optionalTeamTopicText,
+  requireTeamTopicText,
+} from "../lib/teamPromptContract";
+import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 
-const MAX_TOPIC_NAME_LENGTH = 100;
-const MAX_TOPIC_GUIDANCE_LENGTH = 1000;
-const MAX_TOPIC_BOUNDARIES_LENGTH = 1000;
 const TEAM_TOPIC_LIST_LIMIT = 200;
 
 const dayValidator = v.union(
@@ -19,28 +21,6 @@ const dayValidator = v.union(
   v.literal("saturday"),
   v.literal("sunday"),
 );
-
-function requiredText(value: string, label: string, maxLength: number): string {
-  const normalized = value.trim();
-  if (!normalized) throw new Error(`${label} is required.`);
-  if (normalized.length > maxLength) {
-    throw new Error(`${label} must be ${maxLength} characters or fewer.`);
-  }
-  return normalized;
-}
-
-function optionalText(
-  value: string | undefined,
-  label: string,
-  maxLength: number,
-): string | undefined {
-  const normalized = value?.trim();
-  if (!normalized) return undefined;
-  if (normalized.length > maxLength) {
-    throw new Error(`${label} must be ${maxLength} characters or fewer.`);
-  }
-  return normalized;
-}
 
 export const authorizeTopicPreview = internalQuery({
   args: {
@@ -64,14 +44,20 @@ export const authorizeTopicPreview = internalQuery({
       (style.status !== undefined && style.status !== "active") ||
       (style.organizationId && style.organizationId !== args.organizationId)
     ) {
-      throw new Error("Style is not available to this organization.");
+      throw new ConvexError({
+        code: ERROR_CODES.STYLE_UNAVAILABLE,
+        message: ERROR_MESSAGES.STYLE_UNAVAILABLE,
+      });
     }
     if (
       !tone ||
       (tone.status !== undefined && tone.status !== "active") ||
       (tone.organizationId && tone.organizationId !== args.organizationId)
     ) {
-      throw new Error("Tone is not available to this organization.");
+      throw new ConvexError({
+        code: ERROR_CODES.TONE_UNAVAILABLE,
+        message: ERROR_MESSAGES.TONE_UNAVAILABLE,
+      });
     }
     return membership.userId;
   },
@@ -127,17 +113,27 @@ export const createAndAssign = mutation({
   }),
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
-    if (!schedule) throw new Error("Schedule not found");
+    if (!schedule) {
+      throw new ConvexError({
+        code: ERROR_CODES.SCHEDULE_NOT_FOUND,
+        message: ERROR_MESSAGES.SCHEDULE_NOT_FOUND,
+      });
+    }
     await ensurePaidOrganizationMember(ctx, schedule.organizationId, [
       "admin",
       "manager",
     ]);
-    if (schedule.status !== "draft")
-      throw new Error("Cannot modify a published schedule");
+    if (schedule.status !== "draft") {
+      throw new ConvexError({
+        code: ERROR_CODES.SCHEDULE_PUBLISHED,
+        message: ERROR_MESSAGES.SCHEDULE_PUBLISHED,
+      });
+    }
     if (!deliveryDaysForSchedule(schedule).includes(args.dayOfWeek)) {
-      throw new Error(
-        `${args.dayOfWeek} is not an active delivery day for this schedule`,
-      );
+      throw new ConvexError({
+        code: ERROR_CODES.SCHEDULE_DAY_INACTIVE,
+        message: ERROR_MESSAGES.SCHEDULE_DAY_INACTIVE,
+      });
     }
 
     const identity = await ctx.auth.getUserIdentity();
@@ -146,7 +142,12 @@ export const createAndAssign = mutation({
       tokenIdentifier: identity?.tokenIdentifier,
       email: identity?.email,
     });
-    if (!user) throw new Error("User not found");
+    if (!user) {
+      throw new ConvexError({
+        code: ERROR_CODES.USER_NOT_FOUND,
+        message: ERROR_MESSAGES.USER_NOT_FOUND,
+      });
+    }
 
     const questionText = requireQuestionText(args.questionText);
     const now = Date.now();
@@ -154,20 +155,11 @@ export const createAndAssign = mutation({
     if (args.sourceTopic) {
       teamTopicId = await ctx.db.insert("teamTopics", {
         organizationId: schedule.organizationId,
-        name: requiredText(
-          args.sourceTopic.name,
-          "Topic name",
-          MAX_TOPIC_NAME_LENGTH,
-        ),
-        guidance: requiredText(
-          args.sourceTopic.guidance,
-          "Topic guidance",
-          MAX_TOPIC_GUIDANCE_LENGTH,
-        ),
-        boundaries: optionalText(
+        name: requireTeamTopicText(args.sourceTopic.name, "name"),
+        guidance: requireTeamTopicText(args.sourceTopic.guidance, "guidance"),
+        boundaries: optionalTeamTopicText(
           args.sourceTopic.boundaries,
-          "Topic boundaries",
-          MAX_TOPIC_BOUNDARIES_LENGTH,
+          "boundaries",
         ),
         createdBy: user._id,
         createdAt: now,

@@ -4,7 +4,14 @@ import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { convexFunctionModules } from "../../vitestConvexModules";
-import { ERROR_CODES, ERROR_MESSAGES, MAX_QUESTION_TEXT_LENGTH } from "../constants";
+import {
+  ERROR_CODES,
+  ERROR_MESSAGES,
+  MAX_QUESTION_TEXT_LENGTH,
+  MAX_TEAM_TOPIC_BOUNDARIES_LENGTH,
+  MAX_TEAM_TOPIC_GUIDANCE_LENGTH,
+  MAX_TEAM_TOPIC_NAME_LENGTH,
+} from "../constants";
 import { convexErrorData } from "../lib/errorData";
 import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
@@ -221,6 +228,127 @@ test("Team prompts without wording are rejected with a readable error and save n
     assignments: await ctx.db.query("scheduledQuestions").collect(),
   }));
   expect(saved).toEqual({ teamPrompts: [], teamTopics: [], assignments: [] });
+});
+
+async function createDraftTeamSchedule() {
+  const workspace = await createScheduleWorkspace();
+  await workspace.admin.mutation(api.core.orgSettings.upsertOrgSettings, {
+    organizationId: workspace.organizationId,
+    activeDeliveryDays: ["monday"],
+  });
+  const scheduleId = await workspace.admin.mutation(api.core.schedules.createSchedule, {
+    organizationId: workspace.organizationId,
+    weekStart: "2026-07-20",
+  });
+  return { ...workspace, scheduleId };
+}
+
+test("Team prompts into a published schedule are rejected with a readable error", async () => {
+  const { t, admin, scheduleId } = await createDraftTeamSchedule();
+  await t.run(async (ctx) => ctx.db.patch(scheduleId, { status: "published" }));
+
+  const error = await admin
+    .mutation(api.core.teamPrompts.createAndAssign, {
+      scheduleId,
+      dayOfWeek: "monday",
+      questionText: "What should we challenge?",
+    })
+    .catch((caught: unknown) => caught);
+
+  expect(convexErrorData(error)).toEqual({
+    code: ERROR_CODES.SCHEDULE_PUBLISHED,
+    message: ERROR_MESSAGES.SCHEDULE_PUBLISHED,
+  });
+});
+
+test("Team prompts into a deleted schedule are rejected with a readable error", async () => {
+  const { t, admin, scheduleId } = await createDraftTeamSchedule();
+  await t.run(async (ctx) => ctx.db.delete(scheduleId));
+
+  const error = await admin
+    .mutation(api.core.teamPrompts.createAndAssign, {
+      scheduleId,
+      dayOfWeek: "monday",
+      questionText: "What should we challenge?",
+    })
+    .catch((caught: unknown) => caught);
+
+  expect(convexErrorData(error)).toEqual({
+    code: ERROR_CODES.SCHEDULE_NOT_FOUND,
+    message: ERROR_MESSAGES.SCHEDULE_NOT_FOUND,
+  });
+});
+
+test("Team prompts on a day the schedule doesn't deliver are rejected with a readable error", async () => {
+  const { admin, scheduleId } = await createDraftTeamSchedule();
+
+  const error = await admin
+    .mutation(api.core.teamPrompts.createAndAssign, {
+      scheduleId,
+      dayOfWeek: "tuesday",
+      questionText: "What should we challenge?",
+    })
+    .catch((caught: unknown) => caught);
+
+  expect(convexErrorData(error)).toEqual({
+    code: ERROR_CODES.SCHEDULE_DAY_INACTIVE,
+    message: ERROR_MESSAGES.SCHEDULE_DAY_INACTIVE,
+  });
+});
+
+test.each([
+  [
+    "a blank topic name",
+    { name: "  ", guidance: "Surface unspoken concerns." },
+    ERROR_CODES.TEAM_TOPIC_REQUIRED,
+    ERROR_MESSAGES.TEAM_TOPIC_NAME_REQUIRED,
+  ],
+  [
+    "blank topic guidance",
+    { name: "Launch readiness", guidance: "" },
+    ERROR_CODES.TEAM_TOPIC_REQUIRED,
+    ERROR_MESSAGES.TEAM_TOPIC_GUIDANCE_REQUIRED,
+  ],
+  [
+    "an over-long topic name",
+    { name: "a".repeat(MAX_TEAM_TOPIC_NAME_LENGTH + 1), guidance: "Surface unspoken concerns." },
+    ERROR_CODES.TEAM_TOPIC_TOO_LONG,
+    ERROR_MESSAGES.TEAM_TOPIC_NAME_TOO_LONG,
+  ],
+  [
+    "over-long topic guidance",
+    { name: "Launch readiness", guidance: "a".repeat(MAX_TEAM_TOPIC_GUIDANCE_LENGTH + 1) },
+    ERROR_CODES.TEAM_TOPIC_TOO_LONG,
+    ERROR_MESSAGES.TEAM_TOPIC_GUIDANCE_TOO_LONG,
+  ],
+  [
+    "over-long topic boundaries",
+    {
+      name: "Launch readiness",
+      guidance: "Surface unspoken concerns.",
+      boundaries: "a".repeat(MAX_TEAM_TOPIC_BOUNDARIES_LENGTH + 1),
+    },
+    ERROR_CODES.TEAM_TOPIC_TOO_LONG,
+    ERROR_MESSAGES.TEAM_TOPIC_BOUNDARIES_TOO_LONG,
+  ],
+])("Team prompts with %s are rejected with a readable error and save nothing", async (_label, sourceTopic, code, message) => {
+  const { t, admin, scheduleId } = await createDraftTeamSchedule();
+
+  const error = await admin
+    .mutation(api.core.teamPrompts.createAndAssign, {
+      scheduleId,
+      dayOfWeek: "monday",
+      questionText: "What concern deserves more airtime?",
+      sourceTopic,
+    })
+    .catch((caught: unknown) => caught);
+
+  expect(convexErrorData(error)).toEqual({ code, message });
+  const saved = await t.run(async (ctx) => ({
+    teamTopics: await ctx.db.query("teamTopics").collect(),
+    assignments: await ctx.db.query("scheduledQuestions").collect(),
+  }));
+  expect(saved).toEqual({ teamTopics: [], assignments: [] });
 });
 
 test("schedule delivery retains exact Team Prompt wording if the source row is removed", async () => {
@@ -494,13 +622,18 @@ test("topic previews reject taxonomy records owned by another organization", asy
     return { styleId, toneId };
   });
 
-  await expect(
-    admin.query(internal.core.teamPrompts.authorizeTopicPreview, {
+  const error = await admin
+    .query(internal.core.teamPrompts.authorizeTopicPreview, {
       organizationId,
       styleId,
       toneId,
-    }),
-  ).rejects.toThrow("Style is not available to this organization");
+    })
+    .catch((caught: unknown) => caught);
+
+  expect(convexErrorData(error)).toEqual({
+    code: ERROR_CODES.STYLE_UNAVAILABLE,
+    message: ERROR_MESSAGES.STYLE_UNAVAILABLE,
+  });
 });
 
 test("topic previews reject unpublished taxonomy records", async () => {
@@ -526,11 +659,56 @@ test("topic previews reject unpublished taxonomy records", async () => {
     return { styleId, toneId };
   });
 
-  await expect(admin.query(internal.core.teamPrompts.authorizeTopicPreview, {
-    organizationId,
-    styleId,
-    toneId,
-  })).rejects.toThrow("Style is not available to this organization");
+  const error = await admin
+    .query(internal.core.teamPrompts.authorizeTopicPreview, {
+      organizationId,
+      styleId,
+      toneId,
+    })
+    .catch((caught: unknown) => caught);
+
+  expect(convexErrorData(error)).toEqual({
+    code: ERROR_CODES.STYLE_UNAVAILABLE,
+    message: ERROR_MESSAGES.STYLE_UNAVAILABLE,
+  });
+});
+
+test("topic previews reject a tone that is not available with a readable error", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const { styleId, toneId } = await t.run(async (ctx) => {
+    const otherOrganizationId = await ctx.db.insert("organizations", { name: "Other workspace" });
+    const styleId = await ctx.db.insert("styles", {
+      id: "global-style",
+      name: "Global style",
+      structure: "Global structure",
+      color: "#000000",
+      icon: "zap",
+      status: "active",
+    });
+    const toneId = await ctx.db.insert("tones", {
+      id: "private-other-tone",
+      name: "Private other tone",
+      color: "#ffffff",
+      icon: "lock",
+      promptGuidanceForAI: "Use clear language.",
+      organizationId: otherOrganizationId,
+      status: "active",
+    });
+    return { styleId, toneId };
+  });
+
+  const error = await admin
+    .query(internal.core.teamPrompts.authorizeTopicPreview, {
+      organizationId,
+      styleId,
+      toneId,
+    })
+    .catch((caught: unknown) => caught);
+
+  expect(convexErrorData(error)).toEqual({
+    code: ERROR_CODES.TONE_UNAVAILABLE,
+    message: ERROR_MESSAGES.TONE_UNAVAILABLE,
+  });
 });
 
 test("schedule assignment rejects a private prompt from another organization", async () => {

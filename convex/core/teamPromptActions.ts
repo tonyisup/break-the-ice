@@ -7,34 +7,13 @@ import type { Id } from "../_generated/dataModel";
 import { runPreviewQuestionGeneration } from "../lib/generationRunner";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 import { wasAiCallBilled } from "../lib/aiSpendGuard";
-import { normalizePersistableTeamPromptText } from "../lib/teamPromptContract";
+import {
+  normalizePersistableTeamPromptText,
+  optionalTeamTopicText,
+  requireTeamTopicText,
+} from "../lib/teamPromptContract";
 
-const MAX_TOPIC_NAME_LENGTH = 100;
-const MAX_TOPIC_GUIDANCE_LENGTH = 1000;
-const MAX_TOPIC_BOUNDARIES_LENGTH = 1000;
 const PREVIEW_COUNT = 3;
-
-function requiredText(value: string, label: string, maxLength: number): string {
-  const normalized = value.trim();
-  if (!normalized) throw new Error(`${label} is required.`);
-  if (normalized.length > maxLength) {
-    throw new Error(`${label} must be ${maxLength} characters or fewer.`);
-  }
-  return normalized;
-}
-
-function optionalText(
-  value: string | undefined,
-  label: string,
-  maxLength: number,
-): string | undefined {
-  const normalized = value?.trim();
-  if (!normalized) return undefined;
-  if (normalized.length > maxLength) {
-    throw new Error(`${label} must be ${maxLength} characters or fewer.`);
-  }
-  return normalized;
-}
 
 type TopicPreviewArgs = {
   organizationId: Id<"organizations">;
@@ -58,17 +37,9 @@ export async function runTopicPreviewWithUsage(
       toneId: args.toneId,
     },
   );
-  const name = requiredText(args.name, "Topic name", MAX_TOPIC_NAME_LENGTH);
-  const guidance = requiredText(
-    args.guidance,
-    "Topic guidance",
-    MAX_TOPIC_GUIDANCE_LENGTH,
-  );
-  const boundaries = optionalText(
-    args.boundaries,
-    "Topic boundaries",
-    MAX_TOPIC_BOUNDARIES_LENGTH,
-  );
+  const name = requireTeamTopicText(args.name, "name");
+  const guidance = requireTeamTopicText(args.guidance, "guidance");
+  const boundaries = optionalTeamTopicText(args.boundaries, "boundaries");
   const userContext = [
     `Team conversation topic: ${name}`,
     `Desired outcome: ${guidance}`,

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { internal } from "../_generated/api";
 import { runTopicPreviewWithUsage } from "./teamPromptActions";
 import { billedFailure, wasAiCallBilled } from "../lib/aiSpendGuard";
+import { convexErrorData } from "../lib/errorData";
+import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 
 const args = {
   organizationId: "org-id" as any,
@@ -42,6 +44,23 @@ describe("runTopicPreviewWithUsage", () => {
       ],
       runId: "run-id",
     });
+  });
+
+  it("refuses a blank topic name with a readable error before reserving usage", async () => {
+    const ctx = {
+      runQuery: vi.fn().mockResolvedValue("user-id"),
+      runMutation: vi.fn().mockResolvedValue(1),
+    } as any;
+    const generate = vi.fn();
+
+    const error = await runTopicPreviewWithUsage(ctx, { ...args, name: "  " }, generate).catch((e: unknown) => e);
+
+    expect(convexErrorData(error)).toEqual({
+      code: ERROR_CODES.TEAM_TOPIC_REQUIRED,
+      message: ERROR_MESSAGES.TEAM_TOPIC_NAME_REQUIRED,
+    });
+    expect(ctx.runMutation).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
   });
 
   it("restores reserved usage when preview generation fails", async () => {
