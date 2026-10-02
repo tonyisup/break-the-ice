@@ -224,9 +224,12 @@ export const removeOldTimestampFields = internalMutation({
  * versions, fingerprint, source, safety flags, quality), then adds the default blueprint. Values
  * already set are kept, apart from updatedAt on the styles, tones and topics it fills. Private
  * personal, team and organization questions are left alone (see isPrivateUserQuestion). It has
- * no dry run and schedules itself stage by stage; to fingerprint library questions that have
- * none, start at the questions stage:
+ * no dry run and schedules itself stage by stage. To fingerprint library questions that have
+ * none, start at the questions stage (add --prod after `run` for production), then check that a
+ * recomputeQuestionFingerprints dry run shows fewer `withoutFingerprint`:
  * `npx convex run internal/migrations:backfillPromptArchitecture '{"stage":"questions"}'`.
+ * As with the recompute, undoing an earlier review of a question it fingerprints is then refused
+ * as a newer change.
  */
 export const backfillPromptArchitecture = internalMutation({
 	args: {
@@ -752,6 +755,7 @@ export const recomputeQuestionFingerprints = internalAction({
 	},
 });
 
+export const PRIVATE_FINGERPRINT_CLEAR_PAGE_SIZE = 100;
 const privateFingerprintCounts = {
 	scanned: v.number(),
 	privateUserQuestions: v.number(),
@@ -771,7 +775,7 @@ export const clearPrivateQuestionFingerprintsPage = internalMutation({
 	args: { dryRun: v.boolean(), cursor: v.union(v.string(), v.null()) },
 	returns: privateFingerprintPageResult,
 	handler: async (ctx, args) => {
-		const page = await ctx.db.query("questions").paginate({ numItems: FINGERPRINT_RECOMPUTE_PAGE_SIZE, cursor: args.cursor });
+		const page = await ctx.db.query("questions").paginate({ numItems: PRIVATE_FINGERPRINT_CLEAR_PAGE_SIZE, cursor: args.cursor });
 		const counts = { scanned: page.page.length, privateUserQuestions: 0, cleared: 0 };
 		for (const question of page.page) {
 			if (!isPrivateUserQuestion(question)) continue;

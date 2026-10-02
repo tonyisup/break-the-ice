@@ -9,6 +9,7 @@ import {
   FINGERPRINT_MAX_REPORTED_COLLISIONS,
   FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS,
   FINGERPRINT_RECOMPUTE_PAGE_SIZE,
+  PRIVATE_FINGERPRINT_CLEAR_PAGE_SIZE,
   PROMPT_BACKFILL_BATCH_SIZE,
 } from "./internal/migrations";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "./lib/promptArchitecture";
@@ -755,16 +756,16 @@ describe("private questions keep no fingerprint", () => {
     return t.run(async (ctx) => ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }));
   }
 
-  test("Approve personal on a submission leaves it without a fingerprint", async () => {
+  test("Mark Personal on a submission leaves it without a fingerprint", async () => {
     const { t, insertGenerated } = await setup();
     const admin = t.withIdentity(editor);
     const submission = await insertQuestion(t, { authorId: "author-1", customText: smell, status: "pending", fingerprint: fingerprintText(smell) });
 
-    // What the questions page sends for Approve personal.
+    // What the questions page sends for Mark Personal.
     await admin.mutation(api.admin.questions.updateQuestion, {
       id: submission,
       expectedRevision: 0,
-      reviewReason: "Approve personal",
+      reviewReason: "Mark personal",
       text: smell,
       status: "private",
     });
@@ -878,7 +879,7 @@ describe("private questions keep no fingerprint", () => {
     await admin.mutation(api.admin.questions.updateQuestion, {
       id: personal,
       expectedRevision: 0,
-      reviewReason: "Approve personal",
+      reviewReason: "Mark personal",
       text: smell,
       status: "private",
     });
@@ -913,14 +914,14 @@ describe("private questions keep no fingerprint", () => {
     await admin.mutation(api.admin.questions.updateQuestion, {
       id: personal,
       expectedRevision: 0,
-      reviewReason: "Approve personal",
+      reviewReason: "Mark personal",
       text: smell,
       status: "private",
     });
     await admin.mutation(api.admin.questions.updateQuestion, { id: personal, expectedRevision: 1, reviewReason: "Reword", text: bus });
 
     const reviews = await admin.query(api.admin.pruning.getReviewHistory, { source: "question" });
-    const approval = reviews.find((review) => review.reason === "Approve personal")!;
+    const approval = reviews.find((review) => review.reason === "Mark personal")!;
     await expect(admin.mutation(api.admin.pruning.undoReview, { reviewId: approval._id })).rejects.toThrow("newer work");
   });
 
@@ -952,7 +953,7 @@ describe("private questions keep no fingerprint", () => {
     const { t } = await setup();
     const admin = t.withIdentity(editor);
     const reworded = "Which seat do you pick first on a bus?";
-    // Approve personal saved the edited wording in text; customText keeps what was submitted.
+    // Mark Personal saved the edited wording in text; customText keeps what was submitted.
     const submission = await insertQuestion(t, { authorId: "author-1", customText: bus, text: reworded, status: "private" });
 
     await admin.mutation(api.admin.questions.updateQuestion, { id: submission, expectedRevision: 0, reviewReason: "Approve", status: "public" });
@@ -1153,7 +1154,7 @@ describe("clearing fingerprints private questions still hold", () => {
 
   test("a run with private questions on more than one page clears them all", async () => {
     const { t } = await setup();
-    const count = FINGERPRINT_RECOMPUTE_PAGE_SIZE + 1;
+    const count = PRIVATE_FINGERPRINT_CLEAR_PAGE_SIZE + 1;
     for (let i = 0; i < count; i++) {
       const text = `Personal question number ${i}?`;
       await insertQuestion(t, { authorId: `author-${i}`, customText: text, status: "private", fingerprint: fingerprintText(text) });
@@ -1186,7 +1187,7 @@ describe("clearing fingerprints private questions still hold", () => {
   test("a long run logs its running totals every 50 pages, then its totals", async () => {
     const { t } = await setup();
     // 50 full pages of library questions, then a private question on the next page.
-    const filler = FINGERPRINT_RECOMPUTE_PAGE_SIZE * 50;
+    const filler = PRIVATE_FINGERPRINT_CLEAR_PAGE_SIZE * 50;
     await t.run(async (ctx) => {
       for (let i = 0; i < filler; i++) {
         await ctx.db.insert("questions", { text: `Filler question number ${i} for paging?`, status: "public", ...counters });

@@ -244,7 +244,7 @@ export const updateQuestion = mutation({
 		}
 
         // Only a library question keeps a fingerprint (see isPrivateUserQuestion). The questions
-        // page resends the text with every status change, Approve personal included.
+        // page resends the text with every status change, Mark Personal included.
         const after: Doc<"questions"> = { ...before, ...updateData };
         if (isPrivateUserQuestion(after)) {
             if (before.fingerprint !== undefined) updateData.fingerprint = undefined;
