@@ -6,7 +6,7 @@ import { getFunctionName } from "convex/server";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { RemixQuestionDrawer } from "./remix-question-drawer";
-import { ERROR_CODES, ERROR_MESSAGES } from "../../../convex/constants";
+import { ERROR_CODES, ERROR_MESSAGES, MAX_QUESTION_TAG_LENGTH, MAX_QUESTION_TAGS } from "../../../convex/constants";
 import { api } from "../../../convex/_generated/api";
 
 vi.mock("convex/react", () => ({
@@ -537,5 +537,35 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
 
     expect(screen.getByRole("button", { name: "Remix" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+  });
+});
+
+describe("RemixQuestionDrawer tags", () => {
+  const tagNames = Array.from({ length: MAX_QUESTION_TAGS + 1 }, (_, i) => `t${String(i).padStart(2, "0")}`);
+
+  it("stops at the tag limit the server checks, and caps the tag input's length", async () => {
+    const mutations = mockMutations();
+    mutations.add.mockResolvedValue("q-new");
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((ref: MutationRef) =>
+      getFunctionName(ref) === getFunctionName(api.core.tags.getTags)
+        ? tagNames.map((name) => ({ _id: name, name, grouping: "test" }))
+        : undefined,
+    );
+    renderDrawer(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveAttribute("maxLength", String(MAX_QUESTION_TAG_LENGTH));
+
+    for (const name of tagNames) {
+      fireEvent.change(input, { target: { value: name } });
+      fireEvent.keyDown(input, { key: "Enter" });
+    }
+
+    expect(toast.error).toHaveBeenCalledWith(ERROR_MESSAGES.QUESTION_TAGS_TOO_MANY);
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    await waitFor(() => {
+      expect(mutations.add).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: tagNames.slice(0, MAX_QUESTION_TAGS) }),
+      );
+    });
   });
 });

@@ -23,6 +23,7 @@ import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 import { wasAiCallBilled } from "../lib/aiSpendGuard";
 import { requireQuestionText } from "../lib/questionText";
+import { normalizeQuestionTags } from "../lib/questionTags";
 import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
@@ -61,6 +62,7 @@ export const addPersonalQuestion = mutation({
 			return null;
 		}
 		const customText = requireQuestionText(args.customText);
+		const tags = normalizeQuestionTags(args.tags);
 
 		// Look up slugs for legacy support
 		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
@@ -83,7 +85,7 @@ export const addPersonalQuestion = mutation({
 			tone: toneDoc?.id,
 			topicId: args.topicId,
 			topic: topicDoc?.id,
-			tags: args.tags,
+			tags,
 			organizationId: args.organizationId,
 		});
 	},
@@ -1015,6 +1017,7 @@ export const updatePersonalQuestion = mutation({
 		assertNotMergedDuplicate(question);
 		await assertNoMergedCopies(ctx, question);
 		const customText = requireQuestionText(args.customText);
+		const tags = normalizeQuestionTags(args.tags);
 		// Look up slugs for legacy support
 		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
 			args.styleId ? ctx.db.get(args.styleId) : null,
@@ -1043,7 +1046,7 @@ export const updatePersonalQuestion = mutation({
 			tone: toneDoc?.id,
 			topicId: args.topicId,
 			topic: topicDoc?.id,
-			tags: args.tags,
+			tags,
 		});
 		// Now pending or private, so this only drops its embedding. It is embedded again once a
 		// review makes it public.

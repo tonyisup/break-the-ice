@@ -4,7 +4,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { convexFunctionModules } from "../../vitestConvexModules";
-import { ERROR_CODES, ERROR_MESSAGES, MAX_QUESTION_TEXT_LENGTH } from "../constants";
+import {
+  ERROR_CODES,
+  ERROR_MESSAGES,
+  MAX_QUESTION_TAG_LENGTH,
+  MAX_QUESTION_TAGS,
+  MAX_QUESTION_TEXT_LENGTH,
+} from "../constants";
 import { convexErrorData } from "../lib/errorData";
 import { fingerprintText } from "../lib/promptArchitecture";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -224,6 +230,101 @@ test("personal question updates from someone other than the author are refused b
 
   const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
   expect(saved?.customText).toBe("What did you learn this week?");
+});
+
+describe("personal question tags input validation", () => {
+  const manyTags = (count: number) => Array.from({ length: count }, (_, i) => `tag-${i}`);
+  const TOO_MANY_TAGS_ERROR = {
+    code: ERROR_CODES.QUESTION_TAGS_TOO_MANY,
+    message: ERROR_MESSAGES.QUESTION_TAGS_TOO_MANY,
+  };
+  const TAG_TOO_LONG_ERROR = {
+    code: ERROR_CODES.QUESTION_TAG_TOO_LONG,
+    message: ERROR_MESSAGES.QUESTION_TAG_TOO_LONG,
+  };
+  const rejectedTags = [
+    [manyTags(MAX_QUESTION_TAGS + 1), TOO_MANY_TAGS_ERROR],
+    [["food", "a".repeat(MAX_QUESTION_TAG_LENGTH + 1)], TAG_TOO_LONG_ERROR],
+  ] as const;
+
+  // The update schedules an embedding filter sync, which stays queued instead of running.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("new questions save tags trimmed, lowercased and without blanks or repeats", async () => {
+    const { t, author } = await createAuthor();
+    const questionId = await author.mutation(api.core.questions.addPersonalQuestion, {
+      customText: "What did you learn this week?",
+      isPublic: false,
+      tags: [" Food ", "food", "", "  ", "TRAVEL", ...manyTags(MAX_QUESTION_TAGS - 2)],
+    });
+
+    const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
+    expect(saved?.tags).toEqual(["food", "travel", ...manyTags(MAX_QUESTION_TAGS - 2)]);
+  });
+
+  test("updates save tags trimmed, lowercased and without blanks or repeats", async () => {
+    const { t, author } = await createAuthor();
+    const questionId = await author.mutation(api.core.questions.addPersonalQuestion, {
+      customText: "What did you learn this week?",
+      isPublic: false,
+      tags: ["food"],
+    });
+
+    await author.mutation(api.core.questions.updatePersonalQuestion, {
+      questionId: questionId!,
+      customText: "What did you learn this week?",
+      isPublic: false,
+      tags: ["Travel ", "travel", " ", "a".repeat(MAX_QUESTION_TAG_LENGTH)],
+    });
+
+    const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
+    expect(saved?.tags).toEqual(["travel", "a".repeat(MAX_QUESTION_TAG_LENGTH)]);
+  });
+
+  test("new questions with too many or over-long tags are rejected with a readable error", async () => {
+    const { t, author } = await createAuthor();
+
+    for (const [tags, expected] of rejectedTags) {
+      const error = await author
+        .mutation(api.core.questions.addPersonalQuestion, {
+          customText: "What did you learn this week?",
+          isPublic: false,
+          tags: [...tags],
+        })
+        .catch((caught: unknown) => caught);
+      expect(convexErrorData(error)).toEqual(expected);
+    }
+    expect(await t.run(async (ctx) => ctx.db.query("questions").collect())).toHaveLength(0);
+  });
+
+  test("updates with too many or over-long tags are rejected and keep the saved question", async () => {
+    const { t, author } = await createAuthor();
+    const questionId = await author.mutation(api.core.questions.addPersonalQuestion, {
+      customText: "What did you learn this week?",
+      isPublic: false,
+      tags: ["food"],
+    });
+
+    for (const [tags, expected] of rejectedTags) {
+      const error = await author
+        .mutation(api.core.questions.updatePersonalQuestion, {
+          questionId: questionId!,
+          customText: "A different question?",
+          isPublic: false,
+          tags: [...tags],
+        })
+        .catch((caught: unknown) => caught);
+      expect(convexErrorData(error)).toEqual(expected);
+    }
+
+    const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
+    expect(saved).toMatchObject({ customText: "What did you learn this week?", tags: ["food"] });
+  });
 });
 
 describe("author edits go back through review", () => {

@@ -1,7 +1,12 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { convexErrorData } from "../../../convex/lib/errorData";
-import { ERROR_CODES, ERROR_MESSAGES } from "../../../convex/constants";
+import {
+	ERROR_CODES,
+	ERROR_MESSAGES,
+	MAX_QUESTION_TAG_LENGTH,
+	MAX_QUESTION_TAGS,
+} from "../../../convex/constants";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { toast } from "sonner";
@@ -317,6 +322,11 @@ export function RemixQuestionDrawer({
 		}
 
 		if (!tags.includes(tagToAdd)) {
+			// The same limit the server checks on save.
+			if (tags.length >= MAX_QUESTION_TAGS) {
+				toast.error(ERROR_MESSAGES.QUESTION_TAGS_TOO_MANY);
+				return;
+			}
 			setTags([...tags, tagToAdd]);
 		}
 		setTagInput("");
@@ -527,6 +537,7 @@ export function RemixQuestionDrawer({
 							<input
 								placeholder={tags.length === 0 ? "Add tags (e.g. food, travel)..." : ""}
 								value={tagInput}
+								maxLength={MAX_QUESTION_TAG_LENGTH}
 								onChange={(e) => setTagInput(e.target.value)}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") {
