@@ -5,6 +5,7 @@ import {
 	query,
 	action,
 	ActionCtx,
+	MutationCtx,
 	internalQuery,
 } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
@@ -22,7 +23,7 @@ import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 import { wasAiCallBilled } from "../lib/aiSpendGuard";
 import { requireQuestionText } from "../lib/questionText";
-import { refreshQuestionText } from "../lib/questionReview";
+import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 
@@ -961,6 +962,21 @@ function assertNotMergedDuplicate(question: Doc<"questions">) {
 	}
 }
 
+// Copies retired as duplicates of this question point at it, so only an admin changes or
+// removes it.
+async function assertNoMergedCopies(ctx: MutationCtx, question: Doc<"questions">) {
+	const mergedCopy = await ctx.db
+		.query("questions")
+		.withIndex("by_duplicateOf", (q) => q.eq("duplicateOf", question._id))
+		.first();
+	if (mergedCopy) {
+		throw new ConvexError({
+			code: ERROR_CODES.QUESTION_HAS_MERGED_COPIES,
+			message: ERROR_MESSAGES.QUESTION_HAS_MERGED_COPIES,
+		});
+	}
+}
+
 // Update a personal question (must be owned by the current user)
 export const updatePersonalQuestion = mutation({
 	args: {
@@ -997,6 +1013,7 @@ export const updatePersonalQuestion = mutation({
 		}
 		assertPersonalQuestionLifecycle(question);
 		assertNotMergedDuplicate(question);
+		await assertNoMergedCopies(ctx, question);
 		const customText = requireQuestionText(args.customText);
 		// Look up slugs for legacy support
 		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
@@ -1005,7 +1022,6 @@ export const updatePersonalQuestion = mutation({
 			args.topicId ? ctx.db.get(args.topicId) : null,
 		]);
 
-		const wordingChanged = (question.text ?? question.customText) !== customText;
 		await ctx.db.patch(args.questionId, {
 			// The author edits the shown wording, which replaces any reviewed text. It is then
 			// what's shown, and what the next review approves and fingerprints.
@@ -1025,9 +1041,9 @@ export const updatePersonalQuestion = mutation({
 			topic: topicDoc?.id,
 			tags: args.tags,
 		});
-		if (wordingChanged) {
-			await refreshQuestionText(ctx, args.questionId);
-		}
+		// Now pending or private, so a new wording only drops the stale embedding. It is embedded
+		// again once a review makes it public.
+		await syncReviewedEmbedding(ctx, (await ctx.db.get(args.questionId))!, shownWording(question));
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: args.questionId,
 		});
@@ -1064,6 +1080,7 @@ export const deletePersonalQuestion = mutation({
 			throw new Error("You are not authorized to delete this question.");
 		}
 		assertPersonalQuestionLifecycle(question);
+		await assertNoMergedCopies(ctx, question);
 		await removeQuestionReferences(ctx, args.questionId);
 		await ctx.db.delete(args.questionId);
 		return null;
@@ -1098,6 +1115,7 @@ export const makeQuestionPublic = mutation({
 		}
 		assertPersonalQuestionLifecycle(question);
 		assertNotMergedDuplicate(question);
+		await assertNoMergedCopies(ctx, question);
 		if (question.status !== "private") {
 			throw new Error("Only private questions can be made public.");
 		}

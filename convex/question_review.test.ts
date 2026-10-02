@@ -259,6 +259,119 @@ describe("editorial review safeguards", () => {
     ).toHaveLength(0);
   });
 
+  describe("undo and the author's wording", () => {
+    const wording = "What did you learn this week?";
+    async function approveSubmission() {
+      const t = convexTest(schema, modules);
+      const admin = t.withIdentity(identity);
+      const questionId = await t.run((ctx) =>
+        ctx.db.insert("questions", {
+          ...question(),
+          text: undefined,
+          customText: wording,
+          authorId: "author-1",
+          status: "pending",
+        }),
+      );
+      await admin.mutation(api.admin.questions.updateQuestion, {
+        id: questionId,
+        status: "public",
+        expectedRevision: 0,
+        reviewReason: "Approve",
+      });
+      const [review] = await admin.query(api.admin.pruning.getReviewHistory, {
+        source: "question",
+      });
+      return { t, admin, questionId, review };
+    }
+
+    test("an undo is refused once the author's wording changed, even at the same revision", async () => {
+      const { t, admin, questionId, review } = await approveSubmission();
+      expect(review.changes[0].after.customText).toBe(wording);
+      await t.run((ctx) =>
+        ctx.db.patch(questionId, { customText: "What surprised you this week?" }),
+      );
+
+      await expect(
+        admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id }),
+      ).rejects.toThrow("newer work");
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "public",
+        customText: "What surprised you this week?",
+        reviewRevision: 1,
+      });
+    });
+
+    test("undoing an approval that reworded a submission drops its embedding and doesn't embed the author's wording", async () => {
+      const t = convexTest(schema, modules);
+      const admin = t.withIdentity(identity);
+      const questionId = await t.run((ctx) =>
+        ctx.db.insert("questions", {
+          ...question(),
+          text: undefined,
+          customText: wording,
+          authorId: "author-1",
+          status: "pending",
+        }),
+      );
+      await admin.mutation(api.admin.questions.updateQuestion, {
+        id: questionId,
+        text: "What is one thing you learned this week?",
+        status: "public",
+        expectedRevision: 0,
+        reviewReason: "Approve with clearer wording",
+      });
+      await t.run((ctx) =>
+        ctx.db.insert("question_embeddings", {
+          questionId,
+          embedding: [1, 0],
+          status: "public",
+        }),
+      );
+      const embedJobs = async () =>
+        (
+          await t.run((ctx) =>
+            ctx.db.system.query("_scheduled_functions").collect(),
+          )
+        ).filter((job) => job.name === "lib/retriever:embedQuestion").length;
+      const jobsBeforeUndo = await embedJobs();
+      const [review] = await admin.query(api.admin.pruning.getReviewHistory, {
+        source: "question",
+      });
+
+      await admin.mutation(api.admin.pruning.undoReview, {
+        reviewId: review._id,
+      });
+
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "pending",
+        customText: wording,
+      });
+      expect(
+        await t.run((ctx) => ctx.db.query("question_embeddings").collect()),
+      ).toHaveLength(0);
+      expect(await embedJobs()).toBe(jobsBeforeUndo);
+    });
+
+    test("a review recorded before the author's wording was snapshotted still undoes", async () => {
+      const { t, admin, questionId, review } = await approveSubmission();
+      await t.run(async (ctx) => {
+        const { customText: _before, ...before } = review.changes[0].before;
+        const { customText: _after, ...after } = review.changes[0].after;
+        await ctx.db.patch(review.changes[0]._id, { before, after });
+      });
+
+      await admin.mutation(api.admin.pruning.undoReview, {
+        reviewId: review._id,
+      });
+
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "pending",
+        customText: wording,
+      });
+    });
+  });
+
   test("a small local batch keeps low-engagement good content, prunes unclear content, and can undo", async () => {
     const t = convexTest(schema, modules);
     const admin = t.withIdentity(identity);
@@ -558,4 +671,29 @@ describe("editorial review safeguards", () => {
       admin.mutation(api.admin.questions.cleanDuplicateQuestions, {}),
     ).rejects.toThrow("disabled");
   });
+});
+
+test("a queued embedding is not stored once the question has turned private", async () => {
+  const t = convexTest(schema, modules);
+  const wording = "What would you teach a friend in five minutes?";
+  const questionId = await t.run(async (ctx) => {
+    const authorId = await ctx.db.insert("users", { email: "author@example.com" });
+    return ctx.db.insert("questions", {
+      ...question(),
+      text: undefined,
+      customText: wording,
+      authorId,
+      status: "private",
+    });
+  });
+
+  await t.mutation(internal.internal.questions.addEmbedding, {
+    questionId,
+    embedding: [1, 0],
+    expectedText: wording,
+  });
+
+  expect(
+    await t.run((ctx) => ctx.db.query("question_embeddings").collect()),
+  ).toHaveLength(0);
 });

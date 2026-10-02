@@ -8,7 +8,7 @@ import { fingerprintText } from "../lib/promptArchitecture";
 import { isPrivateUserQuestion, isQuestionPublic, isUnlistedAiQuestion } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { PENDING_QUEUE_LIMIT } from "../constants";
-import { recordReview, refreshQuestionText, reviewReason } from "../lib/questionReview";
+import { recordReview, reviewReason, shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { removeQuestionReferences } from "../lib/questionReferences";
 
 const FIX_EXISTING_QUESTIONS_BATCH_SIZE = 100;
@@ -262,9 +262,9 @@ export const updateQuestion = mutation({
 		}
 
 		await ctx.db.patch(id, updateData);
-        if (updateData.text !== undefined && updateData.text !== before.text) {
-            await refreshQuestionText(ctx, id);
-        }
+        // Approve on the questions page resends the shown wording as text and the detail page
+        // sends the status alone, so this compares what the question showed, not its text.
+        await syncReviewedEmbedding(ctx, (await ctx.db.get(id))!, shownWording(before));
         const hasOtherEdits = [tags, style, tone, styleId, toneId, topic, topicId, imageStorageId].some(value => value !== undefined);
         await recordReview(ctx, [before], {
             reviewer: reviewer.tokenIdentifier,

@@ -16,6 +16,8 @@ export const editorialReasonLabels = {
 
 export const reviewSnapshot = v.object({
   text: v.optional(v.string()),
+  // Reviews recorded before author wording was snapshotted don't have it.
+  customText: v.optional(v.string()),
   fingerprint: v.optional(v.string()),
   status: v.optional(
     v.union(

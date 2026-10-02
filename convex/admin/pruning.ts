@@ -7,7 +7,7 @@ import { ensureAdmin } from "../auth";
 import { cosineSimilarity } from "../lib/embeddings";
 import schema from "../schema";
 import { editorialReason } from "../lib/questionReviewValidators";
-import { recordReview, refreshQuestionText, reviewReason, snapshot } from "../lib/questionReview";
+import { recordReview, reviewReason, shownWording, snapshot, syncReviewedEmbedding } from "../lib/questionReview";
 import { isPrivateUserQuestion } from "../lib/questionAccess";
 
 // Shared return validators for type safety
@@ -525,8 +525,11 @@ export const undoReview = mutation({
       if (!question) throw new Error("Question no longer exists");
       const current = snapshot(question);
       // A private question keeps no fingerprint, so clearing one isn't newer work. If any other
-      // field differs, the undo is refused anyway.
-      const keys = Object.keys(current).filter(key => key !== "fingerprint" || !isPrivateUserQuestion(question));
+      // field differs, the undo is refused anyway. Reviews recorded before the author's wording
+      // was snapshotted can't tell whether it changed, so they skip it.
+      const keys = Object.keys(current).filter(key =>
+        (key !== "fingerprint" || !isPrivateUserQuestion(question)) &&
+        (key !== "customText" || "customText" in change.after));
       if (keys.some(key => current[key as keyof typeof current] !== change.after[key as keyof typeof current])) {
         throw new Error("Question changed after this review; undo would overwrite newer work");
       }
@@ -555,7 +558,7 @@ export const undoReview = mutation({
       const question = (await ctx.db.get(change.questionId))!;
       if (isPrivateUserQuestion({ ...question, ...restored })) restored.fingerprint = undefined;
       await ctx.db.patch(change.questionId, restored);
-      if (change.before.text !== change.after.text) await refreshQuestionText(ctx, change.questionId);
+      await syncReviewedEmbedding(ctx, { ...question, ...restored }, shownWording(question));
       await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: change.questionId });
     }
     await ctx.db.patch(review._id, { undoneAt: Date.now(), undoneBy: reviewer.tokenIdentifier });

@@ -1,6 +1,7 @@
 import { convexTest } from "convex-test";
+import OpenAI from "openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { convexFunctionModules } from "../../vitestConvexModules";
 import { ERROR_CODES, ERROR_MESSAGES, MAX_QUESTION_TEXT_LENGTH } from "../constants";
@@ -237,6 +238,7 @@ describe("author edits go back through review", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   async function setup(fields: Partial<Doc<"questions">>) {
@@ -253,6 +255,15 @@ describe("author edits go back through review", () => {
 
   function reword(author: ReturnType<ReturnType<typeof convexTest>["withIdentity"]>, questionId: Id<"questions">) {
     return author.mutation(api.core.questions.updatePersonalQuestion, { questionId, customText: newWording, isPublic: true });
+  }
+
+  async function embedJobs(t: ReturnType<typeof convexTest>) {
+    const scheduled = await t.run(async (ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    return scheduled.filter((job) => job.name === "lib/retriever:embedQuestion" && job.state.kind === "pending");
+  }
+
+  async function embeddings(t: ReturnType<typeof convexTest>) {
+    return await t.run(async (ctx) => ctx.db.query("question_embeddings").collect());
   }
 
   test("an earlier review can't be undone once the author has edited the question", async () => {
@@ -332,13 +343,8 @@ describe("author edits go back through review", () => {
     expect(await t.query(api.core.questions.getQuestionById, { id: questionId })).toMatchObject({ text: firstWording });
   });
 
-  // The questions page sends the shown wording with Approve; the detail page sends the status alone.
-  test.each([
-    ["the questions page", (q: Doc<"questions">) => ({ text: q.text || q.customText! })],
-    ["the detail page", () => ({})],
-  ])("re-approving on %s after the author rewords reviews and fingerprints the new wording", async (_page, wordingSent) => {
-    // The first Approve on the questions page copied the wording into text.
-    const { t, author, admin, questionId } = await setup({
+  test("an author's new wording drops the stale embedding and isn't embedded while it waits for review", async () => {
+    const { t, author, questionId } = await setup({
       customText: firstWording,
       text: firstWording,
       status: "public",
@@ -351,12 +357,30 @@ describe("author edits go back through review", () => {
 
     const edited = await reword(author, questionId);
 
-    // The author's edit is what's shown, and the stale embedding is replaced.
     expect(edited).toMatchObject({ customText: newWording, status: "pending" });
     expect(edited!.text ?? edited!.customText).toBe(newWording);
-    expect(await t.run(async (ctx) => ctx.db.query("question_embeddings").collect())).toHaveLength(0);
-    const scheduled = await t.run(async (ctx) => ctx.db.system.query("_scheduled_functions").collect());
-    expect(scheduled.some((job) => job.name === "lib/retriever:embedQuestion")).toBe(true);
+    expect(await embeddings(t)).toHaveLength(0);
+    expect(await embedJobs(t)).toHaveLength(0);
+  });
+
+  // The questions page sends the shown wording with Approve; the detail page sends the status alone.
+  test.each([
+    ["the questions page", (q: Doc<"questions">) => ({ text: q.text || q.customText! })],
+    ["the detail page", () => ({})],
+  ])("re-approving on %s after the author rewords reviews, fingerprints and embeds the new wording once", async (_page, wordingSent) => {
+    // The first Approve on the questions page copied the wording into text.
+    const { t, author, admin, questionId } = await setup({
+      customText: firstWording,
+      text: firstWording,
+      status: "public",
+      fingerprint: fingerprintText(firstWording),
+      reviewRevision: 1,
+    });
+    await t.run(async (ctx) =>
+      ctx.db.insert("question_embeddings", { questionId, embedding: [1, 0], status: "public" }),
+    );
+    await reword(author, questionId);
+    expect(await embedJobs(t)).toHaveLength(0);
 
     const q = (await t.run(async (ctx) => ctx.db.get(questionId)))!;
     await admin.mutation(api.admin.questions.updateQuestion, {
@@ -369,6 +393,63 @@ describe("author edits go back through review", () => {
     const approved = (await t.run(async (ctx) => ctx.db.get(questionId)))!;
     expect(approved).toMatchObject({ status: "public", fingerprint: fingerprintText(newWording) });
     expect(approved.text ?? approved.customText).toBe(newWording);
+    expect(await embedJobs(t)).toHaveLength(1);
+
+    const embedCreate = vi
+      .spyOn(OpenAI.Embeddings.prototype, "create")
+      .mockResolvedValue({ data: [{ embedding: [0, 1] }] } as never);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(embedCreate).toHaveBeenCalledTimes(1);
+    expect(embedCreate).toHaveBeenCalledWith(expect.objectContaining({ input: newWording }));
+    expect(await embeddings(t)).toEqual([expect.objectContaining({ questionId, embedding: [0, 1], status: "public" })]);
+  });
+
+  test("approving a question whose shown wording already has an embedding doesn't embed it again", async () => {
+    const { t, admin, questionId } = await setup({ customText: firstWording, status: "pending" });
+    await t.run(async (ctx) =>
+      ctx.db.insert("question_embeddings", { questionId, embedding: [1, 0], status: "pending" }),
+    );
+
+    await admin.mutation(api.admin.questions.updateQuestion, {
+      id: questionId,
+      expectedRevision: 0,
+      reviewReason: "Approve",
+      status: "public",
+      text: firstWording,
+    });
+
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ status: "public", text: firstWording });
+    expect(await embedJobs(t)).toHaveLength(0);
+    expect(await embeddings(t)).toEqual([expect.objectContaining({ embedding: [1, 0] })]);
+  });
+
+  test("the missing-embedding backfill picks up a public submission showing the author's wording, not a private one", async () => {
+    const { t, questionId: approved } = await setup({ customText: firstWording, status: "public" });
+    const { privateQuestion, reviewedThenPrivate, library } = await t.run(async (ctx) => {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", AUTHOR_IDENTITY.email))
+        .unique();
+      return {
+        privateQuestion: await ctx.db.insert("questions", { authorId: user!._id, customText: newWording, status: "private", ...counters }),
+        // An approval copied the wording into text before the question was made private again.
+        reviewedThenPrivate: await ctx.db.insert("questions", {
+          authorId: user!._id,
+          customText: newWording,
+          text: newWording,
+          status: "private",
+          ...counters,
+        }),
+        library: await ctx.db.insert("questions", { text: newWording, status: "pruned", ...counters }),
+      };
+    });
+
+    const missing = await t.query(internal.internal.questions.getQuestionsWithMissingEmbeddings, {});
+
+    const ids = missing.map((question) => question._id);
+    expect(ids).toEqual(expect.arrayContaining([approved, library]));
+    expect(ids).not.toContain(privateQuestion);
+    expect(ids).not.toContain(reviewedThenPrivate);
   });
 
   test("an edit that keeps the wording leaves the embedding alone", async () => {
@@ -443,6 +524,57 @@ describe("author edits go back through review", () => {
 
     expect(await t.run(async (ctx) => ctx.db.get(questionId))).toBeNull();
     expect(await t.run(async (ctx) => ctx.db.get(canonical))).toMatchObject({ text: firstWording, status: "public" });
+  });
+
+  /** The author's question, plus a copy merged into `mergedInto` (the author's question by default). */
+  async function setupKeptQuestion(fields: Partial<Doc<"questions">>, mergedInto?: "elsewhere") {
+    const context = await setup(fields);
+    const target = mergedInto
+      ? await context.t.run(async (ctx) => ctx.db.insert("questions", { text: newWording, status: "public", ...counters }))
+      : context.questionId;
+    const copy = await context.t.run(async (ctx) =>
+      ctx.db.insert("questions", {
+        text: firstWording,
+        status: "pruned",
+        prunedAt: 1,
+        duplicateOf: target,
+        duplicateWasPublic: true,
+        ...counters,
+      }),
+    );
+    return { ...context, copy };
+  }
+
+  type Author = ReturnType<ReturnType<typeof convexTest>["withIdentity"]>;
+  const MERGED_COPIES_ERROR = {
+    code: ERROR_CODES.QUESTION_HAS_MERGED_COPIES,
+    message: ERROR_MESSAGES.QUESTION_HAS_MERGED_COPIES,
+  };
+
+  test.each([
+    ["edited", { customText: firstWording, text: firstWording, status: "public" as const }, (author: Author, questionId: Id<"questions">) => reword(author, questionId)],
+    ["resubmitted for review", { customText: firstWording, status: "private" as const }, (author: Author, questionId: Id<"questions">) => author.mutation(api.core.questions.makeQuestionPublic, { questionId })],
+    ["deleted", { customText: firstWording, text: firstWording, status: "public" as const }, (author: Author, questionId: Id<"questions">) => author.mutation(api.core.questions.deletePersonalQuestion, { questionId })],
+  ])("a question other copies were merged into can't be %s by its author", async (_action, fields, act) => {
+    const { t, author, questionId, copy } = await setupKeptQuestion(fields);
+    const before = await t.run(async (ctx) => Promise.all([ctx.db.get(questionId), ctx.db.get(copy)]));
+
+    const error = await act(author, questionId).catch((caught: unknown) => caught);
+
+    expect(convexErrorData(error)).toEqual(MERGED_COPIES_ERROR);
+    expect(await t.run(async (ctx) => Promise.all([ctx.db.get(questionId), ctx.db.get(copy)]))).toEqual(before);
+  });
+
+  test("a question nobody was merged into can still be edited, resubmitted and deleted by its author", async () => {
+    const { t, author, questionId, copy } = await setupKeptQuestion({ customText: firstWording, status: "private" }, "elsewhere");
+
+    await author.mutation(api.core.questions.updatePersonalQuestion, { questionId, customText: newWording, isPublic: false });
+    await author.mutation(api.core.questions.makeQuestionPublic, { questionId });
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ customText: newWording, status: "pending" });
+    await author.mutation(api.core.questions.deletePersonalQuestion, { questionId });
+
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toBeNull();
+    expect(await t.run(async (ctx) => ctx.db.get(copy))).not.toBeNull();
   });
 });
 

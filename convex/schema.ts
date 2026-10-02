@@ -268,6 +268,7 @@ export default defineSchema({
     .index("by_tone_text", ["tone"])
     .index("by_text", ["text"])
     .index("by_fingerprint", ["fingerprint"])
+    .index("by_duplicateOf", ["duplicateOf"])
     .index("by_generationRun", ["generationRunId"])
     .index("by_author", ["authorId", "status"])
     .index("by_prunedAt_status_text", ["prunedAt", "status", "text"])

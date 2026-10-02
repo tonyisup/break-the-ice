@@ -13,6 +13,7 @@ export const ERROR_CODES = {
   QUESTION_TEXT_REQUIRED: "QUESTION_TEXT_REQUIRED",
   QUESTION_TEXT_TOO_LONG: "QUESTION_TEXT_TOO_LONG",
   QUESTION_MERGED_AS_DUPLICATE: "QUESTION_MERGED_AS_DUPLICATE",
+  QUESTION_HAS_MERGED_COPIES: "QUESTION_HAS_MERGED_COPIES",
 } as const;
 
 export const ERROR_MESSAGES = {
@@ -28,4 +29,5 @@ export const ERROR_MESSAGES = {
   QUESTION_TEXT_REQUIRED: "Please enter a question.",
   QUESTION_TEXT_TOO_LONG: `Questions can be up to ${MAX_QUESTION_TEXT_LENGTH} characters.`,
   QUESTION_MERGED_AS_DUPLICATE: "This question was merged with a matching one in the library, so it can no longer be edited.",
+  QUESTION_HAS_MERGED_COPIES: "Other questions were merged into this one, so ask an admin to change or remove it.",
 } as const;

@@ -1,10 +1,12 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { isPrivateUserQuestion } from "./questionAccess";
 
 export function snapshot(question: Doc<"questions">) {
   return {
     text: question.text,
+    customText: question.customText,
     fingerprint: question.fingerprint,
     status: question.status,
     prunedAt: question.prunedAt,
@@ -22,20 +24,59 @@ export function reviewReason(reason: string) {
   return trimmed;
 }
 
-export async function refreshQuestionText(
+/** What a question shows: its reviewed text, or the author's wording until a review copies it. */
+export function shownWording(question: Pick<Doc<"questions">, "text" | "customText">) {
+  return question.text ?? question.customText;
+}
+
+async function deleteQuestionEmbeddings(
   ctx: MutationCtx,
   questionId: Doc<"questions">["_id"],
 ) {
-  // Remove stale vectors in the same transaction as the edit. A failed embedding
-  // job leaves the question eligible for the existing missing-embedding retry.
   const rows = await ctx.db
     .query("question_embeddings")
     .withIndex("by_questionId", (q) => q.eq("questionId", questionId))
     .collect();
   for (const row of rows) await ctx.db.delete(row._id);
+}
+
+// Only for a question whose shown wording is embedded (see syncReviewedEmbedding).
+async function refreshQuestionText(
+  ctx: MutationCtx,
+  questionId: Doc<"questions">["_id"],
+) {
+  // Remove stale vectors in the same transaction as the edit. A failed embedding
+  // job leaves the question eligible for the existing missing-embedding retry.
+  await deleteQuestionEmbeddings(ctx, questionId);
   await ctx.scheduler.runAfter(0, internal.lib.retriever.embedQuestion, {
     questionId,
   });
+}
+
+/**
+ * Embeddings follow the reviewed wording: a library or public question has an embedding of the
+ * wording it shows, and a private user-written question has none (see isPrivateUserQuestion), so
+ * an author's wording is embedded once a review makes it public. Call after saving `question`;
+ * `previousWording` is what it showed before.
+ */
+export async function syncReviewedEmbedding(
+  ctx: MutationCtx,
+  question: Doc<"questions">,
+  previousWording: string | undefined,
+) {
+  const wordingChanged = shownWording(question) !== previousWording;
+  if (isPrivateUserQuestion(question)) {
+    if (wordingChanged) await deleteQuestionEmbeddings(ctx, question._id);
+    return;
+  }
+  if (!wordingChanged) {
+    const existing = await ctx.db
+      .query("question_embeddings")
+      .withIndex("by_questionId", (q) => q.eq("questionId", question._id))
+      .first();
+    if (existing) return;
+  }
+  await refreshQuestionText(ctx, question._id);
 }
 
 export async function recordReview(
