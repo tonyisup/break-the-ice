@@ -3,7 +3,12 @@ import { internal } from "../_generated/api";
 import { runTopicPreviewWithUsage } from "./teamPromptActions";
 import { billedFailure, wasAiCallBilled } from "../lib/aiSpendGuard";
 import { convexErrorData } from "../lib/errorData";
-import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
+import {
+  ERROR_CODES,
+  ERROR_MESSAGES,
+  MAX_TEAM_TOPIC_BOUNDARIES_LENGTH,
+  MAX_TEAM_TOPIC_NAME_LENGTH,
+} from "../constants";
 
 const args = {
   organizationId: "org-id" as any,
@@ -61,6 +66,61 @@ describe("runTopicPreviewWithUsage", () => {
     });
     expect(ctx.runMutation).not.toHaveBeenCalled();
     expect(generate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "blank guidance",
+      { guidance: "\n " },
+      ERROR_CODES.TEAM_TOPIC_REQUIRED,
+      ERROR_MESSAGES.TEAM_TOPIC_GUIDANCE_REQUIRED,
+    ],
+    [
+      "an over-long topic name",
+      { name: "a".repeat(MAX_TEAM_TOPIC_NAME_LENGTH + 1) },
+      ERROR_CODES.TEAM_TOPIC_TOO_LONG,
+      ERROR_MESSAGES.TEAM_TOPIC_NAME_TOO_LONG,
+    ],
+    [
+      "over-long boundaries",
+      { boundaries: "a".repeat(MAX_TEAM_TOPIC_BOUNDARIES_LENGTH + 1) },
+      ERROR_CODES.TEAM_TOPIC_TOO_LONG,
+      ERROR_MESSAGES.TEAM_TOPIC_BOUNDARIES_TOO_LONG,
+    ],
+  ])("refuses %s with a readable error before reserving usage", async (_label, override, code, message) => {
+    const ctx = {
+      runQuery: vi.fn().mockResolvedValue("user-id"),
+      runMutation: vi.fn().mockResolvedValue(1),
+    } as any;
+    const generate = vi.fn();
+
+    const error = await runTopicPreviewWithUsage(ctx, { ...args, ...override }, generate).catch((e: unknown) => e);
+
+    expect(convexErrorData(error)).toEqual({ code, message });
+    expect(ctx.runMutation).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("sends trimmed topic fields to generation and leaves out blank boundaries", async () => {
+    const ctx = {
+      runQuery: vi.fn().mockResolvedValue("user-id"),
+      runMutation: vi.fn().mockResolvedValue(1),
+    } as any;
+    const generate = vi.fn().mockResolvedValue({
+      previewTexts: ["One?", "Two?", "Three?"],
+      runId: "run-id",
+    });
+
+    await runTopicPreviewWithUsage(
+      ctx,
+      { ...args, name: "  Launch readiness ", guidance: "\tSurface unspoken concerns.\n", boundaries: "   " },
+      generate,
+    );
+
+    const { userContext } = generate.mock.calls[0][1];
+    expect(userContext).toContain("Team conversation topic: Launch readiness\n");
+    expect(userContext).toContain("Desired outcome: Surface unspoken concerns.\n");
+    expect(userContext).not.toContain("Boundaries:");
   });
 
   it("restores reserved usage when preview generation fails", async () => {

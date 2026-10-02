@@ -351,6 +351,23 @@ test.each([
   expect(saved).toEqual({ teamTopics: [], assignments: [] });
 });
 
+test("Team prompt topics save trimmed fields at the length limit and drop blank boundaries", async () => {
+  const { t, admin, scheduleId } = await createDraftTeamSchedule();
+  const longestName = "n".repeat(MAX_TEAM_TOPIC_NAME_LENGTH);
+  const longestGuidance = "g".repeat(MAX_TEAM_TOPIC_GUIDANCE_LENGTH);
+
+  const result = await admin.mutation(api.core.teamPrompts.createAndAssign, {
+    scheduleId,
+    dayOfWeek: "monday",
+    questionText: "What concern deserves more airtime?",
+    sourceTopic: { name: `  ${longestName}  `, guidance: `\n${longestGuidance}\t`, boundaries: "   " },
+  });
+
+  const topic = await t.run(async (ctx) => ctx.db.get(result.teamTopicId!));
+  expect(topic).toMatchObject({ name: longestName, guidance: longestGuidance });
+  expect(topic?.boundaries).toBeUndefined();
+});
+
 test("schedule delivery retains exact Team Prompt wording if the source row is removed", async () => {
   const { t, admin, scheduleId, questionId } = await createAssignedTeamQuestion();
   await t.run(async (ctx) => ctx.db.delete(questionId));
@@ -709,6 +726,41 @@ test("topic previews reject a tone that is not available with a readable error",
     code: ERROR_CODES.TONE_UNAVAILABLE,
     message: ERROR_MESSAGES.TONE_UNAVAILABLE,
   });
+});
+
+test.each([
+  ["a deleted style", "deleteStyle", ERROR_CODES.STYLE_UNAVAILABLE, ERROR_MESSAGES.STYLE_UNAVAILABLE],
+  ["a deleted tone", "deleteTone", ERROR_CODES.TONE_UNAVAILABLE, ERROR_MESSAGES.TONE_UNAVAILABLE],
+  ["an unpublished tone", "draftTone", ERROR_CODES.TONE_UNAVAILABLE, ERROR_MESSAGES.TONE_UNAVAILABLE],
+] as const)("topic previews reject %s with a readable error", async (_label, change, code, message) => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const { styleId, toneId } = await t.run(async (ctx) => {
+    const styleId = await ctx.db.insert("styles", {
+      id: "global-style",
+      name: "Global style",
+      structure: "Global structure",
+      color: "#000000",
+      icon: "zap",
+      status: "active",
+    });
+    const toneId = await ctx.db.insert("tones", {
+      id: "global-tone",
+      name: "Global tone",
+      color: "#ffffff",
+      icon: "message-circle",
+      promptGuidanceForAI: "Use clear language.",
+      status: change === "draftTone" ? "draft" : "active",
+    });
+    if (change === "deleteStyle") await ctx.db.delete(styleId);
+    if (change === "deleteTone") await ctx.db.delete(toneId);
+    return { styleId, toneId };
+  });
+
+  const error = await admin
+    .query(internal.core.teamPrompts.authorizeTopicPreview, { organizationId, styleId, toneId })
+    .catch((caught: unknown) => caught);
+
+  expect(convexErrorData(error)).toEqual({ code, message });
 });
 
 test("schedule assignment rejects a private prompt from another organization", async () => {

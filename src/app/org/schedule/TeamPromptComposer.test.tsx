@@ -1,7 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TeamPromptComposer } from "./TeamPromptComposer";
-import { MAX_QUESTION_TEXT_LENGTH } from "../../../../convex/constants";
+import {
+  MAX_QUESTION_TEXT_LENGTH,
+  MAX_TEAM_TOPIC_BOUNDARIES_LENGTH,
+  MAX_TEAM_TOPIC_GUIDANCE_LENGTH,
+  MAX_TEAM_TOPIC_NAME_LENGTH,
+} from "../../../../convex/constants";
 
 const taxonomy = {
   styles: [{ id: "style-1", name: "Reflective" }],
@@ -39,6 +44,31 @@ describe("TeamPromptComposer", () => {
         "What assumption should we challenge?",
       );
     });
+  });
+
+  it("caps each topic field at the server's length limit", () => {
+    render(
+      <TeamPromptComposer
+        dayLabel="Wednesday"
+        {...taxonomy}
+        onCreateQuestion={vi.fn()}
+        onPreviewTopic={vi.fn()}
+        onAssignTopicQuestion={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /topic/i }));
+    expect(screen.getByLabelText("Topic name")).toHaveAttribute(
+      "maxlength",
+      String(MAX_TEAM_TOPIC_NAME_LENGTH),
+    );
+    expect(
+      screen.getByLabelText("What should this conversation surface?"),
+    ).toHaveAttribute("maxlength", String(MAX_TEAM_TOPIC_GUIDANCE_LENGTH));
+    expect(screen.getByLabelText(/Boundaries/)).toHaveAttribute(
+      "maxlength",
+      String(MAX_TEAM_TOPIC_BOUNDARIES_LENGTH),
+    );
   });
 
   it("previews three topic questions and assigns editable final wording", async () => {

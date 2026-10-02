@@ -410,6 +410,16 @@ describe("OrgWeeklyCurationPage Team prompt input validation", () => {
 
   it.each([
     ["the readable input validation message", TOO_LONG, ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG],
+    [
+      "the readable topic field message",
+      new ConvexError({ code: ERROR_CODES.TEAM_TOPIC_TOO_LONG, message: ERROR_MESSAGES.TEAM_TOPIC_GUIDANCE_TOO_LONG }),
+      ERROR_MESSAGES.TEAM_TOPIC_GUIDANCE_TOO_LONG,
+    ],
+    [
+      "the readable message for a deleted schedule",
+      new ConvexError({ code: ERROR_CODES.SCHEDULE_NOT_FOUND, message: ERROR_MESSAGES.SCHEDULE_NOT_FOUND }),
+      ERROR_MESSAGES.SCHEDULE_NOT_FOUND,
+    ],
     ["a generic message for an unreadable error", new Error(""), "Failed to assign topic question"],
   ])("shows %s when chosen topic wording is refused, and keeps it", async (_label, failure, expected) => {
     refuseTeamPrompts(failure);
