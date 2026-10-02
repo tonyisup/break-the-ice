@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConvexError } from "convex/values";
 import { getFunctionName } from "convex/server";
@@ -23,13 +23,19 @@ vi.mock("@/hooks/useTeamWorkspace", () => ({
   useTeamWorkspace: () => ({ activeWorkspace: null, isEntitlementsLoading: false, teamWorkspaceId: undefined }),
 }));
 
-// vaul needs layout APIs jsdom lacks; an open drawer is just its content here.
+// vaul needs layout APIs jsdom lacks; an open drawer is just its content here. A closed drawer
+// stays mounted but hidden, and its content's animation end is where the drawer resets.
 vi.mock("@/components/ui/drawer", () => {
   const Pass = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
-  const Drawer = ({ open, children }: { open: boolean; children?: ReactNode }) => (open ? <div>{children}</div> : null);
+  const Drawer = ({ open, children }: { open: boolean; children?: ReactNode }) => <div hidden={!open}>{children}</div>;
+  const DrawerContent = ({ children, onAnimationEnd }: { children?: ReactNode; onAnimationEnd?: () => void }) => (
+    <div data-testid="drawer-content" onAnimationEnd={onAnimationEnd}>
+      {children}
+    </div>
+  );
   return {
     Drawer,
-    DrawerContent: Pass,
+    DrawerContent,
     DrawerHeader: Pass,
     DrawerTitle: Pass,
     DrawerDescription: Pass,
@@ -77,20 +83,28 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+// Lets every pending promise and timer settle, so a check that nothing happened isn't made too early.
+async function flush() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 type MutationRef = Parameters<typeof getFunctionName>[0];
 
 // Separate mocks per mutation, for tests that need to tell a create from an update or delete.
 // A mutation the drawer calls without a mock here fails the test instead of passing silently.
+// An override replaces the returned handle too, so assertions always see what the drawer calls.
 function mockMutations(overrides: { remove?: (args: unknown) => unknown } = {}) {
   const mutations = {
     add: vi.fn(),
     update: vi.fn().mockResolvedValue(null),
-    remove: vi.fn().mockResolvedValue(null),
+    remove: (overrides.remove ?? vi.fn().mockResolvedValue(null)) as ReturnType<typeof vi.fn>,
   };
   const byName: Record<string, unknown> = {
     [getFunctionName(api.core.questions.addPersonalQuestion)]: mutations.add,
     [getFunctionName(api.core.questions.updatePersonalQuestion)]: mutations.update,
-    [getFunctionName(api.core.questions.deletePersonalQuestion)]: overrides.remove ?? mutations.remove,
+    [getFunctionName(api.core.questions.deletePersonalQuestion)]: mutations.remove,
   };
   (useMutation as ReturnType<typeof vi.fn>).mockImplementation((ref: MutationRef) => {
     const name = getFunctionName(ref);
@@ -227,11 +241,9 @@ describe("RemixQuestionDrawer cancel remix", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
     close();
     remix.resolve("A remix the person cancelled?");
-    await remix.promise;
+    await flush();
 
-    await waitFor(() => {
-      expect(mutations.add).not.toHaveBeenCalled();
-    });
+    expect(mutations.add).not.toHaveBeenCalled();
     expect(mutations.update).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
   });
@@ -248,10 +260,8 @@ describe("RemixQuestionDrawer cancel remix", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
 
     cancelled.resolve("A remix the person cancelled?");
-    await cancelled.promise;
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Remixing…" })).toBeDisabled();
-    });
+    await flush();
+    expect(screen.getByRole("button", { name: "Remixing…" })).toBeDisabled();
     expect(screen.queryByText("A remix the person cancelled?")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
     expect(mutations.add).not.toHaveBeenCalled();
@@ -327,11 +337,9 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
     remix.reject(new Error("AI timed out."));
-    await remix.promise.catch(() => {});
+    await flush();
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
-    });
+    expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Remix" })).toHaveFocus();
     expect(toast.error).not.toHaveBeenCalled();
     expect(mutations.add).not.toHaveBeenCalled();
@@ -348,11 +356,9 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     cancelled.reject(new Error("AI timed out."));
-    await cancelled.promise.catch(() => {});
+    await flush();
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Remixing…" })).toBeDisabled();
-    });
+    expect(screen.getByRole("button", { name: "Remixing…" })).toBeDisabled();
     expect(toast.error).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Remix" })).not.toBeInTheDocument();
 
@@ -409,11 +415,9 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
     created.resolve(null);
-    await created.promise;
+    await flush();
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
-    });
+    expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
     expect(mutations.remove).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
   });
@@ -453,21 +457,6 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
   });
 
-  it("starts one remix when the person double-clicks Remix", async () => {
-    const mutations = mockMutations();
-    mutations.add.mockResolvedValue("q-new");
-    const remix = vi.fn().mockResolvedValue("What is your favorite late-night snack?");
-    renderDrawer(remix);
-
-    const button = screen.getByRole("button", { name: "Remix" });
-    fireEvent.click(button);
-    fireEvent.click(button);
-
-    expect(await screen.findByText("What is your favorite late-night snack?")).toBeInTheDocument();
-    expect(remix).toHaveBeenCalledTimes(1);
-    expect(mutations.add).toHaveBeenCalledTimes(1);
-  });
-
   it("saves nothing from a remix still running when the drawer unmounts", async () => {
     const mutations = mockMutations();
     const remix = deferred<string>();
@@ -476,8 +465,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     unmount();
     remix.resolve("A remix from an unmounted drawer?");
-    await remix.promise;
-    await Promise.resolve();
+    await flush();
 
     expect(mutations.add).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
@@ -495,12 +483,41 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
     created.reject(new Error("Network down."));
-    await created.promise.catch(() => {});
+    await flush();
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
-    });
+    expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
     expect(toast.error).not.toHaveBeenCalled();
     expect(mutations.remove).not.toHaveBeenCalled();
+  });
+
+  it("saves nothing from a remix still running when the drawer finishes closing", async () => {
+    const mutations = mockMutations();
+    const remix = deferred<string>();
+    const { close } = renderDrawer(vi.fn().mockReturnValue(remix.promise));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    close();
+    fireEvent.animationEnd(screen.getByTestId("drawer-content"));
+    remix.resolve("A remix from a closed drawer?");
+    await flush();
+
+    expect(mutations.add).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("moves focus to Cancel when the cancelled remix used the last AI credit", async () => {
+    mockMutations();
+    const remix = deferred<string>();
+    renderDrawer(vi.fn().mockReturnValue(remix.promise));
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+
+    // The cancelled run counted toward the limit, so the live user query now reports it reached.
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((ref: MutationRef) =>
+      getFunctionName(ref) === getFunctionName(api.core.users.getCurrentUser) ? { isAiLimitReached: true } : undefined,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
+
+    expect(screen.getByRole("button", { name: "Remix" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
   });
 });

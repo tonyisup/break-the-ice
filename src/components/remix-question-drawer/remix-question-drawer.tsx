@@ -108,10 +108,17 @@ export function RemixQuestionDrawer({
 	const focusAfterCancelRef = useRef(false);
 	const remixButtonRef = useRef<HTMLButtonElement>(null);
 	const saveButtonRef = useRef<HTMLButtonElement>(null);
+	const closeButtonRef = useRef<HTMLButtonElement>(null);
 	useEffect(() => {
 		if (!focusAfterCancelRef.current || remixState === "remixing") return;
 		focusAfterCancelRef.current = false;
-		(remixState === "remixed" ? saveButtonRef : remixButtonRef).current?.focus();
+		if (remixState === "remixed") {
+			saveButtonRef.current?.focus();
+		} else {
+			// The cancelled run may have used the last AI credit, which disables Remix.
+			const remixButton = remixButtonRef.current;
+			(remixButton && !remixButton.disabled ? remixButton : closeButtonRef.current)?.focus();
+		}
 	}, [remixState]);
 
 	const hasChanges = useMemo(() => {
@@ -617,7 +624,7 @@ export function RemixQuestionDrawer({
 								Remix
 							</Button>
 							<DrawerClose asChild>
-								<Button variant="ghost">Cancel</Button>
+								<Button ref={closeButtonRef} variant="ghost">Cancel</Button>
 							</DrawerClose>
 						</>
 					)}
