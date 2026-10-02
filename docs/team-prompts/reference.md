@@ -84,8 +84,14 @@ Constraints:
 - The caller must be an admin or manager in an active Team workspace.
 - The schedule must exist and have `status: "draft"`.
 - `dayOfWeek` must belong to the schedule's delivery-day snapshot.
-- `questionText` is required after trimming and has a 500-character maximum.
+- `questionText` is required after trimming and has a 500-character maximum,
+  the same limit as personal questions and questions submitted for the public
+  feed.
 - Topic fields use the same limits as the preview action.
+
+A blank or over-long `questionText` fails with a `ConvexError` whose `code` is
+`QUESTION_TEXT_REQUIRED` or `QUESTION_TEXT_TOO_LONG`. The error's `message` is
+ready to show.
 
 Return value:
 
