@@ -167,6 +167,44 @@
 **Priority:** P3
 **Depends on:** None
 
+## Review consistency
+
+### Close a remaining review-consistency gap in shared views
+
+**What:** One kind of shared view can show wording that hasn't been through review in some conditions. The specifics are in the owner's private plan doc ("v0.4.6.0 follow-ups").
+
+**Why:** Shared views should only show reviewed or public wording.
+
+**Context:** Deferred during the v0.4.6.0 review.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** None
+
+### Finish review consistency for author-written questions
+
+**What:** Bring a few remaining admin and author review paths in line with v0.4.6.0, including letting an approval see an author's later rewording. The specifics are in the owner's private plan doc ("v0.4.6.0 follow-ups").
+
+**Why:** v0.4.6.0 fixed the main author edit path; a few related paths still need the same checks.
+
+**Context:** Deferred during the v0.4.6.0 review.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
+### Keep an admin's draft when a queued question changes
+
+**What:** In the admin review queue, keep an admin's unsaved text when the question gets a new revision, and show a "question changed" notice instead of replacing it. Show the server's readable message when a stale save is refused.
+
+**Why:** Since v0.4.6.0 the text box reloads with the current wording when the question changes, which drops anything the admin was typing.
+
+**Context:** `src/app/admin/questions/page.tsx` (queue textarea keyed by revision, `handleUpdateField`). Deferred during the v0.4.6.0 review.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## Privacy
 
 ### Document the signed-out session id and regenerate it on revoke
