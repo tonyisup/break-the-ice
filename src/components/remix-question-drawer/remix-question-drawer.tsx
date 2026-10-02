@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { convexErrorData } from "../../../convex/lib/errorData";
 import { ERROR_CODES, ERROR_MESSAGES } from "../../../convex/constants";
@@ -98,9 +98,21 @@ export function RemixQuestionDrawer({
 	const deletePersonalQuestion = useMutation(api.core.questions.deletePersonalQuestion);
 
 	const isClosingRef = useRef(false);
-	// Bumped on every remix start, cancel and reset. A run whose id is no longer current was
-	// cancelled or replaced, so it must not save anything or touch the drawer's state.
+	// Bumped on every remix start, cancel, reset and unmount. A run whose id is no longer current
+	// was cancelled or replaced, so it must not save anything or touch the drawer's state.
 	const remixRequestIdRef = useRef(0);
+	useEffect(() => () => {
+		remixRequestIdRef.current += 1;
+	}, []);
+	// Cancel removes the focused button, so move focus to what replaces it.
+	const focusAfterCancelRef = useRef(false);
+	const remixButtonRef = useRef<HTMLButtonElement>(null);
+	const saveButtonRef = useRef<HTMLButtonElement>(null);
+	useEffect(() => {
+		if (!focusAfterCancelRef.current || remixState === "remixing") return;
+		focusAfterCancelRef.current = false;
+		(remixState === "remixed" ? saveButtonRef : remixButtonRef).current?.focus();
+	}, [remixState]);
 
 	const hasChanges = useMemo(() => {
 		const styleChanged = selectedStyleId !== styleId;
@@ -248,6 +260,7 @@ export function RemixQuestionDrawer({
 
 	const handleCancelRemix = () => {
 		remixRequestIdRef.current += 1;
+		focusAfterCancelRef.current = true;
 		// Go back to the previous remix if there is one, so it can still be saved or discarded.
 		setRemixState(remixedText ? "remixed" : "idle");
 	};
@@ -595,6 +608,7 @@ export function RemixQuestionDrawer({
 					{remixState === "idle" && (
 						<>
 							<Button 
+								ref={remixButtonRef}
 								onClick={handleRemix} 
 								className="gap-2"
 								disabled={currentUser?.isAiLimitReached || isEntitlementsLoading}
@@ -615,14 +629,14 @@ export function RemixQuestionDrawer({
 								Remixing…
 							</Button>
 							<Button variant="ghost" onClick={handleCancelRemix}>
-								Cancel Remix
+								{remixedText ? "Keep Previous Remix" : "Cancel Remix"}
 							</Button>
 						</div>
 					)}
 
 					{remixState === "remixed" && (
 						<>
-							<Button onClick={handleSave} className="gap-2">
+							<Button ref={saveButtonRef} onClick={handleSave} className="gap-2">
 								<Save className="size-4" />
 								Save
 							</Button>

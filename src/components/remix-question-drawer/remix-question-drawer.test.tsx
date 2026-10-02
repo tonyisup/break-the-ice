@@ -7,6 +7,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { RemixQuestionDrawer } from "./remix-question-drawer";
 import { ERROR_CODES, ERROR_MESSAGES } from "../../../convex/constants";
+import { api } from "../../../convex/_generated/api";
 
 vi.mock("convex/react", () => ({
   useAction: vi.fn(),
@@ -25,8 +26,9 @@ vi.mock("@/hooks/useTeamWorkspace", () => ({
 // vaul needs layout APIs jsdom lacks; an open drawer is just its content here.
 vi.mock("@/components/ui/drawer", () => {
   const Pass = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+  const Drawer = ({ open, children }: { open: boolean; children?: ReactNode }) => (open ? <div>{children}</div> : null);
   return {
-    Drawer: ({ open, children }: { open: boolean; children?: ReactNode }) => (open ? <div>{children}</div> : null),
+    Drawer,
     DrawerContent: Pass,
     DrawerHeader: Pass,
     DrawerTitle: Pass,
@@ -60,34 +62,45 @@ function renderDrawer(remix: ReturnType<typeof vi.fn>) {
       onOpenChange={onOpenChange}
     />
   );
-  const { rerender } = render(drawer(true));
-  return { onOpenChange, close: () => rerender(drawer(false)) };
+  const { rerender, unmount } = render(drawer(true));
+  return { onOpenChange, close: () => rerender(drawer(false)), unmount };
 }
 
 // A promise the test settles by hand, to finish a request after the person has cancelled it.
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>(res => {
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
     resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
+type MutationRef = Parameters<typeof getFunctionName>[0];
+
 // Separate mocks per mutation, for tests that need to tell a create from an update or delete.
-function mockMutations() {
+// A mutation the drawer calls without a mock here fails the test instead of passing silently.
+function mockMutations(overrides: { remove?: (args: unknown) => unknown } = {}) {
   const mutations = {
     add: vi.fn(),
     update: vi.fn().mockResolvedValue(null),
     remove: vi.fn().mockResolvedValue(null),
   };
-  const byName: Record<string, ReturnType<typeof vi.fn>> = {
-    "core/questions:addPersonalQuestion": mutations.add,
-    "core/questions:updatePersonalQuestion": mutations.update,
-    "core/questions:deletePersonalQuestion": mutations.remove,
+  const byName: Record<string, unknown> = {
+    [getFunctionName(api.core.questions.addPersonalQuestion)]: mutations.add,
+    [getFunctionName(api.core.questions.updatePersonalQuestion)]: mutations.update,
+    [getFunctionName(api.core.questions.deletePersonalQuestion)]: overrides.remove ?? mutations.remove,
   };
-  (useMutation as ReturnType<typeof vi.fn>).mockImplementation(
-    (ref: Parameters<typeof getFunctionName>[0]) => byName[getFunctionName(ref)] ?? vi.fn(),
-  );
+  (useMutation as ReturnType<typeof vi.fn>).mockImplementation((ref: MutationRef) => {
+    const name = getFunctionName(ref);
+    return (
+      byName[name] ??
+      (() => {
+        throw new Error(`Unmocked mutation ${name}`);
+      })
+    );
+  });
   return mutations;
 }
 
@@ -285,13 +298,15 @@ describe("RemixQuestionDrawer cancel remix", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     fireEvent.click(await screen.findByRole("button", { name: "Remix Again" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
+    expect(screen.queryByRole("button", { name: "Cancel Remix" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Keep Previous Remix" }));
     cancelled.resolve("A remix the person cancelled?");
     await cancelled.promise;
 
     expect(await screen.findByText("What is your favorite late-night snack?")).toBeInTheDocument();
     expect(screen.queryByText("A remix the person cancelled?")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toHaveFocus();
     expect(mutations.update).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -300,5 +315,192 @@ describe("RemixQuestionDrawer cancel remix", () => {
         expect.objectContaining({ questionId: "q-new", customText: "What is your favorite late-night snack?" }),
       );
     });
+  });
+});
+
+describe("RemixQuestionDrawer cancel remix edge cases", () => {
+  it("shows no error when a cancelled remix fails afterwards", async () => {
+    const mutations = mockMutations();
+    const remix = deferred<string>();
+    renderDrawer(vi.fn().mockReturnValue(remix.promise));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
+    remix.reject(new Error("AI timed out."));
+    await remix.promise.catch(() => {});
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
+    });
+    expect(screen.getByRole("button", { name: "Remix" })).toHaveFocus();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(mutations.add).not.toHaveBeenCalled();
+  });
+
+  it("does not let a cancelled remix's failure stop the next remix's spinner", async () => {
+    const mutations = mockMutations();
+    mutations.add.mockResolvedValue("q-new");
+    const cancelled = deferred<string>();
+    const current = deferred<string>();
+    renderDrawer(vi.fn().mockReturnValueOnce(cancelled.promise).mockReturnValueOnce(current.promise));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    cancelled.reject(new Error("AI timed out."));
+    await cancelled.promise.catch(() => {});
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Remixing…" })).toBeDisabled();
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Remix" })).not.toBeInTheDocument();
+
+    current.resolve("What is your favorite late-night snack?");
+    expect(await screen.findByText("What is your favorite late-night snack?")).toBeInTheDocument();
+    expect(mutations.add).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the saved remix when the cancel lands while Remix Again is updating it", async () => {
+    const mutations = mockMutations();
+    mutations.add.mockResolvedValue("q-new");
+    const updating = deferred<null>();
+    mutations.update.mockReturnValueOnce(updating.promise).mockResolvedValue(null);
+    renderDrawer(
+      vi
+        .fn()
+        .mockResolvedValueOnce("What is your favorite late-night snack?")
+        .mockResolvedValueOnce("A remix the person cancelled?"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remix Again" }));
+    await waitFor(() => {
+      expect(mutations.update).toHaveBeenCalledWith(
+        expect.objectContaining({ questionId: "q-new", customText: "A remix the person cancelled?" }),
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Keep Previous Remix" }));
+    updating.resolve(null);
+    await updating.promise;
+
+    expect(await screen.findByText("What is your favorite late-night snack?")).toBeInTheDocument();
+    expect(screen.queryByText("A remix the person cancelled?")).not.toBeInTheDocument();
+    expect(mutations.add).toHaveBeenCalledTimes(1);
+    expect(mutations.remove).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(mutations.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({ questionId: "q-new", customText: "What is your favorite late-night snack?" }),
+      );
+    });
+  });
+
+  it("deletes nothing when a cancelled create returns no question", async () => {
+    const mutations = mockMutations();
+    const created = deferred<string | null>();
+    mutations.add.mockReturnValue(created.promise);
+    renderDrawer(vi.fn().mockResolvedValue("A remix the person cancelled?"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    await waitFor(() => {
+      expect(mutations.add).toHaveBeenCalled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
+    created.resolve(null);
+    await created.promise;
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
+    });
+    expect(mutations.remove).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet when deleting a cancelled remix's question fails", async () => {
+    // A vi.fn attaches its own handler to every promise it returns, which would hide a missing
+    // catch, so the delete here is a plain function whose failed promise records its handlers.
+    const deleteCalls: unknown[] = [];
+    let rejectionHandled = false;
+    const failingDelete = (args: unknown) => {
+      deleteCalls.push(args);
+      const failed = Promise.reject(new Error("Network down."));
+      const then = failed.then.bind(failed);
+      failed.then = ((onFulfilled, onRejected) => {
+        if (typeof onRejected === "function") rejectionHandled = true;
+        return then(onFulfilled, onRejected);
+      }) as typeof failed.then;
+      return failed;
+    };
+    const mutations = mockMutations({ remove: failingDelete });
+    const created = deferred<string>();
+    mutations.add.mockReturnValue(created.promise);
+    renderDrawer(vi.fn().mockResolvedValue("A remix the person cancelled?"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    await waitFor(() => {
+      expect(mutations.add).toHaveBeenCalled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
+    created.resolve("q-cancelled");
+
+    await waitFor(() => {
+      expect(deleteCalls).toEqual([{ questionId: "q-cancelled" }]);
+    });
+    expect(rejectionHandled).toBe(true);
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
+  });
+
+  it("starts one remix when the person double-clicks Remix", async () => {
+    const mutations = mockMutations();
+    mutations.add.mockResolvedValue("q-new");
+    const remix = vi.fn().mockResolvedValue("What is your favorite late-night snack?");
+    renderDrawer(remix);
+
+    const button = screen.getByRole("button", { name: "Remix" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(await screen.findByText("What is your favorite late-night snack?")).toBeInTheDocument();
+    expect(remix).toHaveBeenCalledTimes(1);
+    expect(mutations.add).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves nothing from a remix still running when the drawer unmounts", async () => {
+    const mutations = mockMutations();
+    const remix = deferred<string>();
+    const { unmount } = renderDrawer(vi.fn().mockReturnValue(remix.promise));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    unmount();
+    remix.resolve("A remix from an unmounted drawer?");
+    await remix.promise;
+    await Promise.resolve();
+
+    expect(mutations.add).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("shows no error when a cancelled remix's create fails afterwards", async () => {
+    const mutations = mockMutations();
+    const created = deferred<string>();
+    mutations.add.mockReturnValue(created.promise);
+    renderDrawer(vi.fn().mockResolvedValue("A remix the person cancelled?"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    await waitFor(() => {
+      expect(mutations.add).toHaveBeenCalled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
+    created.reject(new Error("Network down."));
+    await created.promise.catch(() => {});
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(mutations.remove).not.toHaveBeenCalled();
   });
 });
