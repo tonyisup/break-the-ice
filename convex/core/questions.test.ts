@@ -343,7 +343,7 @@ describe("author edits go back through review", () => {
     expect(await t.query(api.core.questions.getQuestionById, { id: questionId })).toMatchObject({ text: firstWording });
   });
 
-  test("an author's new wording drops the stale embedding and isn't embedded while it waits for review", async () => {
+  test("an author edit keeps the reviewed text, saves their wording, and drops the embedding while it waits for review", async () => {
     const { t, author, questionId } = await setup({
       customText: firstWording,
       text: firstWording,
@@ -357,8 +357,9 @@ describe("author edits go back through review", () => {
 
     const edited = await reword(author, questionId);
 
-    expect(edited).toMatchObject({ customText: newWording, status: "pending" });
-    expect(edited!.text ?? edited!.customText).toBe(newWording);
+    expect(edited).toMatchObject({ text: firstWording, customText: newWording, status: "pending", reviewRevision: 2 });
+    expect(edited!.fingerprint).toBeUndefined();
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ text: firstWording, customText: newWording });
     expect(await embeddings(t)).toHaveLength(0);
     expect(await embedJobs(t)).toHaveLength(0);
   });
@@ -367,7 +368,7 @@ describe("author edits go back through review", () => {
   test.each([
     ["the questions page", (q: Doc<"questions">) => ({ text: q.text || q.customText! })],
     ["the detail page", () => ({})],
-  ])("re-approving on %s after the author rewords reviews, fingerprints and embeds the new wording once", async (_page, wordingSent) => {
+  ])("re-approving on %s after the author rewords keeps, fingerprints and embeds the reviewed wording once", async (_page, wordingSent) => {
     // The first Approve on the questions page copied the wording into text.
     const { t, author, admin, questionId } = await setup({
       customText: firstWording,
@@ -390,9 +391,12 @@ describe("author edits go back through review", () => {
       status: "public",
       ...wordingSent(q),
     });
-    const approved = (await t.run(async (ctx) => ctx.db.get(questionId)))!;
-    expect(approved).toMatchObject({ status: "public", fingerprint: fingerprintText(newWording) });
-    expect(approved.text ?? approved.customText).toBe(newWording);
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({
+      status: "public",
+      text: firstWording,
+      customText: newWording,
+      fingerprint: fingerprintText(firstWording),
+    });
     expect(await embedJobs(t)).toHaveLength(1);
 
     const embedCreate = vi
@@ -400,7 +404,7 @@ describe("author edits go back through review", () => {
       .mockResolvedValue({ data: [{ embedding: [0, 1] }] } as never);
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(embedCreate).toHaveBeenCalledTimes(1);
-    expect(embedCreate).toHaveBeenCalledWith(expect.objectContaining({ input: newWording }));
+    expect(embedCreate).toHaveBeenCalledWith(expect.objectContaining({ input: firstWording }));
     expect(await embeddings(t)).toEqual([expect.objectContaining({ questionId, embedding: [0, 1], status: "public" })]);
   });
 

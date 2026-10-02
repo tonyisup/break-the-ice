@@ -1023,9 +1023,8 @@ export const updatePersonalQuestion = mutation({
 		]);
 
 		await ctx.db.patch(args.questionId, {
-			// The author edits the shown wording, which replaces any reviewed text. It is then
-			// what's shown, and what the next review approves and fingerprints.
-			text: undefined,
+			// The author edits their own wording. Reviewed text, if any, stays as it is, so views
+			// keep showing the reviewed wording.
 			customText,
 			status: args.isPublic ? "pending" : "private",
 			// Pending or private, so not a library question: it keeps no fingerprint (see isPrivateUserQuestion).
@@ -1041,8 +1040,8 @@ export const updatePersonalQuestion = mutation({
 			topic: topicDoc?.id,
 			tags: args.tags,
 		});
-		// Now pending or private, so a new wording only drops the stale embedding. It is embedded
-		// again once a review makes it public.
+		// Now pending or private, so this only drops its embedding. It is embedded again once a
+		// review makes it public.
 		await syncReviewedEmbedding(ctx, (await ctx.db.get(args.questionId))!, shownWording(question));
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: args.questionId,

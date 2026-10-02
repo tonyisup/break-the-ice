@@ -930,3 +930,52 @@ test("coach feedback accepts only today's assignment from a published schedule",
     landedWell: true,
   })).resolves.toBeNull();
 });
+
+test("schedule views keep showing an approved submission's reviewed wording after its author edits it", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const reviewedWording = "What did you learn this week?";
+  const authorWording = "What surprised you most this week?";
+  const { isoDate, dayOfWeek } = getZonedCalendarDate(
+    new Date(),
+    DEFAULT_ORGANIZATION_TIME_ZONE,
+  );
+  const { scheduleId, questionId } = await t.run(async (ctx) => {
+    const author = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", ADMIN_IDENTITY.email))
+      .unique();
+    const questionId = await ctx.db.insert("questions", {
+      authorId: author!._id,
+      customText: reviewedWording,
+      text: reviewedWording,
+      status: "public",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+    const now = Date.now();
+    const scheduleId = await ctx.db.insert("schedules", {
+      organizationId,
+      weekStart: isoDate,
+      weekEnd: isoDate,
+      status: "draft",
+      weekStartDay: "monday",
+      deliveryDays: [dayOfWeek],
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { scheduleId, questionId };
+  });
+  await admin.mutation(api.core.schedules.assignQuestion, { scheduleId, dayOfWeek, questionId });
+
+  await admin.mutation(api.core.questions.updatePersonalQuestion, {
+    questionId,
+    customText: authorWording,
+    isPublic: true,
+  });
+
+  const detail = await admin.query(api.core.schedules.getSchedule, { scheduleId });
+  expect(detail.assignments.map((assignment) => assignment.question.text)).toEqual([reviewedWording]);
+  const current = await admin.query(api.core.schedules.getCurrentWeekSchedule, { organizationId });
+  expect(current.todayAssignment?.question.text).toBe(reviewedWording);
+});
