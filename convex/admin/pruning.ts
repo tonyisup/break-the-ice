@@ -548,11 +548,13 @@ export const undoReview = mutation({
         throw new Error("Question changed after this review; undo would overwrite newer work");
       }
       // Without the author's wording in the record, the undo can't confirm it is the wording
-      // the review saw, so it doesn't make a user-written question public on that wording alone.
+      // the review saw, so it doesn't make a private user-written question public on that
+      // wording alone. Undoing a review that leaves the question public is unaffected.
       const restoredQuestion = { ...question, ...restoredFields(change) };
       if (!("customText" in change.after) && isUserWrittenQuestion(restoredQuestion) &&
-        isQuestionPublic(restoredQuestion) && restoredQuestion.text === undefined) {
-        throw new Error("Question changed after this review; undo would overwrite newer work");
+        !isQuestionPublic(question) && isQuestionPublic(restoredQuestion) &&
+        restoredQuestion.text === undefined) {
+        throw new Error("This older review didn't record the author's wording, so undoing it can't make the question public");
       }
     }
     if (review.pruningId) {

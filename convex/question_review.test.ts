@@ -407,11 +407,49 @@ describe("editorial review safeguards", () => {
 
       await expect(
         admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id }),
-      ).rejects.toThrow("newer work");
+      ).rejects.toThrow("didn't record the author's wording");
       expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
         status: "private",
         reviewRevision: 1,
       });
+    });
+
+    test("a review recorded before the author's wording was snapshotted still undoes when the question stays public", async () => {
+      const t = convexTest(schema, modules);
+      const admin = t.withIdentity(identity);
+      const questionId = await t.run((ctx) =>
+        ctx.db.insert("questions", {
+          ...question(),
+          status: "approved",
+          text: undefined,
+          customText: wording,
+          authorId: "author-1",
+        }),
+      );
+      await t.mutation(internal.admin.pruning.savePruningTargets, {
+        targets: [{ questionId, reason: "Low engagement", metrics }],
+      });
+      const [target] = await admin.query(api.admin.pruning.getPendingTargets, {});
+      await admin.mutation(api.admin.pruning.rejectPruning, {
+        pruningId: target._id,
+        expectedRevision: 0,
+        reason: "Concrete and easy to answer; low engagement alone does not justify removal.",
+      });
+      const [review] = await admin.query(api.admin.pruning.getReviewHistory, {
+        source: "pruning",
+      });
+      await t.run(async (ctx) => {
+        const { customText: _before, ...before } = review.changes[0].before;
+        const { customText: _after, ...after } = review.changes[0].after;
+        await ctx.db.patch(review.changes[0]._id, { before, after });
+      });
+
+      await admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id });
+
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "approved",
+      });
+      expect(await admin.query(api.admin.pruning.getPendingTargets, {})).toHaveLength(1);
     });
 
     test("a review recorded before the author's wording was snapshotted still makes a library question public again", async () => {
