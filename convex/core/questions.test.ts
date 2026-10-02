@@ -404,6 +404,18 @@ describe("author edits go back through review", () => {
     expect(await embeddings(t)).toEqual([expect.objectContaining({ questionId, embedding: [0, 1], status: "public" })]);
   });
 
+  test("an embedding job for a question that has turned private doesn't send its wording", async () => {
+    const { t, questionId } = await setup({ customText: firstWording, status: "private" });
+    const embedCreate = vi
+      .spyOn(OpenAI.Embeddings.prototype, "create")
+      .mockResolvedValue({ data: [{ embedding: [0, 1] }] } as never);
+
+    await t.action(internal.lib.retriever.embedQuestion, { questionId });
+
+    expect(embedCreate).not.toHaveBeenCalled();
+    expect(await embeddings(t)).toHaveLength(0);
+  });
+
   test("approving a question whose shown wording already has an embedding doesn't embed it again", async () => {
     const { t, admin, questionId } = await setup({ customText: firstWording, status: "pending" });
     await t.run(async (ctx) =>
