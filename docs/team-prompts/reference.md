@@ -43,18 +43,30 @@ Return value:
 }
 ```
 
+The action checks the topic fields first. A blank `name` or `guidance` fails
+with a `ConvexError` whose `code` is `TEAM_TOPIC_REQUIRED`; a field over its
+limit fails with `TEAM_TOPIC_TOO_LONG`. The error's `message` names the field.
+These refusals come before the AI request limits, so they don't use one of the
+caller's AI requests.
+
 Before checking the caller's role, the action checks the daily AI budget and the
 caller's per-person AI request limits. While the budget is paused it fails with a
 `ConvexError` whose `code` is `AI_BUDGET_PAUSED`; over a request limit, the code
 is `AI_RATE_LIMITED`. Neither failure uses the workspace's AI usage, and the
 error's `message` is ready to show.
 
+A style or tone that is inactive or owned by another workspace fails with
+`STYLE_UNAVAILABLE` or `TONE_UNAVAILABLE`, before any workspace AI usage is
+reserved.
+
 The action requests three candidates and reserves one unit of the workspace's AI
 usage before calling the provider. An empty or unreadable provider answer is
 retried once, as a second provider call with its own generation run. Empty,
 duplicate, and over-500-character candidates are discarded. If three distinct
-persistable questions do not remain, the action returns a retryable error and
-releases the usage reservation. `runId` identifies the generation audit record.
+persistable questions do not remain, the action fails with `AI_GENERATION_FAILED`
+and a "try again" `message`. That failure keeps the usage unit, because the
+provider already charged for the answer. `runId` identifies the generation audit
+record.
 
 ### `core.teamPrompts.createAndAssign`
 
@@ -89,9 +101,22 @@ Constraints:
   feed.
 - Topic fields use the same limits as the preview action.
 
-A blank or over-long `questionText` fails with a `ConvexError` whose `code` is
-`QUESTION_TEXT_REQUIRED` or `QUESTION_TEXT_TOO_LONG`. The error's `message` is
-ready to show.
+These refusals fail with a `ConvexError` whose `message` is ready to show:
+
+| `code`                   | When                                                   |
+| ------------------------ | ------------------------------------------------------ |
+| `SCHEDULE_NOT_DRAFT`     | The schedule is already published or completed         |
+| `SCHEDULE_DAY_INACTIVE`  | `dayOfWeek` is not in the schedule's delivery days     |
+| `QUESTION_TEXT_REQUIRED` | `questionText` is blank after trimming                 |
+| `QUESTION_TEXT_TOO_LONG` | `questionText` is over 500 characters                  |
+| `TEAM_TOPIC_REQUIRED`    | A required `sourceTopic` field is blank after trimming |
+| `TEAM_TOPIC_TOO_LONG`    | A `sourceTopic` field is over its limit                |
+
+A missing schedule and a failed role check stay plain errors.
+
+The topic, question, and assignment are credited to the account whose admin or
+manager membership passed the role check (`createdBy`, `authorId`, and
+`assignedBy`).
 
 Return value:
 

@@ -6,35 +6,14 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPreviewQuestionGeneration } from "../lib/generationRunner";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
-import { wasAiCallBilled } from "../lib/aiSpendGuard";
-import { normalizePersistableTeamPromptText } from "../lib/teamPromptContract";
+import { billedFailure, wasAiCallBilled } from "../lib/aiSpendGuard";
+import {
+  normalizePersistableTeamPromptText,
+  optionalTeamTopicText,
+  requireTeamTopicText,
+} from "../lib/teamPromptContract";
 
-const MAX_TOPIC_NAME_LENGTH = 100;
-const MAX_TOPIC_GUIDANCE_LENGTH = 1000;
-const MAX_TOPIC_BOUNDARIES_LENGTH = 1000;
 const PREVIEW_COUNT = 3;
-
-function requiredText(value: string, label: string, maxLength: number): string {
-  const normalized = value.trim();
-  if (!normalized) throw new Error(`${label} is required.`);
-  if (normalized.length > maxLength) {
-    throw new Error(`${label} must be ${maxLength} characters or fewer.`);
-  }
-  return normalized;
-}
-
-function optionalText(
-  value: string | undefined,
-  label: string,
-  maxLength: number,
-): string | undefined {
-  const normalized = value?.trim();
-  if (!normalized) return undefined;
-  if (normalized.length > maxLength) {
-    throw new Error(`${label} must be ${maxLength} characters or fewer.`);
-  }
-  return normalized;
-}
 
 type TopicPreviewArgs = {
   organizationId: Id<"organizations">;
@@ -45,11 +24,19 @@ type TopicPreviewArgs = {
   toneId: Id<"tones">;
 };
 
+/**
+ * Previews three questions for a topic. The action checks the topic fields before the AI
+ * rate limit; they are checked again here (trimming is idempotent) so no caller can send
+ * blank or over-long text to the model.
+ */
 export async function runTopicPreviewWithUsage(
   ctx: Parameters<typeof runPreviewQuestionGeneration>[0],
   args: TopicPreviewArgs,
   generatePreview: typeof runPreviewQuestionGeneration = runPreviewQuestionGeneration,
 ): Promise<{ questions: string[]; runId: Id<"generationRuns"> }> {
+  const name = requireTeamTopicText(args.name, "name");
+  const guidance = requireTeamTopicText(args.guidance, "guidance");
+  const boundaries = optionalTeamTopicText(args.boundaries, "boundaries");
   const userId = await ctx.runQuery(
     internal.core.teamPrompts.authorizeTopicPreview,
     {
@@ -57,17 +44,6 @@ export async function runTopicPreviewWithUsage(
       styleId: args.styleId,
       toneId: args.toneId,
     },
-  );
-  const name = requiredText(args.name, "Topic name", MAX_TOPIC_NAME_LENGTH);
-  const guidance = requiredText(
-    args.guidance,
-    "Topic guidance",
-    MAX_TOPIC_GUIDANCE_LENGTH,
-  );
-  const boundaries = optionalText(
-    args.boundaries,
-    "Topic boundaries",
-    MAX_TOPIC_BOUNDARIES_LENGTH,
   );
   const userContext = [
     `Team conversation topic: ${name}`,
@@ -96,12 +72,23 @@ export async function runTopicPreviewWithUsage(
       .map(normalizePersistableTeamPromptText)
       .filter((question): question is string => question !== null);
     const distinctQuestions = [...new Set(persistableQuestions)];
+    // The provider has already charged for this answer, so an unusable one keeps its
+    // usage and reaches the manager as a readable error. The counts are logged because
+    // the readable error doesn't say which check failed.
+    if (distinctQuestions.length < PREVIEW_COUNT) {
+      console.warn("Topic preview options could not be used", {
+        runId: preview.runId,
+        generated: preview.previewTexts.length,
+        persistable: persistableQuestions.length,
+        distinct: distinctQuestions.length,
+      });
+    }
     if (distinctQuestions.length === 0) {
-      throw new Error("No persistable topic preview questions were generated.");
+      throw billedFailure(new Error("No persistable topic preview questions were generated."));
     }
     if (distinctQuestions.length < PREVIEW_COUNT) {
-      throw new Error(
-        "Exactly three distinct topic preview questions are required. Please retry.",
+      throw billedFailure(
+        new Error("Exactly three distinct topic preview questions are required."),
       );
     }
     const questions = distinctQuestions.slice(0, PREVIEW_COUNT);
@@ -138,7 +125,12 @@ export const previewTopicQuestions = action({
   ): Promise<{ questions: string[]; runId: Id<"generationRuns"> }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    // Checked before the AI rate limit, so a request refused for its input doesn't
+    // spend the caller's AI requests.
+    const name = requireTeamTopicText(args.name, "name");
+    const guidance = requireTeamTopicText(args.guidance, "guidance");
+    const boundaries = optionalTeamTopicText(args.boundaries, "boundaries");
     await ensureAiRequestAllowed(ctx);
-    return await runTopicPreviewWithUsage(ctx, args);
+    return await runTopicPreviewWithUsage(ctx, { ...args, name, guidance, boundaries });
   },
 });

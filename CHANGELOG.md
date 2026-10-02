@@ -2,6 +2,19 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.5.0] - 2026-10-02
+
+### Fixed
+- Team prompt refusals now say what went wrong instead of "Server Error". Managers see a readable message when the schedule is already published or completed, the day is no longer a delivery day, a topic field is blank or too long, or the chosen style or tone isn't available to their workspace.
+- When the AI's topic preview options can't be used, the manager gets a readable "try again" message, and the request counts toward usage because the provider already charged for it.
+- Topic previews refused for a blank or over-long field no longer use up one of the person's AI requests.
+- Team prompts, their topics and their assignments are now credited to the account whose manager role was checked, which matters for people with more than one sign-in linked to the same email.
+- The Team prompt composer switches to an available style or tone when the one it had picked stops being offered, so "Pick another one" works. It keeps your pick while the options briefly reload.
+- Error messages that pass through more than one server step are read correctly, so they show their readable text instead of a generic error.
+
+### Changed
+- The topic field limits (100 characters for the name, 1,000 for guidance and boundaries) live in one place shared by the composer and the server.
+
 ## [0.4.4.0] - 2026-10-02
 
 ### Fixed

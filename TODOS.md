@@ -167,6 +167,32 @@
 **Priority:** P3
 **Depends on:** None
 
+## Team prompts
+
+### Show readable errors for library question schedule changes
+
+**What:** Give `assignQuestion`, `unassignQuestion` and the publish path in `convex/core/schedules.ts` the same readable refusals Team prompts use (`SCHEDULE_NOT_DRAFT`, `SCHEDULE_DAY_INACTIVE`), and show them on the schedule page through `readableError` instead of `e.message`.
+
+**Why:** Since v0.4.5.0 assigning a Team prompt to a published schedule explains why it was refused, but assigning a library question to the same cell still shows "Server Error" in production.
+
+**Context:** `convex/core/schedules.ts` (assignQuestion, unassignQuestion, publish); handlers in `src/app/org/schedule/page.tsx` that call `toast.error(e.message ...)`. Consider one shared helper for the draft and delivery-day checks used by both modules. Keep a missing schedule a plain error where it's checked before membership. Deferred during the v0.4.5.0 review.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Show length counters on Team topic fields
+
+**What:** Show a character counter (like `QuestionLengthCounter` on the question boxes) on the topic guidance and boundaries fields in the Team prompt composer.
+
+**Why:** The fields stop at their limit, so pasted text over 1,000 characters is cut off with no warning.
+
+**Context:** `src/app/org/schedule/TeamPromptComposer.tsx`; limits in `convex/constants.ts` (`MAX_TEAM_TOPIC_*_LENGTH`). Deferred during the v0.4.5.0 review.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## Privacy
 
 ### Document the signed-out session id and regenerate it on revoke

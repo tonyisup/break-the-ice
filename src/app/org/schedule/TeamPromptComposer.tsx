@@ -8,7 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { QuestionLengthCounter } from "@/components/question-length-counter/QuestionLengthCounter";
-import { MAX_QUESTION_TEXT_LENGTH } from "../../../../convex/constants";
+import {
+  MAX_QUESTION_TEXT_LENGTH,
+  MAX_TEAM_TOPIC_BOUNDARIES_LENGTH,
+  MAX_TEAM_TOPIC_GUIDANCE_LENGTH,
+  MAX_TEAM_TOPIC_NAME_LENGTH,
+} from "../../../../convex/constants";
 
 export type TeamTopicDraft = {
   name: string;
@@ -57,12 +62,19 @@ export function TeamPromptComposer({
   const [isSaving, setIsSaving] = React.useState(false);
   const [isGenerating, setIsGenerating] = React.useState(false);
 
+  // Falls back to the first offered option when nothing is picked yet or the picked
+  // one is no longer offered, so the request matches what the select shows. An empty
+  // list means the options are still loading, so the pick is left alone.
   React.useEffect(() => {
-    if (!styleId && styles[0]) setStyleId(styles[0].id);
+    if (styles.length > 0 && !styles.some((style) => style.id === styleId)) {
+      setStyleId(styles[0].id);
+    }
   }, [styleId, styles]);
 
   React.useEffect(() => {
-    if (!toneId && tones[0]) setToneId(tones[0].id);
+    if (tones.length > 0 && !tones.some((tone) => tone.id === toneId)) {
+      setToneId(tones[0].id);
+    }
   }, [toneId, tones]);
 
   const currentPreviewRequest: TopicPreviewRequest = {
@@ -197,7 +209,7 @@ export function TeamPromptComposer({
                 <Input
                   id="team-topic-name"
                   value={topicName}
-                  maxLength={100}
+                  maxLength={MAX_TEAM_TOPIC_NAME_LENGTH}
                   onChange={(event) => setTopicName(event.target.value)}
                   placeholder="Launch readiness"
                 />
@@ -243,7 +255,7 @@ export function TeamPromptComposer({
               <Textarea
                 id="team-topic-guidance"
                 value={topicGuidance}
-                maxLength={1000}
+                maxLength={MAX_TEAM_TOPIC_GUIDANCE_LENGTH}
                 onChange={(event) => setTopicGuidance(event.target.value)}
                 placeholder="Surface unspoken concerns without turning this into a status meeting."
               />
@@ -258,7 +270,7 @@ export function TeamPromptComposer({
               <Input
                 id="team-topic-boundaries"
                 value={topicBoundaries}
-                maxLength={1000}
+                maxLength={MAX_TEAM_TOPIC_BOUNDARIES_LENGTH}
                 onChange={(event) => setTopicBoundaries(event.target.value)}
                 placeholder="Avoid asking people to name individual owners."
               />
