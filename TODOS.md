@@ -231,6 +231,18 @@
 **Priority:** P3
 **Depends on:** Owner decision
 
+### Keep the fingerprint on submissions pruned from public
+
+**What:** Record whether a user-written question was public when it was pruned, and keep its fingerprint if so, like a pruned library question or a retired public duplicate.
+
+**Why:** Since v0.4.3.0 only library questions keep a fingerprint, and a pruned submission counts as private, so pruning one (and the private fingerprint cleanup) drops it. Generation can then save the exact text of a submission an admin pruned.
+
+**Context:** `isPrivateUserQuestion` in `convex/lib/questionAccess.ts`; `approvePruning` in `convex/admin/pruning.ts`; `updateQuestion` in `convex/admin/questions.ts` (status pruned); `clearPrivateQuestionFingerprintsPage` in `convex/internal/migrations.ts`. Pruned rows don't record their earlier status, so this needs a marker (like `duplicateWasPublic`) set when pruning, and the cleanup and the private-question rule must leave marked rows alone. Accepted by the owner during the v0.4.3.0 review (decision 7290f0f8).
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** None
+
 ### Show readable errors on the admin review and duplicates pages
 
 **What:** Admin mutations in `convex/admin/questions.ts` throw plain `Error`s, which production shows as "Server Error". Throw `ConvexError` with a code and message (as the AI limits do) and read it with `convexErrorData` on the client. Include the duplicates page's "question held for review" guard, and show which group member is held.

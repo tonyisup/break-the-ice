@@ -2,6 +2,16 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.3.0] - 2026-10-02
+
+### Fixed
+- Generation's duplicate check only looks at library questions now. Personal, team and organization questions that aren't public keep no fingerprint: admin edits and reviews (Mark Personal included), pruning, undo and an author's own edits no longer give one or leave one behind, and making one of these questions public fingerprints it from its wording.
+- Questions added on the admin questions page get a fingerprint, so generation treats a copy of one as a duplicate.
+- The prompt architecture backfill leaves personal, team and organization questions that aren't public alone, and reads the questions table one page at a time, so a re-run can't read most of the table in a single step.
+
+### Added
+- A one-time cleanup that removes the fingerprints those questions still hold. Once this deploy is settled, run its dry run: `npx convex run internal/migrations:clearPrivateQuestionFingerprints '{"dryRun":true}'` (add `--prod` after `run` for production), then run it with `false`, and run the dry run again to check that `cleared` is 0. It reports counts only, and reviews made before it ran can still be undone.
+
 ## [0.4.2.0] - 2026-10-02
 
 ### Changed
