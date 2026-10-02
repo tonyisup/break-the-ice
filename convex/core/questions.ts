@@ -22,6 +22,7 @@ import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 import { wasAiCallBilled } from "../lib/aiSpendGuard";
 import { requireQuestionText } from "../lib/questionText";
+import { refreshQuestionText } from "../lib/questionReview";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 
@@ -949,6 +950,17 @@ function assertPersonalQuestionLifecycle(question: Doc<"questions">) {
 	}
 }
 
+// A copy retired as a duplicate stays as it was resolved: admins undo the resolution
+// before changing its status, and its author can't edit it either.
+function assertNotMergedDuplicate(question: Doc<"questions">) {
+	if (question.duplicateOf) {
+		throw new ConvexError({
+			code: ERROR_CODES.QUESTION_MERGED_AS_DUPLICATE,
+			message: ERROR_MESSAGES.QUESTION_MERGED_AS_DUPLICATE,
+		});
+	}
+}
+
 // Update a personal question (must be owned by the current user)
 export const updatePersonalQuestion = mutation({
 	args: {
@@ -984,6 +996,7 @@ export const updatePersonalQuestion = mutation({
 			throw new Error("You are not authorized to update this question.");
 		}
 		assertPersonalQuestionLifecycle(question);
+		assertNotMergedDuplicate(question);
 		const customText = requireQuestionText(args.customText);
 		// Look up slugs for legacy support
 		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
@@ -992,11 +1005,18 @@ export const updatePersonalQuestion = mutation({
 			args.topicId ? ctx.db.get(args.topicId) : null,
 		]);
 
+		const wordingChanged = (question.text ?? question.customText) !== customText;
 		await ctx.db.patch(args.questionId, {
+			// The author edits the shown wording, which replaces any reviewed text. It is then
+			// what's shown, and what the next review approves and fingerprints.
+			text: undefined,
 			customText,
 			status: args.isPublic ? "pending" : "private",
 			// Pending or private, so not a library question: it keeps no fingerprint (see isPrivateUserQuestion).
 			fingerprint: undefined,
+			// Author edits go back through review: an earlier review can't be undone over
+			// them, and a review started before them has to reload.
+			reviewRevision: (question.reviewRevision ?? 0) + 1,
 			styleId: args.styleId,
 			style: styleDoc?.id,
 			toneId: args.toneId,
@@ -1005,6 +1025,9 @@ export const updatePersonalQuestion = mutation({
 			topic: topicDoc?.id,
 			tags: args.tags,
 		});
+		if (wordingChanged) {
+			await refreshQuestionText(ctx, args.questionId);
+		}
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: args.questionId,
 		});
@@ -1074,11 +1097,13 @@ export const makeQuestionPublic = mutation({
 			throw new Error("You are not authorized to update this question.");
 		}
 		assertPersonalQuestionLifecycle(question);
+		assertNotMergedDuplicate(question);
 		if (question.status !== "private") {
 			throw new Error("Only private questions can be made public.");
 		}
 		await ctx.db.patch(args.questionId, {
 			status: "pending",
+			reviewRevision: (question.reviewRevision ?? 0) + 1,
 		});
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: args.questionId,
