@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { convexErrorData } from "../../../convex/lib/errorData";
 import { ERROR_CODES, ERROR_MESSAGES } from "../../../convex/constants";
@@ -98,6 +98,28 @@ export function RemixQuestionDrawer({
 	const deletePersonalQuestion = useMutation(api.core.questions.deletePersonalQuestion);
 
 	const isClosingRef = useRef(false);
+	// Bumped on every remix start, cancel, reset and unmount. A run whose id is no longer current
+	// was cancelled or replaced, so it must not save anything or touch the drawer's state.
+	const remixRequestIdRef = useRef(0);
+	useEffect(() => () => {
+		remixRequestIdRef.current += 1;
+	}, []);
+	// Cancel removes the focused button, so move focus to what replaces it.
+	const focusAfterCancelRef = useRef(false);
+	const remixButtonRef = useRef<HTMLButtonElement>(null);
+	const saveButtonRef = useRef<HTMLButtonElement>(null);
+	const closeButtonRef = useRef<HTMLButtonElement>(null);
+	useEffect(() => {
+		if (!focusAfterCancelRef.current || remixState === "remixing") return;
+		focusAfterCancelRef.current = false;
+		if (remixState === "remixed") {
+			saveButtonRef.current?.focus();
+		} else {
+			// The cancelled run may have used the last AI credit, which disables Remix.
+			const remixButton = remixButtonRef.current;
+			(remixButton && !remixButton.disabled ? remixButton : closeButtonRef.current)?.focus();
+		}
+	}, [remixState]);
 
 	const hasChanges = useMemo(() => {
 		const styleChanged = selectedStyleId !== styleId;
@@ -151,6 +173,7 @@ export function RemixQuestionDrawer({
 	};
 
 	const resetState = () => {
+		remixRequestIdRef.current += 1;
 		setRemixState("idle");
 		setRemixedText("");
 		setNewQuestionId(null);
@@ -169,6 +192,8 @@ export function RemixQuestionDrawer({
 			toast.error("Checking workspace access. Please try again in a moment.");
 			return;
 		}
+		const requestId = ++remixRequestIdRef.current;
+		const isStale = () => remixRequestIdRef.current !== requestId;
 		setRemixState("remixing");
 		setSaveFailed(false);
 		try {
@@ -178,6 +203,8 @@ export function RemixQuestionDrawer({
 				toneId: selectedToneId,
 				topicId: question.topicId,
 			});
+			// Cancelled while the AI was writing: save nothing.
+			if (isStale()) return;
 
 			let currentId = newQuestionId;
 			if (!currentId) {
@@ -191,6 +218,14 @@ export function RemixQuestionDrawer({
 					tags,
 					organizationId: teamWorkspaceId,
 				});
+				if (isStale()) {
+					// Cancelled while the question was being created. Nothing will show it or offer
+					// Discard, so remove it rather than leave it in the person's stash.
+					if (id) {
+						deletePersonalQuestion({ questionId: id }).catch(() => {});
+					}
+					return;
+				}
 				if (id) {
 					setNewQuestionId(id);
 					currentId = id;
@@ -206,13 +241,17 @@ export function RemixQuestionDrawer({
 					topicId: question.topicId,
 					tags,
 				});
+				// Cancelled while the update was in flight. The question may now hold the cancelled
+				// text, but the drawer keeps showing the previous remix, and Save writes that text
+				// back (Discard deletes the question), so leave the server copy alone.
+				if (isStale()) return;
 			}
 
 			// Show the remix only once it is saved, so Save never sends text the server refused.
 			setRemixedText(text);
-			// Final check before marking as remixed
-			setRemixState(current => current === "remixing" ? "remixed" : current);
+			setRemixState("remixed");
 		} catch (error) {
+			if (isStale()) return;
 			// A ConvexError carries a readable message in its data (e.g. the AI budget is paused).
 			// The AI wrote an over-long remix, not the person, so point them to remixing again.
 			const errorData = convexErrorData(error);
@@ -222,11 +261,15 @@ export function RemixQuestionDrawer({
 			const message = typeof dataMessage === "string" ? dataMessage : error instanceof Error ? error.message : String(error);
 			toast.error(`Remix failed: ${message}`);
 			setSaveFailed(true);
-			setRemixState(current => {
-				if (current !== "remixing") return current;
-				return remixedText ? "remixed" : "idle";
-			});
+			setRemixState(remixedText ? "remixed" : "idle");
 		}
+	};
+
+	const handleCancelRemix = () => {
+		remixRequestIdRef.current += 1;
+		focusAfterCancelRef.current = true;
+		// Go back to the previous remix if there is one, so it can still be saved or discarded.
+		setRemixState(remixedText ? "remixed" : "idle");
 	};
 
 	const handleSave = async () => {
@@ -572,6 +615,7 @@ export function RemixQuestionDrawer({
 					{remixState === "idle" && (
 						<>
 							<Button 
+								ref={remixButtonRef}
 								onClick={handleRemix} 
 								className="gap-2"
 								disabled={currentUser?.isAiLimitReached || isEntitlementsLoading}
@@ -580,7 +624,7 @@ export function RemixQuestionDrawer({
 								Remix
 							</Button>
 							<DrawerClose asChild>
-								<Button variant="ghost">Cancel</Button>
+								<Button ref={closeButtonRef} variant="ghost">Cancel</Button>
 							</DrawerClose>
 						</>
 					)}
@@ -591,15 +635,15 @@ export function RemixQuestionDrawer({
 								<Loader2 className="size-4 animate-spin" />
 								Remixing…
 							</Button>
-							<Button variant="ghost" onClick={() => setRemixState("idle")}>
-								Cancel Remix
+							<Button variant="ghost" onClick={handleCancelRemix}>
+								{remixedText ? "Keep Previous Remix" : "Cancel Remix"}
 							</Button>
 						</div>
 					)}
 
 					{remixState === "remixed" && (
 						<>
-							<Button onClick={handleSave} className="gap-2">
+							<Button ref={saveButtonRef} onClick={handleSave} className="gap-2">
 								<Save className="size-4" />
 								Save
 							</Button>
