@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TeamPromptComposer } from "./TeamPromptComposer";
+import { MAX_QUESTION_TEXT_LENGTH } from "../../../../convex/constants";
 
 const taxonomy = {
   styles: [{ id: "style-1", name: "Reflective" }],
@@ -21,9 +22,16 @@ describe("TeamPromptComposer", () => {
     );
 
     fireEvent.click(screen.getByRole("tab", { name: /write/i }));
+    expect(screen.getByLabelText("Exact question")).toHaveAttribute(
+      "maxlength",
+      String(MAX_QUESTION_TEXT_LENGTH),
+    );
     fireEvent.change(screen.getByLabelText("Exact question"), {
       target: { value: "What assumption should we challenge?" },
     });
+    expect(screen.getByLabelText("Exact question")).toHaveAccessibleDescription(
+      `36/${MAX_QUESTION_TEXT_LENGTH} characters`,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save and assign" }));
 
     await waitFor(() => {
@@ -86,9 +94,16 @@ describe("TeamPromptComposer", () => {
     });
 
     fireEvent.click(screen.getByText("What concern deserves more airtime?"));
+    expect(screen.getByLabelText("Final wording")).toHaveAttribute(
+      "maxlength",
+      String(MAX_QUESTION_TEXT_LENGTH),
+    );
     fireEvent.change(screen.getByLabelText("Final wording"), {
       target: { value: "What launch concern deserves more airtime?" },
     });
+    expect(screen.getByLabelText("Final wording")).toHaveAccessibleDescription(
+      `42/${MAX_QUESTION_TEXT_LENGTH} characters`,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Use this question" }));
 
     await waitFor(() => {

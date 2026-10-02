@@ -49,15 +49,17 @@ const addPersonalQuestion = vi.fn();
 
 function renderDrawer(remix: ReturnType<typeof vi.fn>) {
   (useAction as ReturnType<typeof vi.fn>).mockReturnValue(remix);
+  const onOpenChange = vi.fn();
   render(
     <RemixQuestionDrawer
       question={question}
       styleId={"s1" as never}
       toneId={"t1" as never}
       isOpen
-      onOpenChange={vi.fn()}
+      onOpenChange={onOpenChange}
     />,
   );
+  return { onOpenChange };
 }
 
 beforeEach(() => {
@@ -89,5 +91,86 @@ describe("RemixQuestionDrawer remix errors", () => {
       expect(toast.error).toHaveBeenCalledWith("Remix failed: Question not found.");
     });
     expect(screen.getByRole("button", { name: "Remix" })).toBeInTheDocument();
+  });
+});
+
+describe("RemixQuestionDrawer first remix", () => {
+  it("does not show a first remix the server refuses to save, and lets the person remix again", async () => {
+    addPersonalQuestion.mockRejectedValueOnce(
+      new ConvexError({ code: ERROR_CODES.QUESTION_TEXT_TOO_LONG, message: ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG }),
+    );
+    renderDrawer(vi.fn().mockResolvedValue("A remix the server refuses?"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(`Remix failed: ${ERROR_MESSAGES.AI_REMIX_RESULT_TOO_LONG}`);
+    });
+    expect(screen.queryByText("A remix the server refuses?")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
+  });
+});
+
+describe("RemixQuestionDrawer remix again", () => {
+  it("keeps showing the saved remix when the server refuses the next one", async () => {
+    const saveMutation = vi
+      .fn()
+      .mockResolvedValueOnce("q-new")
+      .mockRejectedValueOnce(
+        new ConvexError({ code: ERROR_CODES.QUESTION_TEXT_TOO_LONG, message: ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG }),
+      )
+      .mockResolvedValueOnce(null);
+    (useMutation as ReturnType<typeof vi.fn>).mockReturnValue(saveMutation);
+    renderDrawer(
+      vi
+        .fn()
+        .mockResolvedValueOnce("What is your favorite late-night snack?")
+        .mockResolvedValueOnce("A remix the server refuses?"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remix Again" }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(`Remix failed: ${ERROR_MESSAGES.AI_REMIX_RESULT_TOO_LONG}`);
+    });
+    expect(screen.getByText("What is your favorite late-night snack?")).toBeInTheDocument();
+    expect(screen.queryByText("A remix the server refuses?")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(saveMutation).toHaveBeenLastCalledWith(
+        expect.objectContaining({ questionId: "q-new", customText: "What is your favorite late-night snack?" }),
+      );
+    });
+  });
+});
+
+describe("RemixQuestionDrawer save errors", () => {
+  it.each([
+    [
+      "the server's input validation message",
+      new ConvexError({ code: ERROR_CODES.QUESTION_TEXT_TOO_LONG, message: ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG }),
+      ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG,
+    ],
+    ["a generic message for an unreadable error", new Error("boom"), "Failed to save remixed question."],
+  ])("shows %s when saving the remix fails, and keeps the drawer open", async (_label, failure, expected) => {
+    const saveMutation = vi.fn().mockResolvedValueOnce("q-new").mockRejectedValueOnce(failure);
+    (useMutation as ReturnType<typeof vi.fn>).mockReturnValue(saveMutation);
+    const { onOpenChange } = renderDrawer(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(expected);
+    });
+    expect(saveMutation).toHaveBeenLastCalledWith(
+      expect.objectContaining({ questionId: "q-new", customText: "What is your favorite late-night snack?" }),
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 });
