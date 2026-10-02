@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { fingerprintText } from "./lib/promptArchitecture";
+import { PRIVATE_EMBEDDING_CLEAR_PAGE_SIZE } from "./internal/migrations";
+import type { Doc, Id } from "./_generated/dataModel";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -257,6 +259,237 @@ describe("editorial review safeguards", () => {
     expect(
       await t.run((ctx) => ctx.db.query("question_embeddings").collect()),
     ).toHaveLength(0);
+  });
+
+  describe("undo and the author's wording", () => {
+    const wording = "What did you learn this week?";
+    async function approveSubmission() {
+      const t = convexTest(schema, modules);
+      const admin = t.withIdentity(identity);
+      const questionId = await t.run((ctx) =>
+        ctx.db.insert("questions", {
+          ...question(),
+          text: undefined,
+          customText: wording,
+          authorId: "author-1",
+          status: "pending",
+        }),
+      );
+      await admin.mutation(api.admin.questions.updateQuestion, {
+        id: questionId,
+        status: "public",
+        expectedRevision: 0,
+        reviewReason: "Approve",
+      });
+      const [review] = await admin.query(api.admin.pruning.getReviewHistory, {
+        source: "question",
+      });
+      return { t, admin, questionId, review };
+    }
+
+    test("an undo is refused once the author's wording changed, even at the same revision", async () => {
+      const { t, admin, questionId, review } = await approveSubmission();
+      expect(review.changes[0].after.customText).toBe(wording);
+      await t.run((ctx) =>
+        ctx.db.patch(questionId, { customText: "What surprised you this week?" }),
+      );
+
+      await expect(
+        admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id }),
+      ).rejects.toThrow("newer work");
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "public",
+        customText: "What surprised you this week?",
+        reviewRevision: 1,
+      });
+    });
+
+    test("undoing an approval that reworded a submission drops its embedding and doesn't embed the author's wording", async () => {
+      const t = convexTest(schema, modules);
+      const admin = t.withIdentity(identity);
+      const questionId = await t.run((ctx) =>
+        ctx.db.insert("questions", {
+          ...question(),
+          text: undefined,
+          customText: wording,
+          authorId: "author-1",
+          status: "pending",
+        }),
+      );
+      await admin.mutation(api.admin.questions.updateQuestion, {
+        id: questionId,
+        text: "What is one thing you learned this week?",
+        status: "public",
+        expectedRevision: 0,
+        reviewReason: "Approve with clearer wording",
+      });
+      await t.run((ctx) =>
+        ctx.db.insert("question_embeddings", {
+          questionId,
+          embedding: [1, 0],
+          status: "public",
+        }),
+      );
+      const embedJobs = async () =>
+        (
+          await t.run((ctx) =>
+            ctx.db.system.query("_scheduled_functions").collect(),
+          )
+        ).filter((job) => job.name === "lib/retriever:embedQuestion").length;
+      const jobsBeforeUndo = await embedJobs();
+      const [review] = await admin.query(api.admin.pruning.getReviewHistory, {
+        source: "question",
+      });
+
+      await admin.mutation(api.admin.pruning.undoReview, {
+        reviewId: review._id,
+      });
+
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "pending",
+        customText: wording,
+      });
+      expect(
+        await t.run((ctx) => ctx.db.query("question_embeddings").collect()),
+      ).toHaveLength(0);
+      expect(await embedJobs()).toBe(jobsBeforeUndo);
+    });
+
+    test("a review recorded before the author's wording was snapshotted still undoes", async () => {
+      const { t, admin, questionId, review } = await approveSubmission();
+      await t.run(async (ctx) => {
+        const { customText: _before, ...before } = review.changes[0].before;
+        const { customText: _after, ...after } = review.changes[0].after;
+        await ctx.db.patch(review.changes[0]._id, { before, after });
+      });
+
+      await admin.mutation(api.admin.pruning.undoReview, {
+        reviewId: review._id,
+      });
+
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "pending",
+        customText: wording,
+      });
+    });
+
+    // A review that took a question out of public, recorded with or without the author's wording.
+    async function unpublish(fields: Record<string, unknown>, recordWording: boolean) {
+      const t = convexTest(schema, modules);
+      const admin = t.withIdentity(identity);
+      const questionId = await t.run((ctx) =>
+        ctx.db.insert("questions", { ...question(), status: "approved", ...fields }),
+      );
+      await admin.mutation(api.admin.questions.updateQuestion, {
+        id: questionId,
+        status: "private",
+        expectedRevision: 0,
+        reviewReason: "Hide it",
+      });
+      const [review] = await admin.query(api.admin.pruning.getReviewHistory, {
+        source: "question",
+      });
+      if (!recordWording) {
+        await t.run(async (ctx) => {
+          const { customText: _before, ...before } = review.changes[0].before;
+          const { customText: _after, ...after } = review.changes[0].after;
+          await ctx.db.patch(review.changes[0]._id, { before, after });
+        });
+      }
+      return { t, admin, questionId, review };
+    }
+
+    test("a review recorded before the author's wording was snapshotted won't make a question public on that wording alone", async () => {
+      const { t, admin, questionId, review } = await unpublish(
+        { text: undefined, customText: wording, authorId: "author-1" },
+        false,
+      );
+
+      await expect(
+        admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id }),
+      ).rejects.toThrow("didn't record the author's wording");
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "private",
+        reviewRevision: 1,
+      });
+    });
+
+    test("a review recorded before the author's wording was snapshotted still undoes when the question stays public", async () => {
+      const t = convexTest(schema, modules);
+      const admin = t.withIdentity(identity);
+      const questionId = await t.run((ctx) =>
+        ctx.db.insert("questions", {
+          ...question(),
+          status: "approved",
+          text: undefined,
+          customText: wording,
+          authorId: "author-1",
+        }),
+      );
+      await t.mutation(internal.admin.pruning.savePruningTargets, {
+        targets: [{ questionId, reason: "Low engagement", metrics }],
+      });
+      const [target] = await admin.query(api.admin.pruning.getPendingTargets, {});
+      await admin.mutation(api.admin.pruning.rejectPruning, {
+        pruningId: target._id,
+        expectedRevision: 0,
+        reason: "Concrete and easy to answer; low engagement alone does not justify removal.",
+      });
+      const [review] = await admin.query(api.admin.pruning.getReviewHistory, {
+        source: "pruning",
+      });
+      await t.run(async (ctx) => {
+        const { customText: _before, ...before } = review.changes[0].before;
+        const { customText: _after, ...after } = review.changes[0].after;
+        await ctx.db.patch(review.changes[0]._id, { before, after });
+      });
+
+      await admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id });
+
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "approved",
+      });
+      expect(await admin.query(api.admin.pruning.getPendingTargets, {})).toHaveLength(1);
+    });
+
+    test("a review recorded before the author's wording was snapshotted still makes a library question public again", async () => {
+      const { t, admin, questionId, review } = await unpublish({}, false);
+
+      await admin.mutation(api.admin.pruning.undoReview, {
+        reviewId: review._id,
+      });
+
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "approved",
+      });
+    });
+
+    test("undoing a review that made an approved submission private makes it public and embeds its wording", async () => {
+      const { t, admin, questionId, review } = await unpublish(
+        { text: undefined, customText: wording, authorId: "author-1" },
+        true,
+      );
+      expect(review.changes[0].after.customText).toBe(wording);
+
+      await admin.mutation(api.admin.pruning.undoReview, {
+        reviewId: review._id,
+      });
+
+      expect(await t.run((ctx) => ctx.db.get(questionId))).toMatchObject({
+        status: "approved",
+        customText: wording,
+      });
+      const scheduled = await t.run((ctx) =>
+        ctx.db.system.query("_scheduled_functions").collect(),
+      );
+      expect(
+        scheduled.filter(
+          (job) =>
+            job.name === "lib/retriever:embedQuestion" &&
+            job.state.kind === "pending",
+        ),
+      ).toHaveLength(1);
+    });
   });
 
   test("a small local batch keeps low-engagement good content, prunes unclear content, and can undo", async () => {
@@ -557,5 +790,122 @@ describe("editorial review safeguards", () => {
     await expect(
       admin.mutation(api.admin.questions.cleanDuplicateQuestions, {}),
     ).rejects.toThrow("disabled");
+  });
+});
+
+test("a queued embedding is not stored once the question has turned private", async () => {
+  const t = convexTest(schema, modules);
+  const wording = "What would you teach a friend in five minutes?";
+  const questionId = await t.run(async (ctx) => {
+    const authorId = await ctx.db.insert("users", { email: "author@example.com" });
+    return ctx.db.insert("questions", {
+      ...question(),
+      text: undefined,
+      customText: wording,
+      authorId,
+      status: "private",
+    });
+  });
+
+  await t.mutation(internal.internal.questions.addEmbedding, {
+    questionId,
+    embedding: [1, 0],
+    expectedText: wording,
+  });
+
+  expect(
+    await t.run((ctx) => ctx.db.query("question_embeddings").collect()),
+  ).toHaveLength(0);
+});
+
+describe("clearing embeddings private questions still hold", () => {
+  type TestConvex = ReturnType<typeof convexTest>;
+
+  async function insertWithEmbedding(t: TestConvex, fields: Partial<Doc<"questions">>) {
+    return t.run(async (ctx) => {
+      const questionId = await ctx.db.insert("questions", { ...question(), ...fields });
+      await ctx.db.insert("question_embeddings", { questionId, embedding: [1, 0] });
+      return questionId;
+    });
+  }
+
+  async function embeddedIds(t: TestConvex) {
+    return t.run(async (ctx) =>
+      (await ctx.db.query("question_embeddings").collect()).map((row) => row.questionId),
+    );
+  }
+
+  async function setupQuestions() {
+    const t = convexTest(schema, modules);
+    const organizationId = await t.run((ctx) =>
+      ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }),
+    );
+    const ids: Record<string, Id<"questions">> = {
+      library: await insertWithEmbedding(t, {}),
+      prunedLibrary: await insertWithEmbedding(t, { status: "pruned" }),
+      approved: await insertWithEmbedding(t, { text: undefined, customText: "Approved?", authorId: "author-1", status: "approved" }),
+      personal: await insertWithEmbedding(t, { customText: "Personal?", authorId: "author-2", status: "private" }),
+      pending: await insertWithEmbedding(t, { text: undefined, customText: "Pending?", authorId: "author-3", status: "pending" }),
+      teamPrompt: await insertWithEmbedding(t, { organizationId, customText: "Team?", kind: "team_prompt", status: "private" }),
+      withoutEmbedding: await t.run((ctx) =>
+        ctx.db.insert("questions", { ...question(), text: undefined, customText: "None?", authorId: "author-4", status: "private" }),
+      ),
+    };
+    // A second embedding row for one private question counts separately.
+    await t.run((ctx) => ctx.db.insert("question_embeddings", { questionId: ids.personal, embedding: [0, 1] }));
+    return { t, ids };
+  }
+
+  test("a dry run counts what it would clear and writes nothing", async () => {
+    const { t } = await setupQuestions();
+    const before = await embeddedIds(t);
+
+    const summary = await t.action(internal.internal.migrations.clearPrivateQuestionEmbeddings, { dryRun: true });
+
+    expect(summary).toEqual({ scanned: 7, privateUserQuestions: 4, cleared: 4 });
+    expect(await embeddedIds(t)).toEqual(before);
+  });
+
+  test("a real run clears only private questions' embeddings, and a rerun clears none", async () => {
+    const { t, ids } = await setupQuestions();
+
+    const summary = await t.action(internal.internal.migrations.clearPrivateQuestionEmbeddings, { dryRun: false });
+
+    expect(summary).toEqual({ scanned: 7, privateUserQuestions: 4, cleared: 4 });
+    expect((await embeddedIds(t)).sort()).toEqual([ids.library, ids.prunedLibrary, ids.approved].sort());
+
+    const again = await t.action(internal.internal.migrations.clearPrivateQuestionEmbeddings, { dryRun: false });
+    expect(again).toEqual({ scanned: 7, privateUserQuestions: 4, cleared: 0 });
+  });
+
+  test("a run with private questions on more than one page clears them all", async () => {
+    const t = convexTest(schema, modules);
+    const count = PRIVATE_EMBEDDING_CLEAR_PAGE_SIZE + 1;
+    for (let i = 0; i < count; i++) {
+      await insertWithEmbedding(t, { text: undefined, customText: `Personal question number ${i}?`, authorId: `author-${i}`, status: "private" });
+    }
+    const library = await insertWithEmbedding(t, {});
+
+    const summary = await t.action(internal.internal.migrations.clearPrivateQuestionEmbeddings, { dryRun: false });
+
+    expect(summary).toEqual({ scanned: count + 1, privateUserQuestions: count, cleared: count });
+    expect(await embeddedIds(t)).toEqual([library]);
+  });
+
+  test("a short run logs only its totals", async () => {
+    const t = convexTest(schema, modules);
+    await insertWithEmbedding(t, { customText: "Personal?", authorId: "author-1", status: "private" });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await t.action(internal.internal.migrations.clearPrivateQuestionEmbeddings, { dryRun: true });
+
+      const lines = log.mock.calls.map(([line]) => String(line)).filter((line) => line.startsWith("clearPrivateQuestionEmbeddings"));
+      expect(lines).toEqual([
+        `clearPrivateQuestionEmbeddings (dry run) total: ${JSON.stringify({ scanned: 1, privateUserQuestions: 1, cleared: 1 })}`,
+      ]);
+    } finally {
+      log.mockRestore();
+    }
   });
 });

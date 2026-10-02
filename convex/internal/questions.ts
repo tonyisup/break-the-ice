@@ -8,6 +8,7 @@ import { cosineSimilarity } from "../lib/embeddings";
 import { doc } from "convex-helpers/validators";
 import schema from "../schema";
 import { duplicateGroup } from "../lib/questionReferences";
+import { isPrivateUserQuestion } from "../lib/questionAccess";
 
 export const questionByIdResultValidator = v.nullable(doc(schema, "questions"));
 
@@ -58,6 +59,8 @@ export const addEmbedding = internalMutation({
 	handler: async (ctx, args) => {
 		const question = await ctx.db.get(args.questionId);
 		if (!question || (question.text ?? question.customText) !== args.expectedText) return null;
+		// A question that turned private while its embedding job was queued keeps none.
+		if (isPrivateUserQuestion(question)) return null;
 		const existing = await ctx.db
 			.query("question_embeddings")
 			.withIndex("by_questionId", (q) => q.eq("questionId", args.questionId))
@@ -209,7 +212,9 @@ export const getQuestionsWithMissingEmbeddings = internalQuery({
 			(await ctx.db.query("question_embeddings").collect()).map((e) => e.questionId)
 		);
 		const raw = await ctx.db.query("questions").collect();
-		const questions = raw.filter((q) => q.text !== undefined);
+		// Embeddings follow the reviewed wording: a public submission may show only the author's
+		// wording, and a private user-written question has no embedding (see syncReviewedEmbedding).
+		const questions = raw.filter((q) => (q.text ?? q.customText) !== undefined && !isPrivateUserQuestion(q));
 		return questions
 			.filter((q) => !withEmbeddingIds.has(q._id))
 			.map((q) => ({ _id: q._id, text: q.text }));

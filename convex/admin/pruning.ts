@@ -7,8 +7,8 @@ import { ensureAdmin } from "../auth";
 import { cosineSimilarity } from "../lib/embeddings";
 import schema from "../schema";
 import { editorialReason } from "../lib/questionReviewValidators";
-import { recordReview, refreshQuestionText, reviewReason, snapshot } from "../lib/questionReview";
-import { isPrivateUserQuestion } from "../lib/questionAccess";
+import { recordReview, reviewReason, shownWording, snapshot, syncReviewedEmbedding } from "../lib/questionReview";
+import { isPrivateUserQuestion, isQuestionPublic, isUserWrittenQuestion } from "../lib/questionAccess";
 
 // Shared return validators for type safety
 export const pruningSettingsValidator = v.object({
@@ -353,6 +353,8 @@ export const approvePruning = mutation({
 			// A pruned submission is no longer public, so it loses its fingerprint (see isPrivateUserQuestion).
 			fingerprint: isPrivateUserQuestion({ ...before, status: "pruned" }) ? undefined : before.fingerprint,
 		});
+		// A pruned submission drops its embedding too; undo embeds it again (see syncReviewedEmbedding).
+		await syncReviewedEmbedding(ctx, (await ctx.db.get(target.questionId))!, shownWording(before));
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: target.questionId,
 		});
@@ -510,6 +512,18 @@ export const getReviewHistory = query({
   },
 });
 
+// What undoing a review puts back on one question. Explicit keys restore absent optional
+// fields as well as defined values.
+function restoredFields(change: Doc<"questionReviewChanges">) {
+  return {
+    text: change.before.text, fingerprint: change.before.fingerprint,
+    status: change.before.status, prunedAt: change.before.prunedAt,
+    duplicateOf: change.before.duplicateOf, duplicateWasPublic: change.before.duplicateWasPublic,
+    heldForReview: change.before.heldForReview,
+    reviewRevision: (change.after.reviewRevision ?? 0) + 1,
+  };
+}
+
 export const undoReview = mutation({
   args: { reviewId: v.id("questionReviews") },
   returns: v.null(),
@@ -525,10 +539,22 @@ export const undoReview = mutation({
       if (!question) throw new Error("Question no longer exists");
       const current = snapshot(question);
       // A private question keeps no fingerprint, so clearing one isn't newer work. If any other
-      // field differs, the undo is refused anyway.
-      const keys = Object.keys(current).filter(key => key !== "fingerprint" || !isPrivateUserQuestion(question));
+      // field differs, the undo is refused anyway. Reviews recorded before the author's wording
+      // was snapshotted can't tell whether it changed, so they skip it.
+      const keys = Object.keys(current).filter(key =>
+        (key !== "fingerprint" || !isPrivateUserQuestion(question)) &&
+        (key !== "customText" || "customText" in change.after));
       if (keys.some(key => current[key as keyof typeof current] !== change.after[key as keyof typeof current])) {
         throw new Error("Question changed after this review; undo would overwrite newer work");
+      }
+      // Without the author's wording in the record, the undo can't confirm it is the wording
+      // the review saw, so it doesn't make a private user-written question public on that
+      // wording alone. Undoing a review that leaves the question public is unaffected.
+      const restoredQuestion = { ...question, ...restoredFields(change) };
+      if (!("customText" in change.after) && isUserWrittenQuestion(restoredQuestion) &&
+        !isQuestionPublic(question) && isQuestionPublic(restoredQuestion) &&
+        restoredQuestion.text === undefined) {
+        throw new Error("This older review didn't record the author's wording, so undoing it can't make the question public");
       }
     }
     if (review.pruningId) {
@@ -543,19 +569,12 @@ export const undoReview = mutation({
       await ctx.db.patch(detection._id, { status: "pending", reviewedBy: undefined, reviewedAt: undefined, rejectReason: undefined });
     }
     for (const change of changes) {
-      // Explicit keys restore absent optional fields as well as defined values.
-      const restored = {
-        text: change.before.text, fingerprint: change.before.fingerprint,
-        status: change.before.status, prunedAt: change.before.prunedAt,
-        duplicateOf: change.before.duplicateOf, duplicateWasPublic: change.before.duplicateWasPublic,
-        heldForReview: change.before.heldForReview,
-        reviewRevision: (change.after.reviewRevision ?? 0) + 1,
-      };
+      const restored = restoredFields(change);
       // Undo never puts a fingerprint back on a private question (see isPrivateUserQuestion).
       const question = (await ctx.db.get(change.questionId))!;
       if (isPrivateUserQuestion({ ...question, ...restored })) restored.fingerprint = undefined;
       await ctx.db.patch(change.questionId, restored);
-      if (change.before.text !== change.after.text) await refreshQuestionText(ctx, change.questionId);
+      await syncReviewedEmbedding(ctx, { ...question, ...restored }, shownWording(question));
       await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: change.questionId });
     }
     await ctx.db.patch(review._id, { undoneAt: Date.now(), undoneBy: reviewer.tokenIdentifier });

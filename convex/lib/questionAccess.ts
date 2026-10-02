@@ -8,14 +8,18 @@ export function isQuestionPublic(question: Doc<"questions">): boolean {
 	return (Boolean(question.duplicateOf) && question.duplicateWasPublic === true && status === "pruned") || status === "public" || status === "approved" || status === undefined;
 }
 
+/** A personal question, team prompt or organization question, public or not: not a library question. */
+export function isUserWrittenQuestion(question: Doc<"questions">): boolean {
+	return question.authorId !== undefined || question.kind !== undefined || question.organizationId !== undefined;
+}
+
 /**
  * A personal question, team prompt or organization question that isn't public. It isn't a
  * library question, so it keeps no fingerprint: generation dedupes its candidates against the
  * library's fingerprints only.
  */
 export function isPrivateUserQuestion(question: Doc<"questions">): boolean {
-	const userWritten = question.authorId !== undefined || question.kind !== undefined || question.organizationId !== undefined;
-	return userWritten && !isQuestionPublic(question);
+	return isUserWrittenQuestion(question) && !isQuestionPublic(question);
 }
 
 /**

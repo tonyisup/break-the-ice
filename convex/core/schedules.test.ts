@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
@@ -1200,4 +1200,60 @@ test("coach feedback accepts only today's assignment from a published schedule",
     scheduledQuestionId: currentAssignmentId,
     landedWell: true,
   })).resolves.toBeNull();
+});
+
+test.each([
+  ["with reviewed text", true],
+  ["approved without reviewed text", false],
+] as const)("schedule views keep showing an approved submission's wording (%s) after its author edits it", async (_case, hasReviewedText) => {
+  vi.useFakeTimers();
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const reviewedWording = "What did you learn this week?";
+  const authorWording = "What surprised you most this week?";
+  const { isoDate, dayOfWeek } = getZonedCalendarDate(
+    new Date(),
+    DEFAULT_ORGANIZATION_TIME_ZONE,
+  );
+  const { scheduleId, questionId } = await t.run(async (ctx) => {
+    const author = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", ADMIN_IDENTITY.email))
+      .unique();
+    const questionId = await ctx.db.insert("questions", {
+      authorId: author!._id,
+      customText: reviewedWording,
+      ...(hasReviewedText ? { text: reviewedWording } : {}),
+      status: "public",
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    });
+    const now = Date.now();
+    const scheduleId = await ctx.db.insert("schedules", {
+      organizationId,
+      weekStart: isoDate,
+      weekEnd: isoDate,
+      status: "draft",
+      weekStartDay: "monday",
+      deliveryDays: [dayOfWeek],
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { scheduleId, questionId };
+  });
+  await admin.mutation(api.core.schedules.assignQuestion, { scheduleId, dayOfWeek, questionId });
+
+  await admin.mutation(api.core.questions.updatePersonalQuestion, {
+    questionId,
+    customText: authorWording,
+    isPublic: true,
+  });
+
+  const detail = await admin.query(api.core.schedules.getSchedule, { scheduleId });
+  expect(detail.assignments.map((assignment) => assignment.question.text)).toEqual([reviewedWording]);
+  const current = await admin.query(api.core.schedules.getCurrentWeekSchedule, { organizationId });
+  expect(current.todayAssignment?.question.text).toBe(reviewedWording);
+  // Let the author edit's scheduled follow-ups finish inside the test.
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  vi.useRealTimers();
 });

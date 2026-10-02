@@ -5,6 +5,7 @@ import {
 	query,
 	action,
 	ActionCtx,
+	MutationCtx,
 	internalQuery,
 } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
@@ -22,6 +23,7 @@ import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 import { wasAiCallBilled } from "../lib/aiSpendGuard";
 import { requireQuestionText } from "../lib/questionText";
+import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 
@@ -949,6 +951,32 @@ function assertPersonalQuestionLifecycle(question: Doc<"questions">) {
 	}
 }
 
+// A copy retired as a duplicate stays as it was resolved: admins undo the resolution
+// before changing its status, and its author can't edit it either.
+function assertNotMergedDuplicate(question: Doc<"questions">) {
+	if (question.duplicateOf) {
+		throw new ConvexError({
+			code: ERROR_CODES.QUESTION_MERGED_AS_DUPLICATE,
+			message: ERROR_MESSAGES.QUESTION_MERGED_AS_DUPLICATE,
+		});
+	}
+}
+
+// Copies retired as duplicates of this question point at it, so only an admin changes or
+// removes it.
+async function assertNoMergedCopies(ctx: MutationCtx, question: Doc<"questions">) {
+	const mergedCopy = await ctx.db
+		.query("questions")
+		.withIndex("by_duplicateOf", (q) => q.eq("duplicateOf", question._id))
+		.first();
+	if (mergedCopy) {
+		throw new ConvexError({
+			code: ERROR_CODES.QUESTION_HAS_MERGED_COPIES,
+			message: ERROR_MESSAGES.QUESTION_HAS_MERGED_COPIES,
+		});
+	}
+}
+
 // Update a personal question (must be owned by the current user)
 export const updatePersonalQuestion = mutation({
 	args: {
@@ -984,6 +1012,8 @@ export const updatePersonalQuestion = mutation({
 			throw new Error("You are not authorized to update this question.");
 		}
 		assertPersonalQuestionLifecycle(question);
+		assertNotMergedDuplicate(question);
+		await assertNoMergedCopies(ctx, question);
 		const customText = requireQuestionText(args.customText);
 		// Look up slugs for legacy support
 		const [styleDoc, toneDoc, topicDoc] = await Promise.all([
@@ -992,11 +1022,21 @@ export const updatePersonalQuestion = mutation({
 			args.topicId ? ctx.db.get(args.topicId) : null,
 		]);
 
+		// A question approved without reviewed text shows its customText. Keep that approved
+		// wording as the reviewed text before the author's edit replaces customText.
+		const approvedWording =
+			question.text === undefined && isQuestionPublic(question) ? question.customText : undefined;
 		await ctx.db.patch(args.questionId, {
+			// The author edits their own wording. Reviewed text stays as it is, so views keep
+			// showing the reviewed wording.
+			...(approvedWording !== undefined ? { text: approvedWording } : {}),
 			customText,
 			status: args.isPublic ? "pending" : "private",
 			// Pending or private, so not a library question: it keeps no fingerprint (see isPrivateUserQuestion).
 			fingerprint: undefined,
+			// Author edits go back through review: an earlier review can't be undone over
+			// them, and a review started before them has to reload.
+			reviewRevision: (question.reviewRevision ?? 0) + 1,
 			styleId: args.styleId,
 			style: styleDoc?.id,
 			toneId: args.toneId,
@@ -1005,6 +1045,9 @@ export const updatePersonalQuestion = mutation({
 			topic: topicDoc?.id,
 			tags: args.tags,
 		});
+		// Now pending or private, so this only drops its embedding. It is embedded again once a
+		// review makes it public.
+		await syncReviewedEmbedding(ctx, (await ctx.db.get(args.questionId))!, shownWording(question));
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: args.questionId,
 		});
@@ -1041,6 +1084,7 @@ export const deletePersonalQuestion = mutation({
 			throw new Error("You are not authorized to delete this question.");
 		}
 		assertPersonalQuestionLifecycle(question);
+		await assertNoMergedCopies(ctx, question);
 		await removeQuestionReferences(ctx, args.questionId);
 		await ctx.db.delete(args.questionId);
 		return null;
@@ -1074,11 +1118,14 @@ export const makeQuestionPublic = mutation({
 			throw new Error("You are not authorized to update this question.");
 		}
 		assertPersonalQuestionLifecycle(question);
+		assertNotMergedDuplicate(question);
+		await assertNoMergedCopies(ctx, question);
 		if (question.status !== "private") {
 			throw new Error("Only private questions can be made public.");
 		}
 		await ctx.db.patch(args.questionId, {
 			status: "pending",
+			reviewRevision: (question.reviewRevision ?? 0) + 1,
 		});
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: args.questionId,

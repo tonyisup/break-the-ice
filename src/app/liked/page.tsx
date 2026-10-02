@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { convexErrorData } from "../../../convex/lib/errorData";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
@@ -187,7 +188,8 @@ function LikedQuestionsPageContent() {
       toast.success("Question submitted for review!");
     } catch (error) {
       console.error("Error making question public:", error);
-      toast.error("Failed to make question public.");
+      const dataMessage = convexErrorData(error)?.message;
+      toast.error(typeof dataMessage === "string" ? dataMessage : "Failed to make question public.");
     }
   };
 
@@ -205,7 +207,8 @@ function LikedQuestionsPageContent() {
       toast.success("Question deleted");
     } catch (error) {
       console.error("Error deleting question:", error);
-      toast.error("Failed to delete question.");
+      const dataMessage = convexErrorData(error)?.message;
+      toast.error(typeof dataMessage === "string" ? dataMessage : "Failed to delete question.");
     }
   };
 

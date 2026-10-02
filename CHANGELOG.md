@@ -2,6 +2,19 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.6.0] - 2026-10-02
+
+### Fixed
+- An author's edits now go back through review consistently. An admin review started before the edit has to reload, and an earlier review can't be undone over it. Views keep showing the wording that was reviewed, including for questions approved without separately saved reviewed text.
+- Authors can't edit or resubmit a question that was merged into another as a duplicate, and can't edit, resubmit or delete a question that other questions were merged into. They see a readable message asking them to contact an admin, including on the liked page.
+- Embeddings follow the reviewed wording. Questions that aren't public keep none, an approval that makes a question public embeds its wording once, and the missing-embedding backfill also covers public questions whose wording is the author's own.
+- Undoing an older review checks the author's wording too, and an older review that didn't record it can't make a question public.
+- The admin review queue's text box shows a question's current wording after an author edits it.
+
+### Added
+- A one-time cleanup that removes embeddings non-public author-written questions still hold. Once this deploy is settled, run its dry run: `npx convex run internal/migrations:clearPrivateQuestionEmbeddings '{"dryRun":true}'` (add `--prod` after `run` for production), then run it with `false`, and run the dry run again to check that `cleared` is 0. It reports counts only.
+- A database index for finding the questions merged into a question.
+
 ## [0.4.5.0] - 2026-10-02
 
 ### Fixed

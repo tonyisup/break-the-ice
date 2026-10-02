@@ -4,6 +4,7 @@ import { action, internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
 import OpenAI from "openai";
+import { isPrivateUserQuestion } from "./questionAccess";
 import {
   buildEmbeddingTextForStyle,
   buildEmbeddingTextForTone,
@@ -56,6 +57,9 @@ export const embedQuestion = internalAction({
     if (!question) {
       return;
     }
+    // A question that turned private after this job was queued keeps no embedding, so its
+    // wording isn't sent for one.
+    if (isPrivateUserQuestion(question)) return;
     // Only embed if there is text
     const textToEmbed = question.text ?? question.customText;
     if (!textToEmbed) return;

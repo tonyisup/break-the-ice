@@ -163,6 +163,40 @@ describe("editing a queued question", () => {
     );
   });
 
+  it("shows the author's new wording after they edit a queued question, so the old wording isn't saved", async () => {
+    const { rerender } = render(<QuestionsPage />);
+    fireEvent.focus(screen.getByDisplayValue("What made you laugh this week?"));
+
+    vi.mocked(useQuery).mockImplementation(((name: string) => {
+      if (name === "getQuestions") return [];
+      if (name === "getPendingQuestions") {
+        return [{ ...aiQuestion, text: undefined, customText: "What made you smile today?", reviewRevision: 4 }];
+      }
+      if (name === "getStyles" || name === "getTones") return [];
+      return undefined;
+    }) as never);
+    rerender(<QuestionsPage />);
+
+    const textarea = screen.getByDisplayValue("What made you smile today?");
+    expect(screen.queryByDisplayValue("What made you laugh this week?")).not.toBeInTheDocument();
+    fireEvent.blur(textarea);
+    expect(updateQuestion).not.toHaveBeenCalled();
+  });
+
+  it("saves a text edit with the revision it started from", async () => {
+    render(<QuestionsPage />);
+
+    const textarea = screen.getByDisplayValue("What made you laugh this week?");
+    fireEvent.focus(textarea);
+    fireEvent.blur(textarea, { target: { value: "What made you laugh hardest this week?" } });
+
+    await waitFor(() =>
+      expect(updateQuestion).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "q-ai", text: "What made you laugh hardest this week?", expectedRevision: 3 }),
+      ),
+    );
+  });
+
   it("remixes a question that is only in the queue", async () => {
     render(<QuestionsPage />);
 

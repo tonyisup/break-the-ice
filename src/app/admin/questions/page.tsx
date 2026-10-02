@@ -134,7 +134,7 @@ export default function QuestionsPage() {
     }
   };
 
-  const handleUpdateField = async (id: Id<"questions">, updates: any) => {
+  const handleUpdateField = async (id: Id<"questions">, updates: any, editRevision?: number) => {
     const question = findQuestion(id);
     if (!question) return;
     const reason = updates.text !== undefined || updates.status !== undefined
@@ -144,7 +144,7 @@ export default function QuestionsPage() {
     try {
       await updateQuestion({
         id,
-        expectedRevision: question.reviewRevision ?? 0,
+        expectedRevision: editRevision ?? question.reviewRevision ?? 0,
         reviewReason: reason,
         ...updates,
       });
@@ -397,11 +397,22 @@ export default function QuestionsPage() {
                     {q.isAIGenerated ? "AI generated" : "User Submitted"}
                   </div>
                   <textarea
+                    // A new revision (an author edit) remounts the box with the current wording, and
+                    // the save carries the revision the edit started from, so stale text is refused.
+                    key={`${q._id}:${q.reviewRevision ?? 0}`}
                     className="w-full min-h-[80px] p-3 rounded-md border bg-background text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none resize-none"
                     defaultValue={q.text || q.customText || ""}
+                    onFocus={(e) => {
+                      e.currentTarget.dataset.editRevision = String(q.reviewRevision ?? 0);
+                    }}
                     onBlur={(e) => {
                       if (e.target.value !== (q.text || q.customText)) {
-                        handleUpdateField(q._id, { text: e.target.value });
+                        const editRevision = e.currentTarget.dataset.editRevision;
+                        handleUpdateField(
+                          q._id,
+                          { text: e.target.value },
+                          editRevision === undefined ? undefined : Number(editRevision),
+                        );
                       }
                     }}
                     placeholder="Question text..."

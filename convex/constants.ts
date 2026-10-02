@@ -17,6 +17,8 @@ export const ERROR_CODES = {
   AI_GENERATION_FAILED: "AI_GENERATION_FAILED",
   QUESTION_TEXT_REQUIRED: "QUESTION_TEXT_REQUIRED",
   QUESTION_TEXT_TOO_LONG: "QUESTION_TEXT_TOO_LONG",
+  QUESTION_MERGED_AS_DUPLICATE: "QUESTION_MERGED_AS_DUPLICATE",
+  QUESTION_HAS_MERGED_COPIES: "QUESTION_HAS_MERGED_COPIES",
   SCHEDULE_NOT_DRAFT: "SCHEDULE_NOT_DRAFT",
   SCHEDULE_DAY_INACTIVE: "SCHEDULE_DAY_INACTIVE",
   TEAM_TOPIC_REQUIRED: "TEAM_TOPIC_REQUIRED",
@@ -37,6 +39,8 @@ export const ERROR_MESSAGES = {
   AI_GENERATION_FAILED: "The AI sent back an answer we couldn't use. Please try again.",
   QUESTION_TEXT_REQUIRED: "Please enter a question.",
   QUESTION_TEXT_TOO_LONG: `Questions can be up to ${MAX_QUESTION_TEXT_LENGTH} characters.`,
+  QUESTION_MERGED_AS_DUPLICATE: "This question was merged with a matching one in the library, so it can no longer be edited.",
+  QUESTION_HAS_MERGED_COPIES: "Other questions were merged into this one, so ask an admin to change or remove it.",
   // Team prompt refusals. A topic field shares one code per refusal, with a message
   // that names the field.
   SCHEDULE_NOT_DRAFT: "This schedule is already published or completed, so it can't be changed.",
