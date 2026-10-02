@@ -6,8 +6,8 @@ export const MAX_QUESTION_TEXT_LENGTH = 500;
 
 /**
  * The most tags a person's question can carry, and the longest tag, in characters. Tag names
- * are short single words (see PREDEFINED_TAGS); the count leaves room for a remix, which keeps
- * the tags of the question it came from.
+ * are short single words (see PREDEFINED_TAGS); the count leaves room above normal use, since
+ * admin and generated questions can carry more tags than a person would pick.
  */
 export const MAX_QUESTION_TAGS = 20;
 export const MAX_QUESTION_TAG_LENGTH = 50;

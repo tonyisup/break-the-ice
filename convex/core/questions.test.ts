@@ -325,6 +325,139 @@ describe("personal question tags input validation", () => {
     const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
     expect(saved).toMatchObject({ customText: "What did you learn this week?", tags: ["food"] });
   });
+
+  test("writes without tags save no tags, and an empty list saves an empty list", async () => {
+    const { t, author } = await createAuthor();
+    const questionId = await author.mutation(api.core.questions.addPersonalQuestion, {
+      customText: "What did you learn this week?",
+      isPublic: false,
+    });
+    expect((await t.run(async (ctx) => ctx.db.get(questionId!)))?.tags).toBeUndefined();
+
+    await author.mutation(api.core.questions.updatePersonalQuestion, {
+      questionId: questionId!,
+      customText: "What did you learn this week?",
+      isPublic: false,
+      tags: [],
+    });
+    expect((await t.run(async (ctx) => ctx.db.get(questionId!)))?.tags).toEqual([]);
+  });
+
+  test("blank new questions with too many tags are still skipped without an error", async () => {
+    const { t, author } = await createAuthor();
+
+    expect(
+      await author.mutation(api.core.questions.addPersonalQuestion, {
+        customText: "   ",
+        isPublic: false,
+        tags: manyTags(MAX_QUESTION_TAGS + 1),
+      }),
+    ).toBeNull();
+    expect(await t.run(async (ctx) => ctx.db.query("questions").collect())).toHaveLength(0);
+  });
+
+  test("the question text is checked before the tags", async () => {
+    const { t, author } = await createAuthor();
+    const addError = await author
+      .mutation(api.core.questions.addPersonalQuestion, {
+        customText: TOO_LONG_QUESTION,
+        isPublic: false,
+        tags: manyTags(MAX_QUESTION_TAGS + 1),
+      })
+      .catch((caught: unknown) => caught);
+    expect(convexErrorData(addError)).toEqual(TOO_LONG_ERROR);
+
+    const questionId = await author.mutation(api.core.questions.addPersonalQuestion, {
+      customText: "What did you learn this week?",
+      isPublic: false,
+      tags: ["food"],
+    });
+    const updateError = await author
+      .mutation(api.core.questions.updatePersonalQuestion, {
+        questionId: questionId!,
+        customText: TOO_LONG_QUESTION,
+        isPublic: false,
+        tags: manyTags(MAX_QUESTION_TAGS + 1),
+      })
+      .catch((caught: unknown) => caught);
+    expect(convexErrorData(updateError)).toEqual(TOO_LONG_ERROR);
+    expect((await t.run(async (ctx) => ctx.db.get(questionId!)))?.tags).toEqual(["food"]);
+  });
+
+  test("updates from someone other than the author are refused before the tags are checked", async () => {
+    const { t, author } = await createAuthor();
+    const questionId = await author.mutation(api.core.questions.addPersonalQuestion, {
+      customText: "What did you learn this week?",
+      isPublic: false,
+      tags: ["food"],
+    });
+    const otherIdentity = {
+      subject: "other-user",
+      tokenIdentifier: "https://clerk.example|other-user",
+      email: "other-user@example.com",
+    };
+    await t.run(async (ctx) => {
+      await ctx.db.insert("users", {
+        clerkId: otherIdentity.subject,
+        tokenIdentifier: otherIdentity.tokenIdentifier,
+        email: otherIdentity.email,
+      });
+    });
+
+    for (const [tags] of rejectedTags) {
+      await expect(
+        t.withIdentity(otherIdentity).mutation(api.core.questions.updatePersonalQuestion, {
+          questionId: questionId!,
+          customText: "A different question?",
+          isPublic: false,
+          tags: [...tags],
+        }),
+      ).rejects.toThrow("not authorized");
+    }
+
+    const saved = await t.run(async (ctx) => ctx.db.get(questionId!));
+    expect(saved).toMatchObject({ customText: "What did you learn this week?", tags: ["food"] });
+  });
+
+  test("a copy merged into a library question is refused before its tags are checked", async () => {
+    const { t, author } = await createAuthor();
+    const counters = { totalLikes: 0, totalShows: 0, averageViewDuration: 0 };
+    const questionId = await t.run(async (ctx) => {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", AUTHOR_IDENTITY.email))
+        .unique();
+      const canonical = await ctx.db.insert("questions", {
+        text: "What did you learn this week?",
+        status: "public",
+        ...counters,
+      });
+      return ctx.db.insert("questions", {
+        authorId: user!._id,
+        customText: "What did you learn this week?",
+        status: "pruned",
+        prunedAt: 1,
+        duplicateOf: canonical,
+        tags: ["food"],
+        ...counters,
+      });
+    });
+
+    const error = await author
+      .mutation(api.core.questions.updatePersonalQuestion, {
+        questionId,
+        customText: "A different question?",
+        isPublic: false,
+        tags: manyTags(MAX_QUESTION_TAGS + 1),
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(convexErrorData(error)).toEqual({
+      code: ERROR_CODES.QUESTION_MERGED_AS_DUPLICATE,
+      message: ERROR_MESSAGES.QUESTION_MERGED_AS_DUPLICATE,
+    });
+    expect((await t.run(async (ctx) => ctx.db.get(questionId)))?.tags).toEqual(["food"]);
+  });
 });
 
 describe("author edits go back through review", () => {

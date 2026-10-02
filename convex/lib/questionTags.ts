@@ -11,6 +11,10 @@ import {
  * like the tag names people pick from, with blanks and repeats dropped. Too many tags, or an
  * over-long one, throws a ConvexError, whose message reaches the client in production.
  * Undefined stays undefined, so a write without tags keeps meaning "no tags".
+ *
+ * Tags don't have to exist in the tags table: admins create tags freely (the generator and the
+ * question editor take free text) and can rename or delete them, so requiring a match would
+ * refuse saves of questions whose tags were valid when they were set.
  */
 export function normalizeQuestionTags(tags: string[] | undefined): string[] | undefined {
   if (tags === undefined) return undefined;
