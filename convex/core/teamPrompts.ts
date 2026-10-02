@@ -3,7 +3,7 @@ import { internalQuery, mutation, query } from "../_generated/server";
 import { ensurePaidOrganizationMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 import { deliveryDaysForSchedule } from "../lib/deliveryDays";
-import { MAX_TEAM_PROMPT_TEXT_LENGTH } from "../lib/teamPromptContract";
+import { requireQuestionText } from "../lib/questionText";
 
 const MAX_TOPIC_NAME_LENGTH = 100;
 const MAX_TOPIC_GUIDANCE_LENGTH = 1000;
@@ -148,11 +148,7 @@ export const createAndAssign = mutation({
     });
     if (!user) throw new Error("User not found");
 
-    const questionText = requiredText(
-      args.questionText,
-      "Question",
-      MAX_TEAM_PROMPT_TEXT_LENGTH,
-    );
+    const questionText = requireQuestionText(args.questionText);
     const now = Date.now();
     let teamTopicId = undefined;
     if (args.sourceTopic) {

@@ -447,13 +447,20 @@ describe("review follow-ups", () => {
 describe("prompt size", () => {
   test("a remix of an overlong question is refused before the quota charge or any model call", async () => {
     const { t, meId } = await setup();
-    const questionId = await t.withIdentity(ME).mutation(api.core.questions.addPersonalQuestion, {
-      customText: `${"why ".repeat(300)}?`,
-      isPublic: false,
-    });
+    // Saved before question text had a length limit.
+    const questionId = await t.run(async (ctx) =>
+      ctx.db.insert("questions", {
+        authorId: meId,
+        customText: `${"why ".repeat(300)}?`,
+        status: "private",
+        totalLikes: 0,
+        totalShows: 0,
+        averageViewDuration: 0,
+      }),
+    );
 
     await expect(
-      t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId: questionId! }),
+      t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId }),
     ).rejects.toThrow(/too long to remix/);
 
     expect(create).not.toHaveBeenCalled();
