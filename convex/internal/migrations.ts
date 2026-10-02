@@ -822,3 +822,74 @@ export const clearPrivateQuestionFingerprints = internalAction({
 		return totals;
 	},
 });
+
+export const PRIVATE_EMBEDDING_CLEAR_PAGE_SIZE = 100;
+const privateEmbeddingCounts = {
+	scanned: v.number(),
+	privateUserQuestions: v.number(),
+	cleared: v.number(),
+};
+const privateEmbeddingPageResult = v.object({
+	...privateEmbeddingCounts,
+	continueCursor: v.string(),
+	isDone: v.boolean(),
+});
+
+/**
+ * One page of the private embedding cleanup. With `dryRun` it writes nothing and reports what a
+ * real run would clear. It pages over every question, unfiltered: a filtered paginate can read
+ * most of the table to fill one page.
+ */
+export const clearPrivateQuestionEmbeddingsPage = internalMutation({
+	args: { dryRun: v.boolean(), cursor: v.union(v.string(), v.null()) },
+	returns: privateEmbeddingPageResult,
+	handler: async (ctx, args) => {
+		const page = await ctx.db.query("questions").paginate({ numItems: PRIVATE_EMBEDDING_CLEAR_PAGE_SIZE, cursor: args.cursor });
+		const counts = { scanned: page.page.length, privateUserQuestions: 0, cleared: 0 };
+		for (const question of page.page) {
+			if (!isPrivateUserQuestion(question)) continue;
+			counts.privateUserQuestions += 1;
+			const embeddings = await ctx.db
+				.query("question_embeddings")
+				.withIndex("by_questionId", (q) => q.eq("questionId", question._id))
+				.collect();
+			counts.cleared += embeddings.length;
+			if (!args.dryRun) for (const embedding of embeddings) await ctx.db.delete(embedding._id);
+		}
+		return { ...counts, continueCursor: page.continueCursor, isDone: page.isDone };
+	},
+});
+
+/**
+ * Deletes the embeddings of personal, team and organization questions that aren't public: only
+ * library and public questions keep one, of the wording they show (see syncReviewedEmbedding).
+ * `cleared` counts embedding rows deleted, and it reports counts only. Making one of these
+ * questions public embeds it again.
+ *
+ * Run it with dryRun first, and again after a real run (cleared should then be 0); add --prod
+ * after `run` for production:
+ * `npx convex run internal/migrations:clearPrivateQuestionEmbeddings '{"dryRun":true}'`.
+ */
+export const clearPrivateQuestionEmbeddings = internalAction({
+	args: { dryRun: v.boolean() },
+	returns: v.object(privateEmbeddingCounts),
+	handler: async (ctx, args) => {
+		const label = `clearPrivateQuestionEmbeddings${args.dryRun ? " (dry run)" : ""}`;
+		const totals = { scanned: 0, privateUserQuestions: 0, cleared: 0 };
+		const countKeys = Object.keys(privateEmbeddingCounts) as Array<keyof typeof privateEmbeddingCounts>;
+		let cursor: string | null = null;
+		for (let pages = 1; ; pages++) {
+			const page: Infer<typeof privateEmbeddingPageResult> = await ctx.runMutation(
+				internal.internal.migrations.clearPrivateQuestionEmbeddingsPage,
+				{ dryRun: args.dryRun, cursor },
+			);
+			for (const key of countKeys) totals[key] += page[key];
+			if (page.isDone) break;
+			// Running totals, so a run that stops partway still shows how far it got.
+			if (pages % FINGERPRINT_PROGRESS_LOG_PAGES === 0) console.log(`${label} progress: ${JSON.stringify(totals)}`);
+			cursor = page.continueCursor;
+		}
+		console.log(`${label} total: ${JSON.stringify(totals)}`);
+		return totals;
+	},
+});

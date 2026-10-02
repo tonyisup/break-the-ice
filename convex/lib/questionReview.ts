@@ -56,20 +56,20 @@ async function refreshQuestionText(
 /**
  * Embeddings follow the reviewed wording: a library or public question has an embedding of the
  * wording it shows, and a private user-written question has none (see isPrivateUserQuestion), so
- * an author's wording is embedded once a review makes it public. Call after saving `question`;
- * `previousWording` is what it showed before.
+ * an author's wording is embedded once a review makes it public and its embedding is removed
+ * whenever it is saved private, whether or not its wording changed. Call after saving
+ * `question`; `previousWording` is what it showed before.
  */
 export async function syncReviewedEmbedding(
   ctx: MutationCtx,
   question: Doc<"questions">,
   previousWording: string | undefined,
 ) {
-  const wordingChanged = shownWording(question) !== previousWording;
   if (isPrivateUserQuestion(question)) {
-    if (wordingChanged) await deleteQuestionEmbeddings(ctx, question._id);
+    await deleteQuestionEmbeddings(ctx, question._id);
     return;
   }
-  if (!wordingChanged) {
+  if (shownWording(question) === previousWording) {
     const existing = await ctx.db
       .query("question_embeddings")
       .withIndex("by_questionId", (q) => q.eq("questionId", question._id))

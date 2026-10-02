@@ -119,7 +119,7 @@ test("blank new questions are skipped without an input validation error", async 
 });
 
 test("personal question updates save the trimmed text", async () => {
-  // The update schedules an embedding refresh and filter sync, which stay queued instead of running.
+  // The update schedules an embedding filter sync, which stays queued instead of running.
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     const { t, author } = await createAuthor();
@@ -452,7 +452,7 @@ describe("author edits go back through review", () => {
     expect(ids).not.toContain(reviewedThenPrivate);
   });
 
-  test("an edit that keeps the wording leaves the embedding alone", async () => {
+  test("an author edit that keeps the wording on a question that stays private removes its embedding", async () => {
     const { t, author, questionId } = await setup({ text: firstWording, customText: "An older draft?", status: "private" });
     await t.run(async (ctx) =>
       ctx.db.insert("question_embeddings", { questionId, embedding: [1, 0], status: "private" }),
@@ -461,7 +461,58 @@ describe("author edits go back through review", () => {
     await author.mutation(api.core.questions.updatePersonalQuestion, { questionId, customText: firstWording, isPublic: false });
 
     expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ customText: firstWording, status: "private" });
-    expect(await t.run(async (ctx) => ctx.db.query("question_embeddings").collect())).toHaveLength(1);
+    expect(await embeddings(t)).toHaveLength(0);
+    expect(await embedJobs(t)).toHaveLength(0);
+  });
+
+  test("an admin edit that keeps a public question's wording keeps its embedding", async () => {
+    const { t, admin, questionId } = await setup({ customText: firstWording, text: firstWording, status: "public" });
+    await t.run(async (ctx) =>
+      ctx.db.insert("question_embeddings", { questionId, embedding: [1, 0], status: "public" }),
+    );
+
+    await admin.mutation(api.admin.questions.updateQuestion, { id: questionId, reviewReason: "Retag", tags: ["travel"] });
+
+    expect(await embeddings(t)).toEqual([expect.objectContaining({ questionId, embedding: [1, 0] })]);
+    expect(await embedJobs(t)).toHaveLength(0);
+  });
+
+  test("Mark Personal with the status alone removes a public submission's embedding", async () => {
+    const { t, admin, questionId } = await setup({ customText: firstWording, text: firstWording, status: "public" });
+    await t.run(async (ctx) =>
+      ctx.db.insert("question_embeddings", { questionId, embedding: [1, 0], status: "public" }),
+    );
+
+    await admin.mutation(api.admin.questions.updateQuestion, {
+      id: questionId,
+      expectedRevision: 0,
+      reviewReason: "Mark personal",
+      status: "private",
+    });
+
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ status: "private", text: firstWording });
+    expect(await embeddings(t)).toHaveLength(0);
+    expect(await embedJobs(t)).toHaveLength(0);
+  });
+
+  test("pruning a submission removes its embedding, and undoing the prune embeds it again", async () => {
+    const { t, admin, questionId } = await setup({ customText: firstWording, text: firstWording, status: "public" });
+    const pruningId = await t.run(async (ctx) => {
+      await ctx.db.insert("question_embeddings", { questionId, embedding: [1, 0], status: "public" });
+      return ctx.db.insert("pruning", { questionId, status: "pending", reason: "Low engagement" });
+    });
+
+    await admin.mutation(api.admin.pruning.approvePruning, { pruningId, reason: "Prune", expectedRevision: 0 });
+
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ status: "pruned" });
+    expect(await embeddings(t)).toHaveLength(0);
+    expect(await embedJobs(t)).toHaveLength(0);
+
+    const [review] = await admin.query(api.admin.pruning.getReviewHistory, { source: "pruning" });
+    await admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id });
+
+    expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ status: "public" });
+    expect(await embedJobs(t)).toHaveLength(1);
   });
 
   test("an edit kept private still starts a new review revision", async () => {
