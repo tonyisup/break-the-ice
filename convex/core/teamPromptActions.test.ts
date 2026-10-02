@@ -106,6 +106,50 @@ describe("runTopicPreviewWithUsage", () => {
   });
 
   it.each([
+    ["a blank topic name", { name: "   " }, ERROR_CODES.TEAM_TOPIC_REQUIRED, ERROR_MESSAGES.TEAM_TOPIC_NAME_REQUIRED],
+    [
+      "over-long boundaries",
+      { boundaries: "x".repeat(MAX_TEAM_TOPIC_BOUNDARIES_LENGTH + 1) },
+      ERROR_CODES.TEAM_TOPIC_TOO_LONG,
+      ERROR_MESSAGES.TEAM_TOPIC_BOUNDARIES_TOO_LONG,
+    ],
+  ])("checks the topic fields itself and refuses %s before reserving usage", async (_case, override, code, message) => {
+    const ctx = {
+      runQuery: vi.fn().mockResolvedValue("user-id"),
+      runMutation: vi.fn().mockResolvedValue(1),
+    } as any;
+    const generate = vi.fn();
+
+    const error = await runTopicPreviewWithUsage(ctx, { ...args, ...override }, generate).catch((e: unknown) => e);
+
+    expect(convexErrorData(error)).toEqual({ code, message });
+    expect(ctx.runMutation).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("logs why the preview options could not be used", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ctx = {
+      runQuery: vi.fn().mockResolvedValue("user-id"),
+      runMutation: vi.fn().mockResolvedValue(1),
+    } as any;
+    const generate = vi.fn().mockResolvedValue({
+      previewTexts: ["What should we revisit?", "What should we revisit?", "x".repeat(501)],
+      runId: "run-id",
+    });
+
+    await runTopicPreviewWithUsage(ctx, args, generate).catch(() => {});
+
+    expect(warn).toHaveBeenCalledWith("Topic preview options could not be used", {
+      runId: "run-id",
+      generated: 3,
+      persistable: 2,
+      distinct: 1,
+    });
+    warn.mockRestore();
+  });
+
+  it.each([
     ["wording that cannot be persisted", ["x".repeat(501)]],
     ["incomplete or duplicate options", ["What should we revisit?", "What should we revisit?"]],
   ])("refuses %s readably and keeps the paid usage", async (_case, previewTexts) => {

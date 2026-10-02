@@ -24,12 +24,19 @@ type TopicPreviewArgs = {
   toneId: Id<"tones">;
 };
 
-/** Previews three questions for a topic whose fields the caller has already trimmed and checked. */
+/**
+ * Previews three questions for a topic. The action checks the topic fields before the AI
+ * rate limit; they are checked again here (trimming is idempotent) so no caller can send
+ * blank or over-long text to the model.
+ */
 export async function runTopicPreviewWithUsage(
   ctx: Parameters<typeof runPreviewQuestionGeneration>[0],
   args: TopicPreviewArgs,
   generatePreview: typeof runPreviewQuestionGeneration = runPreviewQuestionGeneration,
 ): Promise<{ questions: string[]; runId: Id<"generationRuns"> }> {
+  const name = requireTeamTopicText(args.name, "name");
+  const guidance = requireTeamTopicText(args.guidance, "guidance");
+  const boundaries = optionalTeamTopicText(args.boundaries, "boundaries");
   const userId = await ctx.runQuery(
     internal.core.teamPrompts.authorizeTopicPreview,
     {
@@ -39,9 +46,9 @@ export async function runTopicPreviewWithUsage(
     },
   );
   const userContext = [
-    `Team conversation topic: ${args.name}`,
-    `Desired outcome: ${args.guidance}`,
-    args.boundaries ? `Boundaries: ${args.boundaries}` : undefined,
+    `Team conversation topic: ${name}`,
+    `Desired outcome: ${guidance}`,
+    boundaries ? `Boundaries: ${boundaries}` : undefined,
     "Return distinct options that a facilitator can ask exactly as written.",
   ]
     .filter(Boolean)
@@ -66,7 +73,16 @@ export async function runTopicPreviewWithUsage(
       .filter((question): question is string => question !== null);
     const distinctQuestions = [...new Set(persistableQuestions)];
     // The provider has already charged for this answer, so an unusable one keeps its
-    // usage and reaches the manager as a readable error.
+    // usage and reaches the manager as a readable error. The counts are logged because
+    // the readable error doesn't say which check failed.
+    if (distinctQuestions.length < PREVIEW_COUNT) {
+      console.warn("Topic preview options could not be used", {
+        runId: preview.runId,
+        generated: preview.previewTexts.length,
+        persistable: persistableQuestions.length,
+        distinct: distinctQuestions.length,
+      });
+    }
     if (distinctQuestions.length === 0) {
       throw billedFailure(new Error("No persistable topic preview questions were generated."));
     }

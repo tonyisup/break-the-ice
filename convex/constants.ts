@@ -39,7 +39,7 @@ export const ERROR_MESSAGES = {
   QUESTION_TEXT_TOO_LONG: `Questions can be up to ${MAX_QUESTION_TEXT_LENGTH} characters.`,
   // Team prompt refusals. A topic field shares one code per refusal, with a message
   // that names the field.
-  SCHEDULE_PUBLISHED: "This schedule was just published, so it can't be changed.",
+  SCHEDULE_PUBLISHED: "This schedule is no longer a draft, so it can't be changed.",
   SCHEDULE_DAY_INACTIVE: "That day is no longer a delivery day for this schedule.",
   TEAM_TOPIC_NAME_REQUIRED: "Please enter a topic name.",
   TEAM_TOPIC_GUIDANCE_REQUIRED: "Please describe what this conversation should surface.",
