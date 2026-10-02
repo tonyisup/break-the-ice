@@ -2,6 +2,18 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.1.0] - 2026-10-01
+
+### Fixed
+- Generation catches duplicates that differ only in quote style again. The model often writes curly quotes, and the step meant to straighten them changed nothing, so "What’s..." and "What's..." got different fingerprints and exact copies were saved. New AI questions are now saved with straight quotes, and a curly "What’s your favorite..." is rejected as too generic, like its straight form.
+- Generation no longer fails a whole batch when two library questions share a fingerprint, for example after approving an old curly-quoted question that has a straight twin. Either copy now counts as the existing question.
+
+### Added
+- A one-time recompute for fingerprints saved before this fix. Run its dry run soon after deploying: `npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'` (add `--prod` after `run` for production). It reports how many fingerprints change and lists public library questions that share one after the run (question IDs and status, no text), so extra copies can be retired on the admin duplicates page. Personal, team and organization questions that aren't public are left alone.
+
+### Changed
+- Eval runs record whether the model wrote curly quotes before they were straightened, so the curly-quote count in eval summaries still reflects what the model produced. `evals/compare.mjs` no longer warns when a run's questions match more than one library question, since that no longer changes what gets saved.
+
 ## [0.4.0.0] - 2026-10-01
 
 ### Added

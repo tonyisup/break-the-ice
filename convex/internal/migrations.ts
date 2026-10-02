@@ -1,7 +1,8 @@
 import { v, type Infer } from "convex/values";
 import { internalAction, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
+import { isQuestionPublic } from "../lib/questionAccess";
 import { settleDuplicateGroup } from "../lib/questionReferences";
 import { defaultIdealPromptLength, defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "../lib/promptArchitecture";
@@ -591,3 +592,151 @@ export const cleanDanglingQuestionReferences = internalAction({
 	},
 });
 
+export const FINGERPRINT_RECOMPUTE_PAGE_SIZE = 100;
+// Convex keeps at most 256 log lines per run, so progress is logged every this many pages.
+const FINGERPRINT_PROGRESS_LOG_PAGES = 50;
+// Convex arrays hold at most 8,192 values, so the report lists this many groups, and this many
+// questions in each, and counts the rest.
+export const FINGERPRINT_MAX_REPORTED_COLLISIONS = 1000;
+export const FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS = 50;
+const fingerprintRecomputeCounts = {
+	scanned: v.number(),
+	privateUserQuestions: v.number(),
+	withoutFingerprint: v.number(),
+	withoutText: v.number(),
+	changed: v.number(),
+};
+const fingerprintCollisionQuestion = v.object({
+	questionId: v.id("questions"),
+	status: v.optional(v.string()),
+	organizationId: v.optional(v.id("organizations")),
+});
+const fingerprintRecomputePageResult = v.object({
+	...fingerprintRecomputeCounts,
+	// Each public library question's fingerprint once the page is done, for the collision report.
+	live: v.array(v.object({ ...fingerprintCollisionQuestion.fields, fingerprint: v.string() })),
+	continueCursor: v.string(),
+	isDone: v.boolean(),
+});
+
+/**
+ * A personal question, team prompt or organization question that isn't public. It isn't a
+ * library question, so the recompute neither rewrites nor lists it, even where it has a
+ * fingerprint (an older backfill and admin reviews give some one).
+ */
+function isPrivateUserQuestion(question: Doc<"questions">) {
+	const userWritten = question.authorId !== undefined || question.kind !== undefined || question.organizationId !== undefined;
+	return userWritten && !isQuestionPublic(question);
+}
+
+/**
+ * One page of the fingerprint recompute. With `dryRun` it writes nothing and reports what a real
+ * run would change.
+ */
+export const recomputeQuestionFingerprintsPage = internalMutation({
+	args: { dryRun: v.boolean(), cursor: v.union(v.string(), v.null()) },
+	returns: fingerprintRecomputePageResult,
+	handler: async (ctx, args) => {
+		const page = await ctx.db.query("questions").paginate({ numItems: FINGERPRINT_RECOMPUTE_PAGE_SIZE, cursor: args.cursor });
+		const counts = { scanned: page.page.length, privateUserQuestions: 0, withoutFingerprint: 0, withoutText: 0, changed: 0 };
+		const live: Infer<typeof fingerprintRecomputePageResult>["live"] = [];
+		for (const question of page.page) {
+			if (isPrivateUserQuestion(question)) {
+				counts.privateUserQuestions += 1;
+				continue;
+			}
+			// Only stored fingerprints are recomputed; a library question without one stays without.
+			if (question.fingerprint === undefined) {
+				counts.withoutFingerprint += 1;
+				continue;
+			}
+			// An approved submission can keep its wording in customText only, as the backfill read it.
+			const text = question.text ?? question.customText;
+			let fingerprint = question.fingerprint;
+			if (!text) {
+				counts.withoutText += 1;
+			} else if (fingerprintText(text) !== fingerprint) {
+				fingerprint = fingerprintText(text);
+				counts.changed += 1;
+				if (!args.dryRun) await ctx.db.patch(question._id, { fingerprint });
+			}
+			// Only public, unretired questions can collide. Retired, private and held copies keep their
+			// fingerprints, so generation still won't recreate them, but aren't listed.
+			if (isQuestionPublic(question) && question.status !== "pruned" && question.prunedAt === undefined) {
+				live.push({ questionId: question._id, status: question.status, organizationId: question.organizationId, fingerprint });
+			}
+		}
+		return { ...counts, live, continueCursor: page.continueCursor, isDone: page.isDone };
+	},
+});
+
+/**
+ * Recomputes stored question fingerprints with the current fingerprintText. Fingerprints saved
+ * before curly quotes were normalized don't match a recomputation, so generation doesn't see a
+ * candidate as a duplicate of a library question that differs only in quote style.
+ *
+ * Only library questions are recomputed. Personal, team and organization questions that aren't
+ * public (`privateUserQuestions`), library questions with no stored fingerprint, and ones with no
+ * text to fingerprint are counted and left alone. Until it has run after the quote fix deploys,
+ * generation can save copies of curly-quoted library questions, so run it soon after deploying
+ * (on dev too, before evals).
+ *
+ * `collisionGroups` counts the fingerprints that two or more public, unpruned library questions
+ * share after the run. `collisions` lists the first FINGERPRINT_MAX_REPORTED_COLLISIONS of them,
+ * each with its `size` and up to FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS questions (IDs, status
+ * and organization, no text), oldest first. A fingerprint is a short hash, so compare the
+ * wording before treating a group as duplicates. Generation treats any of them as the existing
+ * copy, so nothing breaks if they stay. Retire copies on the admin duplicates page, which keeps
+ * their links working; pruning one on the questions page breaks them.
+ *
+ * A run is safe to repeat. A fingerprint can go stale again later (an undo can restore an old
+ * one, and a question that was private during a run can be published without a text change),
+ * and a copy held for review isn't listed until it's approved, so check later dry runs for
+ * changed above 0 or new collisions. Run it with dryRun first, and again after a real run
+ * (changed should then be 0); add --prod after `run` for production:
+ * `npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'`.
+ */
+export const recomputeQuestionFingerprints = internalAction({
+	args: { dryRun: v.boolean() },
+	returns: v.object({
+		...fingerprintRecomputeCounts,
+		collisionGroups: v.number(),
+		collisions: v.array(
+			v.object({ fingerprint: v.string(), size: v.number(), questions: v.array(fingerprintCollisionQuestion) }),
+		),
+	}),
+	handler: async (ctx, args) => {
+		const label = `recomputeQuestionFingerprints${args.dryRun ? " (dry run)" : ""}`;
+		const totals = { scanned: 0, privateUserQuestions: 0, withoutFingerprint: 0, withoutText: 0, changed: 0 };
+		const countKeys = Object.keys(fingerprintRecomputeCounts) as Array<keyof typeof fingerprintRecomputeCounts>;
+		const groups = new Map<string, Array<Infer<typeof fingerprintCollisionQuestion>>>();
+		let cursor: string | null = null;
+		for (let pages = 1; ; pages++) {
+			const page: Infer<typeof fingerprintRecomputePageResult> = await ctx.runMutation(
+				internal.internal.migrations.recomputeQuestionFingerprintsPage,
+				{ dryRun: args.dryRun, cursor },
+			);
+			for (const key of countKeys) totals[key] += page[key];
+			for (const { fingerprint, ...question } of page.live) {
+				const group = groups.get(fingerprint);
+				if (group) group.push(question);
+				else groups.set(fingerprint, [question]);
+			}
+			if (page.isDone) break;
+			// Running totals, so a run that stops partway still shows how far it got.
+			if (pages % FINGERPRINT_PROGRESS_LOG_PAGES === 0) console.log(`${label} progress: ${JSON.stringify(totals)}`);
+			cursor = page.continueCursor;
+		}
+		const collisions = [...groups].filter(([, questions]) => questions.length > 1);
+		console.log(`${label} total: ${JSON.stringify({ ...totals, collisionGroups: collisions.length })}`);
+		return {
+			...totals,
+			collisionGroups: collisions.length,
+			collisions: collisions.slice(0, FINGERPRINT_MAX_REPORTED_COLLISIONS).map(([fingerprint, questions]) => ({
+				fingerprint,
+				size: questions.length,
+				questions: questions.slice(0, FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS),
+			})),
+		};
+	},
+});

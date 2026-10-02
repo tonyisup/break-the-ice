@@ -46,11 +46,12 @@ const evalBatch = v.object({
   tone: taxonomyRef,
   topic: v.union(v.null(), taxonomyRef),
   definitions: evalDefinitionsResult,
-  /** Questions whose fingerprint matches more than one library row: the real save step would throw. */
+  /** Questions whose fingerprint more than one stored question holds (duplicates, retired copies included). */
   fingerprintCollisions: v.number(),
   candidates: v.array(
     v.object({
       text: v.string(),
+      hadCurlyQuotes: v.boolean(),
       outcome: v.union(v.literal("saved"), v.literal("duplicate"), v.literal("rejected")),
       duplicateOf: v.union(v.null(), v.literal("batch"), v.literal("library")),
       codeRejections: v.array(v.string()),

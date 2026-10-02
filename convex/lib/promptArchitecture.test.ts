@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractFirstJsonValue, parseQuestionObjects } from "./promptArchitecture";
+import { extractFirstJsonValue, fingerprintText, normalizeQuestion, parseQuestionObjects } from "./promptArchitecture";
 
 describe("parseQuestionObjects", () => {
   it("parses clean JSON", () => {
@@ -34,5 +34,22 @@ describe("extractFirstJsonValue", () => {
   it("returns the first balanced JSON object", () => {
     const extracted = extractFirstJsonValue('prefix {"a":1} suffix {"b":2}');
     expect(extracted).toBe('{"a":1}');
+  });
+});
+
+// Curly quotes are written as escapes so an editor can't quietly turn them into straight ones.
+describe("normalizeQuestion", () => {
+  it("turns curly quotes into straight ones", () => {
+    expect(normalizeQuestion("\u201CWhat\u2019s your \u2018usual\u2019 order?\u201D")).toBe(
+      "\"What's your 'usual' order?\"",
+    );
+  });
+});
+
+describe("fingerprintText", () => {
+  it("gives questions that differ only in quote style the same fingerprint", () => {
+    expect(fingerprintText("What\u2019s the \u201Cbest\u201D snack you\u2018ve had?")).toBe(
+      fingerprintText("What's the \"best\" snack you've had?"),
+    );
   });
 });

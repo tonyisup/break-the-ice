@@ -73,7 +73,7 @@ export const evalDefinitions = internalQuery({
 
 /**
  * How many questions already have each fingerprint (0, 1, or 2 for "more than one"). The save
- * step treats one as a duplicate and throws on more than one, failing the whole batch.
+ * step treats a candidate matching any of them as a duplicate.
  */
 export const libraryFingerprintMatches = internalQuery({
   args: { fingerprints: v.array(v.string()) },

@@ -64,9 +64,6 @@ const warnings = [
     .filter((summary) => JSON.stringify(summary.library.sizes) !== JSON.stringify([baseline.library]))
     .map((summary) => `${summary.run} searched a different library, so library duplicate rates aren't like for like.`),
   ...summaries.filter((summary) => summary.library.searchErrors).map((summary) => `${summary.run} had library search errors.`),
-  ...summaries
-    .filter((summary) => summary.batches.fingerprintCollisions)
-    .map((summary) => `${summary.run} has questions matching more than one library row; the real save step would fail those batches.`),
 ];
 
 const pooled = poolRates(summaries.map((summary) => summary.rates));

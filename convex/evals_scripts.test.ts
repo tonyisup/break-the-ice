@@ -823,6 +823,75 @@ describe("scripts", () => {
       expect(summary.generator).toMatchObject({ resolvedModelSet: ["m1"], neighbours: 5, batchSize: 3 });
       expect(summary.library).toMatchObject({ sizes: [{ publicQuestions: 10, withEmbedding: 10 }], questionsChecked: 3 });
     });
+
+    test("counts curly quotes from each question's flag, or from its text in runs made before the flag, and adds up collisions", () => {
+      const definitions = { style: { slug: "a", name: "A", definition: "Ask A." }, tone: { slug: "t", name: "T", definition: "Light." }, topic: null };
+      const cacheLine = ({ state, questions }: { state: unknown; questions: unknown }, answers: unknown) =>
+        JSON.stringify({
+          key: createHash("sha256").update(JSON.stringify({ model: JEV_MODEL, state, questions })).digest("hex"),
+          response: { model: JEV_MODEL, answers, usage: { input_tokens: 1, output_tokens: 1 } },
+        });
+      const cleanAnswers = Object.fromEntries(
+        Object.entries(GATE_QUESTIONS).map(([id, question]) => [
+          id,
+          question.type === "noul" ? { type: "noul", noul: clean[id] } : { type: "score", score: clean[id] },
+        ]),
+      );
+      // One question per batch, each batch in its own style, so the scorer compares no pairs.
+      const scoreRun = (run: string, candidates: Array<{ text: string; hadCurlyQuotes?: boolean; fingerprintCollisions: number }>) => {
+        const batches = candidates.map(({ fingerprintCollisions, ...candidate }, i) => ({
+          seed: { id: `s0${i + 1}`, style: `style-${i}`, tone: "t" },
+          ok: true,
+          commit: "abc",
+          failures: [],
+          result: {
+            runId: `r${i}`,
+            model: "preset",
+            temperature: 0.9,
+            settings: { maxOutputTokens: 2900, unusableOutputAttempts: 2, neighbours: 0 },
+            promptHash: `hash-${i}`,
+            blueprint: { slug: "b", version: 1 },
+            style: { slug: `style-${i}`, version: 1, name: `Style ${i}` },
+            tone: { slug: "t", version: 1, name: "T" },
+            topic: null,
+            definitions,
+            fingerprintCollisions,
+            candidates: [{ outcome: "saved", duplicateOf: null, codeRejections: [], neighbours: [], neighbourError: null, ...candidate }],
+          },
+        }));
+        writeRun(run, {
+          "generated.json": {
+            run,
+            deployment: "dev",
+            createdAt: "2026-10-01T00:00:00.000Z",
+            batchSize: 1,
+            invocations: [{ startedAtMs: 0, commit: "abc", library: { publicQuestions: 10, withEmbedding: 10 }, attemptsComplete: true }],
+            attempts: batches.map((batch) => ({ runId: batch.result.runId, seedId: batch.seed.id, status: "succeeded", error: null, resolvedModel: "m1", costUsd: 0.01, completionTokens: 900 })),
+            batches,
+          },
+          "jev-cache.jsonl": `${candidates.map(({ text }) => cacheLine(gateRequest({ text, definitions }), cleanAnswers)).join("\n")}\n`,
+        });
+        const scored = runScript("score.mjs", [run], { TYPESAFE_API_KEY: "test-only" });
+        expect(scored.status, scored.stderr).toBe(0);
+        return readRunFile(`${run}/summary.json`);
+      };
+
+      // Before the flag, the text kept the model's curly quotes. Curly quotes are written as escapes
+      // so an editor can't quietly turn them into straight ones.
+      const older = scoreRun("older", [
+        { text: "Which song\u2019s chorus do you know by heart?", fingerprintCollisions: 0 },
+        { text: "Which seat do you always pick on a bus?", fingerprintCollisions: 0 },
+      ]);
+      expect(older.pipeline.curlyQuotes).toBe(1);
+      expect(older.batches.fingerprintCollisions).toBe(0);
+      // Now the text is straightened, and the flag says whether the model wrote curly quotes.
+      const newer = scoreRun("newer", [
+        { text: "Which song's chorus do you know by heart?", hadCurlyQuotes: true, fingerprintCollisions: 1 },
+        { text: "Which seat do you always pick on a bus?", hadCurlyQuotes: false, fingerprintCollisions: 2 },
+      ]);
+      expect(newer.pipeline.curlyQuotes).toBe(1);
+      expect(newer.batches.fingerprintCollisions).toBe(3);
+    });
   });
 
   describe("baseline and compare", () => {
@@ -937,6 +1006,16 @@ describe("scripts", () => {
       expect(comparison.noData).toContain("libraryLikelyRate");
       expect(comparison.noData).not.toContain("passRate");
       expect(result.stdout).toMatch(/NO DATA\s+libraryLikelyRate/);
+    });
+
+    test("compare doesn't warn about questions matching more than one library question", () => {
+      // The save step treats any of them as the existing copy, so the comparison stays fair.
+      baselineOf(["a", 80], ["b", 82]);
+      writeRun("dupes", { "summary.json": summary("dupes", 80, { batches: { fingerprintCollisions: 2 } }) });
+
+      const result = runScript("compare.mjs", ["base", "dupes"]);
+      expect(result.status, result.stderr).toBe(0);
+      expect(readRunFile("dupes/comparison-base.json").warnings).toEqual([]);
     });
 
     test("compare refuses runs it can't fairly compare", () => {
