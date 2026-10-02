@@ -27,7 +27,13 @@ vi.mock("@/hooks/useTeamWorkspace", () => ({
 // stays mounted but hidden, and its content's animation end is where the drawer resets.
 vi.mock("@/components/ui/drawer", () => {
   const Pass = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
-  const Drawer = ({ open, children }: { open: boolean; children?: ReactNode }) => <div hidden={!open}>{children}</div>;
+  // The test-only button stands in for vaul asking to open, which runs the drawer's open handler.
+  const Drawer = ({ open, onOpenChange, children }: { open: boolean; onOpenChange?: (open: boolean) => void; children?: ReactNode }) => (
+    <div hidden={!open}>
+      <button type="button" data-testid="drawer-request-open" onClick={() => onOpenChange?.(true)} />
+      {children}
+    </div>
+  );
   const DrawerContent = ({ children, onAnimationEnd }: { children?: ReactNode; onAnimationEnd?: () => void }) => (
     <div data-testid="drawer-content" onAnimationEnd={onAnimationEnd}>
       {children}
@@ -595,6 +601,45 @@ describe("RemixQuestionDrawer tags", () => {
         expect.objectContaining({ tags: tagNames.slice(0, MAX_QUESTION_TAGS) }),
       );
     });
+  });
+
+  it("refuses a picked tag longer than the server allows", () => {
+    mockMutations();
+    const longName = "x".repeat(MAX_QUESTION_TAG_LENGTH + 1);
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((ref: MutationRef) =>
+      getFunctionName(ref) === getFunctionName(api.core.tags.getTags)
+        ? [{ _id: "long", name: longName, grouping: "test" }]
+        : undefined,
+    );
+    renderDrawer(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
+    const input = screen.getByRole("textbox");
+
+    // A picked suggestion goes straight to the add handler, without the input's length cap.
+    fireEvent.change(input, { target: { value: longName } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(toast.error).toHaveBeenCalledWith(ERROR_MESSAGES.QUESTION_TAG_TOO_LONG);
+    expect(screen.queryByText(longName)).not.toBeInTheDocument();
+  });
+
+  it("checks the tags it would save before the remix uses an AI request", async () => {
+    mockMutations();
+    const remix = vi.fn().mockResolvedValue("What is your favorite late-night snack?");
+    (useAction as ReturnType<typeof vi.fn>).mockReturnValue(remix);
+    const onOpenChange = vi.fn();
+    const tagged = { ...(question as object), tags: tagNames } as never;
+    const drawer = (isOpen: boolean) => (
+      <RemixQuestionDrawer question={tagged} styleId={"s1" as never} toneId={"t1" as never} isOpen={isOpen} onOpenChange={onOpenChange} />
+    );
+    const { rerender } = render(drawer(false));
+    // Opening copies the question's tags, which can exceed what a person's question may carry.
+    fireEvent.click(screen.getByTestId("drawer-request-open"));
+    rerender(drawer(true));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remix" }));
+
+    expect(toast.error).toHaveBeenCalledWith(ERROR_MESSAGES.QUESTION_TAGS_TOO_MANY);
+    expect(remix).not.toHaveBeenCalled();
   });
 
   it("shows the server's readable message when it refuses the remix's tags", async () => {

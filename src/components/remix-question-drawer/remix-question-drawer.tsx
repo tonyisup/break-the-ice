@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { convexErrorData } from "../../../convex/lib/errorData";
+import { normalizeQuestionTags } from "../../../convex/lib/questionTags";
 import {
 	ERROR_CODES,
 	ERROR_MESSAGES,
@@ -197,6 +198,14 @@ export function RemixQuestionDrawer({
 			toast.error("Checking workspace access. Please try again in a moment.");
 			return;
 		}
+		// Check the tags the save will send before the remix uses an AI request.
+		try {
+			normalizeQuestionTags(tags);
+		} catch (error) {
+			const dataMessage = convexErrorData(error)?.message;
+			toast.error(typeof dataMessage === "string" ? dataMessage : "These tags can't be saved.");
+			return;
+		}
 		const requestId = ++remixRequestIdRef.current;
 		const isStale = () => remixRequestIdRef.current !== requestId;
 		setRemixState("remixing");
@@ -322,7 +331,11 @@ export function RemixQuestionDrawer({
 		}
 
 		if (!tags.includes(tagToAdd)) {
-			// The same limit the server checks on save.
+			// The same limits the server checks on save. A picked suggestion skips the input's cap.
+			if (tagToAdd.length > MAX_QUESTION_TAG_LENGTH) {
+				toast.error(ERROR_MESSAGES.QUESTION_TAG_TOO_LONG);
+				return;
+			}
 			if (tags.length >= MAX_QUESTION_TAGS) {
 				toast.error(ERROR_MESSAGES.QUESTION_TAGS_TOO_MANY);
 				return;
