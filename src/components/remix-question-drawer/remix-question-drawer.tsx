@@ -98,6 +98,9 @@ export function RemixQuestionDrawer({
 	const deletePersonalQuestion = useMutation(api.core.questions.deletePersonalQuestion);
 
 	const isClosingRef = useRef(false);
+	// Bumped on every remix start, cancel and reset. A run whose id is no longer current was
+	// cancelled or replaced, so it must not save anything or touch the drawer's state.
+	const remixRequestIdRef = useRef(0);
 
 	const hasChanges = useMemo(() => {
 		const styleChanged = selectedStyleId !== styleId;
@@ -151,6 +154,7 @@ export function RemixQuestionDrawer({
 	};
 
 	const resetState = () => {
+		remixRequestIdRef.current += 1;
 		setRemixState("idle");
 		setRemixedText("");
 		setNewQuestionId(null);
@@ -169,6 +173,8 @@ export function RemixQuestionDrawer({
 			toast.error("Checking workspace access. Please try again in a moment.");
 			return;
 		}
+		const requestId = ++remixRequestIdRef.current;
+		const isStale = () => remixRequestIdRef.current !== requestId;
 		setRemixState("remixing");
 		setSaveFailed(false);
 		try {
@@ -178,6 +184,8 @@ export function RemixQuestionDrawer({
 				toneId: selectedToneId,
 				topicId: question.topicId,
 			});
+			// Cancelled while the AI was writing: save nothing.
+			if (isStale()) return;
 
 			let currentId = newQuestionId;
 			if (!currentId) {
@@ -191,6 +199,14 @@ export function RemixQuestionDrawer({
 					tags,
 					organizationId: teamWorkspaceId,
 				});
+				if (isStale()) {
+					// Cancelled while the question was being created. Nothing will show it or offer
+					// Discard, so remove it rather than leave it in the person's stash.
+					if (id) {
+						deletePersonalQuestion({ questionId: id }).catch(() => {});
+					}
+					return;
+				}
 				if (id) {
 					setNewQuestionId(id);
 					currentId = id;
@@ -206,13 +222,17 @@ export function RemixQuestionDrawer({
 					topicId: question.topicId,
 					tags,
 				});
+				// Cancelled while the update was in flight. The question may now hold the cancelled
+				// text, but the drawer keeps showing the previous remix, and Save writes that text
+				// back (Discard deletes the question), so leave the server copy alone.
+				if (isStale()) return;
 			}
 
 			// Show the remix only once it is saved, so Save never sends text the server refused.
 			setRemixedText(text);
-			// Final check before marking as remixed
-			setRemixState(current => current === "remixing" ? "remixed" : current);
+			setRemixState("remixed");
 		} catch (error) {
+			if (isStale()) return;
 			// A ConvexError carries a readable message in its data (e.g. the AI budget is paused).
 			// The AI wrote an over-long remix, not the person, so point them to remixing again.
 			const errorData = convexErrorData(error);
@@ -222,11 +242,14 @@ export function RemixQuestionDrawer({
 			const message = typeof dataMessage === "string" ? dataMessage : error instanceof Error ? error.message : String(error);
 			toast.error(`Remix failed: ${message}`);
 			setSaveFailed(true);
-			setRemixState(current => {
-				if (current !== "remixing") return current;
-				return remixedText ? "remixed" : "idle";
-			});
+			setRemixState(remixedText ? "remixed" : "idle");
 		}
+	};
+
+	const handleCancelRemix = () => {
+		remixRequestIdRef.current += 1;
+		// Go back to the previous remix if there is one, so it can still be saved or discarded.
+		setRemixState(remixedText ? "remixed" : "idle");
 	};
 
 	const handleSave = async () => {
@@ -591,7 +614,7 @@ export function RemixQuestionDrawer({
 								<Loader2 className="size-4 animate-spin" />
 								Remixing…
 							</Button>
-							<Button variant="ghost" onClick={() => setRemixState("idle")}>
+							<Button variant="ghost" onClick={handleCancelRemix}>
 								Cancel Remix
 							</Button>
 						</div>
