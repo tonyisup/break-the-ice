@@ -126,15 +126,16 @@ later becomes unavailable.
 
 The preview action:
 
-1. Verifies the caller is an admin or manager in an active Team workspace.
-2. Validates and bounds topic input.
+1. Validates and bounds topic input.
+2. Verifies the caller is an admin or manager in an active Team workspace.
 3. Reserves one unit from the workspace's AI generation allowance.
 4. Uses the existing prompt architecture with the selected style and tone.
 5. Includes topic guidance and boundaries as generation context.
 6. Returns exactly three distinct persistable candidates without adding them to
    the public question pool.
 
-Failed provider calls release the reserved usage unit.
+Failed provider calls release the reserved usage unit, unless the provider
+already charged for the call.
 
 The chosen candidate is persisted only when the manager assigns it.
 
@@ -151,8 +152,11 @@ The chosen candidate is persisted only when the manager assigns it.
 - Topic previews do not modify a schedule.
 - Topic previews are refused, without using the workspace's AI usage, while the
   daily AI budget is paused or the caller is over their AI request limits.
-- Topic previews fail and release reserved usage when fewer than three distinct,
-  persistable candidates remain after validation.
+- Topic previews fail with a readable "try again" error when fewer than three
+  distinct, persistable candidates remain after validation. The reserved usage
+  is kept, because the provider already charged for the answer.
+- Topic previews with a blank or over-long field are refused before the AI
+  request limits, so they don't use one of the caller's AI requests.
 - A failed preview leaves the current draft and existing assignments unchanged.
 - Preview candidates that exceed the exact-question persistence limit are not
   returned as selectable options.
