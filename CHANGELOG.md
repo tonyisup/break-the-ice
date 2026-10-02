@@ -15,6 +15,16 @@ All notable changes to Break the Ice are recorded here.
 ### Changed
 - The topic field limits (100 characters for the name, 1,000 for guidance and boundaries) live in one place shared by the composer and the server.
 
+## [0.4.4.0] - 2026-10-02
+
+### Fixed
+- Cancelling a remix now really cancels it. A cancelled remix no longer lands in your stash, and starting another remix right after cancelling creates one question instead of two. A cancelled remix can't finish the next remix's spinner or show its text with Save enabled. If the cancel arrives while the question is being created, that question is removed.
+- Closing the drawer or leaving the page while a remix is running no longer saves the remix in the background.
+
+### Changed
+- When you remix again and then cancel, the drawer goes back to your previous remix so you can still save or discard it. The button reads "Keep Previous Remix" in that case.
+- After a cancel, keyboard focus moves to the button that replaces Cancel (Save, Remix, or the drawer's Cancel when Remix isn't available), so keyboard and screen reader users keep their place.
+
 ## [0.4.3.0] - 2026-10-02
 
 ### Fixed

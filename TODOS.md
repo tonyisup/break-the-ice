@@ -293,6 +293,56 @@
 **Priority:** P2
 **Depends on:** None
 
+## Remix drawer
+
+### Clean up abandoned remix drafts on the server
+
+**What:** Remove remix drafts nobody saved or discarded, on the server instead of relying on the drawer. Cover: a question created by a cancelled remix whose cleanup delete fails or never runs (the page reloads first); a finished remix left when the drawer unmounts without Save or Discard; and a cancelled Remix Again whose update landed, which leaves the text the person rejected until they press Save or Discard.
+
+**Why:** Since v0.4.4.0 the drawer deletes a cancelled remix's question itself, but that delete is a best-effort browser call. When it can't run, the draft stays in the person's stash with no signal.
+
+**Context:** `handleRemix` and `handleCancelRemix` in `src/components/remix-question-drawer/remix-question-drawer.tsx`; `addPersonalQuestion` / `deletePersonalQuestion` in `convex/core/questions.ts`. One option is a draft flag set by the drawer and cleared on Save, with a scheduled job expiring old drafts. Deferred during the v0.4.4.0 review.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
+### Find the author the same way in all personal question mutations
+
+**What:** Switch `deletePersonalQuestion` and `updatePersonalQuestion` to `findCanonicalUser`, like `addPersonalQuestion`.
+
+**Why:** They look the author up by email with `.unique()`, which throws for people with duplicate user records and doesn't normalize the email. For them, a question they just created can't be updated or deleted, so Discard and the drawer's cleanup of a cancelled remix fail.
+
+**Context:** `convex/core/questions.ts`; `findCanonicalUser` in `convex/lib/users.ts`. Add tests with duplicate user records that share an email. Deferred during the v0.4.4.0 review.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** The author-edit review guards branch, which also changes `updatePersonalQuestion`
+
+### Keep the previous remix's settings when keeping it
+
+**What:** When "Keep Previous Remix" restores the earlier remix, also restore the style, tone and tags it was written with, and keep that remix visible (dimmed) while Remix Again runs instead of hiding it behind the spinner.
+
+**Why:** Today Save after "Keep Previous Remix" stores the earlier text with whatever style and tone are selected now, and the person can't see what Cancel will bring back.
+
+**Context:** `handleCancelRemix` and `handleSave` in `src/components/remix-question-drawer/remix-question-drawer.tsx`. Record the settings with each saved remix. Deferred during the v0.4.4.0 review.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Close small remix drawer gaps
+
+**What:** (1) Treat an AI remix that comes back blank (`addPersonalQuestion` returns `null`) as a failure instead of showing a Save button that does nothing. (2) Disable the style, tone and tag controls while a remix runs, so a run's text isn't saved under settings picked mid-run. (3) Move focus to Cancel if Remix becomes disabled after the AI limit updates following a cancel, and move focus to Save or Remix when a run finishes while Cancel had focus.
+
+**Why:** Each leaves the drawer in a confusing state for some people. (1) and (2) predate v0.4.4.0; (3) are edge cases of the focus handling added in it.
+
+**Context:** `src/components/remix-question-drawer/remix-question-drawer.tsx`. Deferred during the v0.4.4.0 review.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## Analytics
 
 ### Don't count a merged signed-out like again after unlike/re-like
