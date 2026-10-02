@@ -11,7 +11,7 @@ import {
   FINGERPRINT_RECOMPUTE_PAGE_SIZE,
   PROMPT_BACKFILL_BATCH_SIZE,
 } from "./internal/migrations";
-import { fingerprintText } from "./lib/promptArchitecture";
+import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "./lib/promptArchitecture";
 
 type TestConvex = ReturnType<typeof convexTest>;
 type QuestionFields = Partial<Doc<"questions">>;
@@ -755,10 +755,9 @@ describe("private questions keep no fingerprint", () => {
     return t.run(async (ctx) => ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }));
   }
 
-  test("Approve personal on a submission leaves it without a fingerprint, so generation still saves a match", async () => {
+  test("Approve personal on a submission leaves it without a fingerprint", async () => {
     const { t, insertGenerated } = await setup();
     const admin = t.withIdentity(editor);
-    // An admin review before this change gave it one.
     const submission = await insertQuestion(t, { authorId: "author-1", customText: smell, status: "pending", fingerprint: fingerprintText(smell) });
 
     // What the questions page sends for Approve personal.
@@ -893,6 +892,38 @@ describe("private questions keep no fingerprint", () => {
     expect(restored?.fingerprint).toBeUndefined();
   });
 
+  test("an author editing their approved question sends it back without a fingerprint", async () => {
+    const { t } = await setup();
+    const identity = { subject: "author", tokenIdentifier: "https://issuer.test|author", email: "author@example.test" };
+    const authorId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { clerkId: identity.subject, tokenIdentifier: identity.tokenIdentifier, email: identity.email }),
+    );
+    const approved = await insertQuestion(t, { authorId, customText: smell, text: smell, status: "public", fingerprint: fingerprintText(smell) });
+
+    await t.withIdentity(identity).mutation(api.core.questions.updatePersonalQuestion, { questionId: approved, customText: bus, isPublic: true });
+
+    expect(await t.run(async (ctx) => ctx.db.get(approved))).toMatchObject({ status: "pending", customText: bus });
+    expect(await fingerprintOf(t, approved)).toBeNull();
+  });
+
+  test("undo on a private question is still refused when anything besides its fingerprint changed", async () => {
+    const { t } = await setup();
+    const admin = t.withIdentity(editor);
+    const personal = await insertQuestion(t, { authorId: "author-1", customText: smell, status: "pending" });
+    await admin.mutation(api.admin.questions.updateQuestion, {
+      id: personal,
+      expectedRevision: 0,
+      reviewReason: "Approve personal",
+      text: smell,
+      status: "private",
+    });
+    await admin.mutation(api.admin.questions.updateQuestion, { id: personal, expectedRevision: 1, reviewReason: "Reword", text: bus });
+
+    const reviews = await admin.query(api.admin.pruning.getReviewHistory, { source: "question" });
+    const approval = reviews.find((review) => review.reason === "Approve personal")!;
+    await expect(admin.mutation(api.admin.pruning.undoReview, { reviewId: approval._id })).rejects.toThrow("newer work");
+  });
+
   test("an admin-created question is fingerprinted, so generation skips a copy of it", async () => {
     const { t, insertGenerated } = await setup();
     const admin = t.withIdentity(editor);
@@ -901,6 +932,80 @@ describe("private questions keep no fingerprint", () => {
 
     expect(await fingerprintOf(t, created)).toBe(fingerprintText(bus));
     expect((await insertGenerated(bus)).duplicates).toEqual([{ text: bus, reason: "duplicate of existing question" }]);
+  });
+
+  test("a change without new text leaves a library question's or a public submission's fingerprint as it was", async () => {
+    const { t } = await setup();
+    const admin = t.withIdentity(editor);
+    const library = await insertQuestion(t, { text: smell, status: "pending", fingerprint: "q_old_library" });
+    const submission = await insertQuestion(t, { authorId: "author-1", customText: bus, text: bus, status: "public", fingerprint: "q_old_submission" });
+
+    // The question detail page sends the status alone when the text hasn't changed.
+    await admin.mutation(api.admin.questions.updateQuestion, { id: library, expectedRevision: 0, reviewReason: "Approve", status: "public" });
+    await admin.mutation(api.admin.questions.updateQuestion, { id: submission, reviewReason: "Retag", tags: ["travel"] });
+
+    expect(await fingerprintOf(t, library)).toBe("q_old_library");
+    expect(await fingerprintOf(t, submission)).toBe("q_old_submission");
+  });
+
+  test("publishing a reworded private submission with the status alone fingerprints the edited text", async () => {
+    const { t } = await setup();
+    const admin = t.withIdentity(editor);
+    const reworded = "Which seat do you pick first on a bus?";
+    // Approve personal saved the edited wording in text; customText keeps what was submitted.
+    const submission = await insertQuestion(t, { authorId: "author-1", customText: bus, text: reworded, status: "private" });
+
+    await admin.mutation(api.admin.questions.updateQuestion, { id: submission, expectedRevision: 0, reviewReason: "Approve", status: "public" });
+
+    expect(await fingerprintOf(t, submission)).toBe(fingerprintText(reworded));
+  });
+
+  test("publishing a private question with no wording to fingerprint leaves it without one", async () => {
+    const { t } = await setup();
+    const admin = t.withIdentity(editor);
+    const organizationId = await setupOrganization(t);
+    const blank = await insertQuestion(t, { organizationId, status: "private", fingerprint: "q_old_blank" });
+
+    await admin.mutation(api.admin.questions.updateQuestion, { id: blank, expectedRevision: 0, reviewReason: "Publish", status: "public" });
+
+    expect(await t.run(async (ctx) => ctx.db.get(blank))).toMatchObject({ status: "public" });
+    expect(await fingerprintOf(t, blank)).toBeNull();
+  });
+
+  test("undoing a prune gives a public submission its fingerprint back", async () => {
+    const { t, insertGenerated } = await setup();
+    const admin = t.withIdentity(editor);
+    const submission = await insertQuestion(t, { authorId: "author-1", customText: smell, text: smell, status: "public", fingerprint: fingerprintText(smell) });
+    const pruningId = await t.run(async (ctx) => ctx.db.insert("pruning", { questionId: submission, status: "pending", reason: "Low engagement" }));
+    await admin.mutation(api.admin.pruning.approvePruning, { pruningId, reason: "Prune", expectedRevision: 0 });
+    expect(await fingerprintOf(t, submission)).toBeNull();
+
+    const [review] = await admin.query(api.admin.pruning.getReviewHistory, { source: "pruning" });
+    await admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id });
+
+    expect(await t.run(async (ctx) => ctx.db.get(submission))).toMatchObject({ status: "public", fingerprint: fingerprintText(smell) });
+    expect((await insertGenerated(smell)).duplicates).toEqual([{ text: smell, reason: "duplicate of existing question" }]);
+  });
+
+  test("undoing Approve public takes back the fingerprint it gave, and doesn't restore an older one", async () => {
+    const { t, insertGenerated } = await setup();
+    const admin = t.withIdentity(editor);
+    const submission = await insertQuestion(t, { authorId: "author-1", customText: smell, status: "pending", fingerprint: "q_old_pending" });
+    await admin.mutation(api.admin.questions.updateQuestion, {
+      id: submission,
+      expectedRevision: 0,
+      reviewReason: "Approve",
+      text: smell,
+      status: "public",
+    });
+    expect(await fingerprintOf(t, submission)).toBe(fingerprintText(smell));
+
+    const [review] = await admin.query(api.admin.pruning.getReviewHistory, { source: "question" });
+    await admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id });
+
+    expect(await t.run(async (ctx) => ctx.db.get(submission))).toMatchObject({ status: "pending" });
+    expect(await fingerprintOf(t, submission)).toBeNull();
+    expect((await insertGenerated(smell)).insertedCount).toBe(1);
   });
 });
 
@@ -932,6 +1037,27 @@ describe("the prompt architecture backfill", () => {
     ]);
   });
 
+  test("leaves questions that are already backfilled alone", async () => {
+    const { t } = await setup();
+    await insertQuestion(t, {
+      text: roadTrip,
+      fingerprint: fingerprintText(roadTrip),
+      styleSlug: "reflective",
+      toneSlug: "warm",
+      styleVersion: 1,
+      toneVersion: 1,
+      source: "seed",
+      safetyFlags: [],
+      quality: {},
+    });
+    const library = await insertQuestion(t, { text: bus });
+
+    const result = await t.mutation(internal.internal.migrations.backfillPromptArchitecture, { stage: "questions" });
+
+    expect(result.questionsUpdated).toBe(1);
+    expect(await fingerprintOf(t, library)).toBe(fingerprintText(bus));
+  });
+
   test("moves past a full batch of skipped questions to the ones after it", async () => {
     const { t } = await setup();
     for (let i = 0; i < PROMPT_BACKFILL_BATCH_SIZE + 1; i++) {
@@ -945,6 +1071,20 @@ describe("the prompt architecture backfill", () => {
     expect(await fingerprintOf(t, library)).toBe(fingerprintText(bus));
     const fingerprinted = await t.run(async (ctx) => (await ctx.db.query("questions").collect()).filter((q) => q.fingerprint !== undefined).length);
     expect(fingerprinted).toBe(1);
+  });
+
+  test("a run from the first stage reaches the questions and adds the default blueprint", async () => {
+    const { t } = await setup();
+    const personal = await insertQuestion(t, { authorId: "author-1", customText: smell, status: "private" });
+    const library = await insertQuestion(t, { text: bus });
+
+    await t.mutation(internal.internal.migrations.backfillPromptArchitecture, {});
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    expect(await fingerprintOf(t, library)).toBe(fingerprintText(bus));
+    expect(await fingerprintOf(t, personal)).toBeNull();
+    const blueprints = await t.run(async (ctx) => ctx.db.query("promptBlueprints").collect());
+    expect(blueprints.map(({ slug }) => slug)).toEqual([DEFAULT_BLUEPRINT_SLUG]);
   });
 });
 
@@ -977,10 +1117,9 @@ describe("clearing fingerprints private questions still hold", () => {
     expect(after).toEqual(before);
   });
 
-  test("a real run clears only private questions, so generation saves a candidate only they matched", async () => {
+  test("a real run clears only private questions' fingerprints", async () => {
     const { t, insertGenerated } = await setup();
     const ids = await setupQuestions(t);
-    expect((await insertGenerated(smell)).duplicates).toEqual([{ text: smell, reason: "duplicate of existing question" }]);
 
     const summary = await t.action(internal.internal.migrations.clearPrivateQuestionFingerprints, { dryRun: false });
 
@@ -1029,5 +1168,52 @@ describe("clearing fingerprints private questions still hold", () => {
     } finally {
       log.mockRestore();
     }
+  });
+
+  test("a long run logs its running totals every 50 pages, then its totals", async () => {
+    const { t } = await setup();
+    // 50 full pages of library questions, then a private question on the next page.
+    const filler = FINGERPRINT_RECOMPUTE_PAGE_SIZE * 50;
+    await t.run(async (ctx) => {
+      for (let i = 0; i < filler; i++) {
+        await ctx.db.insert("questions", { text: `Filler question number ${i} for paging?`, status: "public", ...counters });
+      }
+    });
+    await insertQuestion(t, { authorId: "author-1", customText: smell, status: "private", fingerprint: fingerprintText(smell) });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await t.action(internal.internal.migrations.clearPrivateQuestionFingerprints, { dryRun: false });
+
+      const lines = log.mock.calls.map(([line]) => String(line)).filter((line) => line.startsWith("clearPrivateQuestionFingerprints"));
+      expect(lines).toEqual([
+        `clearPrivateQuestionFingerprints progress: ${JSON.stringify({ scanned: filler, privateUserQuestions: 0, cleared: 0 })}`,
+        `clearPrivateQuestionFingerprints total: ${JSON.stringify({ scanned: filler + 1, privateUserQuestions: 1, cleared: 1 })}`,
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  test("a review made before a run can still be undone after it", async () => {
+    const { t } = await setup();
+    const admin = t.withIdentity({
+      subject: "editor",
+      tokenIdentifier: "https://issuer.test|editor",
+      metadata: { isAdmin: "true" },
+    });
+    // Keeping a flagged question changes nothing on it, so the review records the fingerprint it still had.
+    const personal = await insertQuestion(t, { authorId: "author-1", customText: smell, status: "private", fingerprint: fingerprintText(smell) });
+    const pruningId = await admin.mutation(api.admin.pruning.flagQuestion, { questionId: personal, reasons: ["awkward_wording"], notes: "Needs review" });
+    await admin.mutation(api.admin.pruning.rejectPruning, { pruningId, reason: "Clear enough as written", expectedRevision: 1 });
+    expect(await t.action(internal.internal.migrations.clearPrivateQuestionFingerprints, { dryRun: false })).toMatchObject({ cleared: 1 });
+
+    const history = await admin.query(api.admin.pruning.getReviewHistory, { source: "pruning" });
+    const kept = history.find((review) => review.outcome === "keep")!;
+    await admin.mutation(api.admin.pruning.undoReview, { reviewId: kept._id });
+
+    expect(await t.run(async (ctx) => ctx.db.get(personal))).toMatchObject({ status: "private", reviewRevision: 3 });
+    expect(await fingerprintOf(t, personal)).toBeNull();
+    expect(await t.run(async (ctx) => (await ctx.db.get(pruningId))?.status)).toBe("pending");
   });
 });

@@ -995,6 +995,8 @@ export const updatePersonalQuestion = mutation({
 		await ctx.db.patch(args.questionId, {
 			customText,
 			status: args.isPublic ? "pending" : "private",
+			// Pending or private, so not a library question: it keeps no fingerprint (see isPrivateUserQuestion).
+			fingerprint: undefined,
 			styleId: args.styleId,
 			style: styleDoc?.id,
 			toneId: args.toneId,

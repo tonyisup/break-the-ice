@@ -387,23 +387,25 @@ export const backfillPromptArchitecture = internalMutation({
 			const questionStyles = new Map(allStyles.map((style) => [style._id.toString(), style]));
 			const questionTones = new Map(allTones.map((tone) => [tone._id.toString(), tone]));
 			const questionTopics = new Map(allTopics.map((topic) => [topic._id.toString(), topic]));
+			// Unfiltered, so each page reads one batch. A filtered page keeps reading until it has a
+			// batch of matches, which can be most of the table.
 			const page = await ctx.db
 				.query("questions")
-				.filter((q) =>
-					q.or(
-						q.eq(q.field("styleSlug"), undefined),
-						q.eq(q.field("toneSlug"), undefined),
-						q.eq(q.field("styleVersion"), undefined),
-						q.eq(q.field("toneVersion"), undefined),
-						q.eq(q.field("fingerprint"), undefined),
-						q.eq(q.field("source"), undefined),
-						q.eq(q.field("safetyFlags"), undefined),
-						q.eq(q.field("quality"), undefined),
-					),
-				)
 				.paginate({ numItems: PROMPT_BACKFILL_BATCH_SIZE, cursor: args.cursor ?? null });
 			for (const question of page.page) {
-				// Not a library question: it gets no fingerprint (see isPrivateUserQuestion).
+				const needsBackfill = [
+					question.styleSlug,
+					question.toneSlug,
+					question.styleVersion,
+					question.toneVersion,
+					question.fingerprint,
+					question.source,
+					question.safetyFlags,
+					question.quality,
+				].includes(undefined);
+				if (!needsBackfill) continue;
+				// Not a library question: the backfill leaves it alone, fingerprint included (see
+				// isPrivateUserQuestion).
 				if (isPrivateUserQuestion(question)) continue;
 				const style = question.styleId ? questionStyles.get(question.styleId.toString()) : null;
 				const tone = question.toneId ? questionTones.get(question.toneId.toString()) : null;
@@ -773,13 +775,12 @@ export const clearPrivateQuestionFingerprintsPage = internalMutation({
 });
 
 /**
- * Clears the fingerprint on personal, team and organization questions that aren't public. They
- * aren't library questions, which are all generation should dedupe against, but an older backfill
- * and admin reviews gave some one. It reports counts only. Admin reviews no longer fingerprint
- * these questions, and making one public fingerprints it again.
+ * Clears the fingerprint on personal, team and organization questions that aren't public: only
+ * library questions keep one (see isPrivateUserQuestion). It reports counts only. Making one of
+ * these questions public fingerprints it again.
  *
- * Undo after a run: undoing an earlier review of a cleared question is refused as a newer change.
- * Run it with dryRun first, and again after a real run (cleared should then be 0); add --prod
+ * Earlier reviews of a cleared question can still be undone: undo doesn't compare a private
+ * question's fingerprint. Run it with dryRun first, and again after a real run (cleared should then be 0); add --prod
  * after `run` for production:
  * `npx convex run internal/migrations:clearPrivateQuestionFingerprints '{"dryRun":true}'`.
  */

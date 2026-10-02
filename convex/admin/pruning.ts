@@ -524,7 +524,10 @@ export const undoReview = mutation({
       const question = await ctx.db.get(change.questionId);
       if (!question) throw new Error("Question no longer exists");
       const current = snapshot(question);
-      if (Object.keys(current).some(key => current[key as keyof typeof current] !== change.after[key as keyof typeof current])) {
+      // A private question keeps no fingerprint, so clearing one isn't newer work. If any other
+      // field differs, the undo is refused anyway.
+      const keys = Object.keys(current).filter(key => key !== "fingerprint" || !isPrivateUserQuestion(question));
+      if (keys.some(key => current[key as keyof typeof current] !== change.after[key as keyof typeof current])) {
         throw new Error("Question changed after this review; undo would overwrite newer work");
       }
     }
