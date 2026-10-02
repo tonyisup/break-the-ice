@@ -261,7 +261,8 @@ test("Team prompts into a published schedule are rejected with a readable error"
   });
 });
 
-test("Team prompts into a deleted schedule are rejected with a readable error", async () => {
+// The missing schedule is checked before membership, so it stays a plain error.
+test("Team prompts into a deleted schedule are rejected with a plain error", async () => {
   const { t, admin, scheduleId } = await createDraftTeamSchedule();
   await t.run(async (ctx) => ctx.db.delete(scheduleId));
 
@@ -273,10 +274,9 @@ test("Team prompts into a deleted schedule are rejected with a readable error", 
     })
     .catch((caught: unknown) => caught);
 
-  expect(convexErrorData(error)).toEqual({
-    code: ERROR_CODES.SCHEDULE_NOT_FOUND,
-    message: ERROR_MESSAGES.SCHEDULE_NOT_FOUND,
-  });
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toContain("Schedule not found");
+  expect(convexErrorData(error)).toBeUndefined();
 });
 
 test("Team prompts on a day the schedule doesn't deliver are rejected with a readable error", async () => {

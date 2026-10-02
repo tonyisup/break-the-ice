@@ -113,12 +113,8 @@ export const createAndAssign = mutation({
   }),
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
-    if (!schedule) {
-      throw new ConvexError({
-        code: ERROR_CODES.SCHEDULE_NOT_FOUND,
-        message: ERROR_MESSAGES.SCHEDULE_NOT_FOUND,
-      });
-    }
+    // Checked before membership, so it stays a plain error like the other schedule paths.
+    if (!schedule) throw new Error("Schedule not found");
     await ensurePaidOrganizationMember(ctx, schedule.organizationId, [
       "admin",
       "manager",
@@ -142,12 +138,8 @@ export const createAndAssign = mutation({
       tokenIdentifier: identity?.tokenIdentifier,
       email: identity?.email,
     });
-    if (!user) {
-      throw new ConvexError({
-        code: ERROR_CODES.USER_NOT_FOUND,
-        message: ERROR_MESSAGES.USER_NOT_FOUND,
-      });
-    }
+    // Membership was already checked above, so the user always exists here.
+    if (!user) throw new Error("User not found");
 
     const questionText = requireQuestionText(args.questionText);
     const now = Date.now();

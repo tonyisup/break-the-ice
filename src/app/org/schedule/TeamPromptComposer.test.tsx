@@ -192,4 +192,43 @@ describe("TeamPromptComposer", () => {
       screen.queryByRole("button", { name: "Use this question" }),
     ).not.toBeInTheDocument();
   });
+
+  it("moves to an offered style and tone when the picked ones stop being offered", async () => {
+    const onPreviewTopic = vi.fn().mockResolvedValue(["One?", "Two?", "Three?"]);
+    const composer = (styles: typeof taxonomy.styles, tones: typeof taxonomy.tones) => (
+      <TeamPromptComposer
+        dayLabel="Wednesday"
+        styles={styles}
+        tones={tones}
+        onCreateQuestion={vi.fn()}
+        onPreviewTopic={onPreviewTopic}
+        onAssignTopicQuestion={vi.fn()}
+      />
+    );
+    const { rerender } = render(
+      composer(
+        [...taxonomy.styles, { id: "style-2", name: "Playful" }],
+        [...taxonomy.tones, { id: "tone-2", name: "Direct" }],
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /topic/i }));
+    fireEvent.change(screen.getByLabelText("Style"), { target: { value: "style-2" } });
+    fireEvent.change(screen.getByLabelText("Tone"), { target: { value: "tone-2" } });
+    rerender(composer(taxonomy.styles, taxonomy.tones));
+
+    fireEvent.change(screen.getByLabelText("Topic name"), {
+      target: { value: "Launch readiness" },
+    });
+    fireEvent.change(
+      screen.getByLabelText("What should this conversation surface?"),
+      { target: { value: "Surface unspoken concerns." } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate three options" }));
+
+    await waitFor(() => expect(onPreviewTopic).toHaveBeenCalledOnce());
+    expect(onPreviewTopic).toHaveBeenCalledWith(
+      expect.objectContaining({ styleId: "style-1", toneId: "tone-1" }),
+    );
+  });
 });

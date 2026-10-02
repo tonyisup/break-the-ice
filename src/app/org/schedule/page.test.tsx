@@ -387,6 +387,21 @@ describe("OrgWeeklyCurationPage Team prompt input validation", () => {
     return createAndAssign;
   }
 
+  function mockTopicComposerQueries() {
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
+      if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
+      if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
+      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
+      if (fn === "getCurationPreview") return { totalResponses: 0, coachCount: 0, confidence: "insufficient", recommendations: [] };
+      if (fn === "getStyles") return [{ _id: "style-1", id: "reflective", slug: "reflective", name: "Reflective", icon: "zap", color: "#888888" }];
+      if (fn === "getTones") return [{ _id: "tone-1", id: "warm", slug: "warm", name: "Warm", icon: "heart", color: "#888888" }];
+      if (fn === "getPublicQuestions" || fn === "getTopics") return [];
+      return undefined;
+    });
+  }
+
   it("shows the readable input validation message when written wording is refused, and keeps the draft", async () => {
     const createAndAssign = refuseTeamPrompts(TOO_LONG);
     render(<OrgWeeklyCurationPage />);
@@ -415,11 +430,6 @@ describe("OrgWeeklyCurationPage Team prompt input validation", () => {
       new ConvexError({ code: ERROR_CODES.TEAM_TOPIC_TOO_LONG, message: ERROR_MESSAGES.TEAM_TOPIC_GUIDANCE_TOO_LONG }),
       ERROR_MESSAGES.TEAM_TOPIC_GUIDANCE_TOO_LONG,
     ],
-    [
-      "the readable message for a deleted schedule",
-      new ConvexError({ code: ERROR_CODES.SCHEDULE_NOT_FOUND, message: ERROR_MESSAGES.SCHEDULE_NOT_FOUND }),
-      ERROR_MESSAGES.SCHEDULE_NOT_FOUND,
-    ],
     ["a generic message for an unreadable error", new Error(""), "Failed to assign topic question"],
   ])("shows %s when chosen topic wording is refused, and keeps it", async (_label, failure, expected) => {
     refuseTeamPrompts(failure);
@@ -429,18 +439,7 @@ describe("OrgWeeklyCurationPage Team prompt input validation", () => {
         ? vi.fn().mockResolvedValue({ questions: options, runId: "run-1" })
         : vi.fn().mockResolvedValue(undefined),
     );
-    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
-      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
-      if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
-      if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
-      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
-      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
-      if (fn === "getCurationPreview") return { totalResponses: 0, coachCount: 0, confidence: "insufficient", recommendations: [] };
-      if (fn === "getStyles") return [{ _id: "style-1", id: "reflective", slug: "reflective", name: "Reflective", icon: "zap", color: "#888888" }];
-      if (fn === "getTones") return [{ _id: "tone-1", id: "warm", slug: "warm", name: "Warm", icon: "heart", color: "#888888" }];
-      if (fn === "getPublicQuestions" || fn === "getTopics") return [];
-      return undefined;
-    });
+    mockTopicComposerQueries();
 
     render(<OrgWeeklyCurationPage />);
     fireEvent.click(screen.getByRole("button", { name: "Assign" }));
@@ -485,18 +484,7 @@ describe("OrgWeeklyCurationPage Team prompt input validation", () => {
         }))
         : vi.fn().mockResolvedValue(undefined),
     );
-    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
-      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
-      if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
-      if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
-      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
-      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
-      if (fn === "getCurationPreview") return { totalResponses: 0, coachCount: 0, confidence: "insufficient", recommendations: [] };
-      if (fn === "getStyles") return [{ _id: "style-1", id: "reflective", slug: "reflective", name: "Reflective", icon: "zap", color: "#888888" }];
-      if (fn === "getTones") return [{ _id: "tone-1", id: "warm", slug: "warm", name: "Warm", icon: "heart", color: "#888888" }];
-      if (fn === "getPublicQuestions" || fn === "getTopics") return [];
-      return undefined;
-    });
+    mockTopicComposerQueries();
 
     render(<OrgWeeklyCurationPage />);
     fireEvent.click(screen.getByRole("button", { name: "Assign" }));

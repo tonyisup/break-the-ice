@@ -62,12 +62,18 @@ export function TeamPromptComposer({
   const [isSaving, setIsSaving] = React.useState(false);
   const [isGenerating, setIsGenerating] = React.useState(false);
 
+  // Falls back to the first offered option when nothing is picked yet or the picked
+  // one is no longer offered, so the request matches what the select shows.
   React.useEffect(() => {
-    if (!styleId && styles[0]) setStyleId(styles[0].id);
+    if (!styles.some((style) => style.id === styleId)) {
+      setStyleId(styles[0]?.id ?? "");
+    }
   }, [styleId, styles]);
 
   React.useEffect(() => {
-    if (!toneId && tones[0]) setToneId(tones[0].id);
+    if (!tones.some((tone) => tone.id === toneId)) {
+      setToneId(tones[0]?.id ?? "");
+    }
   }, [toneId, tones]);
 
   const currentPreviewRequest: TopicPreviewRequest = {

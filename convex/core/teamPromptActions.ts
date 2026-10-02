@@ -24,6 +24,7 @@ type TopicPreviewArgs = {
   toneId: Id<"tones">;
 };
 
+/** Previews three questions for a topic whose fields the caller has already trimmed and checked. */
 export async function runTopicPreviewWithUsage(
   ctx: Parameters<typeof runPreviewQuestionGeneration>[0],
   args: TopicPreviewArgs,
@@ -37,13 +38,10 @@ export async function runTopicPreviewWithUsage(
       toneId: args.toneId,
     },
   );
-  const name = requireTeamTopicText(args.name, "name");
-  const guidance = requireTeamTopicText(args.guidance, "guidance");
-  const boundaries = optionalTeamTopicText(args.boundaries, "boundaries");
   const userContext = [
-    `Team conversation topic: ${name}`,
-    `Desired outcome: ${guidance}`,
-    boundaries ? `Boundaries: ${boundaries}` : undefined,
+    `Team conversation topic: ${args.name}`,
+    `Desired outcome: ${args.guidance}`,
+    args.boundaries ? `Boundaries: ${args.boundaries}` : undefined,
     "Return distinct options that a facilitator can ask exactly as written.",
   ]
     .filter(Boolean)
@@ -109,7 +107,12 @@ export const previewTopicQuestions = action({
   ): Promise<{ questions: string[]; runId: Id<"generationRuns"> }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    // Checked before the AI rate limit, so a request refused for its input doesn't
+    // spend the caller's AI requests.
+    const name = requireTeamTopicText(args.name, "name");
+    const guidance = requireTeamTopicText(args.guidance, "guidance");
+    const boundaries = optionalTeamTopicText(args.boundaries, "boundaries");
     await ensureAiRequestAllowed(ctx);
-    return await runTopicPreviewWithUsage(ctx, args);
+    return await runTopicPreviewWithUsage(ctx, { ...args, name, guidance, boundaries });
   },
 });
