@@ -24,6 +24,10 @@ const args = {
 };
 
 describe("runTopicPreviewWithUsage", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("reserves workspace AI usage before generating previews", async () => {
     const ctx = {
       runQuery: vi.fn().mockResolvedValue("user-id"),
@@ -146,13 +150,13 @@ describe("runTopicPreviewWithUsage", () => {
       persistable: 2,
       distinct: 1,
     });
-    warn.mockRestore();
   });
 
   it.each([
     ["wording that cannot be persisted", ["x".repeat(501)]],
     ["incomplete or duplicate options", ["What should we revisit?", "What should we revisit?"]],
   ])("refuses %s readably and keeps the paid usage", async (_case, previewTexts) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const ctx = {
       runQuery: vi.fn().mockResolvedValue("user-id"),
       runMutation: vi.fn().mockResolvedValue(1),

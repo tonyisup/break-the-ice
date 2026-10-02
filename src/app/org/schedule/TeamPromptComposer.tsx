@@ -63,16 +63,17 @@ export function TeamPromptComposer({
   const [isGenerating, setIsGenerating] = React.useState(false);
 
   // Falls back to the first offered option when nothing is picked yet or the picked
-  // one is no longer offered, so the request matches what the select shows.
+  // one is no longer offered, so the request matches what the select shows. An empty
+  // list means the options are still loading, so the pick is left alone.
   React.useEffect(() => {
-    if (!styles.some((style) => style.id === styleId)) {
-      setStyleId(styles[0]?.id ?? "");
+    if (styles.length > 0 && !styles.some((style) => style.id === styleId)) {
+      setStyleId(styles[0].id);
     }
   }, [styleId, styles]);
 
   React.useEffect(() => {
-    if (!tones.some((tone) => tone.id === toneId)) {
-      setToneId(tones[0]?.id ?? "");
+    if (tones.length > 0 && !tones.some((tone) => tone.id === toneId)) {
+      setToneId(tones[0].id);
     }
   }, [toneId, tones]);
 

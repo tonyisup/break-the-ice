@@ -193,6 +193,44 @@ describe("TeamPromptComposer", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps the picked style and tone while the options briefly reload", async () => {
+    const onPreviewTopic = vi.fn().mockResolvedValue(["One?", "Two?", "Three?"]);
+    const composer = (styles: typeof taxonomy.styles, tones: typeof taxonomy.tones) => (
+      <TeamPromptComposer
+        dayLabel="Wednesday"
+        styles={styles}
+        tones={tones}
+        onCreateQuestion={vi.fn()}
+        onPreviewTopic={onPreviewTopic}
+        onAssignTopicQuestion={vi.fn()}
+      />
+    );
+    const styles = [...taxonomy.styles, { id: "style-2", name: "Playful" }];
+    const tones = [...taxonomy.tones, { id: "tone-2", name: "Direct" }];
+    const { rerender } = render(composer(styles, tones));
+
+    fireEvent.click(screen.getByRole("tab", { name: /topic/i }));
+    fireEvent.change(screen.getByLabelText("Style"), { target: { value: "style-2" } });
+    fireEvent.change(screen.getByLabelText("Tone"), { target: { value: "tone-2" } });
+    // The page passes an empty list while its taxonomy queries are loading.
+    rerender(composer([], []));
+    rerender(composer(styles, tones));
+
+    fireEvent.change(screen.getByLabelText("Topic name"), {
+      target: { value: "Launch readiness" },
+    });
+    fireEvent.change(
+      screen.getByLabelText("What should this conversation surface?"),
+      { target: { value: "Surface unspoken concerns." } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate three options" }));
+
+    await waitFor(() => expect(onPreviewTopic).toHaveBeenCalledOnce());
+    expect(onPreviewTopic).toHaveBeenCalledWith(
+      expect.objectContaining({ styleId: "style-2", toneId: "tone-2" }),
+    );
+  });
+
   it("moves to an offered style and tone when the picked ones stop being offered", async () => {
     const onPreviewTopic = vi.fn().mockResolvedValue(["One?", "Two?", "Three?"]);
     const composer = (styles: typeof taxonomy.styles, tones: typeof taxonomy.tones) => (

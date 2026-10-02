@@ -243,22 +243,63 @@ async function createDraftTeamSchedule() {
   return { ...workspace, scheduleId };
 }
 
-test("Team prompts into a published schedule are rejected with a readable error", async () => {
-  const { t, admin, scheduleId } = await createDraftTeamSchedule();
-  await t.run(async (ctx) => ctx.db.patch(scheduleId, { status: "published" }));
+test.each(["published", "completed"] as const)(
+  "Team prompts into a %s schedule are rejected with a readable error",
+  async (status) => {
+    const { t, admin, scheduleId } = await createDraftTeamSchedule();
+    await t.run(async (ctx) => ctx.db.patch(scheduleId, { status }));
 
-  const error = await admin
-    .mutation(api.core.teamPrompts.createAndAssign, {
+    const error = await admin
+      .mutation(api.core.teamPrompts.createAndAssign, {
+        scheduleId,
+        dayOfWeek: "monday",
+        questionText: "What should we challenge?",
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(convexErrorData(error)).toEqual({
+      code: ERROR_CODES.SCHEDULE_NOT_DRAFT,
+      message: ERROR_MESSAGES.SCHEDULE_NOT_DRAFT,
+    });
+  },
+);
+
+// The role check walks every user row for the identity, so writes must use the row it accepted.
+test("Team prompts are credited to the user row whose membership passed the role check", async () => {
+  const { t, organizationId, scheduleId } = await createDraftTeamSchedule();
+  const legacyUserId = await t.run(async (ctx) => {
+    const legacyUserId = await ctx.db.insert("users", { email: MANAGER_IDENTITY.email });
+    await ctx.db.insert("users", {
+      clerkId: MANAGER_IDENTITY.subject,
+      tokenIdentifier: MANAGER_IDENTITY.tokenIdentifier,
+      email: MANAGER_IDENTITY.email,
+    });
+    await ctx.db.insert("organization_members", {
+      userId: legacyUserId,
+      organizationId,
+      role: "manager",
+    });
+    return legacyUserId;
+  });
+
+  const result = await t.withIdentity(MANAGER_IDENTITY).mutation(
+    api.core.teamPrompts.createAndAssign,
+    {
       scheduleId,
       dayOfWeek: "monday",
       questionText: "What should we challenge?",
-    })
-    .catch((caught: unknown) => caught);
+      sourceTopic: { name: "Launch readiness", guidance: "Surface unspoken concerns." },
+    },
+  );
 
-  expect(convexErrorData(error)).toEqual({
-    code: ERROR_CODES.SCHEDULE_PUBLISHED,
-    message: ERROR_MESSAGES.SCHEDULE_PUBLISHED,
-  });
+  const saved = await t.run(async (ctx) => ({
+    topic: await ctx.db.get(result.teamTopicId!),
+    question: await ctx.db.get(result.questionId),
+    assignment: await ctx.db.get(result.scheduledQuestionId),
+  }));
+  expect(saved.topic?.createdBy).toBe(legacyUserId);
+  expect(saved.question?.authorId).toBe(legacyUserId);
+  expect(saved.assignment?.assignedBy).toBe(legacyUserId);
 });
 
 // The missing schedule is checked before membership, so it stays a plain error.

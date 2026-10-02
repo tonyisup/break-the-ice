@@ -17,7 +17,7 @@ export const ERROR_CODES = {
   AI_GENERATION_FAILED: "AI_GENERATION_FAILED",
   QUESTION_TEXT_REQUIRED: "QUESTION_TEXT_REQUIRED",
   QUESTION_TEXT_TOO_LONG: "QUESTION_TEXT_TOO_LONG",
-  SCHEDULE_PUBLISHED: "SCHEDULE_PUBLISHED",
+  SCHEDULE_NOT_DRAFT: "SCHEDULE_NOT_DRAFT",
   SCHEDULE_DAY_INACTIVE: "SCHEDULE_DAY_INACTIVE",
   TEAM_TOPIC_REQUIRED: "TEAM_TOPIC_REQUIRED",
   TEAM_TOPIC_TOO_LONG: "TEAM_TOPIC_TOO_LONG",
@@ -39,7 +39,7 @@ export const ERROR_MESSAGES = {
   QUESTION_TEXT_TOO_LONG: `Questions can be up to ${MAX_QUESTION_TEXT_LENGTH} characters.`,
   // Team prompt refusals. A topic field shares one code per refusal, with a message
   // that names the field.
-  SCHEDULE_PUBLISHED: "This schedule is no longer a draft, so it can't be changed.",
+  SCHEDULE_NOT_DRAFT: "This schedule is already published or completed, so it can't be changed.",
   SCHEDULE_DAY_INACTIVE: "That day is no longer a delivery day for this schedule.",
   TEAM_TOPIC_NAME_REQUIRED: "Please enter a topic name.",
   TEAM_TOPIC_GUIDANCE_REQUIRED: "Please describe what this conversation should surface.",

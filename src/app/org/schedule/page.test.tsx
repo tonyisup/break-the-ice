@@ -461,8 +461,8 @@ describe("OrgWeeklyCurationPage Team prompt input validation", () => {
 
   it("shows the readable message when the schedule was published in another tab, not the redacted server error", async () => {
     refuseTeamPrompts(new ConvexError({
-      code: ERROR_CODES.SCHEDULE_PUBLISHED,
-      message: ERROR_MESSAGES.SCHEDULE_PUBLISHED,
+      code: ERROR_CODES.SCHEDULE_NOT_DRAFT,
+      message: ERROR_MESSAGES.SCHEDULE_NOT_DRAFT,
     }));
     render(<OrgWeeklyCurationPage />);
     fireEvent.click(screen.getByRole("button", { name: "Assign" }));
@@ -470,7 +470,7 @@ describe("OrgWeeklyCurationPage Team prompt input validation", () => {
     fireEvent.change(screen.getByLabelText("Exact question"), { target: { value: "What should we challenge?" } });
     fireEvent.click(screen.getByRole("button", { name: "Save and assign" }));
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(ERROR_MESSAGES.SCHEDULE_PUBLISHED));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(ERROR_MESSAGES.SCHEDULE_NOT_DRAFT));
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.success).not.toHaveBeenCalled();
   });

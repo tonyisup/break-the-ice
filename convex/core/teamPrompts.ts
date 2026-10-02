@@ -1,7 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { internalQuery, mutation, query } from "../_generated/server";
 import { ensurePaidOrganizationMember } from "../auth";
-import { findCanonicalUser } from "../lib/users";
 import { deliveryDaysForSchedule } from "../lib/deliveryDays";
 import { requireQuestionText } from "../lib/questionText";
 import {
@@ -115,14 +114,16 @@ export const createAndAssign = mutation({
     const schedule = await ctx.db.get(args.scheduleId);
     // Checked before membership, so it stays a plain error like the other schedule paths.
     if (!schedule) throw new Error("Schedule not found");
-    await ensurePaidOrganizationMember(ctx, schedule.organizationId, [
-      "admin",
-      "manager",
-    ]);
+    // Writes are credited to the membership row that passed the role check.
+    const membership = await ensurePaidOrganizationMember(
+      ctx,
+      schedule.organizationId,
+      ["admin", "manager"],
+    );
     if (schedule.status !== "draft") {
       throw new ConvexError({
-        code: ERROR_CODES.SCHEDULE_PUBLISHED,
-        message: ERROR_MESSAGES.SCHEDULE_PUBLISHED,
+        code: ERROR_CODES.SCHEDULE_NOT_DRAFT,
+        message: ERROR_MESSAGES.SCHEDULE_NOT_DRAFT,
       });
     }
     if (!deliveryDaysForSchedule(schedule).includes(args.dayOfWeek)) {
@@ -131,15 +132,6 @@ export const createAndAssign = mutation({
         message: ERROR_MESSAGES.SCHEDULE_DAY_INACTIVE,
       });
     }
-
-    const identity = await ctx.auth.getUserIdentity();
-    const user = await findCanonicalUser(ctx, {
-      clerkId: identity?.subject,
-      tokenIdentifier: identity?.tokenIdentifier,
-      email: identity?.email,
-    });
-    // Membership was already checked above, so the user always exists here.
-    if (!user) throw new Error("User not found");
 
     const questionText = requireQuestionText(args.questionText);
     const now = Date.now();
@@ -153,7 +145,7 @@ export const createAndAssign = mutation({
           args.sourceTopic.boundaries,
           "boundaries",
         ),
-        createdBy: user._id,
+        createdBy: membership.userId,
         createdAt: now,
         updatedAt: now,
       });
@@ -161,7 +153,7 @@ export const createAndAssign = mutation({
 
     const questionId = await ctx.db.insert("questions", {
       organizationId: schedule.organizationId,
-      authorId: user._id,
+      authorId: membership.userId,
       customText: questionText,
       kind: "team_prompt",
       status: "private",
@@ -185,7 +177,7 @@ export const createAndAssign = mutation({
       questionId,
       slotOrder: 0,
       assignedAt: now,
-      assignedBy: user._id,
+      assignedBy: membership.userId,
       teamTopicId,
       questionTextSnapshot: questionText,
     });
