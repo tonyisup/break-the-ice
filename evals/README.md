@@ -46,6 +46,14 @@ library questions saved under an older fingerprint aren't recognized as exact co
 `npx convex run internal/migrations:recomputeQuestionFingerprints '{"dryRun":true}'`, then again
 with `false`.
 
+Since v0.4.3.0 only library questions keep a fingerprint. Before generating on dev, also run the
+one-time cleanup that clears the ones older code left on other questions:
+`npx convex run internal/migrations:clearPrivateQuestionFingerprints '{"dryRun":true}'`, then
+again with `false` (a second dry run should show `cleared` at 0). It can change the library
+duplicate rate against a baseline generated before it ran. The recorded library size stays the
+same, so `compare.mjs` won't flag that: library duplicate rates against such a baseline aren't
+like for like.
+
 A run costs about $0.15 of generation on dev (charged to the dev deployment's system AI budget)
 and about $0.05 of Jev.
 
