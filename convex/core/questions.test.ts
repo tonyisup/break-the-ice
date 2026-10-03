@@ -595,6 +595,19 @@ describe("author edits go back through review", () => {
     expect(edited!.prunedAt).toBeUndefined();
   });
 
+  test("an author edit to a question older pruning marked with only prunedAt un-retires it without keeping the pruned wording as reviewed text", async () => {
+    const { t, author, admin, questionId } = await setup({ customText: firstWording, status: "approved", prunedAt: 1 });
+
+    const edited = await reword(author, questionId);
+
+    expect(edited).toMatchObject({ customText: newWording, status: "pending", reviewRevision: 1 });
+    expect(edited!.prunedAt).toBeUndefined();
+    expect(edited!.text).toBeUndefined();
+    const queue = await admin.query(api.admin.questions.getPendingQuestions, {});
+    expect(queue.map((question: Doc<"questions">) => question._id)).toEqual([questionId]);
+    expect(await t.query(api.core.questions.getQuestionById, { id: questionId })).toBeNull();
+  });
+
   test("an author edit to a pruned question waits in the review queue, and the prune can't be undone over it", async () => {
     const { t, author, admin, questionId } = await setup({ customText: firstWording, text: firstWording, status: "public" });
     const pruningId = await t.run(async (ctx) =>

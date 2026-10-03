@@ -316,3 +316,95 @@ describe("normalizing questions retired before the shared rule", () => {
     });
   });
 });
+
+describe("who can still open a question older pruning marked with only prunedAt", () => {
+  const author = { subject: "legacy-author", tokenIdentifier: "https://issuer.test|legacy-author", email: "legacy-author@example.com" };
+
+  test("its share image and picture no longer load", async () => {
+    const t = convexTest(schema, modules);
+    const imageStorageId = await t.run(async (ctx) => ctx.storage.store(new Blob(["image"])));
+    const live = await insertQuestion(t, { text: "Live?", imageStorageId });
+    const legacy = await insertQuestion(t, { text: "Old?", prunedAt: 1, imageStorageId });
+
+    expect(await t.query(api.core.questions.getQuestionForOgImage, { id: legacy })).toBeNull();
+    expect(await t.query(api.core.questions.getQuestionImageUrl, { questionId: legacy })).toBeNull();
+    expect(await t.query(api.core.questions.getQuestionForOgImage, { id: live })).toMatchObject({ text: "Live?", heldForReview: false });
+    expect(await t.query(api.core.questions.getQuestionImageUrl, { questionId: live })).toEqual(expect.any(String));
+  });
+
+  test("its author can still open their own submission, but no one else can", async () => {
+    const t = convexTest(schema, modules);
+    const authorId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { clerkId: author.subject, tokenIdentifier: author.tokenIdentifier, email: author.email }),
+    );
+    const submission = await insertQuestion(t, { authorId, customText: "My old question?", status: "approved", prunedAt: 1 });
+
+    expect(await t.query(api.core.questions.getQuestionById, { id: submission })).toBeNull();
+    expect(await t.withIdentity(admin).query(api.core.questions.getQuestionById, { id: submission })).toBeNull();
+    expect(await t.withIdentity(author).query(api.core.questions.getQuestionById, { id: submission })).toMatchObject({ _id: submission });
+  });
+});
+
+describe("undoing a review of a question its author edited after older pruning", () => {
+  test("restores it pending and not retired, so it waits for review again", async () => {
+    const t = convexTest(schema, modules);
+    const editor = t.withIdentity(admin);
+    // Before author edits cleared prunedAt, an edit to a pruned question left it pending with prunedAt.
+    const questionId = await insertQuestion(t, { authorId: "author-1", customText: "Edited after pruning?", status: "pending", prunedAt: 1 });
+    await editor.mutation(api.admin.questions.updateQuestion, {
+      id: questionId,
+      status: "public",
+      reviewReason: "Approve the author's edit",
+      expectedRevision: 0,
+    });
+    expect((await getQuestion(t, questionId))?.prunedAt).toBeUndefined();
+
+    const [review] = await editor.query(api.admin.pruning.getReviewHistory, { source: "question" });
+    await editor.mutation(api.admin.pruning.undoReview, { reviewId: review._id });
+
+    const restored = await getQuestion(t, questionId);
+    expect(restored).toMatchObject({ status: "pending", customText: "Edited after pruning?" });
+    expect(restored?.prunedAt).toBeUndefined();
+    expect(restored?.fingerprint).toBeUndefined();
+  });
+});
+
+describe("normalizing team, organization and edited questions retired before the shared rule", () => {
+  async function syncJobs(t: TestConvex) {
+    const scheduled = await t.run(async (ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    return scheduled
+      .filter((job) => job.name === "internal/questions:syncQuestionEmbeddingFilters")
+      .map((job) => (job.args[0] as { questionId: Id<"questions"> }).questionId);
+  }
+
+  test("prunes an organization question and drops its fingerprint and embedding, un-retires private and pending edits, and syncs only changed rows", async () => {
+    const t = convexTest(schema, modules);
+    const organizationId = await t.run(async (ctx) => ctx.db.insert("organizations", { name: "Old Team" }));
+    const live = await insertQuestion(t, { text: "Live?", fingerprint: fingerprintText("Live?") });
+    const orgQuestion = await insertQuestion(t, { organizationId, text: "Old team question?", prunedAt: 1, fingerprint: fingerprintText("Old team question?") });
+    await t.run(async (ctx) => ctx.db.insert("question_embeddings", { questionId: orgQuestion, embedding: [1, 0], status: "public" }));
+    const editedPrivate = await insertQuestion(t, { authorId: "author-1", customText: "Made private?", status: "private", prunedAt: 2 });
+    const editedPending = await insertQuestion(t, { authorId: "author-2", customText: "Resubmitted?", status: "pending", prunedAt: 3, fingerprint: "q_stale" });
+
+    const dry = await t.action(internal.internal.migrations.normalizeRetiredQuestions, { dryRun: true });
+    expect(await syncJobs(t)).toEqual([]);
+    const summary = await t.action(internal.internal.migrations.normalizeRetiredQuestions, { dryRun: false });
+
+    const expected = { scanned: 4, markedPruned: 1, prunedAtCleared: 2, fingerprintsCleared: 2 };
+    expect(dry).toEqual(expected);
+    expect(summary).toEqual(expected);
+    const org = await getQuestion(t, orgQuestion);
+    expect(org).toMatchObject({ status: "pruned", prunedAt: 1 });
+    expect(org?.fingerprint).toBeUndefined();
+    const embedded = await t.run(async (ctx) => ctx.db.query("question_embeddings").collect());
+    expect(embedded.map((row) => row.questionId)).toEqual([]);
+    for (const [id, status] of [[editedPrivate, "private"], [editedPending, "pending"]] as const) {
+      const row = await getQuestion(t, id);
+      expect(row).toMatchObject({ status });
+      expect(row?.prunedAt).toBeUndefined();
+      expect(row?.fingerprint).toBeUndefined();
+    }
+    expect((await syncJobs(t)).sort()).toEqual([orgQuestion, editedPrivate, editedPending].sort());
+    expect(await syncJobs(t)).not.toContain(live);
+  });
+});

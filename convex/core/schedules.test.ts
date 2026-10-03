@@ -1257,3 +1257,27 @@ test.each([
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   vi.useRealTimers();
 });
+
+test("schedule assignment rejects a library question older pruning marked with only prunedAt", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  });
+  const retiredQuestionId = await t.run(async (ctx) =>
+    ctx.db.insert("questions", {
+      text: "Retired by older pruning",
+      status: "public",
+      prunedAt: 1,
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    }),
+  );
+
+  await expect(admin.mutation(api.core.schedules.assignQuestion, {
+    scheduleId,
+    dayOfWeek: "monday",
+    questionId: retiredQuestionId,
+  })).rejects.toThrow("not available to this organization");
+});
