@@ -494,9 +494,11 @@ export const getPublicQuestions = query({
 		for (const q of legacyRows) {
 			byId.set(q._id, q);
 		}
-		const merged = [...byId.values()].sort(
-			(a, b) => a._creationTime - b._creationTime,
-		);
+		// Older pruning set only prunedAt and left the status, so retirement is checked here too
+		// (see isRetiredQuestion): assignQuestion refuses a retired library question.
+		const merged = [...byId.values()]
+			.filter((q) => !isRetiredQuestion(q))
+			.sort((a, b) => a._creationTime - b._creationTime);
 		const rows = merged.slice(0, limit);
 		return rows.map((q) => ({
 			_id: q._id,

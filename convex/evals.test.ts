@@ -229,16 +229,18 @@ describe("eval data", () => {
         duplicateWasPublic: true,
         ...counters,
       });
+      // Older pruning set only prunedAt and left the status public.
+      const legacyPruned = await ctx.db.insert("questions", { text: "Pruned long ago?", status: "public", prunedAt: 1, ...counters });
       const personal = await ctx.db.insert("questions", { text: "Mine?", authorId: userId, status: "public", ...counters });
       const team = await ctx.db.insert("questions", { text: "Team?", organizationId: orgId, status: "public", ...counters });
       const deleted = await ctx.db.insert("questions", { text: "Gone?", status: "public", ...counters });
       await ctx.db.delete(deleted);
-      return [publicId, pruned, retired, personal, team, deleted];
+      return [publicId, pruned, retired, legacyPruned, personal, team, deleted];
     });
 
     const texts = await t.query(internal.internal.evalData.publicLibraryTexts, { questionIds: ids });
 
-    expect(texts).toEqual(["Public?", null, null, null, null, null]);
+    expect(texts).toEqual(["Public?", null, null, null, null, null, null]);
   });
 
   test("fingerprint matches count existing copies, up to two", async () => {
@@ -727,6 +729,9 @@ describe("generateEvalBatch", () => {
       await ctx.db.insert("questions", { text: "Not embedded yet?", status: "public", ...counters });
       await ctx.db.insert("questions", { text: "Mine?", authorId: userId, status: "public", ...counters });
       await ctx.db.insert("questions", { text: "Pruned?", status: "pruned", ...counters });
+      // Older pruning set only prunedAt and left the status public.
+      const legacyPruned = await ctx.db.insert("questions", { text: "Pruned long ago?", status: "public", prunedAt: 1, ...counters });
+      await ctx.db.insert("question_embeddings", { questionId: legacyPruned, embedding: atCosine(1) });
     });
 
     expect(await t.action(internal.internal.evals.evalLibraryStats, {})).toEqual({ publicQuestions: 2, withEmbedding: 1 });

@@ -898,14 +898,25 @@ export const clearPrivateQuestionEmbeddings = internalAction({
 });
 
 export const RETIRED_NORMALIZE_PAGE_SIZE = 100;
+// The run reports the IDs of the first this many questions in each bucket, for spot checks, and
+// counts the rest.
+export const RETIRED_NORMALIZE_MAX_REPORTED_IDS = 100;
 const retiredNormalizeCounts = {
 	scanned: v.number(),
 	markedPruned: v.number(),
 	prunedAtCleared: v.number(),
+	// Personal, team and organization questions that end up not public, moved to "pruned" or
+	// losing `prunedAt`, and still held a fingerprint.
 	fingerprintsCleared: v.number(),
+};
+const retiredNormalizeIds = {
+	markedPrunedIds: v.array(v.id("questions")),
+	prunedAtClearedIds: v.array(v.id("questions")),
 };
 const retiredNormalizePageResult = v.object({
 	...retiredNormalizeCounts,
+	// Every question the page changed (or would change), at most a page's worth.
+	...retiredNormalizeIds,
 	continueCursor: v.string(),
 	isDone: v.boolean(),
 });
@@ -921,11 +932,17 @@ export const normalizeRetiredQuestionsPage = internalMutation({
 	handler: async (ctx, args) => {
 		const page = await ctx.db.query("questions").paginate({ numItems: RETIRED_NORMALIZE_PAGE_SIZE, cursor: args.cursor });
 		const counts = { scanned: page.page.length, markedPruned: 0, prunedAtCleared: 0, fingerprintsCleared: 0 };
+		const ids = { markedPrunedIds: [] as Id<"questions">[], prunedAtClearedIds: [] as Id<"questions">[] };
 		for (const question of page.page) {
 			const normalized = normalizedRetirement(question);
 			if (normalized.status === question.status && normalized.prunedAt === question.prunedAt) continue;
-			if (normalized.status === "pruned") counts.markedPruned += 1;
-			else counts.prunedAtCleared += 1;
+			if (normalized.status === "pruned") {
+				counts.markedPruned += 1;
+				ids.markedPrunedIds.push(question._id);
+			} else {
+				counts.prunedAtCleared += 1;
+				ids.prunedAtClearedIds.push(question._id);
+			}
 			const after = { ...question, ...normalized };
 			// Only library questions keep a fingerprint, and a pruned submission isn't one (see
 			// isPrivateUserQuestion).
@@ -940,7 +957,7 @@ export const normalizeRetiredQuestionsPage = internalMutation({
 			}
 			await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: question._id });
 		}
-		return { ...counts, continueCursor: page.continueCursor, isDone: page.isDone };
+		return { ...counts, ...ids, continueCursor: page.continueCursor, isDone: page.isDone };
 	},
 });
 
@@ -949,9 +966,15 @@ export const normalizeRetiredQuestionsPage = internalMutation({
  * and left the status as it was, so the feed and other lists that select by status kept showing
  * them; these move to status "pruned" (`markedPruned`). A question its author edited after it was
  * pruned has gone back through review as pending or private, so it loses `prunedAt` instead
- * (`prunedAtCleared`). A personal, team or organization question moved to "pruned" is private, so
- * it drops its fingerprint (`fingerprintsCleared`) and embeddings, as approvePruning does; a
- * library question keeps both. It reports counts only.
+ * (`prunedAtCleared`). A personal, team or organization question that ends up not public, either
+ * moved to "pruned" or left pending or private without `prunedAt`, is private, so it drops any
+ * fingerprint it still holds and its embeddings, as approvePruning does; `fingerprintsCleared`
+ * counts the fingerprints dropped in both cases. A library question keeps its fingerprint and
+ * embeddings.
+ *
+ * Besides the counts, `markedPrunedIds` and `prunedAtClearedIds` list the IDs (no text) of the
+ * first RETIRED_NORMALIZE_MAX_REPORTED_IDS questions in each bucket, in table order, for spot
+ * checks; the counts include the rest.
  *
  * It doesn't record a review or change reviewRevision, and undo compares and restores retirement
  * normalized (see normalizedRetirement), so earlier reviews of these questions can still be
@@ -961,11 +984,13 @@ export const normalizeRetiredQuestionsPage = internalMutation({
  */
 export const normalizeRetiredQuestions = internalAction({
 	args: { dryRun: v.boolean() },
-	returns: v.object(retiredNormalizeCounts),
+	returns: v.object({ ...retiredNormalizeCounts, ...retiredNormalizeIds }),
 	handler: async (ctx, args) => {
 		const label = `normalizeRetiredQuestions${args.dryRun ? " (dry run)" : ""}`;
 		const totals = { scanned: 0, markedPruned: 0, prunedAtCleared: 0, fingerprintsCleared: 0 };
 		const countKeys = Object.keys(retiredNormalizeCounts) as Array<keyof typeof retiredNormalizeCounts>;
+		const ids = { markedPrunedIds: [] as Id<"questions">[], prunedAtClearedIds: [] as Id<"questions">[] };
+		const idKeys = Object.keys(retiredNormalizeIds) as Array<keyof typeof retiredNormalizeIds>;
 		let cursor: string | null = null;
 		for (let pages = 1; ; pages++) {
 			const page: Infer<typeof retiredNormalizePageResult> = await ctx.runMutation(
@@ -973,12 +998,15 @@ export const normalizeRetiredQuestions = internalAction({
 				{ dryRun: args.dryRun, cursor },
 			);
 			for (const key of countKeys) totals[key] += page[key];
+			for (const key of idKeys) {
+				ids[key].push(...page[key].slice(0, RETIRED_NORMALIZE_MAX_REPORTED_IDS - ids[key].length));
+			}
 			if (page.isDone) break;
 			// Running totals, so a run that stops partway still shows how far it got.
 			if (pages % FINGERPRINT_PROGRESS_LOG_PAGES === 0) console.log(`${label} progress: ${JSON.stringify(totals)}`);
 			cursor = page.continueCursor;
 		}
 		console.log(`${label} total: ${JSON.stringify(totals)}`);
-		return totals;
+		return { ...totals, ...ids };
 	},
 });

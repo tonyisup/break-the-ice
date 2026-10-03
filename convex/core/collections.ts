@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensurePaidOrganizationMember } from "../auth";
+import { isRetiredQuestion } from "../lib/questionAccess";
 
 const MIN_PUBLIC_SEARCH_LENGTH = 3;
 const MAX_PUBLIC_SEARCH_SCAN = 1500;
@@ -15,8 +16,13 @@ const publicQuestionSummary = v.object({
 	topic: v.optional(v.string()),
 });
 
-function isPubliclyAvailableStatus(status: Doc<"questions">["status"]) {
-	return status === "public" || status === "approved" || status === undefined;
+/**
+ * Public and not retired. Older pruning set only `prunedAt` and left the status, so retirement is
+ * checked too (see isRetiredQuestion). A retired duplicate still opens by link, but no list shows it.
+ */
+function isPubliclyAvailable(question: Doc<"questions">) {
+	const status = question.status;
+	return (status === "public" || status === "approved" || status === undefined) && !isRetiredQuestion(question);
 }
 
 async function loadPublicQuestionPool(ctx: QueryCtx, scanLimit: number) {
@@ -38,7 +44,7 @@ async function loadPublicQuestionPool(ctx: QueryCtx, scanLimit: number) {
 
 	const byId = new Map<Id<"questions">, Doc<"questions">>();
 	for (const row of [...publicRows, ...approvedRows, ...legacyRows]) {
-		if (isPubliclyAvailableStatus(row.status)) {
+		if (isPubliclyAvailable(row)) {
 			byId.set(row._id, row);
 		}
 	}
@@ -87,7 +93,7 @@ export const addQuestionToCollection = mutation({
 		await ensurePaidOrganizationMember(ctx, collection.organizationId, ["admin", "manager"]);
 
 		const question = await ctx.db.get(args.questionId);
-		if (!question || !isPubliclyAvailableStatus(question.status)) {
+		if (!question || !isPubliclyAvailable(question)) {
 			throw new Error("Only public questions can be added to collections");
 		}
 

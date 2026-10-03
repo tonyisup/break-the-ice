@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
-import { RETIRED_NORMALIZE_PAGE_SIZE } from "./internal/migrations";
+import { RETIRED_NORMALIZE_MAX_REPORTED_IDS, RETIRED_NORMALIZE_PAGE_SIZE } from "./internal/migrations";
 import { fingerprintText } from "./lib/promptArchitecture";
 
 type TestConvex = ReturnType<typeof convexTest>;
@@ -105,6 +105,14 @@ describe("a question older pruning marked with only prunedAt is retired", () => 
     const questions = await t.query(api.core.questions.getNextQuestions, { count: 10, style: styleId, tone: toneId });
 
     expect(ids(questions)).toEqual([live]);
+  });
+
+  test("the schedule picker leaves it out", async () => {
+    const { t, live } = await setup();
+
+    const questions = await t.query(api.core.questions.getPublicQuestions, {});
+
+    expect(questions.map((question) => question._id)).toEqual([live]);
   });
 
   test("its link no longer opens, like any pruned question", async () => {
@@ -216,16 +224,25 @@ describe("normalizing questions retired before the shared rule", () => {
     return t.run(async (ctx) => (await ctx.db.query("question_embeddings").collect()).map((row) => row.questionId));
   }
 
-  const expectedCounts = { scanned: 7, markedPruned: 3, prunedAtCleared: 1, fingerprintsCleared: 1 };
+  function expectedSummary(ids: Awaited<ReturnType<typeof setupQuestions>>["ids"]) {
+    return {
+      scanned: 7,
+      markedPruned: 3,
+      prunedAtCleared: 1,
+      fingerprintsCleared: 1,
+      markedPrunedIds: [ids.legacyLibrary, ids.legacyNoStatus, ids.legacySubmission],
+      prunedAtClearedIds: [ids.editedAfterPruning],
+    };
+  }
 
   test("a dry run counts what it would change and writes nothing", async () => {
-    const { t } = await setupQuestions();
+    const { t, ids } = await setupQuestions();
     const before = await allQuestions(t);
     const embeddedBefore = await embeddedIds(t);
 
     const summary = await t.action(internal.internal.migrations.normalizeRetiredQuestions, { dryRun: true });
 
-    expect(summary).toEqual(expectedCounts);
+    expect(summary).toEqual(expectedSummary(ids));
     expect(await allQuestions(t)).toEqual(before);
     expect(await embeddedIds(t)).toEqual(embeddedBefore);
   });
@@ -235,7 +252,7 @@ describe("normalizing questions retired before the shared rule", () => {
 
     const summary = await t.action(internal.internal.migrations.normalizeRetiredQuestions, { dryRun: false });
 
-    expect(summary).toEqual(expectedCounts);
+    expect(summary).toEqual(expectedSummary(ids));
     expect(await getQuestion(t, ids.legacyLibrary)).toMatchObject({
       status: "pruned",
       prunedAt: 1,
@@ -254,20 +271,35 @@ describe("normalizing questions retired before the shared rule", () => {
     expect((await embeddedIds(t)).sort()).toEqual([ids.live, ids.legacyLibrary].sort());
 
     const again = await t.action(internal.internal.migrations.normalizeRetiredQuestions, { dryRun: false });
-    expect(again).toEqual({ scanned: 7, markedPruned: 0, prunedAtCleared: 0, fingerprintsCleared: 0 });
+    expect(again).toEqual({
+      scanned: 7,
+      markedPruned: 0,
+      prunedAtCleared: 0,
+      fingerprintsCleared: 0,
+      markedPrunedIds: [],
+      prunedAtClearedIds: [],
+    });
   });
 
-  test("a run with questions to normalize on more than one page normalizes them all", async () => {
+  test("a run with questions to normalize on more than one page normalizes them all, and lists the first IDs", async () => {
     const t = convexTest(schema, modules);
-    const count = RETIRED_NORMALIZE_PAGE_SIZE + 1;
+    const count = Math.max(RETIRED_NORMALIZE_PAGE_SIZE, RETIRED_NORMALIZE_MAX_REPORTED_IDS) + 1;
+    const legacyIds: Id<"questions">[] = [];
     for (let i = 0; i < count; i++) {
-      await insertQuestion(t, { text: `Old question number ${i}?`, prunedAt: 1 });
+      legacyIds.push(await insertQuestion(t, { text: `Old question number ${i}?`, prunedAt: 1 }));
     }
     await insertQuestion(t, { text: "Live?" });
 
     const summary = await t.action(internal.internal.migrations.normalizeRetiredQuestions, { dryRun: false });
 
-    expect(summary).toEqual({ scanned: count + 1, markedPruned: count, prunedAtCleared: 0, fingerprintsCleared: 0 });
+    expect(summary).toEqual({
+      scanned: count + 1,
+      markedPruned: count,
+      prunedAtCleared: 0,
+      fingerprintsCleared: 0,
+      markedPrunedIds: legacyIds.slice(0, RETIRED_NORMALIZE_MAX_REPORTED_IDS),
+      prunedAtClearedIds: [],
+    });
     const statuses = (await allQuestions(t)).map((question) => question.status);
     expect(statuses.filter((status) => status === "pruned")).toHaveLength(count);
     expect(statuses.filter((status) => status === "public")).toHaveLength(1);
@@ -390,7 +422,14 @@ describe("normalizing team, organization and edited questions retired before the
     expect(await syncJobs(t)).toEqual([]);
     const summary = await t.action(internal.internal.migrations.normalizeRetiredQuestions, { dryRun: false });
 
-    const expected = { scanned: 4, markedPruned: 1, prunedAtCleared: 2, fingerprintsCleared: 2 };
+    const expected = {
+      scanned: 4,
+      markedPruned: 1,
+      prunedAtCleared: 2,
+      fingerprintsCleared: 2,
+      markedPrunedIds: [orgQuestion],
+      prunedAtClearedIds: [editedPrivate, editedPending],
+    };
     expect(dry).toEqual(expected);
     expect(summary).toEqual(expected);
     const org = await getQuestion(t, orgQuestion);

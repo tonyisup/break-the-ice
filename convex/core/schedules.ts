@@ -4,7 +4,7 @@ import { mutation, query } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import { ensurePaidOrganizationMember, isOrganizationPaid } from "../auth";
 import { findCanonicalUser } from "../lib/users";
-import { isQuestionPublic } from "../lib/questionAccess";
+import { isQuestionPublic, isRetiredQuestion } from "../lib/questionAccess";
 import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
   getZonedCalendarDate,
@@ -531,7 +531,10 @@ export const autoSchedule = mutation({
     for (const row of legacyRows) {
       byId.set(row._id, row);
     }
+    // Older pruning set only prunedAt and left the status, so retirement is checked here too (see
+    // isRetiredQuestion), as assignQuestion does.
     let candidates = [...byId.values()].filter((q) =>
+      !isRetiredQuestion(q) &&
       questionMatchesAxisSlugs(
         q,
         args.axisY,
