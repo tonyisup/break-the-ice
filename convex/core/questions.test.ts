@@ -577,6 +577,39 @@ describe("author edits go back through review", () => {
     expect(await t.query(api.core.questions.getQuestionById, { id: questionId })).toMatchObject({ text: firstWording });
   });
 
+  test.each([
+    ["pending", true],
+    ["private", false],
+  ] as const)("an author edit to a pruned question saves it %s and no longer retired", async (status, isPublic) => {
+    const { author, questionId } = await setup({
+      customText: firstWording,
+      text: firstWording,
+      status: "pruned",
+      prunedAt: 1,
+      reviewRevision: 1,
+    });
+
+    const edited = await author.mutation(api.core.questions.updatePersonalQuestion, { questionId, customText: newWording, isPublic });
+
+    expect(edited).toMatchObject({ customText: newWording, status, reviewRevision: 2 });
+    expect(edited!.prunedAt).toBeUndefined();
+  });
+
+  test("an author edit to a pruned question waits in the review queue, and the prune can't be undone over it", async () => {
+    const { t, author, admin, questionId } = await setup({ customText: firstWording, text: firstWording, status: "public" });
+    const pruningId = await t.run(async (ctx) =>
+      ctx.db.insert("pruning", { questionId, status: "pending", reason: "Low engagement" }),
+    );
+    await admin.mutation(api.admin.pruning.approvePruning, { pruningId, reason: "Low engagement", expectedRevision: 0 });
+
+    await reword(author, questionId);
+
+    const queue = await admin.query(api.admin.questions.getPendingQuestions, {});
+    expect(queue.map((question: Doc<"questions">) => question._id)).toEqual([questionId]);
+    const [review] = await admin.query(api.admin.pruning.getReviewHistory, { source: "pruning" });
+    await expect(admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id })).rejects.toThrow("newer work");
+  });
+
   test("an author edit keeps the reviewed text, saves their wording, and drops the embedding while it waits for review", async () => {
     const { t, author, questionId } = await setup({
       customText: firstWording,

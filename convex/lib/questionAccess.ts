@@ -2,10 +2,38 @@ import { Doc, Id } from "../_generated/dataModel";
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { isOrganizationPaid } from "../auth";
 
+type RetirementFields = Pick<Doc<"questions">, "status" | "prunedAt">;
+
+/**
+ * Retired by pruning or as a duplicate, so no list shows it. Older pruning set only `prunedAt`
+ * and left the status as it was, so a set `prunedAt` counts too until normalizeRetiredQuestions
+ * has moved those rows to "pruned". A retired duplicate can still open by link (see
+ * isQuestionPublic).
+ */
+export function isRetiredQuestion(question: RetirementFields): boolean {
+	return question.status === "pruned" || question.prunedAt !== undefined;
+}
+
+/**
+ * The status and `prunedAt` a question has under isRetiredQuestion's rule, for rows written
+ * before it. A row older pruning marked with only `prunedAt` is pruned. A row its author edited
+ * after it was pruned (now pending or private) has gone back through review, so it isn't retired.
+ */
+export function normalizedRetirement(question: RetirementFields): RetirementFields {
+	if (question.prunedAt === undefined || question.status === "pruned") {
+		return { status: question.status, prunedAt: question.prunedAt };
+	}
+	if (question.status === "pending" || question.status === "private") {
+		return { status: question.status, prunedAt: undefined };
+	}
+	return { status: "pruned", prunedAt: question.prunedAt };
+}
+
 export function isQuestionPublic(question: Doc<"questions">): boolean {
 	const status = question.status;
 	// Duplicate retirement preserves the original public URL and content.
-	return (Boolean(question.duplicateOf) && question.duplicateWasPublic === true && status === "pruned") || status === "public" || status === "approved" || status === undefined;
+	if (Boolean(question.duplicateOf) && question.duplicateWasPublic === true && status === "pruned") return true;
+	return !isRetiredQuestion(question) && (status === "public" || status === "approved" || status === undefined);
 }
 
 /** A personal question, team prompt or organization question, public or not: not a library question. */

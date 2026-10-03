@@ -5,7 +5,7 @@ import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 
 import { fingerprintText } from "../lib/promptArchitecture";
-import { isPrivateUserQuestion, isQuestionPublic, isUnlistedAiQuestion } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUnlistedAiQuestion } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { PENDING_QUEUE_LIMIT } from "../constants";
 import { recordReview, reviewReason, shownWording, syncReviewedEmbedding } from "../lib/questionReview";
@@ -569,7 +569,7 @@ export const getPendingDuplicateDetections = query({
 				const questions = await Promise.all(
 					detection.questionIds.map(async (id) => {
 						const question = await ctx.db.get(id);
-						if (!question || question.prunedAt !== undefined || question.status === "pruned") return null;
+						if (!question || isRetiredQuestion(question)) return null;
 
 						const [styleRaw, toneRaw] = await Promise.all([
 							question.styleId ? ctx.db.get(question.styleId) : null,
@@ -765,7 +765,7 @@ export const deleteDuplicateQuestions = mutation({
         const questions: Doc<"questions">[] = [];
         for (const id of group) {
             const question = await ctx.db.get(id);
-            if (!question || question.duplicateOf || question.prunedAt !== undefined || question.status === "pruned") throw new Error("Group membership is stale; a question is missing or retired");
+            if (!question || question.duplicateOf || isRetiredQuestion(question)) throw new Error("Group membership is stale; a question is missing or retired");
             if (!args.expectedRevisions.some(item => item.questionId === id && item.revision === (question.reviewRevision ?? 0))) throw new Error("Question changed during review. Reload first.");
             questions.push(question);
         }
@@ -865,15 +865,15 @@ export const getAdminStats = query({
 			(q.lastShownAt ?? 0) < oneWeekAgo &&
 			q.totalLikes === 0 &&
 			q.totalShows > 0 &&
-			q.prunedAt === undefined
+			!isRetiredQuestion(q)
 		).length;
 
 		return {
 			questions: {
 				total: questions.length,
-				public: questions.filter(q => q.status === "public" || q.status === "approved" || !q.status).length,
+				public: questions.filter(q => !isRetiredQuestion(q) && (q.status === "public" || q.status === "approved" || !q.status)).length,
 				pending: questions.filter(q => q.status === "pending").length,
-				pruned: questions.filter(q => q.prunedAt !== undefined).length,
+				pruned: questions.filter(isRetiredQuestion).length,
 			},
 			users: {
 				total: users.length,

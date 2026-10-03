@@ -8,7 +8,7 @@ import { cosineSimilarity } from "../lib/embeddings";
 import { doc } from "convex-helpers/validators";
 import schema from "../schema";
 import { duplicateGroup } from "../lib/questionReferences";
-import { isPrivateUserQuestion } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isRetiredQuestion } from "../lib/questionAccess";
 
 export const questionByIdResultValidator = v.nullable(doc(schema, "questions"));
 
@@ -768,7 +768,11 @@ export const getRandomQuestionsInternal = internalQuery({
 		const wasShownRecently = (question: { lastShownAt?: number }) =>
 			question.lastShownAt !== undefined && question.lastShownAt >= sevenDaysAgo;
 
+		// The feed selects by status "public", which still includes rows older pruning marked with
+		// only prunedAt. They are dropped here rather than in the index filter, so every read stays
+		// within its take() limit (see isRetiredQuestion).
 		const isVisible = (question: any, excludedIds?: Set<any>) => {
+			if (isRetiredQuestion(question)) return false;
 			if (seenIds.has(question._id)) return false;
 			if (hiddenIds.has(question._id)) return false;
 			if (excludedIds?.has(question._id)) return false;
@@ -1005,7 +1009,10 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			}
 			return q.and(...conditions);
 		};
+		// Rows older pruning marked with only prunedAt still have status "public"; dropped here so
+		// every read stays within its take() limit (see isRetiredQuestion).
 		const isVisible = (question: Doc<"questions">) => {
+			if (isRetiredQuestion(question)) return false;
 			if (seenIds.has(question._id) || hiddenIds.has(question._id)) return false;
 			if (!isQuestionAllowedByPreferences(question, preferenceFilters)) return false;
 			return true;
@@ -1178,7 +1185,7 @@ function isQuestionEligibleForNewsletter(
 	question: Doc<"questions">,
 	filters: QuestionPreferenceFilters,
 ): boolean {
-	if (!question.text || question.prunedAt !== undefined) {
+	if (!question.text || isRetiredQuestion(question)) {
 		return false;
 	}
 	if (

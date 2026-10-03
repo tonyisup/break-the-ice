@@ -2,7 +2,8 @@ import { v, type Infer } from "convex/values";
 import { internalAction, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
-import { isPrivateUserQuestion, isQuestionPublic } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, normalizedRetirement } from "../lib/questionAccess";
+import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { settleDuplicateGroup } from "../lib/questionReferences";
 import { defaultIdealPromptLength, defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "../lib/promptArchitecture";
@@ -635,7 +636,8 @@ const fingerprintCollisionQuestion = v.object({
 });
 const fingerprintRecomputePageResult = v.object({
 	...fingerprintRecomputeCounts,
-	// Each public library question's fingerprint once the page is done, for the collision report.
+	// Each public, unretired question's fingerprint once the page is done, for the collision
+	// report: only these can collide.
 	live: v.array(v.object({ ...fingerprintCollisionQuestion.fields, fingerprint: v.string() })),
 	continueCursor: v.string(),
 	isDone: v.boolean(),
@@ -674,7 +676,7 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
 			}
 			// Only public, unretired questions can collide. Retired, private and held copies keep their
 			// fingerprints, so generation still won't recreate them, but aren't listed.
-			if (isQuestionPublic(question) && question.status !== "pruned" && question.prunedAt === undefined) {
+			if (isQuestionPublic(question) && !isRetiredQuestion(question)) {
 				live.push({ questionId: question._id, status: question.status, organizationId: question.organizationId, fingerprint });
 			}
 		}
@@ -689,14 +691,15 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  *
  * Only library questions are recomputed. Personal, team and organization questions that aren't
  * public (`privateUserQuestions`), library questions with no stored fingerprint, and ones with no
- * text to fingerprint are counted and left alone. Until it has run after the quote fix deploys,
- * generation can save copies of curly-quoted library questions, so run it soon after deploying
- * (on dev too, before evals). `withoutFingerprint` includes questions added with admin
+ * text to fingerprint are counted and left alone. A pruned submission counts as private however
+ * it was pruned, including by older pruning that set only `prunedAt` (see isRetiredQuestion).
+ * Until it has run after the quote fix deploys, generation can save copies of curly-quoted
+ * library questions, so run it soon after deploying (on dev too, before evals). `withoutFingerprint` includes questions added with admin
  * createQuestion before it set a fingerprint, which generation can't see as duplicates; the
  * backfill's questions stage fingerprints them. clearPrivateQuestionFingerprints removes the
  * fingerprints private questions still hold.
  *
- * `collisionGroups` counts the fingerprints that two or more public, unpruned library questions
+ * `collisionGroups` counts the fingerprints that two or more public, unretired library questions
  * share after the run. `collisions` lists the first FINGERPRINT_MAX_REPORTED_COLLISIONS of them,
  * each with its `size` and up to FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS questions (IDs, status
  * and organization, no text), oldest first. A fingerprint is a short hash, so compare the
@@ -881,6 +884,92 @@ export const clearPrivateQuestionEmbeddings = internalAction({
 		for (let pages = 1; ; pages++) {
 			const page: Infer<typeof privateEmbeddingPageResult> = await ctx.runMutation(
 				internal.internal.migrations.clearPrivateQuestionEmbeddingsPage,
+				{ dryRun: args.dryRun, cursor },
+			);
+			for (const key of countKeys) totals[key] += page[key];
+			if (page.isDone) break;
+			// Running totals, so a run that stops partway still shows how far it got.
+			if (pages % FINGERPRINT_PROGRESS_LOG_PAGES === 0) console.log(`${label} progress: ${JSON.stringify(totals)}`);
+			cursor = page.continueCursor;
+		}
+		console.log(`${label} total: ${JSON.stringify(totals)}`);
+		return totals;
+	},
+});
+
+export const RETIRED_NORMALIZE_PAGE_SIZE = 100;
+const retiredNormalizeCounts = {
+	scanned: v.number(),
+	markedPruned: v.number(),
+	prunedAtCleared: v.number(),
+	fingerprintsCleared: v.number(),
+};
+const retiredNormalizePageResult = v.object({
+	...retiredNormalizeCounts,
+	continueCursor: v.string(),
+	isDone: v.boolean(),
+});
+
+/**
+ * One page of the retirement cleanup. With `dryRun` it writes nothing and reports what a real run
+ * would change. It pages over every question, unfiltered: a filtered paginate can read most of the
+ * table to fill one page.
+ */
+export const normalizeRetiredQuestionsPage = internalMutation({
+	args: { dryRun: v.boolean(), cursor: v.union(v.string(), v.null()) },
+	returns: retiredNormalizePageResult,
+	handler: async (ctx, args) => {
+		const page = await ctx.db.query("questions").paginate({ numItems: RETIRED_NORMALIZE_PAGE_SIZE, cursor: args.cursor });
+		const counts = { scanned: page.page.length, markedPruned: 0, prunedAtCleared: 0, fingerprintsCleared: 0 };
+		for (const question of page.page) {
+			const normalized = normalizedRetirement(question);
+			if (normalized.status === question.status && normalized.prunedAt === question.prunedAt) continue;
+			if (normalized.status === "pruned") counts.markedPruned += 1;
+			else counts.prunedAtCleared += 1;
+			const after = { ...question, ...normalized };
+			// Only library questions keep a fingerprint, and a pruned submission isn't one (see
+			// isPrivateUserQuestion).
+			const clearFingerprint = isPrivateUserQuestion(after) && question.fingerprint !== undefined;
+			if (clearFingerprint) counts.fingerprintsCleared += 1;
+			if (args.dryRun) continue;
+			await ctx.db.patch(question._id, { ...normalized, ...(clearFingerprint ? { fingerprint: undefined } : {}) });
+			// The wording doesn't change, so a question that stays public keeps the embedding it has,
+			// and a private one drops its embeddings (see syncReviewedEmbedding).
+			if (isPrivateUserQuestion(after)) {
+				await syncReviewedEmbedding(ctx, { ...after, fingerprint: undefined }, shownWording(question));
+			}
+			await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: question._id });
+		}
+		return { ...counts, continueCursor: page.continueCursor, isDone: page.isDone };
+	},
+});
+
+/**
+ * Normalizes questions retired before isRetiredQuestion's rule. Older pruning set only `prunedAt`
+ * and left the status as it was, so the feed and other lists that select by status kept showing
+ * them; these move to status "pruned" (`markedPruned`). A question its author edited after it was
+ * pruned has gone back through review as pending or private, so it loses `prunedAt` instead
+ * (`prunedAtCleared`). A personal, team or organization question moved to "pruned" is private, so
+ * it drops its fingerprint (`fingerprintsCleared`) and embeddings, as approvePruning does; a
+ * library question keeps both. It reports counts only.
+ *
+ * It doesn't record a review or change reviewRevision, and undo compares and restores retirement
+ * normalized (see normalizedRetirement), so earlier reviews of these questions can still be
+ * undone, before or after it runs. Run it with dryRun first, and again after a real run
+ * (markedPruned and prunedAtCleared should then be 0); add --prod after `run` for production:
+ * `npx convex run internal/migrations:normalizeRetiredQuestions '{"dryRun":true}'`.
+ */
+export const normalizeRetiredQuestions = internalAction({
+	args: { dryRun: v.boolean() },
+	returns: v.object(retiredNormalizeCounts),
+	handler: async (ctx, args) => {
+		const label = `normalizeRetiredQuestions${args.dryRun ? " (dry run)" : ""}`;
+		const totals = { scanned: 0, markedPruned: 0, prunedAtCleared: 0, fingerprintsCleared: 0 };
+		const countKeys = Object.keys(retiredNormalizeCounts) as Array<keyof typeof retiredNormalizeCounts>;
+		let cursor: string | null = null;
+		for (let pages = 1; ; pages++) {
+			const page: Infer<typeof retiredNormalizePageResult> = await ctx.runMutation(
+				internal.internal.migrations.normalizeRetiredQuestionsPage,
 				{ dryRun: args.dryRun, cursor },
 			);
 			for (const key of countKeys) totals[key] += page[key];

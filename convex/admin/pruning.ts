@@ -8,7 +8,7 @@ import { cosineSimilarity } from "../lib/embeddings";
 import schema from "../schema";
 import { editorialReason } from "../lib/questionReviewValidators";
 import { recordReview, reviewReason, shownWording, snapshot, syncReviewedEmbedding } from "../lib/questionReview";
-import { isPrivateUserQuestion, isQuestionPublic, isUserWrittenQuestion } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUserWrittenQuestion, normalizedRetirement } from "../lib/questionAccess";
 
 // Shared return validators for type safety
 export const pruningSettingsValidator = v.object({
@@ -278,7 +278,7 @@ export const savePruningTargets = internalMutation({
 	handler: async (ctx, args) => {
 		for (const target of args.targets) {
             const question = await ctx.db.get(target.questionId);
-            if (!question || question.prunedAt !== undefined || question.status === "pruned") continue;
+            if (!question || isRetiredQuestion(question)) continue;
             const kept = await ctx.db.query("pruning").withIndex("by_questionId_and_status", q => q.eq("questionId", target.questionId).eq("status", "rejected")).order("desc").first();
             if (kept?.reviewedRevision === (question.reviewRevision ?? 0)) continue;
 			const existing = await ctx.db
@@ -321,7 +321,7 @@ export const getPendingTargets = query({
         const result: (Doc<"pruning"> & { question: Doc<"questions"> })[] = [];
         for await (const target of ctx.db.query("pruning").withIndex("by_status", q => q.eq("status", "pending"))) {
             const question = await ctx.db.get(target.questionId);
-            if (!question || question.prunedAt !== undefined || question.status === "pruned") continue;
+            if (!question || isRetiredQuestion(question)) continue;
             result.push({ ...target, question });
             if (result.length >= limit) break;
         }
@@ -344,7 +344,7 @@ export const approvePruning = mutation({
 			throw new Error(`Pruning target is already ${target.status}`);
 		}
         const before = await ctx.db.get(target.questionId);
-        if (!before || before.duplicateOf || before.status === "pruned") throw new Error("Question is no longer available for review");
+        if (!before || before.duplicateOf || isRetiredQuestion(before)) throw new Error("Question is no longer available for review");
         if ((before.reviewRevision ?? 0) !== args.expectedRevision) throw new Error("Question changed during review. Reload first.");
 
 		await ctx.db.patch(target.questionId, {
@@ -386,7 +386,7 @@ export const rejectPruning = mutation({
 			throw new Error(`Pruning target is already ${target.status}`);
 		}
         const before = await ctx.db.get(target.questionId);
-        if (!before || before.duplicateOf || before.status === "pruned") throw new Error("Question is no longer available for review");
+        if (!before || before.duplicateOf || isRetiredQuestion(before)) throw new Error("Question is no longer available for review");
         if ((before.reviewRevision ?? 0) !== args.expectedRevision) throw new Error("Question changed during review. Reload first.");
 
 		await ctx.db.patch(args.pruningId, {
@@ -488,7 +488,7 @@ export const flagQuestion = mutation({
     if (!args.reasons.length) throw new Error("Select at least one editorial reason");
     const notes = reviewReason(args.notes);
     const question = await ctx.db.get(args.questionId);
-    if (!question || question.prunedAt !== undefined || question.status === "pruned") throw new Error("Question is not available for review");
+    if (!question || isRetiredQuestion(question)) throw new Error("Question is not available for review");
     const pending = await ctx.db.query("pruning").withIndex("by_questionId_and_status", q => q.eq("questionId", args.questionId).eq("status", "pending")).first();
     const editorialReasons = [...new Set([...(pending?.editorialReasons ?? []), ...args.reasons])];
     const data = { editorialReasons, editorialNotes: notes, flaggedBy: reviewer.tokenIdentifier };
@@ -513,11 +513,13 @@ export const getReviewHistory = query({
 });
 
 // What undoing a review puts back on one question. Explicit keys restore absent optional
-// fields as well as defined values.
+// fields as well as defined values. A snapshot taken before retirement was normalized is
+// restored normalized, so undo never brings back a row marked with only prunedAt.
 function restoredFields(change: Doc<"questionReviewChanges">) {
+  const { status, prunedAt } = normalizedRetirement(change.before);
   return {
     text: change.before.text, fingerprint: change.before.fingerprint,
-    status: change.before.status, prunedAt: change.before.prunedAt,
+    status, prunedAt,
     duplicateOf: change.before.duplicateOf, duplicateWasPublic: change.before.duplicateWasPublic,
     heldForReview: change.before.heldForReview,
     reviewRevision: (change.after.reviewRevision ?? 0) + 1,
@@ -537,14 +539,17 @@ export const undoReview = mutation({
     for (const change of changes) {
       const question = await ctx.db.get(change.questionId);
       if (!question) throw new Error("Question no longer exists");
-      const current = snapshot(question);
+      // Retirement is compared normalized on both sides: normalizeRetiredQuestions changing a
+      // legacy row's status or prunedAt isn't newer work (see normalizedRetirement).
+      const current = { ...snapshot(question), ...normalizedRetirement(question) };
+      const after = { ...change.after, ...normalizedRetirement(change.after) };
       // A private question keeps no fingerprint, so clearing one isn't newer work. If any other
       // field differs, the undo is refused anyway. Reviews recorded before the author's wording
       // was snapshotted can't tell whether it changed, so they skip it.
       const keys = Object.keys(current).filter(key =>
         (key !== "fingerprint" || !isPrivateUserQuestion(question)) &&
         (key !== "customText" || "customText" in change.after));
-      if (keys.some(key => current[key as keyof typeof current] !== change.after[key as keyof typeof current])) {
+      if (keys.some(key => current[key as keyof typeof current] !== after[key as keyof typeof current])) {
         throw new Error("Question changed after this review; undo would overwrite newer work");
       }
       // Without the author's wording in the record, the undo can't confirm it is the wording
