@@ -54,6 +54,16 @@ duplicate rate against a baseline generated before it ran. The recorded library 
 same, so `compare.mjs` won't flag that: library duplicate rates against such a baseline aren't
 like for like.
 
+Since v0.4.8.0 a question that older pruning marked with only a prune time counts as retired, so
+it is no longer a library question: neighbour search and the recorded library size leave it out as
+soon as the deploy lands (`compare.mjs` flags the size change). Before generating on dev, also run
+the one-time cleanup that moves those questions to `pruned`:
+`npx convex run internal/migrations:normalizeRetiredQuestions '{"dryRun":true}'`, then again with
+`false` (a second dry run should show `markedPruned` and `prunedAtCleared` at 0). It also clears
+the fingerprints that the personal, team and organization questions it changes still hold
+(`fingerprintsCleared`), which can change the library duplicate rate without changing the library
+size, as above.
+
 A run costs about $0.15 of generation on dev (charged to the dev deployment's system AI budget)
 and about $0.05 of Jev.
 

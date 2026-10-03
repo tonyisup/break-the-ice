@@ -17,7 +17,7 @@ import {
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
 import { findCanonicalUser } from "../lib/users";
-import { canReadQuestion, isQuestionPublic, isReadableByLink } from "../lib/questionAccess";
+import { canReadQuestion, isQuestionPublic, isReadableByLink, isRetiredQuestion } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
@@ -225,11 +225,10 @@ export const getNextQuestions = query({
 		const { count, style, tone, seen, hidden, organizationId } = args;
 		const seenIds = new Set(seen ?? []);
 
-		const filteredQuestions = await ctx.db
+		const candidates = await ctx.db
 			.query("questions")
 			.withIndex("by_style_and_tone", (q) => q.eq("styleId", style).eq("toneId", tone))
 			.filter((q) => q.eq(q.field("organizationId"), organizationId))
-			.filter((q) => q.eq(q.field("prunedAt"), undefined))
 			.filter((q) => q.and(
 				q.neq(q.field("text"), undefined),
 				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined))
@@ -237,6 +236,9 @@ export const getNextQuestions = query({
 			.filter((q) => q.and(... (hidden ?? []).map(hiddenId => q.neq(q.field("_id"), hiddenId))))
 			.filter((q) => q.and(... (seen ?? []).map(seenId => q.neq(q.field("_id"), seenId))))
 			.collect();
+		// Retirement is checked in code so the rule stays in one place (see isRetiredQuestion);
+		// collect reads the whole index range either way.
+		const filteredQuestions = candidates.filter((question) => !isRetiredQuestion(question));
 
 		const unseenQuestions = filteredQuestions.filter(q => !seenIds.has(q._id));
 		if (unseenQuestions.length > 0) {
@@ -492,9 +494,11 @@ export const getPublicQuestions = query({
 		for (const q of legacyRows) {
 			byId.set(q._id, q);
 		}
-		const merged = [...byId.values()].sort(
-			(a, b) => a._creationTime - b._creationTime,
-		);
+		// Older pruning set only prunedAt and left the status, so retirement is checked here too
+		// (see isRetiredQuestion): assignQuestion refuses a retired library question.
+		const merged = [...byId.values()]
+			.filter((q) => !isRetiredQuestion(q))
+			.sort((a, b) => a._creationTime - b._creationTime);
 		const rows = merged.slice(0, limit);
 		return rows.map((q) => ({
 			_id: q._id,
@@ -1035,6 +1039,9 @@ export const updatePersonalQuestion = mutation({
 			...(approvedWording !== undefined ? { text: approvedWording } : {}),
 			customText,
 			status: args.isPublic ? "pending" : "private",
+			// An edit to a pruned question sends it back through review too, so it is no longer
+			// retired (see isRetiredQuestion). Undoing the prune is refused once it is edited.
+			prunedAt: undefined,
 			// Pending or private, so not a library question: it keeps no fingerprint (see isPrivateUserQuestion).
 			fingerprint: undefined,
 			// Author edits go back through review: an earlier review can't be undone over

@@ -1257,3 +1257,89 @@ test.each([
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   vi.useRealTimers();
 });
+
+test("schedule assignment rejects a library question older pruning marked with only prunedAt", async () => {
+  const { t, admin, organizationId } = await createScheduleWorkspace();
+  const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  });
+  const retiredQuestionId = await t.run(async (ctx) =>
+    ctx.db.insert("questions", {
+      text: "Retired by older pruning",
+      status: "public",
+      prunedAt: 1,
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    }),
+  );
+
+  await expect(admin.mutation(api.core.schedules.assignQuestion, {
+    scheduleId,
+    dayOfWeek: "monday",
+    questionId: retiredQuestionId,
+  })).rejects.toThrow("not available to this organization");
+});
+
+test("auto-schedule skips a library question older pruning marked with only prunedAt", async () => {
+  const { t, admin, organizationId, questionIds } = await createScheduleWorkspace();
+  const retiredQuestionId = await t.run(async (ctx) =>
+    ctx.db.insert("questions", {
+      text: "Retired by older pruning",
+      status: "public",
+      prunedAt: 1,
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    }),
+  );
+  // More delivery days than questions, so auto-schedule uses every question it considers.
+  await admin.mutation(api.core.orgSettings.upsertOrgSettings, {
+    organizationId,
+    activeDeliveryDays: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+  });
+  const scheduleId = await admin.mutation(api.core.schedules.createSchedule, {
+    organizationId,
+    weekStart: "2026-07-20",
+  });
+
+  await admin.mutation(api.core.schedules.autoSchedule, { scheduleId });
+
+  const detail = await admin.query(api.core.schedules.getSchedule, { scheduleId });
+  const assigned = new Set(detail.assignments.map((assignment) => assignment.question._id));
+  expect(detail.assignments).toHaveLength(5);
+  expect([...assigned].sort()).toEqual([...questionIds].sort());
+  expect(assigned.has(retiredQuestionId)).toBe(false);
+});
+
+test("collections leave out a library question older pruning marked with only prunedAt", async () => {
+  const { t, admin, organizationId, questionIds } = await createScheduleWorkspace();
+  const retiredQuestionId = await t.run(async (ctx) =>
+    ctx.db.insert("questions", {
+      text: "Monday question, retired by older pruning",
+      status: "public",
+      prunedAt: 1,
+      totalLikes: 0,
+      totalShows: 0,
+      averageViewDuration: 0,
+    }),
+  );
+  const collectionId = await admin.mutation(api.core.collections.createCollection, {
+    name: "Mondays",
+    organizationId,
+  });
+
+  const matches = await admin.query(api.core.collections.searchPublicQuestions, { searchText: "monday question" });
+  expect(matches.map((question) => question._id)).toEqual([questionIds[0]]);
+  await expect(admin.mutation(api.core.collections.addQuestionToCollection, {
+    questionId: retiredQuestionId,
+    collectionId,
+  })).rejects.toThrow("Only public questions can be added to collections");
+  await admin.mutation(api.core.collections.addQuestionToCollection, {
+    questionId: questionIds[0],
+    collectionId,
+  });
+  const detail = await admin.query(api.core.collections.getCollectionDetail, { collectionId });
+  expect(detail?.questions.map((question) => question._id)).toEqual([questionIds[0]]);
+});

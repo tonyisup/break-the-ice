@@ -2,6 +2,16 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.8.0] - 2026-10-03
+
+### Fixed
+- Every part of the app now agrees on which questions are retired: a question is retired when it was pruned, including questions an older pruning tool only marked with a prune time. The feed, the next-question picker, newsletters, the pruning queue, admin stats, schedule auto-fill and question picker, and collections all leave retired questions out, and their links no longer open (a retired duplicate of a public question still does).
+- Undoing a past review works the same before and after the cleanup below.
+- When an author edits a question that was pruned, it goes back to review instead of staying half-retired.
+
+### Added
+- A one-time cleanup for questions an older pruning tool marked only with a prune time. Run it right after this deploy, since until then those questions take up space in the feed and schedule pools: `npx convex run internal/migrations:normalizeRetiredQuestions '{"dryRun":true}'` (add `--prod` after `run` for production), check the counts and listed question ids, then run it with `false`, and run the dry run again to check that `markedPruned` and `prunedAtCleared` are 0.
+
 ## [0.4.7.0] - 2026-10-02
 
 ### Changed
