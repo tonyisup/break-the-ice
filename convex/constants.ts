@@ -4,6 +4,14 @@ export const PENDING_QUEUE_LIMIT = 200;
 /** The longest question a person can write, in characters. */
 export const MAX_QUESTION_TEXT_LENGTH = 500;
 
+/**
+ * The most tags a person's question can carry, and the longest tag, in characters. Tag names
+ * are short single words (see PREDEFINED_TAGS); the count leaves room above normal use, since
+ * admin and generated questions can carry more tags than a person would pick.
+ */
+export const MAX_QUESTION_TAGS = 20;
+export const MAX_QUESTION_TAG_LENGTH = 50;
+
 /** The longest Team topic name, outcome guidance and boundaries a manager can write. */
 export const MAX_TEAM_TOPIC_NAME_LENGTH = 100;
 export const MAX_TEAM_TOPIC_GUIDANCE_LENGTH = 1000;
@@ -17,6 +25,8 @@ export const ERROR_CODES = {
   AI_GENERATION_FAILED: "AI_GENERATION_FAILED",
   QUESTION_TEXT_REQUIRED: "QUESTION_TEXT_REQUIRED",
   QUESTION_TEXT_TOO_LONG: "QUESTION_TEXT_TOO_LONG",
+  QUESTION_TAGS_TOO_MANY: "QUESTION_TAGS_TOO_MANY",
+  QUESTION_TAG_TOO_LONG: "QUESTION_TAG_TOO_LONG",
   QUESTION_MERGED_AS_DUPLICATE: "QUESTION_MERGED_AS_DUPLICATE",
   QUESTION_HAS_MERGED_COPIES: "QUESTION_HAS_MERGED_COPIES",
   SCHEDULE_NOT_DRAFT: "SCHEDULE_NOT_DRAFT",
@@ -39,6 +49,8 @@ export const ERROR_MESSAGES = {
   AI_GENERATION_FAILED: "The AI sent back an answer we couldn't use. Please try again.",
   QUESTION_TEXT_REQUIRED: "Please enter a question.",
   QUESTION_TEXT_TOO_LONG: `Questions can be up to ${MAX_QUESTION_TEXT_LENGTH} characters.`,
+  QUESTION_TAGS_TOO_MANY: `Questions can have up to ${MAX_QUESTION_TAGS} tags.`,
+  QUESTION_TAG_TOO_LONG: `Tags can be up to ${MAX_QUESTION_TAG_LENGTH} characters.`,
   QUESTION_MERGED_AS_DUPLICATE: "This question was merged with a matching one in the library, so it can no longer be edited.",
   QUESTION_HAS_MERGED_COPIES: "Other questions were merged into this one, so ask an admin to change or remove it.",
   // Team prompt refusals. A topic field shares one code per refusal, with a message
