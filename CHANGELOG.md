@@ -2,6 +2,12 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.7.0] - 2026-10-02
+
+### Changed
+- Questions people write can have up to 20 tags of up to 50 characters each. The server checks this when a question is saved, trims and lowercases tags, and drops blanks and repeats. Too many tags, or a tag that's too long, gets a clear message ("Questions can have up to 20 tags." or "Tags can be up to 50 characters.").
+- The remix drawer applies the same limits as you add tags, and checks the tags before remixing, so a remix whose tags can't be saved doesn't use up an AI request.
+
 ## [0.4.6.0] - 2026-10-02
 
 ### Fixed
