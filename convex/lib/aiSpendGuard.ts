@@ -75,6 +75,8 @@ export async function keepAiReservation(ctx: SpendCtx, reservation: AiReservatio
 /**
  * Whether a generation failed on a provider call that kept its reservation. A caller working
  * through a batch should stop: the next call would likely fail, and be charged, the same way.
+ * The mark is on the error object itself, so it is only seen inside the action that made the
+ * call: an error that crossed ctx.runAction is rebuilt and has lost it.
  */
 export function keptAiReservation(error: unknown): boolean {
   return typeof error === "object" && error !== null && keptReservationFailures.has(error);

@@ -342,7 +342,7 @@ describe("matrix fill", () => {
 });
 
 describe("helpers", () => {
-  test("only a paused budget or a rate limit stops a batch", () => {
+  test("isAiStopError is true only for a paused budget or a rate limit", () => {
     const convexError = (code: string) => new ConvexError({ code, message: "x" });
 
     expect(isAiStopError(convexError(ERROR_CODES.AI_BUDGET_PAUSED))).toBe(true);
@@ -1034,6 +1034,19 @@ describe("calls that may have been billed without an answer", () => {
     expect(usage.map((row) => row.count)).toEqual([0]);
   });
 
+  test("an empty reply from the provider keeps its reservation and isn't sent again", async () => {
+    const { t, questionId } = await setup();
+    // A body of `null` (or a 204) parses, but to no completion at all.
+    const send = stubSend().mockImplementation(
+      async () => new Response("null", { status: 200, headers: { "content-type": "application/json" } }),
+    );
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(/no completion/);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+  });
+
   test("an unparseable response isn't taken for a refusal because its error mentions a number like 502", async () => {
     const { t, questionId } = await setup();
     create.mockRejectedValue(new SyntaxError("Unexpected token < in JSON at position 502") as never);
@@ -1207,6 +1220,27 @@ describe("calls that may have been billed without an answer", () => {
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.02, 1]]);
   });
 
+  test("the nightly pool carries on past a combination the provider refuses", async () => {
+    const { t } = await setup();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("users", { email: "reader@example.com", clerkId: "reader-clerk", newsletterSubscriptionStatus: "subscribed" });
+      await ctx.db.insert("styles", { id: "playful", name: "Playful", structure: "Ask something playful", color: "#333333", icon: "sparkles" });
+    });
+    create
+      .mockRejectedValueOnce(refused(400, "invalid request") as never)
+      .mockResolvedValueOnce(
+        completion(JSON.stringify({ questions: [{ text: "What small win are you proud of this week?" }] }), { cost: 0.01 }) as never,
+      );
+
+    const result = await t.action(internal.internal.ai.generateNightlyQuestionPool, { targetCount: 1, maxCombinations: 2 });
+
+    // A refusal gave its reservation back, so the next combination is still tried.
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ questionsGenerated: 1, combinationsProcessed: 2 });
+    expect(result.errors).toEqual([expect.stringContaining("400 invalid request")]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.01, 1]]);
+  });
+
   test("a failure to count a kept reservation is logged, never thrown, and isn't retried in the background", async () => {
     const ctx = {
       runMutation: vi.fn().mockRejectedValue(new Error("write conflict")),
@@ -1215,8 +1249,12 @@ describe("calls that may have been billed without an answer", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const reservation = { spendClass: "user" as const, day: "2026-09-29", reservedUsd: 0.02 };
 
-    await expect(keepAiReservation(ctx as never, reservation, new APIConnectionTimeoutError())).resolves.toBeUndefined();
+    const timedOut = new APIConnectionTimeoutError();
 
+    await expect(keepAiReservation(ctx as never, reservation, timedOut)).resolves.toBeUndefined();
+
+    // The reservation is still on the ledger, so a batch must still stop here.
+    expect(keptAiReservation(timedOut)).toBe(true);
     // Settled to the amount already reserved, on the reservation's own day, with no run named.
     expect(ctx.runMutation).toHaveBeenCalledTimes(1);
     expect(getFunctionName(ctx.runMutation.mock.calls[0][0])).toBe("internal/aiSpend:settleAiSpend");

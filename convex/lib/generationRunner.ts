@@ -199,6 +199,9 @@ async function createChatCompletionWithRetry(
     let completion: OpenAI.Chat.Completions.ChatCompletion;
     try {
       completion = await openRouterClient.chat.completions.create(params);
+      // A 204, or a body of `null`, resolves to no completion at all: handled below like any
+      // other response that couldn't be parsed.
+      if (completion == null) throw new TypeError("AI provider returned no completion");
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       if (keepsItsReservation(error)) {
