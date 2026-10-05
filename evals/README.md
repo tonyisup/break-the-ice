@@ -132,8 +132,12 @@ Gemini 3.8 Flash and $0.14 on Sonnet 5.5.
   `settings.maxOutputTokens`.
 - The regime is the admin preview path with a batch of 5 and no per-person exclusion list. The
   feed usually asks for 1 question and excludes recently seen ones.
-- Library duplicates are counted against dev's library, which is smaller than production's and
-  changes; summaries record its size. Dev's taxonomy versions can also differ from production's.
+- Library duplicates are counted against dev's library, which differs from production's and
+  changes; summaries record its size. The library reset added in v0.5.0.0
+  (`internal/migrations:retireLibraryExcept`) changes only the deployment it is run on: on
+  production it leaves eval numbers alone, and on dev it shrinks the library the eval searches,
+  which `compare.mjs` flags as a size change. Dev's taxonomy versions can also differ from
+  production's.
 - Sentence frames are informational: the pooled share mostly reflects styles that require their
   opener, and the cross-style share swings a lot between replicates.
 - `baseline.mjs` and `compare.mjs` refuse a run listed twice, a compare run that is one of the
