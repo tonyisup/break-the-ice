@@ -37,7 +37,8 @@ const generationRunPurpose = v.union(
 );
 
 export default defineSchema({
-  // Token buckets for the AI rate limits (lib/aiRateLimit.ts).
+  // Rows for the AI rate limits (lib/aiRateLimit.ts): convex-helpers token buckets, and the
+  // per-spend-day counts (DAY_LIMITS) that file reads and writes itself.
   ...rateLimitTables,
   analytics: defineTable({
     event: v.union(
