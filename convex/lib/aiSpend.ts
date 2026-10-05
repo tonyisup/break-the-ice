@@ -12,7 +12,8 @@ export type SpendClass = "user" | "system";
 
 export const DEFAULT_DAILY_BUDGET_USD = 1;
 export const DEFAULT_DAILY_HARD_CAP_USD = 5;
-// The least a call is set aside or charged at, so an unpriced call still counts.
+// The least a call is set aside at. An unpriced call is charged everything set aside for it,
+// so it still counts.
 export const FALLBACK_COST_PER_CALL_USD = 0.02;
 
 type TokenPrice = { input: number; output: number };

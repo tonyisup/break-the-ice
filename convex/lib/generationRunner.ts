@@ -137,7 +137,9 @@ const REASONING_ALLOWANCE_TOKENS = 2000;
 const REMIX_ANSWER_TOKENS = 150;
 
 // Output is capped too, since the budget is charged after a call returns. On top of the
-// reasoning, a question and its short rationale take about 100 tokens; each gets twice that.
+// reasoning, a question and its short rationale took about 85 tokens on Sonnet 5.5 and about
+// 170 on Opus 5.5 (up to 210) in the Oct 2026 eval runs. Each gets 200, and the base and the
+// reasoning allowance cover a long one.
 const JSON_BASE_TOKENS = 300;
 const TOKENS_PER_QUESTION = 200;
 

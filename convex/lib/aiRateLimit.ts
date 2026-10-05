@@ -7,7 +7,7 @@ import { ensureAiBudget } from "./aiSpendGuard";
 import { convexErrorData } from "./errorData";
 
 // Per-caller limits on AI work, on top of the daily spend cap (lib/aiSpend.ts). The
-// cap bounds the bill; these stop one caller from spending the whole day's budget.
+// cap bounds the bill; these bound how much of the day's budget one caller can spend.
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;

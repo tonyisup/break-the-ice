@@ -1038,7 +1038,10 @@ function isPublicLibraryQuestion(question: Doc<"questions">): boolean {
 	return !isUserWrittenQuestion(question) && !isRetiredQuestion(question) && isQuestionPublic(question);
 }
 
-/** The questions to keep that aren't public library questions here: missing, retired, or someone's own. */
+/**
+ * The questions to keep that aren't public library questions here: missing, retired, not public
+ * (waiting for review or taken down), or someone's own.
+ */
 export const libraryKeepersNotInLibrary = internalQuery({
 	args: { keepQuestionIds: v.array(v.id("questions")) },
 	returns: v.array(v.id("questions")),
