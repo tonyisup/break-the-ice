@@ -20,7 +20,7 @@
 
 **Why:** The user budget is shared, so it can run out early for everyone, and today nobody hears about it. Since v0.5.0.0 a call costs about four times as much against the same default budget, and calls in flight count at their upper estimate, so the pause comes sooner.
 
-**Context:** `convex/lib/aiSpend.ts` (caps), `convex/lib/aiSpendGuard.ts` (where a pause is detected). `generationRuns.requestedByUserId` and `costUsd` give per-user spend, except for calls that kept their reservation without an answer (`keepAiReservation`), which are on the daily ledger only. Deferred by the owner during the v0.2.0.0 review.
+**Context:** `convex/lib/aiSpend.ts` (caps), `convex/lib/aiSpendGuard.ts` (where a pause is detected). `generationRuns.requestedByUserId` and `costUsd` give per-user spend, except for calls that kept their reservation without an answer (`keepAiReservation`): their cost is on the daily ledger only, and since v0.5.1.0 each signed-in person has five slots a day for calls that are running, unanswered or cut off (`DAY_LIMITS.aiUnanswered` in `convex/lib/aiRateLimit.ts`). Deferred by the owner during the v0.2.0.0 review.
 
 **Effort:** M
 **Priority:** P2
@@ -32,7 +32,7 @@
 
 **Why:** Today every cut-off gives the use back. That made sense when the cap was too small for the model, but since v0.3.2.0 the cap leaves room for the model's thinking.
 
-**Context:** `wasPaidInFull` and `retryUnusableOutput` in `convex/lib/generationRunner.ts`; the refunds happen in the callers (`convex/internal/ai.ts`, `convex/core/questions.ts`) through `wasAiCallBilled`. Deferred by the owner during the v0.3.2.0 review (decision 3aab4fc9).
+**Context:** `wasPaidInFull` and `retryUnusableOutput` in `convex/lib/generationRunner.ts`; the refunds happen in the callers (`convex/internal/ai.ts`, `convex/core/questions.ts`) through `wasAiCallBilled`. Since v0.5.1.0 a cut-off answer also keeps one of the person's five unanswered-call slots (`createChatCompletionWithRetry`); if the refund rule changes, decide whether it still should. Deferred by the owner during the v0.3.2.0 review (decision 3aab4fc9).
 
 **Effort:** S
 **Priority:** P2
@@ -74,16 +74,40 @@
 **Priority:** P2
 **Depends on:** None
 
-### Say why a matrix fill or pool run stopped early
+### Say why a single-cell fill or pool run stopped early
 
-**What:** When a matrix fill stops because the AI stopped answering, tell the manager how many cells were filled and to try again later. Show the reason on the admin pool page too.
+**What:** When a single-cell matrix fill stops because the AI didn't finish an answer, give the manager a readable message, as a batch fill does since v0.5.1.0. Show the reason on the admin pool page too. Give a batch that stops on a rate limit or a paused budget its count of filled cells as well.
 
-**Why:** The fill rejects with the provider's raw error, which production shows as a bare server error, and the count of cells filled is lost (they are saved). The pool page shows only how many errors there were.
+**Why:** A single-cell fill rejects with the provider's raw error, which production shows as a bare server error, so the manager can't tell that trying again may fail the same way and use another of their five unanswered-call slots. The pool page shows only how many errors there were.
 
-**Context:** `fillEmptyCells` in `convex/core/fillMatrix.ts`, `readableError` in `src/app/org/schedule/page.tsx`, `generateNightlyQuestionPool` in `convex/internal/ai.ts` and `src/app/admin/pool/page.tsx`. Deferred during the v0.4.10.0 review.
+**Context:** `fillSingleCell` and `fillStoppedMessage` in `convex/core/fillMatrix.ts`, `readableError` in `src/app/org/schedule/page.tsx`, `generateNightlyQuestionPool` in `convex/internal/ai.ts` and `src/app/admin/pool/page.tsx`. The batch-fill part shipped in v0.5.1.0. Deferred during the v0.4.10.0 review; the single-cell part by the owner during the v0.5.1.0 review.
 
 **Effort:** S
 **Priority:** P2
+**Depends on:** None
+
+### Let the feed recover after an AI refusal, and pause after a call that gets no answer
+
+**What:** On the feed, a rate-limit refusal switches AI questions off until the page is reloaded. Clear that when the filter or workspace changes (a paused budget stays final). And stop the feed's own generation for the page session after a call that timed out or was cut off, instead of asking again on the next page.
+
+**Why:** Since v0.5.1.0 a person has five slots a day for AI calls that are still running or got no answer. Changing filters quickly can hold all five for a few seconds, and the refusal that follows turns AI off for the session. On a slow-provider day the feed can use up the five by itself, and remix, topic previews and matrix fill are then refused until the next day.
+
+**Context:** `aiPausedRef` in `src/pages/InfiniteScrollPage.tsx`. The refusal is `AI_RATE_LIMITED` with `ERROR_MESSAGES.AI_UNANSWERED_LIMITED`. A call that got no answer reaches the feed as a plain error with no code (the marks in `convex/lib/aiSpendGuard.ts` and `convex/lib/generationRunner.ts` don't cross `ctx.runAction`), so it needs one the client can read. Deferred by the owner during the v0.5.1.0 review.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Let a held AI slot lapse when its request dies
+
+**What:** Give a running call's unanswered-call slot an expiry a little past the provider timeout, so a request the platform stops mid-call doesn't hold its slot until midnight.
+
+**Why:** A slot is given back by the request that held it. If that request is stopped first (a long matrix fill at the action time limit, a crash), the slot stays held for the rest of the day, the same way its spend reservation stays on the ledger. `internal/aiRateLimit:resetAiUnanswered` gives one person theirs back by hand.
+
+**Context:** `holdAiUnanswered` and `releaseAiUnanswered` in `convex/lib/aiRateLimit.ts`, held in `createChatCompletionWithRetry` (`convex/lib/generationRunner.ts`). Running and kept slots share one count per day, so an expiry needs them told apart. Same shape as "Expire stale matrix-fill locks". Deferred by the owner during the v0.5.1.0 review.
+
+**Effort:** M
+**Priority:** P3
 **Depends on:** None
 
 ### Stop a batch when the provider asks for a long wait
