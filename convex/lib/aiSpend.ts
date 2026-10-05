@@ -51,6 +51,18 @@ export function spendDay(now: number): string {
   return getZonedCalendarDate(new Date(now), SPEND_TIME_ZONE).isoDate;
 }
 
+const HOUR = 60 * 60 * 1000;
+
+/** When the spend day after `now`'s starts: the next midnight in Los Angeles. */
+export function nextSpendDayStart(now: number): number {
+  const today = spendDay(now);
+  // Los Angeles is a whole number of hours from UTC, so its midnight falls on a UTC hour. A day
+  // there is 23 or 25 hours long when the clocks change.
+  let next = (Math.floor(now / HOUR) + 1) * HOUR;
+  while (spendDay(next) === today) next += HOUR;
+  return next;
+}
+
 // A call's prompt is capped so no caller can make one call cost far more than the
 // cents the cap assumes: the budget is checked before a call and charged after it.
 // Real prompts run 4-5k characters.

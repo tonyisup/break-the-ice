@@ -2,6 +2,22 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.5.1.0] - 2026-10-05
+
+### Fixed
+- The per-person daily limit on AI requests (40 a day across feed generation, remix and team topic previews) now resets at midnight in Los Angeles all year, on the same day the daily AI budget uses. It was a fixed 24-hour window, which reset at 1am during daylight time and drifted on the days the clocks change, so the limit and the budget disagreed about where a day ends. Requests already counted today carry over.
+- A matrix fill that stops at a call that timed out now tells the manager how many cells it filled and that they are saved. Before, the provider's own error reached them as a generic server error.
+
+### Added
+- A per-person limit on AI calls that don't end in an answer. Each signed-in person has five slots a day for calls that are still running, got no answer (a timeout, or a reply that couldn't be read) or were cut off by the length limit. A running call frees its slot when it is answered; the others keep theirs until the next day. With no slot free, feed generation, remix, team topic previews and matrix fill say so and ask the person to try again later. The daily email, admin tools and the eval harness are not counted.
+- `npx convex run internal/aiRateLimit:resetAiUnanswered '{"key":"<Clerk user id>"}'` gives one person their five slots back, for use after a provider incident (add `--prod` after `run` for production). It says whether it found that person's row. A slot that stays held is logged with the `rateLimits` row it belongs to, and the README says how to find the people affected.
+
+### Changed
+- A matrix fill checks the person's own slots before it takes one of the team's fills, so a person already at their limit costs the team nothing. A batch fill also stops at the first cell whose answer is cut off by the length limit, as it already did for a timeout, with the same message about how far it got.
+- A call is charged to the spend day its slot was counted on, so the two agree for a call that starts right at midnight.
+- The README and the team prompts guide describe the limits and the new message.
+- If this release is rolled back, delete the `aiRequestDaily` rows in the `rateLimits` table: the earlier code would read their new timestamps as the start of each person's 24-hour window.
+
 ## [0.5.0.0] - 2026-10-05
 
 ### Changed

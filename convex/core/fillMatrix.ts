@@ -1,12 +1,13 @@
 "use node";
 
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { action, type ActionCtx } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
-import { runPersistedQuestionGeneration } from "../lib/generationRunner";
-import { ensureAiRateLimit, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
+import { runPersistedQuestionGeneration, wasCutOffFailure } from "../lib/generationRunner";
+import { ensureAiRateLimit, ensureAiUnansweredLeft, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
 import { ensureAiBudget, keptAiReservation } from "../lib/aiSpendGuard";
+import { ERROR_CODES } from "../constants";
 
 async function pickRandomActiveTopicSlug(ctx: ActionCtx): Promise<string> {
 	const topics = await ctx.runQuery(api.core.topics.getTopics, {});
@@ -101,6 +102,15 @@ async function publicSlugTripleExists(
 }
 
 /**
+ * What the manager is told when a batch stops at a call that got no usable answer. It counts
+ * only the cells this request filled: some of the cells asked for may have been filled already.
+ */
+function fillStoppedMessage(filledCells: number): string {
+	const filled = filledCells === 1 ? "1 cell" : `${filledCells} cells`;
+	return `Filled ${filled}, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.`;
+}
+
+/**
  * Fill empty cells on the 2D schedule matrix (one generation per visible cell).
  * Each entry matches how the UI buckets questions: same axis-Y slug and axis-X slug,
  * with a shared topic for ALL cells (or random if topicSlug is omitted).
@@ -182,6 +192,9 @@ export const fillEmptyCells = action({
 
 			try {
 				await ensureAiBudget(ctx, "user");
+				// Before the organization's token, so a person who is already at their own
+				// limit is refused before the fill costs the team anything.
+				await ensureAiUnansweredLeft(ctx);
 				await ensureAiRateLimit(ctx, { name: "matrixFillCell", key: args.organizationId });
 				const result = await runPersistedQuestionGeneration(ctx, {
 					purpose: "feed",
@@ -202,10 +215,25 @@ export const fillEmptyCells = action({
 					skippedExisting++;
 				}
 			} catch (err) {
-				// Out of budget or rate-limited: every remaining cell would fail the same way. So,
-				// very likely, would the cells after a call that timed out or came back unparseable,
-				// and each of them would keep its own reservation.
-				if (isAiStopError(err) || keptAiReservation(err)) throw err;
+				// Out of budget or rate-limited: every remaining cell would fail the same way.
+				if (isAiStopError(err)) throw err;
+				// So, very likely, would the cells after a call that timed out, came back
+				// unparseable or was cut off by the output cap, and each of them would keep its
+				// own reservation or one of the person's unanswered-call slots. The error itself
+				// wouldn't reach the manager as anything readable, so they are told how far the
+				// fill got.
+				if (keptAiReservation(err) || wasCutOffFailure(err)) {
+					console.error(
+						`Stopped the matrix fill at (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug})`,
+						err,
+					);
+					throw new ConvexError({
+						code: ERROR_CODES.AI_GENERATION_FAILED,
+						message: fillStoppedMessage(filledCells),
+						filledCells,
+						totalCells: args.cells.length,
+					});
+				}
 				const msg = err instanceof Error ? err.message : String(err);
 				if (msg.includes("No active") && msg.includes("entry found for slug")) {
 					skippedInvalidTaxonomy++;
@@ -293,6 +321,7 @@ export const fillSingleCell = action({
 			const clampedCount = Math.max(MIN_COUNT, Math.min(args.count ?? 1, MAX_COUNT_PER_CELL));
 
 			await ensureAiBudget(ctx, "user");
+			await ensureAiUnansweredLeft(ctx);
 			await ensureAiRateLimit(ctx, { name: "matrixFillCell", key: args.organizationId });
 
 			const result = await runPersistedQuestionGeneration(ctx, {

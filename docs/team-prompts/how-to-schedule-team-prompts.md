@@ -90,9 +90,15 @@ workspace's AI usage, because the provider already charged for it.
 If the planner says new AI questions are paused for today, the app's daily AI
 budget is spent, and topic options and matrix fill come back the next day. The
 same applies when it says you've used today's AI requests. If it says you've
-made a lot of AI requests in a short time, retry in a few minutes. If your team
-has used its matrix fills, more become available through the day. Library and
-**Write** assignments keep working either way.
+made a lot of AI requests in a short time, retry in a few minutes. If it says
+several of your AI requests are still running or got no answer today, wait for
+the running ones to finish and try again; once five have gone without an answer
+in a day, topic options and matrix fill come back the next day. If a matrix
+fill says it stopped because the AI didn't finish an answer, the cells it
+reports as filled are saved, and the call it stopped at counts toward those
+five; try the rest later. If your team has used its matrix fills, more become
+available through the day. Library and **Write** assignments keep working
+either way.
 
 ### “This schedule is already published or completed”
 

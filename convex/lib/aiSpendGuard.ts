@@ -23,9 +23,18 @@ export async function ensureAiBudget(ctx: Pick<ActionCtx, "runQuery">, spendClas
 export type AiReservation = { spendClass: SpendClass; day: string; reservedUsd: number };
 type SpendCtx = Pick<ActionCtx, "runMutation" | "scheduler">;
 
-/** Sets aside `reserveUsd` for one call right before the provider call, or throws AI_BUDGET_PAUSED. */
-export async function reserveAiSpend(ctx: SpendCtx, spendClass: SpendClass, reserveUsd: number): Promise<AiReservation> {
-  const reservation = { spendClass, day: spendDay(Date.now()), reservedUsd: reserveUsd };
+/**
+ * Sets aside `reserveUsd` for one call right before the provider call, or throws
+ * AI_BUDGET_PAUSED. `day` is the spend day to charge: today, unless the caller already counted
+ * the call against a day (its unanswered-call slot's), so the two agree at midnight.
+ */
+export async function reserveAiSpend(
+  ctx: SpendCtx,
+  spendClass: SpendClass,
+  reserveUsd: number,
+  day: string = spendDay(Date.now()),
+): Promise<AiReservation> {
+  const reservation = { spendClass, day, reservedUsd: reserveUsd };
   const reserved = await ctx.runMutation(internal.internal.aiSpend.reserveAiSpend, {
     spendClass,
     day: reservation.day,

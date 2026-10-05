@@ -43,6 +43,7 @@ export const ERROR_MESSAGES = {
   AI_RATE_LIMITED: "That's a lot of AI requests in a short time. Try again in a few minutes.",
   AI_MATRIX_FILL_LIMITED: "Your team has used its matrix fills for now. More become available through the day.",
   AI_DAILY_LIMITED: "You've used today's AI requests. More are available tomorrow.",
+  AI_UNANSWERED_LIMITED: "Several of your AI requests are still running or got no answer today. Try again later.",
   AI_REMIX_TOO_LONG: "That question is too long to remix. Remix works on questions up to 1,000 characters.",
   AI_REMIX_RESULT_TOO_LONG: "That remix came out too long. Try remixing again.",
   AI_PROMPT_TOO_LARGE: "That request is too large to send to the AI.",

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
-import { callReserveUsd, completionUsage, dailyCaps, FALLBACK_COST_PER_CALL_USD, MAX_PROMPT_CHARS, spendDay, worstCaseCallCostUsd } from "./lib/aiSpend";
+import { callReserveUsd, completionUsage, dailyCaps, FALLBACK_COST_PER_CALL_USD, MAX_PROMPT_CHARS, nextSpendDayStart, spendDay, worstCaseCallCostUsd } from "./lib/aiSpend";
 import { reserveAiSpend, settleAiCompletion } from "./lib/aiSpendGuard";
 import { convexErrorData } from "./lib/errorData";
 
@@ -194,6 +194,23 @@ describe("usage from the provider response", () => {
     expect(spendDay(Date.UTC(2026, 8, 30, 7, 30))).toBe("2026-09-30");
   });
 
+  test("the next spend day starts at midnight in Los Angeles, also across a clock change", () => {
+    // Daylight time: midnight is 07:00 UTC. Standard time: 08:00 UTC.
+    expect(nextSpendDayStart(Date.UTC(2026, 8, 29, 19, 0))).toBe(Date.UTC(2026, 8, 30, 7, 0));
+    expect(nextSpendDayStart(Date.UTC(2026, 11, 1, 20, 0))).toBe(Date.UTC(2026, 11, 2, 8, 0));
+    // The last millisecond of a day, and its first.
+    expect(nextSpendDayStart(Date.UTC(2026, 8, 30, 7, 0) - 1)).toBe(Date.UTC(2026, 8, 30, 7, 0));
+    expect(nextSpendDayStart(Date.UTC(2026, 8, 30, 7, 0))).toBe(Date.UTC(2026, 9, 1, 7, 0));
+    // Nov 1, 2026 is 25 hours long (the clocks go back) and Mar 14, 2027 is 23 (they go forward).
+    expect(nextSpendDayStart(Date.UTC(2026, 10, 1, 7, 30))).toBe(Date.UTC(2026, 10, 2, 8, 0));
+    expect(nextSpendDayStart(Date.UTC(2027, 2, 14, 8, 30))).toBe(Date.UTC(2027, 2, 15, 7, 0));
+    for (const now of [Date.UTC(2026, 10, 1, 7, 30), Date.UTC(2027, 2, 14, 8, 30)]) {
+      const next = nextSpendDayStart(now);
+      expect(spendDay(next - 1)).toBe(spendDay(now));
+      expect(spendDay(next)).not.toBe(spendDay(now));
+    }
+  });
+
   test("a failure to record spend doesn't fail the paid call, and the write is retried in the background", async () => {
     const ctx = {
       runMutation: vi.fn().mockRejectedValue(new Error("write conflict")),
@@ -332,6 +349,20 @@ describe("what is set aside before a call", () => {
 
     const refused = await reserveAiSpend(ctx as never, "user", 0.0537).catch((error: unknown) => error);
     expect(convexErrorData(refused)).toEqual({ code: ERROR_CODES.AI_BUDGET_PAUSED, message: ERROR_MESSAGES.AI_BUDGET_PAUSED });
+  });
+
+  test("a reservation is made on the day the caller names, when it already counted the call against one", async () => {
+    const runMutation = vi.fn().mockResolvedValue(true);
+    const ctx = { runMutation, scheduler: { runAfter: vi.fn() } };
+
+    // The clock says Sep 29; the call was counted a moment earlier, on Sep 28.
+    expect(await reserveAiSpend(ctx as never, "user", 0.0537, "2026-09-28")).toEqual({
+      spendClass: "user",
+      day: "2026-09-28",
+      reservedUsd: 0.0537,
+    });
+    expect(calledFunction(runMutation.mock.calls[0][0])).toBe("internal/aiSpend:reserveAiSpend");
+    expect(runMutation.mock.calls[0][1]).toMatchObject({ spendClass: "user", day: "2026-09-28", reserveUsd: 0.0537 });
   });
 
   test("the ledger holds a reservation of any size until it is settled or given back", async () => {

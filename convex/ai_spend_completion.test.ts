@@ -9,7 +9,8 @@ import schema from "./schema";
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HARD_CAP_USD, FALLBACK_COST_PER_CALL_USD, spendDay, worstCaseCallCostUsd } from "./lib/aiSpend";
 import { billedFailure, keepAiReservation, keptAiReservation } from "./lib/aiSpendGuard";
-import { ensureAiRateLimit, isAiStopError } from "./lib/aiRateLimit";
+import * as aiRateLimitLib from "./lib/aiRateLimit";
+import { ensureAiRateLimit, ensureAiUnansweredLeft, holdAiUnanswered, isAiStopError, releaseAiUnanswered } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
 import { GENERATION_MODEL, openRouterClient } from "./lib/generationRunner";
 import { clampBatchSize, DEFAULT_BLUEPRINT_SLUG } from "./lib/promptArchitecture";
@@ -1411,7 +1412,7 @@ describe("calls that may have been billed without an answer", () => {
     expect(usage.map((row) => row.count)).toEqual([1]);
   });
 
-  test("a matrix cell that times out stops the fill: later cells aren't tried, one reservation is kept and the lock is freed", async () => {
+  test("a matrix cell that times out stops the fill and says how far it got: later cells aren't tried, one reservation is kept and the lock is freed", async () => {
     const { t, meId } = await setup();
     const orgId = await t.run(async (ctx) => {
       const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
@@ -1424,9 +1425,11 @@ describe("calls that may have been billed without an answer", () => {
       return orgId;
     });
     create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(
-      t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+    const stopped = await t
+      .withIdentity(ME)
+      .action(api.core.fillMatrix.fillEmptyCells, {
         organizationId: orgId,
         axisY: "style",
         axisX: "tone",
@@ -1435,8 +1438,20 @@ describe("calls that may have been billed without an answer", () => {
           { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
           { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
         ],
-      }),
-    ).rejects.toThrow(TIMED_OUT);
+      })
+      .catch((error: unknown) => error);
+
+    // The manager is told how far the fill got; the provider's error goes to the log.
+    expect(convexErrorData(stopped)).toEqual({
+      code: ERROR_CODES.AI_GENERATION_FAILED,
+      message: "Filled 0 cells, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.",
+      filledCells: 0,
+      totalCells: 2,
+    });
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringMatching(/Stopped the matrix fill at \(style=s1, tone=t1\)/),
+      expect.objectContaining({ message: TIMED_OUT }),
+    );
 
     // The second cell would very likely time out too, and keep a reservation of its own.
     expect(create).toHaveBeenCalledTimes(1);
@@ -1522,5 +1537,558 @@ describe("calls that may have been billed without an answer", () => {
     expect(keptAiReservation(billedFailure(timedOut))).toBe(true);
     expect(keptAiReservation(billedFailure(new Error("400 invalid request")))).toBe(false);
     expect(keptAiReservation(refused(429, "Too Many Requests"))).toBe(false);
+  });
+});
+
+describe("calls a person may have unanswered in one day", () => {
+  const UNANSWERED = /still running or got no answer/;
+
+  /** What is left of a person's five slots, as their row holds it. No row: none was ever held. */
+  async function slotsLeft(t: T, key = ME.subject) {
+    const rows = await t.run(async (ctx) => await ctx.db.query("rateLimits").collect());
+    return rows.find((row) => row.name === "aiUnanswered" && row.key === key)?.value;
+  }
+
+  /** Holds all five of a person's slots for today, as five calls that got no answer would. */
+  async function holdEverySlot(t: T, key = ME.subject) {
+    for (let i = 0; i < 5; i++) {
+      expect(await t.mutation(internal.internal.aiRateLimit.holdAiUnanswered, { key })).toMatchObject({ ok: true });
+    }
+  }
+
+  async function matrixOrg(t: T, meId: Awaited<ReturnType<typeof setup>>["meId"]) {
+    return await t.run(async (ctx) => {
+      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
+      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
+      for (const slug of ["s1", "s2"]) {
+        await ctx.db.insert("styles", { id: slug, slug, status: "active", version: 1, name: slug, structure: "x", color: "#111111", icon: "sparkles" });
+      }
+      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
+      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
+      return orgId;
+    });
+  }
+
+  /** What is left of an organization's matrix fills, as its row holds it. No row: none was taken. */
+  async function matrixFillsLeft(t: T, orgId: string) {
+    const rows = await t.run(async (ctx) => await ctx.db.query("rateLimits").collect());
+    return rows.filter((row) => row.name === "matrixFillCell" && row.key === orgId).map((row) => row.value);
+  }
+
+  test("after five calls that got no answer the next request is refused before any model call, until the next day", async () => {
+    const { t, meId, questionId } = await setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    for (let i = 0; i < 5; i++) await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+    const refusal = await remix(t, questionId).catch((error: unknown) => error);
+
+    // Refused like any other per-person limit, and told when the next spend day starts.
+    expect(convexErrorData(refusal)).toEqual({
+      code: ERROR_CODES.AI_RATE_LIMITED,
+      message: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
+      retryAt: Date.UTC(2026, 8, 30, 7, 0),
+    });
+    expect(create).toHaveBeenCalledTimes(5);
+    const [[day, spendClass, spent, calls]] = await ledger(t);
+    expect([day, spendClass, calls]).toEqual([spendDay(Date.now()), "user", 5]);
+    expect(spent).toBeCloseTo(5 * lastSetAside(), 9);
+    // The refusal made no run, and none of the six requests cost the person a plan use.
+    const { runs, usage } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    }));
+    expect(runs.map((run) => run.status)).toEqual(["failed", "failed", "failed", "failed", "failed"]);
+    expect(usage.map((row) => row.count)).toEqual([0]);
+
+    // 11:59pm in Los Angeles is still that day; 12:01am is the next.
+    vi.setSystemTime(Date.UTC(2026, 8, 30, 6, 59));
+    await expect(remix(t, questionId)).rejects.toThrow(UNANSWERED);
+    vi.setSystemTime(Date.UTC(2026, 8, 30, 7, 1));
+    await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+    expect(create).toHaveBeenCalledTimes(6);
+  });
+
+  test("a remix, feed generation, a team preview and a matrix fill count against the same five", async () => {
+    const { t, meId, styleId, toneId, questionId } = await setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const organizationId = await matrixOrg(t, meId);
+    const fill = () =>
+      t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, {
+        organizationId,
+        styleSlug: "s1",
+        toneSlug: "t1",
+        topicSlug: "any-topic",
+      });
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+    await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+    await expect(
+      t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { anchoredStyleId: styleId, anchoredToneId: toneId }),
+    ).rejects.toThrow(TIMED_OUT);
+    await expect(
+      t.withIdentity(ME).action(api.core.teamPromptActions.previewTopicQuestions, {
+        organizationId,
+        name: "Recovery",
+        guidance: "Talk about rest days",
+        styleId,
+        toneId,
+      }),
+    ).rejects.toThrow(TIMED_OUT);
+    await expect(fill()).rejects.toThrow(TIMED_OUT);
+    expect(create).toHaveBeenCalledTimes(5);
+    expect(await slotsLeft(t)).toBe(0);
+    // The fill that reached the provider took one of the organization's 50.
+    expect(await matrixFillsLeft(t, organizationId)).toEqual([49]);
+
+    await expect(remix(t, questionId)).rejects.toThrow(UNANSWERED);
+    // A matrix fill is refused the same way, with an error a batch stops on, before it takes
+    // one of the organization's fills or starts a run, and the cell it claimed is freed.
+    const refusedFill = await fill().catch((error: unknown) => error);
+    expect(convexErrorData(refusedFill)).toMatchObject({
+      code: ERROR_CODES.AI_RATE_LIMITED,
+      message: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
+    });
+    expect(isAiStopError(refusedFill)).toBe(true);
+    expect(create).toHaveBeenCalledTimes(5);
+    expect(await matrixFillsLeft(t, organizationId)).toEqual([49]);
+    const { runs, locks } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      locks: await ctx.db.query("matrixFillCellLocks").collect(),
+    }));
+    expect(runs).toHaveLength(5);
+    expect(locks).toEqual([]);
+  });
+
+  test("a call that is answered, or that the provider refused, gives its slot back", async () => {
+    process.env.OPENROUTER_MAX_ATTEMPTS = "1";
+    const { t, questionId } = await setup();
+    create
+      .mockResolvedValueOnce(completion("What breakfast would you happily eat every day?", { cost: 0.004 }) as never)
+      .mockRejectedValueOnce(refused(400, "invalid request") as never)
+      .mockRejectedValueOnce(refused(429, "Too Many Requests") as never)
+      .mockRejectedValueOnce(new APIConnectionError({ message: "Connection error." }) as never)
+      // An answer that can't be used was still an answer; so was its retry.
+      .mockResolvedValue(completion('""', { cost: 0.004 }) as never);
+
+    await expect(remix(t, questionId)).resolves.toBe("What breakfast would you happily eat every day?");
+    await expect(remix(t, questionId)).rejects.toThrow("400 invalid request");
+    await expect(remix(t, questionId)).rejects.toThrow(/429/);
+    await expect(remix(t, questionId)).rejects.toThrow(/Connection error/);
+    await expect(remix(t, questionId)).rejects.toThrow(/couldn't use/);
+
+    expect(create).toHaveBeenCalledTimes(6);
+    expect(await slotsLeft(t)).toBe(5);
+  });
+
+  test("a slot kept by a call that got no answer stays kept when later calls are answered or refused", async () => {
+    const { t, questionId } = await setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    create
+      .mockRejectedValueOnce(new APIConnectionTimeoutError() as never)
+      .mockResolvedValueOnce(completion("What breakfast would you happily eat every day?", { cost: 0.004 }) as never)
+      .mockRejectedValueOnce(refused(400, "invalid request") as never)
+      .mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+    await expect(remix(t, questionId)).resolves.toBe("What breakfast would you happily eat every day?");
+    await expect(remix(t, questionId)).rejects.toThrow("400 invalid request");
+    // The answered and the refused call each gave back only their own slot.
+    expect(await slotsLeft(t)).toBe(4);
+
+    for (let i = 0; i < 4; i++) await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+    await expect(remix(t, questionId)).rejects.toThrow(UNANSWERED);
+    expect(create).toHaveBeenCalledTimes(7);
+  });
+
+  test("an answer cut off by the output cap keeps its slot: it is charged while the person's use is given back", async () => {
+    const { t, meId, questionId } = await setup();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const truncated = completion("", { cost: 0.006 });
+    truncated.choices[0].finish_reason = "length";
+    create.mockResolvedValue(truncated as never);
+
+    await expect(remix(t, questionId)).rejects.toThrow(/finish_reason=length/);
+
+    expect(await slotsLeft(t)).toBe(4);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/Keeping an unanswered-call slot \(rateLimits row .+\) for run .+: the answer was cut off/),
+    );
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.006, 1]]);
+    const usage = await t.run(async (ctx) =>
+      (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    );
+    expect(usage.map((row) => row.count)).toEqual([0]);
+
+    // Four more, and the next request is refused before it reaches the model.
+    for (let i = 0; i < 4; i++) await expect(remix(t, questionId)).rejects.toThrow(/finish_reason=length/);
+    await expect(remix(t, questionId)).rejects.toThrow(UNANSWERED);
+    expect(create).toHaveBeenCalledTimes(5);
+  });
+
+  test("a retry the budget refuses gives its slot back too", async () => {
+    const { t, questionId } = await setup();
+    create.mockImplementationOnce((async () => {
+      // Other spend uses up the budget while this attempt is failing. It is added to the day's
+      // row, which this attempt's reservation has already made.
+      await t.run(async (ctx) => {
+        const [today] = await ctx.db.query("aiSpendDays").collect();
+        await ctx.db.patch(today._id, { costUsd: today.costUsd + 5 });
+      });
+      throw refused(503, "Service Unavailable");
+    }) as never);
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(PAUSED);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await slotsLeft(t)).toBe(5);
+  });
+
+  test("calls still waiting on the provider count: a sixth at once is refused, and there is room again once they are answered", async () => {
+    const { t, questionId } = await setup();
+    let waiting = 0;
+    let sixth: unknown;
+    let leftWhileWaiting: number | undefined;
+    create.mockImplementation((async () => {
+      waiting += 1;
+      // Each call starts the next while it is still waiting on the provider.
+      if (waiting < 5) {
+        await remix(t, questionId);
+      } else if (waiting === 5) {
+        leftWhileWaiting = await slotsLeft(t);
+        sixth = await remix(t, questionId).catch((error: unknown) => error);
+      }
+      return completion("What breakfast would you happily eat every day?", { cost: 0.004 });
+    }) as never);
+
+    await expect(remix(t, questionId)).resolves.toBe("What breakfast would you happily eat every day?");
+
+    expect(leftWhileWaiting).toBe(0);
+    expect(convexErrorData(sixth)).toMatchObject({
+      code: ERROR_CODES.AI_RATE_LIMITED,
+      message: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
+    });
+    expect(create).toHaveBeenCalledTimes(5);
+    expect(await slotsLeft(t)).toBe(5);
+    await expect(remix(t, questionId)).resolves.toBe("What breakfast would you happily eat every day?");
+  });
+
+  test("two requests started together for the last slot: one is answered, the other is refused where its call would be made and is given its plan use back", async () => {
+    const { t, meId, questionId } = await setup();
+    let waiting = 0;
+    let together: PromiseSettledResult<string>[] = [];
+    create.mockImplementation((async () => {
+      waiting += 1;
+      if (waiting < 4) {
+        await remix(t, questionId);
+      } else if (waiting === 4) {
+        // Four calls are waiting on the provider, so one slot is left for the two started here.
+        together = await Promise.allSettled([remix(t, questionId), remix(t, questionId)]);
+      }
+      return completion("What breakfast would you happily eat every day?", { cost: 0.004 });
+    }) as never);
+
+    await expect(remix(t, questionId)).resolves.toBe("What breakfast would you happily eat every day?");
+
+    expect(together.map((outcome) => outcome.status).sort()).toEqual(["fulfilled", "rejected"]);
+    const refusal = together.find((outcome) => outcome.status === "rejected") as PromiseRejectedResult;
+    expect(convexErrorData(refusal.reason)).toMatchObject({
+      code: ERROR_CODES.AI_RATE_LIMITED,
+      message: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
+    });
+    expect(create).toHaveBeenCalledTimes(5);
+    expect(await slotsLeft(t)).toBe(5);
+    const { runs, usage } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    }));
+    // Both passed the request limits; the one refused had made its run, which is closed as failed.
+    expect(runs.map((run) => run.status).sort()).toEqual(["failed", "succeeded", "succeeded", "succeeded", "succeeded", "succeeded"]);
+    // Only the five answered requests count as plan use.
+    expect(usage.map((row) => row.count)).toEqual([5]);
+  });
+
+  test("each person has their own five", async () => {
+    const { t, questionId } = await setup();
+    const YOU = { subject: "you-clerk", tokenIdentifier: "test|you-clerk", email: "you@example.com" };
+    await t.run(async (ctx) => {
+      await ctx.db.insert("users", { email: YOU.email, clerkId: YOU.subject });
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    for (let i = 0; i < 5; i++) await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+    await expect(remix(t, questionId)).rejects.toThrow(UNANSWERED);
+
+    await expect(
+      t.withIdentity(YOU).action(api.core.questions.remixQuestionForUser, { questionId }),
+    ).rejects.toThrow(TIMED_OUT);
+    expect(await slotsLeft(t, YOU.subject)).toBe(4);
+  });
+
+  test("system spend holds no slot: an admin remix that times out isn't counted against the admin", async () => {
+    const { t, questionId } = await setup();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    for (let i = 0; i < 6; i++) {
+      await expect(t.withIdentity(ADMIN).action(api.admin.questions.remixQuestion, { id: questionId })).rejects.toThrow(TIMED_OUT);
+    }
+
+    expect(create).toHaveBeenCalledTimes(6);
+    expect(await slotsLeft(t, ADMIN.subject)).toBeUndefined();
+    expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/no signed-in caller/));
+  });
+
+  test("a call nobody is signed in for holds nothing and says so; system spend holds nothing", async () => {
+    const runMutation = vi.fn();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const signedOut = { auth: { getUserIdentity: vi.fn().mockResolvedValue(null) }, runMutation };
+    const signedIn = { auth: { getUserIdentity: vi.fn().mockResolvedValue({ subject: ME.subject }) }, runMutation };
+
+    await expect(holdAiUnanswered(signedIn as never, "system")).resolves.toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+    // User spend with no caller isn't counted against anyone, so it is logged.
+    await expect(holdAiUnanswered(signedOut as never, "user")).resolves.toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/no signed-in caller/));
+    // Nothing was held, so there is nothing to give back.
+    await releaseAiUnanswered(signedIn as never, null);
+    // And with nobody signed in there is nobody to refuse.
+    await expect(ensureAiUnansweredLeft(signedOut as never)).resolves.toBeUndefined();
+
+    expect(runMutation).not.toHaveBeenCalled();
+  });
+
+  test("a slot that can't be given back is logged, never thrown", async () => {
+    const ctx = { runMutation: vi.fn().mockRejectedValue(new Error("write conflict")) };
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(releaseAiUnanswered(ctx as never, { row: "row-1" as never, day: "2026-09-29" })).resolves.toBeUndefined();
+
+    expect(getFunctionName(ctx.runMutation.mock.calls[0][0])).toBe("internal/aiRateLimit:releaseAiUnanswered");
+    expect(ctx.runMutation.mock.calls[0][1]).toEqual({ row: "row-1", day: "2026-09-29" });
+    // The log names the row, so an operator can see whose slot stayed held.
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledWith(expect.stringMatching(/rateLimits row row-1/), expect.any(Error));
+  });
+
+  test("a held slot names its row and the day the hold reported; a refusal carries the code, the message and when to retry", async () => {
+    const runMutation = vi
+      .fn()
+      // Not the faked clock's day: the slot's day is the one the hold was counted on.
+      .mockResolvedValueOnce({ ok: true, row: "row-1", day: "2026-09-28" })
+      .mockResolvedValueOnce({ ok: false, retryAt: 1234 })
+      .mockResolvedValueOnce({ ok: false, retryAt: 5678 });
+    const ctx = { auth: { getUserIdentity: vi.fn().mockResolvedValue({ subject: ME.subject }) }, runMutation };
+
+    expect(await holdAiUnanswered(ctx as never, "user")).toEqual({ row: "row-1", day: "2026-09-28" });
+    expect(getFunctionName(runMutation.mock.calls[0][0])).toBe("internal/aiRateLimit:holdAiUnanswered");
+    expect(runMutation.mock.calls[0][1]).toEqual({ key: ME.subject });
+
+    const refusal = await holdAiUnanswered(ctx as never, "user").catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(ConvexError);
+    expect(convexErrorData(refusal)).toEqual({
+      code: ERROR_CODES.AI_RATE_LIMITED,
+      message: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
+      retryAt: 1234,
+    });
+
+    // The check before a request refuses the same way, and takes nothing.
+    const early = await ensureAiUnansweredLeft(ctx as never).catch((error: unknown) => error);
+    expect(getFunctionName(runMutation.mock.calls[2][0])).toBe("internal/aiRateLimit:checkAiUnanswered");
+    expect(convexErrorData(early)).toEqual({
+      code: ERROR_CODES.AI_RATE_LIMITED,
+      message: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
+      retryAt: 5678,
+    });
+  });
+
+  test("a call is charged to the spend day its slot was held on", async () => {
+    const { t, questionId } = await setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    // The slot was held a moment before midnight; the call is set aside a moment after.
+    vi.spyOn(aiRateLimitLib, "holdAiUnanswered").mockResolvedValue({ row: "row-1" as never, day: "2026-09-28" });
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+
+    expect(await ledger(t)).toEqual([["2026-09-28", "user", lastSetAside(), 1]]);
+  });
+
+  test("a refused attempt whose retry is answered leaves every slot free", async () => {
+    const { t, questionId } = await setup();
+    create
+      .mockRejectedValueOnce(refused(503, "Service Unavailable") as never)
+      .mockResolvedValueOnce(completion("A quicker take on breakfast?", { cost: 0.004 }) as never);
+
+    await expect(throughBackoff(remix(t, questionId))).resolves.toBe("A quicker take on breakfast?");
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await slotsLeft(t)).toBe(5);
+  });
+
+  test("a refused attempt followed by a timeout gives back the first slot and keeps only the second", async () => {
+    const { t, questionId } = await setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    create
+      .mockRejectedValueOnce(refused(429, "Too Many Requests") as never)
+      .mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(TIMED_OUT);
+
+    // The timeout ends the request: there is no third attempt to hold a slot for.
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await slotsLeft(t)).toBe(4);
+  });
+
+  test("a retry holds a slot of its own: with none left by then it is refused instead of sent", async () => {
+    const { t, questionId } = await setup();
+    // The first attempt holds one of Sep 29's slots.
+    create.mockImplementationOnce((async () => {
+      // The spend day turns before the retry, and the new day's slots are all taken by then.
+      vi.setSystemTime(Date.UTC(2026, 8, 30, 7, 0, 1));
+      await holdEverySlot(t);
+      throw refused(503, "Service Unavailable");
+    }) as never);
+
+    const refusal = await throughBackoff(remix(t, questionId)).catch((error: unknown) => error);
+
+    expect(convexErrorData(refusal)).toEqual({
+      code: ERROR_CODES.AI_RATE_LIMITED,
+      message: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
+      retryAt: Date.UTC(2026, 9, 1, 7, 0),
+    });
+    expect(create).toHaveBeenCalledTimes(1);
+    // Yesterday's slot being given back adds nothing to today's, and nothing was set aside today.
+    expect(await slotsLeft(t)).toBe(0);
+    expect(await ledger(t)).toEqual([["2026-09-29", "user", 0, 0]]);
+  });
+
+  test("a reply that couldn't be read as a completion keeps its slot, like a call that timed out", async () => {
+    const { t, questionId } = await setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const send = stubSend().mockImplementation(
+      async () => new Response("null", { status: 200, headers: { "content-type": "application/json" } }),
+    );
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(/no completion/);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await slotsLeft(t)).toBe(4);
+  });
+
+  test("a matrix batch stops at a cell whose answer is cut off and says how far it got: later cells aren't tried, one slot is kept and the cell is freed", async () => {
+    const { t, meId } = await setup();
+    const orgId = await matrixOrg(t, meId);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("styles", { id: "s3", slug: "s3", status: "active", version: 1, name: "s3", structure: "x", color: "#111111", icon: "sparkles" });
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const truncated = completion("", { cost: 0.006 });
+    truncated.choices[0].finish_reason = "length";
+    create
+      .mockResolvedValueOnce(completion(JSON.stringify({ questions: [{ text: "What small win are you proud of this week?" }] }), { cost: 0.01 }) as never)
+      .mockResolvedValue(truncated as never);
+
+    const stopped = await t
+      .withIdentity(ME)
+      .action(api.core.fillMatrix.fillEmptyCells, {
+        organizationId: orgId,
+        axisY: "style",
+        axisX: "tone",
+        topicSlug: "any-topic",
+        cells: [
+          { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
+          { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
+          { ySlug: "s3", xSlug: "t1", styleSlug: "s3", toneSlug: "t1" },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    // A message the planner can show, not the provider's own error.
+    expect(convexErrorData(stopped)).toEqual({
+      code: ERROR_CODES.AI_GENERATION_FAILED,
+      message: "Filled 1 cell, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.",
+      filledCells: 1,
+      totalCells: 3,
+    });
+    // The third cell has the same size and cap, so it would very likely be cut off too.
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await slotsLeft(t)).toBe(4);
+    expect(await matrixFillsLeft(t, orgId)).toEqual([48]);
+    const { runs, locks } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      locks: await ctx.db.query("matrixFillCellLocks").collect(),
+    }));
+    // The first cell's questions stay saved.
+    expect(runs.map((run) => run.status)).toEqual(["succeeded", "failed"]);
+    expect(locks).toEqual([]);
+  });
+
+  test("a matrix batch also stops when the cut-off answer follows a paid-for unusable one", async () => {
+    const { t, meId } = await setup();
+    const orgId = await matrixOrg(t, meId);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const truncated = completion("", { cost: 0.006 });
+    truncated.choices[0].finish_reason = "length";
+    create.mockResolvedValueOnce(completion('{"questions":[]}', { cost: 0.004 }) as never).mockResolvedValue(truncated as never);
+
+    const stopped = await t
+      .withIdentity(ME)
+      .action(api.core.fillMatrix.fillEmptyCells, {
+        organizationId: orgId,
+        axisY: "style",
+        axisX: "tone",
+        topicSlug: "any-topic",
+        cells: [
+          { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
+          { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(convexErrorData(stopped)).toMatchObject({ code: ERROR_CODES.AI_GENERATION_FAILED, filledCells: 0, totalCells: 2 });
+    // Two calls for the first cell, none for the second.
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  test("a matrix batch is refused at its first cell once the person has no slot left: nothing is taken from the team and the cell is freed", async () => {
+    const { t, meId } = await setup();
+    const orgId = await matrixOrg(t, meId);
+    await holdEverySlot(t);
+
+    const refusal = await t
+      .withIdentity(ME)
+      .action(api.core.fillMatrix.fillEmptyCells, {
+        organizationId: orgId,
+        axisY: "style",
+        axisX: "tone",
+        topicSlug: "any-topic",
+        cells: [
+          { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
+          { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(convexErrorData(refusal)).toMatchObject({
+      code: ERROR_CODES.AI_RATE_LIMITED,
+      message: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
+    });
+    expect(create).not.toHaveBeenCalled();
+    // Refused before anything was set aside, before a run was started, and before the
+    // organization's fills were touched.
+    expect(await ledger(t)).toEqual([]);
+    expect(await matrixFillsLeft(t, orgId)).toEqual([]);
+    const { runs, locks } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      locks: await ctx.db.query("matrixFillCellLocks").collect(),
+    }));
+    expect(runs).toEqual([]);
+    expect(locks).toEqual([]);
   });
 });

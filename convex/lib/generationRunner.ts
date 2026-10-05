@@ -11,7 +11,9 @@ import {
 import { callReserveUsd, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
+import { type AiUnansweredSlot, holdAiUnanswered, releaseAiUnanswered } from "./aiRateLimit";
 import {
+  type AiReservation,
   billedFailure,
   ensureAiBudget,
   keepAiReservation,
@@ -191,7 +193,12 @@ export function maxOutputTokens(batchSize: number): number {
 // the cap at that estimate), then settles it to the real cost on success or releases it when
 // the provider refused the call or was never reached. A call that may have been billed
 // without reporting a cost (it timed out, or its response couldn't be parsed) keeps its
-// reservation as its charge and isn't sent again.
+// reservation as its charge and isn't sent again. A signed-in person's user-spend attempt also
+// holds one of their unanswered-call slots (lib/aiRateLimit.ts) while its reservation is open,
+// on the same spend day. The slot is given back when the attempt is answered in full or its
+// reservation is released. It stays held when the attempt keeps its reservation or its answer
+// is cut off by the output cap: both are charged, and as a rule the person's plan use is
+// given back. A cut-off keeps the slot whatever the request then comes to.
 async function createChatCompletionWithRetry(
   ctx: ActionCtx,
   spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
@@ -212,7 +219,14 @@ async function createChatCompletionWithRetry(
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const reservation = await reserveAiSpend(ctx, spend.spendClass, reserveUsd);
+    const slot = await holdAiUnanswered(ctx, spend.spendClass);
+    let reservation: AiReservation;
+    try {
+      reservation = await reserveAiSpend(ctx, spend.spendClass, reserveUsd, slot?.day);
+    } catch (error) {
+      await releaseAiUnanswered(ctx, slot);
+      throw error;
+    }
     let completion: OpenAI.Chat.Completions.ChatCompletion;
     try {
       completion = await openRouterClient.chat.completions.create(params);
@@ -229,8 +243,10 @@ async function createChatCompletionWithRetry(
           `Keeping the ${spend.spendClass} spend reservation for run ${spend.runId}: no usable answer (${lastError.message})`,
         );
         await keepAiReservation(ctx, reservation, lastError);
+        warnSlotKept(slot, spend.runId, "the call got no usable answer");
       } else {
         await releaseAiReservation(ctx, reservation);
+        await releaseAiUnanswered(ctx, slot);
       }
 
       const retryDelayMs = shouldRetryOpenRouterError(error) ? getOpenRouterRetryDelayMs(error, attempt) : null;
@@ -242,10 +258,23 @@ async function createChatCompletionWithRetry(
       continue;
     }
     await settleAiCompletion(ctx, reservation, spend.runId, completion);
+    if (wasCutOff(completion)) {
+      warnSlotKept(slot, spend.runId, "the answer was cut off by the output cap");
+    } else {
+      await releaseAiUnanswered(ctx, slot);
+    }
     return completion;
   }
 
   throw lastError ?? new Error("OpenRouter chat completion failed");
+}
+
+/**
+ * Logs a slot that stays held, with the person's `rateLimits` row: its `key` is the Clerk user
+ * id an operator passes to resetAiUnanswered.
+ */
+function warnSlotKept(slot: AiUnansweredSlot | null, runId: Id<"generationRuns">, why: string): void {
+  if (slot) console.warn(`Keeping an unanswered-call slot (rateLimits row ${slot.row}) for run ${runId}: ${why}`);
 }
 
 /** Whether the answer was cut off by our own output cap (max_tokens). */
@@ -293,6 +322,20 @@ class UnusableOutputError extends Error {
 // An empty or unreadable answer is usually a one-off, so it gets one more try.
 export const UNUSABLE_OUTPUT_ATTEMPTS = 2;
 
+// Failures of a generation whose answer was cut off by our output cap, so wasCutOffFailure can
+// recognise them.
+const cutOffFailures = new WeakSet<object>();
+
+/**
+ * Whether a generation failed because its answer was cut off by our output cap. A caller
+ * working through a batch for a signed-in person should stop: the next call would very likely
+ * be cut off the same way, and each keeps one of the person's unanswered-call slots. Like
+ * keptAiReservation, the mark is only seen inside the action that made the call.
+ */
+export function wasCutOffFailure(error: unknown): boolean {
+  return typeof error === "object" && error !== null && cutOffFailures.has(error);
+}
+
 // gstack-shortcut(dec-ede332ff-223c-47b1-9d49-270141aa91e0): cut-off handling kept as is, upgrade in the generation follow-ups (retry, error message, run labelling).
 /**
  * Runs `attempt` once more when the model's answer couldn't be used, unless our output cap
@@ -315,7 +358,9 @@ async function retryUnusableOutput<T>(attempt: (markBilled: () => void) => Promi
         console.warn(`Retrying generation after unusable output: ${error.message}`);
         continue;
       }
-      throw billed ? billedFailure(error) : error;
+      const failure = billed ? billedFailure(error) : error;
+      if (error instanceof UnusableOutputError && error.cutOff && failure instanceof Error) cutOffFailures.add(failure);
+      throw failure;
     }
   }
 }

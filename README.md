@@ -107,6 +107,17 @@ charged everything set aside for it: an upper estimate from its prompt length an
 at least $0.02. A call in flight counts at that estimate until it settles.
 A call that times out, or whose response can't be parsed, may still be billed: it is charged
 what was set aside for it and isn't sent again, and a matrix fill or nightly pool stops there.
+Each signed-in person has five slots a day for calls that are still running, got no answer
+this way, or were cut off by the length limit. A running call frees its slot when it is
+answered; the others keep theirs until the next day. With no slot free, that person's feed,
+remix, matrix-fill and team-preview requests are refused. Calls for the daily email and admin
+tools hold no slot. A batch matrix fill that stops at a call that got no answer or was cut off
+says how many cells it filled.
+`npx convex run internal/aiRateLimit:resetAiUnanswered '{"key":"<Clerk user id>"}'` gives one
+person all five back (add `--prod` after `run` for production). The people affected are the
+`rateLimits` rows named `aiUnanswered` with a value below 5 and a `ts` from today; a row's
+`key` is the Clerk user id. Each person also gets at most 40 feed, remix and team-preview
+requests a day, counted on the same Los Angeles day; matrix fill is limited per team instead.
 An empty or unreadable AI answer is retried once. The retry is a second call with its own
 generation run, charged and checked against the cap like the first; answers cut off by the
 length limit are not retried.
