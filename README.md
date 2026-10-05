@@ -107,6 +107,11 @@ charged everything set aside for it: an upper estimate from its prompt length an
 at least $0.02. A call in flight counts at that estimate until it settles.
 A call that times out, or whose response can't be parsed, may still be billed: it is charged
 what was set aside for it and isn't sent again, and a matrix fill or nightly pool stops there.
+Each signed-in person can have five calls a day that are still running, got no answer this
+way, or were cut off by the length limit. After that their AI requests are refused until the
+next day; `npx convex run internal/aiRateLimit:resetAiUnanswered '{"key":"<Clerk user id>"}'`
+gives one person theirs back sooner. Each person also gets at most 40 AI requests a day,
+counted on the same Los Angeles day.
 An empty or unreadable AI answer is retried once. The retry is a second call with its own
 generation run, charged and checked against the cap like the first; answers cut off by the
 length limit are not retried.
