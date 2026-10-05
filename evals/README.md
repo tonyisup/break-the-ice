@@ -109,10 +109,12 @@ models differ: in Oct 2026 a run cost about $0.14 on Sonnet 5.5 and $0.46 on Opu
   different text.
 - The output cap's reasoning allowance and the 30-second provider timeout were sized for Gemini
   3.8 Flash. A model that reasons longer or answers slower is cut off or timed out more often, so
-  for any other model (whatever the preset resolves to included) the unusable-output, yield and
-  provider-error figures partly measure fit to those limits. A cut-off shows in the run's
-  attempts as an empty completion with `finish_reason=length`, or as unreadable output with
-  `completionTokens` at the batch's `settings.maxOutputTokens`.
+  for any other model (whatever the preset resolves to included) the unusable-output and
+  provider-error figures partly measure fit to those limits. A cut-off fails its whole batch and
+  the seed is generated again, so yield doesn't move and the question-level rates come only from
+  answers that fit. A cut-off shows in the run's attempts as an empty completion with
+  `finish_reason=length`, or as unreadable output with `completionTokens` at the batch's
+  `settings.maxOutputTokens`.
 - The regime is the admin preview path with a batch of 5 and no per-person exclusion list. The
   feed usually asks for 1 question and excludes recently seen ones.
 - Library duplicates are counted against dev's library, which is smaller than production's and

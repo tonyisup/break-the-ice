@@ -840,7 +840,8 @@ console.log(JSON.stringify(answers[fn]));
         ["s02", undefined],
       ]);
       expect(readRunFile("preset-run/generated.json").model).toBeNull();
-    });
+      // Nine script runs: about 2s here, but a busy machine can pass the default 5s.
+    }, 30_000);
   });
 
   describe("score", () => {
