@@ -1027,6 +1027,8 @@ const libraryRetirePageResult = v.object({
 	...libraryRetireCounts,
 	// Every question the page retired (or would retire), at most a page's worth.
 	retiredIds: v.array(v.id("questions")),
+	// Kept questions whose status is "approved" or unset: public, but the feed lists only "public".
+	keptOutsideFeedIds: v.array(v.id("questions")),
 	continueCursor: v.string(),
 	isDone: v.boolean(),
 });
@@ -1068,11 +1070,13 @@ export const retireLibraryExceptPage = internalMutation({
 		const page = await ctx.db.query("questions").paginate({ numItems: LIBRARY_RETIRE_PAGE_SIZE, cursor: args.cursor });
 		const counts = { scanned: page.page.length, publicLibrary: 0, kept: 0, retired: 0 };
 		const retiredIds: Id<"questions">[] = [];
+		const keptOutsideFeedIds: Id<"questions">[] = [];
 		for (const question of page.page) {
 			if (!isPublicLibraryQuestion(question)) continue;
 			counts.publicLibrary += 1;
 			if (keep.has(question._id)) {
 				counts.kept += 1;
+				if (question.status !== "public") keptOutsideFeedIds.push(question._id);
 				continue;
 			}
 			counts.retired += 1;
@@ -1088,7 +1092,7 @@ export const retireLibraryExceptPage = internalMutation({
 			});
 			await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: question._id });
 		}
-		return { ...counts, retiredIds, continueCursor: page.continueCursor, isDone: page.isDone };
+		return { ...counts, retiredIds, keptOutsideFeedIds, continueCursor: page.continueCursor, isDone: page.isDone };
 	},
 });
 
@@ -1098,16 +1102,20 @@ export const retireLibraryExceptPage = internalMutation({
  * Resets the shared library to a list of keepers: every other public library question is retired
  * (status "pruned", one `prunedAt` for the whole run). Personal, team and organization questions,
  * questions waiting for review and questions already retired are left alone. No question is
- * deleted: a retired one keeps its text, fingerprint and embedding, leaves the feed, pools and
- * pickers, and drops out of the pruning and duplicate queues on its own.
+ * deleted: a retired one keeps its text, fingerprint and embedding, and leaves the feed, the
+ * daily email, the schedule and collection pickers, and the pruning and duplicate review lists.
  *
  * It refuses to run unless every question to keep is a public library question on this
  * deployment, so IDs from another deployment, or an empty list, retire nothing. Besides the
  * counts, `retiredIds` lists the IDs (no text) of the first LIBRARY_RETIRE_MAX_REPORTED_IDS
  * questions retired, in table order, and a real run logs each page's IDs with the run's
- * `prunedAt`. Keep that output as the record of what the run changed.
+ * `prunedAt`. Keep that output as the record of what the run changed. Either kind of run also
+ * logs how many kept questions have status "approved" or none, with the first ten IDs: they
+ * are kept, but the feed lists only status "public".
  *
- * What it doesn't give back:
+ * What it doesn't give back, and what to expect after it:
+ * - A retired question's link stops opening, in shared links and in emails already sent, until
+ *   the question is brought back.
  * - A like or a hide of a question it retires is dropped the next time its owner opens the Liked
  *   or Settings page, and bringing the question back doesn't restore it.
  * - It records no review, so the admin review history can't undo it, and an earlier review of a
@@ -1116,10 +1124,14 @@ export const retireLibraryExceptPage = internalMutation({
  *   /admin/questions/<id> by setting its status to public; the questions list shows only the
  *   newest 100.
  * - A question published while it runs is retired too if a later page reaches it.
+ * - A pending duplicate group it empties leaves the duplicates page but stays in the admin
+ *   dashboard's count.
+ * - With a small library the feed and the daily email generate new questions far more often,
+ *   and matrix fill and the nightly pool still publish theirs to the library without review.
  *
- * Take a backup, run it with dryRun first (`kept` should be the number of IDs you passed), then
- * for real, then with dryRun again (`retired` should then be 0); add --prod after `run` for
- * production:
+ * Take a backup, run it with dryRun first (`kept` should be the number of different IDs you
+ * passed), then for real, then with dryRun again (`retired` should then be 0); add --prod after
+ * `run` for production:
  * `npx convex run internal/migrations:retireLibraryExcept '{"dryRun":true,"keepQuestionIds":["<id>","<id>"]}'`.
  */
 export const retireLibraryExcept = internalAction({
@@ -1143,6 +1155,7 @@ export const retireLibraryExcept = internalAction({
 		const totals = { scanned: 0, publicLibrary: 0, kept: 0, retired: 0 };
 		const countKeys = Object.keys(libraryRetireCounts) as Array<keyof typeof libraryRetireCounts>;
 		const retiredIds: Id<"questions">[] = [];
+		const keptOutsideFeedIds: Id<"questions">[] = [];
 		const prunedAt = Date.now();
 		let cursor: string | null = null;
 		for (;;) {
@@ -1157,8 +1170,14 @@ export const retireLibraryExcept = internalAction({
 			if (!args.dryRun && page.retiredIds.length > 0) {
 				console.log(`${label} retired at prunedAt ${prunedAt}: ${page.retiredIds.join(", ")}`);
 			}
+			keptOutsideFeedIds.push(...page.keptOutsideFeedIds);
 			if (page.isDone) break;
 			cursor = page.continueCursor;
+		}
+		if (keptOutsideFeedIds.length > 0) {
+			console.log(
+				`${label}: ${keptOutsideFeedIds.length} of the questions kept have status "approved" or none, and the feed lists only status "public" (${keptOutsideFeedIds.slice(0, 10).join(", ")})`,
+			);
 		}
 		console.log(`${label} total: ${JSON.stringify(totals)}`);
 		return { ...totals, retiredIds };

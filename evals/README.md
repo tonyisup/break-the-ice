@@ -95,6 +95,12 @@ Gemini 3.8 Flash and $0.14 on Sonnet 5.5.
   blind labels of 60 generated questions (Oct 2026) it matched 69% of the time, and passing
   everything would have matched 75%; of the quality questions only readability separated the
   owner's keeps from rejects. Unusable output, yield and the duplicate rates don't depend on it.
+- The default model was chosen on blind labels, not on the gate, whose pass rate didn't separate
+  the three models (82% Opus 5.5, 81% Gemini 3.8 Flash, 74% Sonnet 5.5, none a detectable change
+  from the baseline). Of 20 questions from each model's run, the owner kept 17, 15 and 12: too
+  few to tell the models apart. Claude, labeling blind every question the three runs would have
+  saved, with the owner's rubric, kept 90 of 100, 62 of 99 and 54 of 98. Those labels come from
+  Opus 5.5 itself, which read its own questions a little more generously than the owner did.
 - `runs/gemini-3-8-flash-r1`, `sonnet-5-5-r1` and `opus-5-5-r1` are the first single runs of each
   named model (Oct 5, 2026). `runs/preset-r1` ran the same day while that preset was temporarily
   pointed at `stealth/space-bunny-alpha`, so it is not a replicate of `v0-3-2`.

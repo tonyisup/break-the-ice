@@ -205,15 +205,18 @@ describe("resetting the library to a list of keepers", () => {
     expect(await allQuestions(t)).toEqual(before);
   });
 
-  test("more keepers than the limit are refused before anything is read, and a keeper listed twice doesn't count toward it", async () => {
+  test("more keepers than the limit are refused before any of them is looked up, and a keeper listed twice doesn't count toward it", async () => {
     const t = convexTest(schema, modules);
     const library = await insertLibrary(t, LIBRARY_RETIRE_MAX_KEPT + 1);
     const atTheLimit = library.slice(0, LIBRARY_RETIRE_MAX_KEPT);
+    const gone = await insertQuestion(t, { text: "Gone?" });
+    await t.run(async (ctx) => ctx.db.delete(gone));
     const before = await allQuestions(t);
     const run = (keepQuestionIds: Id<"questions">[], dryRun: boolean) =>
       t.action(internal.internal.migrations.retireLibraryExcept, { keepQuestionIds, dryRun });
 
-    await expect(run(library, false)).rejects.toThrow(/Pass between 1 and 1000 questions to keep\. Nothing was changed\./);
+    // One ID no longer exists, which the lookup would report first if it ran before the limit.
+    await expect(run([gone, ...library], false)).rejects.toThrow(/Pass between 1 and 1000 questions to keep\. Nothing was changed\./);
     expect(await allQuestions(t)).toEqual(before);
 
     const summary = await run([...atTheLimit, ...atTheLimit.slice(0, 5)], true);
@@ -301,9 +304,19 @@ describe("resetting the library to a list of keepers", () => {
     expect(stillRetired).toMatchObject({ status: "pruned", reviewRevision: 3 });
   });
 
-  test("after the run the feed and the schedule picker offer the keepers, and a retired question's link no longer opens", async () => {
+  test("after the run the schedule picker offers every keeper and the feed those with status public, which the log says, and a retired question's link no longer opens", async () => {
     const { t, ids, keepQuestionIds } = await setupLibrary();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const outsideFeed = `1 of the questions kept have status "approved" or none, and the feed lists only status "public" (${ids.keptNoStatus})`;
+
+    // The dry run already names the keeper the feed won't list.
+    await t.action(internal.internal.migrations.retireLibraryExcept, { keepQuestionIds, dryRun: true });
     await t.action(internal.internal.migrations.retireLibraryExcept, { keepQuestionIds, dryRun: false });
+    expect(log.mock.calls.map((call) => String(call[0])).filter((line) => line.includes("questions kept"))).toEqual([
+      `retireLibraryExcept (dry run): ${outsideFeed}`,
+      `retireLibraryExcept: ${outsideFeed}`,
+    ]);
+    log.mockRestore();
 
     const feed = (
       await t.query(internal.internal.questions.getRandomQuestionsInternal, { count: 10, seen: [], hidden: [], hiddenStyles: [], hiddenTones: [] })
@@ -316,6 +329,7 @@ describe("resetting the library to a list of keepers", () => {
       expect(listed).not.toContain(ids.retiredApproved);
     }
     expect(picker).toEqual(expect.arrayContaining(keepQuestionIds));
+    expect(feed).not.toContain(ids.keptNoStatus);
     // Left alone means still served: a public question someone wrote stays in the feed.
     expect(feed).toContain(ids.personal);
     expect(await t.query(api.core.questions.getQuestionById, { id: ids.retiredPublic })).toBeNull();
@@ -352,18 +366,21 @@ describe("resetting the library to a list of keepers", () => {
     const keeper = await insertQuestion(t, { text: "The keeper?" });
     const others = await insertLibrary(t, LIBRARY_RETIRE_PAGE_SIZE + 5);
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const pageLines = () => log.mock.calls.map((call) => String(call[0])).filter((line) => line.includes("retired at prunedAt"));
+    const lines = () => log.mock.calls.map((call) => String(call[0]));
+    const totals = { scanned: others.length + 1, publicLibrary: others.length + 1, kept: 1, retired: others.length };
 
     await t.action(internal.internal.migrations.retireLibraryExcept, { keepQuestionIds: [keeper], dryRun: true });
-    expect(pageLines()).toEqual([]);
+    expect(lines()).toEqual([`retireLibraryExcept (dry run) total: ${JSON.stringify(totals)}`]);
+    log.mockClear();
 
     await t.action(internal.internal.migrations.retireLibraryExcept, { keepQuestionIds: [keeper], dryRun: false });
 
     // Two pages, each naming what it retired: the record a run that stops partway leaves behind.
     const prunedAt = (await t.run((ctx) => ctx.db.get(others[0])))?.prunedAt;
-    expect(pageLines()).toEqual([
+    expect(lines()).toEqual([
       `retireLibraryExcept retired at prunedAt ${prunedAt}: ${others.slice(0, LIBRARY_RETIRE_PAGE_SIZE - 1).join(", ")}`,
       `retireLibraryExcept retired at prunedAt ${prunedAt}: ${others.slice(LIBRARY_RETIRE_PAGE_SIZE - 1).join(", ")}`,
+      `retireLibraryExcept total: ${JSON.stringify(totals)}`,
     ]);
     log.mockRestore();
   });

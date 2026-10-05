@@ -16,20 +16,23 @@ export const DEFAULT_DAILY_HARD_CAP_USD = 5;
 export const FALLBACK_COST_PER_CALL_USD = 0.02;
 
 type TokenPrice = { input: number; output: number };
+// Opus 5.5 takes a little under 3 bytes a token on this app's English prompts, and a script that
+// takes a token a character takes about 3 bytes a character, so 2 leaves room for both.
+const PROMPT_BYTES_PER_TOKEN = 2;
 
 /**
- * What a call costs at `price` if it uses its whole output cap: the prompt counted at 3 UTF-8
- * bytes a token (English runs nearer 4 a token; a script that takes about a token a character
- * takes about 3 bytes a character) plus the cap. Prices are US dollars per million tokens.
+ * An upper estimate of what a call costs at `price`: its prompt counted at
+ * PROMPT_BYTES_PER_TOKEN UTF-8 bytes a token, plus its whole output cap. Prices are US dollars
+ * per million tokens.
  */
 export function worstCaseCallCostUsd(promptBytes: number, maxOutputTokens: number, price: TokenPrice): number {
-  return (Math.ceil(promptBytes / 3) * price.input + maxOutputTokens * price.output) / 1_000_000;
+  return (Math.ceil(promptBytes / PROMPT_BYTES_PER_TOKEN) * price.input + maxOutputTokens * price.output) / 1_000_000;
 }
 
 /**
  * What to set aside for one call before it runs, settled to the real cost after it returns:
- * its worst case, and never less than the fallback. A call without a whole, positive output
- * cap could cost anything, so it is refused.
+ * that upper estimate, and never less than the fallback. A call without a whole, positive
+ * output cap could cost anything, so it is refused.
  */
 export function callReserveUsd(promptBytes: number, maxOutputTokens: unknown, price: TokenPrice): number {
   if (typeof maxOutputTokens !== "number" || !Number.isInteger(maxOutputTokens) || maxOutputTokens < 1) {

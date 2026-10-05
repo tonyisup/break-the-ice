@@ -20,7 +20,7 @@ import {
 } from "./aiSpendGuard";
 
 // Named here, not through an OpenRouter preset, so a model change shows in a diff and in every
-// run's record. Opus 5.5 led the Oct 2026 eval runs and the owner's blind labels (evals/README.md).
+// run's record. Opus 5.5 was kept most often in the Oct 2026 blind labels (evals/README.md).
 export const GENERATION_MODEL = "anthropic/claude-opus-5.5";
 // OpenRouter's listed price for GENERATION_MODEL, in US dollars per million tokens (Oct 2026).
 // It only sizes what is set aside before a call: spend is settled to the cost the provider
@@ -146,9 +146,10 @@ export function maxOutputTokens(batchSize: number): number {
 }
 
 // Callers check the budget with ensureAiBudget before creating their run. Here each
-// provider attempt reserves its worst case at the listed price atomically (so a retry after
-// backoff is checked against the budget again, and calls in flight count toward the cap at
-// what they could cost), then settles it to the real cost on success or releases it on failure.
+// provider attempt reserves an upper estimate of its cost at the listed price atomically (so a
+// retry after backoff is checked against the budget again, and calls in flight count toward
+// the cap at that estimate), then settles it to the real cost on success or releases it on
+// failure.
 async function createChatCompletionWithRetry(
   ctx: ActionCtx,
   spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },

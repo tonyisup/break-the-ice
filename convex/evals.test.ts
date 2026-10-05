@@ -707,8 +707,8 @@ describe("generateEvalBatch", () => {
     // The same prompt and five-question cap, so the same amount whichever model is named: the
     // set-aside doesn't know another model's prices (see the note in internal/evals.ts).
     const { messages } = create.mock.calls[0][0] as { messages: Array<{ content: string }> };
-    const promptChars = messages.reduce((total, message) => total + message.content.length, 0);
-    const worstCase = worstCaseCallCostUsd(promptChars, 3300, { input: 4, output: 20 });
+    const promptBytes = messages.reduce((total, message) => total + new TextEncoder().encode(message.content).length, 0);
+    const worstCase = worstCaseCallCostUsd(promptBytes, 3300, { input: 4, output: 20 });
     expect(worstCase).toBeGreaterThan(0.066);
     expect(duringCalls[0]).toEqual([worstCase]);
     // The first batch has settled to its reported $0.01 by the time the second is in flight.

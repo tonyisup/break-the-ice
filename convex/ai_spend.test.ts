@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
+import { getFunctionName } from "convex/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -39,6 +40,10 @@ async function seedSpend(t: T, spent: { user?: number; system?: number }, day = 
 // The caps are read here, as ensureAiBudget does in the action, so env changes apply.
 const allowed = (t: T, spendClass: "user" | "system", day = spendDay(Date.now())) =>
   t.query(internal.internal.aiSpend.checkAiBudget, { spendClass, day, ...dailyCaps() });
+
+// Function references are Proxies that vitest treats as equal to one another, so a check on
+// which function was called has to compare names.
+const calledFunction = (reference: unknown) => getFunctionName(reference as never);
 
 describe("spend ledger", () => {
   test("records each completion's cost per day and class, and its usage on the run", async () => {
@@ -205,6 +210,7 @@ describe("usage from the provider response", () => {
       internal.internal.aiSpend.settleAiSpend,
       expect.objectContaining({ day: "2026-09-29", reservedUsd: 0.02, costUsd: 0.01 }),
     );
+    expect(calledFunction(ctx.scheduler.runAfter.mock.calls[0][1])).toBe("internal/aiSpend:settleAiSpend");
     consoleError.mockRestore();
   });
 
@@ -233,6 +239,9 @@ describe("usage from the provider response", () => {
     const settled = { ...reservation, costUsd: 0.0537, runId: undefined, resolvedModel: "m", promptTokens: undefined, completionTokens: undefined };
     expect(ctx.runMutation).toHaveBeenCalledWith(internal.internal.aiSpend.settleAiSpend, settled);
     expect(ctx.scheduler.runAfter).toHaveBeenCalledWith(0, internal.internal.aiSpend.settleAiSpend, settled);
+    // The retry is a settle too: a release would give the whole reservation back.
+    expect(calledFunction(ctx.runMutation.mock.calls[0][0])).toBe("internal/aiSpend:settleAiSpend");
+    expect(calledFunction(ctx.scheduler.runAfter.mock.calls[0][1])).toBe("internal/aiSpend:settleAiSpend");
     consoleError.mockRestore();
   });
 
@@ -260,23 +269,26 @@ describe("usage from the provider response", () => {
 describe("what is set aside before a call", () => {
   const opus = { input: 4, output: 20 };
 
-  test("the worst case counts a started token as a whole one and charges the whole output cap", () => {
+  test("the estimate counts the prompt at two bytes a token, a started token as a whole one, and the whole output cap", () => {
     expect(worstCaseCallCostUsd(0, 0, opus)).toBe(0);
-    // One character is already a token, three still are one, and a fourth starts the next.
+    // One byte is already a token, two still are one, and a third starts the next.
     expect(worstCaseCallCostUsd(1, 0, opus)).toBeCloseTo(0.000004, 9);
-    expect(worstCaseCallCostUsd(3, 0, opus)).toBeCloseTo(0.000004, 9);
-    expect(worstCaseCallCostUsd(4, 0, opus)).toBeCloseTo(0.000008, 9);
+    expect(worstCaseCallCostUsd(2, 0, opus)).toBeCloseTo(0.000004, 9);
+    expect(worstCaseCallCostUsd(3, 0, opus)).toBeCloseTo(0.000008, 9);
     // Output is charged for every token of the cap, at its own price.
     expect(worstCaseCallCostUsd(0, 2500, opus)).toBeCloseTo(0.05, 9);
     expect(worstCaseCallCostUsd(0, 2500, { input: 4, output: 10 })).toBeCloseTo(0.025, 9);
-    // The largest prompt allowed with a ten-question batch: 13,334 tokens in and 4,300 out.
-    expect(worstCaseCallCostUsd(MAX_PROMPT_CHARS, 4300, opus)).toBeCloseTo(0.139336, 9);
+    // The prompt limit counts characters. A ten-question batch at that limit is 20,000 tokens in
+    // and 4,300 out when every character is one byte, and 60,000 in when every one is three:
+    // the most a single call can set aside.
+    expect(worstCaseCallCostUsd(MAX_PROMPT_CHARS, 4300, opus)).toBeCloseTo(0.166, 9);
+    expect(worstCaseCallCostUsd(MAX_PROMPT_CHARS * 3, 4300, opus)).toBeCloseTo(0.326, 9);
   });
 
   test("a call is set aside at no less than the fallback, and one without a whole, positive output cap is refused", () => {
     // A cap this small never happens; the floor is what keeps such a call from counting for nothing.
     expect(callReserveUsd(30, 10, opus)).toBe(FALLBACK_COST_PER_CALL_USD);
-    expect(callReserveUsd(3000, 2500, opus)).toBeCloseTo(0.054, 9);
+    expect(callReserveUsd(3000, 2500, opus)).toBeCloseTo(0.056, 9);
     // With no cap the provider's output is unbounded, and NaN would make the reservation NaN.
     for (const cap of [undefined, null, Number.NaN, Number.POSITIVE_INFINITY, 0, -5, 2.5, "2500"]) {
       expect(() => callReserveUsd(3000, cap, opus), String(cap)).toThrow(/whole, positive output cap/);
@@ -316,6 +328,7 @@ describe("what is set aside before a call", () => {
       ...dailyCaps(),
       reserveUsd: 0.0537,
     });
+    expect(calledFunction(runMutation.mock.calls[0][0])).toBe("internal/aiSpend:reserveAiSpend");
 
     const refused = await reserveAiSpend(ctx as never, "user", 0.0537).catch((error: unknown) => error);
     expect(convexErrorData(refused)).toEqual({ code: ERROR_CODES.AI_BUDGET_PAUSED, message: ERROR_MESSAGES.AI_BUDGET_PAUSED });
@@ -328,7 +341,7 @@ describe("what is set aside before a call", () => {
     const ledger = async () =>
       (await t.run(async (ctx) => ctx.db.query("aiSpendDays").collect())).map((row) => [row.spendClass, row.costUsd, row.calls]);
 
-    // Two calls in flight, each set aside at its own worst case.
+    // Two calls in flight, each set aside at its own estimate.
     expect(await t.mutation(internal.internal.aiSpend.reserveAiSpend, { spendClass: "user", day, ...caps, reserveUsd: 0.0537 })).toBe(true);
     expect(await t.mutation(internal.internal.aiSpend.reserveAiSpend, { spendClass: "user", day, ...caps, reserveUsd: 0.139336 })).toBe(true);
     expect(await ledger()).toEqual([["user", 0.193036, 0]]);

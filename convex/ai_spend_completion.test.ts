@@ -99,6 +99,12 @@ async function seedSpend(t: T, spent: { user?: number; system?: number }) {
   });
 }
 
+/** The prompt's size as the reservation counts it: UTF-8 bytes, not characters. */
+function promptBytesOf(call: unknown[]) {
+  const { messages } = call[0] as { messages: Array<{ content: string }> };
+  return messages.reduce((total, message) => total + new TextEncoder().encode(message.content).length, 0);
+}
+
 async function ledger(t: T) {
   const rows = await t.run(async (ctx) => await ctx.db.query("aiSpendDays").collect());
   return rows.map((row) => [row.day, row.spendClass, row.costUsd, row.calls]).sort();
@@ -548,7 +554,7 @@ describe("adversarial review follow-ups", () => {
     expect(runs.map((run) => run.model)).toEqual([GENERATION_MODEL]);
   });
 
-  test("a call sets aside the most it can cost, and a completion with no reported cost keeps it", async () => {
+  test("a call sets aside an upper estimate of its cost, and a completion with no reported cost keeps it", async () => {
     const { t, styleId, toneId } = await setup();
     let duringCall: unknown[] = [];
     create.mockImplementation((async () => {
@@ -558,12 +564,10 @@ describe("adversarial review follow-ups", () => {
 
     await t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId });
 
-    const params = create.mock.calls[0][0] as { messages: Array<{ content: string }> };
-    const promptChars = params.messages.reduce((total, message) => total + message.content.length, 0);
-    // The prompt at 3 characters a token plus the whole 2,500-token cap, at $4 in and $20 out
-    // per million tokens.
-    expect(worstCaseCallCostUsd(3000, 2500, { input: 4, output: 20 })).toBeCloseTo(0.054);
-    const worstCase = worstCaseCallCostUsd(promptChars, 2500, { input: 4, output: 20 });
+    // The prompt at 2 bytes a token plus the whole 2,500-token cap, at $4 in and $20 out per
+    // million tokens.
+    expect(worstCaseCallCostUsd(3000, 2500, { input: 4, output: 20 })).toBeCloseTo(0.056);
+    const worstCase = worstCaseCallCostUsd(promptBytesOf(create.mock.calls[0]), 2500, { input: 4, output: 20 });
     expect(worstCase).toBeGreaterThan(0.05);
     expect(duringCall).toEqual([[spendDay(Date.now()), "system", worstCase, 0]]);
     // No cost came back, so the call is charged everything that was set aside for it.
@@ -827,8 +831,6 @@ describe("room for a thinking model's reasoning", () => {
 
 describe("what a call in flight sets aside", () => {
   const opus = { input: 4, output: 20 };
-  const promptCharsOf = (call: unknown[]) =>
-    (call[0] as { messages: Array<{ content: string }> }).messages.reduce((total, message) => total + message.content.length, 0);
 
   test("a remix sets aside its own smaller worst case as user spend, then gives back all but what it cost", async () => {
     const { t, questionId } = await setup();
@@ -841,7 +843,7 @@ describe("what a call in flight sets aside", () => {
     await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
 
     // A remix is capped at 2,150 output tokens, so less is set aside than for a batch of questions.
-    const worstCase = worstCaseCallCostUsd(promptCharsOf(create.mock.calls[0]), 2150, opus);
+    const worstCase = worstCaseCallCostUsd(promptBytesOf(create.mock.calls[0]), 2150, opus);
     expect(worstCase).toBeGreaterThan(0.043);
     expect(worstCase).toBeLessThan(worstCaseCallCostUsd(0, 2500, opus));
     expect(duringCall).toEqual([[spendDay(Date.now()), "user", worstCase, 0]]);
@@ -861,10 +863,12 @@ describe("what a call in flight sets aside", () => {
 
     await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
 
-    // Counted by characters, 900 of these would be set aside as 300 tokens; they are 900 or more.
-    const messages = (create.mock.calls[0][0] as { messages: Array<{ content: string }> }).messages;
-    const promptBytes = messages.reduce((total, message) => total + new TextEncoder().encode(message.content).length, 0);
-    expect(promptBytes).toBeGreaterThan(promptCharsOf(create.mock.calls[0]) + 1800);
+    // Each of these characters is one token or more and three bytes. Counted as characters, 900
+    // of them would be set aside as fewer tokens than they are.
+    const { messages } = create.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    const promptChars = messages.reduce((total, message) => total + message.content.length, 0);
+    const promptBytes = promptBytesOf(create.mock.calls[0]);
+    expect(promptBytes).toBeGreaterThan(promptChars + 1800);
     expect(duringCall).toEqual([[spendDay(Date.now()), "user", worstCaseCallCostUsd(promptBytes, 2150, opus), 0]]);
     expect(duringCall[0][2]).toBeGreaterThan(worstCaseCallCostUsd(0, 2150, opus) + (900 * 4) / 1_000_000);
   });
@@ -891,7 +895,7 @@ describe("what a call in flight sets aside", () => {
     await t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 5, anchoredStyleId: styleId, anchoredToneId: toneId });
 
     // The cap for five questions is 3,300 tokens: $0.066 of output before the prompt is counted.
-    const worstCase = worstCaseCallCostUsd(promptCharsOf(create.mock.calls[0]), 3300, opus);
+    const worstCase = worstCaseCallCostUsd(promptBytesOf(create.mock.calls[0]), 3300, opus);
     expect(worstCase).toBeGreaterThan(0.066);
     expect(duringCall).toEqual([[spendDay(Date.now()), "user", worstCase, 0]]);
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.011, 1]]);
@@ -943,7 +947,7 @@ describe("what a call in flight sets aside", () => {
     ).rejects.toThrow("400 invalid request");
 
     // Ten questions: 4,300 tokens of output, $0.086, before the prompt is counted.
-    const worstCase = worstCaseCallCostUsd(promptCharsOf(create.mock.calls[0]), 4300, opus);
+    const worstCase = worstCaseCallCostUsd(promptBytesOf(create.mock.calls[0]), 4300, opus);
     expect(worstCase).toBeGreaterThan(0.086);
     expect(duringCall).toEqual([[spendDay(Date.now()), "system", worstCase, 0]]);
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0, 0]]);
