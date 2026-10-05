@@ -42,9 +42,9 @@
 
 **What:** Reserve each AI call's budget from its `max_tokens` (times a worst-case price) instead of a flat `RESERVE_PER_CALL_USD` of $0.02.
 
-**Why:** The worst-case call is now 4,300 output tokens, about $0.017 on today's model. If the OpenRouter preset is pointed at a pricier model, which needs no deploy, calls could cost more than they reserve and overshoot the daily cap before settling.
+**Why:** The worst-case call is now 4,300 output tokens, about $0.017 on today's model. If the OpenRouter preset is pointed at a pricier model, which needs no deploy, calls could cost more than they reserve and overshoot the daily cap before settling. Eval runs with `--model` can already name a pricier model on dev: Opus 5.5 averaged about $0.023 a call.
 
-**Context:** `reserveAiSpend` in `convex/lib/aiSpendGuard.ts`, `convex/lib/aiSpend.ts`, `maxOutputTokens` in `convex/lib/generationRunner.ts`. Deferred during the v0.3.2.0 review (decision 9ce5b30c).
+**Context:** `reserveAiSpend` in `convex/lib/aiSpendGuard.ts`, `convex/lib/aiSpend.ts`, `maxOutputTokens` in `convex/lib/generationRunner.ts`, and the named-model path in `generateEvalBatch` (`convex/internal/evals.ts`). Deferred during the v0.3.2.0 review (decision 9ce5b30c) and again for eval models in the v0.4.9.0 review (decision 6f390dcf).
 
 **Effort:** M
 **Priority:** P3
@@ -116,6 +116,22 @@
 **Effort:** S
 **Priority:** P2
 **Depends on:** Phase 0 eval harness merged
+
+### Tighten how the eval harness handles model names and failed calls
+
+**What:** Four small gaps left from the v0.4.9.0 review of `--model`:
+1. Classify a failed `npx convex run` from its whole output, not its last three lines, so a refusal isn't misfiled when the CLI prints something after it.
+2. Treat `--model` naming the deployment's own preset as the preset, so a run can be pointed back at it.
+3. Decide whether to refuse router names like `openrouter/auto` and variants like `:online`, which change more than the model.
+4. Keep the commit each committed run cites reachable after a squash merge (tag it, or keep the branch).
+
+**Why:** Each can make a run's record say something slightly different from what ran, or tie a run name to a model that never generated.
+
+**Context:** `cliError` and `classifyFailure` in `evals/runRecord.mjs`, the resume rules in `evals/generate.mjs`, `OPENROUTER_MODEL` in `convex/lib/generationRunner.ts`, and `generator.commits` in each `evals/runs/*/summary.json`. Deferred during the v0.4.9.0 review.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
 
 ### Check remix output before showing it
 
