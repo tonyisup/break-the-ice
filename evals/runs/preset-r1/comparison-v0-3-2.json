@@ -1,0 +1,567 @@
+{
+  "baseline": "v0-3-2",
+  "runs": [
+    "preset-r1"
+  ],
+  "note": "Primary rates use Fisher's exact test at 0.00714 each (Bonferroni over 7). \"not detected\" isn't \"the same\": see each rate's detectable range. Questions within a batch are correlated, so treat p-values near the threshold as needing more runs. Quality means are descriptive.",
+  "changed": [
+    "generator.resolvedModelSet"
+  ],
+  "warnings": [
+    "The preset resolved to a different model."
+  ],
+  "different": [
+    "unusableOutputRate"
+  ],
+  "noData": [],
+  "primary": {
+    "passRate": {
+      "primary": true,
+      "decidedBy": "passRate",
+      "baseline": 0.783,
+      "baselineInterval95": [
+        0.733,
+        0.826
+      ],
+      "run": 0.72,
+      "runCounts": [
+        72,
+        100
+      ],
+      "diff": -0.063,
+      "diffInterval95": [
+        -0.167,
+        0.03
+      ],
+      "p": 0.2188,
+      "result": "not detected",
+      "detectable": {
+        "below": 0.64,
+        "above": 0.91
+      }
+    },
+    "reviewRate": {
+      "primary": true,
+      "decidedBy": "reviewRate",
+      "baseline": 0.207,
+      "baselineInterval95": [
+        0.165,
+        0.256
+      ],
+      "run": 0.28,
+      "runCounts": [
+        28,
+        100
+      ],
+      "diff": 0.073,
+      "diffInterval95": [
+        -0.019,
+        0.177
+      ],
+      "p": 0.13081,
+      "result": "not detected",
+      "detectable": {
+        "below": 0.08,
+        "above": 0.35
+      }
+    },
+    "blockRate": {
+      "primary": true,
+      "decidedBy": "blockRate",
+      "baseline": 0.01,
+      "baselineInterval95": [
+        0.003,
+        0.029
+      ],
+      "run": 0,
+      "runCounts": [
+        0,
+        100
+      ],
+      "diff": -0.01,
+      "diffInterval95": [
+        -0.029,
+        0.028
+      ],
+      "p": 0.57636,
+      "result": "not detected",
+      "detectable": {
+        "below": null,
+        "above": 0.07
+      }
+    },
+    "libraryLikelyRate": {
+      "primary": true,
+      "decidedBy": "libraryLikelyRate",
+      "baseline": 0.033,
+      "baselineInterval95": [
+        0.018,
+        0.06
+      ],
+      "run": 0,
+      "runCounts": [
+        0,
+        100
+      ],
+      "diff": -0.033,
+      "diffInterval95": [
+        -0.06,
+        0.007
+      ],
+      "p": 0.0726,
+      "result": "not detected",
+      "detectable": {
+        "below": null,
+        "above": 0.12
+      }
+    },
+    "batchLikelyRate": {
+      "primary": true,
+      "decidedBy": "batchLikelyRate",
+      "baseline": 0,
+      "baselineInterval95": [
+        0,
+        0.06
+      ],
+      "run": 0.05,
+      "runCounts": [
+        1,
+        20
+      ],
+      "diff": 0.05,
+      "diffInterval95": [
+        -0.023,
+        0.236
+      ],
+      "p": 0.25,
+      "result": "not detected",
+      "detectable": {
+        "below": null,
+        "above": 0.2
+      }
+    },
+    "unusableOutputRate": {
+      "primary": true,
+      "decidedBy": "unusableOutputRate",
+      "baseline": 0,
+      "baselineInterval95": [
+        0,
+        0.06
+      ],
+      "run": 0.286,
+      "runCounts": [
+        8,
+        28
+      ],
+      "diff": 0.286,
+      "diffInterval95": [
+        0.14,
+        0.471
+      ],
+      "p": 0.00005,
+      "result": "different",
+      "detectable": {
+        "below": null,
+        "above": 0.179
+      }
+    },
+    "yieldRate": {
+      "primary": true,
+      "decidedBy": "yieldRate",
+      "baseline": 1,
+      "baselineInterval95": [
+        0.987,
+        1
+      ],
+      "run": 1,
+      "runCounts": [
+        100,
+        100
+      ],
+      "diff": 0,
+      "diffInterval95": [
+        -0.037,
+        0.013
+      ],
+      "p": 1,
+      "result": "not detected",
+      "detectable": {
+        "below": 0.96,
+        "above": null
+      }
+    }
+  },
+  "exploratory": {
+    "codeRejectRate": {
+      "primary": false,
+      "decidedBy": "codeRejectRate",
+      "baseline": 0.003,
+      "baselineInterval95": [
+        0.001,
+        0.019
+      ],
+      "run": 0,
+      "runCounts": [
+        0,
+        100
+      ],
+      "diff": -0.003,
+      "diffInterval95": [
+        -0.019,
+        0.034
+      ],
+      "p": 1,
+      "result": "exploratory"
+    },
+    "crossBatchLikelyRate": {
+      "primary": false,
+      "decidedBy": "crossBatchLikelyRate",
+      "baseline": 0.013,
+      "baselineInterval95": [
+        0.006,
+        0.027
+      ],
+      "run": 0.011,
+      "runCounts": [
+        2,
+        175
+      ],
+      "diff": -0.002,
+      "diffInterval95": [
+        -0.018,
+        0.028
+      ],
+      "p": 1,
+      "result": "exploratory"
+    },
+    "exactDuplicateRate": {
+      "primary": false,
+      "decidedBy": "exactDuplicateRate",
+      "baseline": 0,
+      "baselineInterval95": [
+        0,
+        0.013
+      ],
+      "run": 0,
+      "runCounts": [
+        0,
+        100
+      ],
+      "diff": 0,
+      "diffInterval95": [
+        -0.013,
+        0.037
+      ],
+      "p": 1,
+      "result": "exploratory"
+    },
+    "libraryReviewRate": {
+      "primary": false,
+      "decidedBy": "libraryReviewRate",
+      "baseline": 0.033,
+      "baselineInterval95": [
+        0.018,
+        0.06
+      ],
+      "run": 0.01,
+      "runCounts": [
+        1,
+        100
+      ],
+      "diff": -0.023,
+      "diffInterval95": [
+        -0.051,
+        0.024
+      ],
+      "p": 0.30475,
+      "result": "exploratory"
+    },
+    "passRateWithoutFit": {
+      "primary": false,
+      "decidedBy": "passRateWithoutFit",
+      "baseline": 0.86,
+      "baselineInterval95": [
+        0.816,
+        0.895
+      ],
+      "run": 0.76,
+      "runCounts": [
+        76,
+        100
+      ],
+      "diff": -0.1,
+      "diffInterval95": [
+        -0.199,
+        -0.015
+      ],
+      "p": 0.02852,
+      "result": "exploratory"
+    },
+    "providerErrorRate": {
+      "primary": false,
+      "decidedBy": "providerErrorRate",
+      "baseline": 0,
+      "baselineInterval95": [
+        0,
+        0.06
+      ],
+      "run": 0,
+      "runCounts": [
+        0,
+        28
+      ],
+      "diff": 0,
+      "diffInterval95": [
+        -0.06,
+        0.121
+      ],
+      "p": 1,
+      "result": "exploratory"
+    },
+    "reviewRateWithoutFit": {
+      "primary": false,
+      "decidedBy": "reviewRateWithoutFit",
+      "baseline": 0.13,
+      "baselineInterval95": [
+        0.097,
+        0.173
+      ],
+      "run": 0.24,
+      "runCounts": [
+        24,
+        100
+      ],
+      "diff": 0.11,
+      "diffInterval95": [
+        0.025,
+        0.208
+      ],
+      "p": 0.01133,
+      "result": "exploratory"
+    },
+    "s_humiliationFlagRate": {
+      "primary": false,
+      "decidedBy": "s_humiliationFlagRate",
+      "baseline": 0.053,
+      "baselineInterval95": [
+        0.033,
+        0.085
+      ],
+      "run": 0.03,
+      "runCounts": [
+        3,
+        100
+      ],
+      "diff": -0.023,
+      "diffInterval95": [
+        -0.061,
+        0.035
+      ],
+      "p": 0.42646,
+      "result": "exploratory"
+    },
+    "s_politics_religionFlagRate": {
+      "primary": false,
+      "decidedBy": "s_politics_religionFlagRate",
+      "baseline": 0,
+      "baselineInterval95": [
+        0,
+        0.013
+      ],
+      "run": 0,
+      "runCounts": [
+        0,
+        100
+      ],
+      "diff": 0,
+      "diffInterval95": [
+        -0.013,
+        0.037
+      ],
+      "p": 1,
+      "result": "exploratory"
+    },
+    "s_sexual_illegalFlagRate": {
+      "primary": false,
+      "decidedBy": "s_sexual_illegalFlagRate",
+      "baseline": 0.013,
+      "baselineInterval95": [
+        0.005,
+        0.034
+      ],
+      "run": 0,
+      "runCounts": [
+        0,
+        100
+      ],
+      "diff": -0.013,
+      "diffInterval95": [
+        -0.034,
+        0.025
+      ],
+      "p": 0.576,
+      "result": "exploratory"
+    },
+    "s_targets_personFlagRate": {
+      "primary": false,
+      "decidedBy": "s_targets_personFlagRate",
+      "baseline": 0.003,
+      "baselineInterval95": [
+        0.001,
+        0.019
+      ],
+      "run": 0,
+      "runCounts": [
+        0,
+        100
+      ],
+      "diff": -0.003,
+      "diffInterval95": [
+        -0.019,
+        0.034
+      ],
+      "p": 1,
+      "result": "exploratory"
+    },
+    "s_traumaFlagRate": {
+      "primary": false,
+      "decidedBy": "s_traumaFlagRate",
+      "baseline": 0.013,
+      "baselineInterval95": [
+        0.005,
+        0.034
+      ],
+      "run": 0,
+      "runCounts": [
+        0,
+        100
+      ],
+      "diff": -0.013,
+      "diffInterval95": [
+        -0.034,
+        0.025
+      ],
+      "p": 0.576,
+      "result": "exploratory"
+    },
+    "savedPassRate": {
+      "primary": false,
+      "decidedBy": "savedPassRate",
+      "baseline": 0.786,
+      "baselineInterval95": [
+        0.736,
+        0.829
+      ],
+      "run": 0.72,
+      "runCounts": [
+        72,
+        100
+      ],
+      "diff": -0.066,
+      "diffInterval95": [
+        -0.17,
+        0.027
+      ],
+      "p": 0.21669,
+      "result": "exploratory"
+    },
+    "savedRate": {
+      "primary": false,
+      "decidedBy": "savedRate",
+      "baseline": 0.997,
+      "baselineInterval95": [
+        0.981,
+        0.999
+      ],
+      "run": 1,
+      "runCounts": [
+        100,
+        100
+      ],
+      "diff": 0.003,
+      "diffInterval95": [
+        -0.034,
+        0.019
+      ],
+      "p": 1,
+      "result": "exploratory"
+    },
+    "withinBatchLikelyPairRate": {
+      "primary": false,
+      "decidedBy": "withinBatchLikelyPairRate",
+      "baseline": 0,
+      "baselineInterval95": [
+        0,
+        0.006
+      ],
+      "run": 0.01,
+      "runCounts": [
+        2,
+        200
+      ],
+      "diff": 0.01,
+      "diffInterval95": [
+        0,
+        0.036
+      ],
+      "p": 0.06227,
+      "result": "exploratory"
+    }
+  },
+  "qualityShift": {
+    "readability": {
+      "baseline": 2.483,
+      "baselineSd": 0.015,
+      "run": 2.44,
+      "diff": -0.043
+    },
+    "specificity": {
+      "baseline": 2.413,
+      "baselineSd": 0.021,
+      "run": 2.49,
+      "diff": 0.077
+    },
+    "story_yield": {
+      "baseline": 1.567,
+      "baselineSd": 0.021,
+      "run": 1.58,
+      "diff": 0.013
+    },
+    "fit_style": {
+      "baseline": 1.673,
+      "baselineSd": 0.025,
+      "run": 1.72,
+      "diff": 0.047
+    },
+    "fit_tone": {
+      "baseline": 1.783,
+      "baselineSd": 0.015,
+      "run": 1.63,
+      "diff": -0.153
+    },
+    "single_ask": {
+      "baseline": 0.889,
+      "baselineSd": 0.007,
+      "run": 0.754,
+      "diff": -0.135
+    },
+    "answerable": {
+      "baseline": 0.957,
+      "baselineSd": 0.004,
+      "run": 0.961,
+      "diff": 0.004
+    },
+    "light_answer_ok": {
+      "baseline": 0.812,
+      "baselineSd": 0.003,
+      "run": 0.822,
+      "diff": 0.01
+    },
+    "fit_topic": {
+      "baseline": 0.86,
+      "baselineSd": 0.005,
+      "run": 0.895,
+      "diff": 0.035
+    }
+  }
+}
