@@ -280,6 +280,16 @@ describe("per-person AI requests", () => {
     expect(await t.run(async (ctx) => await ctx.db.query("rateLimits").collect())).toEqual([]);
   });
 
+  test("a slot can only be held and given back: the count function doesn't take the limit's name", async () => {
+    const { t } = await setup();
+
+    await expect(
+      t.mutation(internal.internal.aiRateLimit.consumeAiRateLimit, { name: "aiUnanswered" as never, key: ME.subject, count: 5 }),
+    ).rejects.toThrow();
+
+    expect(await t.run(async (ctx) => await ctx.db.query("rateLimits").collect())).toEqual([]);
+  });
+
   test("an operator can give one person their slots back", async () => {
     const { t, textlessId } = await setup();
     const remixAs = (identity: typeof ME) =>
