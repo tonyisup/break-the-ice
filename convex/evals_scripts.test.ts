@@ -698,6 +698,28 @@ describe("scripts", () => {
       const other = runScript("generate.mjs", ["sonnet-run", "--model", "anthropic/claude-opus-5.5"]);
       expect(other.status).toBe(1);
       expect(other.stderr).toMatch(/generated with --model anthropic\/claude-sonnet-5\.5, not --model anthropic\/claude-opus-5\.5/);
+
+      // An interrupted invocation hasn't read back its model calls yet, so it may have reached one.
+      writeRun("interrupted", {
+        "generated.json": { run: "interrupted", model: "anthropic/claude-sonnet-5.5", invocations: [{ startedAtMs: 0, commit: "abc", attemptsComplete: false }], attempts: [], batches: [] },
+      });
+      const resumed = runScript("generate.mjs", ["interrupted", "--model", "anthropic/claude-opus-5.5"]);
+      expect(resumed.status).toBe(1);
+      expect(resumed.stderr).toMatch(/A run keeps one model/);
+
+      // So may a batch that failed past setup, even when no generation run was read back.
+      writeRun("cli-failed", {
+        "generated.json": {
+          run: "cli-failed",
+          model: "anthropic/claude-sonnet-5.5",
+          invocations: [{ startedAtMs: 0, commit: "abc", generated: [], attemptsComplete: true }],
+          attempts: [],
+          batches: [{ seed: { id: "s01", style: "a", tone: "t" }, ok: false, failures: [{ stage: "cli", commit: "abc", message: "timed out" }] }],
+        },
+      });
+      const cliFailed = runScript("generate.mjs", ["cli-failed", "--model", "anthropic/claude-opus-5.5"]);
+      expect(cliFailed.status).toBe(1);
+      expect(cliFailed.stderr).toMatch(/A run keeps one model/);
     });
 
     test("sends --model with every batch and records it, a rerun keeps the run's model, and a run that never reached a model can switch", () => {
@@ -711,7 +733,8 @@ describe("scripts", () => {
       );
       // A stand-in for `npx convex run` that logs each call and answers as dev would. FAIL_SEED
       // makes that seed's batch fail, so a rerun has something to resume; a model name with a
-      // space is refused before any model call, as the deployment's name check does.
+      // space is refused before any model call, as the deployment's name check does; FAIL_LIBRARY
+      // fails the first call of an invocation.
       const bin = join(root, "bin");
       const calls = join(root, "calls.jsonl");
       mkdirSync(bin);
@@ -721,6 +744,10 @@ describe("scripts", () => {
 const [, , fn, json] = process.argv.slice(2);
 const args = JSON.parse(json);
 const badModel = /\\s/.test(args.model ?? "");
+if (fn === "internal/evals:evalLibraryStats" && process.env.FAIL_LIBRARY) {
+  console.error("Uncaught ConvexError: {\\"code\\":\\"EVALS_DISABLED\\"}");
+  process.exit(1);
+}
 const fail = fn === "internal/evals:generateEvalBatch" && (badModel || args.seedId === process.env.FAIL_SEED);
 appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ fn, args, ok: !fail }) + "\\n");
 if (fail) {
@@ -773,7 +800,7 @@ console.log(JSON.stringify(answers[fn]));
       // A misspelled model is refused before any model call, so the run can switch to the right one;
       // once that one has generated, the run keeps it.
       const typo = runScript("generate.mjs", ["typo-run", "--model", "Claude Sonnet"], { PATH });
-      expect(typo.stdout).toMatch(/2 seeds failed; rerun to retry them/);
+      expect(typo.stdout).toMatch(/2 seeds were refused before generating; fix the setup \(pass the right --model/);
       const fixed = runScript("generate.mjs", ["typo-run", "--model", "anthropic/claude-sonnet-5.5"], { PATH });
       expect(fixed.status, fixed.stderr).toBe(0);
       expect(fixed.stdout).toMatch(/All seeds generated/);
@@ -781,6 +808,27 @@ console.log(JSON.stringify(answers[fn]));
       const switched = runScript("generate.mjs", ["typo-run", "--model", "anthropic/claude-opus-5.5"], { PATH });
       expect(switched.status).toBe(1);
       expect(switched.stderr).toMatch(/A run keeps one model; rerun without --model/);
+
+      // When the first call of an invocation fails, nothing ran, so nothing is recorded and the
+      // run isn't tied to that model.
+      const unreachable = runScript("generate.mjs", ["unreachable", "--model", "anthropic/claude-sonnet-5.5"], { PATH, FAIL_LIBRARY: "1" });
+      expect(unreachable.status).toBe(1);
+      expect(unreachable.stderr).toMatch(/Couldn't read the library from dev .* Nothing was generated/);
+      expect(existsSync(join(evalsDir, "runs", "unreachable", "generated.json"))).toBe(false);
+
+      // --allow-local sits on either side of --model without swallowing it.
+      mkdirSync(join(root, "convex"));
+      writeFileSync(join(root, "convex", "draft.ts"), "export {};\n");
+      for (const [name, ...flags] of [
+        ["local-a", "--allow-local", "--model", "anthropic/claude-sonnet-5.5"],
+        ["local-b", "--model", "anthropic/claude-sonnet-5.5", "--allow-local"],
+      ]) {
+        const local = runScript("generate.mjs", [name, ...flags], { PATH });
+        expect(local.status, local.stderr).toBe(0);
+        expect(local.stdout, name).toMatch(/at \w+\+local with anthropic\/claude-sonnet-5\.5\./);
+        expect(readRunFile(`${name}/generated.json`).model, name).toBe("anthropic/claude-sonnet-5.5");
+      }
+      rmSync(join(root, "convex"), { recursive: true });
 
       // Without --model the deployment's preset generates, and the record says so.
       rmSync(calls);

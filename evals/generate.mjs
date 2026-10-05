@@ -20,7 +20,7 @@ const GENERATION_CONCURRENCY = 2;
 // slack on each side (the run label keeps other runs out).
 const CLOCK_SLACK_MS = 60_000;
 
-const USAGE = "Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--allow-local]   (run names: lowercase letters, digits and dashes)";
+const USAGE = "Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--allow-local]   (run names: lowercase letters, digits and dashes, not starting with a dash)";
 const [run, ...flags] = process.argv.slice(2);
 // Anything else after the run name is refused, so a misplaced or misspelled flag can't quietly
 // start a paid run with the preset.
@@ -74,10 +74,14 @@ mkdirSync(runDir, { recursive: true });
 
 const previous = existsSync(outPath) ? JSON.parse(readFileSync(outPath, "utf8")) : null;
 // Runs from before --model existed have no model recorded, and used the preset. A run that never
-// reached a model (every seed refused as "setup", such as a misspelled --model) can still switch.
+// reached a model (every seed refused as "setup", such as a --model the deployment's name check
+// rejects) can still switch. A well-formed name the provider doesn't know does reach it, and
+// leaves failed generation runs behind, so that run needs a new name. An invocation whose model
+// calls weren't all read back may have reached one too.
 const previousModel = previous?.model ?? null;
 const reachedModel = Boolean(previous) && (
   (previous.attempts ?? []).length > 0 ||
+  (previous.invocations ?? []).some((invocation) => invocation.attemptsComplete !== true) ||
   (previous.batches ?? []).some((batch) => batch.ok || batch.failures.some((failure) => failure.stage !== "setup"))
 );
 if (model === undefined) model = previousModel;
@@ -113,8 +117,9 @@ async function convexRun(fn, args) {
 // Each invocation records its commit, the library it searched, and the generation runs it made.
 const invocations = previous?.invocations ?? [];
 let attempts = previous?.attempts ?? [];
+const createdAt = previous?.createdAt ?? new Date().toISOString();
 function save() {
-  writeJson(outPath, { run, deployment: "dev", createdAt: previous?.createdAt ?? new Date().toISOString(), model, batchSize, invocations, attempts, batches: orderedBatches(seeds, batches) });
+  writeJson(outPath, { run, deployment: "dev", createdAt, model, batchSize, invocations, attempts, batches: orderedBatches(seeds, batches) });
 }
 
 /**
@@ -144,11 +149,16 @@ async function collectAttempts(invocation) {
 for (const invocation of invocations.filter((inv) => inv.attemptsComplete !== true)) await collectAttempts(invocation);
 
 if (todo.length) {
-  const invocation = { startedAtMs: Date.now(), commit, seeds: todo.map((seed) => seed.id), generated: [], library: null, attemptsComplete: false };
+  // Read before the invocation is recorded: if this first call fails (evals off on dev, the CLI
+  // not signed in), no model was called, so nothing about this invocation is saved.
+  const library = await convexRun("internal/evals:evalLibraryStats", {}).catch((error) => {
+    console.error(`Couldn't read the library from dev (${cliError(error)}). Nothing was generated.`);
+    process.exit(1);
+  });
+  const invocation = { startedAtMs: Date.now(), commit, seeds: todo.map((seed) => seed.id), generated: [], library, attemptsComplete: false };
   invocations.push(invocation);
   // Saved before any model call, so an interrupted run still knows when its calls started.
   save();
-  invocation.library = await convexRun("internal/evals:evalLibraryStats", {});
   console.log(`${todo.length} of ${seeds.length} seeds to generate for run "${run}" at ${commit} with ${model ?? "the preset"}.`);
   await mapLimit(todo, GENERATION_CONCURRENCY, async (seed) => {
     const args = {
@@ -176,6 +186,18 @@ if (todo.length) {
   await collectAttempts(invocation);
 }
 save();
-const failed = pendingSeeds(seeds, batches).length;
+const pending = pendingSeeds(seeds, batches);
+const failed = pending.length;
+// A seed refused before any model call (a model name the deployment rejects, a missing style)
+// would be refused the same way on a plain rerun.
+const refused = failed > 0 && pending.every((seed) => batches.get(seed.id)?.failures.at(-1)?.stage === "setup");
 const incomplete = invocations.some((inv) => inv.attemptsComplete !== true);
-console.log(failed ? `${failed} seeds failed; rerun to retry them.` : incomplete ? "Generation records incomplete; rerun to fetch them." : "All seeds generated.");
+console.log(
+  refused
+    ? `${failed} seeds were refused before generating; fix the setup (pass the right --model if the name was refused), then rerun.`
+    : failed
+      ? `${failed} seeds failed; rerun to retry them.`
+      : incomplete
+        ? "Generation records incomplete; rerun to fetch them."
+        : "All seeds generated.",
+);

@@ -20,7 +20,10 @@ const DEFAULT_NEIGHBOURS = 5;
 // and widen to vectorSearch's maximum when held-for-review questions crowd the public ones out.
 const NEIGHBOUR_SEARCH_LIMITS = [40, 256];
 const MAX_NEIGHBOURS = NEIGHBOUR_SEARCH_LIMITS[NEIGHBOUR_SEARCH_LIMITS.length - 1];
-/** An OpenRouter preset or model name, like "anthropic/claude-sonnet-5.5", with an optional variant like ":nitro". */
+/**
+ * An OpenRouter preset or model name, like "anthropic/claude-sonnet-5.5", with an optional variant
+ * like ":nitro".
+ */
 const OPENROUTER_MODEL = /^(@preset\/[a-z0-9-]+|[a-z0-9-]+\/[a-z0-9.-]+(:[a-z0-9-]+)?)$/;
 
 function assertWhole(name: string, value: number, min: number, max: number): void {

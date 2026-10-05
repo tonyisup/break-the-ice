@@ -45,7 +45,9 @@ To try another generation model, name it with `--model` (an OpenRouter model, li
 `anthropic/claude-sonnet-5.5`), then score and compare as usual. Don't try one by repointing the
 OpenRouter preset: production generates with that preset too. A run keeps one model, so a rerun
 without `--model` uses the run's own, a different `--model` is refused, and runs that asked for
-different models aren't replicates. `compare.mjs` reports the model change.
+different models aren't replicates. `compare.mjs` reports the model change. A name the deployment
+refuses fails before any model call, so the same run can be rerun with the corrected `--model`; a
+well-formed name OpenRouter doesn't know fails at the provider, and needs a new run name.
 
 ```bash
 node evals/generate.mjs sonnet-5-5-r1 --model anthropic/claude-sonnet-5.5
@@ -77,14 +79,17 @@ the fingerprints that the personal, team and organization questions it changes s
 (`fingerprintsCleared`), which can change the library duplicate rate without changing the library
 size, as above.
 
-A run with the preset costs about $0.12 of generation on dev (charged to the dev deployment's
-system AI budget) and about $0.05 of Jev. Other models cost more: in Oct 2026 a run cost about
-$0.14 on Sonnet 5.5 and $0.46 on Opus 5.5.
+A run on Gemini 3.8 Flash (what the preset resolved to for `v0-3-2`) costs about $0.12 of
+generation on dev (charged to the dev deployment's system AI budget) and about $0.05 of Jev. Other
+models differ: in Oct 2026 a run cost about $0.14 on Sonnet 5.5 and $0.46 on Opus 5.5.
 
 ## Reading the numbers
 
 - The official baseline is `runs/v0-3-2.json`: three replicate runs of the same seeds
   (`v0-3-2-r1` to `-r3`) pooled. Compare a later run with `node evals/compare.mjs v0-3-2 <run>`.
+- `runs/gemini-3-8-flash-r1`, `sonnet-5-5-r1` and `opus-5-5-r1` are the first single runs of each
+  named model (Oct 5, 2026). `runs/preset-r1` ran the same day while the preset was temporarily
+  pointed at `stealth/space-bunny-alpha`, so it is not a replicate of `v0-3-2`.
 - Seven primary rates decide a comparison, chosen up front, each over independent units: pass,
   review and block rates (over every generated question, before the code checks); the library
   likely-duplicate rate (exact library copies count as duplicates); the share of batches with a
@@ -102,9 +107,12 @@ $0.14 on Sonnet 5.5 and $0.46 on Opus 5.5.
   the model asked for and what it resolved to, deployed settings, library). When definitions
   changed, pass and review are decided without the fit questions, which are then graded against
   different text.
-- The output cap's reasoning allowance was sized for Gemini 3.8 Flash. A model that reasons
-  longer gets cut off more often, so for a `--model` run the unusable-output and yield rates
-  partly measure fit to that cap; cut-offs show as `finish_reason=length` in the run's attempts.
+- The output cap's reasoning allowance and the 30-second provider timeout were sized for Gemini
+  3.8 Flash. A model that reasons longer or answers slower is cut off or timed out more often, so
+  for any other model (whatever the preset resolves to included) the unusable-output, yield and
+  provider-error figures partly measure fit to those limits. A cut-off shows in the run's
+  attempts as an empty completion with `finish_reason=length`, or as unreadable output with
+  `completionTokens` at the batch's `settings.maxOutputTokens`.
 - The regime is the admin preview path with a batch of 5 and no per-person exclusion list. The
   feed usually asks for 1 question and excludes recently seen ones.
 - Library duplicates are counted against dev's library, which is smaller than production's and
