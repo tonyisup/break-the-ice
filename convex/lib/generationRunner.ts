@@ -8,7 +8,7 @@ import {
   buildRemixPrompts,
   parseQuestionObjects,
 } from "./promptArchitecture";
-import { MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
+import { FALLBACK_COST_PER_CALL_USD, MAX_PROMPT_CHARS, worstCaseCallCostUsd, type SpendClass } from "./aiSpend";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 import {
@@ -19,7 +19,12 @@ import {
   settleAiCompletion,
 } from "./aiSpendGuard";
 
-export const GENERATION_MODEL = "@preset/break-the-ice-berg-default";
+// Named here, not through an OpenRouter preset, so a model change shows in a diff and in every
+// run's record. Opus 5.5 led the Oct 2026 eval runs and the owner's blind labels (evals/README.md).
+export const GENERATION_MODEL = "anthropic/claude-opus-5.5";
+// OpenRouter's price for GENERATION_MODEL, in US dollars per million tokens (Oct 2026). Spend is
+// settled to the cost the provider reports; this only sizes what is set aside before a call.
+const GENERATION_PRICE_USD_PER_MTOK = { input: 4, output: 20 };
 /**
  * An OpenRouter preset or model name, like "anthropic/claude-sonnet-5.5", with an optional variant
  * like ":nitro".
@@ -121,9 +126,10 @@ function assertPromptSize(chars: number): void {
   }
 }
 
-// The router preset can resolve to a thinking model, whose hidden reasoning counts toward
-// max_tokens. On google/gemini-3.8-flash it spent about 500 to 1,600 tokens before writing any
-// JSON, so a cap sized for the JSON alone cut off most answers.
+// A thinking model's hidden reasoning counts toward max_tokens. google/gemini-3.8-flash spent
+// about 500 to 1,600 tokens before writing any JSON, so a cap sized for the JSON alone cut off
+// most answers. Opus 5.5 doesn't reason unless asked to, but the allowance stays so a switch to
+// a model that does can't cut answers off again.
 const REASONING_ALLOWANCE_TOKENS = 2000;
 // A remix answers with one plain-text question.
 const REMIX_ANSWER_TOKENS = 150;
@@ -133,32 +139,35 @@ const REMIX_ANSWER_TOKENS = 150;
 const JSON_BASE_TOKENS = 300;
 const TOKENS_PER_QUESTION = 200;
 
-// gstack-shortcut(dec-9ce5b30c-9525-4ac7-89c5-ce1039af4faa): spend reservation sizing deferred, upgrade when the preset model changes.
 export function maxOutputTokens(batchSize: number): number {
   return REASONING_ALLOWANCE_TOKENS + JSON_BASE_TOKENS + TOKENS_PER_QUESTION * batchSize;
 }
 
 // Callers check the budget with ensureAiBudget before creating their run. Here each
-// provider attempt reserves its estimated cost atomically (so a retry after backoff is
-// checked against the budget again), then settles it to the real cost on success or
-// releases it on failure.
+// provider attempt reserves the most it can cost atomically (so a retry after backoff is
+// checked against the budget again, and calls in flight can't overshoot the cap between
+// them), then settles it to the real cost on success or releases it on failure.
 async function createChatCompletionWithRetry(
   ctx: ActionCtx,
   spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  assertPromptSize(
-    params.messages.reduce(
-      (total, message) => total + (typeof message.content === "string" ? message.content.length : 0),
-      0,
-    ),
+  const promptChars = params.messages.reduce(
+    (total, message) => total + (typeof message.content === "string" ? message.content.length : 0),
+    0,
+  );
+  assertPromptSize(promptChars);
+  // Priced at the default model's rates, also for a model the eval harness names.
+  const reserveUsd = Math.max(
+    FALLBACK_COST_PER_CALL_USD,
+    worstCaseCallCostUsd(promptChars, params.max_tokens ?? 0, GENERATION_PRICE_USD_PER_MTOK),
   );
 
   const maxAttempts = getOpenRouterMaxAttempts();
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const reservation = await reserveAiSpend(ctx, spend.spendClass);
+    const reservation = await reserveAiSpend(ctx, spend.spendClass, reserveUsd);
     let completion: OpenAI.Chat.Completions.ChatCompletion;
     try {
       completion = await openRouterClient.chat.completions.create(params);
@@ -510,7 +519,7 @@ export async function runPreviewQuestionGeneration(
     batchSize?: number;
     /** "system" for admin tools; team previews are user spend. */
     spendClass?: SpendClass;
-    /** An OpenRouter model to use instead of the preset. Only the eval harness sets it. */
+    /** An OpenRouter model to use instead of GENERATION_MODEL. Only the eval harness sets it. */
     model?: string;
   },
 ): Promise<{

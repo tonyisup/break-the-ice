@@ -688,11 +688,11 @@ describe("scripts", () => {
         attempts: [{ runId: "r1", status: "succeeded" }],
         batches: [],
       });
-      // Runs from before --model have no model recorded, and used the preset.
+      // Runs from before --model have no model recorded, and used the default.
       writeRun("preset-run", { "generated.json": record("preset-run") });
       const switched = runScript("generate.mjs", ["preset-run", "--model", "anthropic/claude-sonnet-5.5"]);
       expect(switched.status).toBe(1);
-      expect(switched.stderr).toMatch(/generated with the preset, not --model anthropic\/claude-sonnet-5\.5\. A run keeps one model; rerun without --model/);
+      expect(switched.stderr).toMatch(/generated with the default model, not --model anthropic\/claude-sonnet-5\.5\. A run keeps one model; rerun without --model/);
       // A refused invocation gives the run back.
       expect(existsSync(join(evalsDir, "runs", "preset-run", ".lock"))).toBe(false);
 
@@ -847,11 +847,11 @@ console.log(JSON.stringify(answers[fn]));
       }
       rmSync(join(root, "convex"), { recursive: true });
 
-      // Without --model the deployment's preset generates, and the record says so.
+      // Without --model the deployment's default model generates, and the record says so.
       rmSync(calls);
       const preset = runScript("generate.mjs", ["preset-run"], { PATH });
       expect(preset.status, preset.stderr).toBe(0);
-      expect(preset.stdout).toMatch(/with the preset\./);
+      expect(preset.stdout).toMatch(/with the default model\./);
       expect(batchCalls().sort()).toEqual([
         ["s01", undefined],
         ["s02", undefined],

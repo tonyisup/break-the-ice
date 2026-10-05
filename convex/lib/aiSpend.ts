@@ -12,10 +12,21 @@ export type SpendClass = "user" | "system";
 
 export const DEFAULT_DAILY_BUDGET_USD = 1;
 export const DEFAULT_DAILY_HARD_CAP_USD = 5;
-// Charged when the provider reports no cost, so an unpriced call still counts.
+// The least a call is set aside or charged at, so an unpriced call still counts.
 export const FALLBACK_COST_PER_CALL_USD = 0.02;
-// Set aside before each call and settled to the real cost after it returns.
-export const RESERVE_PER_CALL_USD = FALLBACK_COST_PER_CALL_USD;
+
+/**
+ * The most one call can cost, set aside before it runs and settled to the real cost after it
+ * returns: the prompt counted at 3 characters a token (real text runs nearer 4) plus the whole
+ * output cap. Prices are US dollars per million tokens.
+ */
+export function worstCaseCallCostUsd(
+  promptChars: number,
+  maxOutputTokens: number,
+  price: { input: number; output: number },
+): number {
+  return (Math.ceil(promptChars / 3) * price.input + maxOutputTokens * price.output) / 1_000_000;
+}
 
 const SPEND_TIME_ZONE = "America/Los_Angeles";
 
@@ -63,15 +74,18 @@ function finiteNonNegative(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
-/** Cost and token counts from an OpenRouter completion's `usage` (cost is in USD credits). */
-export function completionUsage(usage: unknown): {
+/**
+ * Cost and token counts from an OpenRouter completion's `usage` (cost is in USD credits). A
+ * call with no reported cost is charged `unpricedCostUsd`.
+ */
+export function completionUsage(usage: unknown, unpricedCostUsd = FALLBACK_COST_PER_CALL_USD): {
   costUsd: number;
   promptTokens?: number;
   completionTokens?: number;
 } {
   const fields = (typeof usage === "object" && usage !== null ? usage : {}) as Record<string, unknown>;
   return {
-    costUsd: finiteNonNegative(fields.cost) ?? FALLBACK_COST_PER_CALL_USD,
+    costUsd: finiteNonNegative(fields.cost) ?? unpricedCostUsd,
     promptTokens: finiteNonNegative(fields.prompt_tokens),
     completionTokens: finiteNonNegative(fields.completion_tokens),
   };

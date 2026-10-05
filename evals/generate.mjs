@@ -3,7 +3,7 @@
 // Rerunning the same run name retries only the seeds that failed. Commit convex/ and push it to dev
 // (npx convex dev --once) first: --allow-local runs with uncommitted convex/ changes, for trying
 // things out, and marks the run "+local". --model generates with that OpenRouter model (like
-// anthropic/claude-sonnet-5.5) instead of the preset. A run keeps one model: a rerun without
+// anthropic/claude-sonnet-5.5) instead of the app's default. A run keeps one model: a rerun without
 // --model uses the run's own.
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -23,8 +23,8 @@ const CLOCK_SLACK_MS = 60_000;
 const USAGE = "Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--allow-local]   (run names: lowercase letters, digits and dashes, not starting with a dash)";
 const [run, ...flags] = process.argv.slice(2);
 // Anything else after the run name is refused, so a misplaced or misspelled flag can't quietly
-// start a paid run with the preset.
-let model; // undefined until given; null means the deployment's preset
+// start a paid run with the default model.
+let model; // undefined until given; null means the deployment's default model
 let allowLocal = false;
 let badArgs = !run || !/^[a-z0-9][a-z0-9-]*$/.test(run);
 for (let i = 0; i < flags.length && !badArgs; i += 1) {
@@ -85,7 +85,7 @@ process.on("exit", () => rmSync(lockPath, { force: true }));
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(1));
 
 const previous = existsSync(outPath) ? JSON.parse(readFileSync(outPath, "utf8")) : null;
-// Runs from before --model existed have no model recorded, and used the preset. A run that never
+// Runs from before --model existed have no model recorded, and used the default. A run that never
 // reached a model (every seed refused as "setup", such as a --model the deployment's name check
 // rejects) can still switch. A well-formed name the provider doesn't know does reach it, and
 // leaves failed generation runs behind, so that run needs a new name. An invocation whose model
@@ -98,7 +98,7 @@ const reachedModel = Boolean(previous) && (
 );
 if (model === undefined) model = previousModel;
 if (reachedModel && model !== previousModel) {
-  const named = (value) => (value ? `--model ${value}` : "the preset");
+  const named = (value) => (value ? `--model ${value}` : "the default model");
   console.error(`Run "${run}" was generated with ${named(previousModel)}, not ${named(model)}. A run keeps one model; rerun without --model, or start a new run name.`);
   process.exit(1);
 }
@@ -171,7 +171,7 @@ if (todo.length) {
   invocations.push(invocation);
   // Saved before any model call, so an interrupted run still knows when its calls started.
   save();
-  console.log(`${todo.length} of ${seeds.length} seeds to generate for run "${run}" at ${commit} with ${model ?? "the preset"}.`);
+  console.log(`${todo.length} of ${seeds.length} seeds to generate for run "${run}" at ${commit} with ${model ?? "the default model"}.`);
   await mapLimit(todo, GENERATION_CONCURRENCY, async (seed) => {
     const args = {
       runLabel: run,

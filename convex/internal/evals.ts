@@ -93,7 +93,7 @@ async function nearestLibraryQuestions(ctx: ActionCtx, text: string, count: numb
 }
 
 /**
- * One eval batch: today's prompt builder with the preset model (or the model given), run like an
+ * One eval batch: today's prompt builder with the default model (or the model given), run like an
  * admin preview so nothing is added to the library. Returns each question with what the save
  * step would have done with it and its nearest library questions, for the harness in `evals/` to
  * score. Runs only where EVALS_ENABLED is set (dev).
@@ -110,7 +110,7 @@ export const generateEvalBatch = internalAction({
     temperature: v.optional(v.number()),
     /** Library neighbours per question, 0 to 256; 0 skips the search. */
     neighbours: v.optional(v.number()),
-    /** An OpenRouter model to generate with instead of the preset, like "anthropic/claude-sonnet-5.5". */
+    /** An OpenRouter model to generate with instead of the default, like "anthropic/claude-sonnet-5.5". */
     model: v.optional(v.string()),
   },
   returns: evalBatch,
@@ -121,7 +121,7 @@ export const generateEvalBatch = internalAction({
     assertWhole("batchSize", args.batchSize, 1, MAX_BATCH_SIZE);
     const neighbourCount = args.neighbours ?? DEFAULT_NEIGHBOURS;
     assertWhole("neighbours", neighbourCount, 0, MAX_NEIGHBOURS);
-    // gstack-shortcut(dec-6f390dcf-d794-46ba-887f-dd13edb5e9c0): a named model keeps the flat per-call spend reservation, upgrade when reservation sizing is revisited.
+    // gstack-shortcut(dec-6f390dcf-d794-46ba-887f-dd13edb5e9c0): a named model is reserved at the default model's prices, upgrade when evals name pricier models.
     const model = args.model ?? GENERATION_MODEL;
     const temperature = args.temperature ?? DEFAULT_GENERATION_TEMPERATURE;
     // A seed naming a missing style, tone or topic fails while the prompt is built, and a name

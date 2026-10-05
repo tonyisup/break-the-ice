@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
-import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HARD_CAP_USD, FALLBACK_COST_PER_CALL_USD, spendDay } from "./lib/aiSpend";
+import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HARD_CAP_USD, FALLBACK_COST_PER_CALL_USD, spendDay, worstCaseCallCostUsd } from "./lib/aiSpend";
 import { ensureAiRateLimit, isAiStopError } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
 import { GENERATION_MODEL, openRouterClient } from "./lib/generationRunner";
@@ -514,7 +514,7 @@ describe("adversarial review follow-ups", () => {
     expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 2500 });
   });
 
-  test("an admin preview generates with the preset model: only the eval harness picks another", async () => {
+  test("an admin preview generates with the default model: only the eval harness picks another", async () => {
     const { t, styleId, toneId } = await setup();
     create.mockResolvedValue(
       completion(JSON.stringify({ questions: [{ text: "What small win are you proud of?" }] }), { cost: 0.01 }) as never,
@@ -525,6 +525,28 @@ describe("adversarial review follow-ups", () => {
     expect(create.mock.calls[0][0]).toMatchObject({ model: GENERATION_MODEL });
     const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
     expect(runs.map((run) => run.model)).toEqual([GENERATION_MODEL]);
+  });
+
+  test("a call sets aside the most it can cost, and a completion with no reported cost keeps it", async () => {
+    const { t, styleId, toneId } = await setup();
+    let duringCall: unknown[] = [];
+    create.mockImplementation((async () => {
+      duringCall = await ledger(t);
+      return completion(JSON.stringify({ questions: [{ text: "What small win are you proud of?" }] }));
+    }) as never);
+
+    await t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId });
+
+    const params = create.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    const promptChars = params.messages.reduce((total, message) => total + message.content.length, 0);
+    // The prompt at 3 characters a token plus the whole 2,500-token cap, at $4 in and $20 out
+    // per million tokens.
+    expect(worstCaseCallCostUsd(3000, 2500, { input: 4, output: 20 })).toBeCloseTo(0.054);
+    const worstCase = worstCaseCallCostUsd(promptChars, 2500, { input: 4, output: 20 });
+    expect(worstCase).toBeGreaterThan(0.05);
+    expect(duringCall).toEqual([[spendDay(Date.now()), "system", worstCase, 0]]);
+    // No cost came back, so the call is charged everything that was set aside for it.
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", worstCase, 1]]);
   });
 
   test("a remix leaves room for a thinking model's reasoning", async () => {

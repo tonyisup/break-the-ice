@@ -642,7 +642,7 @@ describe("generateEvalBatch", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  test("generates with the preset unless given another OpenRouter model, and refuses a name that isn't one", async () => {
+  test("generates with the default model unless given another OpenRouter model, and refuses a name that isn't one", async () => {
     const t = await setup();
     create.mockResolvedValue(completion(questionsJson("Which album would you bring to a desert island?")) as never);
     const base = { runLabel: "test", seedId: "s01", styleSlug: "desert-island", toneSlug: "witty", batchSize: 1, neighbours: 0 };
