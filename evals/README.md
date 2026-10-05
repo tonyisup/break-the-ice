@@ -83,7 +83,9 @@ size, as above.
 
 A run on Gemini 3.8 Flash (what the preset resolved to for `v0-3-2`) costs about $0.12 of
 generation on dev (charged to the dev deployment's system AI budget) and about $0.05 of Jev. Other
-models differ: in Oct 2026 a run cost about $0.14 on Sonnet 5.5 and $0.46 on Opus 5.5.
+models differ: in Oct 2026 a run cost about $0.14 on Sonnet 5.5 and $0.46 on Opus 5.5. A call that
+times out has no cost on its run, so a run's reported cost leaves it out; the dev budget still
+counts it.
 
 ## Reading the numbers
 

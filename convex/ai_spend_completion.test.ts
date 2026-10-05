@@ -1,11 +1,14 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
+import { getFunctionName } from "convex/server";
+import { APIConnectionError, APIConnectionTimeoutError, APIError } from "openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HARD_CAP_USD, FALLBACK_COST_PER_CALL_USD, spendDay } from "./lib/aiSpend";
+import { keepAiReservation } from "./lib/aiSpendGuard";
 import { ensureAiRateLimit, isAiStopError } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
 import { GENERATION_MODEL, openRouterClient } from "./lib/generationRunner";
@@ -19,6 +22,7 @@ const ENV_KEYS = ["AI_DAILY_BUDGET_USD", "AI_DAILY_HARD_CAP_USD", "OPENROUTER_MA
 const PAUSED = /paused for today/;
 const RATE_LIMITED = /a lot of AI requests/;
 const MATRIX_LIMITED = /used its matrix fills/;
+const TIMED_OUT = new APIConnectionTimeoutError().message;
 const counters = { totalLikes: 0, totalShows: 0, averageViewDuration: 0 };
 
 let create: ReturnType<typeof vi.spyOn>;
@@ -46,6 +50,25 @@ function completion(content: string, usage?: Record<string, unknown>) {
     choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content } }],
     usage,
   };
+}
+
+/** A refusal from the provider with this HTTP status, as the SDK reports it. */
+function refused(status: number, message: string, headers: Record<string, string> = {}) {
+  return APIError.generate(status, undefined, message, headers);
+}
+
+/**
+ * Awaits an action that backs off between provider attempts, moving the faked clock through
+ * each wait, so the test neither sleeps nor leaves the pinned spend day.
+ */
+async function throughBackoff<T>(action: Promise<T>): Promise<T> {
+  let settled = false;
+  const outcome = action.finally(() => {
+    settled = true;
+  });
+  outcome.catch(() => {});
+  while (!settled) await vi.advanceTimersByTimeAsync(500);
+  return await outcome;
 }
 
 async function setup() {
@@ -130,7 +153,7 @@ describe("recording what a completion cost", () => {
 
   test("a completion that fails records no spend, fails the run and refunds the quota", async () => {
     const { t, meId, questionId } = await setup();
-    create.mockRejectedValue(new Error("400 invalid request") as never);
+    create.mockRejectedValue(refused(400, "invalid request") as never);
 
     await expect(
       t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId }),
@@ -783,35 +806,382 @@ describe("room for a thinking model's reasoning", () => {
 });
 
 describe("provider retries", () => {
-  // The retry backoff uses setTimeout, so these run on the real clock.
+  // The backoff between attempts uses setTimeout: throughBackoff moves the faked clock through it.
+  const remix = (t: T, questionId: Awaited<ReturnType<typeof setup>>["questionId"]) =>
+    t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+  // One layer below `create`, at the client's network send, so the SDK's own retry and response
+  // handling run for real. `fetch` is a private field of the SDK client (openai 4.x).
+  const stubSend = () => {
+    create.mockRestore();
+    return vi.spyOn(openRouterClient as unknown as { fetch: typeof fetch }, "fetch");
+  };
+
   test("a failed attempt releases its reservation; the successful retry is settled once", async () => {
-    vi.useRealTimers();
     const { t, questionId } = await setup();
     create
-      .mockRejectedValueOnce(new Error("429 Too Many Requests") as never)
+      .mockRejectedValueOnce(refused(429, "Too Many Requests") as never)
       .mockResolvedValueOnce(completion("A quicker take on breakfast?", { cost: 0.004 }) as never);
 
-    await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+    await throughBackoff(remix(t, questionId));
 
     expect(create).toHaveBeenCalledTimes(2);
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.004, 1]]);
   });
 
   test("each retry is checked against the budget again", async () => {
-    vi.useRealTimers();
     const { t, questionId } = await setup();
     create.mockImplementationOnce((async () => {
       // Other spend uses up the budget while this attempt is failing.
       await t.run(async (ctx) => {
         await ctx.db.insert("aiSpendDays", { day: spendDay(Date.now()), spendClass: "user", costUsd: 5, calls: 1 });
       });
-      throw new Error("503 Service Unavailable");
+      throw refused(503, "Service Unavailable");
     }) as never);
 
-    await expect(
-      t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId }),
-    ).rejects.toThrow(PAUSED);
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(PAUSED);
 
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  test("a dropped connection is retried and gives its reservation back", async () => {
+    const { t, questionId } = await setup();
+    create
+      .mockRejectedValueOnce(new APIConnectionError({ message: "Connection error." }) as never)
+      .mockResolvedValueOnce(completion("A quicker take on breakfast?", { cost: 0.004 }) as never);
+
+    await throughBackoff(remix(t, questionId));
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.004, 1]]);
+  });
+
+  test("the SDK's own retries are off, so every send goes through createChatCompletionWithRetry with its own reservation", () => {
+    expect(openRouterClient.maxRetries).toBe(0);
+  });
+
+  test("a 503 response reaches the provider once per attempt and gives each reservation back", async () => {
+    process.env.OPENROUTER_MAX_ATTEMPTS = "2";
+    const { t, questionId } = await setup();
+    const send = stubSend().mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ error: { message: "upstream down" } }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(/503/);
+
+    // Two attempts, two sends: the SDK adds none of its own.
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0, 0]]);
+  });
+
+  test("a short Retry-After from the provider is waited out before the retry", async () => {
+    const { t, questionId } = await setup();
+    const sentAt: number[] = [];
+    create.mockImplementation((async () => {
+      sentAt.push(Date.now());
+      if (sentAt.length === 1) throw refused(429, "Too Many Requests", { "retry-after": "2" });
+      return completion("A quicker take on breakfast?", { cost: 0.004 });
+    }) as never);
+
+    await throughBackoff(remix(t, questionId));
+
+    // The provider asked for 2 seconds; the loop's own backoff would have been 300ms.
+    expect(sentAt).toHaveLength(2);
+    expect(sentAt[1] - sentAt[0]).toBeGreaterThanOrEqual(2000);
+  });
+
+  test("a Retry-After longer than 20 seconds is cut to 20, so the action isn't held past its time limit", async () => {
+    const { t, questionId } = await setup();
+    const sentAt: number[] = [];
+    create.mockImplementation((async () => {
+      sentAt.push(Date.now());
+      if (sentAt.length === 1) throw refused(429, "Too Many Requests", { "retry-after": "3600" });
+      return completion("A quicker take on breakfast?", { cost: 0.004 });
+    }) as never);
+
+    await throughBackoff(remix(t, questionId));
+
+    expect(sentAt).toHaveLength(2);
+    const waitedMs = sentAt[1] - sentAt[0];
+    expect(waitedMs).toBeGreaterThanOrEqual(20_000);
+    // Far short of the hour the provider asked for.
+    expect(waitedMs).toBeLessThan(120_000);
+  });
+});
+
+describe("calls that may have been billed without an answer", () => {
+  const remix = (t: T, questionId: Awaited<ReturnType<typeof setup>>["questionId"]) =>
+    t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+  // One layer below `create`, at the client's network send, so the SDK's own retry and response
+  // handling run for real. `fetch` is a private field of the SDK client (openai 4.x).
+  const stubSend = () => {
+    create.mockRestore();
+    return vi.spyOn(openRouterClient as unknown as { fetch: typeof fetch }, "fetch");
+  };
+
+  test("a timed-out call isn't sent again: it keeps its one reservation, fails its run and refunds the quota", async () => {
+    const { t, meId, questionId } = await setup();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+
+    // The provider may still have run and billed the abandoned send, so its $0.02 stays.
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    const { runs, usage } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    }));
+    // The person got nothing, so they keep their use; the run has no reported cost to show.
+    expect(runs.map((run) => [run.status, run.costUsd, run.error])).toEqual([["failed", undefined, TIMED_OUT]]);
+    expect(usage.map((row) => row.count)).toEqual([0]);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/Keeping the user spend reservation for run /));
+  });
+
+  test("a request abandoned at the timeout reaches the provider once", async () => {
+    const { t, questionId } = await setup();
+    // An aborted send is what the SDK's own timeout produces.
+    const send = stubSend().mockRejectedValue(Object.assign(new Error("This operation was aborted"), { name: "AbortError" }));
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(TIMED_OUT);
+
+    // One request, one send: neither the SDK nor the retry loop sends it again.
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+  });
+
+  test("a timed-out call counts toward the cap: the next request is refused once the budget is used", async () => {
+    process.env.AI_DAILY_BUDGET_USD = "0.02";
+    const { t, questionId } = await setup();
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+    await expect(remix(t, questionId)).rejects.toThrow(PAUSED);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+  });
+
+  test("a refused attempt followed by a timeout gives back the first reservation and keeps only the second", async () => {
+    const { t, meId, questionId } = await setup();
+    create
+      .mockRejectedValueOnce(refused(429, "Too Many Requests") as never)
+      .mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(TIMED_OUT);
+
+    // The timeout ends the request: there is no third attempt.
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    const usage = await t.run(async (ctx) =>
+      (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    );
+    expect(usage.map((row) => row.count)).toEqual([0]);
+  });
+
+  test("an answer that arrived but couldn't be read keeps its reservation and isn't sent again", async () => {
+    const { t, meId, questionId } = await setup();
+    const send = stubSend().mockImplementation(
+      async () =>
+        new Response('{"id":"gen-1","choices":[{"message":{"content":"What bre', {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow();
+
+    // The provider answered, so it billed: the $0.02 stays although no cost was reported.
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    const { runs, usage } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    }));
+    expect(runs.map((run) => [run.status, run.costUsd])).toEqual([["failed", undefined]]);
+    expect(usage.map((row) => row.count)).toEqual([0]);
+  });
+
+  test("an unreadable answer isn't taken for a refusal because its error mentions a number like 502", async () => {
+    const { t, questionId } = await setup();
+    create.mockRejectedValue(new SyntaxError("Unexpected token < in JSON at position 502") as never);
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(/position 502/);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+  });
+
+  test("feed generation that times out fails its run, saves nothing and refunds the quota", async () => {
+    const { t, meId, styleId, toneId } = await setup();
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(
+      t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { anchoredStyleId: styleId, anchoredToneId: toneId }),
+    ).rejects.toThrow(TIMED_OUT);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    const { runs, usage, questions } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+      questions: await ctx.db.query("questions").collect(),
+    }));
+    expect(runs.map((run) => [run.purpose, run.status, run.costUsd, run.error])).toEqual([
+      ["feed", "failed", undefined, TIMED_OUT],
+    ]);
+    expect(usage.map((row) => row.count)).toEqual([0]);
+    // Only the question the setup made.
+    expect(questions.map((question) => question.text)).toEqual(["What is your favorite breakfast?"]);
+  });
+
+  test("a daily-email generation that times out stays charged to system spend, not user spend", async () => {
+    const { t, meId, styleId, toneId } = await setup();
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(
+      t.action(internal.internal.ai.generateAIQuestionForUser, {
+        userId: meId,
+        bypassAIUsage: true,
+        purpose: "newsletter",
+        anchoredStyleId: styleId,
+        anchoredToneId: toneId,
+      }),
+    ).rejects.toThrow(TIMED_OUT);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.02, 1]]);
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => [run.purpose, run.status, run.costUsd])).toEqual([["newsletter", "failed", undefined]]);
+  });
+
+  test("an admin preview that times out fails its run and stays charged to system spend", async () => {
+    const { t, styleId, toneId } = await setup();
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(
+      t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId }),
+    ).rejects.toThrow(TIMED_OUT);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => [run.purpose, run.status, run.costUsd])).toEqual([["admin_preview", "failed", undefined]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.02, 1]]);
+  });
+
+  test("a team topic preview that times out keeps its reservation on user spend and refunds the preview use", async () => {
+    const { t, meId, styleId, toneId } = await setup();
+    const organizationId = await t.run(async (ctx) => {
+      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
+      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
+      return orgId;
+    });
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    await expect(
+      t.withIdentity(ME).action(api.core.teamPromptActions.previewTopicQuestions, {
+        organizationId,
+        name: "Recovery",
+        guidance: "Talk about rest days",
+        styleId,
+        toneId,
+      }),
+    ).rejects.toThrow(TIMED_OUT);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    const usage = await t.run(async (ctx) =>
+      (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    );
+    expect(usage.map((row) => row.count)).toEqual([0]);
+  });
+
+  test("a paid-for unusable remix keeps the quota use even when its retry timed out", async () => {
+    const { t, meId, questionId } = await setup();
+    create
+      .mockResolvedValueOnce(completion('""', { cost: 0.004 }) as never)
+      .mockRejectedValueOnce(new APIConnectionTimeoutError() as never);
+
+    await expect(remix(t, questionId)).rejects.toThrow(/couldn't use/);
+
+    expect(create).toHaveBeenCalledTimes(2);
+    // The answered call settles to its real $0.004; the timed-out one keeps its $0.02.
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.024, 2]]);
+    const { runs, usage } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    }));
+    expect(runs.map((run) => [run.status, run.costUsd])).toEqual([
+      ["failed", 0.004],
+      ["failed", undefined],
+    ]);
+    // The first answer was paid for in full, so the use counts.
+    expect(usage.map((row) => row.count)).toEqual([1]);
+  });
+
+  test("a matrix cell that times out is skipped with its reservation kept, and the next cell is still filled", async () => {
+    const { t, meId } = await setup();
+    const orgId = await t.run(async (ctx) => {
+      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
+      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
+      for (const slug of ["s1", "s2"]) {
+        await ctx.db.insert("styles", { id: slug, slug, status: "active", version: 1, name: slug, structure: "x", color: "#111111", icon: "sparkles" });
+      }
+      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
+      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
+      return orgId;
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    create
+      .mockRejectedValueOnce(new APIConnectionTimeoutError() as never)
+      .mockResolvedValueOnce(
+        completion(JSON.stringify({ questions: [{ text: "What small thing made you smile today?" }] }), { cost: 0.01 }) as never,
+      );
+
+    const result = await t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+      organizationId: orgId,
+      axisY: "style",
+      axisX: "tone",
+      topicSlug: "any-topic",
+      cells: [
+        { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
+        { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
+      ],
+    });
+
+    expect(result).toMatchObject({ totalCells: 2, filledCells: 1 });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.03, 2]]);
+    const { runs, locks } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      locks: await ctx.db.query("matrixFillCellLocks").collect(),
+    }));
+    expect(runs.map((run) => [run.status, run.costUsd])).toEqual([
+      ["failed", undefined],
+      ["succeeded", 0.01],
+    ]);
+    expect(locks).toEqual([]);
+  });
+
+  test("a failure to count a kept reservation is logged, never thrown, and isn't retried in the background", async () => {
+    const ctx = {
+      runMutation: vi.fn().mockRejectedValue(new Error("write conflict")),
+      scheduler: { runAfter: vi.fn() },
+    };
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const reservation = { spendClass: "user" as const, day: "2026-09-29", reservedUsd: 0.02 };
+
+    await expect(keepAiReservation(ctx as never, reservation)).resolves.toBeUndefined();
+
+    // Settled to the amount already reserved, on the reservation's own day, with no run named.
+    expect(ctx.runMutation).toHaveBeenCalledTimes(1);
+    expect(getFunctionName(ctx.runMutation.mock.calls[0][0])).toBe("internal/aiSpend:settleAiSpend");
+    expect(ctx.runMutation.mock.calls[0][1]).toEqual({ ...reservation, costUsd: 0.02 });
+    expect(ctx.scheduler.runAfter).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledTimes(1);
   });
 });

@@ -36,13 +36,34 @@ export async function reserveAiSpend(ctx: SpendCtx, spendClass: SpendClass): Pro
   return reservation;
 }
 
-/** Gives the reservation back when the provider call failed. Never throws. */
+/**
+ * Gives the reservation back when the provider refused the call or was never reached. A call
+ * that may still have been billed uses keepAiReservation. Never throws.
+ */
 export async function releaseAiReservation(ctx: SpendCtx, reservation: AiReservation): Promise<void> {
   try {
     await ctx.runMutation(internal.internal.aiSpend.releaseAiSpend, reservation);
   } catch (error) {
     // The reservation stays counted, which errs on the side of spending less.
     console.error("Failed to release AI spend reservation", error);
+  }
+}
+
+/**
+ * Keeps a reservation as the charge for a call that may have been billed without reporting a
+ * cost: it timed out, or its answer couldn't be read. Never throws.
+ */
+export async function keepAiReservation(ctx: SpendCtx, reservation: AiReservation): Promise<void> {
+  try {
+    // Settling to the reserved amount leaves the money where it is and counts the call. No run
+    // is named: the run's own cost stays what the provider reported for an answer.
+    await ctx.runMutation(internal.internal.aiSpend.settleAiSpend, {
+      ...reservation,
+      costUsd: reservation.reservedUsd,
+    });
+  } catch (error) {
+    // The reservation stays counted either way; only the call count is missed.
+    console.error("Failed to count an unanswered AI call", error);
   }
 }
 

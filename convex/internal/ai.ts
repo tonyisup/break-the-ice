@@ -459,7 +459,7 @@ export const generateAIQuestionForUser = internalAction({
 			});
 			return result.questions as (Doc<"questions"> | null)[];
 		} catch (error) {
-			// A call the provider already charged for keeps its usage: otherwise a free
+			// A call whose answer was paid for keeps its usage: otherwise a free
 			// account could get paid generations without spending quota.
 			if (usageIncremented && !wasAiCallBilled(error)) {
 				await ctx.runMutation(internal.internal.users.decrementAIUsage, {
