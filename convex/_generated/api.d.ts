@@ -91,6 +91,8 @@ import type * as lib_questionAccess from "../lib/questionAccess.js";
 import type * as lib_questionReferences from "../lib/questionReferences.js";
 import type * as lib_questionReview from "../lib/questionReview.js";
 import type * as lib_questionReviewValidators from "../lib/questionReviewValidators.js";
+import type * as lib_questionTags from "../lib/questionTags.js";
+import type * as lib_questionText from "../lib/questionText.js";
 import type * as lib_random from "../lib/random.js";
 import type * as lib_resend from "../lib/resend.js";
 import type * as lib_retriever from "../lib/retriever.js";
@@ -196,6 +198,8 @@ declare const fullApi: ApiFromModules<{
   "lib/questionReferences": typeof lib_questionReferences;
   "lib/questionReview": typeof lib_questionReview;
   "lib/questionReviewValidators": typeof lib_questionReviewValidators;
+  "lib/questionTags": typeof lib_questionTags;
+  "lib/questionText": typeof lib_questionText;
   "lib/random": typeof lib_random;
   "lib/resend": typeof lib_resend;
   "lib/retriever": typeof lib_retriever;
