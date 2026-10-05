@@ -1,12 +1,13 @@
 "use node";
 
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { action, type ActionCtx } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration, wasCutOffFailure } from "../lib/generationRunner";
 import { ensureAiRateLimit, ensureAiUnansweredLeft, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
 import { ensureAiBudget, keptAiReservation } from "../lib/aiSpendGuard";
+import { ERROR_CODES } from "../constants";
 
 async function pickRandomActiveTopicSlug(ctx: ActionCtx): Promise<string> {
 	const topics = await ctx.runQuery(api.core.topics.getTopics, {});
@@ -98,6 +99,11 @@ async function publicSlugTripleExists(
 		} while (!done);
 	}
 	return false;
+}
+
+/** What the manager is told when a batch stops at a call that got no usable answer. */
+function fillStoppedMessage(filledCells: number, totalCells: number): string {
+	return `Filled ${filledCells} of ${totalCells} cells, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.`;
 }
 
 /**
@@ -205,11 +211,25 @@ export const fillEmptyCells = action({
 					skippedExisting++;
 				}
 			} catch (err) {
-				// Out of budget or rate-limited: every remaining cell would fail the same way. So,
-				// very likely, would the cells after a call that timed out, came back unparseable
-				// or was cut off by the output cap, and each of them would keep its own
-				// reservation or one of the person's unanswered-call slots.
-				if (isAiStopError(err) || keptAiReservation(err) || wasCutOffFailure(err)) throw err;
+				// Out of budget or rate-limited: every remaining cell would fail the same way.
+				if (isAiStopError(err)) throw err;
+				// So, very likely, would the cells after a call that timed out, came back
+				// unparseable or was cut off by the output cap, and each of them would keep its
+				// own reservation or one of the person's unanswered-call slots. The error itself
+				// wouldn't reach the manager as anything readable, so they are told how far the
+				// fill got.
+				if (keptAiReservation(err) || wasCutOffFailure(err)) {
+					console.error(
+						`Stopped the matrix fill at (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug})`,
+						err,
+					);
+					throw new ConvexError({
+						code: ERROR_CODES.AI_GENERATION_FAILED,
+						message: fillStoppedMessage(filledCells, args.cells.length),
+						filledCells,
+						totalCells: args.cells.length,
+					});
+				}
 				const msg = err instanceof Error ? err.message : String(err);
 				if (msg.includes("No active") && msg.includes("entry found for slug")) {
 					skippedInvalidTaxonomy++;

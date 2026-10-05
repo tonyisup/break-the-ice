@@ -15,6 +15,8 @@ const counters = { totalLikes: 0, totalShows: 0, averageViewDuration: 0 };
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  // Midday Pacific, so a test can't straddle the spend-day boundary.
+  vi.setSystemTime(Date.UTC(2026, 8, 29, 19, 0));
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -297,6 +299,16 @@ describe("per-person AI requests", () => {
     expect(await t.run(async (ctx) => await ctx.db.query("rateLimits").collect())).toEqual([]);
   });
 
+  test("giving a slot back never touches a row of another limit", async () => {
+    const { t } = await setup();
+    await t.mutation(internal.internal.aiRateLimit.consumeAiRateLimit, { name: "aiRequestDaily", key: ME.subject, count: 10 });
+    const daily = await t.run(async (ctx) => (await ctx.db.query("rateLimits").collect())[0]);
+
+    await t.mutation(internal.internal.aiRateLimit.releaseAiUnanswered, { row: daily._id, day: spendDay(Date.now()) });
+
+    expect((await t.run(async (ctx) => await ctx.db.get(daily._id)))?.value).toBe(30);
+  });
+
   test("an operator can give one person their slots back", async () => {
     const { t, textlessId } = await setup();
     const remixAs = (identity: typeof ME) =>
@@ -316,7 +328,7 @@ describe("per-person AI requests", () => {
     // An id with no slots held says so, so a mistyped id or the wrong deployment shows.
     expect(await reset("someone-else")).toEqual({ reset: false });
     // A row left from an earlier day counts as the full five the person has today.
-    vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
+    vi.setSystemTime(Date.UTC(2026, 8, 30, 19, 0));
     expect(await reset(YOU.subject)).toEqual({ reset: true, slotsLeftBefore: 5 });
   });
 

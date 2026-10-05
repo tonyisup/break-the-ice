@@ -31,8 +31,8 @@ export const { rateLimit, checkRateLimit } = defineRateLimits({
 // midnight in Los Angeles all year. A fixed 24-hour window can't follow that day: anchored in
 // standard time it resets at 1am for the whole of daylight time.
 export const DAY_LIMITS = {
-  // At most 40 requests a day per person, to bound how much of the shared user budget one
-  // account can spend.
+  // At most 40 feed, remix and team-preview requests a day per person, to bound how much of
+  // the shared user budget one account can spend. Matrix fill is limited per organization.
   aiRequestDaily: 40,
   // And at most 5 provider calls a day per person that are still running, that kept their
   // reservation without an answer (keepAiReservation in lib/aiSpendGuard.ts), or whose answer

@@ -11,7 +11,7 @@ import {
 import { callReserveUsd, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
-import { holdAiUnanswered, releaseAiUnanswered } from "./aiRateLimit";
+import { type AiUnansweredSlot, holdAiUnanswered, releaseAiUnanswered } from "./aiRateLimit";
 import {
   type AiReservation,
   billedFailure,
@@ -243,6 +243,7 @@ async function createChatCompletionWithRetry(
           `Keeping the ${spend.spendClass} spend reservation for run ${spend.runId}: no usable answer (${lastError.message})`,
         );
         await keepAiReservation(ctx, reservation, lastError);
+        warnSlotKept(slot, spend.runId, "the call got no usable answer");
       } else {
         await releaseAiReservation(ctx, reservation);
         await releaseAiUnanswered(ctx, slot);
@@ -257,15 +258,23 @@ async function createChatCompletionWithRetry(
       continue;
     }
     await settleAiCompletion(ctx, reservation, spend.runId, completion);
-    if (!wasCutOff(completion)) {
+    if (wasCutOff(completion)) {
+      warnSlotKept(slot, spend.runId, "the answer was cut off by the output cap");
+    } else {
       await releaseAiUnanswered(ctx, slot);
-    } else if (slot) {
-      console.warn(`Keeping an unanswered-call slot for run ${spend.runId}: the answer was cut off by the output cap`);
     }
     return completion;
   }
 
   throw lastError ?? new Error("OpenRouter chat completion failed");
+}
+
+/**
+ * Logs a slot that stays held, with the person's `rateLimits` row: its `key` is the Clerk user
+ * id an operator passes to resetAiUnanswered.
+ */
+function warnSlotKept(slot: AiUnansweredSlot | null, runId: Id<"generationRuns">, why: string): void {
+  if (slot) console.warn(`Keeping an unanswered-call slot (rateLimits row ${slot.row}) for run ${runId}: ${why}`);
 }
 
 /** Whether the answer was cut off by our own output cap (max_tokens). */
