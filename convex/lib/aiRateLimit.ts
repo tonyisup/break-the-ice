@@ -1,6 +1,7 @@
 import { ConvexError } from "convex/values";
 import { defineRateLimits } from "convex-helpers/server/rateLimit";
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "../_generated/server";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 import { nextSpendDayStart, spendDay, type SpendClass } from "./aiSpend";
@@ -35,10 +36,11 @@ export const DAY_LIMITS = {
   aiRequestDaily: 40,
   // And at most 5 provider calls a day per person that are still running, that kept their
   // reservation without an answer (keepAiReservation in lib/aiSpendGuard.ts), or whose answer
-  // was cut off by the output cap. Such a call is charged to the shared budget while the
-  // person's plan use is given back, so the request limits alone don't bound what one account
-  // can spend on them. Running calls count, so the five also cover what a person has in flight
-  // at once.
+  // was cut off by the output cap. Such a call is charged to the shared budget while, as a
+  // rule, the person's plan use is given back, so the request limits alone don't bound what
+  // one account can spend on them. A cut-off answer counts even in the rare case where the
+  // use is kept. Running calls count, so the five also cover what a person has in flight at
+  // once.
   aiUnanswered: 5,
 } as const;
 
@@ -65,7 +67,9 @@ async function dayLimitRow(ctx: LimitDb, name: DayLimitName, key: string) {
  * Whether `count` more fit in `key`'s limit for the current spend day. Takes nothing. A row
  * holds what is left for the spend day its `ts` falls in (when it was last taken from; for a
  * row from the fixed window this replaced, the start of its window). On a later day the whole
- * limit is back.
+ * limit is back, and a refusal's `retryAt` is when that day starts. For the unanswered-call
+ * slots that is the latest a refusal can last: a slot held by a call still running comes back
+ * when the call is answered.
  */
 export async function checkDayLimit(ctx: LimitDb, args: DayLimitArgs) {
   const now = Date.now();
@@ -76,33 +80,42 @@ export async function checkDayLimit(ctx: LimitDb, args: DayLimitArgs) {
   return { ok: true as const, row, value, now };
 }
 
-/** Takes `count` from the limit when they fit, and says which spend day they were taken on. */
+/** Takes `count` from the limit when they fit, and says which row and spend day they were taken on. */
 export async function takeDayLimit(ctx: LimitDb, args: DayLimitArgs) {
   const check = await checkDayLimit(ctx, args);
   if (!check.ok) return check;
   const { row, value, now } = check;
-  if (row) {
-    await ctx.db.patch(row._id, { value, ts: now });
-  } else {
-    await ctx.db.insert("rateLimits", { name: args.name, key: args.key, value, ts: now });
-  }
-  return { ok: true as const, day: spendDay(now) };
+  if (row) await ctx.db.patch(row._id, { value, ts: now });
+  const rowId = row ? row._id : await ctx.db.insert("rateLimits", { name: args.name, key: args.key, value, ts: now });
+  return { ok: true as const, row: rowId, day: spendDay(now) };
 }
 
-/** Gives one back, unless the limit has moved on from the spend day it was taken on. */
+/**
+ * Gives one back to the row it was taken from, unless the limit has moved on from the spend
+ * day it was taken on. A row that was reset since (resetDayLimit) is gone, so what was taken
+ * before the reset adds nothing to the row that replaces it.
+ */
 export async function giveBackDayLimit(
   ctx: LimitDb,
-  args: { name: DayLimitName; key: string; day: string },
+  args: { name: DayLimitName; row: Id<"rateLimits">; day: string },
 ): Promise<void> {
-  const row = await dayLimitRow(ctx, args.name, args.key);
-  if (!row || spendDay(row.ts) !== args.day) return;
+  const row = await ctx.db.get(args.row);
+  if (!row || row.name !== args.name || spendDay(row.ts) !== args.day) return;
   await ctx.db.patch(row._id, { value: Math.min(DAY_LIMITS[args.name], row.value + 1) });
 }
 
-/** Gives `key` the whole limit back, whatever it had left. */
-export async function resetDayLimit(ctx: LimitDb, args: { name: DayLimitName; key: string }): Promise<void> {
+/**
+ * Gives `key` the whole limit back by removing its row. Returns what `key` had left today, or
+ * null when there was no row to remove.
+ */
+export async function resetDayLimit(
+  ctx: LimitDb,
+  args: { name: DayLimitName; key: string },
+): Promise<number | null> {
   const row = await dayLimitRow(ctx, args.name, args.key);
-  if (row) await ctx.db.delete(row._id);
+  if (!row) return null;
+  await ctx.db.delete(row._id);
+  return spendDay(row.ts) === spendDay(Date.now()) ? row.value : DAY_LIMITS[args.name];
 }
 
 const LIMIT_MESSAGES: Record<AiRateLimitName, string> = {
@@ -145,8 +158,8 @@ export async function ensureAiRequestAllowed(
   if (!result.ok) throw rateLimited(result.name, result.retryAt);
 }
 
-/** A held unanswered-call slot: whose it is and the spend day it was taken on. */
-export type AiUnansweredSlot = { key: string; day: string };
+/** A held unanswered-call slot: the person's row it was taken from and the spend day it was taken on. */
+export type AiUnansweredSlot = { row: Id<"rateLimits">; day: string };
 
 /**
  * Refuses a signed-in caller who has no unanswered-call slot left, before their request takes
@@ -181,7 +194,7 @@ export async function holdAiUnanswered(
   }
   const held = await ctx.runMutation(internal.internal.aiRateLimit.holdAiUnanswered, { key: identity.subject });
   if (!held.ok) throw rateLimited("aiUnanswered", held.retryAt);
-  return { key: identity.subject, day: held.day };
+  return { row: held.row, day: held.day };
 }
 
 /** Gives a held slot back. Never throws. */

@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { action, type ActionCtx } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
-import { runPersistedQuestionGeneration } from "../lib/generationRunner";
+import { runPersistedQuestionGeneration, wasCutOffFailure } from "../lib/generationRunner";
 import { ensureAiRateLimit, ensureAiUnansweredLeft, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
 import { ensureAiBudget, keptAiReservation } from "../lib/aiSpendGuard";
 
@@ -182,8 +182,8 @@ export const fillEmptyCells = action({
 
 			try {
 				await ensureAiBudget(ctx, "user");
-				// Before the organization's token, so a fill refused for the person's own
-				// limit costs the team nothing.
+				// Before the organization's token, so a person who is already at their own
+				// limit is refused before the fill costs the team anything.
 				await ensureAiUnansweredLeft(ctx);
 				await ensureAiRateLimit(ctx, { name: "matrixFillCell", key: args.organizationId });
 				const result = await runPersistedQuestionGeneration(ctx, {
@@ -206,9 +206,10 @@ export const fillEmptyCells = action({
 				}
 			} catch (err) {
 				// Out of budget or rate-limited: every remaining cell would fail the same way. So,
-				// very likely, would the cells after a call that timed out or came back unparseable,
-				// and each of them would keep its own reservation.
-				if (isAiStopError(err) || keptAiReservation(err)) throw err;
+				// very likely, would the cells after a call that timed out, came back unparseable
+				// or was cut off by the output cap, and each of them would keep its own
+				// reservation or one of the person's unanswered-call slots.
+				if (isAiStopError(err) || keptAiReservation(err) || wasCutOffFailure(err)) throw err;
 				const msg = err instanceof Error ? err.message : String(err);
 				if (msg.includes("No active") && msg.includes("entry found for slug")) {
 					skippedInvalidTaxonomy++;

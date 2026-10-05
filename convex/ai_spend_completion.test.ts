@@ -1629,8 +1629,8 @@ describe("calls a person may have unanswered in one day", () => {
     expect(await matrixFillsLeft(t, organizationId)).toEqual([49]);
 
     await expect(remix(t, questionId)).rejects.toThrow(UNANSWERED);
-    // A matrix fill is refused the same way, with an error a batch stops on, and before it
-    // takes one of the organization's fills, starts a run or holds the cell.
+    // A matrix fill is refused the same way, with an error a batch stops on, before it takes
+    // one of the organization's fills or starts a run, and the cell it claimed is freed.
     const refusedFill = await fill().catch((error: unknown) => error);
     expect(convexErrorData(refusedFill)).toMatchObject({
       code: ERROR_CODES.AI_RATE_LIMITED,
@@ -1690,6 +1690,7 @@ describe("calls a person may have unanswered in one day", () => {
 
   test("an answer cut off by the output cap keeps its slot: it is charged while the person's use is given back", async () => {
     const { t, meId, questionId } = await setup();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const truncated = completion("", { cost: 0.006 });
     truncated.choices[0].finish_reason = "length";
     create.mockResolvedValue(truncated as never);
@@ -1697,6 +1698,7 @@ describe("calls a person may have unanswered in one day", () => {
     await expect(remix(t, questionId)).rejects.toThrow(/finish_reason=length/);
 
     expect(await slotsLeft(t)).toBe(4);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/Keeping an unanswered-call slot for run .*cut off/));
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.006, 1]]);
     const usage = await t.run(async (ctx) =>
       (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
@@ -1756,7 +1758,7 @@ describe("calls a person may have unanswered in one day", () => {
     await expect(remix(t, questionId)).resolves.toBe("What breakfast would you happily eat every day?");
   });
 
-  test("two requests started together for the last slot: one is answered, the other is refused where its call would be made and keeps its plan use", async () => {
+  test("two requests started together for the last slot: one is answered, the other is refused where its call would be made and is given its plan use back", async () => {
     const { t, meId, questionId } = await setup();
     let waiting = 0;
     let together: PromiseSettledResult<string>[] = [];
@@ -1846,22 +1848,23 @@ describe("calls a person may have unanswered in one day", () => {
     const ctx = { runMutation: vi.fn().mockRejectedValue(new Error("write conflict")) };
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(releaseAiUnanswered(ctx as never, { key: ME.subject, day: "2026-09-29" })).resolves.toBeUndefined();
+    await expect(releaseAiUnanswered(ctx as never, { row: "row-1" as never, day: "2026-09-29" })).resolves.toBeUndefined();
 
     expect(getFunctionName(ctx.runMutation.mock.calls[0][0])).toBe("internal/aiRateLimit:releaseAiUnanswered");
-    expect(ctx.runMutation.mock.calls[0][1]).toEqual({ key: ME.subject, day: "2026-09-29" });
+    expect(ctx.runMutation.mock.calls[0][1]).toEqual({ row: "row-1", day: "2026-09-29" });
     expect(consoleError).toHaveBeenCalledTimes(1);
   });
 
-  test("a held slot names its person and the day it was held on; a refusal carries the code, the message and when to retry", async () => {
+  test("a held slot names its row and the day the hold reported; a refusal carries the code, the message and when to retry", async () => {
     const runMutation = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, day: "2026-09-29" })
+      // Not the faked clock's day: the slot's day is the one the hold was counted on.
+      .mockResolvedValueOnce({ ok: true, row: "row-1", day: "2026-09-28" })
       .mockResolvedValueOnce({ ok: false, retryAt: 1234 })
       .mockResolvedValueOnce({ ok: false, retryAt: 5678 });
     const ctx = { auth: { getUserIdentity: vi.fn().mockResolvedValue({ subject: ME.subject }) }, runMutation };
 
-    expect(await holdAiUnanswered(ctx as never, "user")).toEqual({ key: ME.subject, day: "2026-09-29" });
+    expect(await holdAiUnanswered(ctx as never, "user")).toEqual({ row: "row-1", day: "2026-09-28" });
     expect(getFunctionName(runMutation.mock.calls[0][0])).toBe("internal/aiRateLimit:holdAiUnanswered");
     expect(runMutation.mock.calls[0][1]).toEqual({ key: ME.subject });
 
@@ -1887,7 +1890,7 @@ describe("calls a person may have unanswered in one day", () => {
     const { t, questionId } = await setup();
     vi.spyOn(console, "warn").mockImplementation(() => {});
     // The slot was held a moment before midnight; the call is set aside a moment after.
-    vi.spyOn(aiRateLimitLib, "holdAiUnanswered").mockResolvedValue({ key: ME.subject, day: "2026-09-28" });
+    vi.spyOn(aiRateLimitLib, "holdAiUnanswered").mockResolvedValue({ row: "row-1" as never, day: "2026-09-28" });
     create.mockRejectedValue(new APIConnectionTimeoutError() as never);
 
     await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
@@ -1955,6 +1958,35 @@ describe("calls a person may have unanswered in one day", () => {
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(await slotsLeft(t)).toBe(4);
+  });
+
+  test("a matrix batch stops at a cell whose answer is cut off: later cells aren't tried, one slot is kept and the cell is freed", async () => {
+    const { t, meId } = await setup();
+    const orgId = await matrixOrg(t, meId);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const truncated = completion("", { cost: 0.006 });
+    truncated.choices[0].finish_reason = "length";
+    create.mockResolvedValue(truncated as never);
+
+    await expect(
+      t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+        organizationId: orgId,
+        axisY: "style",
+        axisX: "tone",
+        topicSlug: "any-topic",
+        cells: [
+          { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
+          { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
+        ],
+      }),
+    ).rejects.toThrow(/finish_reason=length/);
+
+    // The second cell has the same size and cap, so it would very likely be cut off too.
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await slotsLeft(t)).toBe(4);
+    expect(await matrixFillsLeft(t, orgId)).toEqual([49]);
+    expect(await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
   });
 
   test("a matrix batch is refused at its first cell once the person has no slot left: nothing is taken from the team and the cell is freed", async () => {

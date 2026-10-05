@@ -76,7 +76,7 @@ export const checkAiUnanswered = internalMutation({
 export const holdAiUnanswered = internalMutation({
   args: { key: v.string() },
   returns: v.union(
-    v.object({ ok: v.literal(true), day: v.string() }),
+    v.object({ ok: v.literal(true), row: v.id("rateLimits"), day: v.string() }),
     v.object({ ok: v.literal(false), retryAt: v.number() }),
   ),
   handler: async (ctx, args) => {
@@ -84,12 +84,12 @@ export const holdAiUnanswered = internalMutation({
   },
 });
 
-/** Gives back a slot that was held on `day`. */
+/** Gives back a slot that was held on `day`, to the row it was held in. */
 export const releaseAiUnanswered = internalMutation({
-  args: { key: v.string(), day: v.string() },
+  args: { row: v.id("rateLimits"), day: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await giveBackDayLimit(ctx, { name: "aiUnanswered", key: args.key, day: args.day });
+    await giveBackDayLimit(ctx, { name: "aiUnanswered", row: args.row, day: args.day });
     return null;
   },
 });
@@ -97,14 +97,19 @@ export const releaseAiUnanswered = internalMutation({
 /**
  * Gives one person all of their unanswered-call slots back, for an operator to run after a
  * provider incident. `key` is the person's Clerk user id (`clerkId` on their `users` row):
- * `npx convex run internal/aiRateLimit:resetAiUnanswered '{"key":"<Clerk user id>"}'`.
- * Their calls that are still running stop being counted.
+ * `npx convex run internal/aiRateLimit:resetAiUnanswered '{"key":"<Clerk user id>"}'`
+ * (add `--prod` after `run` for production). `reset: false` means that id has no slot row, so
+ * nothing changed: check the id and the deployment. Their calls that are still running stop
+ * being counted, and give nothing back when they end.
  */
 export const resetAiUnanswered = internalMutation({
   args: { key: v.string() },
-  returns: v.null(),
+  returns: v.union(
+    v.object({ reset: v.literal(true), slotsLeftBefore: v.number() }),
+    v.object({ reset: v.literal(false) }),
+  ),
   handler: async (ctx, args) => {
-    await resetDayLimit(ctx, { name: "aiUnanswered", key: args.key });
-    return null;
+    const left = await resetDayLimit(ctx, { name: "aiUnanswered", key: args.key });
+    return left === null ? { reset: false as const } : { reset: true as const, slotsLeftBefore: left };
   },
 });

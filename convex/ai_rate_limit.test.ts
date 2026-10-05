@@ -195,44 +195,51 @@ describe("per-person AI requests", () => {
 
   test("a slot is given back to the spend day it was held on, and never past the five", async () => {
     const { t } = await setup();
-    const hold = () => t.mutation(internal.internal.aiRateLimit.holdAiUnanswered, { key: ME.subject });
-    const release = (day: string) => t.mutation(internal.internal.aiRateLimit.releaseAiUnanswered, { key: ME.subject, day });
+    const hold = async () => {
+      const held = await t.mutation(internal.internal.aiRateLimit.holdAiUnanswered, { key: ME.subject });
+      if (!held.ok) throw new Error("no slot left");
+      return held;
+    };
+    const release = (slot: Awaited<ReturnType<typeof hold>>) =>
+      t.mutation(internal.internal.aiRateLimit.releaseAiUnanswered, { row: slot.row, day: slot.day });
     const left = () =>
       t.run(async (ctx) => (await ctx.db.query("rateLimits").collect()).find((row) => row.name === "aiUnanswered")?.value);
 
     // 11:59pm PDT on Sep 29, then 12:01am on Sep 30.
     vi.setSystemTime(Date.UTC(2026, 8, 30, 6, 59));
-    expect(await hold()).toEqual({ ok: true, day: "2026-09-29" });
+    const yesterdays = await hold();
+    expect(yesterdays.day).toBe("2026-09-29");
     vi.setSystemTime(Date.UTC(2026, 8, 30, 7, 1));
-    expect(await hold()).toEqual({ ok: true, day: "2026-09-30" });
+    const todays = await hold();
+    expect(todays.day).toBe("2026-09-30");
     expect(await left()).toBe(4);
 
     // Yesterday's call finishing doesn't add to today's slots.
-    await release("2026-09-29");
+    await release(yesterdays);
     expect(await left()).toBe(4);
-    await release("2026-09-30");
-    await release("2026-09-30");
+    await release(todays);
+    await release(todays);
     expect(await left()).toBe(5);
 
-    for (let i = 0; i < 5; i++) expect(await hold()).toEqual({ ok: true, day: "2026-09-30" });
-    expect(await hold()).toEqual({ ok: false, retryAt: Date.UTC(2026, 9, 1, 7, 0) });
+    for (let i = 0; i < 5; i++) expect(await hold()).toMatchObject({ ok: true, day: "2026-09-30" });
+    expect(await t.mutation(internal.internal.aiRateLimit.holdAiUnanswered, { key: ME.subject })).toEqual({
+      ok: false,
+      retryAt: Date.UTC(2026, 9, 1, 7, 0),
+    });
   });
 
-  test("giving back a slot when none is held changes nothing", async () => {
-    const { t } = await setup();
-    const hold = () => t.mutation(internal.internal.aiRateLimit.holdAiUnanswered, { key: ME.subject });
-    const rows = () => t.run(async (ctx) => await ctx.db.query("rateLimits").collect());
+  test("a burst refusal doesn't use up the day's requests", async () => {
+    const { t, textlessId } = await setup();
+    await t.mutation(internal.internal.aiRateLimit.consumeAiRateLimit, { name: "aiRequest", key: ME.subject, count: 10 });
 
-    // Noon Pacific Daylight Time.
-    vi.setSystemTime(Date.UTC(2026, 8, 29, 19, 0));
-    expect(
-      await t.mutation(internal.internal.aiRateLimit.releaseAiUnanswered, { key: ME.subject, day: "2026-09-29" }),
-    ).toBeNull();
-    expect(await rows()).toEqual([]);
+    await expect(
+      t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId: textlessId }),
+    ).rejects.toThrow(RATE_LIMITED);
 
-    // The person still starts the day with five.
-    for (let i = 0; i < 5; i++) expect(await hold()).toEqual({ ok: true, day: "2026-09-29" });
-    expect(await hold()).toEqual({ ok: false, retryAt: Date.UTC(2026, 8, 30, 7, 0) });
+    const names = await t.run(async (ctx) =>
+      (await ctx.db.query("rateLimits").collect()).filter((row) => row.key === ME.subject).map((row) => row.name),
+    );
+    expect(names).toEqual(["aiRequest"]);
   });
 
   test("a person over the daily limit is told when the next day starts", async () => {
@@ -300,14 +307,36 @@ describe("per-person AI requests", () => {
     }
     await expect(remixAs(ME)).rejects.toThrow(/still running or got no answer/);
 
-    expect(await reset(ME.subject)).toBeNull();
+    expect(await reset(ME.subject)).toEqual({ reset: true, slotsLeftBefore: 0 });
 
     // Past the limits again, and nobody else's slots were touched.
     await expect(remixAs(ME)).rejects.toThrow("Question text not found.");
     await expect(remixAs(YOU)).rejects.toThrow(/still running or got no answer/);
     expect(await t.mutation(internal.internal.aiRateLimit.checkAiUnanswered, { key: ME.subject })).toEqual({ ok: true });
-    // A person with nothing held has nothing to reset.
-    expect(await reset("someone-else")).toBeNull();
+    // An id with no slots held says so, so a mistyped id or the wrong deployment shows.
+    expect(await reset("someone-else")).toEqual({ reset: false });
+    // A row left from an earlier day counts as the full five the person has today.
+    vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
+    expect(await reset(YOU.subject)).toEqual({ reset: true, slotsLeftBefore: 5 });
+  });
+
+  test("a call that was running when a person's slots were reset gives nothing back afterwards", async () => {
+    const { t } = await setup();
+    const hold = () => t.mutation(internal.internal.aiRateLimit.holdAiUnanswered, { key: ME.subject });
+    const left = () =>
+      t.run(async (ctx) => (await ctx.db.query("rateLimits").collect()).find((row) => row.name === "aiUnanswered")?.value);
+
+    const before = await hold();
+    if (!before.ok) throw new Error("no slot left");
+    await t.mutation(internal.internal.aiRateLimit.resetAiUnanswered, { key: ME.subject });
+    // Nothing held, so nothing to give back to.
+    await t.mutation(internal.internal.aiRateLimit.releaseAiUnanswered, { row: before.row, day: before.day });
+    expect(await t.run(async (ctx) => await ctx.db.query("rateLimits").collect())).toEqual([]);
+
+    // A slot held after the reset isn't handed back by the earlier call ending.
+    expect(await hold()).toMatchObject({ ok: true });
+    await t.mutation(internal.internal.aiRateLimit.releaseAiUnanswered, { row: before.row, day: before.day });
+    expect(await left()).toBe(4);
   });
 
   test("team previews draw from the same bucket", async () => {
