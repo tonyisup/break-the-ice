@@ -136,7 +136,9 @@ The preview action:
 
 Failed provider calls release the reserved usage unit, unless an answer was paid
 for. A call that times out, or whose response can't be parsed, releases the unit
-too; its reservation stays on the daily AI budget.
+too; its reservation stays on the daily AI budget, and it keeps one of the five
+slots a day the caller has for calls that are running, unanswered or cut off by
+the length limit.
 
 The chosen candidate is persisted only when the manager assigns it.
 
@@ -152,7 +154,8 @@ The chosen candidate is persisted only when the manager assigns it.
   members, including the original author after a role change.
 - Topic previews do not modify a schedule.
 - Topic previews are refused, without using the workspace's AI usage, while the
-  daily AI budget is paused or the caller is over their AI request limits.
+  daily AI budget is paused, the caller is over their AI request limits, or none
+  of the caller's five slots is free.
 - Topic previews fail with a readable "try again" error when fewer than three
   distinct, persistable candidates remain after validation. The reserved usage
   is kept, because the provider already charged for the answer.

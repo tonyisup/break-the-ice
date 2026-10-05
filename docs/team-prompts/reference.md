@@ -50,18 +50,25 @@ These refusals come before the AI request limits, so they don't use one of the
 caller's AI requests.
 
 Before checking the caller's role, the action checks the daily AI budget and the
-caller's per-person AI request limits. While the budget is paused it fails with a
-`ConvexError` whose `code` is `AI_BUDGET_PAUSED`; over a request limit, the code
-is `AI_RATE_LIMITED`. Neither failure uses the workspace's AI usage, and the
-error's `message` is ready to show.
+caller's per-person AI limits: the request limits, and the five slots a day each
+person has for AI calls that are still running, got no answer (a timeout, or a
+response that couldn't be parsed) or were cut off by the length limit. While the
+budget is paused it fails with a `ConvexError` whose `code` is
+`AI_BUDGET_PAUSED`; over a request limit or with no slot free, the code is
+`AI_RATE_LIMITED`. None of these failures uses the workspace's AI usage, and the
+error's `message` is ready to show. The daily limits reset at midnight in Los
+Angeles.
 
 A style or tone that is inactive or owned by another workspace fails with
 `STYLE_UNAVAILABLE` or `TONE_UNAVAILABLE`, before any workspace AI usage is
 reserved.
 
 The action requests three candidates and reserves one unit of the workspace's AI
-usage before calling the provider. An empty or unreadable provider answer is
-retried once, as a second provider call with its own generation run. Empty,
+usage before calling the provider. Each provider call holds one of the caller's
+slots while it runs. The slot is freed when the call is answered; a call that
+times out, whose response can't be parsed, or whose answer is cut off by the
+length limit keeps it until the next day. An empty or unreadable provider answer
+is retried once, as a second provider call with its own generation run. Empty,
 duplicate, and over-500-character candidates are discarded. If three distinct
 persistable questions do not remain, the action fails with `AI_GENERATION_FAILED`
 and a "try again" `message`. That failure keeps the usage unit, because the
