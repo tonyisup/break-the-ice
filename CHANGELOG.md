@@ -7,7 +7,7 @@ All notable changes to Break the Ice are recorded here.
 ### Changed
 - New questions are written by Claude Opus 5.5. The model is named in the code (`GENERATION_MODEL` in `convex/lib/generationRunner.ts`), no longer set through an OpenRouter preset, so a change of model shows in a diff and in every generation run's record. In blind labels of questions from three models, Opus 5.5's were kept most often. A single question takes about 7 seconds and a batch of ten about 17.
 - Each call costs about four times what it did on Gemini 3.8 Flash: about 1 cent for one question and 3 cents for ten. `AI_DAILY_BUDGET_USD` and `AI_DAILY_HARD_CAP_USD` are unchanged, so the daily pause comes sooner; raise them in the Convex environment if you want the earlier headroom.
-- Each AI call now sets aside an upper estimate of its cost before it runs, from its prompt size and output cap at Opus 5.5's listed price (about 5 to 10 cents), in place of a flat 2 cents. Calls in flight count at that amount until they settle to what they cost, so calls started together can't pass the daily cap on the same remaining budget. A call the provider reports no cost for is charged everything set aside for it.
+- Each AI call now sets aside an upper estimate of its cost before it runs, from its prompt size and output cap at Opus 5.5's listed price (about 5 to 10 cents), in place of a flat 2 cents. Calls in flight count at that amount until they settle to what they cost, so calls started together can't pass the daily cap on the same remaining budget. A call the provider reports no cost for is charged everything set aside for it. So is a call that times out or whose reply can't be parsed, which 0.4.10.0 charged the flat 2 cents.
 - The eval harness generates with the app's default model unless `--model` names another. `evals/README.md` records the blind-label result behind the choice of model, and notes that the `v0-3-2` baseline was generated with Gemini 3.8 Flash, so a run on the default reports a model change until a new baseline is pooled.
 
 ### Added
@@ -17,6 +17,17 @@ All notable changes to Break the Ice are recorded here.
 ### Fixed
 - Batch sizes and spend amounts are checked to be whole or finite numbers before they are used: a count that isn't a number is treated as one question, a call without an output cap is refused, and the spend ledger refuses an amount that isn't finite.
 - The README, the tech-stack notes and code comments describe the named model and the new set-aside.
+
+## [0.4.10.0] - 2026-10-05
+
+### Fixed
+- Each request to the AI provider is sent once per attempt. The provider client no longer re-sends a failed or timed-out request by itself behind the app's own retry, so a rate limit, a 5xx or a dropped connection gets at most three sends where it could get nine.
+- A generation call that times out, or whose reply can't be parsed, now counts toward the daily AI budget at the $0.02 set aside for it. The person's own AI use is still given back, because they got nothing.
+
+### Changed
+- A call that times out isn't sent again. Someone waiting on a slow provider gets the failure after about 30 seconds instead of up to 90. The daily email no longer retries a timed-out generation, so a reader whose call stalls gets no email that day.
+- A matrix fill and the nightly pool stop at the first call that times out or can't be parsed, the way they already stop when the budget is paused, instead of trying every remaining cell. Cells already filled stay saved.
+- When the provider asks for a wait before a retry (`Retry-After`, in seconds or as a date), the app waits up to 20 seconds. A longer wait ends the retries, so the request fails promptly instead of holding its job open.
 
 ## [0.4.9.0] - 2026-10-05
 

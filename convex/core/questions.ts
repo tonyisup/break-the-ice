@@ -938,7 +938,8 @@ export const remixQuestionForUser = action({
 
 			return remixText;
 		} catch (error) {
-			// Refund only a call the provider didn't charge for.
+			// Refund unless an answer was paid for. A call that timed out is refunded too: its
+			// reservation stays on the daily budget, but the person got nothing.
 			if (usageIncremented && !wasAiCallBilled(error)) {
 				// Refund the same counter the charge above used.
 				await ctx.runMutation(internal.internal.users.decrementAIUsage, {

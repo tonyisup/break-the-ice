@@ -241,7 +241,8 @@ const summary = {
     ok: okBatches.length,
     failed: generated.batches.filter((batch) => !batch.ok).map((batch) => batch.seed.id),
     // One generation run per model call the generator made, including its own retries of unusable
-    // answers. Provider-level retries inside one call (429s, timeouts) share that call's run.
+    // answers. Provider-level retries inside one call (429s, 5xx, dropped connections) share that
+    // call's run; a timeout ends the call.
     generationRuns: {
       total: runAttempts.length,
       failed: failedAttempts.length,

@@ -105,6 +105,8 @@ Angeles time, and each day's totals are in the `aiSpendDays` table. Each tracked
 call is charged what OpenRouter reports it cost. When OpenRouter reports no cost, the call is
 charged everything set aside for it: an upper estimate from its prompt length and output cap,
 at least $0.02. A call in flight counts at that estimate until it settles.
+A call that times out, or whose response can't be parsed, may still be billed: it is charged
+what was set aside for it and isn't sent again, and a matrix fill or nightly pool stops there.
 An empty or unreadable AI answer is retried once. The retry is a second call with its own
 generation run, charged and checked against the cap like the first; answers cut off by the
 length limit are not retried.

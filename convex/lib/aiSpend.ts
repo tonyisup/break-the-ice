@@ -1,5 +1,6 @@
 // Daily AI spend cap. Every chat completion is checked against today's spend
-// before it runs and recorded with its real cost after it returns.
+// before it runs and recorded with its real cost after it returns. A call that may
+// have been billed without reporting a cost is recorded at the amount reserved for it.
 //
 // "user" spend is anything a signed-in user can trigger (feed generation, remix,
 // matrix fill, team previews). "system" spend is the daily email and admin tools,
@@ -32,8 +33,9 @@ export function worstCaseCallCostUsd(promptBytes: number, maxOutputTokens: numbe
 
 /**
  * What to set aside for one call before it runs, settled to the real cost after it returns:
- * that upper estimate, and never less than the fallback. A call without a whole, positive
- * output cap could cost anything, so it is refused.
+ * that upper estimate, and never less than the fallback. It is also the charge for a call that
+ * times out or whose response can't be parsed. A call without a whole, positive output cap
+ * could cost anything, so it is refused.
  */
 export function callReserveUsd(promptBytes: number, maxOutputTokens: unknown, price: TokenPrice): number {
   if (typeof maxOutputTokens !== "number" || !Number.isInteger(maxOutputTokens) || maxOutputTokens < 1) {

@@ -73,7 +73,10 @@ export async function ensureAiRequestAllowed(
   if (!result.ok) throw rateLimited(result.name, result.retryAt);
 }
 
-/** Whether an error is one the caller should stop on instead of retrying the next item. */
+/**
+ * Whether an error is one the caller should stop on instead of retrying the next item. A batch
+ * also stops on a call that kept its reservation (keptAiReservation in lib/aiSpendGuard.ts).
+ */
 export function isAiStopError(error: unknown): boolean {
   const code = convexErrorData(error)?.code;
   return code === ERROR_CODES.AI_RATE_LIMITED || code === ERROR_CODES.AI_BUDGET_PAUSED;

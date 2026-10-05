@@ -36,7 +36,10 @@ export async function reserveAiSpend(ctx: SpendCtx, spendClass: SpendClass, rese
   return reservation;
 }
 
-/** Gives the reservation back when the provider call failed. Never throws. */
+/**
+ * Gives the reservation back when the provider refused the call or was never reached. A call
+ * that may still have been billed uses keepAiReservation. Never throws.
+ */
 export async function releaseAiReservation(ctx: SpendCtx, reservation: AiReservation): Promise<void> {
   try {
     await ctx.runMutation(internal.internal.aiSpend.releaseAiSpend, reservation);
@@ -44,6 +47,39 @@ export async function releaseAiReservation(ctx: SpendCtx, reservation: AiReserva
     // The reservation stays counted, which errs on the side of spending less.
     console.error("Failed to release AI spend reservation", error);
   }
+}
+
+// Failures whose provider call kept its reservation, so keptAiReservation can recognise them.
+const keptReservationFailures = new WeakSet<object>();
+
+/**
+ * Keeps a reservation as the charge for a call that may have been billed without reporting a
+ * cost: it timed out, or its response couldn't be parsed. Marks `failure`, the error the call
+ * failed with, for keptAiReservation. Never throws.
+ */
+export async function keepAiReservation(ctx: SpendCtx, reservation: AiReservation, failure: Error): Promise<void> {
+  keptReservationFailures.add(failure);
+  try {
+    // Settling to the reserved amount leaves the money where it is and counts the call. No run
+    // is named: the run's own cost stays what the provider reported for an answer.
+    await ctx.runMutation(internal.internal.aiSpend.settleAiSpend, {
+      ...reservation,
+      costUsd: reservation.reservedUsd,
+    });
+  } catch (error) {
+    // The reservation stays counted either way; only the call count is missed.
+    console.error("Failed to count an unanswered AI call", error);
+  }
+}
+
+/**
+ * Whether a generation failed on a provider call that kept its reservation. A caller working
+ * through a batch should stop: the next call would likely fail, and be charged, the same way.
+ * The mark is on the error object itself, so it is only seen inside the action that made the
+ * call: an error that crossed ctx.runAction is rebuilt and has lost it.
+ */
+export function keptAiReservation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && keptReservationFailures.has(error);
 }
 
 /**
@@ -71,8 +107,18 @@ export async function settleAiCompletion(
   }
 }
 
-/** A generation that failed after the provider was paid: the caller shouldn't refund usage. */
+/**
+ * A generation that failed after an answer was paid for in full: the caller shouldn't refund
+ * usage. A call that only kept its reservation (keepAiReservation) isn't marked billed.
+ */
 export function billedFailure(error: unknown): unknown {
+  const billed = withBilledMark(error);
+  // Still a failure whose call kept its reservation, whatever it is now wrapped in.
+  if (keptAiReservation(error) && billed instanceof Error) keptReservationFailures.add(billed);
+  return billed;
+}
+
+function withBilledMark(error: unknown): unknown {
   // Keep a ConvexError's code and message (a paused budget still reads as one), but mark it
   // billed: the paid attempt may be followed by a retry that fails this way.
   if (error instanceof ConvexError) {
@@ -86,7 +132,7 @@ export function billedFailure(error: unknown): unknown {
   });
 }
 
-/** Whether a failed generation had already been paid for (see billedFailure). */
+/** Whether a failed generation had an answer that was paid for in full (see billedFailure). */
 export function wasAiCallBilled(error: unknown): boolean {
   return convexErrorData(error)?.billed === true;
 }
