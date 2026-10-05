@@ -2,13 +2,13 @@
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { getFunctionName } from "convex/server";
-import { APIConnectionError, APIConnectionTimeoutError, APIError } from "openai";
+import { APIConnectionError, APIConnectionTimeoutError, APIError, OpenAIError } from "openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HARD_CAP_USD, FALLBACK_COST_PER_CALL_USD, spendDay } from "./lib/aiSpend";
-import { keepAiReservation } from "./lib/aiSpendGuard";
+import { billedFailure, keepAiReservation, keptAiReservation } from "./lib/aiSpendGuard";
 import { ensureAiRateLimit, isAiStopError } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
 import { GENERATION_MODEL, openRouterClient } from "./lib/generationRunner";
@@ -67,7 +67,13 @@ async function throughBackoff<T>(action: Promise<T>): Promise<T> {
     settled = true;
   });
   outcome.catch(() => {});
-  while (!settled) await vi.advanceTimersByTimeAsync(500);
+  const startedAt = performance.now();
+  while (!settled) {
+    // An action that never settles would otherwise keep this loop, and the faked clock, running
+    // into the tests after it.
+    if (performance.now() - startedAt > 3000) throw new Error("throughBackoff: the action didn't settle within 3 seconds");
+    await vi.advanceTimersByTimeAsync(100);
+  }
   return await outcome;
 }
 
@@ -111,6 +117,15 @@ async function setup() {
 }
 type T = Awaited<ReturnType<typeof setup>>["t"];
 
+const remix = (t: T, questionId: Awaited<ReturnType<typeof setup>>["questionId"]) =>
+  t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+// One layer below `create`, at the client's network send, so the SDK's own retry and response
+// handling run for real. `fetch` is a private field of the SDK client (openai 4.x).
+const stubSend = () => {
+  create.mockRestore();
+  return vi.spyOn(openRouterClient as unknown as { fetch: typeof fetch }, "fetch");
+};
+
 async function seedSpend(t: T, spent: { user?: number; system?: number }) {
   await t.run(async (ctx) => {
     for (const spendClass of ["user", "system"] as const) {
@@ -151,7 +166,7 @@ describe("recording what a completion cost", () => {
     });
   });
 
-  test("a completion that fails records no spend, fails the run and refunds the quota", async () => {
+  test("a completion the provider refuses records no spend, fails the run and refunds the quota", async () => {
     const { t, meId, questionId } = await setup();
     create.mockRejectedValue(refused(400, "invalid request") as never);
 
@@ -807,16 +822,8 @@ describe("room for a thinking model's reasoning", () => {
 
 describe("provider retries", () => {
   // The backoff between attempts uses setTimeout: throughBackoff moves the faked clock through it.
-  const remix = (t: T, questionId: Awaited<ReturnType<typeof setup>>["questionId"]) =>
-    t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
-  // One layer below `create`, at the client's network send, so the SDK's own retry and response
-  // handling run for real. `fetch` is a private field of the SDK client (openai 4.x).
-  const stubSend = () => {
-    create.mockRestore();
-    return vi.spyOn(openRouterClient as unknown as { fetch: typeof fetch }, "fetch");
-  };
 
-  test("a failed attempt releases its reservation; the successful retry is settled once", async () => {
+  test("a refused attempt releases its reservation; the successful retry is settled once", async () => {
     const { t, questionId } = await setup();
     create
       .mockRejectedValueOnce(refused(429, "Too Many Requests") as never)
@@ -893,34 +900,55 @@ describe("provider retries", () => {
     expect(sentAt[1] - sentAt[0]).toBeGreaterThanOrEqual(2000);
   });
 
-  test("a Retry-After longer than 20 seconds is cut to 20, so the action isn't held past its time limit", async () => {
+  test("a Retry-After of exactly 20 seconds is still waited out", async () => {
     const { t, questionId } = await setup();
     const sentAt: number[] = [];
     create.mockImplementation((async () => {
       sentAt.push(Date.now());
-      if (sentAt.length === 1) throw refused(429, "Too Many Requests", { "retry-after": "3600" });
+      if (sentAt.length === 1) throw refused(429, "Too Many Requests", { "retry-after": "20" });
       return completion("A quicker take on breakfast?", { cost: 0.004 });
     }) as never);
 
     await throughBackoff(remix(t, questionId));
 
     expect(sentAt).toHaveLength(2);
-    const waitedMs = sentAt[1] - sentAt[0];
-    expect(waitedMs).toBeGreaterThanOrEqual(20_000);
-    // Far short of the hour the provider asked for.
-    expect(waitedMs).toBeLessThan(120_000);
+    expect(sentAt[1] - sentAt[0]).toBeGreaterThanOrEqual(20_000);
+  });
+
+  test("a Retry-After over 20 seconds ends the retries: the request fails at once instead of holding the action", async () => {
+    const { t, questionId } = await setup();
+    create.mockRejectedValue(refused(429, "Too Many Requests", { "retry-after": "21" }) as never);
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(/429/);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0, 0]]);
+  });
+
+  test("a 408 from the provider is retried and gives its reservation back", async () => {
+    const { t, questionId } = await setup();
+    create
+      .mockRejectedValueOnce(refused(408, "Request Timeout") as never)
+      .mockResolvedValueOnce(completion("A quicker take on breakfast?", { cost: 0.004 }) as never);
+
+    await throughBackoff(remix(t, questionId));
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.004, 1]]);
+  });
+
+  test("an error the SDK raises before sending anything gives its reservation back and isn't retried", async () => {
+    const { t, questionId } = await setup();
+    create.mockRejectedValue(new OpenAIError("timeout must be an integer") as never);
+
+    await expect(remix(t, questionId)).rejects.toThrow(/must be an integer/);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0, 0]]);
   });
 });
 
 describe("calls that may have been billed without an answer", () => {
-  const remix = (t: T, questionId: Awaited<ReturnType<typeof setup>>["questionId"]) =>
-    t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
-  // One layer below `create`, at the client's network send, so the SDK's own retry and response
-  // handling run for real. `fetch` is a private field of the SDK client (openai 4.x).
-  const stubSend = () => {
-    create.mockRestore();
-    return vi.spyOn(openRouterClient as unknown as { fetch: typeof fetch }, "fetch");
-  };
 
   test("a timed-out call isn't sent again: it keeps its one reservation, fails its run and refunds the quota", async () => {
     const { t, meId, questionId } = await setup();
@@ -983,7 +1011,7 @@ describe("calls that may have been billed without an answer", () => {
     expect(usage.map((row) => row.count)).toEqual([0]);
   });
 
-  test("an answer that arrived but couldn't be read keeps its reservation and isn't sent again", async () => {
+  test("a response that arrived but couldn't be parsed keeps its reservation and isn't sent again", async () => {
     const { t, meId, questionId } = await setup();
     const send = stubSend().mockImplementation(
       async () =>
@@ -1006,7 +1034,7 @@ describe("calls that may have been billed without an answer", () => {
     expect(usage.map((row) => row.count)).toEqual([0]);
   });
 
-  test("an unreadable answer isn't taken for a refusal because its error mentions a number like 502", async () => {
+  test("an unparseable response isn't taken for a refusal because its error mentions a number like 502", async () => {
     const { t, questionId } = await setup();
     create.mockRejectedValue(new SyntaxError("Unexpected token < in JSON at position 502") as never);
 
@@ -1123,7 +1151,7 @@ describe("calls that may have been billed without an answer", () => {
     expect(usage.map((row) => row.count)).toEqual([1]);
   });
 
-  test("a matrix cell that times out is skipped with its reservation kept, and the next cell is still filled", async () => {
+  test("a matrix cell that times out stops the fill: later cells aren't tried, one reservation is kept and the lock is freed", async () => {
     const { t, meId } = await setup();
     const orgId = await t.run(async (ctx) => {
       const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
@@ -1135,36 +1163,48 @@ describe("calls that may have been billed without an answer", () => {
       await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
       return orgId;
     });
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    create
-      .mockRejectedValueOnce(new APIConnectionTimeoutError() as never)
-      .mockResolvedValueOnce(
-        completion(JSON.stringify({ questions: [{ text: "What small thing made you smile today?" }] }), { cost: 0.01 }) as never,
-      );
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
 
-    const result = await t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
-      organizationId: orgId,
-      axisY: "style",
-      axisX: "tone",
-      topicSlug: "any-topic",
-      cells: [
-        { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
-        { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
-      ],
-    });
+    await expect(
+      t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+        organizationId: orgId,
+        axisY: "style",
+        axisX: "tone",
+        topicSlug: "any-topic",
+        cells: [
+          { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
+          { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
+        ],
+      }),
+    ).rejects.toThrow(TIMED_OUT);
 
-    expect(result).toMatchObject({ totalCells: 2, filledCells: 1 });
-    expect(create).toHaveBeenCalledTimes(2);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.03, 2]]);
+    // The second cell would very likely time out too, and keep a reservation of its own.
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
     const { runs, locks } = await t.run(async (ctx) => ({
       runs: await ctx.db.query("generationRuns").collect(),
       locks: await ctx.db.query("matrixFillCellLocks").collect(),
     }));
-    expect(runs.map((run) => [run.status, run.costUsd])).toEqual([
-      ["failed", undefined],
-      ["succeeded", 0.01],
-    ]);
+    expect(runs.map((run) => [run.status, run.costUsd])).toEqual([["failed", undefined]]);
     expect(locks).toEqual([]);
+  });
+
+  test("the nightly pool stops at a combination that times out and reports it", async () => {
+    const { t } = await setup();
+    await t.run(async (ctx) => {
+      // The pool only runs when a daily-email subscriber is close to running out of unseen questions.
+      await ctx.db.insert("users", { email: "reader@example.com", clerkId: "reader-clerk", newsletterSubscriptionStatus: "subscribed" });
+      await ctx.db.insert("styles", { id: "playful", name: "Playful", structure: "Ask something playful", color: "#333333", icon: "sparkles" });
+    });
+    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
+
+    const result = await t.action(internal.internal.ai.generateNightlyQuestionPool, { targetCount: 1, maxCombinations: 2 });
+
+    // Two style and tone combinations were due; the second isn't tried.
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ questionsGenerated: 0, combinationsProcessed: 1 });
+    expect(result.errors).toEqual([expect.stringContaining(TIMED_OUT)]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.02, 1]]);
   });
 
   test("a failure to count a kept reservation is logged, never thrown, and isn't retried in the background", async () => {
@@ -1175,7 +1215,7 @@ describe("calls that may have been billed without an answer", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const reservation = { spendClass: "user" as const, day: "2026-09-29", reservedUsd: 0.02 };
 
-    await expect(keepAiReservation(ctx as never, reservation)).resolves.toBeUndefined();
+    await expect(keepAiReservation(ctx as never, reservation, new APIConnectionTimeoutError())).resolves.toBeUndefined();
 
     // Settled to the amount already reserved, on the reservation's own day, with no run named.
     expect(ctx.runMutation).toHaveBeenCalledTimes(1);
@@ -1183,5 +1223,19 @@ describe("calls that may have been billed without an answer", () => {
     expect(ctx.runMutation.mock.calls[0][1]).toEqual({ ...reservation, costUsd: 0.02 });
     expect(ctx.scheduler.runAfter).not.toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalledTimes(1);
+  });
+
+  test("a failure that kept its reservation is still recognised once it is marked billed", async () => {
+    const ctx = { runMutation: vi.fn().mockResolvedValue(null), scheduler: { runAfter: vi.fn() } };
+    const reservation = { spendClass: "user" as const, day: "2026-09-29", reservedUsd: 0.02 };
+    const timedOut = new APIConnectionTimeoutError();
+
+    await keepAiReservation(ctx as never, reservation, timedOut);
+
+    expect(keptAiReservation(timedOut)).toBe(true);
+    // A paid-for first answer followed by a timed-out retry is rethrown as a billed failure.
+    expect(keptAiReservation(billedFailure(timedOut))).toBe(true);
+    expect(keptAiReservation(billedFailure(new Error("400 invalid request")))).toBe(false);
+    expect(keptAiReservation(refused(429, "Too Many Requests"))).toBe(false);
   });
 });

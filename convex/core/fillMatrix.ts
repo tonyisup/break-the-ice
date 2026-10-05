@@ -6,7 +6,7 @@ import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration } from "../lib/generationRunner";
 import { ensureAiRateLimit, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
-import { ensureAiBudget } from "../lib/aiSpendGuard";
+import { ensureAiBudget, keptAiReservation } from "../lib/aiSpendGuard";
 
 async function pickRandomActiveTopicSlug(ctx: ActionCtx): Promise<string> {
 	const topics = await ctx.runQuery(api.core.topics.getTopics, {});
@@ -202,8 +202,10 @@ export const fillEmptyCells = action({
 					skippedExisting++;
 				}
 			} catch (err) {
-				// Out of budget or rate-limited: every remaining cell would fail the same way.
-				if (isAiStopError(err)) throw err;
+				// Out of budget or rate-limited: every remaining cell would fail the same way. So,
+				// very likely, would the cells after a call that timed out or came back unparseable,
+				// and each of them would keep its own reservation.
+				if (isAiStopError(err) || keptAiReservation(err)) throw err;
 				const msg = err instanceof Error ? err.message : String(err);
 				if (msg.includes("No active") && msg.includes("entry found for slug")) {
 					skippedInvalidTaxonomy++;

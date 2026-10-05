@@ -16,7 +16,7 @@ export const DEFAULT_DAILY_HARD_CAP_USD = 5;
 // Charged when the provider reports no cost, so an unpriced call still counts.
 export const FALLBACK_COST_PER_CALL_USD = 0.02;
 // Set aside before each call and settled to the real cost after it returns. Also the charge
-// for a call that times out or whose answer can't be read.
+// for a call that times out or whose response can't be parsed.
 export const RESERVE_PER_CALL_USD = FALLBACK_COST_PER_CALL_USD;
 
 const SPEND_TIME_ZONE = "America/Los_Angeles";

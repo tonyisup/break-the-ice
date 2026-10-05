@@ -7,7 +7,7 @@ import { Doc, Id } from "../_generated/dataModel";
 import { createPopulateMissingEmbeddingsEmail, createPopulateMissingStyleEmbeddingsEmail, createPopulateMissingToneEmbeddingsEmail } from "../lib/emails";
 import { runPersistedQuestionGeneration, runRemixQuestion } from "../lib/generationRunner";
 import type { SpendClass } from "../lib/aiSpend";
-import { wasAiCallBilled } from "../lib/aiSpendGuard";
+import { keptAiReservation, wasAiCallBilled } from "../lib/aiSpendGuard";
 import { normalizeSelectionSeed } from "../lib/random";
 
 export const populateMissingEmbeddings = internalAction({
@@ -291,6 +291,9 @@ export const generateNightlyQuestionPool = internalAction({
 				questionsGenerated += result.saveResult.insertedCount;
 			} catch (error: unknown) {
 				errors.push(`Combo ${(style.slug ?? style.id)}/${(tone.slug ?? tone.id)} failed: ${error instanceof Error ? error.message : String(error)}`);
+				// A call that timed out or came back unparseable kept its reservation, and the next
+				// combination would likely fail the same way: stop here.
+				if (keptAiReservation(error)) break;
 			}
 		}
 
