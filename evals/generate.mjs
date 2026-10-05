@@ -6,7 +6,7 @@
 // anthropic/claude-sonnet-5.5) instead of the preset. A run keeps one model: a rerun without
 // --model uses the run's own.
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -71,6 +71,18 @@ const { batchSize, seeds } = JSON.parse(readFileSync(join(here, "seeds.json"), "
 const runDir = join(here, "runs", run);
 const outPath = join(runDir, "generated.json");
 mkdirSync(runDir, { recursive: true });
+
+// One process per run name at a time: two would overwrite each other's record, and their model
+// calls are counted under the same run label.
+const lockPath = join(runDir, ".lock");
+try {
+  writeFileSync(lockPath, `${process.pid}\n`, { flag: "wx" });
+} catch {
+  console.error(`Run "${run}" is already being generated (${lockPath} exists). If no generate.mjs is running, delete that file.`);
+  process.exit(1);
+}
+process.on("exit", () => rmSync(lockPath, { force: true }));
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(1));
 
 const previous = existsSync(outPath) ? JSON.parse(readFileSync(outPath, "utf8")) : null;
 // Runs from before --model existed have no model recorded, and used the preset. A run that never

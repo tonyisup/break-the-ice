@@ -40,6 +40,8 @@ const problems = [
   // A preset or router can switch models mid-run, as baseline.mjs also refuses.
   ...summaries.filter((summary) => summary.generator.resolvedModelSet.length !== 1).map((summary) => `${summary.run} mixes models`),
   ...identityMismatches(summaries, REPLICATE_KEYS).map((key) => `the runs differ in ${key}, so they aren't one setup`),
+  // A baseline built before a key was recorded would read as changed in it.
+  ...REPLICATE_KEYS.filter((key) => !(key in baseline.identity)).map((key) => `${baselineName} doesn't record ${key}; rebuild it with baseline.mjs --force`),
   ...COMPARABLE_KEYS.filter((key) => JSON.stringify(baseline.identity[key]) !== JSON.stringify(pick(first, key))).map(
     (key) => `${key} differs from ${baselineName}'s (rescore or regenerate the baseline under the same judge, scoring and seeds)`,
   ),

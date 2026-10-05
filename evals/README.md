@@ -43,11 +43,13 @@ node evals/baseline.mjs v0-3-2 v0-3-2-r1 v0-3-2-r2 v0-3-2-r3
 
 To try another generation model, name it with `--model` (an OpenRouter model, like
 `anthropic/claude-sonnet-5.5`), then score and compare as usual. Don't try one by repointing the
-OpenRouter preset: production generates with that preset too. A run keeps one model, so a rerun
-without `--model` uses the run's own, a different `--model` is refused, and runs that asked for
-different models aren't replicates. `compare.mjs` reports the model change. A name the deployment
-refuses fails before any model call, so the same run can be rerun with the corrected `--model`; a
-well-formed name OpenRouter doesn't know fails at the provider, and needs a new run name.
+OpenRouter preset: production generates with that preset too. A named model also skips anything the
+preset bundles (routing, parameters), so a difference from a preset baseline can come from either.
+A run keeps one model, so a rerun without `--model` uses the run's own, a different `--model` is
+refused, and runs that asked for different models aren't replicates. `compare.mjs` reports the
+model change. A name the deployment refuses fails before any model call, so the same run can be
+rerun with the corrected `--model`; a well-formed name OpenRouter doesn't know fails at the
+provider, and needs a new run name.
 
 ```bash
 node evals/generate.mjs sonnet-5-5-r1 --model anthropic/claude-sonnet-5.5
@@ -123,6 +125,10 @@ models differ: in Oct 2026 a run cost about $0.14 on Sonnet 5.5 and $0.46 on Opu
   opener, and the cross-style share swings a lot between replicates.
 - `baseline.mjs` and `compare.mjs` refuse a run listed twice, a compare run that is one of the
   baseline's own, a run generated at more than one commit (resuming at a new commit is refused
-  too: use a new run name), and a run whose calls resolved to more than one model.
+  too: use a new run name), and a run whose calls resolved to more than one model. `compare.mjs`
+  also refuses a baseline built before one of its setup keys was recorded: rebuild it with
+  `baseline.mjs --force`.
+- `generate.mjs` holds `runs/<run>/.lock` while it runs, so the same run name can't be generated
+  twice at once. If it was killed and the file is left behind, delete it.
 - The repo is public. `generated.json` keeps provider and CLI error text from failed calls word
   for word; check it before committing a run that had failures.
