@@ -5,7 +5,7 @@ import OpenAI from "openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import schema from "./schema";
-import { spendDay } from "./lib/aiSpend";
+import { spendDay, worstCaseCallCostUsd } from "./lib/aiSpend";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "./lib/promptArchitecture";
 import { checkEvalCandidates, evalFingerprint } from "./lib/evalChecks";
 import { classifyFailure } from "../evals/runRecord.mjs";
@@ -688,6 +688,33 @@ describe("generateEvalBatch", () => {
       ["failed", "anthropic/claude-sonnet-5.5"],
       ["succeeded", "anthropic/claude-sonnet-5.5"],
     ]);
+  });
+
+  test("a batch on a named model sets aside what the default model's prices allow, and settles to the cost reported", async () => {
+    const t = await setup();
+    const systemSpend = async () =>
+      (await t.run((ctx) => ctx.db.query("aiSpendDays").collect())).filter((row) => row.spendClass === "system").map((row) => row.costUsd);
+    const duringCalls: number[][] = [];
+    create.mockImplementation((async () => {
+      duringCalls.push(await systemSpend());
+      return completion(questionsJson("Which album would you bring to a desert island?"));
+    }) as never);
+    const base = { runLabel: "test", seedId: "s01", styleSlug: "desert-island", toneSlug: "witty", batchSize: 5, neighbours: 0 };
+
+    await t.action(internal.internal.evals.generateEvalBatch, base);
+    await t.action(internal.internal.evals.generateEvalBatch, { ...base, model: "anthropic/claude-sonnet-5.5" });
+
+    // The same prompt and five-question cap, so the same amount whichever model is named: the
+    // set-aside doesn't know another model's prices (see the note in internal/evals.ts).
+    const { messages } = create.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    const promptChars = messages.reduce((total, message) => total + message.content.length, 0);
+    const worstCase = worstCaseCallCostUsd(promptChars, 3300, { input: 4, output: 20 });
+    expect(worstCase).toBeGreaterThan(0.066);
+    expect(duringCalls[0]).toEqual([worstCase]);
+    // The first batch has settled to its reported $0.01 by the time the second is in flight.
+    expect(duringCalls[1]).toHaveLength(1);
+    expect(duringCalls[1][0]).toBeCloseTo(0.01 + worstCase, 9);
+    expect(await systemSpend()).toEqual([0.02]);
   });
 
   test("every model call a batch made is on record, including the generator's own retry", async () => {

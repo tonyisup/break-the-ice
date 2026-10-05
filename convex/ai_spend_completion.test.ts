@@ -9,7 +9,7 @@ import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HAR
 import { ensureAiRateLimit, isAiStopError } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
 import { GENERATION_MODEL, openRouterClient } from "./lib/generationRunner";
-import { DEFAULT_BLUEPRINT_SLUG } from "./lib/promptArchitecture";
+import { clampBatchSize, DEFAULT_BLUEPRINT_SLUG } from "./lib/promptArchitecture";
 
 // The model call is the only network edge: stub it on the shared client so the rest
 // of the pipeline (budget check, run bookkeeping, spend ledger) runs for real.
@@ -281,6 +281,27 @@ describe("matrix fill", () => {
     expect(locks).toEqual([]);
   });
 
+  test("a count that isn't a number is filled as one question: the output stays capped and the ledger stays finite", async () => {
+    const { t, orgId } = await paidOrgMember();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("styles", { id: "s1", slug: "s1", status: "active", version: 1, name: "s1", structure: "x", color: "#111111", icon: "sparkles" });
+      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
+      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
+    });
+    create.mockResolvedValue(completion(JSON.stringify({ questions: [{ text: "What small thing made you smile today?" }] }), { cost: 0.01 }) as never);
+    expect(clampBatchSize(Number.NaN)).toBe(1);
+
+    const result = await t
+      .withIdentity(ME)
+      .action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic", count: Number.NaN });
+
+    // NaN passes through Math.min and Math.max. Unchecked, it reached the provider as no cap
+    // at all and the day's spend row as NaN, which pauses user AI for everyone until the next day.
+    expect(result.count).toBe(1);
+    expect(create.mock.calls.map((call: unknown[]) => (call[0] as { max_tokens: number }).max_tokens)).toEqual([2500]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
+  });
+
   test("an ordinary per-cell failure still skips that cell and keeps filling the rest", async () => {
     const { t, orgId } = await paidOrgMember();
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -334,9 +355,9 @@ describe("helpers", () => {
   });
 
   test("a free call costs nothing, an unreadable cost is charged the fallback, and bad caps fall back", () => {
-    expect(completionUsage({ cost: 0 }).costUsd).toBe(0);
-    expect(completionUsage({ cost: "0.01" }).costUsd).toBe(FALLBACK_COST_PER_CALL_USD);
-    expect(completionUsage(null).costUsd).toBe(FALLBACK_COST_PER_CALL_USD);
+    expect(completionUsage({ cost: 0 }, FALLBACK_COST_PER_CALL_USD).costUsd).toBe(0);
+    expect(completionUsage({ cost: "0.01" }, FALLBACK_COST_PER_CALL_USD).costUsd).toBe(FALLBACK_COST_PER_CALL_USD);
+    expect(completionUsage(null, FALLBACK_COST_PER_CALL_USD).costUsd).toBe(FALLBACK_COST_PER_CALL_USD);
 
     process.env.AI_DAILY_BUDGET_USD = "-1";
     process.env.AI_DAILY_HARD_CAP_USD = "   ";
@@ -801,6 +822,151 @@ describe("room for a thinking model's reasoning", () => {
     const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
     expect(runs.map((run) => [run.purpose, run.status, run.costUsd])).toEqual([["admin_preview", "failed", 0.005]]);
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.005, 1]]);
+  });
+});
+
+describe("what a call in flight sets aside", () => {
+  const opus = { input: 4, output: 20 };
+  const promptCharsOf = (call: unknown[]) =>
+    (call[0] as { messages: Array<{ content: string }> }).messages.reduce((total, message) => total + message.content.length, 0);
+
+  test("a remix sets aside its own smaller worst case as user spend, then gives back all but what it cost", async () => {
+    const { t, questionId } = await setup();
+    let duringCall: unknown[] = [];
+    create.mockImplementation((async () => {
+      duringCall = await ledger(t);
+      return completion("What breakfast would you happily eat every day?", { cost: 0.0042 });
+    }) as never);
+
+    await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+
+    // A remix is capped at 2,150 output tokens, so less is set aside than for a batch of questions.
+    const worstCase = worstCaseCallCostUsd(promptCharsOf(create.mock.calls[0]), 2150, opus);
+    expect(worstCase).toBeGreaterThan(0.043);
+    expect(worstCase).toBeLessThan(worstCaseCallCostUsd(0, 2500, opus));
+    expect(duringCall).toEqual([[spendDay(Date.now()), "user", worstCase, 0]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.0042, 1]]);
+  });
+
+  test("a prompt outside Latin script is counted by its bytes, about a token a character", async () => {
+    const { t, meId } = await setup();
+    const questionId = await t.run((ctx) =>
+      ctx.db.insert("questions", { authorId: meId, customText: `${"朝".repeat(900)}？`, status: "private", ...counters }),
+    );
+    let duringCall: unknown[][] = [];
+    create.mockImplementation((async () => {
+      duringCall = await ledger(t);
+      return completion("朝ごはんは何が好きですか？", { cost: 0.004 });
+    }) as never);
+
+    await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+
+    // Counted by characters, 900 of these would be set aside as 300 tokens; they are 900 or more.
+    const messages = (create.mock.calls[0][0] as { messages: Array<{ content: string }> }).messages;
+    const promptBytes = messages.reduce((total, message) => total + new TextEncoder().encode(message.content).length, 0);
+    expect(promptBytes).toBeGreaterThan(promptCharsOf(create.mock.calls[0]) + 1800);
+    expect(duringCall).toEqual([[spendDay(Date.now()), "user", worstCaseCallCostUsd(promptBytes, 2150, opus), 0]]);
+    expect(duringCall[0][2]).toBeGreaterThan(worstCaseCallCostUsd(0, 2150, opus) + (900 * 4) / 1_000_000);
+  });
+
+  test("a five-question feed batch sets aside more than a single question does", async () => {
+    const { t, styleId, toneId } = await setup();
+    let duringCall: unknown[] = [];
+    create.mockImplementation((async () => {
+      duringCall = await ledger(t);
+      return completion(
+        JSON.stringify({
+          questions: [
+            { text: "What small win are you proud of this week?" },
+            { text: "Which smell takes you straight back to childhood?" },
+            { text: "What habit would you keep if you moved abroad?" },
+            { text: "Which song do you skip every single time?" },
+            { text: "What chore do you secretly enjoy doing?" },
+          ],
+        }),
+        { cost: 0.011 },
+      );
+    }) as never);
+
+    await t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 5, anchoredStyleId: styleId, anchoredToneId: toneId });
+
+    // The cap for five questions is 3,300 tokens: $0.066 of output before the prompt is counted.
+    const worstCase = worstCaseCallCostUsd(promptCharsOf(create.mock.calls[0]), 3300, opus);
+    expect(worstCase).toBeGreaterThan(0.066);
+    expect(duringCall).toEqual([[spendDay(Date.now()), "user", worstCase, 0]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.011, 1]]);
+  });
+
+  test("a call in flight counts at its worst case, so a second is refused until the first settles to what it cost", async () => {
+    // Above the old flat $0.02 a call, below what a remix can cost.
+    process.env.AI_DAILY_BUDGET_USD = "0.04";
+    const { t, meId, questionId } = await setup();
+    const remix = () => t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+    let second: unknown;
+    // Only reached if the second call gets through to the provider.
+    create.mockResolvedValue(completion("Should never be asked for?", { cost: 0.004 }) as never);
+    create.mockImplementationOnce((async () => {
+      // Asked for while the first call is still waiting on the provider.
+      second = await remix().catch((error: unknown) => error);
+      return completion("What breakfast would you happily eat every day?", { cost: 0.004 });
+    }) as never);
+
+    await expect(remix()).resolves.toBe("What breakfast would you happily eat every day?");
+
+    expect(convexErrorData(second)).toMatchObject({ code: ERROR_CODES.AI_BUDGET_PAUSED });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.004, 1]]);
+    // The refused call made no run and used none of the person's quota.
+    const { runs, usage } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    }));
+    expect(runs.map((run) => run.status)).toEqual(["succeeded"]);
+    expect(usage.map((row) => row.count)).toEqual([1]);
+
+    // Settled to $0.004, the budget has room again.
+    create.mockResolvedValueOnce(completion("Which breakfast could you eat forever?", { cost: 0.004 }) as never);
+    await expect(remix()).resolves.toBe("Which breakfast could you eat forever?");
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.008, 2]]);
+  });
+
+  test("a failed call gives back everything it set aside, however much that was", async () => {
+    const { t, styleId, toneId } = await setup();
+    let duringCall: unknown[] = [];
+    create.mockImplementation((async () => {
+      duringCall = await ledger(t);
+      throw new Error("400 invalid request");
+    }) as never);
+
+    await expect(
+      t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId, count: 10 }),
+    ).rejects.toThrow("400 invalid request");
+
+    // Ten questions: 4,300 tokens of output, $0.086, before the prompt is counted.
+    const worstCase = worstCaseCallCostUsd(promptCharsOf(create.mock.calls[0]), 4300, opus);
+    expect(worstCase).toBeGreaterThan(0.086);
+    expect(duringCall).toEqual([[spendDay(Date.now()), "system", worstCase, 0]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0, 0]]);
+  });
+
+  test("the feed and a remix ask for the named default model and record it on their runs", async () => {
+    // A model's own name, not an OpenRouter preset that can be repointed without a diff. The
+    // prices in this file are this model's: a change of model means new ones.
+    expect(GENERATION_MODEL).toBe("anthropic/claude-opus-5.5");
+    const { t, styleId, toneId, questionId } = await setup();
+    create
+      .mockResolvedValueOnce(completion(JSON.stringify({ questions: [{ text: "What small win are you proud of this week?" }] }), { cost: 0.01 }) as never)
+      .mockResolvedValueOnce(completion("What breakfast would you happily eat every day?", { cost: 0.004 }) as never);
+
+    await t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 1, anchoredStyleId: styleId, anchoredToneId: toneId });
+    await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+
+    expect(create.mock.calls.map((call: unknown[]) => (call[0] as { model: string }).model)).toEqual([GENERATION_MODEL, GENERATION_MODEL]);
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => [run.purpose, run.model])).toEqual([
+      ["feed", GENERATION_MODEL],
+      ["remix", GENERATION_MODEL],
+    ]);
   });
 });
 

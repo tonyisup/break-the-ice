@@ -25,6 +25,8 @@ async function addToLedger(
   deltaUsd: number,
   calls: number,
 ): Promise<void> {
+  // A NaN total would fail every later budget check that day and never reach the hard cap.
+  if (!Number.isFinite(deltaUsd)) throw new Error("AI spend amounts must be finite numbers.");
   const existing = await ctx.db
     .query("aiSpendDays")
     .withIndex("by_day_class", (q) => q.eq("day", day).eq("spendClass", spendClass))

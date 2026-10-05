@@ -1092,23 +1092,34 @@ export const retireLibraryExceptPage = internalMutation({
 	},
 });
 
+// gstack-shortcut(dec-2445166b-925b-41c7-9b0a-085b818d4aff): likes and hides of the questions it retires are dropped by the Liked and Settings pages, upgrade when real users have likes.
+// gstack-shortcut(dec-4ea8f5e8-288d-4fdf-b3d3-116cc11b58bb): the backup is the only bulk undo, upgrade when a reset needs partial reversal.
 /**
  * Resets the shared library to a list of keepers: every other public library question is retired
  * (status "pruned", one `prunedAt` for the whole run). Personal, team and organization questions,
- * questions waiting for review and questions already retired are left alone. Nothing is deleted:
- * a retired question keeps its text, fingerprint and embedding, leaves the feed, pools and
- * pickers, and drops out of the pruning and duplicate queues on its own. An admin can bring one
- * back by setting its status to public on the questions page.
+ * questions waiting for review and questions already retired are left alone. No question is
+ * deleted: a retired one keeps its text, fingerprint and embedding, leaves the feed, pools and
+ * pickers, and drops out of the pruning and duplicate queues on its own.
  *
  * It refuses to run unless every question to keep is a public library question on this
  * deployment, so IDs from another deployment, or an empty list, retire nothing. Besides the
  * counts, `retiredIds` lists the IDs (no text) of the first LIBRARY_RETIRE_MAX_REPORTED_IDS
- * questions retired, in table order; keep the output as the record of what the run changed.
+ * questions retired, in table order, and a real run logs each page's IDs with the run's
+ * `prunedAt`. Keep that output as the record of what the run changed.
  *
- * It doesn't record a review, so the admin review history can't undo it, and an earlier review
- * of a question it retires can no longer be undone. Take a backup, run it with dryRun first
- * (`kept` should be the number of IDs you passed), then for real, then with dryRun again
- * (`retired` should then be 0); add --prod after `run` for production:
+ * What it doesn't give back:
+ * - A like or a hide of a question it retires is dropped the next time its owner opens the Liked
+ *   or Settings page, and bringing the question back doesn't restore it.
+ * - It records no review, so the admin review history can't undo it, and an earlier review of a
+ *   question it retires (a pruning decision or a duplicate merge) can no longer be undone.
+ * - The undo for a whole run is the backup. One question is brought back at
+ *   /admin/questions/<id> by setting its status to public; the questions list shows only the
+ *   newest 100.
+ * - A question published while it runs is retired too if a later page reaches it.
+ *
+ * Take a backup, run it with dryRun first (`kept` should be the number of IDs you passed), then
+ * for real, then with dryRun again (`retired` should then be 0); add --prod after `run` for
+ * production:
  * `npx convex run internal/migrations:retireLibraryExcept '{"dryRun":true,"keepQuestionIds":["<id>","<id>"]}'`.
  */
 export const retireLibraryExcept = internalAction({
@@ -1141,6 +1152,11 @@ export const retireLibraryExcept = internalAction({
 			);
 			for (const key of countKeys) totals[key] += page[key];
 			retiredIds.push(...page.retiredIds.slice(0, LIBRARY_RETIRE_MAX_REPORTED_IDS - retiredIds.length));
+			// Logged page by page, with the time every row of the run carries, so a run that stops
+			// partway still leaves a record of what it retired.
+			if (!args.dryRun && page.retiredIds.length > 0) {
+				console.log(`${label} retired at prunedAt ${prunedAt}: ${page.retiredIds.join(", ")}`);
+			}
 			if (page.isDone) break;
 			cursor = page.continueCursor;
 		}

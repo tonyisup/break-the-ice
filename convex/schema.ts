@@ -163,8 +163,8 @@ export default defineSchema({
     resultQuestionIds: v.array(v.id("questions")),
     createdAt: v.number(),
     finishedAt: v.optional(v.number()),
-    // What the provider reported for the completion: the model behind the preset,
-    // token counts and the charge in USD.
+    // What the provider reported for the completion: the model that ran, token counts and
+    // the charge in USD.
     resolvedModel: v.optional(v.string()),
     promptTokens: v.optional(v.number()),
     completionTokens: v.optional(v.number()),

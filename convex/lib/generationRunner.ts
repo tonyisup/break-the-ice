@@ -8,7 +8,7 @@ import {
   buildRemixPrompts,
   parseQuestionObjects,
 } from "./promptArchitecture";
-import { FALLBACK_COST_PER_CALL_USD, MAX_PROMPT_CHARS, worstCaseCallCostUsd, type SpendClass } from "./aiSpend";
+import { callReserveUsd, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 import {
@@ -22,9 +22,11 @@ import {
 // Named here, not through an OpenRouter preset, so a model change shows in a diff and in every
 // run's record. Opus 5.5 led the Oct 2026 eval runs and the owner's blind labels (evals/README.md).
 export const GENERATION_MODEL = "anthropic/claude-opus-5.5";
-// OpenRouter's price for GENERATION_MODEL, in US dollars per million tokens (Oct 2026). Spend is
-// settled to the cost the provider reports; this only sizes what is set aside before a call.
+// OpenRouter's listed price for GENERATION_MODEL, in US dollars per million tokens (Oct 2026).
+// It only sizes what is set aside before a call: spend is settled to the cost the provider
+// reports, which is higher if the call was routed to a dearer endpoint.
 const GENERATION_PRICE_USD_PER_MTOK = { input: 4, output: 20 };
+const utf8 = new TextEncoder();
 /**
  * An OpenRouter preset or model name, like "anthropic/claude-sonnet-5.5", with an optional variant
  * like ":nitro".
@@ -144,24 +146,24 @@ export function maxOutputTokens(batchSize: number): number {
 }
 
 // Callers check the budget with ensureAiBudget before creating their run. Here each
-// provider attempt reserves the most it can cost atomically (so a retry after backoff is
-// checked against the budget again, and calls in flight can't overshoot the cap between
-// them), then settles it to the real cost on success or releases it on failure.
+// provider attempt reserves its worst case at the listed price atomically (so a retry after
+// backoff is checked against the budget again, and calls in flight count toward the cap at
+// what they could cost), then settles it to the real cost on success or releases it on failure.
 async function createChatCompletionWithRetry(
   ctx: ActionCtx,
   spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  const promptChars = params.messages.reduce(
-    (total, message) => total + (typeof message.content === "string" ? message.content.length : 0),
-    0,
-  );
+  let promptChars = 0;
+  let promptBytes = 0;
+  for (const message of params.messages) {
+    if (typeof message.content !== "string") continue;
+    promptChars += message.content.length;
+    promptBytes += utf8.encode(message.content).length;
+  }
   assertPromptSize(promptChars);
   // Priced at the default model's rates, also for a model the eval harness names.
-  const reserveUsd = Math.max(
-    FALLBACK_COST_PER_CALL_USD,
-    worstCaseCallCostUsd(promptChars, params.max_tokens ?? 0, GENERATION_PRICE_USD_PER_MTOK),
-  );
+  const reserveUsd = callReserveUsd(promptBytes, params.max_tokens, GENERATION_PRICE_USD_PER_MTOK);
 
   const maxAttempts = getOpenRouterMaxAttempts();
   let lastError: Error | null = null;

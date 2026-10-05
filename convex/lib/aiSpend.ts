@@ -15,17 +15,27 @@ export const DEFAULT_DAILY_HARD_CAP_USD = 5;
 // The least a call is set aside or charged at, so an unpriced call still counts.
 export const FALLBACK_COST_PER_CALL_USD = 0.02;
 
+type TokenPrice = { input: number; output: number };
+
 /**
- * The most one call can cost, set aside before it runs and settled to the real cost after it
- * returns: the prompt counted at 3 characters a token (real text runs nearer 4) plus the whole
- * output cap. Prices are US dollars per million tokens.
+ * What a call costs at `price` if it uses its whole output cap: the prompt counted at 3 UTF-8
+ * bytes a token (English runs nearer 4 a token; a script that takes about a token a character
+ * takes about 3 bytes a character) plus the cap. Prices are US dollars per million tokens.
  */
-export function worstCaseCallCostUsd(
-  promptChars: number,
-  maxOutputTokens: number,
-  price: { input: number; output: number },
-): number {
-  return (Math.ceil(promptChars / 3) * price.input + maxOutputTokens * price.output) / 1_000_000;
+export function worstCaseCallCostUsd(promptBytes: number, maxOutputTokens: number, price: TokenPrice): number {
+  return (Math.ceil(promptBytes / 3) * price.input + maxOutputTokens * price.output) / 1_000_000;
+}
+
+/**
+ * What to set aside for one call before it runs, settled to the real cost after it returns:
+ * its worst case, and never less than the fallback. A call without a whole, positive output
+ * cap could cost anything, so it is refused.
+ */
+export function callReserveUsd(promptBytes: number, maxOutputTokens: unknown, price: TokenPrice): number {
+  if (typeof maxOutputTokens !== "number" || !Number.isInteger(maxOutputTokens) || maxOutputTokens < 1) {
+    throw new Error("An AI call needs a whole, positive output cap.");
+  }
+  return Math.max(FALLBACK_COST_PER_CALL_USD, worstCaseCallCostUsd(promptBytes, maxOutputTokens, price));
 }
 
 const SPEND_TIME_ZONE = "America/Los_Angeles";
@@ -78,7 +88,7 @@ function finiteNonNegative(value: unknown): number | undefined {
  * Cost and token counts from an OpenRouter completion's `usage` (cost is in USD credits). A
  * call with no reported cost is charged `unpricedCostUsd`.
  */
-export function completionUsage(usage: unknown, unpricedCostUsd = FALLBACK_COST_PER_CALL_USD): {
+export function completionUsage(usage: unknown, unpricedCostUsd: number): {
   costUsd: number;
   promptTokens?: number;
   completionTokens?: number;
