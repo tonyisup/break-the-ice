@@ -2,6 +2,22 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.5.0.0] - 2026-10-05
+
+### Changed
+- New questions are written by Claude Opus 5.5. The model is named in the code (`GENERATION_MODEL` in `convex/lib/generationRunner.ts`), no longer set through an OpenRouter preset, so a change of model shows in a diff and in every generation run's record. In blind labels of questions from three models, Opus 5.5's were kept most often. A single question takes about 7 seconds and a batch of ten about 17.
+- Each call costs about four times what it did on Gemini 3.8 Flash: about 1 cent for one question and 3 cents for ten. `AI_DAILY_BUDGET_USD` and `AI_DAILY_HARD_CAP_USD` are unchanged, so the daily pause comes sooner; raise them in the Convex environment if you want the earlier headroom.
+- Each AI call now sets aside an upper estimate of its cost before it runs, from its prompt size and output cap at Opus 5.5's listed price (about 5 to 10 cents), in place of a flat 2 cents. Calls in flight count at that amount until they settle to what they cost, so calls started together can't pass the daily cap on the same remaining budget. A call the provider reports no cost for is charged everything set aside for it.
+- The eval harness generates with the app's default model unless `--model` names another. `evals/README.md` records the blind-label result behind the choice of model, and notes that the `v0-3-2` baseline was generated with Gemini 3.8 Flash, so a run on the default reports a model change until a new baseline is pooled.
+
+### Added
+- A one-time cleanup that resets the shared question library to a list of questions to keep. Every other public library question is retired, not deleted: it keeps its text and can be brought back one at a time at `/admin/questions/<id>`. Personal, team and organization questions, questions waiting for review and questions already retired are left alone, and it changes nothing unless every question to keep is a public library question on that deployment. Take a backup, then run `npx convex run internal/migrations:retireLibraryExcept '{"dryRun":true,"keepQuestionIds":["<id>","<id>"]}'` (add `--prod` after `run` for production), check that `kept` is the number of IDs you passed, run it with `false`, and run the dry run again to check that `retired` is 0.
+- What the cleanup doesn't give back is listed in the comment on `retireLibraryExcept` in `convex/internal/migrations.ts`; read it before a production run. In short: links to retired questions stop opening, likes and hides of them are dropped, the backup is the only undo for a whole run, and with a small library the feed and the daily email write new questions far more often.
+
+### Fixed
+- Batch sizes and spend amounts are checked to be whole or finite numbers before they are used: a count that isn't a number is treated as one question, a call without an output cap is refused, and the spend ledger refuses an amount that isn't finite.
+- The README, the tech-stack notes and code comments describe the named model and the new set-aside.
+
 ## [0.4.9.0] - 2026-10-05
 
 ### Added
