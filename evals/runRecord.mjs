@@ -35,7 +35,7 @@ export function orderedBatches(seeds, batches) {
  */
 export function classifyFailure(message) {
   const text = String(message ?? "");
-  if (/EVALS_DISABLED|EVAL_SETUP|Could not find (public )?function|No active \w+ entry/.test(text)) return "setup";
+  if (/EVALS_DISABLED|EVAL_SETUP|AI_MODEL_NAME|Could not find (public )?function|No active \w+ entry/.test(text)) return "setup";
   if (/AI_BUDGET_PAUSED|paused for today/.test(text)) return "budget";
   if (/could not be read|empty completion|had no questions|AI_GENERATION_FAILED|cut off/.test(text)) return "generation";
   if (/Uncaught|Server Error/.test(text)) return "server";

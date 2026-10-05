@@ -2,6 +2,20 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.9.0] - 2026-10-05
+
+### Added
+- The generation eval can run any OpenRouter model. `node evals/generate.mjs <run> --model anthropic/claude-sonnet-5.5` generates the same seeds with that model in place of the preset, so a model can be compared with the baseline before production switches to it. A run keeps one model: a rerun without `--model` uses the run's own, and runs that asked for different models aren't pooled as replicates.
+- First single runs of three models on the eval seeds: Gemini 3.8 Flash, Claude Sonnet 5.5 and Claude Opus 5.5. At this size none differs detectably from the baseline's 78% pass rate (81%, 74% and 82%). A fourth run records what happened while the preset briefly pointed at an unreleased model: 29% of its calls came back unusable.
+
+### Changed
+- `compare.mjs` names the model each side asked for, refuses a run whose calls resolved to more than one model, and refuses a baseline built before one of its setup keys was recorded (rebuild it with `baseline.mjs --force`).
+- `generate.mjs` refuses unknown arguments and a flag placed before the run name, holds a lock so the same run can't be generated twice at once, and records nothing when its first call to dev fails. When every seed was refused before generating, it says to fix the setup instead of just rerunning.
+- A model name is checked where it reaches the provider, before anything is read or charged.
+
+### Fixed
+- The generated Convex API types now include the question text and tag modules added in 0.4.2.0 and 0.4.7.0.
+
 ## [0.4.8.0] - 2026-10-03
 
 ### Fixed

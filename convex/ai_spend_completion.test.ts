@@ -8,7 +8,7 @@ import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HARD_CAP_USD, FALLBACK_COST_PER_CALL_USD, spendDay } from "./lib/aiSpend";
 import { ensureAiRateLimit, isAiStopError } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
-import { openRouterClient } from "./lib/generationRunner";
+import { GENERATION_MODEL, openRouterClient } from "./lib/generationRunner";
 import { DEFAULT_BLUEPRINT_SLUG } from "./lib/promptArchitecture";
 
 // The model call is the only network edge: stub it on the shared client so the rest
@@ -512,6 +512,19 @@ describe("adversarial review follow-ups", () => {
 
     // One question: 2,000 for a thinking model's reasoning, then 300 + 200 per question.
     expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 2500 });
+  });
+
+  test("an admin preview generates with the preset model: only the eval harness picks another", async () => {
+    const { t, styleId, toneId } = await setup();
+    create.mockResolvedValue(
+      completion(JSON.stringify({ questions: [{ text: "What small win are you proud of?" }] }), { cost: 0.01 }) as never,
+    );
+
+    await t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId });
+
+    expect(create.mock.calls[0][0]).toMatchObject({ model: GENERATION_MODEL });
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => run.model)).toEqual([GENERATION_MODEL]);
   });
 
   test("a remix leaves room for a thinking model's reasoning", async () => {

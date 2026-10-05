@@ -76,3 +76,4 @@ dist-ssr
 evals/runs/*/jev-cache.jsonl
 
 backups/
+evals/runs/*/.lock

@@ -20,6 +20,11 @@ import {
 } from "./aiSpendGuard";
 
 export const GENERATION_MODEL = "@preset/break-the-ice-berg-default";
+/**
+ * An OpenRouter preset or model name, like "anthropic/claude-sonnet-5.5", with an optional variant
+ * like ":nitro".
+ */
+const OPENROUTER_MODEL = /^(@preset\/[a-z0-9-]+|[a-z0-9-]+\/[a-z0-9.-]+(:[a-z0-9-]+)?)$/;
 /** Temperature for saved questions (feed, daily email) unless a caller sets one. */
 export const DEFAULT_GENERATION_TEMPERATURE = 0.9;
 export const GENERATION_PROVIDER = "openrouter";
@@ -505,6 +510,8 @@ export async function runPreviewQuestionGeneration(
     batchSize?: number;
     /** "system" for admin tools; team previews are user spend. */
     spendClass?: SpendClass;
+    /** An OpenRouter model to use instead of the preset. Only the eval harness sets it. */
+    model?: string;
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -513,9 +520,18 @@ export async function runPreviewQuestionGeneration(
   previewText: string;
   previewTexts: string[];
 }> {
+  // Checked here, where the name reaches the provider, so no caller can pass one through
+  // unchecked, and before anything is read or charged.
+  if (args.model !== undefined && !OPENROUTER_MODEL.test(args.model)) {
+    throw new ConvexError({
+      code: "AI_MODEL_NAME",
+      message: `"${args.model}" isn't an OpenRouter model name like "anthropic/claude-sonnet-5.5".`,
+    });
+  }
   const spendClass = args.spendClass ?? "user";
   await ensureAiBudget(ctx, spendClass);
 
+  const model = args.model ?? GENERATION_MODEL;
   const temperature = args.temperature ?? 0.85;
   const prompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
     styleId: args.styleId,
@@ -538,13 +554,13 @@ export async function runPreviewQuestionGeneration(
       purpose: "admin_preview",
       requestedByUserId: args.requestedByUserId,
       prompt,
-      model: GENERATION_MODEL,
+      model,
       temperature,
     });
 
     try {
       const completion = await createChatCompletionWithRetry(ctx, { spendClass, runId }, {
-        model: GENERATION_MODEL,
+        model,
         temperature,
         max_tokens: maxOutputTokens(prompt.batchSize),
         response_format: { type: "json_object" },

@@ -93,10 +93,10 @@ async function nearestLibraryQuestions(ctx: ActionCtx, text: string, count: numb
 }
 
 /**
- * One eval batch: today's prompt builder and model, run like an admin preview so nothing is
- * added to the library. Returns each question with what the save step would have done with it
- * and its nearest library questions, for the harness in `evals/` to score. Runs only where
- * EVALS_ENABLED is set (dev).
+ * One eval batch: today's prompt builder with the preset model (or the model given), run like an
+ * admin preview so nothing is added to the library. Returns each question with what the save
+ * step would have done with it and its nearest library questions, for the harness in `evals/` to
+ * score. Runs only where EVALS_ENABLED is set (dev).
  */
 export const generateEvalBatch = internalAction({
   args: {
@@ -110,6 +110,8 @@ export const generateEvalBatch = internalAction({
     temperature: v.optional(v.number()),
     /** Library neighbours per question, 0 to 256; 0 skips the search. */
     neighbours: v.optional(v.number()),
+    /** An OpenRouter model to generate with instead of the preset, like "anthropic/claude-sonnet-5.5". */
+    model: v.optional(v.string()),
   },
   returns: evalBatch,
   handler: async (ctx, args): Promise<EvalBatch> => {
@@ -119,9 +121,11 @@ export const generateEvalBatch = internalAction({
     assertWhole("batchSize", args.batchSize, 1, MAX_BATCH_SIZE);
     const neighbourCount = args.neighbours ?? DEFAULT_NEIGHBOURS;
     assertWhole("neighbours", neighbourCount, 0, MAX_NEIGHBOURS);
+    // gstack-shortcut(dec-6f390dcf-d794-46ba-887f-dd13edb5e9c0): a named model keeps the flat per-call spend reservation, upgrade when reservation sizing is revisited.
+    const model = args.model ?? GENERATION_MODEL;
     const temperature = args.temperature ?? DEFAULT_GENERATION_TEMPERATURE;
-    // A seed naming a missing style, tone or topic fails while the prompt is built, before any
-    // run row or spend.
+    // A seed naming a missing style, tone or topic fails while the prompt is built, and a name
+    // that isn't an OpenRouter model is refused by the runner, both before any run row or spend.
     const preview = await runPreviewQuestionGeneration(ctx, {
       requestedByUserId: `eval:${args.runLabel}:${args.seedId}`,
       styleSlug: args.styleSlug,
@@ -130,6 +134,7 @@ export const generateEvalBatch = internalAction({
       batchSize: args.batchSize,
       temperature,
       spendClass: "system",
+      model: args.model,
     });
     const { prompt } = preview;
     const definitions = await ctx.runQuery(internal.internal.evalData.evalDefinitions, {
@@ -159,7 +164,7 @@ export const generateEvalBatch = internalAction({
 
     return {
       runId: preview.runId,
-      model: GENERATION_MODEL,
+      model,
       temperature,
       settings: {
         maxOutputTokens: maxOutputTokens(prompt.batchSize),

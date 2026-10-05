@@ -179,8 +179,8 @@ export const COMPARABLE_KEYS = [
 ];
 /**
  * What must also match for runs to be replicates of one setup. A comparison reports these as what
- * changed: prompts, the taxonomy and definitions they came from, sampling, the model the preset
- * resolved to, and the deployed code's settings.
+ * changed: prompts, the taxonomy and definitions they came from, sampling, the model asked for and
+ * what it resolved to, and the deployed code's settings.
  */
 export const REPLICATE_KEYS = [
   ...COMPARABLE_KEYS,
@@ -188,6 +188,7 @@ export const REPLICATE_KEYS = [
   "generator.definitionsHash",
   "generator.taxonomyHash",
   "generator.temperatures",
+  "generator.model",
   "generator.resolvedModelSet",
   "generator.settingsHash",
 ];
