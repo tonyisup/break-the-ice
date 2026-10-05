@@ -6,7 +6,7 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
 - `seeds.json`: the fixed inputs (20 batches of 5: every style active on both dev and production,
   tones stepped through, a topic on every other batch). Don't edit it; later runs compare on it.
 - `generate.mjs <run> [--model <openrouter-model>]`: runs each seed through today's prompt builder
-  and the preset model (or the one given) on the **dev** deployment
+  and the app's default model (or the one given) on the **dev** deployment
   (`internal/evals:generateEvalBatch`, run like an admin preview, so nothing is added to the
   library). Records what the save step would do with each question (code checks, exact
   duplicates), its 5 nearest public library questions by embedding, a hash of the prompt, the
@@ -41,15 +41,14 @@ node evals/score.mjs v0-3-2-r1
 node evals/baseline.mjs v0-3-2 v0-3-2-r1 v0-3-2-r2 v0-3-2-r3
 ```
 
-To try another generation model, name it with `--model` (an OpenRouter model, like
-`anthropic/claude-sonnet-5.5`), then score and compare as usual. Don't try one by repointing the
-OpenRouter preset: production generates with that preset too. A named model also skips anything the
-preset bundles (routing, parameters), so a difference from a preset baseline can come from either.
-A run keeps one model, so a rerun without `--model` uses the run's own, a different `--model` is
-refused, and runs that asked for different models aren't replicates. `compare.mjs` reports the
-model change. A name the deployment refuses fails before any model call, so the same run can be
-rerun with the corrected `--model`; a well-formed name OpenRouter doesn't know fails at the
-provider, and needs a new run name.
+Without `--model` a run uses the app's default, `GENERATION_MODEL` in
+`convex/lib/generationRunner.ts` (Opus 5.5 since Oct 2026). To try another generation model, name
+it with `--model` (an OpenRouter model, like `anthropic/claude-sonnet-5.5`), then score and compare
+as usual. A run keeps one model, so a rerun without `--model` uses the run's own, a different
+`--model` is refused, and runs that asked for different models aren't replicates. `compare.mjs`
+reports the model change. A name the deployment refuses fails before any model call, so the same
+run can be rerun with the corrected `--model`; a well-formed name OpenRouter doesn't know fails at
+the provider, and needs a new run name.
 
 ```bash
 node evals/generate.mjs sonnet-5-5-r1 --model anthropic/claude-sonnet-5.5
@@ -81,18 +80,30 @@ the fingerprints that the personal, team and organization questions it changes s
 (`fingerprintsCleared`), which can change the library duplicate rate without changing the library
 size, as above.
 
-A run on Gemini 3.8 Flash (what the preset resolved to for `v0-3-2`) costs about $0.12 of
-generation on dev (charged to the dev deployment's system AI budget) and about $0.05 of Jev. Other
-models differ: in Oct 2026 a run cost about $0.14 on Sonnet 5.5 and $0.46 on Opus 5.5. A call that
-times out has no cost on its run, so a run's reported cost leaves it out; the dev budget still
-counts it.
+A run on the default model, Opus 5.5, costs about $0.46 of generation on dev (charged to the dev
+deployment's system AI budget) and about $0.05 of Jev. In Oct 2026 a run cost about $0.12 on
+Gemini 3.8 Flash and $0.14 on Sonnet 5.5. A call that times out has no cost on its run, so a
+run's reported cost leaves it out; the dev budget still counts it.
 
 ## Reading the numbers
 
 - The official baseline is `runs/v0-3-2.json`: three replicate runs of the same seeds
   (`v0-3-2-r1` to `-r3`) pooled. Compare a later run with `node evals/compare.mjs v0-3-2 <run>`.
+  It was generated with Gemini 3.8 Flash through an OpenRouter preset the app no longer uses, so
+  a run on today's default reports a model change until three Opus runs are pooled into a new
+  baseline.
+- The gate's pass verdict is a rough guide to quality, not the owner's judgment. On the owner's
+  blind labels of 60 generated questions (Oct 2026) it matched 69% of the time, and passing
+  everything would have matched 75%; of the quality questions only readability separated the
+  owner's keeps from rejects. Unusable output, yield and the duplicate rates don't depend on it.
+- The default model was chosen on blind labels, not on the gate, whose pass rate didn't separate
+  the three models (82% Opus 5.5, 81% Gemini 3.8 Flash, 74% Sonnet 5.5, none a detectable change
+  from the baseline). Of 20 questions from each model's run, the owner kept 17, 15 and 12: too
+  few to tell the models apart. Claude, labeling blind every question the three runs would have
+  saved, with the owner's rubric, kept 90 of 100, 62 of 99 and 54 of 98. Those labels come from
+  Opus 5.5 itself, which read its own questions a little more generously than the owner did.
 - `runs/gemini-3-8-flash-r1`, `sonnet-5-5-r1` and `opus-5-5-r1` are the first single runs of each
-  named model (Oct 5, 2026). `runs/preset-r1` ran the same day while the preset was temporarily
+  named model (Oct 5, 2026). `runs/preset-r1` ran the same day while that preset was temporarily
   pointed at `stealth/space-bunny-alpha`, so it is not a replicate of `v0-3-2`.
 - Seven primary rates decide a comparison, chosen up front, each over independent units: pass,
   review and block rates (over every generated question, before the code checks); the library
@@ -112,9 +123,10 @@ counts it.
   changed, pass and review are decided without the fit questions, which are then graded against
   different text.
 - The output cap's reasoning allowance and the 30-second provider timeout were sized for Gemini
-  3.8 Flash. A model that reasons longer or answers slower is cut off or timed out more often, so
-  for any other model (whatever the preset resolves to included) the unusable-output and
-  provider-error figures partly measure fit to those limits. A cut-off fails its whole batch and
+  3.8 Flash, and Opus 5.5 fits them (no cut-offs in 100 questions; a batch of ten took under 20
+  seconds). A model that reasons longer or answers slower is cut off or timed out more often, so
+  for such a model the unusable-output and provider-error figures partly measure fit to those
+  limits. A cut-off fails its whole batch and
   the seed is generated again, so yield doesn't move and the question-level rates come only from
   answers that fit. A cut-off shows in the run's attempts as an empty completion with
   `finish_reason=length`, or as unreadable output with `completionTokens` at the batch's
@@ -124,8 +136,12 @@ counts it.
   across that change aren't like for like.
 - The regime is the admin preview path with a batch of 5 and no per-person exclusion list. The
   feed usually asks for 1 question and excludes recently seen ones.
-- Library duplicates are counted against dev's library, which is smaller than production's and
-  changes; summaries record its size. Dev's taxonomy versions can also differ from production's.
+- Library duplicates are counted against dev's library, which differs from production's and
+  changes; summaries record its size. The library reset added in v0.5.0.0
+  (`internal/migrations:retireLibraryExcept`) changes only the deployment it is run on: on
+  production it leaves eval numbers alone, and on dev it shrinks the library the eval searches,
+  which `compare.mjs` flags as a size change. Dev's taxonomy versions can also differ from
+  production's.
 - Sentence frames are informational: the pooled share mostly reflects styles that require their
   opener, and the cross-style share swings a lot between replicates.
 - `baseline.mjs` and `compare.mjs` refuse a run listed twice, a compare run that is one of the

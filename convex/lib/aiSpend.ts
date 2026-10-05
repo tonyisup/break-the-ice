@@ -13,11 +13,36 @@ export type SpendClass = "user" | "system";
 
 export const DEFAULT_DAILY_BUDGET_USD = 1;
 export const DEFAULT_DAILY_HARD_CAP_USD = 5;
-// Charged when the provider reports no cost, so an unpriced call still counts.
+// The least a call is set aside at. An unpriced call is charged everything set aside for it,
+// so it still counts.
 export const FALLBACK_COST_PER_CALL_USD = 0.02;
-// Set aside before each call and settled to the real cost after it returns. Also the charge
-// for a call that times out or whose response can't be parsed.
-export const RESERVE_PER_CALL_USD = FALLBACK_COST_PER_CALL_USD;
+
+type TokenPrice = { input: number; output: number };
+// Opus 5.5 takes a little under 3 bytes a token on this app's English prompts, and a script that
+// takes a token a character takes about 3 bytes a character, so 2 leaves room for both.
+const PROMPT_BYTES_PER_TOKEN = 2;
+
+/**
+ * An upper estimate of what a call costs at `price`: its prompt counted at
+ * PROMPT_BYTES_PER_TOKEN UTF-8 bytes a token, plus its whole output cap. Prices are US dollars
+ * per million tokens.
+ */
+export function worstCaseCallCostUsd(promptBytes: number, maxOutputTokens: number, price: TokenPrice): number {
+  return (Math.ceil(promptBytes / PROMPT_BYTES_PER_TOKEN) * price.input + maxOutputTokens * price.output) / 1_000_000;
+}
+
+/**
+ * What to set aside for one call before it runs, settled to the real cost after it returns:
+ * that upper estimate, and never less than the fallback. It is also the charge for a call that
+ * times out or whose response can't be parsed. A call without a whole, positive output cap
+ * could cost anything, so it is refused.
+ */
+export function callReserveUsd(promptBytes: number, maxOutputTokens: unknown, price: TokenPrice): number {
+  if (typeof maxOutputTokens !== "number" || !Number.isInteger(maxOutputTokens) || maxOutputTokens < 1) {
+    throw new Error("An AI call needs a whole, positive output cap.");
+  }
+  return Math.max(FALLBACK_COST_PER_CALL_USD, worstCaseCallCostUsd(promptBytes, maxOutputTokens, price));
+}
 
 const SPEND_TIME_ZONE = "America/Los_Angeles";
 
@@ -65,15 +90,18 @@ function finiteNonNegative(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
-/** Cost and token counts from an OpenRouter completion's `usage` (cost is in USD credits). */
-export function completionUsage(usage: unknown): {
+/**
+ * Cost and token counts from an OpenRouter completion's `usage` (cost is in USD credits). A
+ * call with no reported cost is charged `unpricedCostUsd`.
+ */
+export function completionUsage(usage: unknown, unpricedCostUsd: number): {
   costUsd: number;
   promptTokens?: number;
   completionTokens?: number;
 } {
   const fields = (typeof usage === "object" && usage !== null ? usage : {}) as Record<string, unknown>;
   return {
-    costUsd: finiteNonNegative(fields.cost) ?? FALLBACK_COST_PER_CALL_USD,
+    costUsd: finiteNonNegative(fields.cost) ?? unpricedCostUsd,
     promptTokens: finiteNonNegative(fields.prompt_tokens),
     completionTokens: finiteNonNegative(fields.completion_tokens),
   };

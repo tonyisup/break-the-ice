@@ -38,6 +38,7 @@ async function pickNewsletterQuestion(ctx: ActionCtx, userId: Id<"users">): Prom
 		// 2. If the user has a preference embedding, find the most similar valid question
 		const userEmb = await ctx.runQuery(internal.internal.users.getUserEmbedding, { userId });
 		if (userEmb && userEmb.length > 0) {
+			// gstack-shortcut(dec-55096c6c-b5ad-48e3-a302-c3949f4b2969): the search isn't filtered to live questions, so retired ones crowd keepers out of the candidates, upgrade when subscribers arrive or keepers should be emailed first.
 			const MAX_CANDIDATES = 100;
 
 			const results = await ctx.vectorSearch("question_embeddings", "by_embedding", {

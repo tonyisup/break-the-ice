@@ -7,7 +7,7 @@ import { ensureAiBudget } from "./aiSpendGuard";
 import { convexErrorData } from "./errorData";
 
 // Per-caller limits on AI work, on top of the daily spend cap (lib/aiSpend.ts). The
-// cap bounds the bill; these stop one caller from spending the whole day's budget.
+// cap bounds the bill; these bound how much of the day's budget one caller can spend.
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -24,8 +24,8 @@ export const { rateLimit, checkRateLimit } = defineRateLimits({
   // Feed generation, remix and team previews share one bucket per person (Clerk user
   // id): a burst of 10, then one every two minutes.
   aiRequest: { kind: "token bucket", rate: 30, period: HOUR, capacity: 10 },
-  // And at most 40 a day per person, so one account can't spend the whole shared
-  // user budget and pause AI for everyone.
+  // And at most 40 a day per person, to bound how much of the shared user budget one
+  // account can spend.
   aiRequestDaily: { kind: "fixed window", rate: 40, period: DAY, start: LOS_ANGELES_MIDNIGHT },
   // Matrix fill: one token per attempted cell, per organization. One full request at
   // once, then 100 a day.

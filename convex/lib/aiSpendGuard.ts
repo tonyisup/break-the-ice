@@ -3,7 +3,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
-import { completionUsage, dailyCaps, RESERVE_PER_CALL_USD, spendDay, type SpendClass } from "./aiSpend";
+import { completionUsage, dailyCaps, spendDay, type SpendClass } from "./aiSpend";
 import { convexErrorData } from "./errorData";
 
 function budgetPaused(): ConvexError<{ code: string; message: string }> {
@@ -23,9 +23,9 @@ export async function ensureAiBudget(ctx: Pick<ActionCtx, "runQuery">, spendClas
 export type AiReservation = { spendClass: SpendClass; day: string; reservedUsd: number };
 type SpendCtx = Pick<ActionCtx, "runMutation" | "scheduler">;
 
-/** Sets aside one call's estimated cost right before the provider call, or throws AI_BUDGET_PAUSED. */
-export async function reserveAiSpend(ctx: SpendCtx, spendClass: SpendClass): Promise<AiReservation> {
-  const reservation = { spendClass, day: spendDay(Date.now()), reservedUsd: RESERVE_PER_CALL_USD };
+/** Sets aside `reserveUsd` for one call right before the provider call, or throws AI_BUDGET_PAUSED. */
+export async function reserveAiSpend(ctx: SpendCtx, spendClass: SpendClass, reserveUsd: number): Promise<AiReservation> {
+  const reservation = { spendClass, day: spendDay(Date.now()), reservedUsd: reserveUsd };
   const reserved = await ctx.runMutation(internal.internal.aiSpend.reserveAiSpend, {
     spendClass,
     day: reservation.day,
@@ -84,8 +84,9 @@ export function keptAiReservation(error: unknown): boolean {
 
 /**
  * Settles a reservation to what the completion actually cost and stores its usage on
- * the run. Never throws: the call is already paid for. If the write fails it is retried
- * through the scheduler; until it lands, the reservation still counts toward the cap.
+ * the run; a completion with no reported cost keeps the whole reservation. Never throws: the
+ * call is already paid for. If the write fails it is retried through the scheduler; until it
+ * lands, the reservation still counts toward the cap.
  */
 export async function settleAiCompletion(
   ctx: SpendCtx,
@@ -93,7 +94,7 @@ export async function settleAiCompletion(
   runId: Id<"generationRuns"> | undefined,
   completion: { model?: string; usage?: unknown },
 ): Promise<void> {
-  const args = { ...reservation, runId, resolvedModel: completion.model, ...completionUsage(completion.usage) };
+  const args = { ...reservation, runId, resolvedModel: completion.model, ...completionUsage(completion.usage, reservation.reservedUsd) };
   try {
     await ctx.runMutation(internal.internal.aiSpend.settleAiSpend, args);
   } catch (error) {

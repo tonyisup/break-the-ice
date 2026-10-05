@@ -7,12 +7,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
-import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HARD_CAP_USD, FALLBACK_COST_PER_CALL_USD, spendDay } from "./lib/aiSpend";
+import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HARD_CAP_USD, FALLBACK_COST_PER_CALL_USD, spendDay, worstCaseCallCostUsd } from "./lib/aiSpend";
 import { billedFailure, keepAiReservation, keptAiReservation } from "./lib/aiSpendGuard";
 import { ensureAiRateLimit, isAiStopError } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
 import { GENERATION_MODEL, openRouterClient } from "./lib/generationRunner";
-import { DEFAULT_BLUEPRINT_SLUG } from "./lib/promptArchitecture";
+import { clampBatchSize, DEFAULT_BLUEPRINT_SLUG } from "./lib/promptArchitecture";
 
 // The model call is the only network edge: stub it on the shared client so the rest
 // of the pipeline (budget check, run bookkeeping, spend ledger) runs for real.
@@ -135,6 +135,25 @@ async function seedSpend(t: T, spent: { user?: number; system?: number }) {
       }
     }
   });
+}
+
+/** The prompt's size as the reservation counts it: UTF-8 bytes, not characters. */
+function promptBytesOf(call: unknown[]) {
+  const { messages } = call[0] as { messages: Array<{ content: string }> };
+  return messages.reduce((total, message) => total + new TextEncoder().encode(message.content).length, 0);
+}
+
+/**
+ * What the last call sent set aside: its upper estimate at the default model's prices. A call
+ * that gets no usable answer keeps exactly this as its charge.
+ */
+function lastSetAside(send?: { mock: { calls: unknown[][] } }): number {
+  // With the network send stubbed (stubSend), the request is read from the body that was sent.
+  const params = send
+    ? JSON.parse((send.mock.calls[send.mock.calls.length - 1][1] as { body: string }).body)
+    : create.mock.calls[create.mock.calls.length - 1][0];
+  const { max_tokens } = params as { max_tokens: number };
+  return worstCaseCallCostUsd(promptBytesOf([params]), max_tokens, { input: 4, output: 20 });
 }
 
 async function ledger(t: T) {
@@ -319,6 +338,27 @@ describe("matrix fill", () => {
     expect(locks).toEqual([]);
   });
 
+  test("a count that isn't a number is filled as one question: the output stays capped and the ledger stays finite", async () => {
+    const { t, orgId } = await paidOrgMember();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("styles", { id: "s1", slug: "s1", status: "active", version: 1, name: "s1", structure: "x", color: "#111111", icon: "sparkles" });
+      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
+      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
+    });
+    create.mockResolvedValue(completion(JSON.stringify({ questions: [{ text: "What small thing made you smile today?" }] }), { cost: 0.01 }) as never);
+    expect(clampBatchSize(Number.NaN)).toBe(1);
+
+    const result = await t
+      .withIdentity(ME)
+      .action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic", count: Number.NaN });
+
+    // NaN passes through Math.min and Math.max. Unchecked, it reached the provider as no cap
+    // at all and the day's spend row as NaN, which pauses user AI for everyone until the next day.
+    expect(result.count).toBe(1);
+    expect(create.mock.calls.map((call: unknown[]) => (call[0] as { max_tokens: number }).max_tokens)).toEqual([2500]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
+  });
+
   test("an ordinary per-cell failure still skips that cell and keeps filling the rest", async () => {
     const { t, orgId } = await paidOrgMember();
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -372,9 +412,9 @@ describe("helpers", () => {
   });
 
   test("a free call costs nothing, an unreadable cost is charged the fallback, and bad caps fall back", () => {
-    expect(completionUsage({ cost: 0 }).costUsd).toBe(0);
-    expect(completionUsage({ cost: "0.01" }).costUsd).toBe(FALLBACK_COST_PER_CALL_USD);
-    expect(completionUsage(null).costUsd).toBe(FALLBACK_COST_PER_CALL_USD);
+    expect(completionUsage({ cost: 0 }, FALLBACK_COST_PER_CALL_USD).costUsd).toBe(0);
+    expect(completionUsage({ cost: "0.01" }, FALLBACK_COST_PER_CALL_USD).costUsd).toBe(FALLBACK_COST_PER_CALL_USD);
+    expect(completionUsage(null, FALLBACK_COST_PER_CALL_USD).costUsd).toBe(FALLBACK_COST_PER_CALL_USD);
 
     process.env.AI_DAILY_BUDGET_USD = "-1";
     process.env.AI_DAILY_HARD_CAP_USD = "   ";
@@ -552,7 +592,7 @@ describe("adversarial review follow-ups", () => {
     expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 2500 });
   });
 
-  test("an admin preview generates with the preset model: only the eval harness picks another", async () => {
+  test("an admin preview generates with the default model: only the eval harness picks another", async () => {
     const { t, styleId, toneId } = await setup();
     create.mockResolvedValue(
       completion(JSON.stringify({ questions: [{ text: "What small win are you proud of?" }] }), { cost: 0.01 }) as never,
@@ -563,6 +603,26 @@ describe("adversarial review follow-ups", () => {
     expect(create.mock.calls[0][0]).toMatchObject({ model: GENERATION_MODEL });
     const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
     expect(runs.map((run) => run.model)).toEqual([GENERATION_MODEL]);
+  });
+
+  test("a call sets aside an upper estimate of its cost, and a completion with no reported cost keeps it", async () => {
+    const { t, styleId, toneId } = await setup();
+    let duringCall: unknown[] = [];
+    create.mockImplementation((async () => {
+      duringCall = await ledger(t);
+      return completion(JSON.stringify({ questions: [{ text: "What small win are you proud of?" }] }));
+    }) as never);
+
+    await t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId });
+
+    // The prompt at 2 bytes a token plus the whole 2,500-token cap, at $4 in and $20 out per
+    // million tokens.
+    expect(worstCaseCallCostUsd(3000, 2500, { input: 4, output: 20 })).toBeCloseTo(0.056);
+    const worstCase = worstCaseCallCostUsd(promptBytesOf(create.mock.calls[0]), 2500, { input: 4, output: 20 });
+    expect(worstCase).toBeGreaterThan(0.05);
+    expect(duringCall).toEqual([[spendDay(Date.now()), "system", worstCase, 0]]);
+    // No cost came back, so the call is charged everything that was set aside for it.
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", worstCase, 1]]);
   });
 
   test("a remix leaves room for a thinking model's reasoning", async () => {
@@ -820,6 +880,151 @@ describe("room for a thinking model's reasoning", () => {
   });
 });
 
+describe("what a call in flight sets aside", () => {
+  const opus = { input: 4, output: 20 };
+
+  test("a remix sets aside its own smaller worst case as user spend, then gives back all but what it cost", async () => {
+    const { t, questionId } = await setup();
+    let duringCall: unknown[] = [];
+    create.mockImplementation((async () => {
+      duringCall = await ledger(t);
+      return completion("What breakfast would you happily eat every day?", { cost: 0.0042 });
+    }) as never);
+
+    await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+
+    // A remix is capped at 2,150 output tokens, so less is set aside than for a batch of questions.
+    const worstCase = worstCaseCallCostUsd(promptBytesOf(create.mock.calls[0]), 2150, opus);
+    expect(worstCase).toBeGreaterThan(0.043);
+    expect(worstCase).toBeLessThan(worstCaseCallCostUsd(0, 2500, opus));
+    expect(duringCall).toEqual([[spendDay(Date.now()), "user", worstCase, 0]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.0042, 1]]);
+  });
+
+  test("a prompt outside Latin script is counted by its bytes, about a token a character", async () => {
+    const { t, meId } = await setup();
+    const questionId = await t.run((ctx) =>
+      ctx.db.insert("questions", { authorId: meId, customText: `${"朝".repeat(900)}？`, status: "private", ...counters }),
+    );
+    let duringCall: unknown[][] = [];
+    create.mockImplementation((async () => {
+      duringCall = await ledger(t);
+      return completion("朝ごはんは何が好きですか？", { cost: 0.004 });
+    }) as never);
+
+    await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+
+    // Each of these characters is one token or more and three bytes. Counted as characters, 900
+    // of them would be set aside as fewer tokens than they are.
+    const { messages } = create.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    const promptChars = messages.reduce((total, message) => total + message.content.length, 0);
+    const promptBytes = promptBytesOf(create.mock.calls[0]);
+    expect(promptBytes).toBeGreaterThan(promptChars + 1800);
+    expect(duringCall).toEqual([[spendDay(Date.now()), "user", worstCaseCallCostUsd(promptBytes, 2150, opus), 0]]);
+    expect(duringCall[0][2]).toBeGreaterThan(worstCaseCallCostUsd(0, 2150, opus) + (900 * 4) / 1_000_000);
+  });
+
+  test("a five-question feed batch sets aside more than a single question does", async () => {
+    const { t, styleId, toneId } = await setup();
+    let duringCall: unknown[] = [];
+    create.mockImplementation((async () => {
+      duringCall = await ledger(t);
+      return completion(
+        JSON.stringify({
+          questions: [
+            { text: "What small win are you proud of this week?" },
+            { text: "Which smell takes you straight back to childhood?" },
+            { text: "What habit would you keep if you moved abroad?" },
+            { text: "Which song do you skip every single time?" },
+            { text: "What chore do you secretly enjoy doing?" },
+          ],
+        }),
+        { cost: 0.011 },
+      );
+    }) as never);
+
+    await t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 5, anchoredStyleId: styleId, anchoredToneId: toneId });
+
+    // The cap for five questions is 3,300 tokens: $0.066 of output before the prompt is counted.
+    const worstCase = worstCaseCallCostUsd(promptBytesOf(create.mock.calls[0]), 3300, opus);
+    expect(worstCase).toBeGreaterThan(0.066);
+    expect(duringCall).toEqual([[spendDay(Date.now()), "user", worstCase, 0]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.011, 1]]);
+  });
+
+  test("a call in flight counts at its worst case, so a second is refused until the first settles to what it cost", async () => {
+    // Above the old flat $0.02 a call, below what a remix can cost.
+    process.env.AI_DAILY_BUDGET_USD = "0.04";
+    const { t, meId, questionId } = await setup();
+    const remix = () => t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+    let second: unknown;
+    // Only reached if the second call gets through to the provider.
+    create.mockResolvedValue(completion("Should never be asked for?", { cost: 0.004 }) as never);
+    create.mockImplementationOnce((async () => {
+      // Asked for while the first call is still waiting on the provider.
+      second = await remix().catch((error: unknown) => error);
+      return completion("What breakfast would you happily eat every day?", { cost: 0.004 });
+    }) as never);
+
+    await expect(remix()).resolves.toBe("What breakfast would you happily eat every day?");
+
+    expect(convexErrorData(second)).toMatchObject({ code: ERROR_CODES.AI_BUDGET_PAUSED });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.004, 1]]);
+    // The refused call made no run and used none of the person's quota.
+    const { runs, usage } = await t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    }));
+    expect(runs.map((run) => run.status)).toEqual(["succeeded"]);
+    expect(usage.map((row) => row.count)).toEqual([1]);
+
+    // Settled to $0.004, the budget has room again.
+    create.mockResolvedValueOnce(completion("Which breakfast could you eat forever?", { cost: 0.004 }) as never);
+    await expect(remix()).resolves.toBe("Which breakfast could you eat forever?");
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.008, 2]]);
+  });
+
+  test("a failed call gives back everything it set aside, however much that was", async () => {
+    const { t, styleId, toneId } = await setup();
+    let duringCall: unknown[] = [];
+    create.mockImplementation((async () => {
+      duringCall = await ledger(t);
+      throw refused(400, "invalid request");
+    }) as never);
+
+    await expect(
+      t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId, count: 10 }),
+    ).rejects.toThrow("400 invalid request");
+
+    // Ten questions: 4,300 tokens of output, $0.086, before the prompt is counted.
+    const worstCase = worstCaseCallCostUsd(promptBytesOf(create.mock.calls[0]), 4300, opus);
+    expect(worstCase).toBeGreaterThan(0.086);
+    expect(duringCall).toEqual([[spendDay(Date.now()), "system", worstCase, 0]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0, 0]]);
+  });
+
+  test("the feed and a remix ask for the named default model and record it on their runs", async () => {
+    // A model's own name, not an OpenRouter preset that can be repointed without a diff. The
+    // prices in this file are this model's: a change of model means new ones.
+    expect(GENERATION_MODEL).toBe("anthropic/claude-opus-5.5");
+    const { t, styleId, toneId, questionId } = await setup();
+    create
+      .mockResolvedValueOnce(completion(JSON.stringify({ questions: [{ text: "What small win are you proud of this week?" }] }), { cost: 0.01 }) as never)
+      .mockResolvedValueOnce(completion("What breakfast would you happily eat every day?", { cost: 0.004 }) as never);
+
+    await t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 1, anchoredStyleId: styleId, anchoredToneId: toneId });
+    await t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId });
+
+    expect(create.mock.calls.map((call: unknown[]) => (call[0] as { model: string }).model)).toEqual([GENERATION_MODEL, GENERATION_MODEL]);
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => [run.purpose, run.model])).toEqual([
+      ["feed", GENERATION_MODEL],
+      ["remix", GENERATION_MODEL],
+    ]);
+  });
+});
+
 describe("provider retries", () => {
   // The backoff between attempts uses setTimeout: throughBackoff moves the faked clock through it.
 
@@ -978,9 +1183,9 @@ describe("calls that may have been billed without an answer", () => {
 
     await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
 
-    // The provider may still have run and billed the abandoned send, so its $0.02 stays.
+    // The provider may still have run and billed the abandoned send, so what was set aside stays.
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(), 1]]);
     const { runs, usage } = await t.run(async (ctx) => ({
       runs: await ctx.db.query("generationRuns").collect(),
       usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
@@ -1000,7 +1205,7 @@ describe("calls that may have been billed without an answer", () => {
 
     // One request, one send: neither the SDK nor the retry loop sends it again.
     expect(send).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(send), 1]]);
   });
 
   test("a timed-out call counts toward the cap: the next request is refused once the budget is used", async () => {
@@ -1012,7 +1217,7 @@ describe("calls that may have been billed without an answer", () => {
     await expect(remix(t, questionId)).rejects.toThrow(PAUSED);
 
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(), 1]]);
   });
 
   test("a refused attempt followed by a timeout gives back the first reservation and keeps only the second", async () => {
@@ -1025,7 +1230,7 @@ describe("calls that may have been billed without an answer", () => {
 
     // The timeout ends the request: there is no third attempt.
     expect(create).toHaveBeenCalledTimes(2);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(), 1]]);
     const usage = await t.run(async (ctx) =>
       (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
     );
@@ -1044,9 +1249,9 @@ describe("calls that may have been billed without an answer", () => {
 
     await expect(throughBackoff(remix(t, questionId))).rejects.toThrow();
 
-    // The provider answered, so it billed: the $0.02 stays although no cost was reported.
+    // The provider answered, so it billed: what was set aside stays although no cost was reported.
     expect(send).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(send), 1]]);
     const { runs, usage } = await t.run(async (ctx) => ({
       runs: await ctx.db.query("generationRuns").collect(),
       usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
@@ -1065,7 +1270,7 @@ describe("calls that may have been billed without an answer", () => {
     await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(/no completion/);
 
     expect(send).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(send), 1]]);
   });
 
   test.each([
@@ -1080,7 +1285,7 @@ describe("calls that may have been billed without an answer", () => {
     await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(/no completion/);
 
     expect(send).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(send), 1]]);
     const usage = await t.run(async (ctx) =>
       (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
     );
@@ -1094,7 +1299,7 @@ describe("calls that may have been billed without an answer", () => {
     await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(/position 502/);
 
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(), 1]]);
   });
 
   test("feed generation that times out fails its run, saves nothing and refunds the quota", async () => {
@@ -1106,7 +1311,7 @@ describe("calls that may have been billed without an answer", () => {
     ).rejects.toThrow(TIMED_OUT);
 
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(), 1]]);
     const { runs, usage, questions } = await t.run(async (ctx) => ({
       runs: await ctx.db.query("generationRuns").collect(),
       usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
@@ -1135,7 +1340,7 @@ describe("calls that may have been billed without an answer", () => {
     ).rejects.toThrow(TIMED_OUT);
 
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", lastSetAside(), 1]]);
     const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
     expect(runs.map((run) => [run.purpose, run.status, run.costUsd])).toEqual([["newsletter", "failed", undefined]]);
   });
@@ -1151,7 +1356,7 @@ describe("calls that may have been billed without an answer", () => {
     expect(create).toHaveBeenCalledTimes(1);
     const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
     expect(runs.map((run) => [run.purpose, run.status, run.costUsd])).toEqual([["admin_preview", "failed", undefined]]);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", lastSetAside(), 1]]);
   });
 
   test("a team topic preview that times out keeps its reservation on user spend and refunds the preview use", async () => {
@@ -1174,7 +1379,7 @@ describe("calls that may have been billed without an answer", () => {
     ).rejects.toThrow(TIMED_OUT);
 
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(), 1]]);
     const usage = await t.run(async (ctx) =>
       (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
     );
@@ -1190,8 +1395,10 @@ describe("calls that may have been billed without an answer", () => {
     await expect(remix(t, questionId)).rejects.toThrow(/couldn't use/);
 
     expect(create).toHaveBeenCalledTimes(2);
-    // The answered call settles to its real $0.004; the timed-out one keeps its $0.02.
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.024, 2]]);
+    // The answered call settles to its real $0.004; the timed-out one keeps what it set aside.
+    const [[, , spent, calls]] = await ledger(t);
+    expect(spent).toBeCloseTo(0.004 + lastSetAside(), 9);
+    expect(calls).toBe(2);
     const { runs, usage } = await t.run(async (ctx) => ({
       runs: await ctx.db.query("generationRuns").collect(),
       usage: (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
@@ -1233,7 +1440,7 @@ describe("calls that may have been billed without an answer", () => {
 
     // The second cell would very likely time out too, and keep a reservation of its own.
     expect(create).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(), 1]]);
     const { runs, locks } = await t.run(async (ctx) => ({
       runs: await ctx.db.query("generationRuns").collect(),
       locks: await ctx.db.query("matrixFillCellLocks").collect(),
@@ -1257,7 +1464,7 @@ describe("calls that may have been billed without an answer", () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ questionsGenerated: 0, combinationsProcessed: 1 });
     expect(result.errors).toEqual([expect.stringContaining(TIMED_OUT)]);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.02, 1]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", lastSetAside(), 1]]);
   });
 
   test("the nightly pool carries on past a combination the provider refuses", async () => {

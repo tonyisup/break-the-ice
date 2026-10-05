@@ -101,10 +101,12 @@ matrix fill, team topic previews) reaches `AI_DAILY_BUDGET_USD` (default 1), tha
 generation pauses for the rest of the day. Once the day's total spend reaches
 `AI_DAILY_HARD_CAP_USD` (default 5), generation for the daily email and admin tools stops
 too. Keep the budget below the hard cap. Days run on Los
-Angeles time, each tracked generation call is charged what OpenRouter reports it cost (a
-flat $0.02 when it reports none), and each day's totals are in the `aiSpendDays` table.
+Angeles time, and each day's totals are in the `aiSpendDays` table. Each tracked generation
+call is charged what OpenRouter reports it cost. When OpenRouter reports no cost, the call is
+charged everything set aside for it: an upper estimate from its prompt length and output cap,
+at least $0.02. A call in flight counts at that estimate until it settles.
 A call that times out, or whose response can't be parsed, may still be billed: it is charged
-the $0.02 set aside for it and isn't sent again, and a matrix fill or nightly pool stops there.
+what was set aside for it and isn't sent again, and a matrix fill or nightly pool stops there.
 An empty or unreadable AI answer is retried once. The retry is a second call with its own
 generation run, charged and checked against the cap like the first; answers cut off by the
 length limit are not retried.

@@ -18,7 +18,7 @@
 
 **What:** Email the owner (the existing `internal.email.sendEmail` notifier, `CRONS_NOTICE_EMAIL`) the first time user AI pauses each day, with the day's spend. Then decide how the shared user budget should be split. The specifics are in the owner's private plan doc ("v0.1.0.0 security follow-ups").
 
-**Why:** The user budget is shared, so it can run out early for everyone, and today nobody hears about it.
+**Why:** The user budget is shared, so it can run out early for everyone, and today nobody hears about it. Since v0.5.0.0 a call costs about four times as much against the same default budget, and calls in flight count at their upper estimate, so the pause comes sooner.
 
 **Context:** `convex/lib/aiSpend.ts` (caps), `convex/lib/aiSpendGuard.ts` (where a pause is detected). `generationRuns.requestedByUserId` and `costUsd` give per-user spend, except for calls that kept their reservation without an answer (`keepAiReservation`), which are on the daily ledger only. Deferred by the owner during the v0.2.0.0 review.
 
@@ -38,15 +38,15 @@
 **Priority:** P2
 **Depends on:** None
 
-### Size the per-call spend reservation from the output cap
+### Don't charge a provider error that arrives as a success
 
-**What:** Reserve each AI call's budget from its `max_tokens` (times a worst-case price) instead of a flat `RESERVE_PER_CALL_USD` of $0.02.
+**What:** Treat an OpenRouter response that has HTTP 200 but a top-level `error`, or no `choices`, as a failed call: release its reservation and take the existing retry-or-throw path. Keep the whole-reservation charge for a completion that has choices but no reported cost.
 
-**Why:** The worst-case call is now 4,300 output tokens, about $0.017 on today's model. If the OpenRouter preset is pointed at a pricier model, which needs no deploy, calls could cost more than they reserve and overshoot the daily cap before settling. Eval runs with `--model` can already name a pricier model on dev: Opus 5.5 averaged about $0.023 a call. The reservation is also what a call is charged when it times out or its response can't be parsed (`keepAiReservation`), since its real cost is never reported.
+**Why:** Such a response is settled as a paid completion at everything set aside for it (about 5 to 10 cents since v0.5.0.0, 2 cents before), and the unusable-output retry does it a second time. During a provider outage a handful of them can pause user AI for the day. It isn't certain these calls are free, so check what OpenRouter bills for an error raised after the model started before releasing the money.
 
-**Context:** `reserveAiSpend` in `convex/lib/aiSpendGuard.ts`, `convex/lib/aiSpend.ts`, `maxOutputTokens` in `convex/lib/generationRunner.ts`, and the named-model path in `generateEvalBatch` (`convex/internal/evals.ts`). Deferred during the v0.3.2.0 review (decision 9ce5b30c) and again for eval models in the v0.4.9.0 review (decision 6f390dcf).
+**Context:** `createChatCompletionWithRetry` and `retryUnusableOutput` in `convex/lib/generationRunner.ts`, `settleAiCompletion` in `convex/lib/aiSpendGuard.ts`. Since v0.4.10.0 a reply that isn't a completion object at all keeps its reservation and isn't sent again; this is the reply that is an object with an `error` and no choices. Deferred by the owner during the v0.5.0.0 review.
 
-**Effort:** M
+**Effort:** S
 **Priority:** P3
 **Depends on:** None
 
@@ -100,11 +100,11 @@
 
 ## Generation
 
-### Label questions for Phase 0, then compare Claude and Jev against the labels
+### Refit or drop the Jev quality questions, now that the Phase 0 labels are in
 
-**What:** The owner labels about 200 production questions (keep or reject, the four review reasons, safety concerns) in the Question Labels page. Then measure the owner's keep rate and reason mix, how often Claude's blind labels and the Jev gate agree with the owner, and refit the quality cutoffs in `evals/jev.mjs` on those labels.
+**What:** The owner's labels are done (Oct 2026) and the comparison is in `evals/README.md`: the Jev gate's pass verdict matched the owner on 69% of generated questions, below the 75% that passing everything would match, and only readability separated keeps from rejects. Decide whether to refit the quality cutoffs in `evals/jev.mjs` on the labels or drop the quality questions and keep Jev for duplicates, then pool three runs on the default model into a new baseline.
 
-**Why:** Phase 0's gate needs the labels, and the Jev quality cutoffs are provisional until they're fit to the owner's judgment. Refitting changes `CUTOFFS_HASH`, so rescore the baseline (`node evals/score.mjs v0-3-2-r1 --force` and so on, then `evals/baseline.mjs`) afterwards.
+**Why:** The Jev quality cutoffs are still provisional, and the `v0-3-2` baseline was generated with a model the app no longer uses, so every comparison reports a model change. Refitting changes `CUTOFFS_HASH`, so rescore the runs (`node evals/score.mjs <run> --force`, then `evals/baseline.mjs`) afterwards.
 
 **Context:** Deferred from plan: Phase 0 spec (the plan doc's "Phase 0 spec" tab). The labeling page and Claude's blind labels are in the owner's private Question Labels artifact; labels are not stored in this repo.
 
@@ -147,7 +147,7 @@
 
 **Why:** v0.3.2.0 leaves room for the model's thinking but doesn't limit it. Every feed fill and remix spends about 500 to 1,600 thinking tokens first, which costs a few seconds and some money. Capping it blind could make questions worse.
 
-**Context:** The eval harness is on branch feat/phase0-eval-harness (`evals/`). The preset is `@preset/break-the-ice-berg-default` in `convex/lib/generationRunner.ts`.
+**Context:** The eval harness is in `evals/`. Since v0.5.0.0 the default model is Opus 5.5 (`GENERATION_MODEL` in `convex/lib/generationRunner.ts`), which doesn't reason unless asked, so this applies again only if the default moves to a model that does; the thinking-token figures above were measured on Gemini 3.8 Flash.
 
 **Effort:** S
 **Priority:** P2
@@ -155,11 +155,12 @@
 
 ### Tighten how the eval harness handles model names and failed calls
 
-**What:** Four small gaps left from the v0.4.9.0 review of `--model`:
+**What:** Five small gaps left from the v0.4.9.0 and v0.5.0.0 reviews of `--model`:
 1. Classify a failed `npx convex run` from its whole output, not its last three lines, so a refusal isn't misfiled when the CLI prints something after it.
-2. Treat `--model` naming the deployment's own preset as the preset, so a run can be pointed back at it.
+2. Treat `--model` naming the app's default model as the default, so a run can be pointed back at it.
 3. Decide whether to refuse router names like `openrouter/auto` and variants like `:online`, which change more than the model.
 4. Keep the commit each committed run cites reachable after a squash merge (tag it, or keep the branch).
+5. Record the model a default-model run actually used. Such a run records no model, so a rerun after the default changes regenerates its failed seeds on the new model, and `compare.mjs` only reports the mix afterwards.
 
 **Why:** Each can make a run's record say something slightly different from what ran, or tie a run name to a model that never generated.
 
@@ -323,13 +324,13 @@
 **Priority:** P2
 **Depends on:** None
 
-### Filter the daily email's similar-question search to reviewed questions
+### Filter the daily email's and duplicate detection's searches to live questions
 
-**What:** The daily email looks for a question near the reader's taste with an unfiltered vector search (top 100), then drops ineligible rows. Held questions now fill that window, so the email falls back to generating new questions more often. Filter the search by status.
+**What:** The daily email looks for a question near the reader's taste with an unfiltered vector search (top 100), then drops ineligible rows. Held questions fill that window, and after the v0.5.0.0 library reset so do retired ones, which keep their embeddings. The email then falls back to generating a new question even when an unsent library question exists. Admin duplicate detection has the same gap: its nearest-5 search isn't filtered, so retired near-duplicates can crowd a live pair out and new pending groups can be made of retired questions. Filter both searches by status.
 
-**Why:** Each fallback is a paid generation and adds another held question.
+**Why:** Each email fallback is a paid generation and adds another held question, and when generation is paused the email has nothing to send. Missed duplicates stay in the library.
 
-**Context:** `convex/internal/newsletter.ts` (`ctx.vectorSearch("question_embeddings", ...)`); the index has `status` in `filterFields`. Check production first for embedding rows with no status (legacy), which a status filter would exclude.
+**Context:** `convex/internal/newsletter.ts` (`ctx.vectorSearch("question_embeddings", ...)`, marked `gstack-shortcut(dec-55096c6c…)`) and the detection scan in `convex/internal/ai.ts`; the index has `status` in `filterFields`, and the reset keeps each embedding row's status in step. Check production first for embedding rows with no status (legacy), which a status filter would exclude. Deferred again by the owner during the v0.5.0.0 review.
 
 **Effort:** S
 **Priority:** P2
@@ -512,6 +513,19 @@
 **Depends on:** None
 
 ## Completed
+
+### Size the per-call spend reservation from the output cap
+
+**What:** Reserve each AI call's budget from its `max_tokens` (times a worst-case price) instead of a flat `RESERVE_PER_CALL_USD` of $0.02.
+
+**Why:** The worst-case call is now 4,300 output tokens, about $0.017 on today's model. If the OpenRouter preset is pointed at a pricier model, which needs no deploy, calls could cost more than they reserve and overshoot the daily cap before settling. Eval runs with `--model` can already name a pricier model on dev: Opus 5.5 averaged about $0.023 a call. The reservation is also what a call is charged when it times out or its response can't be parsed (`keepAiReservation`), since its real cost is never reported.
+
+**Context:** `reserveAiSpend` in `convex/lib/aiSpendGuard.ts`, `convex/lib/aiSpend.ts`, `maxOutputTokens` in `convex/lib/generationRunner.ts`, and the named-model path in `generateEvalBatch` (`convex/internal/evals.ts`). Deferred during the v0.3.2.0 review (decision 9ce5b30c) and again for eval models in the v0.4.9.0 review (decision 6f390dcf).
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** None
+**Completed:** v0.5.0.0 (2026-10-05)
 
 ### Route the remaining schedule path through the shared visibility rule
 
