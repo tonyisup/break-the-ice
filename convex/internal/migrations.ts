@@ -1,8 +1,8 @@
 import { v, type Infer } from "convex/values";
-import { internalAction, internalMutation } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
-import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, normalizedRetirement } from "../lib/questionAccess";
+import type { Doc, Id } from "../_generated/dataModel";
+import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUserWrittenQuestion, normalizedRetirement } from "../lib/questionAccess";
 import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { settleDuplicateGroup } from "../lib/questionReferences";
 import { defaultIdealPromptLength, defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
@@ -1008,5 +1008,143 @@ export const normalizeRetiredQuestions = internalAction({
 		}
 		console.log(`${label} total: ${JSON.stringify(totals)}`);
 		return { ...totals, ...ids };
+	},
+});
+
+export const LIBRARY_RETIRE_PAGE_SIZE = 100;
+// The run reports the IDs of the first this many questions it retires, for the record, and counts
+// the rest.
+export const LIBRARY_RETIRE_MAX_REPORTED_IDS = 1000;
+export const LIBRARY_RETIRE_MAX_KEPT = 1000;
+const libraryRetireCounts = {
+	scanned: v.number(),
+	// Public library questions found: the ones kept plus the ones retired.
+	publicLibrary: v.number(),
+	kept: v.number(),
+	retired: v.number(),
+};
+const libraryRetirePageResult = v.object({
+	...libraryRetireCounts,
+	// Every question the page retired (or would retire), at most a page's worth.
+	retiredIds: v.array(v.id("questions")),
+	continueCursor: v.string(),
+	isDone: v.boolean(),
+});
+
+/** A question the shared library lists: public, and not a personal, team or organization question. */
+function isPublicLibraryQuestion(question: Doc<"questions">): boolean {
+	return !isUserWrittenQuestion(question) && !isRetiredQuestion(question) && isQuestionPublic(question);
+}
+
+/** The questions to keep that aren't public library questions here: missing, retired, or someone's own. */
+export const libraryKeepersNotInLibrary = internalQuery({
+	args: { keepQuestionIds: v.array(v.id("questions")) },
+	returns: v.array(v.id("questions")),
+	handler: async (ctx, args) => {
+		const notInLibrary: Id<"questions">[] = [];
+		for (const questionId of args.keepQuestionIds) {
+			const question = await ctx.db.get(questionId);
+			if (!question || !isPublicLibraryQuestion(question)) notInLibrary.push(questionId);
+		}
+		return notInLibrary;
+	},
+});
+
+/**
+ * One page of the library reset. With `dryRun` it writes nothing and reports what a real run
+ * would retire. It pages over every question, unfiltered: a filtered paginate can read most of
+ * the table to fill one page.
+ */
+export const retireLibraryExceptPage = internalMutation({
+	args: {
+		keepQuestionIds: v.array(v.id("questions")),
+		dryRun: v.boolean(),
+		cursor: v.union(v.string(), v.null()),
+		prunedAt: v.number(),
+	},
+	returns: libraryRetirePageResult,
+	handler: async (ctx, args) => {
+		const keep = new Set<Id<"questions">>(args.keepQuestionIds);
+		const page = await ctx.db.query("questions").paginate({ numItems: LIBRARY_RETIRE_PAGE_SIZE, cursor: args.cursor });
+		const counts = { scanned: page.page.length, publicLibrary: 0, kept: 0, retired: 0 };
+		const retiredIds: Id<"questions">[] = [];
+		for (const question of page.page) {
+			if (!isPublicLibraryQuestion(question)) continue;
+			counts.publicLibrary += 1;
+			if (keep.has(question._id)) {
+				counts.kept += 1;
+				continue;
+			}
+			counts.retired += 1;
+			retiredIds.push(question._id);
+			if (args.dryRun) continue;
+			// Retired as approvePruning retires a library question: it keeps its fingerprint, so the
+			// same wording isn't generated again, and its embedding, whose filters follow the new
+			// status. The revision moves so an admin page loaded before the run can't save over it.
+			await ctx.db.patch(question._id, {
+				status: "pruned",
+				prunedAt: args.prunedAt,
+				reviewRevision: (question.reviewRevision ?? 0) + 1,
+			});
+			await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: question._id });
+		}
+		return { ...counts, retiredIds, continueCursor: page.continueCursor, isDone: page.isDone };
+	},
+});
+
+/**
+ * Resets the shared library to a list of keepers: every other public library question is retired
+ * (status "pruned", one `prunedAt` for the whole run). Personal, team and organization questions,
+ * questions waiting for review and questions already retired are left alone. Nothing is deleted:
+ * a retired question keeps its text, fingerprint and embedding, leaves the feed, pools and
+ * pickers, and drops out of the pruning and duplicate queues on its own. An admin can bring one
+ * back by setting its status to public on the questions page.
+ *
+ * It refuses to run unless every question to keep is a public library question on this
+ * deployment, so IDs from another deployment, or an empty list, retire nothing. Besides the
+ * counts, `retiredIds` lists the IDs (no text) of the first LIBRARY_RETIRE_MAX_REPORTED_IDS
+ * questions retired, in table order; keep the output as the record of what the run changed.
+ *
+ * It doesn't record a review, so the admin review history can't undo it, and an earlier review
+ * of a question it retires can no longer be undone. Take a backup, run it with dryRun first
+ * (`kept` should be the number of IDs you passed), then for real, then with dryRun again
+ * (`retired` should then be 0); add --prod after `run` for production:
+ * `npx convex run internal/migrations:retireLibraryExcept '{"dryRun":true,"keepQuestionIds":["<id>","<id>"]}'`.
+ */
+export const retireLibraryExcept = internalAction({
+	args: { keepQuestionIds: v.array(v.id("questions")), dryRun: v.boolean() },
+	returns: v.object({ ...libraryRetireCounts, retiredIds: v.array(v.id("questions")) }),
+	handler: async (ctx, args) => {
+		const keepQuestionIds = [...new Set(args.keepQuestionIds)];
+		if (keepQuestionIds.length === 0 || keepQuestionIds.length > LIBRARY_RETIRE_MAX_KEPT) {
+			throw new Error(`Pass between 1 and ${LIBRARY_RETIRE_MAX_KEPT} questions to keep. Nothing was changed.`);
+		}
+		const notInLibrary: Id<"questions">[] = await ctx.runQuery(internal.internal.migrations.libraryKeepersNotInLibrary, {
+			keepQuestionIds,
+		});
+		if (notInLibrary.length > 0) {
+			throw new Error(
+				`${notInLibrary.length} of the ${keepQuestionIds.length} questions to keep aren't public library questions on this deployment (${notInLibrary.slice(0, 10).join(", ")}). Nothing was changed.`,
+			);
+		}
+
+		const label = `retireLibraryExcept${args.dryRun ? " (dry run)" : ""}`;
+		const totals = { scanned: 0, publicLibrary: 0, kept: 0, retired: 0 };
+		const countKeys = Object.keys(libraryRetireCounts) as Array<keyof typeof libraryRetireCounts>;
+		const retiredIds: Id<"questions">[] = [];
+		const prunedAt = Date.now();
+		let cursor: string | null = null;
+		for (;;) {
+			const page: Infer<typeof libraryRetirePageResult> = await ctx.runMutation(
+				internal.internal.migrations.retireLibraryExceptPage,
+				{ keepQuestionIds, dryRun: args.dryRun, cursor, prunedAt },
+			);
+			for (const key of countKeys) totals[key] += page[key];
+			retiredIds.push(...page.retiredIds.slice(0, LIBRARY_RETIRE_MAX_REPORTED_IDS - retiredIds.length));
+			if (page.isDone) break;
+			cursor = page.continueCursor;
+		}
+		console.log(`${label} total: ${JSON.stringify(totals)}`);
+		return { ...totals, retiredIds };
 	},
 });
