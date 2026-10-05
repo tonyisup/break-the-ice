@@ -3,7 +3,8 @@
 // Rerunning the same run name retries only the seeds that failed. Commit convex/ and push it to dev
 // (npx convex dev --once) first: --allow-local runs with uncommitted convex/ changes, for trying
 // things out, and marks the run "+local". --model generates with that OpenRouter model (like
-// anthropic/claude-sonnet-5.5) instead of the preset; a run keeps one model throughout.
+// anthropic/claude-sonnet-5.5) instead of the preset. A run keeps one model: a rerun without
+// --model uses the run's own.
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -21,10 +22,17 @@ const CLOCK_SLACK_MS = 60_000;
 
 const USAGE = "Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--allow-local]   (run names: lowercase letters, digits and dashes)";
 const [run, ...flags] = process.argv.slice(2);
-const modelAt = flags.indexOf("--model");
-// null means the deployment's preset.
-const model = modelAt === -1 ? null : flags[modelAt + 1];
-if (!run || !/^[a-z0-9-]+$/.test(run) || model === undefined || model?.startsWith("--")) {
+// Anything else after the run name is refused, so a misplaced or misspelled flag can't quietly
+// start a paid run with the preset.
+let model; // undefined until given; null means the deployment's preset
+let allowLocal = false;
+let badArgs = !run || !/^[a-z0-9][a-z0-9-]*$/.test(run);
+for (let i = 0; i < flags.length && !badArgs; i += 1) {
+  if (flags[i] === "--allow-local") allowLocal = true;
+  else if (flags[i] === "--model" && model === undefined && flags[i + 1] && !flags[i + 1].startsWith("-")) model = flags[++i];
+  else badArgs = true;
+}
+if (badArgs) {
   console.error(USAGE);
   process.exit(1);
 }
@@ -65,10 +73,17 @@ const outPath = join(runDir, "generated.json");
 mkdirSync(runDir, { recursive: true });
 
 const previous = existsSync(outPath) ? JSON.parse(readFileSync(outPath, "utf8")) : null;
-// Runs from before --model existed have no model recorded, and used the preset.
-if (previous && (previous.model ?? null) !== model) {
+// Runs from before --model existed have no model recorded, and used the preset. A run that never
+// reached a model (every seed refused as "setup", such as a misspelled --model) can still switch.
+const previousModel = previous?.model ?? null;
+const reachedModel = Boolean(previous) && (
+  (previous.attempts ?? []).length > 0 ||
+  (previous.batches ?? []).some((batch) => batch.ok || batch.failures.some((failure) => failure.stage !== "setup"))
+);
+if (model === undefined) model = previousModel;
+if (reachedModel && model !== previousModel) {
   const named = (value) => (value ? `--model ${value}` : "the preset");
-  console.error(`Run "${run}" was generated with ${named(previous.model)}, not ${named(model)}. A run keeps one model; start a new run name.`);
+  console.error(`Run "${run}" was generated with ${named(previousModel)}, not ${named(model)}. A run keeps one model; rerun without --model, or start a new run name.`);
   process.exit(1);
 }
 const batches = new Map((previous?.batches ?? []).map((batch) => [batch.seed.id, batch]));
@@ -78,7 +93,7 @@ const todo = pendingSeeds(seeds, batches);
 // settings each batch returns show what actually ran.
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const dirty = Boolean(git("status", "--porcelain", "--", "convex"));
-if (dirty && !flags.includes("--allow-local")) {
+if (dirty && !allowLocal) {
   console.error("convex/ has uncommitted changes, so the run's commit wouldn't say what code ran. Commit and push them, or pass --allow-local.");
   process.exit(1);
 }

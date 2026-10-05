@@ -647,7 +647,7 @@ describe("generateEvalBatch", () => {
     create.mockResolvedValue(completion(questionsJson("Which album would you bring to a desert island?")) as never);
     const base = { runLabel: "test", seedId: "s01", styleSlug: "desert-island", toneSlug: "witty", batchSize: 1, neighbours: 0 };
 
-    for (const model of ["", "claude-sonnet-5.5", "anthropic/claude sonnet", "https://example.com/model"]) {
+    for (const model of ["", "claude-sonnet-5.5", "anthropic/claude sonnet", "https://example.com/model", "anthropic/claude-sonnet-5.5:"]) {
       await expect(t.action(internal.internal.evals.generateEvalBatch, { ...base, model }), model).rejects.toThrow(
         /isn't an OpenRouter model name/,
       );
@@ -656,14 +656,38 @@ describe("generateEvalBatch", () => {
 
     const preset = await t.action(internal.internal.evals.generateEvalBatch, base);
     const sonnet = await t.action(internal.internal.evals.generateEvalBatch, { ...base, model: "anthropic/claude-sonnet-5.5" });
+    // A routing variant is part of the name.
+    const nitro = await t.action(internal.internal.evals.generateEvalBatch, { ...base, model: "anthropic/claude-sonnet-5.5:nitro" });
 
-    expect([preset.model, sonnet.model]).toEqual([GENERATION_MODEL, "anthropic/claude-sonnet-5.5"]);
+    const asked = [GENERATION_MODEL, "anthropic/claude-sonnet-5.5", "anthropic/claude-sonnet-5.5:nitro"];
+    expect([preset.model, sonnet.model, nitro.model]).toEqual(asked);
+    expect(create.mock.calls.map((call: unknown[]) => (call[0] as { model: string }).model)).toEqual(asked);
+    const runs = await t.run((ctx) => ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => run.model)).toEqual(asked);
+  });
+
+  test("a model name that isn't one fails as setup, and a retry of unusable output stays on the model asked for", async () => {
+    const t = await setup();
+    const base = { runLabel: "test", seedId: "s01", styleSlug: "desert-island", toneSlug: "witty", batchSize: 1, neighbours: 0 };
+    const refused = await t.action(internal.internal.evals.generateEvalBatch, { ...base, model: "Claude Sonnet" }).catch((e: unknown) => e);
+    // So generate.mjs records every seed of a mistyped --model as a setup failure, not a generation one.
+    expect(classifyFailure(String(refused))).toBe("setup");
+    create
+      .mockResolvedValueOnce(completion("not json") as never)
+      .mockResolvedValueOnce(completion(questionsJson("Which one book would you bring to a desert island?")) as never);
+
+    const batch = await t.action(internal.internal.evals.generateEvalBatch, { ...base, model: "anthropic/claude-sonnet-5.5" });
+
+    expect(batch.model).toBe("anthropic/claude-sonnet-5.5");
     expect(create.mock.calls.map((call: unknown[]) => (call[0] as { model: string }).model)).toEqual([
-      GENERATION_MODEL,
+      "anthropic/claude-sonnet-5.5",
       "anthropic/claude-sonnet-5.5",
     ]);
     const runs = await t.run((ctx) => ctx.db.query("generationRuns").collect());
-    expect(runs.map((run) => run.model)).toEqual([GENERATION_MODEL, "anthropic/claude-sonnet-5.5"]);
+    expect(runs.map((run) => [run.status, run.model])).toEqual([
+      ["failed", "anthropic/claude-sonnet-5.5"],
+      ["succeeded", "anthropic/claude-sonnet-5.5"],
+    ]);
   });
 
   test("every model call a batch made is on record, including the generator's own retry", async () => {

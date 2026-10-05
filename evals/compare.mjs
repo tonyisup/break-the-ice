@@ -37,6 +37,8 @@ const problems = [
   ...(new Set(runIds).size < runIds.length ? ["a run is listed twice"] : []),
   ...summaries.filter((summary) => (baseline.runIdsHashes ?? []).includes(summary.generator.runIdsHash)).map((summary) => `${summary.run} is one of ${baselineName}'s own runs`),
   ...summaries.filter((summary) => summary.generator.commits.length !== 1).map((summary) => `${summary.run} mixes code versions`),
+  // A preset or router can switch models mid-run, as baseline.mjs also refuses.
+  ...summaries.filter((summary) => summary.generator.resolvedModelSet.length !== 1).map((summary) => `${summary.run} mixes models`),
   ...identityMismatches(summaries, REPLICATE_KEYS).map((key) => `the runs differ in ${key}, so they aren't one setup`),
   ...COMPARABLE_KEYS.filter((key) => JSON.stringify(baseline.identity[key]) !== JSON.stringify(pick(first, key))).map(
     (key) => `${key} differs from ${baselineName}'s (rescore or regenerate the baseline under the same judge, scoring and seeds)`,
@@ -62,7 +64,11 @@ const warnings = [
   ...(changed.includes("generator.model")
     ? [`The runs asked for ${first.generator.model}; ${baselineName} asked for ${baseline.identity["generator.model"]}.`]
     : changed.includes("generator.resolvedModelSet")
-      ? ["The preset resolved to a different model."]
+      ? [
+          first.generator.model?.startsWith("@preset/") === false
+            ? `${first.generator.model} resolved to a different model.`
+            : "The preset resolved to a different model.",
+        ]
       : []),
   ...summaries
     .filter((summary) => JSON.stringify(summary.library.sizes) !== JSON.stringify([baseline.library]))

@@ -1,5 +1,6 @@
 // The eval harness's local Node tooling (evals/*.mjs). Nothing here touches the network: fetch is
-// stubbed, and generate.mjs is only run far enough to hit its guards.
+// stubbed, and generate.mjs is only run far enough to hit its guards, or against a stand-in for
+// `npx convex run`.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -480,6 +481,17 @@ describe("comparison statistics", () => {
     expect(hashOf({ a: 1 })).toBe(hashOf({ a: 1 }));
     expect(hashOf({ a: 1 })).not.toBe(hashOf({ a: 2 }));
   });
+
+  test("every committed baseline records each replicate key, so compare never reads a missing one as a change", () => {
+    const runsDir = join(__dirname, "..", "evals", "runs");
+    const baselines = readdirSync(runsDir).filter((file) => file.endsWith(".json"));
+
+    expect(baselines.length).toBeGreaterThan(0);
+    for (const file of baselines) {
+      const { identity } = JSON.parse(readFileSync(join(runsDir, file), "utf8"));
+      expect(Object.keys(identity).sort(), file).toEqual([...REPLICATE_KEYS].sort());
+    }
+  });
 });
 
 describe("run record", () => {
@@ -645,23 +657,141 @@ describe("scripts", () => {
       expect(result.stderr).toMatch(/was generated at 0ld0ld0 .* Resuming would mix code versions/);
     });
 
-    test("needs a model after --model, and won't resume a run with a different model", () => {
+    test("refuses a missing, empty, repeated or misplaced --model and any unknown argument", () => {
       writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
-      for (const flags of [["--model"], ["--model", "--allow-local"]]) {
-        const result = runScript("generate.mjs", ["guard-test", ...flags]);
-        expect(result.status, flags.join(" ")).toBe(1);
-        expect(result.stderr, flags.join(" ")).toMatch(/Usage: node evals\/generate\.mjs/);
+      const cases = [
+        ["guard-test", "--model"],
+        ["guard-test", "--model", ""],
+        ["guard-test", "--model", "--allow-local"],
+        ["guard-test", "--model=anthropic/claude-sonnet-5.5"],
+        ["guard-test", "--modle", "anthropic/claude-sonnet-5.5"],
+        ["guard-test", "--model", "a/b", "--model", "c/d"],
+        ["guard-test", "extra"],
+        // A flag before the run name would otherwise become the run name.
+        ["--model", "anthropic/claude-sonnet-5.5", "guard-test"],
+      ];
+      for (const args of cases) {
+        const result = runScript("generate.mjs", args);
+        expect(result.status, args.join(" ")).toBe(1);
+        expect(result.stderr, args.join(" ")).toMatch(/Usage: node evals\/generate\.mjs/);
       }
+      expect(existsSync(join(evalsDir, "runs", "guard-test"))).toBe(false);
+      expect(existsSync(join(evalsDir, "runs", "--model"))).toBe(false);
+    });
+
+    test("won't switch the model of a run that has reached one", () => {
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const record = (run: string, model?: string) => ({
+        run,
+        ...(model ? { model } : {}),
+        invocations: [],
+        attempts: [{ runId: "r1", status: "succeeded" }],
+        batches: [],
+      });
       // Runs from before --model have no model recorded, and used the preset.
-      writeRun("preset-run", { "generated.json": { run: "preset-run", invocations: [], attempts: [], batches: [] } });
+      writeRun("preset-run", { "generated.json": record("preset-run") });
       const switched = runScript("generate.mjs", ["preset-run", "--model", "anthropic/claude-sonnet-5.5"]);
       expect(switched.status).toBe(1);
-      expect(switched.stderr).toMatch(/generated with the preset, not --model anthropic\/claude-sonnet-5\.5\. A run keeps one model/);
+      expect(switched.stderr).toMatch(/generated with the preset, not --model anthropic\/claude-sonnet-5\.5\. A run keeps one model; rerun without --model/);
 
-      writeRun("sonnet-run", { "generated.json": { run: "sonnet-run", model: "anthropic/claude-sonnet-5.5", invocations: [], attempts: [], batches: [] } });
-      const dropped = runScript("generate.mjs", ["sonnet-run"]);
-      expect(dropped.status).toBe(1);
-      expect(dropped.stderr).toMatch(/generated with --model anthropic\/claude-sonnet-5\.5, not the preset/);
+      writeRun("sonnet-run", { "generated.json": record("sonnet-run", "anthropic/claude-sonnet-5.5") });
+      const other = runScript("generate.mjs", ["sonnet-run", "--model", "anthropic/claude-opus-5.5"]);
+      expect(other.status).toBe(1);
+      expect(other.stderr).toMatch(/generated with --model anthropic\/claude-sonnet-5\.5, not --model anthropic\/claude-opus-5\.5/);
+    });
+
+    test("sends --model with every batch and records it, a rerun keeps the run's model, and a run that never reached a model can switch", () => {
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd: root });
+      git("init", "-q");
+      git("commit", "-q", "--allow-empty", "-m", "start");
+      writeFileSync(
+        join(evalsDir, "seeds.json"),
+        JSON.stringify({ batchSize: 1, seeds: [{ id: "s01", style: "a", tone: "t" }, { id: "s02", style: "b", tone: "t" }] }),
+      );
+      // A stand-in for `npx convex run` that logs each call and answers as dev would. FAIL_SEED
+      // makes that seed's batch fail, so a rerun has something to resume; a model name with a
+      // space is refused before any model call, as the deployment's name check does.
+      const bin = join(root, "bin");
+      const calls = join(root, "calls.jsonl");
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, "fake-convex.mjs"),
+        `import { appendFileSync, readFileSync } from "node:fs";
+const [, , fn, json] = process.argv.slice(2);
+const args = JSON.parse(json);
+const badModel = /\\s/.test(args.model ?? "");
+const fail = fn === "internal/evals:generateEvalBatch" && (badModel || args.seedId === process.env.FAIL_SEED);
+appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ fn, args, ok: !fail }) + "\\n");
+if (fail) {
+  console.error(badModel ? 'Uncaught ConvexError: {"code":"EVAL_SETUP"}' : "Uncaught Error: Model output could not be read");
+  process.exit(1);
+}
+const generatedRuns = readFileSync(${JSON.stringify(calls)}, "utf8").trim().split("\\n").map((line) => JSON.parse(line))
+  .filter((call) => call.ok && call.fn === "internal/evals:generateEvalBatch" && call.args.runLabel === args.runLabel)
+  .map((call) => ({ runId: "r-" + call.args.runLabel + "-" + call.args.seedId, status: "succeeded" }));
+const answers = {
+  "internal/evals:evalLibraryStats": { publicQuestions: 10, withEmbedding: 10 },
+  "internal/evals:generateEvalBatch": { runId: "r-" + args.runLabel + "-" + args.seedId, model: args.model ?? "@preset/x", candidates: [] },
+  "internal/evalData:evalRunAttempts": generatedRuns,
+};
+console.log(JSON.stringify(answers[fn]));
+`,
+      );
+      writeFileSync(join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, "fake-convex.mjs")}" "$@"\n`, { mode: 0o755 });
+      const PATH = `${bin}:/usr/bin:/bin`;
+      const batchCalls = () =>
+        readFileSync(calls, "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line))
+          .filter((call) => call.fn === "internal/evals:generateEvalBatch")
+          .map((call) => [call.args.seedId, call.args.model]);
+
+      const first = runScript("generate.mjs", ["sonnet-run", "--model", "anthropic/claude-sonnet-5.5"], { PATH, FAIL_SEED: "s02" });
+      expect(first.status, first.stderr).toBe(0);
+      expect(first.stdout).toMatch(/2 of 2 seeds to generate for run "sonnet-run" at \w+ with anthropic\/claude-sonnet-5\.5\./);
+      expect(first.stdout).toMatch(/1 seeds failed; rerun to retry them/);
+
+      // Without --model, a rerun keeps the run's own model.
+      const resumed = runScript("generate.mjs", ["sonnet-run"], { PATH });
+      expect(resumed.status, resumed.stderr).toBe(0);
+      expect(resumed.stdout).toMatch(/1 of 2 seeds to generate .* with anthropic\/claude-sonnet-5\.5\./);
+      expect(resumed.stdout).toMatch(/All seeds generated/);
+      expect(batchCalls().sort()).toEqual([
+        ["s01", "anthropic/claude-sonnet-5.5"],
+        ["s02", "anthropic/claude-sonnet-5.5"],
+        ["s02", "anthropic/claude-sonnet-5.5"],
+      ]);
+      const generated = readRunFile("sonnet-run/generated.json");
+      expect(generated.model).toBe("anthropic/claude-sonnet-5.5");
+      expect(generated.batches.map((batch: { ok: boolean; result: { model: string } }) => [batch.ok, batch.result.model])).toEqual([
+        [true, "anthropic/claude-sonnet-5.5"],
+        [true, "anthropic/claude-sonnet-5.5"],
+      ]);
+
+      // A misspelled model is refused before any model call, so the run can switch to the right one;
+      // once that one has generated, the run keeps it.
+      const typo = runScript("generate.mjs", ["typo-run", "--model", "Claude Sonnet"], { PATH });
+      expect(typo.stdout).toMatch(/2 seeds failed; rerun to retry them/);
+      const fixed = runScript("generate.mjs", ["typo-run", "--model", "anthropic/claude-sonnet-5.5"], { PATH });
+      expect(fixed.status, fixed.stderr).toBe(0);
+      expect(fixed.stdout).toMatch(/All seeds generated/);
+      expect(readRunFile("typo-run/generated.json").model).toBe("anthropic/claude-sonnet-5.5");
+      const switched = runScript("generate.mjs", ["typo-run", "--model", "anthropic/claude-opus-5.5"], { PATH });
+      expect(switched.status).toBe(1);
+      expect(switched.stderr).toMatch(/A run keeps one model; rerun without --model/);
+
+      // Without --model the deployment's preset generates, and the record says so.
+      rmSync(calls);
+      const preset = runScript("generate.mjs", ["preset-run"], { PATH });
+      expect(preset.status, preset.stderr).toBe(0);
+      expect(preset.stdout).toMatch(/with the preset\./);
+      expect(batchCalls().sort()).toEqual([
+        ["s01", undefined],
+        ["s02", undefined],
+      ]);
+      expect(readRunFile("preset-run/generated.json").model).toBeNull();
     });
   });
 
@@ -843,7 +973,7 @@ describe("scripts", () => {
       });
       expect(summary.safety.s_trauma.block).toBe(1);
       expect(summary.judge).toEqual({ model: JEV_MODEL, questionSetHash: QUESTION_SET_HASH, cutoffsHash: CUTOFFS_HASH, scoringVersion: SCORING_VERSION });
-      expect(summary.generator).toMatchObject({ resolvedModelSet: ["m1"], neighbours: 5, batchSize: 3 });
+      expect(summary.generator).toMatchObject({ model: "preset", resolvedModelSet: ["m1"], neighbours: 5, batchSize: 3 });
       expect(summary.library).toMatchObject({ sizes: [{ publicQuestions: 10, withEmbedding: 10 }], questionsChecked: 3 });
     });
 
@@ -978,6 +1108,7 @@ describe("scripts", () => {
       const cases: Array<[Overrides, RegExp]> = [
         [{ generator: { commits: ["abc", "def"] } }, /mixes code versions/],
         [{ generator: { promptSetHash: "other" } }, /generator.promptSetHash differs/],
+        [{ generator: { model: "anthropic/claude-sonnet-5.5" } }, /generator.model differs/],
         [{ generator: { resolvedModelSet: ["m2"] } }, /generator.resolvedModelSet differs/],
         [{ generator: { resolvedModelSet: ["m1", "m2"] } }, /mixes models/],
         [{ batches: { failed: ["s03"] } }, /has failed seeds/],
@@ -1041,6 +1172,42 @@ describe("scripts", () => {
       expect(readRunFile("dupes/comparison-base.json").warnings).toEqual([]);
     });
 
+    test("compare names the model each side asked for, and otherwise says when the preset resolved differently", () => {
+      const preset = { model: "@preset/break-the-ice-berg-default" };
+      baselineOf(["a", 80, { generator: preset }], ["b", 82, { generator: preset }]);
+      writeRun("sonnet", {
+        "summary.json": summary("sonnet", 80, { generator: { model: "anthropic/claude-sonnet-5.5", resolvedModelSet: ["anthropic/claude-sonnet-5.5"] } }),
+      });
+      writeRun("rerouted", { "summary.json": summary("rerouted", 80, { generator: { ...preset, resolvedModelSet: ["m2"] } }) });
+
+      const sonnet = runScript("compare.mjs", ["base", "sonnet"]);
+      expect(sonnet.status, sonnet.stderr).toBe(0);
+      const sonnetResult = readRunFile("sonnet/comparison-base.json");
+      expect(sonnetResult.changed).toEqual(["generator.model", "generator.resolvedModelSet"]);
+      // Asking for another model is why it resolved differently, so that isn't warned about twice.
+      expect(sonnetResult.warnings).toEqual([
+        "The runs asked for anthropic/claude-sonnet-5.5; base asked for @preset/break-the-ice-berg-default.",
+      ]);
+      expect(sonnet.stdout).toMatch(/Changed: generator\.model, generator\.resolvedModelSet/);
+      expect(sonnet.stdout).toMatch(/Warning: The runs asked for anthropic\/claude-sonnet-5\.5; base asked for @preset/);
+
+      const rerouted = runScript("compare.mjs", ["base", "rerouted"]);
+      expect(rerouted.status, rerouted.stderr).toBe(0);
+      const reroutedResult = readRunFile("rerouted/comparison-base.json");
+      expect(reroutedResult.changed).toEqual(["generator.resolvedModelSet"]);
+      expect(reroutedResult.warnings).toEqual(["The preset resolved to a different model."]);
+    });
+
+    test("compare names a model that resolved differently without blaming the preset", () => {
+      const sonnet = { model: "anthropic/claude-sonnet-5.5", resolvedModelSet: ["anthropic/claude-sonnet-5.5"] };
+      baselineOf(["a", 80, { generator: sonnet }], ["b", 82, { generator: sonnet }]);
+      writeRun("later", { "summary.json": summary("later", 80, { generator: { ...sonnet, resolvedModelSet: ["anthropic/claude-sonnet-5.5-20261101"] } }) });
+
+      const later = runScript("compare.mjs", ["base", "later"]);
+      expect(later.status, later.stderr).toBe(0);
+      expect(readRunFile("later/comparison-base.json").warnings).toEqual(["anthropic/claude-sonnet-5.5 resolved to a different model."]);
+    });
+
     test("compare refuses runs it can't fairly compare", () => {
       baselineOf(["a", 80], ["b", 82]);
       const cases: Array<[string[], Overrides[], RegExp]> = [
@@ -1048,6 +1215,8 @@ describe("scripts", () => {
         [["rescored"], [{ judge: { scoringVersion: SCORING_VERSION + 1 } }], /judge.scoringVersion differs/],
         [["failed"], [{ batches: { failed: ["s03"] } }], /failed has failed seeds/],
         [["m1", "m2"], [{}, { generator: { promptSetHash: "other" } }], /aren't one setup/],
+        [["p1", "s1"], [{}, { generator: { model: "anthropic/claude-sonnet-5.5" } }], /the runs differ in generator.model, so they aren't one setup/],
+        [["mixed"], [{ generator: { resolvedModelSet: ["m1", "m2"] } }], /mixed mixes models/],
         [["c1", "c2"], [{}, { generator: { runIdsHash: "ids-c1" } }], /a run is listed twice/],
         [["a"], [{}], /a is one of base's own runs/],
         [["mixed"], [{ generator: { commits: ["abc", "def"] } }], /mixed mixes code versions/],

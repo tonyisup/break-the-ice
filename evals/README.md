@@ -6,8 +6,9 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
 - `seeds.json`: the fixed inputs (20 batches of 5: every style active on both dev and production,
   tones stepped through, a topic on every other batch). Don't edit it; later runs compare on it.
 - `generate.mjs <run> [--model <openrouter-model>]`: runs each seed through today's prompt builder
-  and the preset model (or the one given) on the **dev** deployment (`internal/evals:generateEvalBatch`, run like an admin preview, so nothing is added
-  to the library). Records what the save step would do with each question (code checks, exact
+  and the preset model (or the one given) on the **dev** deployment
+  (`internal/evals:generateEvalBatch`, run like an admin preview, so nothing is added to the
+  library). Records what the save step would do with each question (code checks, exact
   duplicates), its 5 nearest public library questions by embedding, a hash of the prompt, the
   library's size, and every model call dev recorded for the run (including the generator's own
   retries). Rerun to retry failed seeds; failed attempts stay in the record.
@@ -18,7 +19,7 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
   (not committed), so a rescore is free.
 - `baseline.mjs <name> <run>...`: pools replicate runs of one setup into a baseline (each rate's
   counts added up, with a 95% interval). Refuses runs that aren't replicates: a different judge,
-  cutoffs, seeds, prompts, definitions or library, or failed seeds.
+  cutoffs, seeds, prompts, definitions, model or library, or failed seeds.
 - `compare.mjs <baseline> <run>...`: tests one or more runs of a changed setup against a baseline
   (see below).
 - `jev.mjs`: the Jev questions and cutoffs. The judge is pinned (`JEV_MODEL`), and summaries
@@ -41,9 +42,10 @@ node evals/baseline.mjs v0-3-2 v0-3-2-r1 v0-3-2-r2 v0-3-2-r3
 ```
 
 To try another generation model, name it with `--model` (an OpenRouter model, like
-`anthropic/claude-sonnet-5.5`), then score and compare as usual. A run keeps one model, so
-resuming it with a different `--model` is refused, and runs that asked for different models
-aren't replicates. `compare.mjs` reports the model change.
+`anthropic/claude-sonnet-5.5`), then score and compare as usual. Don't try one by repointing the
+OpenRouter preset: production generates with that preset too. A run keeps one model, so a rerun
+without `--model` uses the run's own, a different `--model` is refused, and runs that asked for
+different models aren't replicates. `compare.mjs` reports the model change.
 
 ```bash
 node evals/generate.mjs sonnet-5-5-r1 --model anthropic/claude-sonnet-5.5
@@ -75,8 +77,9 @@ the fingerprints that the personal, team and organization questions it changes s
 (`fingerprintsCleared`), which can change the library duplicate rate without changing the library
 size, as above.
 
-A run costs about $0.15 of generation on dev (charged to the dev deployment's system AI budget)
-and about $0.05 of Jev.
+A run with the preset costs about $0.12 of generation on dev (charged to the dev deployment's
+system AI budget) and about $0.05 of Jev. Other models cost more: in Oct 2026 a run cost about
+$0.14 on Sonnet 5.5 and $0.46 on Opus 5.5.
 
 ## Reading the numbers
 
@@ -96,8 +99,12 @@ and about $0.05 of Jev.
 - A comparison refuses runs judged with a different Jev version, question wording, cutoffs or
   scoring version, on different seeds or neighbour counts, or with failed seeds: rescore or
   regenerate the baseline first. It reports what else changed (prompts, taxonomy, definitions,
-  resolved model, deployed settings, library). When definitions changed, pass and review are
-  decided without the fit questions, which are then graded against different text.
+  the model asked for and what it resolved to, deployed settings, library). When definitions
+  changed, pass and review are decided without the fit questions, which are then graded against
+  different text.
+- The output cap's reasoning allowance was sized for Gemini 3.8 Flash. A model that reasons
+  longer gets cut off more often, so for a `--model` run the unusable-output and yield rates
+  partly measure fit to that cap; cut-offs show as `finish_reason=length` in the run's attempts.
 - The regime is the admin preview path with a batch of 5 and no per-person exclusion list. The
   feed usually asks for 1 question and excludes recently seen ones.
 - Library duplicates are counted against dev's library, which is smaller than production's and
@@ -105,7 +112,7 @@ and about $0.05 of Jev.
 - Sentence frames are informational: the pooled share mostly reflects styles that require their
   opener, and the cross-style share swings a lot between replicates.
 - `baseline.mjs` and `compare.mjs` refuse a run listed twice, a compare run that is one of the
-  baseline's own, and a run generated at more than one commit (resuming at a new commit is
-  refused too: use a new run name).
+  baseline's own, a run generated at more than one commit (resuming at a new commit is refused
+  too: use a new run name), and a run whose calls resolved to more than one model.
 - The repo is public. `generated.json` keeps provider and CLI error text from failed calls word
   for word; check it before committing a run that had failures.

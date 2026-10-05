@@ -20,8 +20,8 @@ const DEFAULT_NEIGHBOURS = 5;
 // and widen to vectorSearch's maximum when held-for-review questions crowd the public ones out.
 const NEIGHBOUR_SEARCH_LIMITS = [40, 256];
 const MAX_NEIGHBOURS = NEIGHBOUR_SEARCH_LIMITS[NEIGHBOUR_SEARCH_LIMITS.length - 1];
-/** An OpenRouter preset or model name, like "anthropic/claude-sonnet-5.5". */
-const OPENROUTER_MODEL = /^(@preset\/[a-z0-9-]+|[a-z0-9-]+\/[a-z0-9.-]+)$/;
+/** An OpenRouter preset or model name, like "anthropic/claude-sonnet-5.5", with an optional variant like ":nitro". */
+const OPENROUTER_MODEL = /^(@preset\/[a-z0-9-]+|[a-z0-9-]+\/[a-z0-9.-]+(:[a-z0-9-]+)?)$/;
 
 function assertWhole(name: string, value: number, min: number, max: number): void {
   if (!Number.isInteger(value) || value < min || value > max) {
@@ -96,9 +96,9 @@ async function nearestLibraryQuestions(ctx: ActionCtx, text: string, count: numb
 
 /**
  * One eval batch: today's prompt builder with the preset model (or the model given), run like an
- * admin preview so nothing is added to the library. Returns each question with what the save step would have done with it
- * and its nearest library questions, for the harness in `evals/` to score. Runs only where
- * EVALS_ENABLED is set (dev).
+ * admin preview so nothing is added to the library. Returns each question with what the save
+ * step would have done with it and its nearest library questions, for the harness in `evals/` to
+ * score. Runs only where EVALS_ENABLED is set (dev).
  */
 export const generateEvalBatch = internalAction({
   args: {
@@ -123,6 +123,7 @@ export const generateEvalBatch = internalAction({
     assertWhole("batchSize", args.batchSize, 1, MAX_BATCH_SIZE);
     const neighbourCount = args.neighbours ?? DEFAULT_NEIGHBOURS;
     assertWhole("neighbours", neighbourCount, 0, MAX_NEIGHBOURS);
+    // gstack-shortcut(dec-6f390dcf-d794-46ba-887f-dd13edb5e9c0): a named model keeps the flat per-call spend reservation, upgrade when reservation sizing is revisited.
     const model = args.model ?? GENERATION_MODEL;
     if (!OPENROUTER_MODEL.test(model)) {
       throw new ConvexError({ code: "EVAL_SETUP", message: `"${model}" isn't an OpenRouter model name like "anthropic/claude-sonnet-5.5".` });
