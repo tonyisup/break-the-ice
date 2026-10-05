@@ -5,8 +5,8 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
 
 - `seeds.json`: the fixed inputs (20 batches of 5: every style active on both dev and production,
   tones stepped through, a topic on every other batch). Don't edit it; later runs compare on it.
-- `generate.mjs <run>`: runs each seed through today's prompt builder and model on the **dev**
-  deployment (`internal/evals:generateEvalBatch`, run like an admin preview, so nothing is added
+- `generate.mjs <run> [--model <openrouter-model>]`: runs each seed through today's prompt builder
+  and the preset model (or the one given) on the **dev** deployment (`internal/evals:generateEvalBatch`, run like an admin preview, so nothing is added
   to the library). Records what the save step would do with each question (code checks, exact
   duplicates), its 5 nearest public library questions by embedding, a hash of the prompt, the
   library's size, and every model call dev recorded for the run (including the generator's own
@@ -38,6 +38,17 @@ npx convex dev --once
 node evals/generate.mjs v0-3-2-r1
 node evals/score.mjs v0-3-2-r1
 node evals/baseline.mjs v0-3-2 v0-3-2-r1 v0-3-2-r2 v0-3-2-r3
+```
+
+To try another generation model, name it with `--model` (an OpenRouter model, like
+`anthropic/claude-sonnet-5.5`), then score and compare as usual. A run keeps one model, so
+resuming it with a different `--model` is refused, and runs that asked for different models
+aren't replicates. `compare.mjs` reports the model change.
+
+```bash
+node evals/generate.mjs sonnet-5-5-r1 --model anthropic/claude-sonnet-5.5
+node evals/score.mjs sonnet-5-5-r1
+node evals/compare.mjs v0-3-2 sonnet-5-5-r1
 ```
 
 Exact library copies are matched on each question's stored fingerprint. After a change to how

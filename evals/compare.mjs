@@ -59,7 +59,11 @@ const warnings = [
   ...(Object.keys(substitutions).length
     ? ["Style, tone or topic definitions changed: passRate and reviewRate are decided without the fit questions."]
     : []),
-  ...(changed.includes("generator.resolvedModelSet") ? ["The preset resolved to a different model."] : []),
+  ...(changed.includes("generator.model")
+    ? [`The runs asked for ${first.generator.model}; ${baselineName} asked for ${baseline.identity["generator.model"]}.`]
+    : changed.includes("generator.resolvedModelSet")
+      ? ["The preset resolved to a different model."]
+      : []),
   ...summaries
     .filter((summary) => JSON.stringify(summary.library.sizes) !== JSON.stringify([baseline.library]))
     .map((summary) => `${summary.run} searched a different library, so library duplicate rates aren't like for like.`),

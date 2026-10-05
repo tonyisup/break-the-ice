@@ -505,6 +505,8 @@ export async function runPreviewQuestionGeneration(
     batchSize?: number;
     /** "system" for admin tools; team previews are user spend. */
     spendClass?: SpendClass;
+    /** An OpenRouter model to use instead of the preset. Only the eval harness sets it. */
+    model?: string;
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -516,6 +518,7 @@ export async function runPreviewQuestionGeneration(
   const spendClass = args.spendClass ?? "user";
   await ensureAiBudget(ctx, spendClass);
 
+  const model = args.model ?? GENERATION_MODEL;
   const temperature = args.temperature ?? 0.85;
   const prompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
     styleId: args.styleId,
@@ -538,13 +541,13 @@ export async function runPreviewQuestionGeneration(
       purpose: "admin_preview",
       requestedByUserId: args.requestedByUserId,
       prompt,
-      model: GENERATION_MODEL,
+      model,
       temperature,
     });
 
     try {
       const completion = await createChatCompletionWithRetry(ctx, { spendClass, runId }, {
-        model: GENERATION_MODEL,
+        model,
         temperature,
         max_tokens: maxOutputTokens(prompt.batchSize),
         response_format: { type: "json_object" },

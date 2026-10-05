@@ -9,7 +9,7 @@ import { spendDay } from "./lib/aiSpend";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "./lib/promptArchitecture";
 import { checkEvalCandidates, evalFingerprint } from "./lib/evalChecks";
 import { classifyFailure } from "../evals/runRecord.mjs";
-import { openRouterClient } from "./lib/generationRunner";
+import { GENERATION_MODEL, openRouterClient } from "./lib/generationRunner";
 
 let create: ReturnType<typeof vi.spyOn>;
 
@@ -640,6 +640,30 @@ describe("generateEvalBatch", () => {
       );
     }
     expect(create).not.toHaveBeenCalled();
+  });
+
+  test("generates with the preset unless given another OpenRouter model, and refuses a name that isn't one", async () => {
+    const t = await setup();
+    create.mockResolvedValue(completion(questionsJson("Which album would you bring to a desert island?")) as never);
+    const base = { runLabel: "test", seedId: "s01", styleSlug: "desert-island", toneSlug: "witty", batchSize: 1, neighbours: 0 };
+
+    for (const model of ["", "claude-sonnet-5.5", "anthropic/claude sonnet", "https://example.com/model"]) {
+      await expect(t.action(internal.internal.evals.generateEvalBatch, { ...base, model }), model).rejects.toThrow(
+        /isn't an OpenRouter model name/,
+      );
+    }
+    expect(create).not.toHaveBeenCalled();
+
+    const preset = await t.action(internal.internal.evals.generateEvalBatch, base);
+    const sonnet = await t.action(internal.internal.evals.generateEvalBatch, { ...base, model: "anthropic/claude-sonnet-5.5" });
+
+    expect([preset.model, sonnet.model]).toEqual([GENERATION_MODEL, "anthropic/claude-sonnet-5.5"]);
+    expect(create.mock.calls.map((call: unknown[]) => (call[0] as { model: string }).model)).toEqual([
+      GENERATION_MODEL,
+      "anthropic/claude-sonnet-5.5",
+    ]);
+    const runs = await t.run((ctx) => ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => run.model)).toEqual([GENERATION_MODEL, "anthropic/claude-sonnet-5.5"]);
   });
 
   test("every model call a batch made is on record, including the generator's own retry", async () => {

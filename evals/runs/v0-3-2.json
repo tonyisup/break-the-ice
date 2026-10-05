@@ -19,6 +19,7 @@
     "generator.temperatures": [
       0.9
     ],
+    "generator.model": "@preset/break-the-ice-berg-default",
     "generator.resolvedModelSet": [
       "google/gemini-3.8-flash"
     ],

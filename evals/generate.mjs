@@ -1,8 +1,9 @@
 // Generates the eval's questions on the dev deployment, one batch per seed, without saving them to
-// the library. Usage: node evals/generate.mjs <run-name> [--allow-local]
+// the library. Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--allow-local]
 // Rerunning the same run name retries only the seeds that failed. Commit convex/ and push it to dev
 // (npx convex dev --once) first: --allow-local runs with uncommitted convex/ changes, for trying
-// things out, and marks the run "+local".
+// things out, and marks the run "+local". --model generates with that OpenRouter model (like
+// anthropic/claude-sonnet-5.5) instead of the preset; a run keeps one model throughout.
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -18,9 +19,13 @@ const GENERATION_CONCURRENCY = 2;
 // slack on each side (the run label keeps other runs out).
 const CLOCK_SLACK_MS = 60_000;
 
+const USAGE = "Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--allow-local]   (run names: lowercase letters, digits and dashes)";
 const [run, ...flags] = process.argv.slice(2);
-if (!run || !/^[a-z0-9-]+$/.test(run)) {
-  console.error("Usage: node evals/generate.mjs <run-name>   (lowercase letters, digits and dashes)");
+const modelAt = flags.indexOf("--model");
+// null means the deployment's preset.
+const model = modelAt === -1 ? null : flags[modelAt + 1];
+if (!run || !/^[a-z0-9-]+$/.test(run) || model === undefined || model?.startsWith("--")) {
+  console.error(USAGE);
   process.exit(1);
 }
 const here = dirname(fileURLToPath(import.meta.url));
@@ -60,6 +65,12 @@ const outPath = join(runDir, "generated.json");
 mkdirSync(runDir, { recursive: true });
 
 const previous = existsSync(outPath) ? JSON.parse(readFileSync(outPath, "utf8")) : null;
+// Runs from before --model existed have no model recorded, and used the preset.
+if (previous && (previous.model ?? null) !== model) {
+  const named = (value) => (value ? `--model ${value}` : "the preset");
+  console.error(`Run "${run}" was generated with ${named(previous.model)}, not ${named(model)}. A run keeps one model; start a new run name.`);
+  process.exit(1);
+}
 const batches = new Map((previous?.batches ?? []).map((batch) => [batch.seed.id, batch]));
 const todo = pendingSeeds(seeds, batches);
 
@@ -88,7 +99,7 @@ async function convexRun(fn, args) {
 const invocations = previous?.invocations ?? [];
 let attempts = previous?.attempts ?? [];
 function save() {
-  writeJson(outPath, { run, deployment: "dev", createdAt: previous?.createdAt ?? new Date().toISOString(), batchSize, invocations, attempts, batches: orderedBatches(seeds, batches) });
+  writeJson(outPath, { run, deployment: "dev", createdAt: previous?.createdAt ?? new Date().toISOString(), model, batchSize, invocations, attempts, batches: orderedBatches(seeds, batches) });
 }
 
 /**
@@ -123,7 +134,7 @@ if (todo.length) {
   // Saved before any model call, so an interrupted run still knows when its calls started.
   save();
   invocation.library = await convexRun("internal/evals:evalLibraryStats", {});
-  console.log(`${todo.length} of ${seeds.length} seeds to generate for run "${run}" at ${commit}.`);
+  console.log(`${todo.length} of ${seeds.length} seeds to generate for run "${run}" at ${commit} with ${model ?? "the preset"}.`);
   await mapLimit(todo, GENERATION_CONCURRENCY, async (seed) => {
     const args = {
       runLabel: run,
@@ -132,6 +143,7 @@ if (todo.length) {
       toneSlug: seed.tone,
       batchSize,
       ...(seed.topic ? { topicSlug: seed.topic } : {}),
+      ...(model ? { model } : {}),
     };
     try {
       const result = await convexRun("internal/evals:generateEvalBatch", args);

@@ -473,6 +473,10 @@ describe("comparison statistics", () => {
     expect(identityMismatches([base, base], REPLICATE_KEYS)).toEqual([]);
     expect(identityMismatches([base, changedPrompt], REPLICATE_KEYS)).toEqual(["generator.promptSetHash"]);
     expect(identityMismatches([base, changedPrompt], COMPARABLE_KEYS)).toEqual([]);
+    // A different model is a different setup, but still compared on the same measuring stick.
+    const otherModel = { ...base, generator: { ...base.generator, model: "anthropic/claude-sonnet-5.5" } };
+    expect(identityMismatches([base, otherModel], REPLICATE_KEYS)).toEqual(["generator.model"]);
+    expect(identityMismatches([base, otherModel], COMPARABLE_KEYS)).toEqual([]);
     expect(hashOf({ a: 1 })).toBe(hashOf({ a: 1 }));
     expect(hashOf({ a: 1 })).not.toBe(hashOf({ a: 2 }));
   });
@@ -639,6 +643,25 @@ describe("scripts", () => {
       const result = runScript("generate.mjs", ["resumed"], { PATH: "/usr/bin:/bin" });
       expect(result.status).toBe(1);
       expect(result.stderr).toMatch(/was generated at 0ld0ld0 .* Resuming would mix code versions/);
+    });
+
+    test("needs a model after --model, and won't resume a run with a different model", () => {
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      for (const flags of [["--model"], ["--model", "--allow-local"]]) {
+        const result = runScript("generate.mjs", ["guard-test", ...flags]);
+        expect(result.status, flags.join(" ")).toBe(1);
+        expect(result.stderr, flags.join(" ")).toMatch(/Usage: node evals\/generate\.mjs/);
+      }
+      // Runs from before --model have no model recorded, and used the preset.
+      writeRun("preset-run", { "generated.json": { run: "preset-run", invocations: [], attempts: [], batches: [] } });
+      const switched = runScript("generate.mjs", ["preset-run", "--model", "anthropic/claude-sonnet-5.5"]);
+      expect(switched.status).toBe(1);
+      expect(switched.stderr).toMatch(/generated with the preset, not --model anthropic\/claude-sonnet-5\.5\. A run keeps one model/);
+
+      writeRun("sonnet-run", { "generated.json": { run: "sonnet-run", model: "anthropic/claude-sonnet-5.5", invocations: [], attempts: [], batches: [] } });
+      const dropped = runScript("generate.mjs", ["sonnet-run"]);
+      expect(dropped.status).toBe(1);
+      expect(dropped.stderr).toMatch(/generated with --model anthropic\/claude-sonnet-5\.5, not the preset/);
     });
   });
 
