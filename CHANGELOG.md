@@ -2,6 +2,17 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.4.10.0] - 2026-10-05
+
+### Fixed
+- Each request to the AI provider is sent once per attempt. The provider client no longer re-sends a failed or timed-out request by itself behind the app's own retry, so a rate limit, a 5xx or a dropped connection gets at most three sends where it could get nine.
+- A generation call that times out, or whose reply can't be parsed, now counts toward the daily AI budget at the $0.02 set aside for it. The person's own AI use is still given back, because they got nothing.
+
+### Changed
+- A call that times out isn't sent again. Someone waiting on a slow provider gets the failure after about 30 seconds instead of up to 90. The daily email no longer retries a timed-out generation, so a reader whose call stalls gets no email that day.
+- A matrix fill and the nightly pool stop at the first call that times out or can't be parsed, the way they already stop when the budget is paused, instead of trying every remaining cell. Cells already filled stay saved.
+- When the provider asks for a wait before a retry (`Retry-After`, in seconds or as a date), the app waits up to 20 seconds. A longer wait ends the retries, so the request fails promptly instead of holding its job open.
+
 ## [0.4.9.0] - 2026-10-05
 
 ### Added
