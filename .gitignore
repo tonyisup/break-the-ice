@@ -74,3 +74,4 @@ dist-ssr
 
 # eval harness: Jev response cache (rerun without paying again)
 evals/runs/*/jev-cache.jsonl
+evals/runs/*/.lock
