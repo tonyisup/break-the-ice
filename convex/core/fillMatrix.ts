@@ -5,7 +5,7 @@ import { action, type ActionCtx } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration } from "../lib/generationRunner";
-import { ensureAiRateLimit, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
+import { ensureAiRateLimit, ensureAiUnansweredLeft, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
 import { ensureAiBudget, keptAiReservation } from "../lib/aiSpendGuard";
 
 async function pickRandomActiveTopicSlug(ctx: ActionCtx): Promise<string> {
@@ -182,6 +182,9 @@ export const fillEmptyCells = action({
 
 			try {
 				await ensureAiBudget(ctx, "user");
+				// Before the organization's token, so a fill refused for the person's own
+				// limit costs the team nothing.
+				await ensureAiUnansweredLeft(ctx);
 				await ensureAiRateLimit(ctx, { name: "matrixFillCell", key: args.organizationId });
 				const result = await runPersistedQuestionGeneration(ctx, {
 					purpose: "feed",
@@ -293,6 +296,7 @@ export const fillSingleCell = action({
 			const clampedCount = Math.max(MIN_COUNT, Math.min(args.count ?? 1, MAX_COUNT_PER_CELL));
 
 			await ensureAiBudget(ctx, "user");
+			await ensureAiUnansweredLeft(ctx);
 			await ensureAiRateLimit(ctx, { name: "matrixFillCell", key: args.organizationId });
 
 			const result = await runPersistedQuestionGeneration(ctx, {

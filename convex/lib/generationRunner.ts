@@ -11,7 +11,9 @@ import {
 import { callReserveUsd, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
+import { holdAiUnanswered, releaseAiUnanswered } from "./aiRateLimit";
 import {
+  type AiReservation,
   billedFailure,
   ensureAiBudget,
   keepAiReservation,
@@ -191,7 +193,11 @@ export function maxOutputTokens(batchSize: number): number {
 // the cap at that estimate), then settles it to the real cost on success or releases it when
 // the provider refused the call or was never reached. A call that may have been billed
 // without reporting a cost (it timed out, or its response couldn't be parsed) keeps its
-// reservation as its charge and isn't sent again.
+// reservation as its charge and isn't sent again. A signed-in person's user-spend attempt also
+// holds one of their unanswered-call slots (lib/aiRateLimit.ts) while its reservation is open,
+// on the same spend day. The slot is given back when the attempt is answered in full or its
+// reservation is released. It stays held when the attempt keeps its reservation or its answer
+// is cut off by the output cap: both are charged while the person's plan use is given back.
 async function createChatCompletionWithRetry(
   ctx: ActionCtx,
   spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
@@ -212,7 +218,14 @@ async function createChatCompletionWithRetry(
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const reservation = await reserveAiSpend(ctx, spend.spendClass, reserveUsd);
+    const slot = await holdAiUnanswered(ctx, spend.spendClass);
+    let reservation: AiReservation;
+    try {
+      reservation = await reserveAiSpend(ctx, spend.spendClass, reserveUsd, slot?.day);
+    } catch (error) {
+      await releaseAiUnanswered(ctx, slot);
+      throw error;
+    }
     let completion: OpenAI.Chat.Completions.ChatCompletion;
     try {
       completion = await openRouterClient.chat.completions.create(params);
@@ -231,6 +244,7 @@ async function createChatCompletionWithRetry(
         await keepAiReservation(ctx, reservation, lastError);
       } else {
         await releaseAiReservation(ctx, reservation);
+        await releaseAiUnanswered(ctx, slot);
       }
 
       const retryDelayMs = shouldRetryOpenRouterError(error) ? getOpenRouterRetryDelayMs(error, attempt) : null;
@@ -242,6 +256,7 @@ async function createChatCompletionWithRetry(
       continue;
     }
     await settleAiCompletion(ctx, reservation, spend.runId, completion);
+    if (!wasCutOff(completion)) await releaseAiUnanswered(ctx, slot);
     return completion;
   }
 
