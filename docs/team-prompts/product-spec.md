@@ -134,8 +134,9 @@ The preview action:
 6. Returns exactly three distinct persistable candidates without adding them to
    the public question pool.
 
-Failed provider calls release the reserved usage unit, unless the provider
-already charged for the call.
+Failed provider calls release the reserved usage unit, unless an answer was paid
+for. A call that times out, or whose response can't be parsed, releases the unit
+too; its reservation stays on the daily AI budget.
 
 The chosen candidate is persisted only when the manager assigns it.
 

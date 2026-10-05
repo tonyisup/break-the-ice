@@ -1,6 +1,6 @@
 "use node";
 
-import OpenAI, { APIError } from "openai";
+import OpenAI, { APIConnectionError, APIConnectionTimeoutError, APIError, OpenAIError } from "openai";
 import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
@@ -14,6 +14,7 @@ import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 import {
   billedFailure,
   ensureAiBudget,
+  keepAiReservation,
   releaseAiReservation,
   reserveAiSpend,
   settleAiCompletion,
@@ -42,6 +43,9 @@ export const openRouterClient = new OpenAI({
   apiKey: OPEN_ROUTER_API_KEY,
   // gstack-shortcut(dec-da9ce3c3-49b9-4c2e-b9c6-2948f4f723a6): timeout sizing deferred, upgrade when large batches time out.
   timeout: 30000,
+  // The SDK would otherwise re-send a failed or timed-out request twice by itself, all under
+  // one spend reservation. createChatCompletionWithRetry retries instead, reserving per send.
+  maxRetries: 0,
   defaultHeaders: {
     "HTTP-Referer": "https://breaktheiceberg.com",
     "X-Title": "Break the ice(berg)",
@@ -70,20 +74,46 @@ function getOpenRouterMaxAttempts(): number {
   );
 }
 
+/**
+ * Whether a failed call keeps its reservation as its charge, because the provider may have run
+ * and billed it without reporting a cost: our timeout fired while it was working, or a response
+ * arrived that the SDK couldn't parse. A refusal (an HTTP error status), a dropped connection
+ * and the SDK's own argument errors give the reservation back. Anything that isn't one of the
+ * SDK's errors is taken for an unparseable response, so an unexpected error is charged rather
+ * than missed.
+ */
+function keepsItsReservation(error: unknown): boolean {
+  return error instanceof APIConnectionTimeoutError || !(error instanceof OpenAIError);
+}
+
 function shouldRetryOpenRouterError(error: unknown): boolean {
+  // A call that may already be billed isn't sent again: a second send is a second charge, and
+  // a call that needed longer than the timeout will likely need it again.
+  if (keepsItsReservation(error)) {
+    return false;
+  }
+
+  // The connection dropped before any response. These carry no status, and with the SDK's
+  // own retries off this is the only place they get another try.
+  if (error instanceof APIConnectionError) {
+    return true;
+  }
+
   if (error instanceof APIError) {
     const status = error.status;
     return status === 408 || status === 429 || (status !== undefined && status >= 500);
   }
 
-  if (error instanceof Error) {
-    return /\b(408|429|5\d{2})\b/.test(error.message);
-  }
-
   return false;
 }
 
-function getOpenRouterRetryDelayMs(error: unknown, attempt: number): number {
+// The longest the loop waits before a retry. When the provider's Retry-After asks for longer,
+// the call isn't retried: sleeping that long would hold the action past its time limit, where
+// the caller's cleanup never runs, and a retry sent sooner would only be refused again.
+const MAX_RETRY_DELAY_MS = 20_000;
+
+/** How long to wait before the next attempt, or null when the provider asks for longer than that. */
+function getOpenRouterRetryDelayMs(error: unknown, attempt: number): number | null {
   const baseDelayMs = 300 * attempt;
 
   if (!(error instanceof APIError)) {
@@ -102,12 +132,20 @@ function getOpenRouterRetryDelayMs(error: unknown, attempt: number): number {
     return baseDelayMs;
   }
 
+  // Retry-After is a number of seconds or an HTTP date.
   const retryAfterSeconds = Number.parseInt(retryAfter, 10);
-  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+  const retryAfterMs = Number.isFinite(retryAfterSeconds)
+    ? retryAfterSeconds * 1000
+    : Date.parse(retryAfter) - Date.now();
+  if (!Number.isFinite(retryAfterMs) || retryAfterMs <= 0) {
     return baseDelayMs;
   }
 
-  return Math.max(baseDelayMs, retryAfterSeconds * 1000);
+  if (retryAfterMs > MAX_RETRY_DELAY_MS) {
+    return null;
+  }
+
+  return Math.max(baseDelayMs, retryAfterMs);
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -141,7 +179,9 @@ export function maxOutputTokens(batchSize: number): number {
 // Callers check the budget with ensureAiBudget before creating their run. Here each
 // provider attempt reserves its estimated cost atomically (so a retry after backoff is
 // checked against the budget again), then settles it to the real cost on success or
-// releases it on failure.
+// releases it when the provider refused the call or was never reached. A call that may have
+// been billed without reporting a cost (it timed out, or its response couldn't be parsed)
+// keeps its reservation as its charge and isn't sent again.
 async function createChatCompletionWithRetry(
   ctx: ActionCtx,
   spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
@@ -162,15 +202,29 @@ async function createChatCompletionWithRetry(
     let completion: OpenAI.Chat.Completions.ChatCompletion;
     try {
       completion = await openRouterClient.chat.completions.create(params);
+      // A reply that isn't a completion object at all (a 204 or `null`, or a body the SDK hands
+      // back as text because it wasn't JSON) is handled below like any other response that
+      // couldn't be parsed.
+      if (completion === null || typeof completion !== "object" || Array.isArray(completion)) {
+        throw new TypeError("AI provider returned no completion");
+      }
     } catch (error) {
-      await releaseAiReservation(ctx, reservation);
       lastError = error instanceof Error ? error : new Error(String(error));
+      if (keepsItsReservation(error)) {
+        console.warn(
+          `Keeping the ${spend.spendClass} spend reservation for run ${spend.runId}: no usable answer (${lastError.message})`,
+        );
+        await keepAiReservation(ctx, reservation, lastError);
+      } else {
+        await releaseAiReservation(ctx, reservation);
+      }
 
-      if (attempt >= maxAttempts || !shouldRetryOpenRouterError(error)) {
+      const retryDelayMs = shouldRetryOpenRouterError(error) ? getOpenRouterRetryDelayMs(error, attempt) : null;
+      if (attempt >= maxAttempts || retryDelayMs === null) {
         throw lastError;
       }
 
-      await sleep(getOpenRouterRetryDelayMs(error, attempt));
+      await sleep(retryDelayMs);
       continue;
     }
     await settleAiCompletion(ctx, reservation, spend.runId, completion);
@@ -230,7 +284,8 @@ export const UNUSABLE_OUTPUT_ATTEMPTS = 2;
  * Runs `attempt` once more when the model's answer couldn't be used, unless our output cap
  * cut it off. Each attempt creates and closes its own run, so every run's cost is still
  * settled exactly once. Provider errors aren't retried here: createChatCompletionWithRetry
- * already retries timeouts, 429s and 5xx, and a 400 won't get better on a second try. The
+ * already retries dropped connections, 429s and 5xx, a timeout isn't sent again because it
+ * may still be billed, and a 400 won't get better on a second try. The
  * final error is marked billed when any attempt was paid for in full.
  */
 async function retryUnusableOutput<T>(attempt: (markBilled: () => void) => Promise<T>): Promise<T> {

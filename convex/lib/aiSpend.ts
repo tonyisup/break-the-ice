@@ -1,5 +1,6 @@
 // Daily AI spend cap. Every chat completion is checked against today's spend
-// before it runs and recorded with its real cost after it returns.
+// before it runs and recorded with its real cost after it returns. A call that may
+// have been billed without reporting a cost is recorded at the amount reserved for it.
 //
 // "user" spend is anything a signed-in user can trigger (feed generation, remix,
 // matrix fill, team previews). "system" spend is the daily email and admin tools,
@@ -14,7 +15,8 @@ export const DEFAULT_DAILY_BUDGET_USD = 1;
 export const DEFAULT_DAILY_HARD_CAP_USD = 5;
 // Charged when the provider reports no cost, so an unpriced call still counts.
 export const FALLBACK_COST_PER_CALL_USD = 0.02;
-// Set aside before each call and settled to the real cost after it returns.
+// Set aside before each call and settled to the real cost after it returns. Also the charge
+// for a call that times out or whose response can't be parsed.
 export const RESERVE_PER_CALL_USD = FALLBACK_COST_PER_CALL_USD;
 
 const SPEND_TIME_ZONE = "America/Los_Angeles";

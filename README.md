@@ -103,6 +103,8 @@ generation pauses for the rest of the day. Once the day's total spend reaches
 too. Keep the budget below the hard cap. Days run on Los
 Angeles time, each tracked generation call is charged what OpenRouter reports it cost (a
 flat $0.02 when it reports none), and each day's totals are in the `aiSpendDays` table.
+A call that times out, or whose response can't be parsed, may still be billed: it is charged
+the $0.02 set aside for it and isn't sent again, and a matrix fill or nightly pool stops there.
 An empty or unreadable AI answer is retried once. The retry is a second call with its own
 generation run, charged and checked against the cap like the first; answers cut off by the
 length limit are not retried.

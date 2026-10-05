@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
+import { APIError } from "openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -368,7 +369,7 @@ describe("an empty or unreadable answer gets one retry", () => {
 
   test("a request the provider rejects (400) is not retried", async () => {
     const { t, styleV2, toneId } = await setup();
-    create.mockRejectedValue(new Error("400 Provider returned error") as never);
+    create.mockRejectedValue(APIError.generate(400, undefined, "Provider returned error", {}) as never);
 
     await expect(generate(t, styleV2, toneId)).rejects.toThrow(/400/);
 
@@ -813,7 +814,7 @@ describe("the feed and the daily email end to end", () => {
     const userId = await feedReader(t);
     create
       .mockResolvedValueOnce(completion("") as never)
-      .mockRejectedValueOnce(new Error("400 Provider returned error") as never);
+      .mockRejectedValueOnce(APIError.generate(400, undefined, "Provider returned error", {}) as never);
 
     await expect(
       t.withIdentity(READER).action(api.core.ai.generateAIQuestionForFeed, { anchoredStyleId: styleV2, anchoredToneId: toneId }),

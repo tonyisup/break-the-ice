@@ -83,7 +83,9 @@ size, as above.
 
 A run on Gemini 3.8 Flash (what the preset resolved to for `v0-3-2`) costs about $0.12 of
 generation on dev (charged to the dev deployment's system AI budget) and about $0.05 of Jev. Other
-models differ: in Oct 2026 a run cost about $0.14 on Sonnet 5.5 and $0.46 on Opus 5.5.
+models differ: in Oct 2026 a run cost about $0.14 on Sonnet 5.5 and $0.46 on Opus 5.5. A call that
+times out has no cost on its run, so a run's reported cost leaves it out; the dev budget still
+counts it.
 
 ## Reading the numbers
 
@@ -116,7 +118,10 @@ models differ: in Oct 2026 a run cost about $0.14 on Sonnet 5.5 and $0.46 on Opu
   the seed is generated again, so yield doesn't move and the question-level rates come only from
   answers that fit. A cut-off shows in the run's attempts as an empty completion with
   `finish_reason=length`, or as unreadable output with `completionTokens` at the batch's
-  `settings.maxOutputTokens`.
+  `settings.maxOutputTokens`. A timed-out call is not sent again and fails its batch. Runs
+  recorded while the provider client still re-sent timed-out calls by itself (the `v0-3-2`
+  baseline and the model runs of 5 Oct 2026) could absorb a slow call, so provider-error figures
+  across that change aren't like for like.
 - The regime is the admin preview path with a batch of 5 and no per-person exclusion list. The
   feed usually asks for 1 question and excludes recently seen ones.
 - Library duplicates are counted against dev's library, which is smaller than production's and

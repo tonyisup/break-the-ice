@@ -95,7 +95,7 @@ export async function runTopicPreviewWithUsage(
 
     return { questions, runId: preview.runId };
   } catch (error) {
-    // A preview the provider already charged for keeps its usage.
+    // A preview whose answer was paid for keeps its usage.
     if (!wasAiCallBilled(error)) {
       await ctx.runMutation(internal.internal.users.decrementAIUsage, {
         userId,

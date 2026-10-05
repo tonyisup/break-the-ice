@@ -20,7 +20,7 @@
 
 **Why:** The user budget is shared, so it can run out early for everyone, and today nobody hears about it.
 
-**Context:** `convex/lib/aiSpend.ts` (caps), `convex/lib/aiSpendGuard.ts` (where a pause is detected). `generationRuns.requestedByUserId` and `costUsd` give per-user spend. Deferred by the owner during the v0.2.0.0 review.
+**Context:** `convex/lib/aiSpend.ts` (caps), `convex/lib/aiSpendGuard.ts` (where a pause is detected). `generationRuns.requestedByUserId` and `costUsd` give per-user spend, except for calls that kept their reservation without an answer (`keepAiReservation`), which are on the daily ledger only. Deferred by the owner during the v0.2.0.0 review.
 
 **Effort:** M
 **Priority:** P2
@@ -42,7 +42,7 @@
 
 **What:** Reserve each AI call's budget from its `max_tokens` (times a worst-case price) instead of a flat `RESERVE_PER_CALL_USD` of $0.02.
 
-**Why:** The worst-case call is now 4,300 output tokens, about $0.017 on today's model. If the OpenRouter preset is pointed at a pricier model, which needs no deploy, calls could cost more than they reserve and overshoot the daily cap before settling. Eval runs with `--model` can already name a pricier model on dev: Opus 5.5 averaged about $0.023 a call.
+**Why:** The worst-case call is now 4,300 output tokens, about $0.017 on today's model. If the OpenRouter preset is pointed at a pricier model, which needs no deploy, calls could cost more than they reserve and overshoot the daily cap before settling. Eval runs with `--model` can already name a pricier model on dev: Opus 5.5 averaged about $0.023 a call. The reservation is also what a call is charged when it times out or its response can't be parsed (`keepAiReservation`), since its real cost is never reported.
 
 **Context:** `reserveAiSpend` in `convex/lib/aiSpendGuard.ts`, `convex/lib/aiSpend.ts`, `maxOutputTokens` in `convex/lib/generationRunner.ts`, and the named-model path in `generateEvalBatch` (`convex/internal/evals.ts`). Deferred during the v0.3.2.0 review (decision 9ce5b30c) and again for eval models in the v0.4.9.0 review (decision 6f390dcf).
 
@@ -52,11 +52,47 @@
 
 ### Size the AI provider timeout from the output cap
 
-**What:** Give each OpenRouter call a timeout based on its `max_tokens`, and set `maxRetries: 0` on `openRouterClient` so only `createChatCompletionWithRetry` retries, with a spend reservation per attempt.
+**What:** Give each OpenRouter call a timeout based on its `max_tokens`.
 
-**Why:** The client times out at a flat 30 seconds and the SDK quietly retries twice. A 10-question batch takes about 20 seconds today, but a slower model could make someone wait about 90 seconds, and the abandoned attempts aren't recorded as spend.
+**Why:** The client times out at a flat 30 seconds. A 10-question batch takes about 20 seconds today, so a slower model would time out. A timed-out call isn't sent again and keeps its spend reservation, so a timeout that is too short fails requests and uses up the daily budget on answers nobody receives.
 
-**Context:** `openRouterClient` in `convex/lib/generationRunner.ts`. Deferred during the v0.3.2.0 review (decision da9ce3c3).
+**Context:** `openRouterClient` and `createChatCompletionWithRetry` in `convex/lib/generationRunner.ts`. The SDK's own retries are off (`maxRetries: 0`), so the app's loop is the only retry: it reserves per attempt and retries 408, 429 and 5xx responses and dropped connections. Deferred during the v0.3.2.0 review (decision da9ce3c3).
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Stop the daily-email batch at a call that keeps its reservation
+
+**What:** Have the daily-email batch stop generating once a call times out or its response can't be parsed, the way matrix fill and the nightly pool do, then send the emails already prepared. Apply the same rule to a delivery's later attempts.
+
+**Why:** The batch generates for many readers in one job. On a slow-provider morning each reader's call waits out the 30-second timeout and is charged to the system budget, and the prepared emails wait behind them.
+
+**Context:** `processNewsletterBatch` in `convex/internal/newsletterBatch.ts`, the generation call in `convex/internal/newsletter.ts`, `MAX_DELIVERY_ATTEMPTS` in `convex/internal/newsletterDelivery.ts`. `keptAiReservation` (`convex/lib/aiSpendGuard.ts`) marks the error object, which doesn't survive `ctx.runAction`, so the signal has to be returned or carried in `ConvexError` data. Deferred during the v0.4.10.0 review.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
+### Say why a matrix fill or pool run stopped early
+
+**What:** When a matrix fill stops because the AI stopped answering, tell the manager how many cells were filled and to try again later. Show the reason on the admin pool page too.
+
+**Why:** The fill rejects with the provider's raw error, which production shows as a bare server error, and the count of cells filled is lost (they are saved). The pool page shows only how many errors there were.
+
+**Context:** `fillEmptyCells` in `convex/core/fillMatrix.ts`, `readableError` in `src/app/org/schedule/page.tsx`, `generateNightlyQuestionPool` in `convex/internal/ai.ts` and `src/app/admin/pool/page.tsx`. Deferred during the v0.4.10.0 review.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Stop a batch when the provider asks for a long wait
+
+**What:** Treat a call that gave up because the provider's `Retry-After` was over 20 seconds as a reason to stop a matrix fill or pool run.
+
+**Why:** The batch moves straight on to the next cell and sends again to a provider that asked for a pause. Nothing is charged, but the fill uses up the organization's matrix allowance and reports no cells filled.
+
+**Context:** `getOpenRouterRetryDelayMs` and `MAX_RETRY_DELAY_MS` in `convex/lib/generationRunner.ts`, `isAiStopError` in `convex/lib/aiRateLimit.ts`. Deferred during the v0.4.10.0 review.
 
 **Effort:** S
 **Priority:** P3

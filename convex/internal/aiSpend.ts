@@ -108,7 +108,7 @@ export const settleAiSpend = internalMutation({
   },
 });
 
-/** Gives back a reservation whose call failed before the provider returned anything. */
+/** Gives back a reservation for a call the provider didn't bill. */
 export const releaseAiSpend = internalMutation({
   args: { spendClass: spendClassValidator, day: v.string(), reservedUsd: v.number() },
   returns: v.null(),
