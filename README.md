@@ -114,8 +114,8 @@ requests are refused. A matrix fill that stops at a timed-out or cut-off cell sa
 cells it filled.
 `npx convex run internal/aiRateLimit:resetAiUnanswered '{"key":"<Clerk user id>"}'` gives one
 person all five back (add `--prod` after `run` for production). The people affected are the
-`rateLimits` rows named `aiUnanswered` with a value below 5; a row's `key` is the Clerk user
-id. Each person also gets at most 40 feed, remix and team-preview requests a day, counted on
+`rateLimits` rows named `aiUnanswered` with a value below 5 and a `ts` from today; a row's
+`key` is the Clerk user id. Each person also gets at most 40 feed, remix and team-preview requests a day, counted on
 the same Los Angeles day; matrix fill is limited per team instead.
 An empty or unreadable AI answer is retried once. The retry is a second call with its own
 generation run, charged and checked against the cap like the first; answers cut off by the

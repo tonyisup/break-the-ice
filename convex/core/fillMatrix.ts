@@ -101,9 +101,13 @@ async function publicSlugTripleExists(
 	return false;
 }
 
-/** What the manager is told when a batch stops at a call that got no usable answer. */
-function fillStoppedMessage(filledCells: number, totalCells: number): string {
-	return `Filled ${filledCells} of ${totalCells} cells, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.`;
+/**
+ * What the manager is told when a batch stops at a call that got no usable answer. It counts
+ * only the cells this request filled: some of the cells asked for may have been filled already.
+ */
+function fillStoppedMessage(filledCells: number): string {
+	const filled = filledCells === 1 ? "1 cell" : `${filledCells} cells`;
+	return `Filled ${filled}, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.`;
 }
 
 /**
@@ -225,7 +229,7 @@ export const fillEmptyCells = action({
 					);
 					throw new ConvexError({
 						code: ERROR_CODES.AI_GENERATION_FAILED,
-						message: fillStoppedMessage(filledCells, args.cells.length),
+						message: fillStoppedMessage(filledCells),
 						filledCells,
 						totalCells: args.cells.length,
 					});

@@ -1444,7 +1444,7 @@ describe("calls that may have been billed without an answer", () => {
     // The manager is told how far the fill got; the provider's error goes to the log.
     expect(convexErrorData(stopped)).toEqual({
       code: ERROR_CODES.AI_GENERATION_FAILED,
-      message: "Filled 0 of 2 cells, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.",
+      message: "Filled 0 cells, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.",
       filledCells: 0,
       totalCells: 2,
     });
@@ -1868,7 +1868,9 @@ describe("calls a person may have unanswered in one day", () => {
 
     expect(getFunctionName(ctx.runMutation.mock.calls[0][0])).toBe("internal/aiRateLimit:releaseAiUnanswered");
     expect(ctx.runMutation.mock.calls[0][1]).toEqual({ row: "row-1", day: "2026-09-29" });
+    // The log names the row, so an operator can see whose slot stayed held.
     expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledWith(expect.stringMatching(/rateLimits row row-1/), expect.any(Error));
   });
 
   test("a held slot names its row and the day the hold reported; a refusal carries the code, the message and when to retry", async () => {
@@ -2009,7 +2011,7 @@ describe("calls a person may have unanswered in one day", () => {
     // A message the planner can show, not the provider's own error.
     expect(convexErrorData(stopped)).toEqual({
       code: ERROR_CODES.AI_GENERATION_FAILED,
-      message: "Filled 1 of 3 cells, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.",
+      message: "Filled 1 cell, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.",
       filledCells: 1,
       totalCells: 3,
     });

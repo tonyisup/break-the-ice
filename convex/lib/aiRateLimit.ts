@@ -204,7 +204,7 @@ export async function releaseAiUnanswered(ctx: RateLimitCtx, slot: AiUnansweredS
     await ctx.runMutation(internal.internal.aiRateLimit.releaseAiUnanswered, slot);
   } catch (error) {
     // The slot stays held until the next spend day, which errs on the side of spending less.
-    console.error("Failed to give back an unanswered-call slot", error);
+    console.error(`Failed to give back an unanswered-call slot (rateLimits row ${slot.row})`, error);
   }
 }
 
