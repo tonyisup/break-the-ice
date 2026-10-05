@@ -925,6 +925,27 @@ describe("provider retries", () => {
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0, 0]]);
   });
 
+  test("a Retry-After given as a date is waited out, and one over 20 seconds away ends the retries", async () => {
+    const { t, questionId } = await setup();
+    const sentAt: number[] = [];
+    create.mockImplementation((async () => {
+      sentAt.push(Date.now());
+      if (sentAt.length === 1) {
+        throw refused(429, "Too Many Requests", { "retry-after": new Date(Date.now() + 5000).toUTCString() });
+      }
+      if (sentAt.length === 2) {
+        throw refused(429, "Too Many Requests", { "retry-after": new Date(Date.now() + 60_000).toUTCString() });
+      }
+      return completion("A quicker take on breakfast?", { cost: 0.004 });
+    }) as never);
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(/429/);
+
+    // The first date was 5 seconds off (an HTTP date drops the milliseconds); the second was too far.
+    expect(sentAt).toHaveLength(2);
+    expect(sentAt[1] - sentAt[0]).toBeGreaterThanOrEqual(4000);
+  });
+
   test("a 408 from the provider is retried and gives its reservation back", async () => {
     const { t, questionId } = await setup();
     create
@@ -1045,6 +1066,25 @@ describe("calls that may have been billed without an answer", () => {
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+  });
+
+  test.each([
+    ["an HTML page", "<html>Bad gateway</html>", { "content-type": "text/html" }],
+    ["an empty body", null, {}],
+    ["a JSON string", '"oops"', { "content-type": "application/json" }],
+    ["a JSON list", "[]", { "content-type": "application/json" }],
+  ] as const)("a 200 reply that is %s, not a completion, keeps its reservation and isn't sent again", async (_what, body, headers) => {
+    const { t, meId, questionId } = await setup();
+    const send = stubSend().mockImplementation(async () => new Response(body, { status: 200, headers }));
+
+    await expect(throughBackoff(remix(t, questionId))).rejects.toThrow(/no completion/);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.02, 1]]);
+    const usage = await t.run(async (ctx) =>
+      (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
+    );
+    expect(usage.map((row) => row.count)).toEqual([0]);
   });
 
   test("an unparseable response isn't taken for a refusal because its error mentions a number like 502", async () => {
