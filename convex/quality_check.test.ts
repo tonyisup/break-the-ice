@@ -1297,6 +1297,20 @@ describe("who gets to read a verdict", () => {
       expect(q).not.toHaveProperty("qualityCheck");
       expect(q).not.toHaveProperty("safetyFlags");
     }
+    // A person's own question is never checked, so these two can't leak today. They strip all
+    // the same, so that doesn't rest on which questions get checked.
+    const mine = await s.t.run(async (ctx) => {
+      const author = await ctx.db.query("users").first();
+      return ctx.db.insert("questions", { customText: "My own question?", authorId: author!._id, status: "private", ...counters, ...verdict });
+    });
+    const listed = await me.query(api.core.questions.getCustomQuestions, {});
+    const edited = await me.mutation(api.core.questions.updatePersonalQuestion, { questionId: mine, customText: "My own question, edited?", isPublic: false });
+    expect(listed.map((q: Doc<"questions">) => q._id)).toEqual([mine]);
+    for (const q of [...listed, edited]) {
+      expect(q).not.toHaveProperty("qualityCheck");
+      expect(q).not.toHaveProperty("safetyFlags");
+    }
+
     const [queued] = await s.t.withIdentity(ADMIN).query(api.admin.questions.getPendingQuestions, {});
     expect(queued).toMatchObject({ _id: held, qualityCheck: { verdict: "hold" }, safetyFlags: ["humiliation"] });
   });

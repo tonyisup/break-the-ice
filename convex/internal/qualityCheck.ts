@@ -48,8 +48,9 @@ const EVAL_MAX_ITEMS = 25;
  *
  * Every check is system spend, whoever's request generated the question. A check costs about
  * 1 cent a question, which is more than generating a feed question did, so on the user budget
- * it would cut what people can generate in a day to about a third. On system spend it is
- * bounded by the generation it follows, which the user budget still caps.
+ * it would cut what people can generate in a day to about a third. On system spend, the checks
+ * that follow people's generation are still bounded by the user budget that caps it; the ones
+ * that follow the daily email and the nightly pool are bounded by the hard cap only.
  */
 async function judge(
   ctx: ActionCtx,

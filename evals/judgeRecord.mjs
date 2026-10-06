@@ -1,7 +1,7 @@
 // What judge.mjs does with run files, verdicts and the owner's labels. Pure, so it can be tested.
 
 /** At most this share of the questions Claude would publish may be ones the owner rejects. */
-export const PASS_REJECT_SHARE = 1 / 20;
+const PASS_REJECT_SHARE = 1 / 20;
 /** Fewer labeled would-publish cards than this can't show anything about a 1-in-20 rate. */
 export const MIN_PASS_CARDS = 60;
 

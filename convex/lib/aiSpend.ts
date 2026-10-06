@@ -5,9 +5,11 @@
 // "user" spend is anything a signed-in user can trigger (feed generation, remix,
 // matrix fill, team previews). "system" spend is the daily email and admin tools,
 // which don't count against the user budget, so abuse can't starve them. The quality
-// check of each generated question is system spend too (internal/qualityCheck.ts): it
-// follows people's generation, so the user budget bounds it, but it does use room under
-// the hard cap. Both stop at the hard cap. Change either cap with the Convex env vars
+// check of each generated question is system spend too (internal/qualityCheck.ts). The
+// checks that follow people's own generation (the feed, matrix fill) can't outgrow the
+// user budget that caps that generation, but they do use room under the hard cap; the
+// checks that follow the daily email and the nightly pool are bounded by the hard cap
+// only. Both classes stop at the hard cap. Change either cap with the Convex env vars
 // below, no deploy needed.
 
 import { getZonedCalendarDate } from "./timezone";

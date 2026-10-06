@@ -24,8 +24,8 @@ export const QUALITY_CHECK_MAX_OUTPUT_TOKENS = 1200;
 const MAX_NOTE_CHARS = 200;
 const MIN_PUBLISH_CONFIDENCE = 5;
 
-export const QUALITY_REASONS = ["awkward_wording", "unclear_answer", "style_tone_mismatch", "repeated_construction"] as const;
-export const QUALITY_SAFETY_FLAGS = ["trauma", "targets_person", "sexual_illegal", "politics_religion", "humiliation"] as const;
+const QUALITY_REASONS = ["awkward_wording", "unclear_answer", "style_tone_mismatch", "repeated_construction"] as const;
+const QUALITY_SAFETY_FLAGS = ["trauma", "targets_person", "sexual_illegal", "politics_religion", "humiliation"] as const;
 
 export const qualityVerdict = v.object({
   verdict: v.union(v.literal("keep"), v.literal("hold")),
@@ -46,14 +46,15 @@ export const qualityCheckSnapshot = v.object({
   runId: v.id("generationRuns"),
   checkedAt: v.number(),
 });
-export type QualityCheckSnapshot = Infer<typeof qualityCheckSnapshot>;
+type QualityCheckSnapshot = Infer<typeof qualityCheckSnapshot>;
 
-export type QualityCheckMode = "off" | "record" | "publish";
+type QualityCheckMode = "off" | "record" | "publish";
 
 /**
  * QUALITY_CHECK_MODE on this deployment: `off` (the default) schedules no checks and shows no
- * flag. `record` saves a verdict on every generated question and changes nothing about who
- * can see a question; a hold or a safety flag is then marked on a team's schedule grid and
+ * flag. `record` saves a verdict on every question the save step inserts (the feed's, the
+ * daily email's, a matrix fill's and the nightly pool's; not one an admin accepts on the
+ * generator page) and changes nothing about who can see a question; a hold or a safety flag is then marked on a team's schedule grid and
  * left out of Auto-fill Week and the coach-feedback suggestions until an admin acts on the
  * question (claudeFlag). `publish` is accepted, and behaves as `record` until publishing is built. Anything else is off, with a
  * warning, so a misspelled value doesn't pass for a quiet day.

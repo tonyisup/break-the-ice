@@ -4,13 +4,13 @@ import type { Doc } from "../_generated/dataModel";
 /** A judge reads these next to each question, and gets less accurate as its input grows. */
 const MAX_DEFINITION_CHARS = 300;
 
-export function shortDefinition(parts: Array<string | undefined>): string {
+function shortDefinition(parts: Array<string | undefined>): string {
   const text = parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   return text.length > MAX_DEFINITION_CHARS ? `${text.slice(0, MAX_DEFINITION_CHARS - 1)}…` : text;
 }
 
 export const taxonomyDefinition = v.object({ slug: v.string(), name: v.string(), definition: v.string() });
-export type TaxonomyDefinition = Infer<typeof taxonomyDefinition>;
+type TaxonomyDefinition = Infer<typeof taxonomyDefinition>;
 
 /**
  * Short definitions of a style, tone and topic, using the fields the generator is given, so a

@@ -58,7 +58,7 @@ export function ClaudeVerdict({
   const Icon = concern ? CircleAlert : CheckCircle2;
   return (
     // A plain keep stays quiet, so a concern is what the eye lands on in a long queue.
-    <div className={cn("rounded-md border px-3 py-2 text-sm", concern ? concernBox : "border-emerald-500/40", outdated && "opacity-70")}>
+    <div className={cn("rounded-md border px-3 py-2 text-sm", concern ? concernBox : "border-emerald-500/40", outdated && "border-dashed")}>
       <div className="flex flex-wrap items-center gap-2">
         <Icon aria-hidden="true" className={cn("size-4 shrink-0", concern ? concernText : "text-emerald-600 dark:text-emerald-400")} />
         <span className="font-semibold">{check.verdict === "hold" ? "Claude: hold" : "Claude: keep"}</span>
