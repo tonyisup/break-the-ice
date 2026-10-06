@@ -1061,8 +1061,8 @@ export const triggerPoolGeneration = action({
 	handler: async (ctx, args): Promise<{ questionsGenerated: number; combinationsProcessed: number; errors: string[] }> => {
 		await ensureAdmin(ctx);
 
-		// A run makes one AI call per combination, so the number is checked before anything
-		// is generated.
+		// A run generates once per combination, and each generation is at least one AI call, so
+		// the number is checked before anything is generated.
 		const maxCombinations = args.maxCombinations ?? 10;
 		if (!Number.isInteger(maxCombinations) || maxCombinations < 1) {
 			throw new ConvexError({ code: "POOL_SETUP", message: "maxCombinations must be a whole number of 1 or more." });
