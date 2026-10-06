@@ -584,6 +584,44 @@ describe("how many questions one feed request generates", () => {
   );
 });
 
+describe("how many combinations an admin pool run covers", () => {
+  /** A daily-email reader close to running out of questions, so a pool run has work to do, and a second style. */
+  async function poolDue() {
+    const ctx = await setup();
+    await ctx.t.run(async (db) => {
+      await db.db.insert("users", { email: "reader@example.com", clerkId: "reader-clerk", newsletterSubscriptionStatus: "subscribed" });
+      await db.db.insert("styles", { id: "playful", name: "Playful", structure: "Ask something playful", color: "#333333", icon: "sparkles" });
+    });
+    return ctx;
+  }
+
+  test.each([Number.NaN, Infinity, -1, 0, 2.5])("a pool run asked for %s combinations is refused before anything is generated", async (maxCombinations) => {
+    const { t } = await poolDue();
+    // Only reached if the run isn't refused.
+    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+
+    const error = await t
+      .withIdentity(ADMIN)
+      .action(api.admin.questions.triggerPoolGeneration, { targetCount: 1, maxCombinations })
+      .catch((e: unknown) => e);
+
+    expect(convexErrorData(error)).toEqual({ code: "POOL_SETUP", message: "maxCombinations must be a whole number of 1 or more." });
+    expect(create).not.toHaveBeenCalled();
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs).toEqual([]);
+  });
+
+  test("a pool run asked for one combination covers one of the two that are due", async () => {
+    const { t } = await poolDue();
+    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+
+    const result = await t.withIdentity(ADMIN).action(api.admin.questions.triggerPoolGeneration, { targetCount: 1, maxCombinations: 1 });
+
+    expect(result).toMatchObject({ questionsGenerated: 1, combinationsProcessed: 1, errors: [] });
+    expect(askedFor()).toEqual([[2500, "1"]]);
+  });
+});
+
 describe("helpers", () => {
   test("a batch size that isn't a number is one question, and any other is held to a whole number from one to ten", () => {
     expect([Number.NaN, Infinity, -Infinity].map((value) => clampBatchSize(value))).toEqual([1, 1, 1]);

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query, action, internalMutation, MutationCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAdmin } from "../auth";
@@ -1061,9 +1061,16 @@ export const triggerPoolGeneration = action({
 	handler: async (ctx, args): Promise<{ questionsGenerated: number; combinationsProcessed: number; errors: string[] }> => {
 		await ensureAdmin(ctx);
 
+		// A run makes one AI call per combination, so the number is checked before anything
+		// is generated.
+		const maxCombinations = args.maxCombinations ?? 10;
+		if (!Number.isInteger(maxCombinations) || maxCombinations < 1) {
+			throw new ConvexError({ code: "POOL_SETUP", message: "maxCombinations must be a whole number of 1 or more." });
+		}
+
 		const result: { questionsGenerated: number; combinationsProcessed: number; errors: string[] } = await ctx.runAction(internal.internal.ai.generateNightlyQuestionPool, {
 			targetCount: args.targetCount ?? 5,
-			maxCombinations: args.maxCombinations ?? 10,
+			maxCombinations,
 		});
 		return result;
 	},
