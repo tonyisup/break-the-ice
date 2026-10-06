@@ -79,3 +79,5 @@ backups/
 evals/runs/*/.lock
 # The owner's keep/reject labels, exported from the private labels page for evals/judge.mjs.
 evals/owner-labels.json
+# evals/judge.mjs output: the quality check's verdicts, kept local so a blind set stays blind.
+evals/judged/

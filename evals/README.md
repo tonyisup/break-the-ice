@@ -102,7 +102,9 @@ node evals/judge.mjs my-judged v0-5-2-r1 v0-5-2-r2 v0-5-2-r3
 
 A question that appears in more than one run is judged once. Rerunning the same name judges
 only what is missing, and refuses if the deployment's judge model or instructions have changed
-since. A check costs about 1 cent, charged to the dev deployment's system AI budget.
+since. A check costs about 1 cent, charged to the dev deployment's system AI budget. The
+`judged/` folder is git-ignored: the verdicts stay local, so the owner can label a set drawn
+from them without seeing them.
 
 To compare the verdicts with the owner's labels, put the labels in `evals/owner-labels.json`
 (git-ignored; the labels are not stored in this repo):
