@@ -20,7 +20,7 @@ import { SignInCTA } from "@/components/SignInCTA";
 import { UpgradeCTA } from "@/components/UpgradeCTA";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
 import { RefineResultsCTA } from "@/components/RefineResultsCTA";
-import { ERROR_MESSAGES, ERROR_CODES } from "../../convex/constants";
+import { ERROR_MESSAGES, ERROR_CODES, MAX_FEED_GENERATION_COUNT } from "../../convex/constants";
 import { convexErrorData } from "../../convex/lib/errorData";
 import { cn } from "@/lib/utils";
 
@@ -342,7 +342,7 @@ export default function InfiniteScrollPage() {
         const generalQuestions = dbQuestions.slice(anchoredMatchCount);
         const anchorShortfall = Math.max(0, targetAnchoredCount - anchoredQuestions.length);
         const totalShortfall = Math.max(0, BATCH_SIZE - dbQuestions.length);
-        const generationCount = Math.min(5, Math.max(anchorShortfall, totalShortfall));
+        const generationCount = Math.min(MAX_FEED_GENERATION_COUNT, Math.max(anchorShortfall, totalShortfall));
         let generatedQuestions: Doc<"questions">[] = [];
 
         if (generationCount > 0 && user.isSignedIn && !currentUser?.isAiLimitReached && !aiPausedRef.current) {

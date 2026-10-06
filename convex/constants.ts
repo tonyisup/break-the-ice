@@ -17,12 +17,16 @@ export const MAX_TEAM_TOPIC_NAME_LENGTH = 100;
 export const MAX_TEAM_TOPIC_GUIDANCE_LENGTH = 1000;
 export const MAX_TEAM_TOPIC_BOUNDARIES_LENGTH = 1000;
 
+/** The most questions one feed request generates. The feed page asks for no more, and the public feed action holds every caller to it. */
+export const MAX_FEED_GENERATION_COUNT = 5;
+
 export const ERROR_CODES = {
   AI_LIMIT_REACHED: "AI_LIMIT_REACHED",
   AI_BUDGET_PAUSED: "AI_BUDGET_PAUSED",
   AI_RATE_LIMITED: "AI_RATE_LIMITED",
   AI_PROMPT_TOO_LARGE: "AI_PROMPT_TOO_LARGE",
   AI_GENERATION_FAILED: "AI_GENERATION_FAILED",
+  AI_COUNT_INVALID: "AI_COUNT_INVALID",
   QUESTION_TEXT_REQUIRED: "QUESTION_TEXT_REQUIRED",
   QUESTION_TEXT_TOO_LONG: "QUESTION_TEXT_TOO_LONG",
   QUESTION_TAGS_TOO_MANY: "QUESTION_TAGS_TOO_MANY",
@@ -48,6 +52,7 @@ export const ERROR_MESSAGES = {
   AI_REMIX_RESULT_TOO_LONG: "That remix came out too long. Try remixing again.",
   AI_PROMPT_TOO_LARGE: "That request is too large to send to the AI.",
   AI_GENERATION_FAILED: "The AI sent back an answer we couldn't use. Please try again.",
+  AI_COUNT_INVALID: "The number of questions to generate isn't a valid number.",
   QUESTION_TEXT_REQUIRED: "Please enter a question.",
   QUESTION_TEXT_TOO_LONG: `Questions can be up to ${MAX_QUESTION_TEXT_LENGTH} characters.`,
   QUESTION_TAGS_TOO_MANY: `Questions can have up to ${MAX_QUESTION_TAGS} tags.`,

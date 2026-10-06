@@ -8,7 +8,7 @@ import { ModernQuestionCard } from '@/components/modern-question-card';
 import { NewsletterCard } from '@/components/newsletter-card/NewsletterCard';
 import { ConvexError } from 'convex/values';
 import { toast } from 'sonner';
-import { ERROR_CODES, ERROR_MESSAGES } from '../../convex/constants';
+import { ERROR_CODES, ERROR_MESSAGES, MAX_FEED_GENERATION_COUNT } from '../../convex/constants';
 
 // Hoisted mocks for dynamic control
 const mockUseAuth = vi.fn();
@@ -660,6 +660,38 @@ describe('InfiniteScrollPage', () => {
       expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10);
     });
     expect(generateAction).toHaveBeenCalledWith(expect.objectContaining({ count: 5 }));
+  });
+
+  it('asks for no more generated questions than the feed limit when an anchored page is short by more', async () => {
+    mockSearchParams = new URLSearchParams('style=style1');
+    // The database has nothing: six anchored questions short, and ten short of a full first page.
+    const actionMock = vi.fn().mockResolvedValue({
+      questions: [],
+      anchoredMatchCount: 0,
+      targetAnchoredCount: 6,
+    });
+    const generatedQuestions = Array.from({ length: MAX_FEED_GENERATION_COUNT }, (_, index) => ({
+      _id: `generated-${index}`,
+      text: `Generated anchor ${index}`,
+      styleId: 'style1',
+      toneId: 'tone1',
+    }));
+    const generateAction = vi.fn().mockResolvedValue(generatedQuestions);
+    (useConvex as any).mockReturnValue({ query: vi.fn(), action: actionMock });
+    (useAction as any).mockReturnValue(generateAction);
+
+    render(
+      <WorkspaceProvider>
+        <InfiniteScrollPage />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(MAX_FEED_GENERATION_COUNT);
+    });
+    // Written from the limit the server holds a feed request to, so a page that stops reading
+    // it fails here when the limit changes.
+    expect(generateAction.mock.calls.map(([asked]) => asked.count)).toEqual([MAX_FEED_GENERATION_COUNT]);
   });
 
   it('sorts the first batch of questions by text length', async () => {

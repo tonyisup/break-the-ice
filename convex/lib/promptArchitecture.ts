@@ -48,8 +48,9 @@ export type PromptBlueprintDoc = {
 };
 
 export function clampBatchSize(value: number) {
-  // NaN passes through Math.min and Math.max, and the output cap is sized from the result.
-  if (Number.isNaN(value)) return 1;
+  // NaN passes through Math.min and Math.max, and Infinity would come out as the largest batch.
+  // The output cap is sized from the result, so a value that isn't a number is one question.
+  if (!Number.isFinite(value)) return 1;
   return Math.max(1, Math.min(MAX_BATCH_SIZE, Math.floor(value)));
 }
 

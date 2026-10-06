@@ -5,6 +5,8 @@ import { action } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
+import { clampBatchSize } from "../lib/promptArchitecture";
+import { MAX_FEED_GENERATION_COUNT } from "../constants";
 
 export const generateAIQuestionForFeed = action({
 	args: {
@@ -34,7 +36,8 @@ export const generateAIQuestionForFeed = action({
 		}
 		await ensureAiRequestAllowed(ctx);
 
-		const count = args.count || 1;
+		// A request is charged to the person's plan at most once, however many questions it asks for.
+		const count = Math.min(clampBatchSize(args.count ?? 1), MAX_FEED_GENERATION_COUNT);
 		const takeoverTopics = await ctx.runQuery(api.core.topics.getActiveTakeoverTopics);
 		let topicId = args.anchoredTopicId;
 		let bypassAIUsage = false;

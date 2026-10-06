@@ -118,6 +118,10 @@ person all five back (add `--prod` after `run` for production). The people affec
 `rateLimits` rows named `aiUnanswered` with a value below 5 and a `ts` from today; a row's
 `key` is the Clerk user id. Each person also gets at most 40 feed, remix and team-preview
 requests a day, counted on the same Los Angeles day; matrix fill is limited per team instead.
+One feed request writes at most five questions (`MAX_FEED_GENERATION_COUNT` in
+[`convex/constants.ts`](./convex/constants.ts)), and a matrix fill writes one question per
+cell. A count that isn't a number is one question on the feed and in the admin preview; a
+matrix fill refuses it (`AI_COUNT_INVALID`) before it uses one of the team's fills.
 An empty or unreadable AI answer is retried once. The retry is a second call with its own
 generation run, charged and checked against the cap like the first; answers cut off by the
 length limit are not retried.
