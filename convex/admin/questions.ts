@@ -190,6 +190,11 @@ export const updateQuestion = mutation({
 		if (text !== undefined) {
 			if (!text.trim()) throw new Error("Question text cannot be empty");
             updateData.text = text.trim();
+            // The quality check's verdict is about the wording it read. Its run keeps the record.
+            if (updateData.text !== before.text && before.qualityCheck) {
+                updateData.qualityCheck = undefined;
+                updateData.safetyFlags = [];
+            }
 		}
 
 		if (tags !== undefined) {

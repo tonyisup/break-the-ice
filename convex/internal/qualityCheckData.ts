@@ -10,11 +10,15 @@ const HELD_SCAN_LIMIT = 500;
 
 const definition = v.object({ slug: v.string(), name: v.string(), definition: v.string() });
 
-/** A generated library question that has no verdict yet. Questions people wrote are never checked. */
+/**
+ * A generated library question that has no verdict yet. Questions people wrote are never
+ * checked, and neither is one with no style or tone to be judged against.
+ */
 function awaitsCheck(question: Doc<"questions">): boolean {
   return (
     question.isAIGenerated === true &&
     Boolean(question.text) &&
+    Boolean(question.styleId && question.toneId) &&
     !question.qualityCheck &&
     !isUserWrittenQuestion(question) &&
     !isRetiredQuestion(question)
@@ -48,12 +52,14 @@ export const questionForCheck = internalQuery({
 
 /**
  * Saves a verdict on a question. It only records: the question's status, its place in the
- * review queue and its review revision are left alone. A question that is gone, or that
- * another check reached first, is left as it is.
+ * review queue and its review revision are left alone. A question that is gone, that another
+ * check reached first, or whose wording changed while the judge was reading it, is left as it is.
  */
 export const saveQualityCheck = internalMutation({
   args: {
     questionId: v.id("questions"),
+    /** The wording the judge read. */
+    text: v.string(),
     verdict: qualityVerdict,
     model: v.string(),
     promptVersion: v.number(),
@@ -62,7 +68,7 @@ export const saveQualityCheck = internalMutation({
   returns: v.object({ saved: v.boolean() }),
   handler: async (ctx, args) => {
     const question = await ctx.db.get(args.questionId);
-    if (!question || question.qualityCheck) return { saved: false };
+    if (!question || question.qualityCheck || question.text !== args.text) return { saved: false };
     const verdict = args.verdict as QualityVerdict;
     await ctx.db.patch(args.questionId, {
       qualityCheck: {
@@ -80,7 +86,10 @@ export const saveQualityCheck = internalMutation({
   },
 });
 
-/** Generated questions waiting in the review queue with no verdict, oldest first. */
+/**
+ * Generated questions waiting in the review queue with no verdict, oldest first. It reads the
+ * HELD_SCAN_LIMIT oldest pending questions, which is far more than the queue has held.
+ */
 export const heldQuestionsWithoutCheck = internalQuery({
   args: { limit: v.number() },
   returns: v.array(v.id("questions")),

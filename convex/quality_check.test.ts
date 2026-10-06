@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
+import OpenAI from "openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -159,8 +160,26 @@ describe("the publish rule and the answer parser", () => {
     ["a confidence of 6", JSON.stringify({ ...KEEP, confidence: 6 })],
     ["a fractional confidence", JSON.stringify({ ...KEEP, confidence: 4.5 })],
     ["a missing note", JSON.stringify({ ...KEEP, note: undefined })],
+    ["JSON null", "null"],
+    ["a bare word", JSON.stringify("keep")],
+    ["a missing verdict", JSON.stringify({ ...KEEP, verdict: undefined })],
+    ["a reason that isn't text", JSON.stringify({ ...HOLD, reasons: [1] })],
+    ["safety flags that aren't a list", JSON.stringify({ ...HOLD, safety: "humiliation" })],
+    ["missing safety flags", JSON.stringify({ ...KEEP, safety: undefined })],
+    ["a confidence written as text", JSON.stringify({ ...KEEP, confidence: "5" })],
+    ["a note that isn't text", JSON.stringify({ ...KEEP, note: 5 })],
+    ["nothing at all", ""],
   ])("%s is not a verdict", (_what, raw) => {
     expect(parseQualityVerdict(raw)).toBeNull();
+  });
+
+  test("an answer in a bare code fence is read, and a topic with no definition is shown by its name alone", () => {
+    expect(parseQualityVerdict(`\`\`\`\n${JSON.stringify(KEEP)}\n\`\`\``)).toEqual(KEEP);
+
+    const style = { slug: "reflective", name: "Reflective", definition: "Looks back." };
+    const tone = { slug: "warm", name: "Warm", definition: "Kind." };
+    const prompts = buildQualityCheckPrompts({ text: "Q?", style, tone, topic: { slug: "any-topic", name: "Any", definition: "" } });
+    expect(prompts.userPrompt).toBe("Style: Reflective\nLooks back.\n\nTone: Warm\nKind.\n\nTopic: Any\n\nQuestion:\nQ?");
   });
 
   test("the judge is shown the question and what it was asked to be, never the generator's rationale", () => {
@@ -212,6 +231,20 @@ describe("scheduling a check when a question is saved", () => {
     const result = await save(s, ["What small thing made you smile today?", "What small thing made you smile today?"], "pending");
     expect(result.insertedCount).toBe(1);
     expect(await queuedChecks(s)).toHaveLength(1);
+  });
+
+  test("publish mode records like record mode: even a verdict that would publish leaves the question held for review", async () => {
+    process.env.QUALITY_CHECK_MODE = "publish";
+    const s = await setup();
+    const { insertedQuestionIds: [questionId] } = await save(s, ["What small thing made you smile today?"], "pending");
+    expect(await queuedChecks(s)).toEqual([[questionId, 1, 0]]);
+    answers(KEEP);
+
+    expect(await check(s, questionId)).toBe("checked");
+
+    expect(await question(s, questionId)).toMatchObject({ status: "pending", heldForReview: true, qualityCheck: { verdict: "keep", wouldPublish: true } });
+    // Still out of every shared list: publishing isn't built yet.
+    expect(await s.t.query(api.core.questions.getPublicQuestions, {})).toEqual([]);
   });
 });
 
@@ -361,7 +394,7 @@ describe("checking a question in record mode", () => {
         purpose: "quality_check", batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "", sourceQuestionId: questionId,
       });
       await s.t.mutation(internal.internal.qualityCheckData.saveQualityCheck, {
-        questionId, verdict: HOLD, model: QUALITY_CHECK_MODEL, promptVersion: QUALITY_CHECK_PROMPT_VERSION, runId,
+        questionId, text: "What small thing made you smile today?", verdict: HOLD, model: QUALITY_CHECK_MODEL, promptVersion: QUALITY_CHECK_PROMPT_VERSION, runId,
       });
       return completion(JSON.stringify(KEEP));
     }) as never);
@@ -369,6 +402,22 @@ describe("checking a question in record mode", () => {
     await check(s, questionId);
 
     expect((await question(s, questionId))?.qualityCheck).toMatchObject({ verdict: "hold" });
+  });
+
+  test("a question reworded while the judge is answering gets no verdict: the verdict was about the old wording", async () => {
+    const s = await setup();
+    const questionId = await generated(s);
+    create.mockImplementation((async () => {
+      await s.t.run((ctx) => ctx.db.patch(questionId, { text: "What made you smile today?" }));
+      return completion(JSON.stringify(HOLD));
+    }) as never);
+
+    expect(await check(s, questionId)).toBe("checked");
+
+    expect(await question(s, questionId)).toMatchObject({ text: "What made you smile today?", safetyFlags: [] });
+    expect((await question(s, questionId))?.qualityCheck).toBeUndefined();
+    // Still held with no verdict, so the backfill finds it and judges the new wording.
+    expect(await s.t.query(internal.internal.qualityCheckData.heldQuestionsWithoutCheck, { limit: 10 })).toEqual([questionId]);
   });
 
   test("with the mode switched off, a check that was already queued does nothing", async () => {
@@ -380,6 +429,157 @@ describe("checking a question in record mode", () => {
 
     expect(create).not.toHaveBeenCalled();
     expect((await question(s, questionId))?.qualityCheck).toBeUndefined();
+  });
+
+  test.each([
+    ["an empty answer", "", /returned an empty completion \(model=anthropic\/claude-opus-5\.5, finish_reason=length\)/, undefined],
+    ["an answer cut off partway", '{"verdict": "keep", "reasons": [], "saf', /answer couldn't be read/, '{"verdict": "keep", "reasons": [], "saf'],
+  ])("%s, as when the output cap is too small, is paid for, recorded on the failed run and retried", async (_what, content, error, rawResponse) => {
+    const s = await setup();
+    const questionId = await generated(s);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cutOff = completion(content);
+    cutOff.choices[0].finish_reason = "length";
+    create.mockResolvedValue(cutOff as never);
+
+    expect(await check(s, questionId)).toBe("failed");
+
+    expect((await question(s, questionId))?.qualityCheck).toBeUndefined();
+    const [run] = await runs(s);
+    expect(run).toMatchObject({ purpose: "quality_check", status: "failed", costUsd: 0.006, sourceQuestionId: questionId });
+    expect(run.error).toMatch(error);
+    expect(run.rawResponse).toBe(rawResponse);
+    expect(await spend(s)).toEqual([["system", 0.006, 1]]);
+    expect(await queuedChecks(s)).toEqual([[questionId, 2, 5]]);
+  });
+
+  test("the retry runs by itself five minutes later and saves the verdict", async () => {
+    const s = await setup();
+    const questionId = await generated(s);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    create
+      .mockResolvedValueOnce(completion("Not JSON.") as never)
+      .mockResolvedValue(completion(JSON.stringify(HOLD)) as never);
+    const failedAt = Date.now();
+
+    expect(await check(s, questionId)).toBe("failed");
+    await s.t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const checked = await question(s, questionId);
+    expect(checked?.qualityCheck).toMatchObject({ verdict: "hold", wouldPublish: false });
+    expect(checked?.qualityCheck?.checkedAt).toBeGreaterThanOrEqual(failedAt + QUALITY_CHECK_RETRY_DELAY_MS);
+    expect((await runs(s)).map((run) => [run.status, run.sourceQuestionId])).toEqual([
+      ["failed", questionId],
+      ["succeeded", questionId],
+    ]);
+    expect(checked?.qualityCheck?.runId).toBe((await runs(s))[1]._id);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await queuedChecks(s)).toEqual([]);
+  });
+
+  test("a question deleted while the judge is answering is left alone: nothing is saved and nothing is retried", async () => {
+    const s = await setup();
+    const questionId = await generated(s);
+    create.mockImplementation((async () => {
+      await s.t.run((ctx) => ctx.db.delete(questionId));
+      return completion(JSON.stringify(KEEP));
+    }) as never);
+
+    // The call was made and paid for, so this isn't a failure to try again.
+    expect(await check(s, questionId)).not.toBe("failed");
+
+    expect(await question(s, questionId)).toBeNull();
+    expect((await runs(s)).map((run) => [run.purpose, run.status])).toEqual([["quality_check", "succeeded"]]);
+    expect(await queuedChecks(s)).toEqual([]);
+  });
+
+  test("a question the judge can't be shown is skipped without a call: no text, a team's own, no style or tone, or one that no longer exists", async () => {
+    const s = await setup();
+    const { organizationId, goneStyleId, goneToneId } = await s.t.run(async (ctx) => ({
+      organizationId: await ctx.db.insert("organizations", { name: "Gym" }),
+      goneStyleId: await ctx.db.insert("styles", { id: "gone", slug: "gone", name: "Gone", structure: "x", color: "#111111", icon: "sparkles" }),
+      goneToneId: await ctx.db.insert("tones", { id: "gone", slug: "gone", name: "Gone", promptGuidanceForAI: "x", color: "#222222", icon: "sun" }),
+    }));
+    const skipped = [
+      await generated(s, { text: undefined, customText: "Only an author's wording?" }),
+      await generated(s, { organizationId, text: "A team's own question?" }),
+      await generated(s, { styleId: undefined, text: "No style on record?" }),
+      await generated(s, { toneId: undefined, text: "No tone on record?" }),
+      await generated(s, { styleId: goneStyleId, text: "Its style was deleted?" }),
+      await generated(s, { toneId: goneToneId, text: "Its tone was deleted?" }),
+    ];
+    await s.t.run(async (ctx) => {
+      await ctx.db.delete(goneStyleId);
+      await ctx.db.delete(goneToneId);
+    });
+
+    for (const questionId of skipped) expect(await check(s, questionId), questionId).toBe("skipped");
+
+    expect(create).not.toHaveBeenCalled();
+    expect(await runs(s)).toEqual([]);
+    expect(await queuedChecks(s)).toEqual([]);
+  });
+
+  test("a question with a topic is judged against it, and one whose topic is gone as having none", async () => {
+    const s = await setup();
+    const { topicId, goneTopicId } = await s.t.run(async (ctx) => ({
+      topicId: await ctx.db.insert("topics", { id: "food", slug: "food", name: "Food", description: "Cooking and eating.", scopeBoundaries: ["snacks", "recipes"] }),
+      goneTopicId: await ctx.db.insert("topics", { id: "gone", slug: "gone", name: "Gone" }),
+    }));
+    const withTopic = await generated(s, { topicId, topic: "food", text: "What snack do you always pack?" });
+    const topicGone = await generated(s, { topicId: goneTopicId, topic: "gone", text: "What did you pack last time?" });
+    await s.t.run((ctx) => ctx.db.delete(goneTopicId));
+    answers(KEEP);
+    const promptOf = (call: number) => (create.mock.calls[call][0] as { messages: Array<{ content: string }> }).messages[1].content;
+
+    expect(await check(s, withTopic)).toBe("checked");
+    expect(await check(s, topicGone)).toBe("checked");
+
+    expect(promptOf(0)).toContain("Topic: Food. Cooking and eating. Covers: snacks, recipes.\n\nQuestion:\nWhat snack do you always pack?");
+    expect(promptOf(1)).toContain("Topic: none\n\nQuestion:\nWhat did you pack last time?");
+    expect((await runs(s)).map((run) => [run.sourceQuestionId, run.topicSlug])).toEqual([
+      [withTopic, "food"],
+      [topicGone, undefined],
+    ]);
+  });
+
+  test("the verdict names the model the provider says answered, or the one asked for when it doesn't say", async () => {
+    const s = await setup();
+    const dated = await generated(s, { text: "Answered by a dated model?" });
+    const unnamed = await generated(s, { text: "Answered by an unnamed model?" });
+    create
+      .mockResolvedValueOnce({ ...completion(JSON.stringify(KEEP)), model: "anthropic/claude-opus-5.5-20261001" } as never)
+      .mockResolvedValueOnce({ ...completion(JSON.stringify(KEEP)), model: undefined } as never);
+
+    await check(s, dated);
+    await check(s, unnamed);
+
+    expect((await question(s, dated))?.qualityCheck?.model).toBe("anthropic/claude-opus-5.5-20261001");
+    expect((await question(s, unnamed))?.qualityCheck?.model).toBe(QUALITY_CHECK_MODEL);
+    // The run keeps both: the model asked for, and the one that answered.
+    expect((await runs(s)).map((run) => [run.model, run.resolvedModel])).toEqual([
+      [QUALITY_CHECK_MODEL, "anthropic/claude-opus-5.5-20261001"],
+      [QUALITY_CHECK_MODEL, undefined],
+    ]);
+  });
+
+  test("when the failed run can't be marked failed either, the check still reports the failure and is retried", async () => {
+    const s = await setup();
+    const questionId = await generated(s);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    create.mockImplementation((async () => {
+      // The run row disappears while the provider is answering, so the failure can't be written to it.
+      const [run] = await runs(s);
+      await s.t.run((ctx) => ctx.db.delete(run._id));
+      return completion("Not JSON.");
+    }) as never);
+
+    expect(await check(s, questionId)).toBe("failed");
+
+    expect(logged).toHaveBeenCalledWith("Failed to mark the quality check's run as failed", expect.anything());
+    expect((await question(s, questionId))?.qualityCheck).toBeUndefined();
+    expect(await queuedChecks(s)).toEqual([[questionId, 2, 5]]);
   });
 });
 
@@ -502,6 +702,34 @@ describe("the four ways a question is generated, in record mode", () => {
     expect(checks).toEqual([]);
     expect((await runs(s)).map((run) => run.purpose)).toEqual(["feed"]);
   });
+
+  test("a feed question's queued check then runs by itself, and the owner's review queue shows the verdict", async () => {
+    const s = await app();
+    create
+      .mockResolvedValueOnce(completion(JSON.stringify({ questions: [{ text: "What small win are you proud of this week?" }] }), { cost: 0.01 }) as never)
+      .mockResolvedValue(completion(JSON.stringify(HOLD)) as never);
+    vi.spyOn(OpenAI.Embeddings.prototype, "create").mockResolvedValue({ data: [{ embedding: [0, 1] }] } as never);
+
+    await s.t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { anchoredStyleId: s.styleId, anchoredToneId: s.toneId });
+    await s.t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const queue: Doc<"questions">[] = await s.t.withIdentity(ADMIN).query(api.admin.questions.getPendingQuestions, {});
+    expect(queue).toHaveLength(1);
+    expect(queue[0]).toMatchObject({
+      text: "What small win are you proud of this week?",
+      status: "pending",
+      heldForReview: true,
+      safetyFlags: ["humiliation"],
+      qualityCheck: { ...HOLD, wouldPublish: false, model: QUALITY_CHECK_MODEL, promptVersion: QUALITY_CHECK_PROMPT_VERSION },
+    });
+    // One generation for the person, one check for the owner: each on its own run and budget.
+    expect((await runs(s)).map((run) => [run.purpose, run.status, run.sourceQuestionId])).toEqual([
+      ["feed", "succeeded", undefined],
+      ["quality_check", "succeeded", queue[0]._id],
+    ]);
+    expect((await spend(s)).sort()).toEqual([["system", 0.006, 1], ["user", 0.01, 1]]);
+    expect(await queuedChecks(s)).toEqual([]);
+  });
 });
 
 describe("the backfill", () => {
@@ -560,6 +788,30 @@ describe("the backfill", () => {
     await expect(backfill(s, false)).rejects.toThrow(/QUALITY_CHECK_MODE is off on this deployment\. Nothing was checked\./);
     expect(create).not.toHaveBeenCalled();
   });
+
+  test("a real run with nothing waiting checks nothing; one that meets a question it can't check counts it as skipped and still checks the rest", async () => {
+    process.env.QUALITY_CHECK_MODE = "record";
+    const s = await setup();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    answers(KEEP);
+
+    expect(await backfill(s, false)).toEqual({ questionIds: [], checked: 0, skipped: 0, failed: 0 });
+    expect(create).not.toHaveBeenCalled();
+
+    const goneStyleId = await s.t.run((ctx) =>
+      ctx.db.insert("styles", { id: "gone", slug: "gone", name: "Gone", structure: "x", color: "#111111", icon: "sparkles" }),
+    );
+    const orphan = await generated(s, { styleId: goneStyleId, text: "Its style was deleted?" });
+    const waiting = await generated(s, { text: "Still checkable?" });
+    await s.t.run((ctx) => ctx.db.delete(goneStyleId));
+
+    expect(await backfill(s, false)).toEqual({ questionIds: [orphan, waiting], checked: 1, skipped: 1, failed: 0 });
+
+    // No call was made, or paid for, for the one that was skipped.
+    expect(create).toHaveBeenCalledTimes(1);
+    expect((await question(s, orphan))?.qualityCheck).toBeUndefined();
+    expect((await question(s, waiting))?.qualityCheck?.verdict).toBe("keep");
+  });
 });
 
 describe("the check for measuring against labels", () => {
@@ -607,6 +859,34 @@ describe("the check for measuring against labels", () => {
     const s = await setup();
     await expect(evaluate(s, Array.from({ length: 26 }, () => items[0]))).rejects.toThrow(/Pass at most 25 questions a call/);
   });
+
+  test("exactly 25 texts are all judged, and an empty list makes no call", async () => {
+    process.env.EVALS_ENABLED = "true";
+    const s = await setup();
+    answers(KEEP);
+
+    expect(await evaluate(s, [])).toEqual({ model: QUALITY_CHECK_MODEL, promptVersion: QUALITY_CHECK_PROMPT_VERSION, results: [] });
+    expect(create).not.toHaveBeenCalled();
+
+    const full = Array.from({ length: 25 }, (_, i) => ({ ...items[0], text: `Question number ${i}?` }));
+    const { results } = await evaluate(s, full);
+    expect(results.map((result) => [result.text, result.wouldPublish])).toEqual(full.map((item) => [item.text, true]));
+    expect(create).toHaveBeenCalledTimes(25);
+  });
+
+  test("with the daily hard cap reached every text is reported as not judged, with no call and no run", async () => {
+    process.env.EVALS_ENABLED = "true";
+    process.env.AI_DAILY_HARD_CAP_USD = "1";
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.insert("aiSpendDays", { day: spendDay(Date.now()), spendClass: "system", costUsd: 1, calls: 3 }));
+
+    const { results } = await evaluate(s);
+
+    expect(results.map((result) => [result.text, result.verdict, result.wouldPublish])).toEqual(items.map((item) => [item.text, undefined, undefined]));
+    for (const result of results) expect(result.error).toMatch(/AI_BUDGET_PAUSED/);
+    expect(create).not.toHaveBeenCalled();
+    expect(await runs(s)).toEqual([]);
+  });
 });
 
 describe("the flag on the schedule grid", () => {
@@ -626,6 +906,93 @@ describe("the flag on the schedule grid", () => {
       [held, { reasons: ["awkward_wording"], safety: ["humiliation"], note: "Stiff phrasing." }],
       [kept, undefined],
       [unchecked, undefined],
+    ]);
+  });
+
+  test("a keep with a safety concern is flagged too, and an admin's review of a held question clears its flag", async () => {
+    const s = await setup();
+    const runId = await s.t.mutation(internal.internal.generation.createGenerationRun, {
+      purpose: "quality_check", batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "",
+    });
+    const stamp = { model: QUALITY_CHECK_MODEL, promptVersion: 1, runId, checkedAt: 1 };
+    const live = { status: "public" as const, heldForReview: undefined };
+    const risky = await generated(s, { ...live, text: "Kept, with a concern?", qualityCheck: { ...KEEP, safety: ["trauma"], wouldPublish: false, ...stamp } });
+    const approved = await generated(s, { ...live, text: "Held, then approved?", reviewRevision: 1, qualityCheck: { ...HOLD, wouldPublish: false, ...stamp } });
+
+    const pool = await s.t.query(api.core.questions.getPublicQuestions, {});
+
+    expect(pool.map((row) => [row._id, row.claudeFlag])).toEqual([
+      [risky, { reasons: [], safety: ["trauma"], note: "Clear and easy to answer." }],
+      [approved, undefined],
+    ]);
+  });
+});
+
+describe("an admin's edit of a checked question", () => {
+  const ADMIN = { subject: "admin-clerk", tokenIdentifier: "test|admin-clerk", email: "admin@example.com", metadata: { isAdmin: "true" } };
+
+  async function checked(s: Setup) {
+    const runId = await s.t.mutation(internal.internal.generation.createGenerationRun, {
+      purpose: "quality_check", batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "",
+    });
+    return generated(s, {
+      safetyFlags: ["humiliation"],
+      qualityCheck: { ...HOLD, wouldPublish: false, model: QUALITY_CHECK_MODEL, promptVersion: 1, runId, checkedAt: 1 },
+    });
+  }
+  const edit = (s: Setup, id: Id<"questions">, fields: { text?: string; status?: "public" }) =>
+    s.t.withIdentity(ADMIN).mutation(api.admin.questions.updateQuestion, { id, expectedRevision: 0, reviewReason: "Reviewed", ...fields });
+
+  test("new wording drops the verdict and its safety flags, since the check never read it", async () => {
+    const s = await setup();
+    const questionId = await checked(s);
+
+    await edit(s, questionId, { text: "What made you smile today?" });
+
+    const after = await question(s, questionId);
+    expect(after).toMatchObject({ text: "What made you smile today?", safetyFlags: [] });
+    expect(after?.qualityCheck).toBeUndefined();
+  });
+
+  test("approving with the wording unchanged keeps the verdict beside the owner's decision", async () => {
+    const s = await setup();
+    const questionId = await checked(s);
+
+    await edit(s, questionId, { text: " What small thing made you smile today? ", status: "public" });
+
+    expect(await question(s, questionId)).toMatchObject({ status: "public", safetyFlags: ["humiliation"], qualityCheck: { verdict: "hold" } });
+  });
+});
+
+describe("generation runs, now that a run can be a check with no blueprint", () => {
+  test("a check's run reads back like any other run, and a generation's run still keeps its blueprint", async () => {
+    const s = await setup();
+    const blueprintId = await s.t.run((ctx) =>
+      ctx.db.insert("promptBlueprints", {
+        slug: DEFAULT_BLUEPRINT_SLUG,
+        version: 1,
+        status: "active",
+        systemInstruction: "",
+        safetyChecklist: [],
+        qualityChecklist: [],
+        outputFormatInstruction: "",
+        createdAt: 0,
+        updatedAt: 0,
+      }),
+    );
+    const run = { batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "" };
+    const checkRunId = await s.t.mutation(internal.internal.generation.createGenerationRun, { ...run, purpose: "quality_check" });
+    const feedRunId = await s.t.mutation(internal.internal.generation.createGenerationRun, { ...run, purpose: "feed", blueprintId });
+
+    expect(await s.t.query(internal.internal.generation.getGenerationRun, { runId: checkRunId })).toEqual({
+      _id: checkRunId,
+      status: "running",
+      purpose: "quality_check",
+      resultQuestionIds: [],
+    });
+    expect((await runs(s)).map((row) => [row._id, row.purpose, row.blueprintId])).toEqual([
+      [checkRunId, "quality_check", undefined],
+      [feedRunId, "feed", blueprintId],
     ]);
   });
 });

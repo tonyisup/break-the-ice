@@ -98,6 +98,7 @@ async function checkOne(ctx: ActionCtx, questionId: Id<"questions">): Promise<Ch
     const judged = await judge(ctx, subject, questionId);
     await ctx.runMutation(internal.internal.qualityCheckData.saveQualityCheck, {
       questionId,
+      text: subject.text,
       verdict: judged.verdict,
       model: judged.model,
       promptVersion: QUALITY_CHECK_PROMPT_VERSION,

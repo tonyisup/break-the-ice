@@ -48,4 +48,15 @@ describe("ClaudeFlagDetails", () => {
     expect(screen.getByText("Targets a person")).toBeInTheDocument();
     expect(screen.getByText("Two questions in one.")).toBeInTheDocument();
   });
+
+  it("shows just its heading, with no empty note line, when the judge gave no reasons, flags or note", () => {
+    const { container, rerender } = render(<ClaudeFlagDetails flag={{ reasons: [], safety: [], note: "" }} />);
+    expect(screen.getByText("Flagged by Claude")).toBeInTheDocument();
+    expect(container.querySelector("p")).toBeNull();
+    expect(container.textContent).toBe("Flagged by Claude");
+
+    rerender(<ClaudeVerdict check={{ verdict: "hold", reasons: [], safety: [], note: "", wouldPublish: false }} />);
+    expect(container.querySelector("p")).toBeNull();
+    expect(container.textContent).toBe("Claude: hold");
+  });
 });

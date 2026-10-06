@@ -26,6 +26,7 @@ import { requireQuestionText } from "../lib/questionText";
 import { normalizeQuestionTags } from "../lib/questionTags";
 import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { editorialReason } from "../lib/questionReviewValidators";
+import { claudeFlag } from "../lib/qualityCheck";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 
@@ -468,8 +469,9 @@ export const getPublicQuestions = query({
 			v.literal("pruning"),
 			v.literal("pruned")
 		)),
-		// Present only when the quality check would hold the question: its reasons, safety
-		// flags and one-sentence note, for whoever is choosing questions for a team.
+		// Present only when the quality check held the question or raised a safety concern,
+		// and no admin has reviewed it since: its reasons, safety flags and one-sentence
+		// note, for whoever is choosing questions for a team.
 		claudeFlag: v.optional(v.object({
 			reasons: v.array(editorialReason),
 			safety: v.array(v.string()),
@@ -517,9 +519,7 @@ export const getPublicQuestions = query({
 			isAIGenerated: q.isAIGenerated,
 			totalLikes: q.totalLikes,
 			status: q.status,
-			claudeFlag: q.qualityCheck?.verdict === "hold"
-				? { reasons: q.qualityCheck.reasons, safety: q.qualityCheck.safety, note: q.qualityCheck.note }
-				: undefined,
+			claudeFlag: claudeFlag(q),
 		}));
 	},
 });

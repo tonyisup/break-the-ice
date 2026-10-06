@@ -63,4 +63,21 @@ describe("verdicts beside the owner's labels", () => {
     expect(passRule(group(MIN_PASS_CARDS - 1, 0))).toMatchObject({ decided: false });
     expect(passRule(undefined)).toMatchObject({ decided: false });
   });
+
+  test("the pass rule is decided from exactly 60 cards, says how many it had when it isn't, and a run with nothing saved adds no questions", () => {
+    const group = (wouldPublish: number, wouldPublishRejected: number) => ({ cards: wouldPublish, unjudged: 0, wouldPublish, wouldPublishRejected, wouldHold: 0, wouldHoldKept: 0 });
+
+    expect(passRule(group(MIN_PASS_CARDS, 3))).toEqual({ decided: true, pass: true, rejected: 3, allowed: 3, of: 60 });
+    expect(passRule(group(MIN_PASS_CARDS, 4))).toMatchObject({ decided: true, pass: false });
+    expect(passRule(group(12, 0))).toEqual({ decided: false, reason: "Needs at least 60 labeled cards the check would publish; there are 12." });
+    expect(passRule(undefined)).toEqual({ decided: false, reason: "Needs at least 60 labeled cards the check would publish; there are 0." });
+    // Cards that were labeled but never judged don't count toward the 60.
+    const unjudged = compareWithLabels([], Array.from({ length: 80 }, (_, i) => ({ text: `Q${i}`, group: "would_publish", verdict: "keep" }))) as Record<string, unknown>;
+    expect(unjudged.would_publish).toMatchObject({ cards: 80, unjudged: 80, wouldPublish: 0 });
+    expect(passRule(unjudged.would_publish)).toMatchObject({ decided: false });
+
+    // A run file with no batches yet, and a batch marked ok that has no result, are passed over.
+    expect(savedQuestions([{ run: "empty", generated: {} }, { run: "partial", generated: { batches: [{ seed: { id: "s01" }, ok: true }] } }])).toEqual([]);
+    expect(compareWithLabels(judged, [])).toEqual({});
+  });
 });

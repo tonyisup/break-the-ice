@@ -159,6 +159,20 @@ export function parseQualityVerdict(raw: string): QualityVerdict | null {
 }
 
 /**
+ * What a team's managers are shown about a question nobody has reviewed: the check held it or
+ * raised a safety concern. An admin's review of the question settles it, so the flag goes.
+ */
+export function claudeFlag(question: {
+  qualityCheck?: QualityCheckSnapshot;
+  reviewRevision?: number;
+}): Pick<QualityCheckSnapshot, "reasons" | "safety" | "note"> | undefined {
+  const check = question.qualityCheck;
+  if (!check || (question.reviewRevision ?? 0) > 0) return undefined;
+  if (check.verdict !== "hold" && check.safety.length === 0) return undefined;
+  return { reasons: check.reasons, safety: check.safety, note: check.note };
+}
+
+/**
  * Whether a verdict is clear enough to publish a question without the owner seeing it: a keep
  * at the top confidence only. On 60 questions the owner had labeled (dev, Oct 2026), the owner
  * rejected about 1 in 5 of the keeps at 4 or above, and 1 of the 17 at 5.

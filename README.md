@@ -133,8 +133,9 @@ Generated questions can be checked by Claude after they are saved. `QUALITY_CHEC
 Convex environment turns this on: `off` (the default) or `record`. In `record`, each new
 question from the feed, the daily email, matrix fill and the nightly pool gets a verdict (keep
 or hold, with reasons, safety flags and a one-sentence note) a few seconds after it is saved.
-The verdict shows in the admin review queue, and a question the check would hold is marked
-"Flagged" on a team's schedule grid. Nothing about who can see a question changes. Each check
+The verdict shows in the admin review queue. On a team's schedule grid, a question the check
+held, or raised a safety concern about, is marked "Flagged" until an admin reviews it. Editing a
+question's wording drops its verdict. Nothing about who can see a question changes. Each check
 is a small call charged to system spend, about 1 cent. To check questions that were
 already waiting, run `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`,
 then with `false`.
