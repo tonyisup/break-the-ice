@@ -80,15 +80,16 @@ describe("verdicts beside the owner's labels", () => {
     // cards re-judged as holds, or missing, the remaining 3 in 93 must not read as a pass.
     const drawn = Array.from({ length: 100 }, (_, i) => ({ text: `Blind ${i}`, group: "would_publish", verdict: i < 10 ? "reject" : "keep" }));
     const asDrawn = drawn.map((card) => ({ text: card.text, verdict: { verdict: "keep" }, wouldPublish: true }));
-    expect(passRule(compareWithLabels(asDrawn, drawn).would_publish)).toEqual({ decided: true, pass: false, rejected: 10, allowed: 5, of: 100 });
+    const publishGroup = (results: unknown[], cards: unknown[]) => (compareWithLabels(results, cards) as Record<string, unknown>).would_publish;
+    expect(passRule(publishGroup(asDrawn, drawn))).toEqual({ decided: true, pass: false, rejected: 10, allowed: 5, of: 100 });
     const rejudged = asDrawn.map((result, i) => (i < 7 ? { ...result, verdict: { verdict: "hold" }, wouldPublish: false, wouldFlag: true } : result));
-    expect(passRule(compareWithLabels(rejudged, drawn).would_publish)).toEqual({
+    expect(passRule(publishGroup(rejudged, drawn))).toEqual({
       decided: false,
       reason: "7 of the 100 cards drawn as would-publish aren't judged in this file or would no longer publish. Use the judged file the set was drawn from.",
     });
-    expect(passRule(compareWithLabels(asDrawn.slice(7), drawn).would_publish)).toMatchObject({ decided: false, reason: expect.stringMatching(/^7 of the 100 cards/) });
+    expect(passRule(publishGroup(asDrawn.slice(7), drawn))).toMatchObject({ decided: false, reason: expect.stringMatching(/^7 of the 100 cards/) });
     // A card exported twice is counted once.
-    expect(compareWithLabels(asDrawn, [...drawn, drawn[0]]).would_publish).toMatchObject({ cards: 100, wouldPublishRejected: 10 });
+    expect(publishGroup(asDrawn, [...drawn, drawn[0]])).toMatchObject({ cards: 100, wouldPublishRejected: 10 });
 
     // A run file with no batches yet, and a batch marked ok that has no result, are passed over.
     expect(savedQuestions([{ run: "empty", generated: {} }, { run: "partial", generated: { batches: [{ seed: { id: "s01" }, ok: true }] } }])).toEqual([]);
