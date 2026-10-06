@@ -6,6 +6,7 @@ import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
 import { clampBatchSize } from "../lib/promptArchitecture";
+import { withoutVerdict } from "../lib/questionAccess";
 import { MAX_FEED_GENERATION_COUNT } from "../constants";
 
 export const generateAIQuestionForFeed = action({
@@ -17,7 +18,7 @@ export const generateAIQuestionForFeed = action({
 		anchoredTopicId: v.optional(v.id("topics")),
 	},
 	returns: v.array(v.nullable(v.any())),
-	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
+	handler: async (ctx, args): Promise<(Omit<Doc<"questions">, "qualityCheck" | "safetyFlags"> | null)[]> => {
 		if (args.organizationId) {
 			const organizations = await ctx.runQuery(api.core.organizations.getOrganizations, {});
 			const isMember = organizations.some((organization: { _id: Id<"organizations"> }) => organization._id === args.organizationId);
@@ -50,7 +51,7 @@ export const generateAIQuestionForFeed = action({
 			bypassAIUsage = true;
 		}
 
-		return await ctx.runAction(internal.internal.ai.generateAIQuestionForUser, {
+		const questions: (Doc<"questions"> | null)[] = await ctx.runAction(internal.internal.ai.generateAIQuestionForUser, {
 			userId: user._id,
 			count,
 			organizationId: args.organizationId,
@@ -60,5 +61,6 @@ export const generateAIQuestionForFeed = action({
 			anchoredToneId: args.anchoredToneId,
 			purpose: "feed",
 		});
+		return questions.map((question) => question && withoutVerdict(question));
 	}
 });

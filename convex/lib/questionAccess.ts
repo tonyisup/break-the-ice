@@ -29,6 +29,17 @@ export function normalizedRetirement(question: RetirementFields): RetirementFiel
 	return { status: "pruned", prunedAt: question.prunedAt };
 }
 
+/**
+ * A question as anyone but an admin gets it: without the quality check's verdict. The verdict
+ * is the owner's, and someone who can read what the check thinks of their question can steer it.
+ */
+export function withoutVerdict<T extends { qualityCheck?: unknown; safetyFlags?: unknown }>(
+	question: T,
+): Omit<T, "qualityCheck" | "safetyFlags"> {
+	const { qualityCheck: _check, safetyFlags: _flags, ...rest } = question;
+	return rest;
+}
+
 export function isQuestionPublic(question: Doc<"questions">): boolean {
 	const status = question.status;
 	// Duplicate retirement preserves the original public URL and content.

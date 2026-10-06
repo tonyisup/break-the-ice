@@ -314,6 +314,10 @@ export const createGenerationRun = internalMutation({
   },
   returns: v.id("generationRuns"),
   handler: async (ctx, args) => {
+    // Only a check has no blueprint: a generation's run always records the one its prompt came from.
+    if (args.purpose !== "quality_check" && !args.blueprintId) {
+      throw new Error(`A ${args.purpose} run needs its blueprint`);
+    }
     return await ctx.db.insert("generationRuns", {
       status: "running",
       purpose: args.purpose,

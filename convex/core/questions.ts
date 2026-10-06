@@ -17,7 +17,7 @@ import {
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
 import { findCanonicalUser } from "../lib/users";
-import { canReadQuestion, isQuestionPublic, isReadableByLink, isRetiredQuestion } from "../lib/questionAccess";
+import { canReadQuestion, isQuestionPublic, isReadableByLink, isRetiredQuestion, withoutVerdict } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
@@ -209,7 +209,8 @@ export const getNextRandomQuestions = action({
 		targetAnchoredCount: v.number(),
 	}),
 	handler: async (ctx, args) => {
-		return await getNextRandomQuestionsInternal(ctx, args);
+		const next = await getNextRandomQuestionsInternal(ctx, args);
+		return { ...next, questions: next.questions.map(withoutVerdict) };
 	},
 });
 
@@ -245,11 +246,11 @@ export const getNextQuestions = query({
 		const unseenQuestions = filteredQuestions.filter(q => !seenIds.has(q._id));
 		if (unseenQuestions.length > 0) {
 			shuffleArray(unseenQuestions);
-			return unseenQuestions.slice(0, count);
+			return unseenQuestions.slice(0, count).map(withoutVerdict);
 		}
 
 		shuffleArray(filteredQuestions);
-		return filteredQuestions.slice(0, count);
+		return filteredQuestions.slice(0, count).map(withoutVerdict);
 	}
 })
 
@@ -443,7 +444,7 @@ export const getQuestionsByIds = query({
 				visibleQuestions.push(question);
 			}
 		}
-		return visibleQuestions;
+		return visibleQuestions.map(withoutVerdict);
 	},
 });
 
@@ -638,7 +639,7 @@ export const getLikedQuestions = query({
 			if (!question || question.organizationId !== args.organizationId) continue;
 			if (await canReadQuestion(ctx, question, user._id)) liked.push(question);
 		}
-		return liked;
+		return liked.map(withoutVerdict);
 	},
 });
 
@@ -662,7 +663,7 @@ export const getQuestionById = query({
 					email: identity.email,
 				})
 				: null;
-			return (await canReadQuestion(ctx, question, user?._id)) ? question : null;
+			return (await canReadQuestion(ctx, question, user?._id)) ? withoutVerdict(question) : null;
 		} catch {
 			return null;
 		}

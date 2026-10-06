@@ -1,14 +1,22 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
-import { qualityCheckMode, qualityVerdict, wouldPublish, type QualityVerdict } from "../lib/qualityCheck";
+import { qualityCheckMode, qualityVerdict, sameJudgedSubject, wouldPublish, type QualityVerdict } from "../lib/qualityCheck";
 import { isRetiredQuestion, isUserWrittenQuestion } from "../lib/questionAccess";
 import { taxonomyDefinitions } from "../lib/taxonomyDefinitions";
 
-/** Pending questions read per backfill query, to stay well within a query's limits. */
-const HELD_SCAN_LIMIT = 500;
+/** Pending questions read per page of the backfill's scan, to stay well within a query's limits. */
+const HELD_PAGE_SIZE = 200;
 
 const definition = v.object({ slug: v.string(), name: v.string(), definition: v.string() });
+
+/** What the check read on a question. A verdict is only saved while all of it is unchanged. */
+const judgedSubject = v.object({
+  text: v.string(),
+  styleId: v.id("styles"),
+  toneId: v.id("tones"),
+  topicId: v.optional(v.id("topics")),
+});
 
 /**
  * A generated library question that has no verdict yet. Questions people wrote are never
@@ -26,15 +34,19 @@ function awaitsCheck(question: Doc<"questions">): boolean {
 }
 
 /**
- * What the judge is shown for one question: its text and short definitions of its style, tone
- * and topic. Null when the question shouldn't be checked: it is gone, already has a verdict,
- * wasn't generated, was retired, or its style or tone no longer exists.
+ * What the judge is shown for one question (its text and short definitions of its style, tone
+ * and topic), with what was read from the question to build it. Null when the question
+ * shouldn't be checked: it is gone, already has a verdict, wasn't generated, was retired, or
+ * its style or tone no longer exists.
  */
 export const questionForCheck = internalQuery({
   args: { questionId: v.id("questions") },
   returns: v.union(
     v.null(),
-    v.object({ text: v.string(), style: definition, tone: definition, topic: v.union(v.null(), definition) }),
+    v.object({
+      subject: v.object({ text: v.string(), style: definition, tone: definition, topic: v.union(v.null(), definition) }),
+      read: judgedSubject,
+    }),
   ),
   handler: async (ctx, args) => {
     const question = await ctx.db.get(args.questionId);
@@ -46,21 +58,24 @@ export const questionForCheck = internalQuery({
       question.topicId ? ctx.db.get(question.topicId) : Promise.resolve(null),
     ]);
     if (!style || !tone) return null;
-    return { text: question.text, ...taxonomyDefinitions(style, tone, topic) };
+    return {
+      subject: { text: question.text, ...taxonomyDefinitions(style, tone, topic) },
+      read: { text: question.text, styleId: question.styleId, toneId: question.toneId, topicId: question.topicId },
+    };
   },
 });
 
 /**
  * Saves a verdict on a question. It only records: the question's status, its place in the
- * review queue and its review revision are left alone. A question that is gone, that another
- * check reached first, or whose wording changed while the judge was reading it, is left as it
- * is. So is every question once the mode is off, even for a check that was already running.
+ * review queue and its review revision are left alone. Nothing is saved when the question is
+ * gone, another check reached it first, or its wording, style, tone or topic changed while
+ * the judge was reading it. Nothing is saved once the mode is off either, even for a check
+ * that was already running.
  */
 export const saveQualityCheck = internalMutation({
   args: {
     questionId: v.id("questions"),
-    /** The wording the judge read. */
-    text: v.string(),
+    read: judgedSubject,
     verdict: qualityVerdict,
     model: v.string(),
     promptVersion: v.number(),
@@ -70,7 +85,7 @@ export const saveQualityCheck = internalMutation({
   handler: async (ctx, args) => {
     if (qualityCheckMode() === "off") return { saved: false };
     const question = await ctx.db.get(args.questionId);
-    if (!question || question.qualityCheck || question.text !== args.text) return { saved: false };
+    if (!question || question.qualityCheck || !sameJudgedSubject(question, args.read)) return { saved: false };
     const verdict = args.verdict as QualityVerdict;
     await ctx.db.patch(args.questionId, {
       qualityCheck: {
@@ -81,7 +96,8 @@ export const saveQualityCheck = internalMutation({
         runId: args.runId,
         checkedAt: Date.now(),
       },
-      // Kept in step for existing readers of safetyFlags; qualityCheck.safety is the source.
+      // The schema's own field for these. Nothing reads it yet; it is kept in step with
+      // qualityCheck.safety, which is the source, and is cleared with it (NO_VERDICT).
       safetyFlags: args.verdict.safety,
     });
     return { saved: true };
@@ -89,23 +105,27 @@ export const saveQualityCheck = internalMutation({
 });
 
 /**
- * Generated questions waiting in the review queue with no verdict, oldest first. It reads the
- * HELD_SCAN_LIMIT oldest pending questions, which is far more than the queue has held.
+ * One page of the review queue, oldest first: the generated questions on it that are waiting
+ * with no verdict, up to `limit`. A question whose style or tone was deleted can't be judged,
+ * so it is left out instead of taking a place in the list on every run. The caller reads on
+ * from `cursor` until it has enough or `isDone`.
  */
 export const heldQuestionsWithoutCheck = internalQuery({
-  args: { limit: v.number() },
-  returns: v.array(v.id("questions")),
+  args: { limit: v.number(), cursor: v.union(v.string(), v.null()) },
+  returns: v.object({ questionIds: v.array(v.id("questions")), cursor: v.string(), isDone: v.boolean() }),
   handler: async (ctx, args) => {
-    const pending = await ctx.db
+    const page = await ctx.db
       .query("questions")
       .withIndex("by_status", (q) => q.eq("status", "pending"))
       .order("asc")
-      .take(HELD_SCAN_LIMIT);
-    const waiting: Id<"questions">[] = [];
-    for (const question of pending) {
-      if (waiting.length >= args.limit) break;
-      if (question.heldForReview === true && awaitsCheck(question)) waiting.push(question._id);
+      .paginate({ numItems: HELD_PAGE_SIZE, cursor: args.cursor });
+    const questionIds: Id<"questions">[] = [];
+    for (const question of page.page) {
+      if (questionIds.length >= args.limit) break;
+      if (question.heldForReview !== true || !awaitsCheck(question)) continue;
+      if (!(await ctx.db.get(question.styleId!)) || !(await ctx.db.get(question.toneId!))) continue;
+      questionIds.push(question._id);
     }
-    return waiting;
+    return { questionIds, cursor: page.continueCursor, isDone: page.isDone };
   },
 });
