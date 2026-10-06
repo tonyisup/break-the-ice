@@ -6,13 +6,13 @@ import { APIConnectionError, APIConnectionTimeoutError, APIError, OpenAIError } 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
-import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
+import { ERROR_CODES, ERROR_MESSAGES, MAX_FEED_GENERATION_COUNT } from "./constants";
 import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HARD_CAP_USD, FALLBACK_COST_PER_CALL_USD, spendDay, worstCaseCallCostUsd } from "./lib/aiSpend";
 import { billedFailure, keepAiReservation, keptAiReservation } from "./lib/aiSpendGuard";
 import * as aiRateLimitLib from "./lib/aiRateLimit";
 import { ensureAiRateLimit, ensureAiUnansweredLeft, holdAiUnanswered, isAiStopError, releaseAiUnanswered } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
-import { GENERATION_MODEL, openRouterClient } from "./lib/generationRunner";
+import { GENERATION_MODEL, maxOutputTokens, openRouterClient } from "./lib/generationRunner";
 import { clampBatchSize, DEFAULT_BLUEPRINT_SLUG } from "./lib/promptArchitecture";
 
 // The model call is the only network edge: stub it on the shared client so the rest
@@ -160,6 +160,32 @@ function lastSetAside(send?: { mock: { calls: unknown[][] } }): number {
 async function ledger(t: T) {
   const rows = await t.run(async (ctx) => await ctx.db.query("aiSpendDays").collect());
   return rows.map((row) => [row.day, row.spendClass, row.costUsd, row.calls]).sort();
+}
+
+// As many questions as the largest batch holds, so a test can tell how many a call kept.
+const TEN_QUESTIONS = JSON.stringify({
+  questions: [
+    "What small win are you proud of this week?",
+    "Which smell takes you straight back to childhood?",
+    "What habit would you keep if you moved abroad?",
+    "Which song do you skip every single time?",
+    "What chore do you secretly enjoy doing?",
+    "Which meal would you cook to impress a stranger?",
+    "What did you collect when you were ten?",
+    "Which street in your town do you like best?",
+    "What gift have you kept the longest?",
+    "Which board game brings out your worst side?",
+  ].map((text) => ({ text })),
+});
+
+/** What each call asked the provider for: its output cap, and the number of questions its prompt names. */
+function askedFor() {
+  return create.mock.calls.map((call: unknown[]) => {
+    const { max_tokens, messages } = call[0] as { max_tokens: number; messages: Array<{ content: string }> };
+    const asked = /Generate (\S+) ice-breaker questions/.exec(messages[1].content);
+    if (!asked) throw new Error("askedFor: the user prompt no longer says \"Generate N ice-breaker questions\"");
+    return [max_tokens, asked[1]];
+  });
 }
 
 describe("recording what a completion cost", () => {
@@ -339,25 +365,127 @@ describe("matrix fill", () => {
     expect(locks).toEqual([]);
   });
 
-  test("a count that isn't a number is filled as one question: the output stays capped and the ledger stays finite", async () => {
+  /** A paid organization with one empty cell to fill: an active style, tone and topic. */
+  async function fillableCell() {
+    const ctx = await paidOrgMember();
+    await ctx.t.run(async (db) => {
+      await db.db.insert("styles", { id: "s1", slug: "s1", status: "active", version: 1, name: "s1", structure: "x", color: "#111111", icon: "sparkles" });
+      await db.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
+      await db.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
+    });
+    return ctx;
+  }
+  type Cell = Awaited<ReturnType<typeof fillableCell>>;
+  // Both fills, each asked for `count` questions in that cell (or given no count) and returning
+  // how many it saved.
+  const FILLS = {
+    "a single-cell fill": async ({ t, orgId }: Cell, count?: number) =>
+      (await t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic", count })).count,
+    "a batch fill": async ({ t, orgId }: Cell, count?: number) =>
+      (
+        await t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+          organizationId: orgId,
+          axisY: "style",
+          axisX: "tone",
+          topicSlug: "any-topic",
+          cells: [{ ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" }],
+          countPerCell: count,
+        })
+      ).totalQuestionsGenerated,
+  };
+  const BOTH_FILLS = ["a single-cell fill", "a batch fill"] as const;
+
+  test.each(BOTH_FILLS.flatMap((which) => [Number.NaN, Infinity, -Infinity].map((count) => [which, count] as const)))(
+    "%s refuses a count of %s: no cell is claimed, nothing is sent and nothing is charged",
+    async (which, count) => {
+      const cell = await fillableCell();
+      // Only reached if the fill isn't refused.
+      create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+
+      const error = await FILLS[which](cell, count).catch((e: unknown) => e);
+
+      // NaN and the infinities are numbers to the argument check, so the fill has to refuse them.
+      expect(error).toBeInstanceOf(ConvexError);
+      expect(convexErrorData(error)).toEqual({ code: ERROR_CODES.AI_COUNT_INVALID, message: ERROR_MESSAGES.AI_COUNT_INVALID });
+      expect(create).not.toHaveBeenCalled();
+      const { runs, locks, limits } = await cell.t.run(async (ctx) => ({
+        runs: await ctx.db.query("generationRuns").collect(),
+        locks: await ctx.db.query("matrixFillCellLocks").collect(),
+        limits: await ctx.db.query("rateLimits").collect(),
+      }));
+      expect(runs).toEqual([]);
+      expect(locks).toEqual([]);
+      // None of the team's fills or the person's own requests were used.
+      expect(limits).toEqual([]);
+      expect(await ledger(cell.t)).toEqual([]);
+    },
+  );
+
+  // The schedule page asks for one question per cell, and a fill generates one whatever
+  // count it is given.
+  test.each(BOTH_FILLS.flatMap((which) => [1, -3, 2.7, 10, 50].map((count) => [which, count] as const)))(
+    "%s asked for %s questions generates one, under a cap of 2500 tokens",
+    async (which, count) => {
+      const cell = await fillableCell();
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+
+      const saved = await FILLS[which](cell, count);
+
+      expect(saved).toBe(1);
+      expect(askedFor()).toEqual([[2500, "1"]]);
+      expect(await ledger(cell.t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
+    },
+  );
+
+  test.each(BOTH_FILLS)("%s given no count generates one question, under a cap of 2500 tokens", async (which) => {
+    const cell = await fillableCell();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+
+    const saved = await FILLS[which](cell);
+
+    expect(saved).toBe(1);
+    expect(askedFor()).toEqual([[2500, "1"]]);
+    expect(await ledger(cell.t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
+  });
+
+  test("a single-cell fill refuses a count that isn't a number before it picks a topic", async () => {
+    // No topic is named, and the catalog has none to pick from.
+    const { t, orgId } = await paidOrgMember();
+    // Only reached if the fill isn't refused.
+    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+    const fill = (count?: number) =>
+      t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "reflective", toneSlug: "warm", count });
+
+    // With a count it can use, the fill gets as far as the missing topic.
+    await expect(fill()).rejects.toThrow(/No active topics/);
+    for (const count of [Number.NaN, Infinity, -Infinity]) {
+      const error = await fill(count).catch((e: unknown) => e);
+      expect(convexErrorData(error)).toMatchObject({ code: ERROR_CODES.AI_COUNT_INVALID });
+    }
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("a single-cell fill refuses a count that isn't a number while another fill holds the cell, and leaves that claim in place", async () => {
     const { t, orgId } = await paidOrgMember();
     await t.run(async (ctx) => {
-      await ctx.db.insert("styles", { id: "s1", slug: "s1", status: "active", version: 1, name: "s1", structure: "x", color: "#111111", icon: "sparkles" });
-      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
-      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
+      await ctx.db.insert("matrixFillCellLocks", { organizationId: orgId, cellKey: "s1|t1|any-topic" });
     });
-    create.mockResolvedValue(completion(JSON.stringify({ questions: [{ text: "What small thing made you smile today?" }] }), { cost: 0.01 }) as never);
-    expect(clampBatchSize(Number.NaN)).toBe(1);
+    // Only reached if the fill isn't refused.
+    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+    const fill = (count: number) =>
+      t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic", count });
 
-    const result = await t
-      .withIdentity(ME)
-      .action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic", count: Number.NaN });
-
-    // NaN passes through Math.min and Math.max. Unchecked, it reached the provider as no cap
-    // at all and the day's spend row as NaN, which pauses user AI for everyone until the next day.
-    expect(result.count).toBe(1);
-    expect(create.mock.calls.map((call: unknown[]) => (call[0] as { max_tokens: number }).max_tokens)).toEqual([2500]);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
+    // With a count it can use, a fill that finds the cell held has nothing to do.
+    expect(await fill(1)).toEqual({ count: 0, questionIds: [] });
+    for (const count of [Number.NaN, Infinity, -Infinity]) {
+      const error = await fill(count).catch((e: unknown) => e);
+      expect(convexErrorData(error)).toMatchObject({ code: ERROR_CODES.AI_COUNT_INVALID });
+    }
+    expect(create).not.toHaveBeenCalled();
+    const locks = await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect());
+    expect(locks.map((lock) => lock.cellKey)).toEqual(["s1|t1|any-topic"]);
   });
 
   test("an ordinary per-cell failure still skips that cell and keeps filling the rest", async () => {
@@ -382,7 +510,86 @@ describe("matrix fill", () => {
   });
 });
 
+describe("a question count that isn't a whole number from one to ten", () => {
+  // The count asked for, the questions generated and the output cap. A count that isn't a
+  // number is one question, never the largest batch.
+  const COUNTS = [
+    [Number.NaN, 1, 2500],
+    [Infinity, 1, 2500],
+    [-Infinity, 1, 2500],
+    [-3, 1, 2500],
+    [2.7, 2, 2700],
+  ] as const;
+
+  test.each(COUNTS)("an admin preview asked for %s questions generates %i, under a cap of %i tokens", async (count, questions, maxTokens) => {
+    const { t, styleId, toneId } = await setup();
+    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+
+    await t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId, toneId, count });
+
+    expect(askedFor()).toEqual([[maxTokens, String(questions)]]);
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => run.batchSize)).toEqual([questions]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", 0.01, 1]]);
+  });
+
+  test.each(COUNTS)("the feed asked for %s questions generates %i, under a cap of %i tokens", async (count, questions, maxTokens) => {
+    const { t, styleId, toneId } = await setup();
+    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+
+    const generated = await t
+      .withIdentity(ME)
+      .action(api.core.ai.generateAIQuestionForFeed, { count, anchoredStyleId: styleId, anchoredToneId: toneId });
+
+    expect(generated).toHaveLength(questions);
+    expect(askedFor()).toEqual([[maxTokens, String(questions)]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
+  });
+
+  test.each<[string, { count?: number }]>([
+    ["no particular number of", {}],
+    ["0", { count: 0 }],
+  ])("the feed asked for %s questions generates one, under a cap of 2500 tokens", async (_asked, count) => {
+    const { t, styleId, toneId } = await setup();
+    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+
+    const generated = await t
+      .withIdentity(ME)
+      .action(api.core.ai.generateAIQuestionForFeed, { ...count, anchoredStyleId: styleId, anchoredToneId: toneId });
+
+    expect(generated).toHaveLength(1);
+    expect(askedFor()).toEqual([[2500, "1"]]);
+    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
+  });
+
+});
+
+describe("how many questions one feed request generates", () => {
+  // Written from the shared limit, so a feed action that stops reading it fails here when the
+  // limit changes. An admin preview can still ask for the ten-question batch limit.
+  test.each([MAX_FEED_GENERATION_COUNT, MAX_FEED_GENERATION_COUNT + 1, 10, 50])(
+    "the feed asked for %i questions generates no more than the feed page asks for, as one charge",
+    async (count) => {
+      const { t, styleId, toneId } = await setup();
+      create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+
+      const generated = await t
+        .withIdentity(ME)
+        .action(api.core.ai.generateAIQuestionForFeed, { count, anchoredStyleId: styleId, anchoredToneId: toneId });
+
+      expect(generated).toHaveLength(MAX_FEED_GENERATION_COUNT);
+      expect(askedFor()).toEqual([[maxOutputTokens(MAX_FEED_GENERATION_COUNT), String(MAX_FEED_GENERATION_COUNT)]]);
+      expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
+    },
+  );
+});
+
 describe("helpers", () => {
+  test("a batch size that isn't a number is one question, and any other is held to a whole number from one to ten", () => {
+    expect([Number.NaN, Infinity, -Infinity].map((value) => clampBatchSize(value))).toEqual([1, 1, 1]);
+    expect([-3, 0, 0.4, 1, 2.7, 10, 10.9, 50].map((value) => clampBatchSize(value))).toEqual([1, 1, 1, 1, 2, 10, 10, 10]);
+  });
+
   test("isAiStopError is true only for a paused budget or a rate limit", () => {
     const convexError = (code: string) => new ConvexError({ code, message: "x" });
 

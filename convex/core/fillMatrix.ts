@@ -7,7 +7,7 @@ import type { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration, wasCutOffFailure } from "../lib/generationRunner";
 import { ensureAiRateLimit, ensureAiUnansweredLeft, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
 import { ensureAiBudget, keptAiReservation } from "../lib/aiSpendGuard";
-import { ERROR_CODES } from "../constants";
+import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 
 async function pickRandomActiveTopicSlug(ctx: ActionCtx): Promise<string> {
 	const topics = await ctx.runQuery(api.core.topics.getTopics, {});
@@ -27,7 +27,8 @@ const axisValidator = v.union(
 
 const PAGE_SIZE = 256;
 const MAX_CELLS_PER_REQUEST = MATRIX_FILL_MAX_CELLS;
-const MAX_COUNT_PER_CELL = 10;
+// The schedule page asks for one question per cell, and the server holds any caller to that.
+const MAX_COUNT_PER_CELL = 1;
 const MIN_COUNT = 1;
 
 type MatrixKeysPage = {
@@ -111,6 +112,20 @@ function fillStoppedMessage(filledCells: number): string {
 }
 
 /**
+ * The count to generate a cell with: one unless the caller says otherwise, held to MIN_COUNT
+ * through MAX_COUNT_PER_CELL (a fraction is rounded down when the prompt is built). NaN and the
+ * infinities pass v.number(), so they are refused here, before a cell is claimed or anything
+ * is generated.
+ */
+function questionsPerCell(count: number | undefined): number {
+	if (count === undefined) return MIN_COUNT;
+	if (!Number.isFinite(count)) {
+		throw new ConvexError({ code: ERROR_CODES.AI_COUNT_INVALID, message: ERROR_MESSAGES.AI_COUNT_INVALID });
+	}
+	return Math.max(MIN_COUNT, Math.min(count, MAX_COUNT_PER_CELL));
+}
+
+/**
  * Fill empty cells on the 2D schedule matrix (one generation per visible cell).
  * Each entry matches how the UI buckets questions: same axis-Y slug and axis-X slug,
  * with a shared topic for ALL cells (or random if topicSlug is omitted).
@@ -153,7 +168,7 @@ export const fillEmptyCells = action({
 			throw new Error(`Too many cells requested. Maximum is ${MAX_CELLS_PER_REQUEST}.`);
 		}
 
-		const countPerCell = Math.max(MIN_COUNT, Math.min(args.countPerCell ?? 1, MAX_COUNT_PER_CELL));
+		const countPerCell = questionsPerCell(args.countPerCell);
 		let totalCells = 0;
 		let filledCells = 0;
 		let skippedExisting = 0;
@@ -292,6 +307,8 @@ export const fillSingleCell = action({
 			organizationId: args.organizationId,
 		});
 
+		const clampedCount = questionsPerCell(args.count);
+
 		const effectiveTopic =
 			args.topicSlug !== undefined && args.topicSlug !== ""
 				? args.topicSlug
@@ -317,9 +334,6 @@ export const fillSingleCell = action({
 		}
 
 		try {
-			// Clamp count to safe bounds
-			const clampedCount = Math.max(MIN_COUNT, Math.min(args.count ?? 1, MAX_COUNT_PER_CELL));
-
 			await ensureAiBudget(ctx, "user");
 			await ensureAiUnansweredLeft(ctx);
 			await ensureAiRateLimit(ctx, { name: "matrixFillCell", key: args.organizationId });
