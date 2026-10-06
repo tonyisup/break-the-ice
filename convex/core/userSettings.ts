@@ -9,7 +9,7 @@ import {
 	resolveWorkspaceOrganizationId,
 } from "../lib/workspaceEngagement";
 import { getUserOrCreate } from "./users";
-import { canReadQuestion, readableQuestionIds } from "../lib/questionAccess";
+import { canReadQuestion, readableQuestionIds, withoutVerdict } from "../lib/questionAccess";
 import { findCanonicalUser } from "../lib/users";
 
 const workspaceOrganizationIdArg = {
@@ -139,7 +139,7 @@ export const getQuestionHistory = query({
 			const question = await ctx.db.get(h.questionId);
 			if (question && (await canReadQuestion(ctx, question, user._id))) {
 				results.push({
-					question,
+					question: withoutVerdict(question),
 					viewedAt: h.updatedAt,
 				});
 			}

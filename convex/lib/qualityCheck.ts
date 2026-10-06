@@ -1,5 +1,4 @@
 import { v, type Infer } from "convex/values";
-import type { Id } from "../_generated/dataModel";
 import { editorialReason } from "./questionReviewValidators";
 import { stripCodeFences } from "./promptArchitecture";
 import { taxonomyDefinition } from "./taxonomyDefinitions";
@@ -13,7 +12,9 @@ import { taxonomyDefinition } from "./taxonomyDefinitions";
 // set aside at GENERATION_MODEL's price (createChatCompletionWithRetry), which is this model's
 // too: a different model here needs its own price there.
 export const QUALITY_CHECK_MODEL = "anthropic/claude-opus-5.5";
-// Bumped when the instructions or the publish rule change, so verdicts can be told apart.
+// Bumped when the instructions, the parser's rules or the publish rule change after a release,
+// so verdicts can be told apart. 1 is the first released wording; the drafts measured on dev
+// before it carried 1 as well, so a judged file from before the release isn't comparable.
 export const QUALITY_CHECK_PROMPT_VERSION = 1;
 export const QUALITY_CHECK_TEMPERATURE = 0;
 // The answer is one small JSON object, under 100 tokens. Opus 5.5 spends a few hundred hidden
@@ -50,9 +51,11 @@ export type QualityCheckSnapshot = Infer<typeof qualityCheckSnapshot>;
 export type QualityCheckMode = "off" | "record" | "publish";
 
 /**
- * QUALITY_CHECK_MODE on this deployment: `off` (the default) schedules no checks, `record`
- * saves a verdict on every generated question and changes nothing else. `publish` is
- * accepted, and behaves as `record` until publishing is built. Anything else is off, with a
+ * QUALITY_CHECK_MODE on this deployment: `off` (the default) schedules no checks and shows no
+ * flag. `record` saves a verdict on every generated question and changes nothing about who
+ * can see a question; a hold or a safety flag is then marked on a team's schedule grid and
+ * left out of Auto-fill Week and the coach-feedback suggestions until an admin acts on the
+ * question (claudeFlag). `publish` is accepted, and behaves as `record` until publishing is built. Anything else is off, with a
  * warning, so a misspelled value doesn't pass for a quiet day.
  */
 export function qualityCheckMode(): QualityCheckMode {
@@ -168,11 +171,22 @@ export function parseQualityVerdict(raw: string): QualityVerdict | null {
   return { verdict: answer.verdict, reasons, safety, confidence, note };
 }
 
-/** What the check read about a question. Its verdict stands only while all of it is unchanged. */
-type JudgedSubject = { text?: string; styleId?: Id<"styles">; toneId?: Id<"tones">; topicId?: Id<"topics"> };
+/**
+ * What the check read about a question: its wording and the slugs of its style, tone and
+ * topic. Its verdict stands only while all of it is unchanged. Slugs, not version ids: a new
+ * version of the same style moves every question's styleId, and that isn't the question
+ * becoming a different kind of question.
+ */
+export const judgedSubject = v.object({
+  text: v.optional(v.string()),
+  style: v.optional(v.string()),
+  tone: v.optional(v.string()),
+  topic: v.optional(v.string()),
+});
+type JudgedSubject = Infer<typeof judgedSubject>;
 
 export function sameJudgedSubject(a: JudgedSubject, b: JudgedSubject): boolean {
-  return a.text === b.text && a.styleId === b.styleId && a.toneId === b.toneId && a.topicId === b.topicId;
+  return a.text === b.text && a.style === b.style && a.tone === b.tone && a.topic === b.topic;
 }
 
 /** The patch that takes a verdict off a question, for when what the check read has changed. */

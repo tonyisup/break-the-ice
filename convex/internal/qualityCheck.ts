@@ -6,7 +6,6 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { ensureAiBudget, keptAiReservation } from "../lib/aiSpendGuard";
 import { assertEvalsEnabled } from "../lib/evalChecks";
-import type { SpendClass } from "../lib/aiSpend";
 import {
   GENERATION_PROVIDER,
   UnusableOutputError,
@@ -42,23 +41,22 @@ const BACKFILL_MAX_PAGES = 25;
 /** The most questions one eval call judges, so the action stays well inside its time limit. */
 const EVAL_MAX_ITEMS = 25;
 
-const spendClass = v.union(v.literal("user"), v.literal("system"));
-
 /**
  * One call to the judge, through the daily budget like any generation call and recorded as a
  * `quality_check` run. Throws when the budget is paused, the provider fails or the answer
- * can't be read: there is never a guessed verdict. `spendClass` is the budget it counts
- * toward: a check costs about as much as generating the question did, so one on a question a
- * person generated counts as user spend, like that generation, and can't use up what the daily
- * email needs.
+ * can't be read: there is never a guessed verdict.
+ *
+ * Every check is system spend, whoever's request generated the question. A check costs about
+ * 1 cent a question, which is more than generating a feed question did, so on the user budget
+ * it would cut what people can generate in a day to about a third. On system spend it is
+ * bounded by the generation it follows, which the user budget still caps.
  */
 async function judge(
   ctx: ActionCtx,
   subject: QualityCheckSubject,
-  spendClass: SpendClass,
   sourceQuestionId?: Id<"questions">,
 ): Promise<{ verdict: QualityVerdict; runId: Id<"generationRuns">; model: string }> {
-  await ensureAiBudget(ctx, spendClass);
+  await ensureAiBudget(ctx, "system");
   const prompts = buildQualityCheckPrompts(subject);
   const runId = await ctx.runMutation(internal.internal.generation.createGenerationRun, {
     purpose: "quality_check",
@@ -74,8 +72,7 @@ async function judge(
   });
 
   try {
-    // Nobody is waiting on a check, so it holds none of a person's unanswered-call slots.
-    const completion = await createChatCompletionWithRetry(ctx, { spendClass, runId, unattended: true }, {
+    const completion = await createChatCompletionWithRetry(ctx, { spendClass: "system", runId }, {
       model: QUALITY_CHECK_MODEL,
       temperature: QUALITY_CHECK_TEMPERATURE,
       max_tokens: QUALITY_CHECK_MAX_OUTPUT_TOKENS,
@@ -105,11 +102,11 @@ type CheckResult = { outcome: CheckOutcome; unanswered: boolean };
  * when the verdict wasn't saved because the question changed, was deleted or got a verdict
  * while the judge was reading it. A failure leaves the question exactly as it was.
  */
-async function checkOne(ctx: ActionCtx, questionId: Id<"questions">, spend: SpendClass): Promise<CheckResult> {
+async function checkOne(ctx: ActionCtx, questionId: Id<"questions">): Promise<CheckResult> {
   const found = await ctx.runQuery(internal.internal.qualityCheckData.questionForCheck, { questionId });
   if (!found) return { outcome: "skipped", unanswered: false };
   try {
-    const judged = await judge(ctx, found.subject, spend, questionId);
+    const judged = await judge(ctx, found.subject, questionId);
     const { saved } = await ctx.runMutation(internal.internal.qualityCheckData.saveQualityCheck, {
       questionId,
       read: found.read,
@@ -132,22 +129,16 @@ async function checkOne(ctx: ActionCtx, questionId: Id<"questions">, spend: Spen
  * is picked up by checkPendingQuestions; one that was published at once stays unchecked.
  */
 export const checkQuestion = internalAction({
-  args: {
-    questionId: v.id("questions"),
-    attempt: v.optional(v.number()),
-    /** The budget the check counts toward: that of the generation that made the question. System when not given. */
-    spendClass: v.optional(spendClass),
-  },
+  args: { questionId: v.id("questions"), attempt: v.optional(v.number()) },
   returns: v.union(v.literal("checked"), v.literal("skipped"), v.literal("failed")),
   handler: async (ctx, args): Promise<CheckOutcome> => {
     if (qualityCheckMode() === "off") return "skipped";
-    const { outcome } = await checkOne(ctx, args.questionId, args.spendClass ?? "system");
+    const { outcome } = await checkOne(ctx, args.questionId);
     const attempt = args.attempt ?? 1;
     if (outcome === "failed" && attempt < MAX_ATTEMPTS) {
       await ctx.scheduler.runAfter(QUALITY_CHECK_RETRY_DELAY_MS, internal.internal.qualityCheck.checkQuestion, {
         questionId: args.questionId,
         attempt: attempt + 1,
-        spendClass: args.spendClass,
       });
     } else if (outcome === "failed") {
       console.warn(`Quality check gave up on question ${args.questionId} after ${MAX_ATTEMPTS} attempts.`);
@@ -178,8 +169,7 @@ async function heldWithoutCheck(ctx: ActionCtx, limit: number): Promise<Id<"ques
  * published at once (a matrix fill's or the nightly pool's). With dryRun it only lists them.
  * Up to QUALITY_CHECK_BACKFILL_LIMIT a run, oldest first. A run stops early, leaving the rest
  * as `notReached`, when a call gets no answer or the run has taken
- * QUALITY_CHECK_BACKFILL_TIME_BUDGET_MS. It is the owner's run, so it is system spend. Run it
- * again for more:
+ * QUALITY_CHECK_BACKFILL_TIME_BUDGET_MS. Run it again for more:
  * `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`.
  */
 // gstack-shortcut(dec-73fb363c-9bb6-4c12-95da-fc399eae1f70): a question published at once is never re-checked after two failures, upgrade when the team-facing flag is finished (TODOS.md, Quality check).
@@ -203,7 +193,7 @@ export const checkPendingQuestions = internalAction({
     let reached = 0;
     for (const questionId of questionIds) {
       if (Date.now() - startedAt > QUALITY_CHECK_BACKFILL_TIME_BUDGET_MS) break;
-      const { outcome, unanswered } = await checkOne(ctx, questionId, "system");
+      const { outcome, unanswered } = await checkOne(ctx, questionId);
       counts[outcome] += 1;
       reached += 1;
       // Like the other batch callers: one unanswered call is paid for, the next probably would be too.
@@ -249,7 +239,7 @@ export const evalQualityCheck = internalAction({
         continue;
       }
       try {
-        const { verdict } = await judge(ctx, item, "system");
+        const { verdict } = await judge(ctx, item);
         results.push({ text: item.text, verdict, wouldPublish: wouldPublish(verdict), wouldFlag: flagsQuestion(verdict) });
       } catch (error) {
         results.push({ text: item.text, error: error instanceof Error ? error.message : String(error) });

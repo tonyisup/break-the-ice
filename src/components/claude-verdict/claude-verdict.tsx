@@ -17,6 +17,8 @@ type Concerns = { reasons: Reason[]; safety: string[]; note: string };
 
 const concernBox = "border-amber-500/40 bg-amber-500/10";
 const concernText = "text-amber-600 dark:text-amber-400";
+// red-300 in dark mode: red-400 on this tint falls under 4.5:1 on the review queue's grey card.
+const safetyBadge = "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300";
 
 /** A hold, or a keep with a safety flag: the app's rule for what a team is shown (flagsQuestion). */
 const isConcern = (check: { verdict: "keep" | "hold"; safety: string[] }) => check.verdict === "hold" || check.safety.length > 0;
@@ -31,7 +33,7 @@ function ConcernBadges({ reasons, safety }: Pick<Concerns, "reasons" | "safety">
       ))}
       {safety.map((flag) => (
         // Named as a safety flag in words, not by its colour alone.
-        <Badge key={flag} variant="outline" className="border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400">
+        <Badge key={flag} variant="outline" className={safetyBadge}>
           <span className="font-normal">Safety:&nbsp;</span>
           {safetyLabels[flag] ?? flag}
         </Badge>
@@ -40,17 +42,23 @@ function ConcernBadges({ reasons, safety }: Pick<Concerns, "reasons" | "safety">
   );
 }
 
-/** The quality check's verdict on a question, for an admin. */
+/**
+ * The quality check's verdict on a question, for an admin. `outdated` is for a page where the
+ * admin is editing what the check read: the verdict is about the saved question, and saving
+ * the edit clears it.
+ */
 export function ClaudeVerdict({
   check,
+  outdated = false,
 }: {
   check: Concerns & { verdict: "keep" | "hold"; wouldPublish: boolean };
+  outdated?: boolean;
 }) {
   const concern = isConcern(check);
   const Icon = concern ? CircleAlert : CheckCircle2;
   return (
     // A plain keep stays quiet, so a concern is what the eye lands on in a long queue.
-    <div className={cn("rounded-md border px-3 py-2 text-sm", concern ? concernBox : "border-emerald-500/40")}>
+    <div className={cn("rounded-md border px-3 py-2 text-sm", concern ? concernBox : "border-emerald-500/40", outdated && "opacity-70")}>
       <div className="flex flex-wrap items-center gap-2">
         <Icon aria-hidden="true" className={cn("size-4 shrink-0", concern ? concernText : "text-emerald-600 dark:text-emerald-400")} />
         <span className="font-semibold">{check.verdict === "hold" ? "Claude: hold" : "Claude: keep"}</span>
@@ -66,17 +74,27 @@ export function ClaudeVerdict({
         <ConcernBadges reasons={check.reasons} safety={check.safety} />
       </div>
       {check.note && <p className="mt-1 text-foreground/80">{check.note}</p>}
+      {outdated && <p className="mt-1 text-xs font-medium">About the saved question. Saving this edit clears it.</p>}
     </div>
   );
 }
 
-/** One line for an admin's list of questions: only a hold or a safety flag is worth a row's space. */
+/**
+ * One line for an admin's list of questions: only a hold or a safety flag is worth a row's
+ * space. A safety flag is named whatever the verdict, and takes the safety badge's red.
+ */
 export function ClaudeConcernBadge({ check }: { check: { verdict: "keep" | "hold"; safety: string[]; note: string } }) {
   if (!isConcern(check)) return null;
+  const safety = check.safety.length > 0;
+  const label = check.verdict === "keep" ? "Claude: safety flag" : safety ? "Claude: hold, safety flag" : "Claude: hold";
   return (
-    <Badge variant="outline" className={cn("gap-1 font-medium", concernBox, "text-amber-700 dark:text-amber-400")} title={check.note || undefined}>
+    <Badge
+      variant="outline"
+      className={cn("gap-1 font-medium", safety ? safetyBadge : cn(concernBox, "text-amber-800 dark:text-amber-400"))}
+      title={check.note || undefined}
+    >
       <CircleAlert aria-hidden="true" className="size-3" />
-      {check.verdict === "hold" ? "Claude: hold" : "Claude: safety flag"}
+      {label}
     </Badge>
   );
 }

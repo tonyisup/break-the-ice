@@ -432,7 +432,7 @@ describe("checking a question in record mode", () => {
         purpose: "quality_check", batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "", sourceQuestionId: questionId,
       });
       await s.t.mutation(internal.internal.qualityCheckData.saveQualityCheck, {
-        questionId, read: { text: "What small thing made you smile today?", styleId: s.styleId, toneId: s.toneId }, verdict: HOLD, model: QUALITY_CHECK_MODEL, promptVersion: QUALITY_CHECK_PROMPT_VERSION, runId,
+        questionId, read: { text: "What small thing made you smile today?", style: "reflective", tone: "warm" }, verdict: HOLD, model: QUALITY_CHECK_MODEL, promptVersion: QUALITY_CHECK_PROMPT_VERSION, runId,
       });
       return completion(JSON.stringify(KEEP));
     }) as never);
@@ -794,40 +794,34 @@ describe("the four ways a question is generated, in record mode", () => {
     },
   );
 
-  test("a check counts toward the budget of the generation that made the question, so people's questions can't use up the daily email's", async () => {
-    // The day's user budget is already spent; the hard cap is not.
+  test("every check is system spend: a spent user budget stops none of them, and a reached hard cap stops them all", async () => {
+    process.env.EVALS_ENABLED = "true";
     process.env.AI_DAILY_BUDGET_USD = "1";
     process.env.AI_DAILY_HARD_CAP_USD = "5";
     const s = await app();
+    vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const classOf = async (purpose: "feed" | "nightly_pool" | "newsletter", text: string) => {
-      const runId = await s.t.run(async (ctx) => {
-        const blueprint = await ctx.db.query("promptBlueprints").first();
-        return ctx.db.insert("generationRuns", { status: "succeeded", purpose, blueprintId: blueprint!._id, batchSize: 1, model: "m", temperature: 0, assembledPrompt: "", resultQuestionIds: [], createdAt: 0 });
-      });
-      const { insertedQuestionIds } = await s.t.mutation(internal.internal.generation.insertGeneratedQuestions, {
-        runId, styleId: s.styleId, toneId: s.toneId, styleSlug: "reflective", toneSlug: "warm", styleVersion: 1, toneVersion: 1, candidates: [{ text }],
-      });
-      const scheduled = await s.t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
-      const job = scheduled.find((entry) => entry.name.includes("qualityCheck") && (entry.args[0] as { questionId: string }).questionId === insertedQuestionIds[0]);
-      return [insertedQuestionIds[0], (job!.args[0] as { spendClass?: string }).spendClass] as const;
-    };
-    const [fromFeed, feedClass] = await classOf("feed", "What would you cook for a friend tonight?");
-    const [fromPool, poolClass] = await classOf("nightly_pool", "Which song do you skip every single time?");
-    const [, emailClass] = await classOf("newsletter", "What chore do you secretly enjoy doing?");
-    expect([feedClass, poolClass, emailClass]).toEqual(["user", "system", "system"]);
-
+    // People have used up today's user budget, so the feed is paused for them.
     await s.t.run((ctx) => ctx.db.insert("aiSpendDays", { day: spendDay(Date.now()), spendClass: "user", costUsd: 1, calls: 40 }));
     answers(KEEP);
+    const scheduled = await generated(s, { text: "Saved just before the pause?" });
+    const waiting = await generated(s, { text: "Waiting for the backfill?" });
+    const style = { slug: "reflective", name: "Reflective", definition: "Looks back." };
+    const tone = { slug: "warm", name: "Warm", definition: "Kind." };
 
-    // The person's question is refused its check; the pool's still gets one.
-    expect(await s.t.action(internal.internal.qualityCheck.checkQuestion, { questionId: fromFeed, spendClass: "user" })).toBe("failed");
-    expect(await s.t.action(internal.internal.qualityCheck.checkQuestion, { questionId: fromPool, spendClass: "system" })).toBe("checked");
-    expect(create).toHaveBeenCalledTimes(1);
-    // The retry keeps the class it was scheduled with.
-    expect((await s.t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect()))
-      .filter((entry) => entry.name.includes("qualityCheck") && entry.state.kind === "pending" && (entry.args[0] as { attempt?: number }).attempt === 2)
-      .map((entry) => (entry.args[0] as { spendClass?: string }).spendClass)).toEqual(["user"]);
+    expect(await check(s, scheduled)).toBe("checked");
+    expect(await s.t.action(internal.internal.qualityCheck.checkPendingQuestions, { dryRun: false })).toMatchObject({ questionIds: [waiting], checked: 1, failed: 0 });
+    const { results } = await s.t.action(internal.internal.qualityCheck.evalQualityCheck, { items: [{ text: "Q?", style, tone, topic: null }] });
+    expect(results[0].verdict).toEqual(KEEP);
+    expect((await spend(s)).sort()).toEqual([["system", 0.018, 3], ["user", 1, 40]]);
+
+    // At the hard cap nothing more is sent, whichever way it was asked for.
+    await s.t.run(async (ctx) => {
+      const row = (await ctx.db.query("aiSpendDays").collect()).find((day) => day.spendClass === "system")!;
+      await ctx.db.patch(row._id, { costUsd: 4 });
+    });
+    expect(await check(s, await generated(s, { text: "Past the hard cap?" }))).toBe("failed");
+    expect(create).toHaveBeenCalledTimes(3);
   });
 
   test("with the mode off, none of this happens: a feed question is saved and no check is queued", async () => {
@@ -862,13 +856,12 @@ describe("the four ways a question is generated, in record mode", () => {
       safetyFlags: ["humiliation"],
       qualityCheck: { ...HOLD, wouldPublish: false, model: QUALITY_CHECK_MODEL, promptVersion: QUALITY_CHECK_PROMPT_VERSION },
     });
-    // One generation and one check, each on its own run. The check counts toward the same
-    // budget as the generation that made the question: a person asked for this one.
+    // One generation for the person, one check for the owner: each on its own run and budget.
     expect((await runs(s)).map((run) => [run.purpose, run.status, run.sourceQuestionId])).toEqual([
       ["feed", "succeeded", undefined],
       ["quality_check", "succeeded", queue[0]._id],
     ]);
-    expect(await spend(s)).toEqual([["user", 0.016, 2]]);
+    expect((await spend(s)).sort()).toEqual([["system", 0.006, 1], ["user", 0.01, 1]]);
     expect(await queuedChecks(s)).toEqual([]);
   });
 });
@@ -1187,6 +1180,58 @@ describe("an admin's edit of a checked question", () => {
     }
   });
 
+  test("a new tone or topic drops the verdict too", async () => {
+    const s = await setup();
+    const { otherToneId, topicId } = await s.t.run(async (ctx) => ({
+      otherToneId: await ctx.db.insert("tones", { id: "bold", slug: "bold", status: "active", version: 1, name: "Bold", promptGuidanceForAI: "x", color: "#222222", icon: "sun" }),
+      topicId: await ctx.db.insert("topics", { id: "food", slug: "food", name: "Food" }),
+    }));
+    const byTone = await checked(s);
+    const byPoolPage = await checked(s);
+    const byTopic = await checked(s);
+
+    await s.t.withIdentity(ADMIN).mutation(api.admin.questions.updateQuestion, { id: byTone, toneId: otherToneId, tone: "bold" });
+    await s.t.withIdentity(ADMIN).mutation(api.admin.questions.updateCategories, { updates: [{ id: byPoolPage, tone: "bold" }] });
+    await s.t.withIdentity(ADMIN).mutation(api.admin.questions.updateQuestion, { id: byTopic, topicId, topic: "food" });
+
+    for (const questionId of [byTone, byPoolPage, byTopic]) {
+      const after = await question(s, questionId);
+      expect(after?.qualityCheck, questionId).toBeUndefined();
+      expect(after?.safetyFlags).toEqual([]);
+    }
+  });
+
+  test("a new version of the same style keeps the verdict, saved or still on its way", async () => {
+    const s = await setup();
+    const newVersionId = await s.t.run((ctx) =>
+      ctx.db.insert("styles", { id: "reflective", slug: "reflective", status: "active", version: 2, name: "Reflective", structure: "Ask for a reflection", color: "#111111", icon: "sparkles" }),
+    );
+    // Activating a version moves every question of that style to the new version's id.
+    const saved = await checked(s);
+    await s.t.withIdentity(ADMIN).mutation(api.admin.questions.updateQuestion, { id: saved, styleId: newVersionId, style: "reflective" });
+    expect(await question(s, saved)).toMatchObject({ styleId: newVersionId, qualityCheck: { verdict: "hold" } });
+
+    process.env.QUALITY_CHECK_MODE = "record";
+    const onItsWay = await generated(s);
+    create.mockImplementation((async () => {
+      await s.t.run((ctx) => ctx.db.patch(onItsWay, { styleId: newVersionId }));
+      return completion(JSON.stringify(KEEP));
+    }) as never);
+    expect(await check(s, onItsWay)).toBe("checked");
+    expect(await question(s, onItsWay)).toMatchObject({ styleId: newVersionId, qualityCheck: { verdict: "keep" } });
+  });
+
+  test("undoing an approval keeps the verdict: the wording it read is still there", async () => {
+    const s = await setup();
+    const questionId = await checked(s);
+    await edit(s, questionId, { status: "public" });
+    const [review] = await s.t.run((ctx) => ctx.db.query("questionReviews").collect());
+
+    await s.t.withIdentity(ADMIN).mutation(api.admin.pruning.undoReview, { reviewId: review._id });
+
+    expect(await question(s, questionId)).toMatchObject({ status: "pending", safetyFlags: ["humiliation"], qualityCheck: { verdict: "hold" } });
+  });
+
   test("resending the same style and tone, as Approve does, keeps the verdict", async () => {
     const s = await setup();
     const questionId = await checked(s);
@@ -1228,15 +1273,26 @@ describe("who gets to read a verdict", () => {
     const live = await generated(s, { ...verdict, text: "In the library?", status: "public", heldForReview: undefined });
     const held = await generated(s, { ...verdict, text: "Opened from the daily email?" });
 
+    const ME = { subject: "me-clerk", tokenIdentifier: "test|me-clerk", email: "me@example.com" };
+    await s.t.run(async (ctx) => {
+      const meId = await ctx.db.insert("users", { email: ME.email, clerkId: ME.subject });
+      await ctx.db.insert("userQuestions", { userId: meId, questionId: live, status: "liked", updatedAt: Date.now() });
+    });
+    const me = s.t.withIdentity(ME);
     const forPeople = [
       await s.t.query(api.core.questions.getQuestionById, { id: live }),
       // Held for review, and still readable by its link.
       await s.t.query(api.core.questions.getQuestionById, { id: held }),
       ...(await s.t.query(api.core.questions.getQuestionsByIds, { ids: [live] })),
       ...(await s.t.query(api.core.questions.getNextQuestions, { count: 5, style: s.styleId, tone: s.toneId })),
+      ...(await me.query(api.core.questions.getLikedQuestions, {})),
+      ...(await me.query(api.core.userSettings.getQuestionHistory, {})).map((entry: { question: Doc<"questions"> }) => entry.question),
+      ...(await s.t.action(api.core.questions.getNextRandomQuestions, { count: 5 })).questions,
     ];
 
-    expect(forPeople.map((q) => q.text)).toEqual(["In the library?", "Opened from the daily email?", "In the library?", "In the library?"]);
+    expect(forPeople.map((q) => q.text)).toEqual([
+      "In the library?", "Opened from the daily email?", "In the library?", "In the library?", "In the library?", "In the library?", "In the library?",
+    ]);
     for (const q of forPeople) {
       expect(q).not.toHaveProperty("qualityCheck");
       expect(q).not.toHaveProperty("safetyFlags");

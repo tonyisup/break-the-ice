@@ -4,6 +4,7 @@ import type { Doc } from "../_generated/dataModel";
 import { mutation, query } from "../_generated/server";
 import { ensurePaidOrganizationMember } from "../auth";
 import { findCanonicalUser } from "../lib/users";
+import { claudeFlag } from "../lib/qualityCheck";
 import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
   getZonedCalendarDate,
@@ -372,7 +373,9 @@ export const getCurationPreview = query({
       .order("desc")
       .take(CURATION_CANDIDATE_LIMIT);
     const recommendations = candidates
-      .filter((question) => !scheduledQuestionIds.has(question._id))
+      // A question the quality check flagged is for a person to choose on the grid, after
+      // reading why. It is never suggested here, as Auto-fill never places one.
+      .filter((question) => !scheduledQuestionIds.has(question._id) && !claudeFlag(question))
       .map((question) => {
         const reasons = (["style", "tone", "topic"] as const).flatMap((dimension) => {
           const value = question[dimension];

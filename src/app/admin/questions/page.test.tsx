@@ -122,6 +122,30 @@ describe("admin questions review queue", () => {
     expect(within(card("What is your go-to karaoke song?")).queryByText(/^Claude:/)).toBeNull();
   });
 
+  it("marks a hold in the list of reviewed questions, and leaves a plain keep unmarked", () => {
+    const reviewed = (text: string, verdict: "keep" | "hold") => ({
+      ...aiQuestion,
+      _id: `reviewed-${verdict}`,
+      text,
+      status: "public",
+      qualityCheck: { verdict, reasons: verdict === "hold" ? ["awkward_wording"] : [], safety: [], confidence: 4, note: "Stiff phrasing.", wouldPublish: false },
+    });
+    vi.mocked(useQuery).mockImplementation(((name: string) => {
+      if (name === "getPendingQuestions" || name === "getStyles" || name === "getTones") return [];
+      if (name === "getQuestions") return [reviewed("Which chore do you put off?", "hold"), reviewed("What made you smile today?", "keep")];
+      return undefined;
+    }) as never);
+
+    render(<QuestionsPage />);
+
+    // The table and the mobile cards both render; each shows the hold's mark once and no other.
+    const marks = screen.getAllByText("Claude: hold");
+    expect(marks.length).toBeGreaterThan(0);
+    for (const mark of marks) expect(mark).toHaveAttribute("title", "Stiff phrasing.");
+    expect(screen.queryByText("Claude: keep")).toBeNull();
+    expect(screen.queryByText("Claude: safety flag")).toBeNull();
+  });
+
   it("Reject makes an AI question private, Approve makes it public, and Mark Personal says so", async () => {
     render(<QuestionsPage />);
 

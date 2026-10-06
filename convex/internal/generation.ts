@@ -11,7 +11,6 @@ import {
   validateGeneratedQuestion,
 } from "../lib/promptArchitecture";
 import { qualityCheckMode } from "../lib/qualityCheck";
-import { generationSpendClass } from "../lib/aiSpend";
 
 async function getLatestActiveBySlug(
   ctx: QueryCtx,
@@ -471,10 +470,6 @@ export const insertGeneratedQuestions = internalMutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const checksQuality = qualityCheckMode() !== "off";
-    // A check counts toward the same budget as the generation that made the question. With no
-    // run to say what that was, it is the owner's: system spend.
-    const run = checksQuality && args.runId ? await ctx.db.get(args.runId) : null;
-    const checkSpendClass = run ? generationSpendClass(run.purpose) : "system";
     const insertedQuestionIds: Id<"questions">[] = [];
     const duplicates: Array<{ text: string; reason: string }> = [];
     const rejected: Array<{ text: string; reasons: string[] }> = [];
@@ -546,7 +541,7 @@ export const insertGeneratedQuestions = internalMutation({
       });
       // Scheduled, not awaited, so whoever is waiting for this question waits no longer.
       if (checksQuality) {
-        await ctx.scheduler.runAfter(0, internal.internal.qualityCheck.checkQuestion, { questionId, spendClass: checkSpendClass });
+        await ctx.scheduler.runAfter(0, internal.internal.qualityCheck.checkQuestion, { questionId });
       }
     }
 

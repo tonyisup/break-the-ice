@@ -1019,7 +1019,7 @@ const questionPool = useQuery(
       });
       toast.success("Week auto-filled!");
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to generate");
+      toast.error(readableError(e, "Failed to generate"));
     } finally {
       setIsGenerating(false);
     }
@@ -1054,7 +1054,7 @@ const questionPool = useQuery(
       });
       toast.success("Week auto-filled!");
     } catch (e: any) {
-      toast.error(e.message ?? "Auto-schedule failed");
+      toast.error(readableError(e, "Auto-schedule failed"));
     }
   };
 
@@ -1964,7 +1964,7 @@ const questionPool = useQuery(
                                       <Badge
                                         variant="outline"
                                         title="Flagged by AI review. Open View full to see why."
-                                        className="text-[9px] px-1 py-0 h-3.5 border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                        className="text-[9px] px-1 py-0 h-3.5 border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-400"
                                       >
                                         Flagged
                                       </Badge>

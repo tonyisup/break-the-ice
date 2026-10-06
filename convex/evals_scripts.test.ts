@@ -1341,7 +1341,7 @@ console.log(JSON.stringify(answers[fn]));
         `import { appendFileSync } from "node:fs";
 const [, , fn, json] = process.argv.slice(2);
 const { items } = JSON.parse(json);
-appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ fn, texts: items.map((item) => item.text), keys: Object.keys(items[0]).sort() }) + "\\n");
+appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ fn, texts: items.map((item) => item.text), keys: Object.keys(items[0] ?? {}).sort() }) + "\\n");
 if (items.some((item) => item.text === process.env.FAIL_CALL)) {
   console.error("Uncaught ConvexError: Evals are off on this deployment");
   process.exit(1);
@@ -1453,7 +1453,10 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       const done = runScript("judge.mjs", ["judged", "r1", "r2"], { PATH });
       expect(done.status, done.stderr).toBe(0);
       expect(done.stdout).not.toMatch(/questions to judge/);
-      expect(calls()).toHaveLength(3);
+      // Two calls for the first run; the rerun asked which instructions dev has (a call with no
+      // questions, which costs nothing) and then judged the one that was missing.
+      expect(calls().slice(0, 2).map((call) => call.texts.length).sort()).toEqual([10, 2]);
+      expect(calls().slice(2).map((call) => call.texts.length)).toEqual([0, 1]);
 
       // A call that fails outright loses only its own questions.
       const outage = runScript("judge.mjs", ["other", "r1", "r2"], { PATH, FAIL_CALL: "On hold: question 12?" });
@@ -1466,6 +1469,8 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       const changed = runScript("judge.mjs", ["other", "r1", "r2"], { PATH, PROMPT_VERSION: "2" });
       expect(changed.status).toBe(1);
       expect(changed.stderr).toMatch(/"other" was judged by anthropic\/claude-opus-5\.5 with instructions v1; the deployment now has anthropic\/claude-opus-5\.5 v2\. Start a new name\./);
+      // It found that out before sending a question, so nothing was paid for and thrown away.
+      expect(calls().slice(-1)[0].texts).toEqual([]);
       expect(readJudged("other")).toMatchObject({ promptVersion: 1 });
       expect(readJudged("other").results).toHaveLength(10);
     }, 30_000);
@@ -1516,6 +1521,13 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       expect(narrowed.stdout).toMatch(/Judged 1 of 1 /);
       expect(readJudged("blind").results.map((result: { text: string }) => result.text)).toEqual(sixty);
       expect(runScript("judge.mjs", ["blind", "r2"], { PATH }).stdout).not.toMatch(/questions to judge/);
+
+      // Labels are compared with everything the file holds, also when a rerun names fewer runs.
+      writeLabels(sixty.map((text, i) => card(text, "would_publish", i < 3 ? "reject" : "keep")));
+      expect(runScript("judge.mjs", ["wide", "r1", "r2"], { PATH }).status).toBe(0);
+      const fewerRuns = runScript("judge.mjs", ["wide", "r1"], { PATH });
+      expect(fewerRuns.status, fewerRuns.stderr).toBe(0);
+      expect(fewerRuns.stdout).toContain("Pass rule: PASS. The owner rejected 3 of 60 the check would publish; at most 3 are allowed.");
     }, 30_000);
   });
 });

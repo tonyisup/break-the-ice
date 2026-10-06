@@ -493,6 +493,24 @@ describe("OrgWeeklyCurationPage Team prompt input validation", () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 
+  it("shows why Auto-fill placed nothing when only flagged questions are left, not the redacted server error", async () => {
+    const autoSchedule = vi.fn().mockRejectedValue(new ConvexError({
+      code: ERROR_CODES.SCHEDULE_ONLY_FLAGGED_LEFT,
+      message: ERROR_MESSAGES.SCHEDULE_ONLY_FLAGGED_LEFT,
+    }));
+    (useMutation as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+      if (fn === "autoSchedule") return autoSchedule;
+      if (fn === "createSchedule") return createSchedule;
+      return vi.fn().mockResolvedValue(undefined);
+    });
+    render(<OrgWeeklyCurationPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Auto-fill/ })[0]);
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(ERROR_MESSAGES.SCHEDULE_ONLY_FLAGGED_LEFT));
+    expect(toast.success).not.toHaveBeenCalledWith("Week auto-filled!");
+  });
+
   it("shows the readable message when a topic preview's style is refused", async () => {
     (useAction as ReturnType<typeof vi.fn>).mockImplementation((fn: string) =>
       fn === "previewTopicQuestions"

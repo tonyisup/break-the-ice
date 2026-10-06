@@ -39,6 +39,14 @@ describe("ClaudeVerdict", () => {
     expect(screen.getAllByText(/^Safety:/)).toHaveLength(2);
   });
 
+  it("says the verdict is about the saved question while an edit to what it read is pending", () => {
+    const { rerender } = render(<ClaudeVerdict check={hold} />);
+    expect(screen.queryByText(/Saving this edit clears it/)).toBeNull();
+
+    rerender(<ClaudeVerdict check={hold} outdated />);
+    expect(screen.getByText("About the saved question. Saving this edit clears it.")).toBeInTheDocument();
+  });
+
   it("shows a keep with a safety flag as a concern, not as a plain keep", () => {
     const keep = { verdict: "keep" as const, reasons: [], safety: [], note: "Clear and easy.", wouldPublish: false };
     const { container, rerender } = render(<ClaudeVerdict check={keep} />);
@@ -62,6 +70,10 @@ describe("ClaudeConcernBadge", () => {
 
     rerender(<ClaudeConcernBadge check={{ verdict: "hold", safety: [], note: "Stiff phrasing." }} />);
     expect(screen.getByText("Claude: hold")).toHaveAttribute("title", "Stiff phrasing.");
+
+    // A safety flag is named on a hold too, in the safety colour, so it stands apart in a list.
+    rerender(<ClaudeConcernBadge check={{ verdict: "hold", safety: ["trauma"], note: "" }} />);
+    expect(screen.getByText("Claude: hold, safety flag").className).toContain("text-red-700");
   });
 });
 

@@ -4,21 +4,15 @@
 //
 // "user" spend is anything a signed-in user can trigger (feed generation, remix,
 // matrix fill, team previews). "system" spend is the daily email and admin tools,
-// which don't count against the user budget, so abuse can't starve them. Both stop
-// at the hard cap. Change either cap with the Convex env vars below, no deploy needed.
+// which don't count against the user budget, so abuse can't starve them. The quality
+// check of each generated question is system spend too (internal/qualityCheck.ts): it
+// follows people's generation, so the user budget bounds it, but it does use room under
+// the hard cap. Both stop at the hard cap. Change either cap with the Convex env vars
+// below, no deploy needed.
 
 import { getZonedCalendarDate } from "./timezone";
 
 export type SpendClass = "user" | "system";
-
-/**
- * The budget a generation counts toward, by its purpose. Only the daily email and the
- * admin-triggered pool are system spend. Everything else (feed generation, matrix fill, any
- * purpose added later) is user spend. A question's quality check counts the same way.
- */
-export function generationSpendClass(purpose: string): SpendClass {
-  return purpose === "newsletter" || purpose === "nightly_pool" ? "system" : "user";
-}
 
 export const DEFAULT_DAILY_BUDGET_USD = 1;
 export const DEFAULT_DAILY_HARD_CAP_USD = 5;

@@ -134,16 +134,19 @@ Convex environment turns this on: `off` (the default) or `record`. (`publish` is
 later release and only records for now.) In `record`, each new question from the feed, the
 daily email, matrix fill and the nightly pool gets a verdict (keep or hold, with reasons, safety
 flags and a one-sentence note) a few seconds after it is saved. Nothing about who can see a
-question changes, and the verdict isn't sent to people's apps. Admins see it in the review
-queue and on a question's page, and a hold or a safety flag is marked in their lists. On a
-team's schedule grid, a question the check held, or raised a safety concern about, is marked
-"Flagged", with the reasons in its details, until an admin reviews or edits it, and Auto-fill
-Week leaves it out. Changing a question's wording, style, tone or topic drops its verdict.
+question changes, and the verdict isn't part of the question documents people's apps get.
+Admins see it in the review queue and on a question's page, and a hold or a safety flag is
+marked in their lists. A team sees one thing: on its schedule grid, a question the check held,
+or raised a safety concern about, is marked "Flagged", with the reasons and note in its
+details, until an admin acts on the question. Auto-fill Week and the coach-feedback
+suggestions leave a flagged question out. Changing a question's wording, style, tone or topic
+drops its verdict.
 
-Each check is a small call, about 1 cent, counted toward the same daily budget as the
-generation that made the question: the user budget for a feed or matrix-fill question, system
-spend for the daily email's and the nightly pool's. One that fails is tried once more five
-minutes later. Questions still waiting in the review queue without a verdict can
+Each check is a small call, about 1 cent, charged to system spend whoever generated the
+question. That is about twice what generating a feed question costs, so with recording on, a
+day of generation at the default budgets can add up to about $2 of checks to system spend,
+under the same hard cap as the daily email. One that fails is tried once more five minutes
+later. Questions still waiting in the review queue without a verdict can
 be checked with `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`,
 then with `false` (up to 50 a run; it stops early if the provider isn't answering). That
 doesn't reach questions that were published at once: a matrix fill's or nightly pool's question

@@ -101,8 +101,10 @@ node evals/judge.mjs my-judged v0-5-2-r1 v0-5-2-r2 v0-5-2-r3
 ```
 
 A question that appears in more than one run is judged once. Rerunning the same name judges
-only what is missing, keeps every verdict the file already has, and refuses to judge if the
-deployment's judge model or instructions have changed since. A check costs about 1 cent, charged to the dev deployment's system AI budget. The
+only what is missing, keeps every verdict the file already has, and refuses, before it sends
+a question, if the deployment's judge model or instructions version has changed since. (The
+version is `QUALITY_CHECK_PROMPT_VERSION`. Drafts measured before the first release all
+carried 1, so don't rerun a name from before then.) A check costs about 1 cent, charged to the dev deployment's system AI budget. The
 `judged/` folder is git-ignored: the verdicts stay local, so the owner can label a set drawn
 from them without seeing them.
 
@@ -136,9 +138,9 @@ test. A blind set is.
 The pass rule for a blind set is fixed before it is labeled: of the cards the check would
 publish, the owner rejects at most 1 in 20, rounded down, with an "unsure" counted as a
 reject. It needs at least 60 such cards, and it is decided only on the set as it was drawn:
-if a card of the `would_publish` group isn't judged in the file, or would no longer publish
-(the judge doesn't give the same answer every time), the script says so instead of deciding.
-Keep the judged file a set was drawn from. That is an observed rate, not a proof: 4 rejects in
+if a card of the `would_publish` group has no verdict in the judged file, or the file's verdict
+would no longer publish it (the judge doesn't give the same answer every time), the script
+says so instead of deciding. Keep the judged file a set was drawn from. That is an observed rate, not a proof: 4 rejects in
 95 shows the true rate is unlikely to be above about 10%.
 
 ## Reading the numbers

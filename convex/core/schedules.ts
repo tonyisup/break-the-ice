@@ -1,11 +1,12 @@
 import type { GenericId } from "convex/values";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import { ensurePaidOrganizationMember, isOrganizationPaid } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 import { isQuestionPublic, isRetiredQuestion } from "../lib/questionAccess";
 import { claudeFlag } from "../lib/qualityCheck";
+import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
   getZonedCalendarDate,
@@ -552,12 +553,9 @@ export const autoSchedule = mutation({
     }
     // A question the quality check flagged is for a person to choose after reading why, on the
     // grid. Auto-fill never places one.
-    candidates = candidates.filter((q) => !claudeFlag(q));
-    if (candidates.length === 0) {
-      throw new Error(
-        "Every matching question is flagged by AI review. Assign one by hand after reading why, or generate more.",
-      );
-    }
+    const unflagged = candidates.filter((q) => !claudeFlag(q));
+    const leftOutFlagged = unflagged.length < candidates.length;
+    candidates = unflagged;
 
     const existingAssignments = await ctx.db
       .query("scheduledQuestions")
@@ -566,6 +564,10 @@ export const autoSchedule = mutation({
     const assignedQIds = new Set(existingAssignments.map((a) => a.questionId));
     candidates = candidates.filter((q) => !assignedQIds.has(q._id));
 
+    if (candidates.length === 0 && leftOutFlagged) {
+      // A ConvexError, so the manager reads the reason and not a redacted server error.
+      throw new ConvexError({ code: ERROR_CODES.SCHEDULE_ONLY_FLAGGED_LEFT, message: ERROR_MESSAGES.SCHEDULE_ONLY_FLAGGED_LEFT });
+    }
     if (candidates.length === 0) {
       throw new Error("All eligible questions are already assigned this week.");
     }

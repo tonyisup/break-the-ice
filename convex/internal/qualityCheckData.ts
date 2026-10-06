@@ -1,20 +1,12 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
-import { qualityCheckMode, qualityCheckSubject, qualityVerdict, sameJudgedSubject, wouldPublish } from "../lib/qualityCheck";
+import { judgedSubject, qualityCheckMode, qualityCheckSubject, qualityVerdict, sameJudgedSubject, wouldPublish } from "../lib/qualityCheck";
 import { isRetiredQuestion, isUserWrittenQuestion } from "../lib/questionAccess";
 import { taxonomyDefinitions } from "../lib/taxonomyDefinitions";
 
 /** Pending questions read per page of the backfill's scan, to stay well within a query's limits. */
 const HELD_PAGE_SIZE = 200;
-
-/** What the check read on a question. A verdict is only saved while all of it is unchanged. */
-const judgedSubject = v.object({
-  text: v.string(),
-  styleId: v.id("styles"),
-  toneId: v.id("tones"),
-  topicId: v.optional(v.id("topics")),
-});
 
 /**
  * A generated library question that has no verdict yet. Questions people wrote are never
@@ -58,7 +50,7 @@ export const questionForCheck = internalQuery({
     if (!style || !tone) return null;
     return {
       subject: { text: question.text, ...taxonomyDefinitions(style, tone, topic) },
-      read: { text: question.text, styleId: question.styleId, toneId: question.toneId, topicId: question.topicId },
+      read: { text: question.text, style: question.style, tone: question.tone, topic: question.topic },
     };
   },
 });

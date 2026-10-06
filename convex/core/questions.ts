@@ -594,7 +594,7 @@ export const getCustomQuestions = query({
 		  .withIndex("by_author", (q) => q.eq("authorId", user._id))
 		  .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 		  .collect();
-		return questions.filter((question) => question.kind !== "team_prompt");
+		return questions.filter((question) => question.kind !== "team_prompt").map(withoutVerdict);
 	},
 });
 
@@ -1074,7 +1074,8 @@ export const updatePersonalQuestion = mutation({
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: args.questionId,
 		});
-		return await ctx.db.get(args.questionId);
+		const updated = await ctx.db.get(args.questionId);
+		return updated && withoutVerdict(updated);
 	},
 });
 

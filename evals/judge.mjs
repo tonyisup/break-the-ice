@@ -80,6 +80,17 @@ const save = () =>
 
 
 let failures = 0;
+if (todo.length && record.model !== null) {
+  // An empty call costs nothing and says which model and instructions dev has now.
+  const deployed = await convexRun(root, "internal/qualityCheck:evalQualityCheck", { items: [] }).catch((error) => {
+    console.error(`Couldn't ask dev which instructions it has (${cliError(error)}). Nothing was judged.`);
+    process.exit(1);
+  });
+  if (record.model !== deployed.model || record.promptVersion !== deployed.promptVersion) {
+    console.error(`"${name}" was judged by ${record.model} with instructions v${record.promptVersion}; the deployment now has ${deployed.model} v${deployed.promptVersion}. Start a new name.`);
+    process.exit(1);
+  }
+}
 if (todo.length) {
   console.log(`${todo.length} of ${questions.length} questions to judge for "${name}" at ${commit}, about $${(todo.length * USD_PER_CHECK).toFixed(2)}.`);
   const calls = [];
@@ -94,10 +105,6 @@ if (todo.length) {
       failures += call.length;
       console.error(`A call of ${call.length} questions failed: ${cliError(error)}`);
       return;
-    }
-    if (record.model !== null && (record.model !== answer.model || record.promptVersion !== answer.promptVersion)) {
-      console.error(`"${name}" was judged by ${record.model} with instructions v${record.promptVersion}; the deployment now has ${answer.model} v${answer.promptVersion}. Start a new name.`);
-      process.exit(1);
     }
     record.model = answer.model;
     record.promptVersion = answer.promptVersion;
@@ -126,7 +133,8 @@ console.log(
 );
 
 if (labels) {
-  const groups = compareWithLabels(judged, labels);
+  // Against every verdict the file holds, not only the questions this command named.
+  const groups = compareWithLabels([...byText.values()], labels);
   for (const [group, counts] of Object.entries(groups)) {
     console.log(
       `${group}: ${counts.cards} labeled cards${counts.unjudged ? ` (${counts.unjudged} not judged here)` : ""}. ` +

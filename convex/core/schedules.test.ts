@@ -923,9 +923,15 @@ test("auto-schedule never places a question the quality check flagged, and says 
 
     await t.run((ctx) => ctx.db.patch(questionIds[0], { reviewRevision: 0 }));
     const lastWeek = await admin.mutation(api.core.schedules.createSchedule, { organizationId, weekStart: "2026-08-03" });
-    await expect(admin.mutation(api.core.schedules.autoSchedule, { scheduleId: lastWeek })).rejects.toThrow(
-      /Every matching question is flagged by AI review\. Assign one by hand after reading why, or generate more\./,
-    );
+    // A readable refusal, not a server error the production deployment would redact.
+    const refusal = () => admin.mutation(api.core.schedules.autoSchedule, { scheduleId: lastWeek }).catch((caught: unknown) => caught);
+    const onlyFlaggedLeft = { code: ERROR_CODES.SCHEDULE_ONLY_FLAGGED_LEFT, message: ERROR_MESSAGES.SCHEDULE_ONLY_FLAGGED_LEFT };
+    expect(convexErrorData(await refusal())).toEqual(onlyFlaggedLeft);
+
+    // The same when the one unflagged question is already on the week: the reason is the flags.
+    await t.run((ctx) => ctx.db.patch(questionIds[0], { reviewRevision: 1 }));
+    await admin.mutation(api.core.schedules.assignQuestion, { scheduleId: lastWeek, dayOfWeek: "monday", questionId: questionIds[0] });
+    expect(convexErrorData(await refusal())).toEqual(onlyFlaggedLeft);
   } finally {
     delete process.env.QUALITY_CHECK_MODE;
   }
@@ -1108,6 +1114,26 @@ test("curation preview ranks candidates using attributed coach feedback without 
     landedWell: 3, fellFlat: 0, wrongVibe: 2, timingOff: 0, isMixed: true, coachCount: 1,
   });
   expect(preview.recommendations.findIndex((candidate) => candidate.questionId === intenseCandidateId)).toBe(0);
+
+  // A question the quality check flagged is never suggested, though coach feedback would rank it.
+  process.env.QUALITY_CHECK_MODE = "record";
+  try {
+    await t.run(async (ctx) => {
+      const runId = await ctx.db.insert("generationRuns", {
+        status: "succeeded", purpose: "quality_check", batchSize: 1, model: "m", temperature: 0, assembledPrompt: "", resultQuestionIds: [], createdAt: 0,
+      });
+      await ctx.db.patch(intenseCandidateId, {
+        qualityCheck: {
+          verdict: "hold", reasons: ["awkward_wording"], safety: [], confidence: 4, note: "Stiff phrasing.",
+          wouldPublish: false, model: "m", promptVersion: 1, runId, checkedAt: 1,
+        },
+      });
+    });
+    const withFlag = await admin.query(api.core.coachFeedback.getCurationPreview, { organizationId, currentDate: "2026-07-18", limit: 20 });
+    expect(withFlag.recommendations.some((candidate) => candidate.questionId === intenseCandidateId)).toBe(false);
+  } finally {
+    delete process.env.QUALITY_CHECK_MODE;
+  }
   expect(preview.recommendations.some((candidate) => candidate.questionId === historicalQuestionId)).toBe(false);
   expect(preview.recommendations.some((candidate) => candidate.questionId === scheduledWithoutFeedbackId)).toBe(false);
   expect(preview.recommendations.every((candidate) => candidate.reasons.length > 0)).toBe(true);

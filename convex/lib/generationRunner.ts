@@ -8,7 +8,7 @@ import {
   buildRemixPrompts,
   parseQuestionObjects,
 } from "./promptArchitecture";
-import { callReserveUsd, generationSpendClass, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
+import { callReserveUsd, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 import { type AiUnansweredSlot, holdAiUnanswered, releaseAiUnanswered } from "./aiRateLimit";
@@ -201,12 +201,7 @@ export function maxOutputTokens(batchSize: number): number {
 // given back. A cut-off keeps the slot whatever the request then comes to.
 export async function createChatCompletionWithRetry(
   ctx: ActionCtx,
-  spend: {
-    spendClass: SpendClass;
-    runId: Id<"generationRuns">;
-    /** A scheduled job nobody is waiting on: it holds none of a person's unanswered-call slots. */
-    unattended?: boolean;
-  },
+  spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   let promptChars = 0;
@@ -225,7 +220,7 @@ export async function createChatCompletionWithRetry(
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const slot = spend.unattended ? null : await holdAiUnanswered(ctx, spend.spendClass);
+    const slot = await holdAiUnanswered(ctx, spend.spendClass);
     let reservation: AiReservation;
     try {
       reservation = await reserveAiSpend(ctx, spend.spendClass, reserveUsd, slot?.day);
@@ -504,7 +499,10 @@ export async function runPersistedQuestionGeneration(
   };
   questions: any[];
 }> {
-  const spendClass = generationSpendClass(args.purpose);
+  // Only the daily email and the admin-triggered pool are system spend. Everything
+  // else (feed generation, matrix fill, any purpose added later) is user spend.
+  const spendClass: SpendClass =
+    args.purpose === "newsletter" || args.purpose === "nightly_pool" ? "system" : "user";
   await ensureAiBudget(ctx, spendClass);
 
   const temperature = args.temperature ?? DEFAULT_GENERATION_TEMPERATURE;
