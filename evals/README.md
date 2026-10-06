@@ -22,6 +22,9 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
   cutoffs, seeds, prompts, definitions, model or library, or failed seeds.
 - `compare.mjs <baseline> <run>...`: tests one or more runs of a changed setup against a baseline
   (see below). Writes `comparison-<baseline>.json` in the first run's folder.
+- `judge.mjs <name> <run>... [--only-labeled]`: runs the app's quality check
+  (`convex/lib/qualityCheck.ts`) over the questions those runs would have saved, on dev, and
+  writes its verdicts to `judged/<name>.json`. See "Measuring the quality check" below.
 - `jev.mjs`: the Jev questions and cutoffs. The judge is pinned (`JEV_MODEL`), and summaries
   record hashes of the question wording and of the cutoffs, plus `SCORING_VERSION` (in
   `stats.mjs`, bumped when the rate logic changes); `score.mjs` refuses to overwrite a summary
@@ -86,6 +89,39 @@ A run on the default model, Opus 5.5, costs about $0.46 of generation on dev (ch
 deployment's system AI budget) and about $0.05 of Jev. In Oct 2026 a run cost about $0.12 on
 Gemini 3.8 Flash and $0.14 on Sonnet 5.5. A call that times out has no cost on its run, so a
 run's reported cost leaves it out; the dev budget still counts it.
+
+## Measuring the quality check
+
+The quality check is the call that judges each generated question in the app (keep or hold,
+reasons, safety flags, a confidence from 1 to 5). `judge.mjs` runs the same call on dev over
+questions from generated runs, without saving anything on a question:
+
+```bash
+node evals/judge.mjs my-judged v0-5-2-r1 v0-5-2-r2 v0-5-2-r3
+```
+
+A question that appears in more than one run is judged once. Rerunning the same name judges
+only what is missing, and refuses if the deployment's judge model or instructions have changed
+since. A check costs about half a cent, charged to the dev deployment's system AI budget.
+
+To compare the verdicts with the owner's labels, put the labels in `evals/owner-labels.json`
+(git-ignored; the labels are not stored in this repo):
+
+```json
+{ "cards": [ { "id": "q253", "text": "...", "group": "would_publish", "verdict": "keep", "reasons": [] } ] }
+```
+
+`group` is `would_publish` or `would_hold` for a blind set drawn from the check's verdicts,
+or `labeled_before` for questions labeled before the check existed. `verdict` is `keep`,
+`reject` or `unsure`. Cards are matched to judged questions by their text. With the file
+present, `judge.mjs` prints, for each group, how many questions the check would publish and
+how many of those the owner rejected, and `--only-labeled` judges just the labeled questions.
+
+The check would publish a question only on a keep with no reasons, no safety flags and a
+confidence of 4 or 5. The pass rule for a blind set is fixed before it is labeled: of the cards
+the check would publish, the owner rejects at most 1 in 20, rounded down, with an "unsure"
+counted as a reject. It needs at least 60 such cards. That is an observed rate, not a proof: 4
+rejects in 95 shows the true rate is unlikely to be above about 10%.
 
 ## Reading the numbers
 
