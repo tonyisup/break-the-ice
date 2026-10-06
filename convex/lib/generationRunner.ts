@@ -170,8 +170,8 @@ function assertPromptSize(chars: number): void {
 
 // A thinking model's hidden reasoning counts toward max_tokens. google/gemini-3.8-flash spent
 // about 500 to 1,600 tokens before writing any JSON, so a cap sized for the JSON alone cut off
-// most answers. Opus 5.5 doesn't reason unless asked to, but the allowance stays so a switch to
-// a model that does can't cut answers off again.
+// most answers. Opus 5.5 spends a few hundred before a short answer (measured on the quality
+// check, Oct 2026), so the allowance stays.
 const REASONING_ALLOWANCE_TOKENS = 2000;
 // A remix answers with one plain-text question.
 const REMIX_ANSWER_TOKENS = 150;

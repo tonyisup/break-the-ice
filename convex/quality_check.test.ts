@@ -129,9 +129,9 @@ function save(s: Setup, texts: string[], status?: "pending") {
 }
 
 describe("the publish rule and the answer parser", () => {
-  test("only a keep with no reasons, no safety flags and confidence 4 or 5 would publish", () => {
+  test("only a keep with no reasons, no safety flags and the top confidence would publish", () => {
     expect(wouldPublish(KEEP)).toBe(true);
-    expect(wouldPublish({ ...KEEP, confidence: 4 })).toBe(true);
+    expect(wouldPublish({ ...KEEP, confidence: 4 })).toBe(false);
     expect(wouldPublish({ ...KEEP, confidence: 3 })).toBe(false);
     expect(wouldPublish({ ...KEEP, reasons: ["unclear_answer"] })).toBe(false);
     expect(wouldPublish({ ...KEEP, safety: ["trauma"] })).toBe(false);
@@ -258,7 +258,7 @@ describe("checking a question in record mode", () => {
     expect(await spend(s)).toEqual([["system", 0.006, 1]]);
   });
 
-  test("the provider is asked once, capped at 400 tokens, with the question and its style and tone but not the rationale", async () => {
+  test("the provider is asked once, with room for the model's reasoning, and shown the question and its style and tone but not the rationale", async () => {
     const s = await setup();
     const questionId = await generated(s, { moderationNotes: "The generator's own reasoning." });
     answers(KEEP);
@@ -267,7 +267,7 @@ describe("checking a question in record mode", () => {
 
     expect(create).toHaveBeenCalledTimes(1);
     const params = create.mock.calls[0][0] as { model: string; max_tokens: number; temperature: number; messages: Array<{ content: string }> };
-    expect(params).toMatchObject({ model: QUALITY_CHECK_MODEL, max_tokens: 400, temperature: 0, response_format: { type: "json_object" } });
+    expect(params).toMatchObject({ model: QUALITY_CHECK_MODEL, max_tokens: 1200, temperature: 0, response_format: { type: "json_object" } });
     const prompt = params.messages.map((message) => message.content).join("\n");
     expect(prompt).toContain("Question:\nWhat small thing made you smile today?");
     expect(prompt).toContain("Style: Reflective\nLooks back on something small. Structure: Ask for a reflection");

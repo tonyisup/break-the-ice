@@ -18,7 +18,7 @@ import { writeJson } from "./runRecord.mjs";
 const QUESTIONS_PER_CALL = 10;
 const CALL_CONCURRENCY = 2;
 // What a check cost on Opus 5.5 in Oct 2026, for the estimate printed before a paid run.
-const USD_PER_CHECK = 0.006;
+const USD_PER_CHECK = 0.01;
 
 const USAGE = "Usage: node evals/judge.mjs <name> <run>... [--only-labeled]   (names: lowercase letters, digits and dashes)";
 const [name, ...rest] = process.argv.slice(2);

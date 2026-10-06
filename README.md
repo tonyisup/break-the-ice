@@ -135,7 +135,7 @@ question from the feed, the daily email, matrix fill and the nightly pool gets a
 or hold, with reasons, safety flags and a one-sentence note) a few seconds after it is saved.
 The verdict shows in the admin review queue, and a question the check would hold is marked
 "Flagged" on a team's schedule grid. Nothing about who can see a question changes. Each check
-is a small call charged to system spend, about half a cent. To check questions that were
+is a small call charged to system spend, about 1 cent. To check questions that were
 already waiting, run `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`,
 then with `false`.
 

@@ -102,7 +102,7 @@ node evals/judge.mjs my-judged v0-5-2-r1 v0-5-2-r2 v0-5-2-r3
 
 A question that appears in more than one run is judged once. Rerunning the same name judges
 only what is missing, and refuses if the deployment's judge model or instructions have changed
-since. A check costs about half a cent, charged to the dev deployment's system AI budget.
+since. A check costs about 1 cent, charged to the dev deployment's system AI budget.
 
 To compare the verdicts with the owner's labels, put the labels in `evals/owner-labels.json`
 (git-ignored; the labels are not stored in this repo):
@@ -118,7 +118,13 @@ present, `judge.mjs` prints, for each group, how many questions the check would 
 how many of those the owner rejected, and `--only-labeled` judges just the labeled questions.
 
 The check would publish a question only on a keep with no reasons, no safety flags and a
-confidence of 4 or 5. The pass rule for a blind set is fixed before it is labeled: of the cards
+confidence of 5. On 60 questions the owner had already labeled (16 of them not kept), measured
+on dev in October 2026, it would publish 17, 1 of which the owner had rejected, and hold 4,
+3 of which the owner had rejected. With a confidence of 4 also publishing, it would publish
+48, 9 of them rejected. Those 60 were also used to write the check's instructions, so they
+are not the test. A blind set is.
+
+The pass rule for a blind set is fixed before it is labeled: of the cards
 the check would publish, the owner rejects at most 1 in 20, rounded down, with an "unsure"
 counted as a reject. It needs at least 60 such cards. That is an observed rate, not a proof: 4
 rejects in 95 shows the true rate is unlikely to be above about 10%.
