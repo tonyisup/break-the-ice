@@ -12,6 +12,7 @@ import {
 } from "./lib/taxonomy";
 
 import { editorialReason, reviewSnapshot } from "./lib/questionReviewValidators";
+import { qualityCheckSnapshot } from "./lib/qualityCheck";
 import { rateLimitTables } from "convex-helpers/server/rateLimit";
 
 const questionSource = v.union(
@@ -34,6 +35,9 @@ const generationRunPurpose = v.union(
   v.literal("nightly_pool"),
   v.literal("newsletter"),
   v.literal("remix"),
+  // One call that judges a generated question (internal/qualityCheck.ts). Its run has no
+  // blueprint, and names the question it judged as sourceQuestionId.
+  v.literal("quality_check"),
 );
 
 export default defineSchema({
@@ -141,7 +145,7 @@ export default defineSchema({
     status: generationRunStatus,
     purpose: generationRunPurpose,
     requestedByUserId: v.optional(v.string()),
-    blueprintId: v.id("promptBlueprints"),
+    blueprintId: v.optional(v.id("promptBlueprints")),
     styleId: v.optional(v.id("styles")),
     toneId: v.optional(v.id("tones")),
     topicId: v.optional(v.id("topics")),
@@ -223,6 +227,9 @@ export default defineSchema({
     safetyFlags: v.optional(v.array(v.string())),
     moderationNotes: v.optional(v.string()),
     quality: v.optional(questionQualitySnapshot),
+    // The quality check's verdict on a generated question (lib/qualityCheck.ts). It records
+    // an opinion; it doesn't change who can see the question.
+    qualityCheck: v.optional(qualityCheckSnapshot),
     authorId: v.optional(v.string()),
     customText: v.optional(v.string()),
     kind: v.optional(v.union(v.literal("personal"), v.literal("team_prompt"))),

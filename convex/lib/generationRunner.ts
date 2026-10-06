@@ -199,7 +199,7 @@ export function maxOutputTokens(batchSize: number): number {
 // reservation is released. It stays held when the attempt keeps its reservation or its answer
 // is cut off by the output cap: both are charged, and as a rule the person's plan use is
 // given back. A cut-off keeps the slot whatever the request then comes to.
-async function createChatCompletionWithRetry(
+export async function createChatCompletionWithRetry(
   ctx: ActionCtx,
   spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
@@ -365,7 +365,7 @@ async function retryUnusableOutput<T>(attempt: (markBilled: () => void) => Promi
   }
 }
 
-function getChatCompletionContent(completion: OpenAI.Chat.Completions.ChatCompletion): string {
+export function getChatCompletionContent(completion: OpenAI.Chat.Completions.ChatCompletion): string {
   const content = completion.choices?.[0]?.message?.content?.trim();
   if (!content) {
     const finishReason = completion.choices?.[0]?.finish_reason ?? "unknown";
