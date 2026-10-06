@@ -101,8 +101,8 @@ node evals/judge.mjs my-judged v0-5-2-r1 v0-5-2-r2 v0-5-2-r3
 ```
 
 A question that appears in more than one run is judged once. Rerunning the same name judges
-only what is missing, and refuses if the deployment's judge model or instructions have changed
-since. A check costs about 1 cent, charged to the dev deployment's system AI budget. The
+only what is missing, keeps every verdict the file already has, and refuses to judge if the
+deployment's judge model or instructions have changed since. A check costs about 1 cent, charged to the dev deployment's system AI budget. The
 `judged/` folder is git-ignored: the verdicts stay local, so the owner can label a set drawn
 from them without seeing them.
 
@@ -113,23 +113,33 @@ To compare the verdicts with the owner's labels, put the labels in `evals/owner-
 { "cards": [ { "id": "q253", "text": "...", "group": "would_publish", "verdict": "keep", "reasons": [] } ] }
 ```
 
-`group` is `would_publish` or `would_hold` for a blind set drawn from the check's verdicts,
+`group` is `would_publish` or `for_review` for a blind set drawn from the check's verdicts,
 or `labeled_before` for questions labeled before the check existed. `verdict` is `keep`,
-`reject` or `unsure`. Cards are matched to judged questions by their text. With the file
-present, `judge.mjs` prints, for each group, how many questions the check would publish and
-how many of those the owner rejected, and `--only-labeled` judges just the labeled questions.
+`reject` or `unsure`. Cards are matched to judged questions by their text. `--only-labeled`
+judges just the labeled questions.
 
-The check would publish a question only on a keep with no reasons, no safety flags and a
-confidence of 5. On 60 questions the owner had already labeled (16 of them not kept), measured
-on dev in October 2026, it would publish 17, 1 of which the owner had rejected, and hold 4,
-3 of which the owner had rejected. With a confidence of 4 also publishing, it would publish
-48, 9 of them rejected. Those 60 were also used to write the check's instructions, so they
-are not the test. A blind set is.
+The check sorts a question three ways, and with the labels file present `judge.mjs` prints
+each beside the owner's labels, for each group:
 
-The pass rule for a blind set is fixed before it is labeled: of the cards
-the check would publish, the owner rejects at most 1 in 20, rounded down, with an "unsure"
-counted as a reject. It needs at least 60 such cards. That is an observed rate, not a proof: 4
-rejects in 95 shows the true rate is unlikely to be above about 10%.
+- It **would publish** a question only on a keep with no reasons, no safety flags and a
+  confidence of 5.
+- Every other question it would **leave for review**.
+- It would **flag** a question it held, or raised a safety concern about. That is the app's
+  rule for the mark a team sees on its schedule grid.
+
+On 60 questions the owner had already labeled (16 of them not kept), measured on dev in
+October 2026, it would publish 21, 1 of which the owner had rejected, and flag 3, 2 of which
+the owner had rejected. With a confidence of 4 also publishing, it would publish 48, 10 of
+them rejected. Those 60 were also used to write the check's instructions, so they are not the
+test. A blind set is.
+
+The pass rule for a blind set is fixed before it is labeled: of the cards the check would
+publish, the owner rejects at most 1 in 20, rounded down, with an "unsure" counted as a
+reject. It needs at least 60 such cards, and it is decided only on the set as it was drawn:
+if a card of the `would_publish` group isn't judged in the file, or would no longer publish
+(the judge doesn't give the same answer every time), the script says so instead of deciding.
+Keep the judged file a set was drawn from. That is an observed rate, not a proof: 4 rejects in
+95 shows the true rate is unlikely to be above about 10%.
 
 ## Reading the numbers
 

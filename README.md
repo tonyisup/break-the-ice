@@ -130,15 +130,25 @@ per-team request limits are defined in
 [`convex/lib/aiRateLimit.ts`](./convex/lib/aiRateLimit.ts).
 
 Generated questions can be checked by Claude after they are saved. `QUALITY_CHECK_MODE` in the
-Convex environment turns this on: `off` (the default) or `record`. In `record`, each new
-question from the feed, the daily email, matrix fill and the nightly pool gets a verdict (keep
-or hold, with reasons, safety flags and a one-sentence note) a few seconds after it is saved.
-The verdict shows in the admin review queue. On a team's schedule grid, a question the check
-held, or raised a safety concern about, is marked "Flagged" until an admin reviews it. Editing a
-question's wording drops its verdict. Nothing about who can see a question changes. Each check
-is a small call charged to system spend, about 1 cent. To check questions that were
-already waiting, run `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`,
-then with `false`.
+Convex environment turns this on: `off` (the default) or `record`. (`publish` is reserved for a
+later release and only records for now.) In `record`, each new question from the feed, the
+daily email, matrix fill and the nightly pool gets a verdict (keep or hold, with reasons, safety
+flags and a one-sentence note) a few seconds after it is saved. Nothing about who can see a
+question changes, and the verdict isn't sent to people's apps. Admins see it in the review
+queue and on a question's page, and a hold or a safety flag is marked in their lists. On a
+team's schedule grid, a question the check held, or raised a safety concern about, is marked
+"Flagged", with the reasons in its details, until an admin reviews or edits it. Changing a
+question's wording, style, tone or topic drops its verdict.
+
+Each check is a small call charged to system spend, about 1 cent, and one that fails is tried
+once more five minutes later. Questions still waiting in the review queue without a verdict can
+be checked with `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`,
+then with `false` (up to 50 a run; it stops early if the provider isn't answering). That
+doesn't reach questions that were published at once: a matrix fill's or nightly pool's question
+whose check failed twice, or that was saved while the mode was off, stays unchecked and shows
+no flag. Setting the mode back to `off` stops new checks and hides every flag, with no deploy.
+Reverting the code after checks have run needs the schema's additions kept, because Convex
+refuses a schema that stored rows don't fit.
 
 New AI questions from the feed and the daily email wait for review in the admin queue at
 `/admin/questions`. The person they were made for still gets them, and anyone with the link

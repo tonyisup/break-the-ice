@@ -208,7 +208,7 @@ export function claudeFlag(question: {
 /**
  * Whether a verdict is clear enough to publish a question without the owner seeing it: a keep
  * at the top confidence only. On 60 questions the owner had labeled (dev, Oct 2026), the owner
- * rejected about 1 in 5 of the keeps at 4 or above, and 1 of the 17 at 5.
+ * rejected about 1 in 5 of the keeps at 4 or above, and 1 of the 21 at 5.
  */
 export function wouldPublish(verdict: QualityVerdict): boolean {
   return (
