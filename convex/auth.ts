@@ -133,12 +133,17 @@ export const isPaidTeamMember = async (ctx: QueryCtx | MutationCtx): Promise<boo
     email: identity.email,
   });
   for (const user of candidates) {
-    const memberships = await ctx.db
-      .query("organization_members")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
-    for (const membership of memberships) {
-      if (await isOrganizationPaid(ctx, membership.organizationId)) return true;
+    let cursor: string | null = null;
+    while (true) {
+      const memberships = await ctx.db
+        .query("organization_members")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .paginate({ cursor, numItems: 100 });
+      for (const membership of memberships.page) {
+        if (await isOrganizationPaid(ctx, membership.organizationId)) return true;
+      }
+      if (memberships.isDone) break;
+      cursor = memberships.continueCursor;
     }
   }
   return false;
