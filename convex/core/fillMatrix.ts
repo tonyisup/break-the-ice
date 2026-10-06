@@ -112,17 +112,16 @@ function fillStoppedMessage(filledCells: number): string {
 }
 
 /**
- * The count to generate a cell with: one unless the caller says otherwise, held to MIN_COUNT
- * through MAX_COUNT_PER_CELL (a fraction is rounded down when the prompt is built). NaN and the
- * infinities pass v.number(), so they are refused here, before a cell is claimed or anything
- * is generated.
+ * How many questions to generate for a cell: one unless the caller says otherwise, as a whole
+ * number from MIN_COUNT through MAX_COUNT_PER_CELL. NaN and the infinities pass v.number(), so
+ * they are refused here, before a cell is claimed or anything is generated.
  */
 function questionsPerCell(count: number | undefined): number {
 	if (count === undefined) return MIN_COUNT;
 	if (!Number.isFinite(count)) {
 		throw new ConvexError({ code: ERROR_CODES.AI_COUNT_INVALID, message: ERROR_MESSAGES.AI_COUNT_INVALID });
 	}
-	return Math.max(MIN_COUNT, Math.min(count, MAX_COUNT_PER_CELL));
+	return Math.max(MIN_COUNT, Math.min(Math.floor(count), MAX_COUNT_PER_CELL));
 }
 
 /**
