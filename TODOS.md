@@ -126,9 +126,9 @@
 
 ### Refit or drop the Jev quality questions, now that the Phase 0 labels are in
 
-**What:** The owner's labels are done (Oct 2026) and the comparison is in `evals/README.md`: the Jev gate's pass verdict matched the owner on 69% of generated questions, below the 75% that passing everything would match, and only readability separated keeps from rejects. Decide whether to refit the quality cutoffs in `evals/jev.mjs` on the labels or drop the quality questions and keep Jev for duplicates, then pool three runs on the default model into a new baseline.
+**What:** The owner's labels are done (Oct 2026) and the comparison is in `evals/README.md`: the Jev gate's pass verdict matched the owner on 69% of generated questions, below the 75% that passing everything would match, and only readability separated keeps from rejects. Decide whether to refit the quality cutoffs in `evals/jev.mjs` on the labels or drop the quality questions and keep Jev for duplicates. Either way the pass and review rates change, so rescore every committed run and rebuild both baselines afterwards: `compare.mjs` refuses runs scored under different cutoffs.
 
-**Why:** The Jev quality cutoffs are still provisional, and the `v0-3-2` baseline was generated with a model the app no longer uses, so every comparison reports a model change. Refitting changes `CUTOFFS_HASH`, so rescore the runs (`node evals/score.mjs <run> --force`, then `evals/baseline.mjs`) afterwards.
+**Why:** The Jev quality cutoffs are still provisional, so the pass and review rates in the `v0-5-2` baseline (three runs on Opus 5.5, pooled in v0.5.3.0) are a rough guide only. Refitting changes `CUTOFFS_HASH`, so rescore the runs (`node evals/score.mjs <run> --force`, then `evals/baseline.mjs --force`) afterwards. `single_ask` is the cutoff to look at first: it is the top reason an Opus question misses the gate (40 of 300).
 
 **Context:** Deferred from plan: Phase 0 spec (the plan doc's "Phase 0 spec" tab). The labeling page and Claude's blind labels are in the owner's private Question Labels artifact; labels are not stored in this repo.
 

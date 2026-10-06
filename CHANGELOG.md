@@ -2,6 +2,14 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.5.3.0] - 2026-10-06
+
+### Added
+- An eval baseline on the model the app uses. Three runs of the eval seeds on Claude Opus 5.5 (300 questions) are pooled as `evals/runs/v0-5-2.json`, so a later change is compared with `node evals/compare.mjs v0-5-2 <run>` and no longer reports a model change. None of the seven primary rates differs detectably from the earlier Gemini 3.8 Flash baseline: pass 75% (was 78%), 0 of 60 calls unusable, yield 100%.
+
+### Changed
+- `evals/README.md` names `v0-5-2` as the official baseline and keeps `v0-3-2` as the earlier one. It notes the one quality question that shifts between them (`single_ask`), and its example commands use placeholder run names so they can't rewrite a committed run.
+
 ## [0.5.2.0] - 2026-10-05
 
 ### Fixed
