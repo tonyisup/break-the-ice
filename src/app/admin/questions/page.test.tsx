@@ -101,6 +101,27 @@ describe("admin questions review queue", () => {
     expect(submitted.getByRole("button", { name: "Mark Personal" })).toBeInTheDocument();
   });
 
+  it("shows Claude's verdict, reasons and note on a checked question, and nothing extra on an unchecked one", () => {
+    const checked = {
+      ...aiQuestion,
+      qualityCheck: { verdict: "hold", reasons: ["awkward_wording"], safety: [], confidence: 4, note: "Stiff phrasing.", wouldPublish: false },
+    };
+    vi.mocked(useQuery).mockImplementation(((name: string) => {
+      if (name === "getPendingQuestions") return [checked, submittedQuestion];
+      if (name === "getQuestions" || name === "getStyles" || name === "getTones") return [];
+      return undefined;
+    }) as never);
+
+    render(<QuestionsPage />);
+
+    const ai = within(card("What made you laugh this week?"));
+    expect(ai.getByText("Claude: hold")).toBeInTheDocument();
+    expect(ai.getByText("Awkward wording")).toBeInTheDocument();
+    expect(ai.getByText("Stiff phrasing.")).toBeInTheDocument();
+    expect(ai.queryByText("Would publish")).toBeNull();
+    expect(within(card("What is your go-to karaoke song?")).queryByText(/^Claude:/)).toBeNull();
+  });
+
   it("Reject makes an AI question private, Approve makes it public, and Mark Personal says so", async () => {
     render(<QuestionsPage />);
 

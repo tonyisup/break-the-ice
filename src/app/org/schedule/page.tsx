@@ -52,6 +52,7 @@ import { toast } from "sonner";
 import { convexErrorData } from "../../../../convex/lib/errorData";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { TeamPromptComposer, type TeamTopicDraft } from "./TeamPromptComposer";
+import { ClaudeFlagDetails } from "@/components/claude-verdict/claude-verdict";
 
 const DAYS_DISPLAY: {
   key: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
@@ -1963,6 +1964,9 @@ const questionPool = useQuery(
                                     {q.isAIGenerated && (
                                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">AI</Badge>
                                     )}
+                                    {q.claudeFlag && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-amber-500/60">Flagged</Badge>
+                                    )}
                                     {alreadyAssigned && (
                                       <Badge variant="destructive" className="text-[9px] px-1 py-0 h-3.5">Used</Badge>
                                     )}
@@ -2039,6 +2043,8 @@ const questionPool = useQuery(
                   )}
                 </p>
               </div>
+
+              {previewQuestion.claudeFlag && <ClaudeFlagDetails flag={previewQuestion.claudeFlag} />}
 
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold">Question profile</h3>

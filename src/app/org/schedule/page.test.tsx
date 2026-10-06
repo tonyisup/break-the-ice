@@ -199,7 +199,15 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
       if (fn === "getPublicQuestions") {
         return [
           { _id: "q-cozy", text: firstQuestion, style: "rapid-fire-either", tone: "cozy", topic: "music", isAIGenerated: false },
-          { _id: "q-bold", text: secondQuestion, style: "rapid-fire-either", tone: "bold", topic: "music", isAIGenerated: true },
+          {
+            _id: "q-bold",
+            text: secondQuestion,
+            style: "rapid-fire-either",
+            tone: "bold",
+            topic: "music",
+            isAIGenerated: true,
+            claudeFlag: { reasons: ["awkward_wording"], safety: [], note: "Stiff phrasing." },
+          },
         ];
       }
       return undefined;
@@ -207,12 +215,16 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
 
     render(<OrgWeeklyCurationPage />);
 
+    // Only the question the quality check would hold is marked on the grid.
+    expect(screen.getAllByText("Flagged")).toHaveLength(1);
+
     fireEvent.click(screen.getByRole("button", { name: "Assign" }));
     fireEvent.click(screen.getByRole("button", { name: `View full question: ${firstQuestion}` }));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByRole("heading", { name: "Question details" })).toBeInTheDocument();
     expect(within(dialog).getByText(firstQuestion)).toBeInTheDocument();
+    expect(within(dialog).queryByText("Flagged by Claude")).toBeNull();
     expect(within(dialog).getByText("Rapid Fire Either")).toBeInTheDocument();
     expect(within(dialog).getByText("Cozy")).toBeInTheDocument();
     expect(within(dialog).getByText("Music")).toBeInTheDocument();
@@ -222,6 +234,10 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     expect(within(dialog).getByText(secondQuestion)).toBeInTheDocument();
     expect(within(dialog).getByText("2 of 2")).toBeInTheDocument();
     expect(within(dialog).getByText("AI generated")).toBeInTheDocument();
+    // Its details say why it was flagged, for the manager to judge.
+    expect(within(dialog).getByText("Flagged by Claude")).toBeInTheDocument();
+    expect(within(dialog).getByText("Awkward wording")).toBeInTheDocument();
+    expect(within(dialog).getByText("Stiff phrasing.")).toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Assign to Monday" }));
 
