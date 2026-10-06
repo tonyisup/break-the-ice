@@ -10,8 +10,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { parse } from "dotenv";
 import { mapLimit } from "./async.mjs";
+import { assertDevTarget } from "./devTarget.mjs";
 import { cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess, writeJson } from "./runRecord.mjs";
 
 // Two at a time keeps a run to a few minutes without bursting the provider's rate limit.
@@ -39,33 +39,7 @@ if (badArgs) {
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 
-// `npx convex run` targets whatever these name, from the shell or else from .env.local and .env,
-// parsed with the same dotenv the Convex CLI uses. The eval only runs where they clearly name a dev
-// deployment (and the deployment also refuses unless EVALS_ENABLED is set there). Only these names
-// are read from the files; nothing is printed.
-const TARGET_NAMES = ["CONVEX_DEPLOY_KEY", "CONVEX_DEPLOYMENT", "CONVEX_SELF_HOSTED_URL"];
-function targetSettings(file) {
-  const path = join(root, file);
-  if (!existsSync(path)) return {};
-  const parsed = parse(readFileSync(path, "utf8"));
-  return Object.fromEntries(TARGET_NAMES.filter((name) => parsed[name]).map((name) => [name, parsed[name]]));
-}
-const fromShell = Object.fromEntries(TARGET_NAMES.filter((name) => process.env[name]).map((name) => [name, process.env[name]]));
-const target = { ...targetSettings(".env"), ...targetSettings(".env.local"), ...fromShell };
-if (target.CONVEX_SELF_HOSTED_URL) {
-  console.error("CONVEX_SELF_HOSTED_URL is set. The eval only runs on the dev deployment.");
-  process.exit(1);
-}
-for (const name of ["CONVEX_DEPLOY_KEY", "CONVEX_DEPLOYMENT"]) {
-  if (target[name] && !target[name].startsWith("dev:")) {
-    console.error(`${name} points at a non-dev deployment. The eval only runs on dev.`);
-    process.exit(1);
-  }
-}
-if (!target.CONVEX_DEPLOY_KEY && !target.CONVEX_DEPLOYMENT) {
-  console.error("No Convex deployment is configured (CONVEX_DEPLOYMENT in .env.local). The eval only runs on dev.");
-  process.exit(1);
-}
+assertDevTarget(root);
 
 const { batchSize, seeds } = JSON.parse(readFileSync(join(here, "seeds.json"), "utf8"));
 const runDir = join(here, "runs", run);
