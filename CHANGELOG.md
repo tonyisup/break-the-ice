@@ -2,6 +2,16 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.5.2.0] - 2026-10-05
+
+### Fixed
+- A request for new questions that gives a count that isn't a number is handled the same way everywhere, which finishes the check 0.5.0.0 started. The feed and the admin preview write one question. A matrix fill refuses it with "The number of questions to generate isn't a valid number." before it picks a topic, claims the cell or uses one of the team's fills.
+- Starting a pool run from the admin tools refuses a combination count that isn't a whole number of one or more, before anything is generated.
+
+### Changed
+- One feed request writes five questions at most. The feed page already asked for no more. The server now holds every caller to that, and the page and the server read the same limit, so they can't drift apart.
+- A matrix fill writes one question per cell, which is what the schedule page asks for. The server no longer accepts a higher count per cell.
+
 ## [0.5.1.0] - 2026-10-05
 
 ### Fixed

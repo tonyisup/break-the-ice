@@ -153,18 +153,6 @@
 **Priority:** P2
 **Depends on:** Decide how AI answers cut off by the length limit are charged
 
-### Harden generation input handling
-
-**What:** Close a gap in how generation requests are validated. The specifics are in the owner's private plan doc ("Security follow-ups (private)").
-
-**Why:** Found in the v0.3.2.0 review; older than that release.
-
-**Context:** `convex/lib/promptArchitecture.ts` and the generation callers in `convex/core/fillMatrix.ts` and `convex/admin/ai.ts`.
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** None
-
 ### Measure a reasoning limit with the eval before setting one
 
 **What:** Run the Phase 0 eval seeds with and without OpenRouter's `reasoning` limit (for example low effort, or a token budget) and compare question quality, latency and cost.
@@ -176,6 +164,18 @@
 **Effort:** S
 **Priority:** P2
 **Depends on:** Phase 0 eval harness merged
+
+### Finish the checks on the admin pool trigger's numbers
+
+**What:** Give the pool trigger's combination count an upper limit, make the same check inside the internal pool action, decide whether the per-combination question count should be refused or held to its range, and show a refusal as a readable message on the pool page.
+
+**Why:** v0.5.2.0 checks only that the combination count is a whole number of one or more. Only an admin can start a pool run, and the admin page doesn't send this number.
+
+**Context:** `triggerPoolGeneration` in `convex/admin/questions.ts`, `generateNightlyQuestionPool` in `convex/internal/ai.ts` and `handleGenerate` in `src/app/admin/pool/page.tsx`. Pick the upper limit so a run fits inside one action. Deferred during the v0.5.2.0 review (decision ac90015f).
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
 
 ### Tighten how the eval harness handles model names and failed calls
 
@@ -537,6 +537,19 @@
 **Depends on:** None
 
 ## Completed
+
+### Harden generation input handling
+
+**What:** Close a gap in how generation requests are validated. A question count that isn't a number is treated as one question wherever a prompt is built, a matrix fill refuses it, and the admin pool trigger refuses a combination count that isn't a whole number.
+
+**Why:** Found in the v0.3.2.0 review; older than that release. v0.5.0.0 closed the first part.
+
+**Context:** `clampBatchSize` in `convex/lib/promptArchitecture.ts`, `questionsPerCell` in `convex/core/fillMatrix.ts` and `triggerPoolGeneration` in `convex/admin/questions.ts`. The admin preview in `convex/admin/ai.ts` and the feed in `convex/core/ai.ts` rely on the clamp.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+**Completed:** v0.5.2.0 (2026-10-05)
 
 ### Size the per-call spend reservation from the output cap
 
