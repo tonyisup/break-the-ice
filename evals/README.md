@@ -21,7 +21,7 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
   counts added up, with a 95% interval). Refuses runs that aren't replicates: a different judge,
   cutoffs, seeds, prompts, definitions, model or library, or failed seeds.
 - `compare.mjs <baseline> <run>...`: tests one or more runs of a changed setup against a baseline
-  (see below).
+  (see below). Writes `comparison-<baseline>.json` in the first run's folder.
 - `jev.mjs`: the Jev questions and cutoffs. The judge is pinned (`JEV_MODEL`), and summaries
   record hashes of the question wording and of the cutoffs, plus `SCORING_VERSION` (in
   `stats.mjs`, bumped when the rate logic changes); `score.mjs` refuses to overwrite a summary
@@ -53,9 +53,9 @@ run can be rerun with the corrected `--model`; a well-formed name OpenRouter doe
 the provider, and needs a new run name.
 
 ```bash
-node evals/generate.mjs sonnet-5-5-r1 --model anthropic/claude-sonnet-5.5
-node evals/score.mjs sonnet-5-5-r1
-node evals/compare.mjs v0-5-2 sonnet-5-5-r1
+node evals/generate.mjs my-sonnet-r1 --model anthropic/claude-sonnet-5.5
+node evals/score.mjs my-sonnet-r1
+node evals/compare.mjs v0-5-2 my-sonnet-r1
 ```
 
 Exact library copies are matched on each question's stored fingerprint. After a change to how
@@ -97,8 +97,9 @@ run's reported cost leaves it out; the dev budget still counts it.
   between the two baselines (`runs/v0-5-2-r1/comparison-v0-3-2.json`). One quality question
   does shift, outside the seven: 40 of the 300 Opus questions fall under the provisional
   `single_ask` cutoff, against 7 of 300 before, and fewer fail on the other questions, so the
-  pass rate barely moves. The earlier baseline also predates the duplicate-fingerprint and
-  timeout changes described below; exact copies and provider errors were 0 on both sides.
+  pass rate barely moves. The earlier baseline also predates the duplicate-fingerprint changes
+  described under "Running it" and the timeout change described below; exact copies and provider
+  errors were 0 on both sides.
 - The gate's pass verdict is a rough guide to quality, not the owner's judgment. On the owner's
   blind labels of 60 generated questions (Oct 2026) it matched 69% of the time, and passing
   everything would have matched 75%; of the quality questions only readability separated the
