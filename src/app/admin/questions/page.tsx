@@ -49,7 +49,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { getAdminQuestionPageSize, paginateQuestions } from "./pagination";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ClaudeVerdict } from "@/components/claude-verdict/claude-verdict";
+import { ClaudeConcernBadge, ClaudeVerdict } from "@/components/claude-verdict/claude-verdict";
 
 export default function QuestionsPage() {
   const isMobile = useIsMobile();
@@ -613,6 +613,11 @@ export default function QuestionsPage() {
                             {q.text || q.customText}
                           </span>
                         )}
+                        {!isEditing && q.qualityCheck && (
+                          <div className="mt-1">
+                            <ClaudeConcernBadge check={q.qualityCheck} />
+                          </div>
+                        )}
                       </td>
                       <td className="block md:table-cell px-4 md:px-6 py-2 md:py-4">
                         <div className="md:hidden text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">
@@ -1024,6 +1029,7 @@ export default function QuestionsPage() {
                         {q.text || q.customText}
                       </p>
                     )}
+                    {!isEditing && q.qualityCheck && <ClaudeConcernBadge check={q.qualityCheck} />}
                   </div>
 
                   {!isEditing && (

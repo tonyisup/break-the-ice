@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Icon, IconComponent } from "@/components/ui/icons/icon"
 import { cn } from "@/lib/utils"
+import { ClaudeVerdict } from "@/components/claude-verdict/claude-verdict"
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
@@ -670,6 +671,7 @@ export default function QuestionDetailsPage() {
 						<p className="text-xs text-muted-foreground">
 							{editText.length} characters · Created {new Date(question._creationTime).toLocaleDateString()}
 						</p>
+						{question.qualityCheck && <ClaudeVerdict check={question.qualityCheck} />}
 					</div>
 
 					{/* Question Image */}

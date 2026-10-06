@@ -1949,7 +1949,7 @@ const questionPool = useQuery(
                                     type="button"
                                     className="group w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                     onClick={() => setPreviewQuestionId(q._id)}
-                                    aria-label={`View full question: ${q.text ?? "Untitled question"}`}
+                                    aria-label={`View full question: ${q.text ?? "Untitled question"}${q.claudeFlag ? ", flagged by AI review" : ""}`}
                                   >
                                     <span className="block text-xs leading-snug line-clamp-3">
                                       {q.text ?? <em className="text-muted-foreground/50">No text</em>}
@@ -1960,12 +1960,18 @@ const questionPool = useQuery(
                                     </span>
                                   </button>
                                   <div className="flex flex-wrap gap-1">
+                                    {q.claudeFlag && (
+                                      <Badge
+                                        variant="outline"
+                                        title="Flagged by AI review. Open View full to see why."
+                                        className="text-[9px] px-1 py-0 h-3.5 border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                      >
+                                        Flagged
+                                      </Badge>
+                                    )}
                                     <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">{q.topic ? q.topic : q.tone ? q.tone : q.style ? q.style : "Unknown"}</Badge>
                                     {q.isAIGenerated && (
                                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">AI</Badge>
-                                    )}
-                                    {q.claudeFlag && (
-                                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-amber-500/60">Flagged</Badge>
                                     )}
                                     {alreadyAssigned && (
                                       <Badge variant="destructive" className="text-[9px] px-1 py-0 h-3.5">Used</Badge>

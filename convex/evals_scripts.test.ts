@@ -1350,7 +1350,7 @@ const results = items.map((item) => {
   if (item.text === process.env.FAIL_TEXT) return { text: item.text, error: "The quality check's answer couldn't be read" };
   const hold = item.text.startsWith("On hold");
   const verdict = { verdict: hold ? "hold" : "keep", reasons: hold ? ["awkward_wording"] : [], safety: [], confidence: 5, note: "" };
-  return { text: item.text, verdict, wouldPublish: !hold };
+  return { text: item.text, verdict, wouldPublish: !hold, wouldFlag: hold };
 });
 console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: Number(process.env.PROMPT_VERSION ?? 1), results }));
 `,
@@ -1415,7 +1415,7 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       expect(first.status).toBe(1);
       expect(first.stdout).toMatch(/12 of 12 questions to judge for "judged" at \w+, about \$0\.12\./);
       expect(first.stderr).toMatch(/Not judged \(The quality check's answer couldn't be read\): Question 5\?/);
-      expect(first.stdout).toMatch(/Judged 11 of 12: the check would publish 10 and hold 1\./);
+      expect(first.stdout).toMatch(/Judged 11 of 12 by anthropic\/claude-opus-5\.5 with instructions v1: the check would publish 10, leave 1 for review and flag 1\./);
       expect(first.stderr).toMatch(/1 questions weren't judged\. Rerun the same command to try them again\./);
       // Two calls, of ten and of two, each question shown with its definitions and nothing else.
       expect(calls().map((call) => [call.fn, call.texts.length, call.keys]).sort()).toEqual([
@@ -1435,14 +1435,15 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
         seedId: "s01",
         verdict: { verdict: "keep", reasons: [], safety: [], confidence: 5, note: "" },
         wouldPublish: true,
+        wouldFlag: false,
       });
-      expect(partial.results[10]).toMatchObject({ run: "r2", verdict: { verdict: "hold" }, wouldPublish: false });
+      expect(partial.results[10]).toMatchObject({ run: "r2", verdict: { verdict: "hold" }, wouldPublish: false, wouldFlag: true });
 
       // The rerun asks only for the one that failed, and puts it back in the runs' order.
       const rerun = runScript("judge.mjs", ["judged", "r1", "r2"], { PATH });
       expect(rerun.status, rerun.stderr).toBe(0);
       expect(rerun.stdout).toMatch(/1 of 12 questions to judge/);
-      expect(rerun.stdout).toMatch(/Judged 12 of 12: the check would publish 11 and hold 1\./);
+      expect(rerun.stdout).toMatch(/Judged 12 of 12 by .* v1: the check would publish 11, leave 1 for review and flag 1\./);
       expect(calls().slice(-1)[0].texts).toEqual(["Question 5?"]);
       const whole = readJudged("judged");
       expect(whole.results.map((result: { text: string }) => result.text).slice(3, 6)).toEqual(["Question 4?", "Question 5?", "Question 6?"]);
@@ -1477,16 +1478,16 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       writeLabels([
         card("Kept and liked?", "would_publish", "keep"),
         card("Kept but rejected?", "would_publish", "reject"),
-        card("On hold but liked?", "would_hold", "keep"),
+        card("On hold but liked?", "for_review", "keep"),
         card("Not in any run?", "labeled_before", "unsure"),
       ]);
 
       const labeled = runScript("judge.mjs", ["small", "r1", "--only-labeled"], { PATH });
       expect(labeled.status, labeled.stderr).toBe(0);
       expect(calls().map((call) => call.texts)).toEqual([["Kept and liked?", "Kept but rejected?", "On hold but liked?"]]);
-      expect(labeled.stdout).toMatch(/Judged 3 of 3: the check would publish 2 and hold 1\./);
-      expect(labeled.stdout).toContain("would_publish: 2 labeled cards. Would publish 2, of which the owner rejected 1. Would hold 0, of which the owner kept 0.");
-      expect(labeled.stdout).toContain("would_hold: 1 labeled cards. Would publish 0, of which the owner rejected 0. Would hold 1, of which the owner kept 1.");
+      expect(labeled.stdout).toMatch(/Judged 3 of 3 by .* v1: the check would publish 2, leave 1 for review and flag 1\./);
+      expect(labeled.stdout).toContain("would_publish: 2 labeled cards. Would publish 2, of which the owner rejected 1. Would leave 0 for review, of which the owner kept 0. Would flag 0, of which the owner kept 0.");
+      expect(labeled.stdout).toContain("for_review: 1 labeled cards. Would publish 0, of which the owner rejected 0. Would leave 1 for review, of which the owner kept 1. Would flag 1, of which the owner kept 1.");
       expect(labeled.stdout).toContain("labeled_before: 1 labeled cards (1 not judged here). Would publish 0, of which the owner rejected 0.");
       expect(labeled.stdout).toContain("Pass rule: not decided. Needs at least 60 labeled cards the check would publish; there are 2.");
 
@@ -1507,6 +1508,14 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       const fail = runScript("judge.mjs", ["blind", "r2"], { PATH });
       expect(fail.status, fail.stderr).toBe(0);
       expect(fail.stdout).toContain("Pass rule: FAIL. The owner rejected 4 of 60 the check would publish; at most 3 are allowed.");
+
+      // Naming fewer questions on a rerun keeps the verdicts already paid for.
+      writeLabels([card("Blind question 1?", "would_publish", "keep")]);
+      const narrowed = runScript("judge.mjs", ["blind", "r2", "--only-labeled"], { PATH });
+      expect(narrowed.status, narrowed.stderr).toBe(0);
+      expect(narrowed.stdout).toMatch(/Judged 1 of 1 /);
+      expect(readJudged("blind").results.map((result: { text: string }) => result.text)).toEqual(sixty);
+      expect(runScript("judge.mjs", ["blind", "r2"], { PATH }).stdout).not.toMatch(/questions to judge/);
     }, 30_000);
   });
 });

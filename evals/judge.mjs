@@ -1,9 +1,10 @@
 // Runs the quality check over the questions some generated runs would have saved, on the dev
 // deployment (internal/qualityCheck:evalQualityCheck), and writes its verdicts to
 // evals/judged/<name>.json. Nothing is saved on any question. Rerunning the same name judges
-// only what is still missing. When evals/owner-labels.json exists, it also sets the verdicts
-// beside the owner's labels and evaluates the pass rule. --only-labeled judges just the
-// questions that file has labels for.
+// only what is still missing and keeps every verdict the file already has, also when the rerun
+// names fewer questions. When evals/owner-labels.json exists, it also sets the verdicts beside
+// the owner's labels and evaluates the pass rule. --only-labeled judges just the questions
+// that file has labels for.
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -17,7 +18,7 @@ import { writeJson } from "./runRecord.mjs";
 // A call judges its questions one after another, a few seconds each.
 const QUESTIONS_PER_CALL = 10;
 const CALL_CONCURRENCY = 2;
-// What a check cost on Opus 5.5 in Oct 2026, for the estimate printed before a paid run.
+// About what a check cost on Opus 5.5 in Oct 2026, for the estimate printed before a paid run.
 const USD_PER_CHECK = 0.01;
 
 const USAGE = "Usage: node evals/judge.mjs <name> <run>... [--only-labeled]   (names: lowercase letters, digits and dashes)";
@@ -64,13 +65,19 @@ const commit = `${git("rev-parse", "--short", "HEAD")}${git("status", "--porcela
 const record = {
   name,
   createdAt: previous?.createdAt ?? new Date().toISOString(),
-  runs: runNames,
+  runs: [...new Set([...(previous?.runs ?? []), ...runNames])],
   commits: [...new Set([...(previous?.commits ?? []), ...(todo.length ? [commit] : [])])],
   model: previous?.model ?? null,
   promptVersion: previous?.promptVersion ?? null,
 };
-// In the runs' order, so the file reads the same however the calls finished.
-const save = () => writeJson(outPath, { ...record, results: questions.map((question) => byText.get(question.text)).filter(Boolean) });
+// In the runs' order, so the file reads the same however the calls finished. Verdicts on
+// questions this run didn't name follow: they were paid for, and a set may have been drawn from them.
+const asked = new Set(questions.map((question) => question.text));
+const save = () =>
+  writeJson(outPath, {
+    ...record,
+    results: [...questions.map((question) => byText.get(question.text)).filter(Boolean), ...[...byText.values()].filter((result) => !asked.has(result.text))],
+  });
 
 const exec = promisify(execFile);
 async function convexRun(fn, args) {
@@ -102,7 +109,9 @@ if (todo.length) {
     record.promptVersion = answer.promptVersion;
     answer.results.forEach((result, index) => {
       const { run, seedId } = call[index];
-      if (result.verdict) byText.set(result.text, { text: result.text, run, seedId, verdict: result.verdict, wouldPublish: result.wouldPublish });
+      if (result.verdict) {
+        byText.set(result.text, { text: result.text, run, seedId, verdict: result.verdict, wouldPublish: result.wouldPublish, wouldFlag: result.wouldFlag });
+      }
       else {
         failures += 1;
         console.error(`Not judged (${result.error}): ${result.text}`);
@@ -115,7 +124,12 @@ save();
 
 const judged = questions.map((question) => byText.get(question.text)).filter(Boolean);
 const publish = judged.filter((result) => result.wouldPublish).length;
-console.log(`Judged ${judged.length} of ${questions.length}: the check would publish ${publish} and hold ${judged.length - publish}. Wrote ${outPath}.`);
+const flag = judged.filter((result) => result.wouldFlag).length;
+// "Flag" is the app's own rule for what a team is shown: a hold, or any safety flag.
+console.log(
+  `Judged ${judged.length} of ${questions.length} by ${record.model} with instructions v${record.promptVersion}: ` +
+    `the check would publish ${publish}, leave ${judged.length - publish} for review and flag ${flag}. Wrote ${outPath}.`,
+);
 
 if (labels) {
   const groups = compareWithLabels(judged, labels);
@@ -123,7 +137,8 @@ if (labels) {
     console.log(
       `${group}: ${counts.cards} labeled cards${counts.unjudged ? ` (${counts.unjudged} not judged here)` : ""}. ` +
         `Would publish ${counts.wouldPublish}, of which the owner rejected ${counts.wouldPublishRejected}. ` +
-        `Would hold ${counts.wouldHold}, of which the owner kept ${counts.wouldHoldKept}.`,
+        `Would leave ${counts.forReview} for review, of which the owner kept ${counts.forReviewKept}. ` +
+        `Would flag ${counts.flagged}, of which the owner kept ${counts.flaggedKept}.`,
     );
   }
   const rule = passRule(groups.would_publish);

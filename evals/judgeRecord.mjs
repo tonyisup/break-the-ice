@@ -31,14 +31,21 @@ export function allowedRejects(count) {
 
 /**
  * Sets the owner's labels beside the judge's verdicts, by question text. An "unsure" counts as
- * a reject. Cards whose text was never judged, or whose check failed, are counted as unjudged
- * and left out of every rate.
+ * a reject, and a card that appears twice counts once. Cards whose text was never judged, or
+ * whose check failed, are counted as unjudged and left out of every rate. Each judged card is
+ * either one the check would publish or one it would leave for review; `flagged` counts the
+ * ones the app would also flag to a team (a hold, or any safety flag), whichever side they are on.
  */
 export function compareWithLabels(results, cards) {
   const verdicts = new Map(results.filter((result) => result.verdict).map((result) => [result.text, result]));
   const groups = {};
+  const counted = new Set();
   for (const card of cards) {
-    const group = (groups[card.group] ??= { cards: 0, unjudged: 0, wouldPublish: 0, wouldPublishRejected: 0, wouldHold: 0, wouldHoldKept: 0 });
+    if (counted.has(card.text)) continue;
+    counted.add(card.text);
+    const group = (groups[card.group] ??= {
+      cards: 0, unjudged: 0, wouldPublish: 0, wouldPublishRejected: 0, forReview: 0, forReviewKept: 0, flagged: 0, flaggedKept: 0,
+    });
     group.cards += 1;
     const judged = verdicts.get(card.text);
     if (!judged) {
@@ -50,8 +57,12 @@ export function compareWithLabels(results, cards) {
       group.wouldPublish += 1;
       if (!kept) group.wouldPublishRejected += 1;
     } else {
-      group.wouldHold += 1;
-      if (kept) group.wouldHoldKept += 1;
+      group.forReview += 1;
+      if (kept) group.forReviewKept += 1;
+    }
+    if (judged.wouldFlag) {
+      group.flagged += 1;
+      if (kept) group.flaggedKept += 1;
     }
   }
   return groups;
@@ -59,9 +70,19 @@ export function compareWithLabels(results, cards) {
 
 /**
  * The pass rule for the blind set, fixed before it was labeled: of the cards the judge would
- * publish, the owner rejects at most 1 in 20, rounded down.
+ * publish, the owner rejects at most 1 in 20, rounded down. It takes the `would_publish` group
+ * and is decided only on the set as it was drawn: a card that isn't judged in this file, or
+ * that this file's verdicts would no longer publish, would otherwise drop out of the count
+ * along with any reject on it.
  */
 export function passRule(group) {
+  const moved = (group?.unjudged ?? 0) + (group?.forReview ?? 0);
+  if (moved > 0) {
+    return {
+      decided: false,
+      reason: `${moved} of the ${group.cards} cards drawn as would-publish aren't judged in this file or would no longer publish. Use the judged file the set was drawn from.`,
+    };
+  }
   if (!group || group.wouldPublish < MIN_PASS_CARDS) {
     return { decided: false, reason: `Needs at least ${MIN_PASS_CARDS} labeled cards the check would publish; there are ${group?.wouldPublish ?? 0}.` };
   }

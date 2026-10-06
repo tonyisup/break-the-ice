@@ -217,6 +217,8 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
 
     // Only the question the quality check would hold is marked on the grid.
     expect(screen.getAllByText("Flagged")).toHaveLength(1);
+    // The mark is in the button's name too, for someone who can't see the chip.
+    expect(screen.getByRole("button", { name: `View full question: ${secondQuestion}, flagged by AI review` })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Assign" }));
     fireEvent.click(screen.getByRole("button", { name: `View full question: ${firstQuestion}` }));
@@ -224,7 +226,7 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByRole("heading", { name: "Question details" })).toBeInTheDocument();
     expect(within(dialog).getByText(firstQuestion)).toBeInTheDocument();
-    expect(within(dialog).queryByText("Flagged by Claude")).toBeNull();
+    expect(within(dialog).queryByText("Flagged by AI review")).toBeNull();
     expect(within(dialog).getByText("Rapid Fire Either")).toBeInTheDocument();
     expect(within(dialog).getByText("Cozy")).toBeInTheDocument();
     expect(within(dialog).getByText("Music")).toBeInTheDocument();
@@ -235,7 +237,7 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
     expect(within(dialog).getByText("2 of 2")).toBeInTheDocument();
     expect(within(dialog).getByText("AI generated")).toBeInTheDocument();
     // Its details say why it was flagged, for the manager to judge.
-    expect(within(dialog).getByText("Flagged by Claude")).toBeInTheDocument();
+    expect(within(dialog).getByText("Flagged by AI review")).toBeInTheDocument();
     expect(within(dialog).getByText("Awkward wording")).toBeInTheDocument();
     expect(within(dialog).getByText("Stiff phrasing.")).toBeInTheDocument();
 
