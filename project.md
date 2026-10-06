@@ -47,6 +47,7 @@ In many fitness group training classes, the coach starts with a "Question of the
 - ✅ Nightly generation pool system for batch AI generation
 - ✅ Daily AI spend cap, per-call cost tracking, and per-person/per-team AI rate limits
 - ✅ Admin review queue for new feed and daily-email AI questions, held out of shared lists until approved
+- ✅ Optional AI quality check of generated questions (record-only, off by default): verdicts for admins, and a "Flagged" mark on the team schedule grid; Auto-fill and the feedback suggestions leave flagged questions out
 - ✅ Configurable pruning pipeline with settings
 - ✅ Analytics with view duration tracking
 - ✅ PostHog integration
@@ -68,7 +69,7 @@ In many fitness group training classes, the coach starts with a "Question of the
 
 ### Feedback-informed curation preview
 
-The backend exposes an admin/manager, read-only candidate preview based on up to 500 of the newest coach responses from each of the eight most recent eligible schedule weeks. It never creates schedules or assignments. Each candidate score carries its matching style, tone, or topic evidence and response count. Candidates require at least three responses from two distinct coaches for directional confidence; candidates below either threshold are labeled insufficient evidence.
+The backend exposes an admin/manager, read-only candidate preview based on up to 500 of the newest coach responses from each of the eight most recent eligible schedule weeks. It never creates schedules or assignments. Each candidate score carries its matching style, tone, or topic evidence and response count. Candidates require at least three responses from two distinct coaches for directional confidence; candidates below either threshold are labeled insufficient evidence. Questions the AI quality check has flagged are left out of the candidates.
 
 ## Design Guides
 - Consumer: infinite scroll, smooth animations, dark/light mode

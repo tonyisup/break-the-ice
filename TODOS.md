@@ -159,7 +159,7 @@
 
 **Why:** v0.3.2.0 leaves room for the model's thinking but doesn't limit it. Every feed fill and remix spends about 500 to 1,600 thinking tokens first, which costs a few seconds and some money. Capping it blind could make questions worse.
 
-**Context:** The eval harness is in `evals/`. Since v0.5.0.0 the default model is Opus 5.5 (`GENERATION_MODEL` in `convex/lib/generationRunner.ts`), which doesn't reason unless asked, so this applies again only if the default moves to a model that does; the thinking-token figures above were measured on Gemini 3.8 Flash.
+**Context:** The eval harness is in `evals/`. Since v0.5.0.0 the default model is Opus 5.5 (`GENERATION_MODEL` in `convex/lib/generationRunner.ts`). It spends a few hundred hidden tokens before a short answer (measured on the quality check, Oct 2026), so this still applies; the thinking-token figures above were measured on Gemini 3.8 Flash.
 
 **Effort:** S
 **Priority:** P2
