@@ -112,9 +112,10 @@ function fillStoppedMessage(filledCells: number): string {
 }
 
 /**
- * How many questions to generate for a cell: one unless the caller says otherwise, as a whole
- * number from MIN_COUNT through MAX_COUNT_PER_CELL. NaN and the infinities pass v.number(), so
- * they are refused here, before a cell is claimed or anything is generated.
+ * How many questions to generate for a cell. A fill generates one per cell today whatever it is
+ * asked for: a count is rounded down and held to MIN_COUNT through MAX_COUNT_PER_CELL, which
+ * are both one. NaN and the infinities pass v.number(), so they are refused here, before a cell
+ * is claimed or anything is generated.
  */
 function questionsPerCell(count: number | undefined): number {
 	if (count === undefined) return MIN_COUNT;

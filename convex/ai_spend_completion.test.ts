@@ -561,7 +561,6 @@ describe("a question count that isn't a whole number from one to ten", () => {
     expect(askedFor()).toEqual([[2500, "1"]]);
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
   });
-
 });
 
 describe("how many questions one feed request generates", () => {
@@ -619,6 +618,16 @@ describe("how many combinations an admin pool run covers", () => {
 
     expect(result).toMatchObject({ questionsGenerated: 1, combinationsProcessed: 1, errors: [] });
     expect(askedFor()).toEqual([[2500, "1"]]);
+  });
+
+  test("a pool run given no combination count, as the admin page starts one, covers both combinations that are due", async () => {
+    const { t } = await poolDue();
+    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+
+    const result = await t.withIdentity(ADMIN).action(api.admin.questions.triggerPoolGeneration, { targetCount: 1 });
+
+    expect(result).toMatchObject({ combinationsProcessed: 2, errors: [] });
+    expect(askedFor()).toEqual([[2500, "1"], [2500, "1"]]);
   });
 });
 
