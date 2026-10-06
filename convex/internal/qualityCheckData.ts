@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
-import { qualityVerdict, wouldPublish, type QualityVerdict } from "../lib/qualityCheck";
+import { qualityCheckMode, qualityVerdict, wouldPublish, type QualityVerdict } from "../lib/qualityCheck";
 import { isRetiredQuestion, isUserWrittenQuestion } from "../lib/questionAccess";
 import { taxonomyDefinitions } from "../lib/taxonomyDefinitions";
 
@@ -53,7 +53,8 @@ export const questionForCheck = internalQuery({
 /**
  * Saves a verdict on a question. It only records: the question's status, its place in the
  * review queue and its review revision are left alone. A question that is gone, that another
- * check reached first, or whose wording changed while the judge was reading it, is left as it is.
+ * check reached first, or whose wording changed while the judge was reading it, is left as it
+ * is. So is every question once the mode is off, even for a check that was already running.
  */
 export const saveQualityCheck = internalMutation({
   args: {
@@ -67,6 +68,7 @@ export const saveQualityCheck = internalMutation({
   },
   returns: v.object({ saved: v.boolean() }),
   handler: async (ctx, args) => {
+    if (qualityCheckMode() === "off") return { saved: false };
     const question = await ctx.db.get(args.questionId);
     if (!question || question.qualityCheck || question.text !== args.text) return { saved: false };
     const verdict = args.verdict as QualityVerdict;

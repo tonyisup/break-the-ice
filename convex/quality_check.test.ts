@@ -404,6 +404,20 @@ describe("checking a question in record mode", () => {
     expect((await question(s, questionId))?.qualityCheck).toMatchObject({ verdict: "hold" });
   });
 
+  test("with the mode switched off while the judge is answering, the verdict isn't saved", async () => {
+    const s = await setup();
+    const questionId = await generated(s);
+    create.mockImplementation((async () => {
+      process.env.QUALITY_CHECK_MODE = "off";
+      return completion(JSON.stringify(HOLD));
+    }) as never);
+
+    await check(s, questionId);
+
+    expect(await question(s, questionId)).toMatchObject({ status: "pending", heldForReview: true, safetyFlags: [] });
+    expect((await question(s, questionId))?.qualityCheck).toBeUndefined();
+  });
+
   test("a question reworded while the judge is answering gets no verdict: the verdict was about the old wording", async () => {
     const s = await setup();
     const questionId = await generated(s);
@@ -617,11 +631,38 @@ describe("the four ways a question is generated, in record mode", () => {
   const reviewQueue = async (s: Setup) =>
     (await s.t.withIdentity(ADMIN).query(api.admin.questions.getPendingQuestions, {})).map((q: Doc<"questions">) => q._id);
 
+  type App = Awaited<ReturnType<typeof app>>;
+  const viaFeed = (s: App) =>
+    s.t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { anchoredStyleId: s.styleId, anchoredToneId: s.toneId });
+  const viaEmail = (s: App) =>
+    s.t.action(internal.internal.ai.generateAIQuestionForUser, {
+      userId: s.meId,
+      bypassAIUsage: true,
+      purpose: "newsletter",
+      anchoredStyleId: s.styleId,
+      anchoredToneId: s.toneId,
+    });
+  async function viaFill(s: App) {
+    const organizationId = await s.t.run(async (ctx) => {
+      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
+      await ctx.db.insert("organization_members", { userId: s.meId, organizationId: orgId, role: "manager" });
+      await ctx.db.insert("styles", { id: "s1", slug: "s1", status: "active", version: 1, name: "s1", structure: "x", color: "#111111", icon: "sparkles" });
+      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
+      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
+      return orgId;
+    });
+    await s.t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic" });
+  }
+  async function viaPool(s: App) {
+    await s.t.run((ctx) => ctx.db.insert("users", { email: "reader@example.com", clerkId: "reader-clerk", newsletterSubscriptionStatus: "subscribed" }));
+    await s.t.action(internal.internal.ai.generateNightlyQuestionPool, { targetCount: 1, maxCombinations: 1 });
+  }
+
   test("a feed question is held for review as before, and its check is queued, not run in the request", async () => {
     const s = await app();
     generates("What small win are you proud of this week?");
 
-    await s.t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { anchoredStyleId: s.styleId, anchoredToneId: s.toneId });
+    await viaFeed(s);
 
     const { saved, checks } = await outcome(s);
     expect(saved).toMatchObject({ status: "pending", heldForReview: true });
@@ -635,13 +676,7 @@ describe("the four ways a question is generated, in record mode", () => {
     const s = await app();
     generates("Which song do you skip every single time?");
 
-    await s.t.action(internal.internal.ai.generateAIQuestionForUser, {
-      userId: s.meId,
-      bypassAIUsage: true,
-      purpose: "newsletter",
-      anchoredStyleId: s.styleId,
-      anchoredToneId: s.toneId,
-    });
+    await viaEmail(s);
 
     const { saved, checks } = await outcome(s);
     expect(saved).toMatchObject({ status: "pending", heldForReview: true });
@@ -650,17 +685,9 @@ describe("the four ways a question is generated, in record mode", () => {
 
   test("a matrix fill's question is public at once and never enters the owner's queue, whatever the verdict", async () => {
     const s = await app();
-    const organizationId = await s.t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId: s.meId, organizationId: orgId, role: "manager" });
-      await ctx.db.insert("styles", { id: "s1", slug: "s1", status: "active", version: 1, name: "s1", structure: "x", color: "#111111", icon: "sparkles" });
-      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
-      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
-      return orgId;
-    });
     generates("What chore do you secretly enjoy doing?");
 
-    await s.t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic" });
+    await viaFill(s);
 
     const { saved, checks } = await outcome(s);
     expect(saved.status).toBe("public");
@@ -679,16 +706,38 @@ describe("the four ways a question is generated, in record mode", () => {
 
   test("a nightly-pool question is public at once as before, with a check queued", async () => {
     const s = await app();
-    await s.t.run((ctx) => ctx.db.insert("users", { email: "reader@example.com", clerkId: "reader-clerk", newsletterSubscriptionStatus: "subscribed" }));
     generates("What habit would you keep if you moved abroad?");
 
-    await s.t.action(internal.internal.ai.generateNightlyQuestionPool, { targetCount: 1, maxCombinations: 1 });
+    await viaPool(s);
 
     const { saved, checks } = await outcome(s);
     expect(saved).toMatchObject({ status: "public", poolStatus: "available" });
     expect(saved.heldForReview).toBeUndefined();
     expect(checks).toEqual([[saved._id, 1, 0]]);
   });
+
+  // What a path saves never depends on the mode. Only whether a check is queued does.
+  const PATHS = [
+    ["feed", viaFeed, { status: "pending", heldForReview: true }],
+    ["daily-email", viaEmail, { status: "pending", heldForReview: true }],
+    ["matrix fill", viaFill, { status: "public" }],
+    ["nightly-pool", viaPool, { status: "public", poolStatus: "available" }],
+  ] as const;
+  test.each((["off", "publish"] as const).flatMap((mode) => PATHS.map(([name, generate, saved]) => [mode, name, generate, saved] as const)))(
+    "with the mode %s, a %s question is saved as in record mode, and a check is queued only if the mode isn't off",
+    async (mode, _name, generate, expected) => {
+      const s = await app();
+      process.env.QUALITY_CHECK_MODE = mode;
+      generates("What would you cook for a friend tonight?");
+
+      await generate(s);
+
+      const { saved, checks } = await outcome(s);
+      expect(saved).toMatchObject(expected);
+      expect(checks).toEqual(mode === "off" ? [] : [[saved._id, 1, 0]]);
+      expect(await reviewQueue(s)).toEqual(saved.status === "pending" ? [saved._id] : []);
+    },
+  );
 
   test("with the mode off, none of this happens: a feed question is saved and no check is queued", async () => {
     const s = await app();
