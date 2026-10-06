@@ -52,6 +52,7 @@ import { toast } from "sonner";
 import { convexErrorData } from "../../../../convex/lib/errorData";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { TeamPromptComposer, type TeamTopicDraft } from "./TeamPromptComposer";
+import { ClaudeFlagDetails } from "@/components/claude-verdict/claude-verdict";
 
 const DAYS_DISPLAY: {
   key: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
@@ -1018,7 +1019,7 @@ const questionPool = useQuery(
       });
       toast.success("Week auto-filled!");
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to generate");
+      toast.error(readableError(e, "Failed to generate"));
     } finally {
       setIsGenerating(false);
     }
@@ -1053,7 +1054,7 @@ const questionPool = useQuery(
       });
       toast.success("Week auto-filled!");
     } catch (e: any) {
-      toast.error(e.message ?? "Auto-schedule failed");
+      toast.error(readableError(e, "Auto-schedule failed"));
     }
   };
 
@@ -1948,7 +1949,7 @@ const questionPool = useQuery(
                                     type="button"
                                     className="group w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                     onClick={() => setPreviewQuestionId(q._id)}
-                                    aria-label={`View full question: ${q.text ?? "Untitled question"}`}
+                                    aria-label={`View full question: ${q.text ?? "Untitled question"}${q.claudeFlag ? ", flagged by AI review" : ""}`}
                                   >
                                     <span className="block text-xs leading-snug line-clamp-3">
                                       {q.text ?? <em className="text-muted-foreground/50">No text</em>}
@@ -1959,6 +1960,15 @@ const questionPool = useQuery(
                                     </span>
                                   </button>
                                   <div className="flex flex-wrap gap-1">
+                                    {q.claudeFlag && (
+                                      <Badge
+                                        variant="outline"
+                                        title="Flagged by AI review. Open View full to see why."
+                                        className="text-[9px] px-1 py-0 h-3.5 border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-400"
+                                      >
+                                        Flagged
+                                      </Badge>
+                                    )}
                                     <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">{q.topic ? q.topic : q.tone ? q.tone : q.style ? q.style : "Unknown"}</Badge>
                                     {q.isAIGenerated && (
                                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">AI</Badge>
@@ -2039,6 +2049,8 @@ const questionPool = useQuery(
                   )}
                 </p>
               </div>
+
+              {previewQuestion.claudeFlag && <ClaudeFlagDetails flag={previewQuestion.claudeFlag} />}
 
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold">Question profile</h3>

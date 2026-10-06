@@ -14,4 +14,4 @@ This document outlines the technology stack used in the "Ice Breaker" project.
 
 *   **Testing**: Unit and integration tests are written and executed with [Vitest](https://vitest.dev/).
 
-*   **AI**: AI-powered question generation runs through [OpenRouter](https://openrouter.ai/) with a model named in code (`GENERATION_MODEL` in `convex/lib/generationRunner.ts`, Claude Opus 5.5), under a daily spend cap.
+*   **AI**: AI-powered question generation runs through [OpenRouter](https://openrouter.ai/) with a model named in code (`GENERATION_MODEL` in `convex/lib/generationRunner.ts`, Claude Opus 5.5), under a daily spend cap. An optional quality check of each generated question (`QUALITY_CHECK_MODE` in the Convex environment, off by default) calls the same provider, with its model named in `convex/lib/qualityCheck.ts` (`QUALITY_CHECK_MODEL`).

@@ -1309,4 +1309,235 @@ console.log(JSON.stringify(answers[fn]));
       }
     });
   });
+
+  describe("judge", () => {
+    const style = { slug: "reflective", name: "Reflective", definition: "Looks back." };
+    const tone = { slug: "warm", name: "Warm", definition: "Kind." };
+    /** A generated run whose one batch would have saved these questions. */
+    const generatedRun = (texts: string[]) => ({
+      batches: [{ seed: { id: "s01" }, ok: true, result: { definitions: { style, tone, topic: null }, candidates: texts.map((text) => ({ text, outcome: "saved" })) } }],
+    });
+    const readJudged = (name: string) => JSON.parse(readFileSync(join(evalsDir, "judged", `${name}.json`), "utf8"));
+    const calls = () =>
+      readFileSync(join(root, "calls.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as { fn: string; texts: string[]; keys: string[] });
+    /**
+     * A dev target, a commit to record, and a stand-in for `npx convex run` that logs each call
+     * and answers as dev would: a hold for a question starting "On hold", otherwise a keep the
+     * check would publish. FAIL_TEXT makes that one question unreadable, FAIL_CALL fails the
+     * whole call holding that question, and PROMPT_VERSION is the instructions version dev reports.
+     */
+    function devStandIn(): string {
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd: root });
+      git("init", "-q");
+      git("commit", "-q", "--allow-empty", "-m", "start");
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, "fake-convex.mjs"),
+        `import { appendFileSync } from "node:fs";
+const [, , fn, json] = process.argv.slice(2);
+const { items } = JSON.parse(json);
+appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ fn, texts: items.map((item) => item.text), keys: Object.keys(items[0] ?? {}).sort() }) + "\\n");
+if (items.some((item) => item.text === process.env.FAIL_CALL)) {
+  console.error("Uncaught ConvexError: Evals are off on this deployment");
+  process.exit(1);
+}
+const results = items.map((item) => {
+  if (item.text === process.env.FAIL_TEXT) return { text: item.text, error: "The quality check's answer couldn't be read" };
+  const hold = item.text.startsWith("On hold");
+  const verdict = { verdict: hold ? "hold" : "keep", reasons: hold ? ["awkward_wording"] : [], safety: [], confidence: 5, note: "" };
+  return { text: item.text, verdict, wouldPublish: !hold, wouldFlag: hold };
+});
+// VERSION_2_TEXT: a call holding that question is answered by a deployment that has moved to v2.
+const version = items.some((item) => item.text === process.env.VERSION_2_TEXT) ? 2 : Number(process.env.PROMPT_VERSION ?? 1);
+console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: version, results }));
+`,
+      );
+      writeFileSync(join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, "fake-convex.mjs")}" "$@"\n`, { mode: 0o755 });
+      return `${bin}:/usr/bin:/bin`;
+    }
+
+    test("refuses bad arguments, a non-dev deployment, a run that wasn't generated and --only-labeled without labels, before any call", () => {
+      const badArgs = [
+        [],
+        ["Bad Name", "r1"],
+        ["judged"],
+        ["judged", "--only-labeled"],
+        ["judged", "r1", "r1"],
+        ["judged", "Bad Run"],
+        ["judged", "r1", "--force"],
+        // A flag before the name would otherwise become the name.
+        ["--only-labeled", "judged", "r1"],
+      ];
+      for (const args of badArgs) {
+        const result = runScript("judge.mjs", args);
+        expect(result.status, args.join(" ")).toBe(1);
+        expect(result.stderr, args.join(" ")).toMatch(/Usage: node evals\/judge\.mjs/);
+      }
+
+      const noTarget = runScript("judge.mjs", ["judged", "r1"]);
+      expect(noTarget.status).toBe(1);
+      expect(noTarget.stderr).toMatch(/No Convex deployment is configured/);
+      for (const [name, value] of [
+        ["CONVEX_DEPLOY_KEY", "prod:test-only|abc"],
+        ["CONVEX_DEPLOYMENT", "prod:happy-otter-123"],
+      ]) {
+        const result = runScript("judge.mjs", ["judged", "r1"], { [name]: value });
+        expect(result.status, value).toBe(1);
+        expect(result.stderr, value).toMatch(new RegExp(`${name} points at a non-dev deployment`));
+      }
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\nCONVEX_SELF_HOSTED_URL=https://convex.example\n");
+      expect(runScript("judge.mjs", ["judged", "r1"]).stderr).toMatch(/CONVEX_SELF_HOSTED_URL is set/);
+
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const notGenerated = runScript("judge.mjs", ["judged", "r1"]);
+      expect(notGenerated.status).toBe(1);
+      expect(notGenerated.stderr).toMatch(/Run "r1" has no generated\.json\. Generate it first with evals\/generate\.mjs/);
+
+      writeRun("r1", { "generated.json": generatedRun(["Kept one?"]) });
+      const noLabels = runScript("judge.mjs", ["judged", "r1", "--only-labeled"]);
+      expect(noLabels.status).toBe(1);
+      expect(noLabels.stderr).toMatch(/--only-labeled needs evals\/owner-labels\.json, which doesn't exist/);
+      // A refused run writes nothing.
+      expect(existsSync(join(evalsDir, "judged"))).toBe(false);
+      // Fourteen script runs: well under a second here, but a busy machine can pass the default 5s.
+    }, 30_000);
+
+    test("judges each saved question once in calls of ten, keeps what it has when some fail, and a rerun judges only what is missing", () => {
+      const PATH = devStandIn();
+      writeRun("r1", { "generated.json": generatedRun(Array.from({ length: 11 }, (_, i) => `Question ${i + 1}?`)) });
+      // The second run repeats a question from the first.
+      writeRun("r2", { "generated.json": generatedRun(["Question 1?", "On hold: question 12?"]) });
+
+      const first = runScript("judge.mjs", ["judged", "r1", "r2"], { PATH, FAIL_TEXT: "Question 5?" });
+      expect(first.status).toBe(1);
+      expect(first.stdout).toMatch(/12 of 12 questions to judge for "judged" at \w+, about \$0\.12\./);
+      expect(first.stderr).toMatch(/Not judged \(The quality check's answer couldn't be read\): Question 5\?/);
+      expect(first.stdout).toMatch(/Judged 11 of 12 by anthropic\/claude-opus-5\.5 with instructions v1: the check would publish 10, leave 1 for review and flag 1\./);
+      expect(first.stderr).toMatch(/1 questions weren't judged\. Rerun the same command to try them again\./);
+      // Two calls, of ten and of two, each question shown with its definitions and nothing else.
+      expect(calls().map((call) => [call.fn, call.texts.length, call.keys]).sort()).toEqual([
+        ["internal/qualityCheck:evalQualityCheck", 10, ["style", "text", "tone", "topic"]],
+        ["internal/qualityCheck:evalQualityCheck", 2, ["style", "text", "tone", "topic"]],
+      ]);
+      const partial = readJudged("judged");
+      expect(partial).toMatchObject({ name: "judged", runs: ["r1", "r2"], model: "anthropic/claude-opus-5.5", promptVersion: 1 });
+      expect(partial.commits).toHaveLength(1);
+      expect(partial.results.map((result: { text: string }) => result.text)).toEqual([
+        ...[1, 2, 3, 4, 6, 7, 8, 9, 10, 11].map((n) => `Question ${n}?`),
+        "On hold: question 12?",
+      ]);
+      expect(partial.results[0]).toEqual({
+        text: "Question 1?",
+        run: "r1",
+        seedId: "s01",
+        verdict: { verdict: "keep", reasons: [], safety: [], confidence: 5, note: "" },
+        wouldPublish: true,
+        wouldFlag: false,
+      });
+      expect(partial.results[10]).toMatchObject({ run: "r2", verdict: { verdict: "hold" }, wouldPublish: false, wouldFlag: true });
+
+      // The rerun asks only for the one that failed, and puts it back in the runs' order.
+      const rerun = runScript("judge.mjs", ["judged", "r1", "r2"], { PATH });
+      expect(rerun.status, rerun.stderr).toBe(0);
+      expect(rerun.stdout).toMatch(/1 of 12 questions to judge/);
+      expect(rerun.stdout).toMatch(/Judged 12 of 12 by .* v1: the check would publish 11, leave 1 for review and flag 1\./);
+      expect(calls().slice(-1)[0].texts).toEqual(["Question 5?"]);
+      const whole = readJudged("judged");
+      expect(whole.results.map((result: { text: string }) => result.text).slice(3, 6)).toEqual(["Question 4?", "Question 5?", "Question 6?"]);
+      expect([whole.createdAt, whole.commits]).toEqual([partial.createdAt, partial.commits]);
+
+      // With everything judged, another run makes no call.
+      const done = runScript("judge.mjs", ["judged", "r1", "r2"], { PATH });
+      expect(done.status, done.stderr).toBe(0);
+      expect(done.stdout).not.toMatch(/questions to judge/);
+      // Two calls for the first run; the rerun asked which instructions dev has (a call with no
+      // questions, which costs nothing) and then judged the one that was missing.
+      expect(calls().slice(0, 2).map((call) => call.texts.length).sort()).toEqual([10, 2]);
+      expect(calls().slice(2).map((call) => call.texts.length)).toEqual([0, 1]);
+
+      // A call that fails outright loses only its own questions.
+      const outage = runScript("judge.mjs", ["other", "r1", "r2"], { PATH, FAIL_CALL: "On hold: question 12?" });
+      expect(outage.status).toBe(1);
+      expect(outage.stderr).toMatch(/A call of 2 questions failed: Uncaught ConvexError: Evals are off on this deployment/);
+      expect(outage.stderr).toMatch(/2 questions weren't judged/);
+      expect(readJudged("other").results).toHaveLength(10);
+
+      // Verdicts from different instructions aren't mixed under one name.
+      const changed = runScript("judge.mjs", ["other", "r1", "r2"], { PATH, PROMPT_VERSION: "2" });
+      expect(changed.status).toBe(1);
+      expect(changed.stderr).toMatch(/"other" was judged by anthropic\/claude-opus-5\.5 with instructions v1; the deployment now has anthropic\/claude-opus-5\.5 v2\. Start a new name\./);
+      // It found that out before sending a question, so nothing was paid for and thrown away.
+      expect(calls().slice(-1)[0].texts).toEqual([]);
+
+      // A deployment that changes between two calls of one run is refused too: the file never
+      // holds verdicts from two sets of instructions.
+      const midRun = runScript("judge.mjs", ["shifting", "r1", "r2"], { PATH, VERSION_2_TEXT: "On hold: question 12?" });
+      expect(midRun.status).toBe(1);
+      expect(midRun.stderr).toMatch(/"shifting" was judged by .* with instructions v[12]; the deployment now has .* v[12]\. Start a new name\./);
+      // Whichever call answered first is all the file has.
+      expect([10, 2]).toContain(readJudged("shifting").results.length);
+      expect(readJudged("other")).toMatchObject({ promptVersion: 1 });
+      expect(readJudged("other").results).toHaveLength(10);
+    }, 30_000);
+
+    test("with the owner's labels it sets the verdicts beside them, applies the pass rule, and --only-labeled judges just the labeled questions", () => {
+      const PATH = devStandIn();
+      const card = (text: string, group: string, verdict: string) => ({ id: text, text, group, verdict, reasons: [] });
+      const writeLabels = (cards: unknown[]) => writeFileSync(join(evalsDir, "owner-labels.json"), JSON.stringify({ cards }));
+      writeRun("r1", { "generated.json": generatedRun(["Kept and liked?", "Kept but rejected?", "On hold but liked?", "Never labeled?"]) });
+      writeLabels([
+        card("Kept and liked?", "would_publish", "keep"),
+        card("Kept but rejected?", "would_publish", "reject"),
+        card("On hold but liked?", "for_review", "keep"),
+        card("Not in any run?", "labeled_before", "unsure"),
+      ]);
+
+      const labeled = runScript("judge.mjs", ["small", "r1", "--only-labeled"], { PATH });
+      expect(labeled.status, labeled.stderr).toBe(0);
+      expect(calls().map((call) => call.texts)).toEqual([["Kept and liked?", "Kept but rejected?", "On hold but liked?"]]);
+      expect(labeled.stdout).toMatch(/Judged 3 of 3 by .* v1: the check would publish 2, leave 1 for review and flag 1\./);
+      expect(labeled.stdout).toContain("would_publish: 2 labeled cards. Would publish 2, of which the owner rejected 1. Would leave 0 for review, of which the owner kept 0. Would flag 0, of which the owner kept 0.");
+      expect(labeled.stdout).toContain("for_review: 1 labeled cards. Would publish 0, of which the owner rejected 0. Would leave 1 for review, of which the owner kept 1. Would flag 1, of which the owner kept 1.");
+      expect(labeled.stdout).toContain("labeled_before: 1 labeled cards (1 not judged here). Would publish 0, of which the owner rejected 0.");
+      expect(labeled.stdout).toContain("Pass rule: not decided. Needs at least 60 labeled cards the check would publish; there are 2.");
+
+      // Without the flag, the same name goes on to the question nobody labeled.
+      const everything = runScript("judge.mjs", ["small", "r1"], { PATH });
+      expect(everything.status, everything.stderr).toBe(0);
+      expect(everything.stdout).toMatch(/1 of 4 questions to judge/);
+      expect(calls().slice(-1)[0].texts).toEqual(["Never labeled?"]);
+
+      // Sixty cards the check would publish decide the rule: 3 rejects pass, a fourth fails.
+      const sixty = Array.from({ length: 60 }, (_, i) => `Blind question ${i + 1}?`);
+      writeRun("r2", { "generated.json": generatedRun(sixty) });
+      writeLabels(sixty.map((text, i) => card(text, "would_publish", i < 3 ? "reject" : "keep")));
+      const pass = runScript("judge.mjs", ["blind", "r2"], { PATH });
+      expect(pass.status, pass.stderr).toBe(0);
+      expect(pass.stdout).toContain("Pass rule: PASS. The owner rejected 3 of 60 the check would publish; at most 3 are allowed.");
+      writeLabels(sixty.map((text, i) => card(text, "would_publish", i < 3 ? "reject" : i === 3 ? "unsure" : "keep")));
+      const fail = runScript("judge.mjs", ["blind", "r2"], { PATH });
+      expect(fail.status, fail.stderr).toBe(0);
+      expect(fail.stdout).toContain("Pass rule: FAIL. The owner rejected 4 of 60 the check would publish; at most 3 are allowed.");
+
+      // Naming fewer questions on a rerun keeps the verdicts already paid for.
+      writeLabels([card("Blind question 1?", "would_publish", "keep")]);
+      const narrowed = runScript("judge.mjs", ["blind", "r2", "--only-labeled"], { PATH });
+      expect(narrowed.status, narrowed.stderr).toBe(0);
+      expect(narrowed.stdout).toMatch(/Judged 1 of 1 /);
+      expect(readJudged("blind").results.map((result: { text: string }) => result.text)).toEqual(sixty);
+      expect(runScript("judge.mjs", ["blind", "r2"], { PATH }).stdout).not.toMatch(/questions to judge/);
+
+      // Labels are compared with everything the file holds, also when a rerun names fewer runs.
+      writeLabels(sixty.map((text, i) => card(text, "would_publish", i < 3 ? "reject" : "keep")));
+      expect(runScript("judge.mjs", ["wide", "r1", "r2"], { PATH }).status).toBe(0);
+      const fewerRuns = runScript("judge.mjs", ["wide", "r1"], { PATH });
+      expect(fewerRuns.status, fewerRuns.stderr).toBe(0);
+      expect(fewerRuns.stdout).toContain("Pass rule: PASS. The owner rejected 3 of 60 the check would publish; at most 3 are allowed.");
+    }, 30_000);
+  });
 });

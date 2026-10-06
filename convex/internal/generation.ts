@@ -10,6 +10,7 @@ import {
   normalizeQuestion,
   validateGeneratedQuestion,
 } from "../lib/promptArchitecture";
+import { qualityCheckMode } from "../lib/qualityCheck";
 
 async function getLatestActiveBySlug(
   ctx: QueryCtx,
@@ -291,9 +292,10 @@ export const createGenerationRun = internalMutation({
       v.literal("nightly_pool"),
       v.literal("newsletter"),
       v.literal("remix"),
+      v.literal("quality_check"),
     ),
     requestedByUserId: v.optional(v.string()),
-    blueprintId: v.id("promptBlueprints"),
+    blueprintId: v.optional(v.id("promptBlueprints")),
     styleId: v.optional(v.id("styles")),
     toneId: v.optional(v.id("tones")),
     topicId: v.optional(v.id("topics")),
@@ -312,6 +314,10 @@ export const createGenerationRun = internalMutation({
   },
   returns: v.id("generationRuns"),
   handler: async (ctx, args) => {
+    // Only a check has no blueprint: a generation's run always records the one its prompt came from.
+    if (args.purpose !== "quality_check" && !args.blueprintId) {
+      throw new Error(`A ${args.purpose} run needs its blueprint`);
+    }
     return await ctx.db.insert("generationRuns", {
       status: "running",
       purpose: args.purpose,
@@ -463,6 +469,7 @@ export const insertGeneratedQuestions = internalMutation({
   }),
   handler: async (ctx, args) => {
     const now = Date.now();
+    const checksQuality = qualityCheckMode() !== "off";
     const insertedQuestionIds: Id<"questions">[] = [];
     const duplicates: Array<{ text: string; reason: string }> = [];
     const rejected: Array<{ text: string; reasons: string[] }> = [];
@@ -532,6 +539,10 @@ export const insertGeneratedQuestions = internalMutation({
       await ctx.scheduler.runAfter(0, internal.lib.retriever.embedQuestion, {
         questionId,
       });
+      // Scheduled, not awaited, so whoever is waiting for this question waits no longer.
+      if (checksQuality) {
+        await ctx.scheduler.runAfter(0, internal.internal.qualityCheck.checkQuestion, { questionId });
+      }
     }
 
     if (args.runId) {
@@ -582,6 +593,7 @@ export const getGenerationRun = internalQuery({
         v.literal("nightly_pool"),
         v.literal("newsletter"),
         v.literal("remix"),
+        v.literal("quality_check"),
       ),
       previewText: v.optional(v.string()),
       acceptedQuestionId: v.optional(v.id("questions")),

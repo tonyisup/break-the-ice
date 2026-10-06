@@ -13,11 +13,12 @@ import { api, internal } from "../_generated/api";
 import {
 	ensureAdmin,
 	ensurePaidOrganizationMember,
+	isPaidTeamMember,
 } from "../auth";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
 import { findCanonicalUser } from "../lib/users";
-import { canReadQuestion, isQuestionPublic, isReadableByLink, isRetiredQuestion } from "../lib/questionAccess";
+import { canReadQuestion, isQuestionPublic, isReadableByLink, isRetiredQuestion, withoutVerdict } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
@@ -25,6 +26,8 @@ import { wasAiCallBilled } from "../lib/aiSpendGuard";
 import { requireQuestionText } from "../lib/questionText";
 import { normalizeQuestionTags } from "../lib/questionTags";
 import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
+import { editorialReason } from "../lib/questionReviewValidators";
+import { claudeFlag } from "../lib/qualityCheck";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 
@@ -207,7 +210,8 @@ export const getNextRandomQuestions = action({
 		targetAnchoredCount: v.number(),
 	}),
 	handler: async (ctx, args) => {
-		return await getNextRandomQuestionsInternal(ctx, args);
+		const next = await getNextRandomQuestionsInternal(ctx, args);
+		return { ...next, questions: next.questions.map(withoutVerdict) };
 	},
 });
 
@@ -243,11 +247,11 @@ export const getNextQuestions = query({
 		const unseenQuestions = filteredQuestions.filter(q => !seenIds.has(q._id));
 		if (unseenQuestions.length > 0) {
 			shuffleArray(unseenQuestions);
-			return unseenQuestions.slice(0, count);
+			return unseenQuestions.slice(0, count).map(withoutVerdict);
 		}
 
 		shuffleArray(filteredQuestions);
-		return filteredQuestions.slice(0, count);
+		return filteredQuestions.slice(0, count).map(withoutVerdict);
 	}
 })
 
@@ -441,7 +445,7 @@ export const getQuestionsByIds = query({
 				visibleQuestions.push(question);
 			}
 		}
-		return visibleQuestions;
+		return visibleQuestions.map(withoutVerdict);
 	},
 });
 
@@ -467,6 +471,14 @@ export const getPublicQuestions = query({
 			v.literal("pruning"),
 			v.literal("pruned")
 		)),
+		// Present only when the quality check held the question or raised a safety concern,
+		// no admin has reviewed it since, and the caller is a signed-in member of a team: its
+		// reasons, safety flags and one-sentence note, for whoever is choosing questions.
+		claudeFlag: v.optional(v.object({
+			reasons: v.array(editorialReason),
+			safety: v.array(v.string()),
+			note: v.string(),
+		})),
 	})),
 	handler: async (ctx, args) => {
 		const limit = args.limit ?? 200;
@@ -500,6 +512,13 @@ export const getPublicQuestions = query({
 			.filter((q) => !isRetiredQuestion(q))
 			.sort((a, b) => a._creationTime - b._creationTime);
 		const rows = merged.slice(0, limit);
+		// This query needs no sign-in, and the flag is the check's reasons and note: it goes to a
+		// signed-in member of a team and to nobody else. Looked up only when there is a flag.
+		const flags = new Map(rows.flatMap((q) => {
+			const flag = claudeFlag(q);
+			return flag ? [[q._id, flag] as const] : [];
+		}));
+		const forTeam = flags.size > 0 && (await isPaidTeamMember(ctx));
 		return rows.map((q) => ({
 			_id: q._id,
 			text: q.text ?? q.customText,
@@ -509,6 +528,7 @@ export const getPublicQuestions = query({
 			isAIGenerated: q.isAIGenerated,
 			totalLikes: q.totalLikes,
 			status: q.status,
+			claudeFlag: forTeam ? flags.get(q._id) : undefined,
 		}));
 	},
 });
@@ -582,7 +602,7 @@ export const getCustomQuestions = query({
 		  .withIndex("by_author", (q) => q.eq("authorId", user._id))
 		  .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 		  .collect();
-		return questions.filter((question) => question.kind !== "team_prompt");
+		return questions.filter((question) => question.kind !== "team_prompt").map(withoutVerdict);
 	},
 });
 
@@ -627,7 +647,7 @@ export const getLikedQuestions = query({
 			if (!question || question.organizationId !== args.organizationId) continue;
 			if (await canReadQuestion(ctx, question, user._id)) liked.push(question);
 		}
-		return liked;
+		return liked.map(withoutVerdict);
 	},
 });
 
@@ -651,7 +671,7 @@ export const getQuestionById = query({
 					email: identity.email,
 				})
 				: null;
-			return (await canReadQuestion(ctx, question, user?._id)) ? question : null;
+			return (await canReadQuestion(ctx, question, user?._id)) ? withoutVerdict(question) : null;
 		} catch {
 			return null;
 		}
@@ -1062,7 +1082,8 @@ export const updatePersonalQuestion = mutation({
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: args.questionId,
 		});
-		return await ctx.db.get(args.questionId);
+		const updated = await ctx.db.get(args.questionId);
+		return updated && withoutVerdict(updated);
 	},
 });
 

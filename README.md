@@ -129,6 +129,32 @@ Embedding calls and the admin image generator are not tracked or counted toward 
 per-team request limits are defined in
 [`convex/lib/aiRateLimit.ts`](./convex/lib/aiRateLimit.ts).
 
+Generated questions can be checked by Claude after they are saved. `QUALITY_CHECK_MODE` in the
+Convex environment turns this on: `off` (the default) or `record`. (`publish` is reserved for a
+later release and only records for now.) In `record`, each new question from the feed, the
+daily email, matrix fill and the nightly pool gets a verdict (keep or hold, with reasons, safety
+flags and a one-sentence note) a few seconds after it is saved. Nothing about who can see a
+question changes, and the verdict isn't part of the question documents people's apps get.
+Admins see it in the review queue and on a question's page, and a hold or a safety flag is
+marked in their lists. A signed-in member of a team sees one thing: on the schedule grid, a
+question the check held, or raised a safety concern about, is marked "Flagged", with the
+reasons and note in its details, until an admin acts on the question. Auto-fill Week and the coach-feedback
+suggestions leave a flagged question out. Changing a question's wording, style, tone or topic
+drops its verdict.
+
+Each check is a small call, about 1 cent, charged to system spend whoever generated the
+question. That is about twice what generating a feed question costs, so with recording on, a
+day of generation at the default budgets can add up to about $2 of checks to system spend,
+under the same hard cap as the daily email. One that fails is tried once more five minutes
+later. Questions still waiting in the review queue without a verdict can
+be checked with `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`,
+then with `false` (up to 50 a run; it stops early if the provider isn't answering). That
+doesn't reach questions that were published at once: a matrix fill's or nightly pool's question
+whose check failed twice, or that was saved while the mode was off, stays unchecked and shows
+no flag. Setting the mode back to `off` stops new checks and hides every flag, with no deploy.
+Reverting the code after checks have run needs the schema's additions kept, because Convex
+refuses a schema that stored rows don't fit.
+
 New AI questions from the feed and the daily email wait for review in the admin queue at
 `/admin/questions`. The person they were made for still gets them, and anyone with the link
 can open them, but they stay out of the shared feed, collections, daily-email picks and team

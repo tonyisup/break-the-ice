@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { getAdminQuestionPageSize, paginateQuestions } from "./pagination";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { ClaudeConcernBadge, ClaudeVerdict } from "@/components/claude-verdict/claude-verdict";
 
 export default function QuestionsPage() {
   const isMobile = useIsMobile();
@@ -396,6 +397,7 @@ export default function QuestionsPage() {
                     {q.isAIGenerated ? <Sparkles className="size-3" /> : <UserCircle className="size-3" />}
                     {q.isAIGenerated ? "AI generated" : "User Submitted"}
                   </div>
+                  {q.qualityCheck && <ClaudeVerdict check={q.qualityCheck} />}
                   <textarea
                     // A new revision (an author edit) remounts the box with the current wording, and
                     // the save carries the revision the edit started from, so stale text is refused.
@@ -610,6 +612,11 @@ export default function QuestionsPage() {
                           <span className="font-medium text-base md:text-sm leading-relaxed">
                             {q.text || q.customText}
                           </span>
+                        )}
+                        {!isEditing && q.qualityCheck && (
+                          <div className="mt-1">
+                            <ClaudeConcernBadge check={q.qualityCheck} />
+                          </div>
                         )}
                       </td>
                       <td className="block md:table-cell px-4 md:px-6 py-2 md:py-4">
@@ -1022,6 +1029,7 @@ export default function QuestionsPage() {
                         {q.text || q.customText}
                       </p>
                     )}
+                    {!isEditing && q.qualityCheck && <ClaudeConcernBadge check={q.qualityCheck} />}
                   </div>
 
                   {!isEditing && (

@@ -20,6 +20,13 @@ turn a custom topic into a reviewed question for a specific delivery day.
 
 The selected question appears in the day card immediately.
 
+A question marked **Flagged** in the matrix is one the app's automated AI
+review held or raised a safety concern about. Select **View full** to read why.
+You can still assign it yourself; **Auto-fill** and **Auto-fill Week** leave
+flagged questions out. The mark stays until one of Break the Ice's own admins
+acts on the question, and it shows only while the AI review is switched on for
+the app.
+
 ## Write and schedule an exact question
 
 1. Select **Assign** on an empty delivery day.
@@ -106,6 +113,15 @@ Published and completed weeks can't be changed. Someone may have published the
 week while you were composing. Open or create a draft week to assign a new
 question. If the planner says the day is no longer a delivery day, reload the
 planner and pick one of the days the week shows.
+
+### “Auto-fill leaves out questions flagged by AI review”
+
+**Auto-fill** and **Auto-fill Week** never place a question marked **Flagged**.
+This message means no other question is left for the week: every question that
+matches the matrix's row and column selection is either flagged or already
+assigned this week. Widen the selection, generate a question for an empty cell,
+or use the **Write** or **Topic** tab. To use a flagged question anyway, select
+**View full** on it to read the concern, then assign it yourself.
 
 ### The week will not publish
 

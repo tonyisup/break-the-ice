@@ -5,13 +5,12 @@
 // things out, and marks the run "+local". --model generates with that OpenRouter model (like
 // anthropic/claude-sonnet-5.5) instead of the app's default. A run keeps one model: a rerun without
 // --model uses the run's own.
-import { execFile, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
-import { parse } from "dotenv";
 import { mapLimit } from "./async.mjs";
+import { assertDevTarget, convexRun } from "./devTarget.mjs";
 import { cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess, writeJson } from "./runRecord.mjs";
 
 // Two at a time keeps a run to a few minutes without bursting the provider's rate limit.
@@ -39,33 +38,7 @@ if (badArgs) {
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 
-// `npx convex run` targets whatever these name, from the shell or else from .env.local and .env,
-// parsed with the same dotenv the Convex CLI uses. The eval only runs where they clearly name a dev
-// deployment (and the deployment also refuses unless EVALS_ENABLED is set there). Only these names
-// are read from the files; nothing is printed.
-const TARGET_NAMES = ["CONVEX_DEPLOY_KEY", "CONVEX_DEPLOYMENT", "CONVEX_SELF_HOSTED_URL"];
-function targetSettings(file) {
-  const path = join(root, file);
-  if (!existsSync(path)) return {};
-  const parsed = parse(readFileSync(path, "utf8"));
-  return Object.fromEntries(TARGET_NAMES.filter((name) => parsed[name]).map((name) => [name, parsed[name]]));
-}
-const fromShell = Object.fromEntries(TARGET_NAMES.filter((name) => process.env[name]).map((name) => [name, process.env[name]]));
-const target = { ...targetSettings(".env"), ...targetSettings(".env.local"), ...fromShell };
-if (target.CONVEX_SELF_HOSTED_URL) {
-  console.error("CONVEX_SELF_HOSTED_URL is set. The eval only runs on the dev deployment.");
-  process.exit(1);
-}
-for (const name of ["CONVEX_DEPLOY_KEY", "CONVEX_DEPLOYMENT"]) {
-  if (target[name] && !target[name].startsWith("dev:")) {
-    console.error(`${name} points at a non-dev deployment. The eval only runs on dev.`);
-    process.exit(1);
-  }
-}
-if (!target.CONVEX_DEPLOY_KEY && !target.CONVEX_DEPLOYMENT) {
-  console.error("No Convex deployment is configured (CONVEX_DEPLOYMENT in .env.local). The eval only runs on dev.");
-  process.exit(1);
-}
+assertDevTarget(root);
 
 const { batchSize, seeds } = JSON.parse(readFileSync(join(here, "seeds.json"), "utf8"));
 const runDir = join(here, "runs", run);
@@ -120,11 +93,6 @@ if (todo.length && earlierCommits.some((earlier) => earlier !== commit)) {
   process.exit(1);
 }
 
-const exec = promisify(execFile);
-async function convexRun(fn, args) {
-  const { stdout } = await exec("npx", ["convex", "run", fn, JSON.stringify(args)], { cwd: root, maxBuffer: 16 * 1024 * 1024 });
-  return JSON.parse(stdout.slice(stdout.search(/[[{]/)));
-}
 
 // Each invocation records its commit, the library it searched, and the generation runs it made.
 const invocations = previous?.invocations ?? [];
@@ -140,7 +108,7 @@ function save() {
  */
 async function collectAttempts(invocation) {
   try {
-    const fresh = await convexRun("internal/evalData:evalRunAttempts", {
+    const fresh = await convexRun(root, "internal/evalData:evalRunAttempts", {
       runLabel: run,
       since: invocation.startedAtMs - CLOCK_SLACK_MS,
       ...(invocation.endedAtMs ? { until: invocation.endedAtMs + CLOCK_SLACK_MS } : {}),
@@ -163,7 +131,7 @@ for (const invocation of invocations.filter((inv) => inv.attemptsComplete !== tr
 if (todo.length) {
   // Read before the invocation is recorded: if this first call fails (evals off on dev, the CLI
   // not signed in), no model was called, so nothing about this invocation is saved.
-  const library = await convexRun("internal/evals:evalLibraryStats", {}).catch((error) => {
+  const library = await convexRun(root, "internal/evals:evalLibraryStats", {}).catch((error) => {
     console.error(`Couldn't read the library from dev (${cliError(error)}). Nothing was generated.`);
     process.exit(1);
   });
@@ -183,7 +151,7 @@ if (todo.length) {
       ...(model ? { model } : {}),
     };
     try {
-      const result = await convexRun("internal/evals:generateEvalBatch", args);
+      const result = await convexRun(root, "internal/evals:generateEvalBatch", args);
       recordSuccess(batches, seed, result, commit);
       invocation.generated.push(seed.id);
       console.log(`${seed.id} ${seed.style}/${seed.tone}${seed.topic ? `/${seed.topic}` : ""}: ${result.candidates.length} questions`);

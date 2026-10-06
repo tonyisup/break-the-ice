@@ -35,6 +35,7 @@ export const ERROR_CODES = {
   QUESTION_HAS_MERGED_COPIES: "QUESTION_HAS_MERGED_COPIES",
   SCHEDULE_NOT_DRAFT: "SCHEDULE_NOT_DRAFT",
   SCHEDULE_DAY_INACTIVE: "SCHEDULE_DAY_INACTIVE",
+  SCHEDULE_ONLY_FLAGGED_LEFT: "SCHEDULE_ONLY_FLAGGED_LEFT",
   TEAM_TOPIC_REQUIRED: "TEAM_TOPIC_REQUIRED",
   TEAM_TOPIC_TOO_LONG: "TEAM_TOPIC_TOO_LONG",
   STYLE_UNAVAILABLE: "STYLE_UNAVAILABLE",
@@ -63,6 +64,7 @@ export const ERROR_MESSAGES = {
   // that names the field.
   SCHEDULE_NOT_DRAFT: "This schedule is already published or completed, so it can't be changed.",
   SCHEDULE_DAY_INACTIVE: "That day is no longer a delivery day for this schedule.",
+  SCHEDULE_ONLY_FLAGGED_LEFT: "Auto-fill leaves out questions flagged by AI review, and no other question is left for this week. Open a flagged question on the grid to see why, and assign it yourself if you want it.",
   TEAM_TOPIC_NAME_REQUIRED: "Please enter a topic name.",
   TEAM_TOPIC_GUIDANCE_REQUIRED: "Please describe what this conversation should surface.",
   TEAM_TOPIC_NAME_TOO_LONG: `Topic names can be up to ${MAX_TEAM_TOPIC_NAME_LENGTH} characters.`,

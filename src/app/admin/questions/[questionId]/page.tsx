@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Icon, IconComponent } from "@/components/ui/icons/icon"
 import { cn } from "@/lib/utils"
+import { ClaudeVerdict } from "@/components/claude-verdict/claude-verdict"
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
@@ -551,6 +552,14 @@ export default function QuestionDetailsPage() {
 	const selectedStyle = styles?.find((style) => style._id === editStyle || style.slug === editStyle || style.id === editStyle) ?? null
 	const selectedTone = tones?.find((tone) => tone._id === editTone || tone.slug === editTone || tone.id === editTone) ?? null
 	const selectedTopic = topics?.find((topic) => topic._id === editTopic || topic.slug === editTopic || topic.id === editTopic) ?? null
+	// The quality check read the saved wording, style, tone and topic. Saving a change to any of
+	// them clears its verdict (updateQuestion), so the verdict box says so while one is pending.
+	const editsWhatTheCheckRead = Boolean(question) && (
+		editText !== (question.text ?? question.customText ?? "") ||
+		Boolean(selectedStyle?.slug && selectedStyle.slug !== question.style) ||
+		Boolean(selectedTone?.slug && selectedTone.slug !== question.tone) ||
+		Boolean(selectedTopic?.slug && selectedTopic.slug !== question.topic)
+	)
 	const styleMeta = question._style
 	const toneMeta = question._tone
 	const topicMeta = question._topic
@@ -670,6 +679,7 @@ export default function QuestionDetailsPage() {
 						<p className="text-xs text-muted-foreground">
 							{editText.length} characters · Created {new Date(question._creationTime).toLocaleDateString()}
 						</p>
+						{question.qualityCheck && <ClaudeVerdict check={question.qualityCheck} outdated={editsWhatTheCheckRead} />}
 					</div>
 
 					{/* Question Image */}

@@ -170,8 +170,8 @@ function assertPromptSize(chars: number): void {
 
 // A thinking model's hidden reasoning counts toward max_tokens. google/gemini-3.8-flash spent
 // about 500 to 1,600 tokens before writing any JSON, so a cap sized for the JSON alone cut off
-// most answers. Opus 5.5 doesn't reason unless asked to, but the allowance stays so a switch to
-// a model that does can't cut answers off again.
+// most answers. Opus 5.5 spends a few hundred before a short answer (measured on the quality
+// check, Oct 2026), so the allowance stays.
 const REASONING_ALLOWANCE_TOKENS = 2000;
 // A remix answers with one plain-text question.
 const REMIX_ANSWER_TOKENS = 150;
@@ -199,7 +199,7 @@ export function maxOutputTokens(batchSize: number): number {
 // reservation is released. It stays held when the attempt keeps its reservation or its answer
 // is cut off by the output cap: both are charged, and as a rule the person's plan use is
 // given back. A cut-off keeps the slot whatever the request then comes to.
-async function createChatCompletionWithRetry(
+export async function createChatCompletionWithRetry(
   ctx: ActionCtx,
   spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
@@ -212,7 +212,8 @@ async function createChatCompletionWithRetry(
     promptBytes += utf8.encode(message.content).length;
   }
   assertPromptSize(promptChars);
-  // Priced at the default model's rates, also for a model the eval harness names.
+  // Priced at the default model's rates, also for a model the eval harness names and for the
+  // quality check, whose model is priced the same today (QUALITY_CHECK_MODEL).
   const reserveUsd = callReserveUsd(promptBytes, params.max_tokens, GENERATION_PRICE_USD_PER_MTOK);
 
   const maxAttempts = getOpenRouterMaxAttempts();
@@ -292,7 +293,7 @@ function wasPaidInFull(completion: OpenAI.Chat.Completions.ChatCompletion): bool
 }
 
 /** Records a run's failure without letting a failed write replace the original error. */
-async function markRunFailed(ctx: ActionCtx, runId: Id<"generationRuns">, error: unknown, fallbackMessage: string): Promise<void> {
+export async function markRunFailed(ctx: ActionCtx, runId: Id<"generationRuns">, error: unknown, fallbackMessage: string): Promise<void> {
   try {
     await ctx.runMutation(internal.internal.generation.failGenerationRun, {
       runId,
@@ -308,7 +309,7 @@ async function markRunFailed(ctx: ActionCtx, runId: Id<"generationRuns">, error:
  * The model answered, but with nothing we can use: empty, not JSON, no questions in it, or
  * cut off by our output cap partway through.
  */
-class UnusableOutputError extends Error {
+export class UnusableOutputError extends Error {
   constructor(
     message: string,
     readonly rawResponse?: string,
@@ -365,7 +366,7 @@ async function retryUnusableOutput<T>(attempt: (markBilled: () => void) => Promi
   }
 }
 
-function getChatCompletionContent(completion: OpenAI.Chat.Completions.ChatCompletion): string {
+export function getChatCompletionContent(completion: OpenAI.Chat.Completions.ChatCompletion): string {
   const content = completion.choices?.[0]?.message?.content?.trim();
   if (!content) {
     const finishReason = completion.choices?.[0]?.finish_reason ?? "unknown";

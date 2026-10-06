@@ -2,6 +2,24 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.6.0.0] - 2026-10-06
+
+### Added
+- Claude can check every generated question. Set `QUALITY_CHECK_MODE=record` in the Convex environment (it is off by default) and each new question from the feed, the daily email, matrix fill and the nightly pool gets a verdict a few seconds after it is saved: keep or hold, the reasons (the same four the review queue uses), safety flags, a confidence from 1 to 5 and a one-sentence note. This release only records. Nothing about who can see a question changes.
+- The verdict shows in the admin review queue and on a question's page. A keep the check is sure enough of to publish unread (confidence 5, no reasons, no safety flags) is marked "Would publish". The admin's lists of reviewed questions mark a hold or a safety flag.
+- On the schedule grid, signed-in members of a team see a "Flagged" mark on a question the check held, or raised a safety concern about, with the reasons and note in its details, until an admin acts on the question. Auto-fill Week and the coach-feedback suggestions leave flagged questions out, and Auto-fill says so when nothing else is left for the week.
+- `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'` lists the questions waiting in the review queue with no verdict, and with `false` checks up to 50 of them. A run stops early when the provider isn't answering.
+- `node evals/judge.mjs <name> <run>...` runs the same check on dev over an eval run's questions. With the owner's labels in a git-ignored file it prints how often the owner rejected what the check would publish and kept what it would flag, and applies the pass rule for a blind set: at most 1 reject in 20 of the questions the check would publish.
+
+### Changed
+- A check costs about 1 cent and is charged to system spend. With recording on, a day of generation at the default budgets can add up to about $2 of checks, under the same hard cap as the daily email.
+- Changing a question's wording, style, tone or topic drops its verdict, whether from the question page, the pool page or an undo. A new version of the same style keeps it.
+- Question documents sent to people's apps no longer carry `safetyFlags` (always an empty list on generated questions until now) or the new verdict. Admin pages still get both.
+- A generation run can no longer be saved without the prompt blueprint it came from. Only a check's run has none.
+- The check and the eval harness read the same short definitions of a style, tone and topic, and the two eval scripts that call dev share one guard that refuses any other deployment.
+- The README describes the switch, what recording shows to whom, what it costs and how to switch it off. `evals/README.md` describes measuring the check, with the first numbers: on 60 questions the owner had already labeled, the check would publish 21, one of which the owner had rejected, and flag 3, two of which the owner had rejected.
+- If this release is rolled back after checks have run, keep the schema's additions: Convex refuses a schema that stored rows don't fit. Setting the mode back to `off` stops new checks and hides every flag, with no deploy.
+
 ## [0.5.3.0] - 2026-10-06
 
 ### Added

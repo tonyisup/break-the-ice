@@ -10,6 +10,7 @@ import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { PENDING_QUEUE_LIMIT } from "../constants";
 import { recordReview, reviewReason, shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { removeQuestionReferences } from "../lib/questionReferences";
+import { NO_VERDICT, sameJudgedSubject } from "../lib/qualityCheck";
 
 const FIX_EXISTING_QUESTIONS_BATCH_SIZE = 100;
 
@@ -246,6 +247,9 @@ export const updateQuestion = mutation({
         // Only a library question keeps a fingerprint (see isPrivateUserQuestion). The questions
         // page resends the text with every status change, Mark Personal included.
         const after: Doc<"questions"> = { ...before, ...updateData };
+        // The quality check's verdict is about the wording, style, tone and topic it read. Its
+        // run keeps the record of what it said.
+        if (before.qualityCheck && !sameJudgedSubject(before, after)) Object.assign(updateData, NO_VERDICT);
         if (isPrivateUserQuestion(after)) {
             if (before.fingerprint !== undefined) updateData.fingerprint = undefined;
         } else if (text !== undefined || isPrivateUserQuestion(before)) {
@@ -489,11 +493,14 @@ export const updateCategories = mutation({
 				if (update.tone !== undefined) {
 					toneId = (await resolveTaxonomySlug(ctx.db, "tones", update.tone, question.organizationId))?._id;
 				}
+				// The patch below writes both slugs, so one that isn't given is removed.
+				const recategorized = { ...question, style: update.style, tone: update.tone };
 				await ctx.db.patch(update.id, {
 					style: update.style,
 					tone: update.tone,
 					...(styleId !== undefined && { styleId }),
 					...(toneId !== undefined && { toneId }),
+					...(question.qualityCheck && !sameJudgedSubject(question, recategorized) ? NO_VERDICT : {}),
 				});
 				if (update.style !== undefined || update.tone !== undefined) {
 					await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {

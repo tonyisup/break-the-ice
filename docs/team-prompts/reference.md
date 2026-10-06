@@ -16,6 +16,12 @@ Selecting **Assign** on an editable schedule day opens the prompt composer.
 The composer is available only for a missing assignment on a draft or not-yet-
 created week. Published schedules use the existing immutable schedule behavior.
 
+On the question matrix, a library question shows a **Flagged** badge when the
+AI quality check held it or raised a safety concern about it. **View full**
+shows the check's reasons, safety flags, and one-sentence note. The badge is
+advisory: the question can still be assigned by hand. See
+`core.questions.getPublicQuestions` and `core.schedules.autoSchedule` below.
+
 ## Convex API
 
 ### `core.teamPromptActions.previewTopicQuestions`
@@ -182,6 +188,54 @@ text:
 
 `core.schedules.getCurrentWeekSchedule` also resolves `customText` so exact team
 questions render in manager and coach-compatible schedule readers.
+
+### `core.questions.getPublicQuestions`
+
+Lists the library questions the question matrix offers. A row carries
+`claudeFlag` only when all of these hold:
+
+- The AI quality check held the question or raised a safety concern about it.
+- No app admin has acted on the question.
+- The check is switched on for the deployment (`QUALITY_CHECK_MODE`, described
+  in the [README](../../README.md)).
+- The caller is signed in and belongs to an active Team workspace.
+
+```ts
+{
+  // existing row fields
+  claudeFlag?: {
+    reasons: Array<
+      | "awkward_wording"
+      | "unclear_answer"
+      | "style_tone_mismatch"
+      | "repeated_construction"
+    >;
+    safety: string[];
+    note: string;
+  };
+}
+```
+
+`safety` holds zero or more of `trauma`, `targets_person`, `sexual_illegal`,
+`politics_religion`, and `humiliation`. Every other caller gets the same rows
+without the field, and no other part of the check's verdict is returned here.
+
+### `core.schedules.autoSchedule`
+
+Fills a draft week from the library questions that match the matrix's row and
+column selection. The caller must be an admin or manager in an active Team
+workspace. Flagged questions are left out: the ones that meet the first three
+`claudeFlag` conditions above.
+
+When no question is left for the week once flagged questions and questions
+already assigned to it are removed, and at least one flagged question was left
+out, the mutation fails with a `ConvexError` whose `code` is
+`SCHEDULE_ONLY_FLAGGED_LEFT` and whose `message` is ready to show. Its other
+refusals stay plain errors.
+
+`core.schedules.assignQuestion` does not check the flag, so a flagged question
+can still be assigned by hand. The feedback-informed suggestions from
+`core.coachFeedback.getCurationPreview` leave flagged questions out too.
 
 ## Data model
 

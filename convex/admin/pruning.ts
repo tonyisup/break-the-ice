@@ -9,6 +9,7 @@ import schema from "../schema";
 import { editorialReason } from "../lib/questionReviewValidators";
 import { recordReview, reviewReason, shownWording, snapshot, syncReviewedEmbedding } from "../lib/questionReview";
 import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUserWrittenQuestion, normalizedRetirement } from "../lib/questionAccess";
+import { NO_VERDICT } from "../lib/qualityCheck";
 
 // Shared return validators for type safety
 export const pruningSettingsValidator = v.object({
@@ -578,7 +579,10 @@ export const undoReview = mutation({
       // Undo never puts a fingerprint back on a private question (see isPrivateUserQuestion).
       const question = (await ctx.db.get(change.questionId))!;
       if (isPrivateUserQuestion({ ...question, ...restored })) restored.fingerprint = undefined;
-      await ctx.db.patch(change.questionId, restored);
+      // A quality check's verdict is about the wording it read, and the snapshot doesn't carry
+      // one, so wording that undo puts back has none.
+      const verdict = question.qualityCheck && restored.text !== question.text ? NO_VERDICT : {};
+      await ctx.db.patch(change.questionId, { ...restored, ...verdict });
       await syncReviewedEmbedding(ctx, { ...question, ...restored }, shownWording(question));
       await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: change.questionId });
     }

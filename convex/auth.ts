@@ -119,6 +119,36 @@ export const isOrganizationPaid = async (
   return organization.planTier === "team" && isBillingActiveStatus(organization.billingStatus);
 };
 
+/**
+ * Whether the caller is signed in and belongs to at least one team with an active Team
+ * workspace. Never throws: it is for data a team may see and nobody else should, in a query
+ * that anyone can call.
+ */
+export const isPaidTeamMember = async (ctx: QueryCtx | MutationCtx): Promise<boolean> => {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) return false;
+  const { candidates } = await collectUserCandidates(ctx, {
+    clerkId: identity.subject,
+    tokenIdentifier: identity.tokenIdentifier,
+    email: identity.email,
+  });
+  for (const user of candidates) {
+    let cursor: string | null = null;
+    while (true) {
+      const memberships = await ctx.db
+        .query("organization_members")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .paginate({ cursor, numItems: 100 });
+      for (const membership of memberships.page) {
+        if (await isOrganizationPaid(ctx, membership.organizationId)) return true;
+      }
+      if (memberships.isDone) break;
+      cursor = memberships.continueCursor;
+    }
+  }
+  return false;
+};
+
 export const ensurePaidOrganizationMember = async (
   ctx: QueryCtx | MutationCtx,
   organizationId: Id<"organizations">,
