@@ -21,7 +21,7 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
   counts added up, with a 95% interval). Refuses runs that aren't replicates: a different judge,
   cutoffs, seeds, prompts, definitions, model or library, or failed seeds.
 - `compare.mjs <baseline> <run>...`: tests one or more runs of a changed setup against a baseline
-  (see below).
+  (see below). Writes `comparison-<baseline>.json` in the first run's folder.
 - `jev.mjs`: the Jev questions and cutoffs. The judge is pinned (`JEV_MODEL`), and summaries
   record hashes of the question wording and of the cutoffs, plus `SCORING_VERSION` (in
   `stats.mjs`, bumped when the rate logic changes); `score.mjs` refuses to overwrite a summary
@@ -36,10 +36,12 @@ on dev only. Commit `convex/` and push it to dev first (`generate.mjs` refuses u
 
 ```bash
 npx convex dev --once
-node evals/generate.mjs v0-3-2-r1
-node evals/score.mjs v0-3-2-r1
-node evals/baseline.mjs v0-3-2 v0-3-2-r1 v0-3-2-r2 v0-3-2-r3
+node evals/generate.mjs my-setup-r1
+node evals/score.mjs my-setup-r1
+node evals/baseline.mjs my-setup my-setup-r1 my-setup-r2 my-setup-r3
 ```
+
+Use run names of your own: rerunning these on a committed run's name rewrites its files.
 
 Without `--model` a run uses the app's default, `GENERATION_MODEL` in
 `convex/lib/generationRunner.ts` (Opus 5.5 since Oct 2026). To try another generation model, name
@@ -51,9 +53,9 @@ run can be rerun with the corrected `--model`; a well-formed name OpenRouter doe
 the provider, and needs a new run name.
 
 ```bash
-node evals/generate.mjs sonnet-5-5-r1 --model anthropic/claude-sonnet-5.5
-node evals/score.mjs sonnet-5-5-r1
-node evals/compare.mjs v0-3-2 sonnet-5-5-r1
+node evals/generate.mjs my-sonnet-r1 --model anthropic/claude-sonnet-5.5
+node evals/score.mjs my-sonnet-r1
+node evals/compare.mjs v0-5-2 my-sonnet-r1
 ```
 
 Exact library copies are matched on each question's stored fingerprint. After a change to how
@@ -87,19 +89,26 @@ run's reported cost leaves it out; the dev budget still counts it.
 
 ## Reading the numbers
 
-- The official baseline is `runs/v0-3-2.json`: three replicate runs of the same seeds
-  (`v0-3-2-r1` to `-r3`) pooled. Compare a later run with `node evals/compare.mjs v0-3-2 <run>`.
-  It was generated with Gemini 3.8 Flash through an OpenRouter preset the app no longer uses, so
-  a run on today's default reports a model change until three Opus runs are pooled into a new
-  baseline.
+- The official baseline is `runs/v0-5-2.json`: three replicate runs of the same seeds on the
+  default model, Opus 5.5, at v0.5.2.0 (`v0-5-2-r1` to `-r3`) pooled, 300 questions. Compare a
+  later run with `node evals/compare.mjs v0-5-2 <run>`.
+- `runs/v0-3-2.json` is the earlier baseline, generated with Gemini 3.8 Flash through an
+  OpenRouter preset the app no longer uses. None of the seven primary rates differs detectably
+  between the two baselines (`runs/v0-5-2-r1/comparison-v0-3-2.json`). One quality question
+  does shift, outside the seven: 40 of the 300 Opus questions fall under the provisional
+  `single_ask` cutoff, against 7 of 300 before, and fewer fail on the other questions, so the
+  pass rate barely moves. The earlier baseline also predates the duplicate-fingerprint changes
+  described under "Running it" and the timeout change described below; exact copies and provider
+  errors were 0 on both sides.
 - The gate's pass verdict is a rough guide to quality, not the owner's judgment. On the owner's
   blind labels of 60 generated questions (Oct 2026) it matched 69% of the time, and passing
   everything would have matched 75%; of the quality questions only readability separated the
   owner's keeps from rejects. Unusable output, yield and the duplicate rates don't depend on it.
 - The default model was chosen on blind labels, not on the gate, whose pass rate didn't separate
-  the three models (82% Opus 5.5, 81% Gemini 3.8 Flash, 74% Sonnet 5.5, none a detectable change
-  from the baseline). Of 20 questions from each model's run, the owner kept 17, 15 and 12: too
-  few to tell the models apart. Claude, labeling blind every question the three runs would have
+  the three models in single runs of 100 (82% Opus 5.5, 81% Gemini 3.8 Flash, 74% Sonnet 5.5,
+  none a detectable change from the `v0-3-2` baseline; Opus pooled over three more runs is 75%).
+  Of 20 questions from each model's run, the owner kept 17, 15 and 12: too few to tell the
+  models apart. Claude, labeling blind every question the three runs would have
   saved, with the owner's rubric, kept 90 of 100, 62 of 99 and 54 of 98. Those labels come from
   Opus 5.5 itself, which read its own questions a little more generously than the owner did.
 - `runs/gemini-3-8-flash-r1`, `sonnet-5-5-r1` and `opus-5-5-r1` are the first single runs of each
@@ -123,7 +132,7 @@ run's reported cost leaves it out; the dev budget still counts it.
   changed, pass and review are decided without the fit questions, which are then graded against
   different text.
 - The output cap's reasoning allowance and the 30-second provider timeout were sized for Gemini
-  3.8 Flash, and Opus 5.5 fits them (no cut-offs in 100 questions; a batch of ten took under 20
+  3.8 Flash, and Opus 5.5 fits them (no cut-offs in 400 questions; a batch of ten took under 20
   seconds). A model that reasons longer or answers slower is cut off or timed out more often, so
   for such a model the unusable-output and provider-error figures partly measure fit to those
   limits. A cut-off fails its whole batch and
@@ -132,8 +141,9 @@ run's reported cost leaves it out; the dev budget still counts it.
   `finish_reason=length`, or as unreadable output with `completionTokens` at the batch's
   `settings.maxOutputTokens`. A timed-out call is not sent again and fails its batch. Runs
   recorded while the provider client still re-sent timed-out calls by itself (the `v0-3-2`
-  baseline and the model runs of 5 Oct 2026) could absorb a slow call, so provider-error figures
-  across that change aren't like for like.
+  baseline and the single runs `gemini-3-8-flash-r1`, `sonnet-5-5-r1`, `opus-5-5-r1` and
+  `preset-r1`) could absorb a slow call, so provider-error figures across that change aren't
+  like for like. The `v0-5-2` runs were recorded after it.
 - The regime is the admin preview path with a batch of 5 and no per-person exclusion list. The
   feed usually asks for 1 question and excludes recently seen ones.
 - Library duplicates are counted against dev's library, which differs from production's and
