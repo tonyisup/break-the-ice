@@ -218,6 +218,92 @@
 **Priority:** P3
 **Depends on:** None
 
+## Quality check
+
+### Finish the flag a team sees on its schedule grid
+
+**What:** Show the "Flagged" mark on a week's day cards as well as on the grid, let a team generate a replacement for a cell whose only question is flagged, give admins a filter and a count for flagged questions that are live, and clear the flag on an admin's approval rather than on any admin action.
+
+**Why:** A manager who assigns a flagged question by hand sees no mark on the day card afterwards. An admin sees the mark in their lists but can't ask for just the flagged ones. And an admin action that settles nothing (a tag edit, a flag for pruning) takes the mark off.
+
+**Context:** `claudeFlag` in `convex/lib/qualityCheck.ts` is the rule; `getPublicQuestions` (`convex/core/questions.ts`) returns it, and `autoSchedule` (`convex/core/schedules.ts`) and the coach-feedback suggestions (`getCurationPreview`) already leave flagged questions out. `getSchedule` returns no flag, so a question that Auto-fill placed before its check landed shows nothing if the check then holds it. A flagged question still fills its matrix cell (`pageQuestionMatrixCellKeys`), so a team can't generate another question for that cell. The flag clears when `reviewRevision` is above 0, which every `recordReview` moves. Belongs with the matrix-fill ownership issue (a fill's question belongs to its team first), where a manager's own review of a flagged question gets designed. Shipped this way by the owner's choice during the v0.6.0.0 review (decision 73fb363c).
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** The matrix-fill ownership issue
+
+### Measure the flag before leaning on it
+
+**What:** Set a bar for how often a flagged question is one the owner would have kept, and measure it on the blind set. Consider showing a hold to a team only above a confidence.
+
+**Why:** On the 60 questions the owner had labeled, the check flagged 3 and the owner had rejected 2 of them. That is too few to say how often a flag is wrong, and a wrong flag stays until an admin acts.
+
+**Context:** `evals/judge.mjs` prints, for each label group, how many questions the check would flag and how many of those the owner kept (`flagged`, `flaggedKept` in `evals/judgeRecord.mjs`). The rule is `flagsQuestion` in `convex/lib/qualityCheck.ts`: any hold at any confidence, or any safety flag.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** The owner's labels on the blind set
+
+### Check published questions whose check never landed
+
+**What:** Give `checkPendingQuestions` a way to reach generated questions that were published at once (a matrix fill's or the nightly pool's) and have no verdict.
+
+**Why:** The backfill covers the review queue only. A fill's or pool's question whose check failed twice, or that was saved while the check was off, stays unchecked and shows no flag, which looks the same as a question the check kept.
+
+**Context:** `heldQuestionsWithoutCheck` in `convex/internal/qualityCheckData.ts` reads pending questions that are held for review. Widening it to every live generated question would also check the library the owner picked by hand and could flag those, so it needs a start date or a marker for "published without review". `checkQuestion` logs when it gives up on a question.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Don't pay for a check twice
+
+**What:** Mark a question while its check is running and when its check fails, so a backfill run and a scheduled check (or its retry) don't both send it, a question whose check keeps failing isn't sent again on every backfill run, and a question an admin has already rejected isn't checked at all. Don't retry an answer that was cut off by the output cap.
+
+**Why:** Two checks for one question cost about 1 cent each and only the first verdict is kept. A question whose answer can never be read stays at the head of the backfill's list and is paid for on every run, and with 50 of them the backfill never reaches the rest. A cut-off answer would be cut off again five minutes later.
+
+**Context:** `awaitsCheck` in `convex/internal/qualityCheckData.ts` only looks for a saved verdict, and nothing on a question records a failed attempt. `saveQualityCheck` refuses a second verdict after it has been paid for, and the action reports it as skipped. `checkQuestion` in `convex/internal/qualityCheck.ts` retries every failure once; `wasCutOffFailure` in `convex/lib/generationRunner.ts` tells a cut-off apart. The backfill also reads at most 5,000 pending rows a run and doesn't say when it stopped short of the end of the queue.
+
+**Effort:** S
+**Priority:** P4
+**Depends on:** None
+
+### Small things from the quality check's adversarial review
+
+**What:** (1) Cut a style, tone or topic definition on whole characters, as the check's note is. (2) When Auto-fill refuses because only flagged questions are left, don't tell a manager to assign one that is already on the week. (3) Drop the verdict when a question's style, tone or topic is changed by id alone. (4) Keep two `evals/judge.mjs` runs from writing the same judged file at once.
+
+**Why:** (1) A definition cut in the middle of an emoji may be refused by the database, and then no question of that style can be checked. (2) The message misleads in that one case. (3) The verdict is tied to the slugs, and `updateQuestion` accepts a `styleId` with no slug; the admin pages always send both. (4) Each run rewrites the file from its own copy, so one can drop the other's paid verdicts.
+
+**Context:** (1) `shortDefinition` in `convex/lib/taxonomyDefinitions.ts`; text that has no such character comes out the same, so the eval baselines don't move. (2) `autoSchedule` in `convex/core/schedules.ts` works out whether flagged questions were left out before it removes the ones already assigned. (3) `sameJudgedSubject` in `convex/lib/qualityCheck.ts`. (4) `evals/generate.mjs` already takes a lock file per run name.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Give the quality check its own daily cap
+
+**What:** Count checks against a daily budget of their own, instead of system spend.
+
+**Why:** A check costs about 1 cent a question, more than generating a feed question does, and system spend is what the daily email runs on. On the user budget instead, checks would cut what people can generate in a day to about a third, which is why they aren't there.
+
+**Context:** `judge` in `convex/internal/qualityCheck.ts` charges every check to system spend; `convex/lib/aiSpend.ts` has the two spend classes and their caps. The owner chose system spend during the v0.6.0.0 review, with this as the follow-up. The specifics are in the owner's private plan doc ("Security follow-ups (private)").
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
+### Before a keep publishes a question (issue #345, Phase C)
+
+**What:** Decide what, besides the check's own answer, stands between a generated question and the public library, and how the `publish` mode is switched on.
+
+**Why:** In record mode a wrong verdict only misleads a reviewer. Once a keep publishes, the check is the only reader, so it shouldn't be the only gate, and a deployment that already has `QUALITY_CHECK_MODE=publish` set shouldn't start publishing the moment the code ships.
+
+**Context:** `wouldPublish` in `convex/lib/qualityCheck.ts` is the rule (a keep at confidence 5, no reasons, no safety flags), and the blind set's pass rule in `evals/judgeRecord.mjs` is the bar it has to clear first. Today `publish` records only. The verdict is taken off every question document people's apps get (`withoutVerdict` in `convex/lib/questionAccess.ts`; a team is shown only `claudeFlag`), which holds as long as every new query that returns a question does the same: keeping verdicts in their own table would make that structural. The question goes to the judge as a JSON string. The specifics of what a second gate should cover are in the owner's private plan doc ("Security follow-ups (private)").
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** The blind set passing
+
 ## Access control
 
 ### Check gym membership across duplicate user records in canReadQuestion
