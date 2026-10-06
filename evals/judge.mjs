@@ -106,6 +106,12 @@ if (todo.length) {
       console.error(`A call of ${call.length} questions failed: ${cliError(error)}`);
       return;
     }
+    // Also mid-run: a deployment that changes between two calls must not leave one file holding
+    // verdicts from two sets of instructions under one version.
+    if (record.model !== null && (record.model !== answer.model || record.promptVersion !== answer.promptVersion)) {
+      console.error(`"${name}" was judged by ${record.model} with instructions v${record.promptVersion}; the deployment now has ${answer.model} v${answer.promptVersion}. Start a new name.`);
+      process.exit(1);
+    }
     record.model = answer.model;
     record.promptVersion = answer.promptVersion;
     answer.results.forEach((result, index) => {

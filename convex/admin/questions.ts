@@ -493,7 +493,8 @@ export const updateCategories = mutation({
 				if (update.tone !== undefined) {
 					toneId = (await resolveTaxonomySlug(ctx.db, "tones", update.tone, question.organizationId))?._id;
 				}
-				const recategorized = { ...question, ...(update.style !== undefined && { style: update.style }), ...(update.tone !== undefined && { tone: update.tone }) };
+				// The patch below writes both slugs, so one that isn't given is removed.
+				const recategorized = { ...question, style: update.style, tone: update.tone };
 				await ctx.db.patch(update.id, {
 					style: update.style,
 					tone: update.tone,

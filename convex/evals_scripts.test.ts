@@ -1352,7 +1352,9 @@ const results = items.map((item) => {
   const verdict = { verdict: hold ? "hold" : "keep", reasons: hold ? ["awkward_wording"] : [], safety: [], confidence: 5, note: "" };
   return { text: item.text, verdict, wouldPublish: !hold, wouldFlag: hold };
 });
-console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: Number(process.env.PROMPT_VERSION ?? 1), results }));
+// VERSION_2_TEXT: a call holding that question is answered by a deployment that has moved to v2.
+const version = items.some((item) => item.text === process.env.VERSION_2_TEXT) ? 2 : Number(process.env.PROMPT_VERSION ?? 1);
+console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: version, results }));
 `,
       );
       writeFileSync(join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, "fake-convex.mjs")}" "$@"\n`, { mode: 0o755 });
@@ -1471,6 +1473,14 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       expect(changed.stderr).toMatch(/"other" was judged by anthropic\/claude-opus-5\.5 with instructions v1; the deployment now has anthropic\/claude-opus-5\.5 v2\. Start a new name\./);
       // It found that out before sending a question, so nothing was paid for and thrown away.
       expect(calls().slice(-1)[0].texts).toEqual([]);
+
+      // A deployment that changes between two calls of one run is refused too: the file never
+      // holds verdicts from two sets of instructions.
+      const midRun = runScript("judge.mjs", ["shifting", "r1", "r2"], { PATH, VERSION_2_TEXT: "On hold: question 12?" });
+      expect(midRun.status).toBe(1);
+      expect(midRun.stderr).toMatch(/"shifting" was judged by .* with instructions v[12]; the deployment now has .* v[12]\. Start a new name\./);
+      // Whichever call answered first is all the file has.
+      expect([10, 2]).toContain(readJudged("shifting").results.length);
       expect(readJudged("other")).toMatchObject({ promptVersion: 1 });
       expect(readJudged("other").results).toHaveLength(10);
     }, 30_000);

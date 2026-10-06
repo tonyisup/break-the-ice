@@ -136,9 +136,9 @@ daily email, matrix fill and the nightly pool gets a verdict (keep or hold, with
 flags and a one-sentence note) a few seconds after it is saved. Nothing about who can see a
 question changes, and the verdict isn't part of the question documents people's apps get.
 Admins see it in the review queue and on a question's page, and a hold or a safety flag is
-marked in their lists. A team sees one thing: on its schedule grid, a question the check held,
-or raised a safety concern about, is marked "Flagged", with the reasons and note in its
-details, until an admin acts on the question. Auto-fill Week and the coach-feedback
+marked in their lists. A signed-in member of a team sees one thing: on the schedule grid, a
+question the check held, or raised a safety concern about, is marked "Flagged", with the
+reasons and note in its details, until an admin acts on the question. Auto-fill Week and the coach-feedback
 suggestions leave a flagged question out. Changing a question's wording, style, tone or topic
 drops its verdict.
 

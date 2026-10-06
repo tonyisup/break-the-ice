@@ -13,6 +13,7 @@ import { api, internal } from "../_generated/api";
 import {
 	ensureAdmin,
 	ensurePaidOrganizationMember,
+	isPaidTeamMember,
 } from "../auth";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
@@ -471,8 +472,8 @@ export const getPublicQuestions = query({
 			v.literal("pruned")
 		)),
 		// Present only when the quality check held the question or raised a safety concern,
-		// and no admin has reviewed it since: its reasons, safety flags and one-sentence
-		// note, for whoever is choosing questions for a team.
+		// no admin has reviewed it since, and the caller is a signed-in member of a team: its
+		// reasons, safety flags and one-sentence note, for whoever is choosing questions.
 		claudeFlag: v.optional(v.object({
 			reasons: v.array(editorialReason),
 			safety: v.array(v.string()),
@@ -511,6 +512,13 @@ export const getPublicQuestions = query({
 			.filter((q) => !isRetiredQuestion(q))
 			.sort((a, b) => a._creationTime - b._creationTime);
 		const rows = merged.slice(0, limit);
+		// This query needs no sign-in, and the flag is the check's reasons and note: it goes to a
+		// signed-in member of a team and to nobody else. Looked up only when there is a flag.
+		const flags = new Map(rows.flatMap((q) => {
+			const flag = claudeFlag(q);
+			return flag ? [[q._id, flag] as const] : [];
+		}));
+		const forTeam = flags.size > 0 && (await isPaidTeamMember(ctx));
 		return rows.map((q) => ({
 			_id: q._id,
 			text: q.text ?? q.customText,
@@ -520,7 +528,7 @@ export const getPublicQuestions = query({
 			isAIGenerated: q.isAIGenerated,
 			totalLikes: q.totalLikes,
 			status: q.status,
-			claudeFlag: claudeFlag(q),
+			claudeFlag: forTeam ? flags.get(q._id) : undefined,
 		}));
 	},
 });

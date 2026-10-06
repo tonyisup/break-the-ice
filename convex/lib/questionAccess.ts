@@ -34,8 +34,8 @@ export function normalizedRetirement(question: RetirementFields): RetirementFiel
  * The verdict is the owner's, and someone who can read what the check thinks of their question
  * can steer it. Every function people's apps call that returns a question document passes it
  * through here. The one thing a team is shown on purpose is claudeFlag (lib/qualityCheck.ts),
- * which getPublicQuestions returns for a flagged question: its reasons, safety flags and note,
- * and never a keep, a confidence or wouldPublish.
+ * which getPublicQuestions returns for a flagged question to a signed-in member of a team:
+ * its reasons, safety flags and note, and never a keep, a confidence or wouldPublish.
  */
 export function withoutVerdict<T extends { qualityCheck?: unknown; safetyFlags?: unknown }>(
 	question: T,

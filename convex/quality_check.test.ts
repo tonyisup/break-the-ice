@@ -755,7 +755,7 @@ describe("the four ways a question is generated, in record mode", () => {
     // The team's managers see the flag on their grid; the owner's queue stays empty.
     expect(await question(s, saved._id)).toMatchObject({ status: "public", qualityCheck: { verdict: "hold" } });
     expect(await reviewQueue(s)).toEqual([]);
-    const grid = await s.t.query(api.core.questions.getPublicQuestions, {});
+    const grid = await s.t.withIdentity(ME).query(api.core.questions.getPublicQuestions, {});
     expect(grid.find((row) => row._id === saved._id)?.claudeFlag).toEqual({ reasons: ["awkward_wording"], safety: ["humiliation"], note: "Stiff phrasing." });
   });
 
@@ -1081,9 +1081,22 @@ describe("the check for measuring against labels", () => {
 });
 
 describe("the flag on the schedule grid", () => {
+  const MANAGER = { subject: "manager-clerk", tokenIdentifier: "test|manager-clerk", email: "manager@example.com" };
+  const VISITOR = { subject: "visitor-clerk", tokenIdentifier: "test|visitor-clerk", email: "visitor@example.com" };
+
   beforeEach(() => {
     process.env.QUALITY_CHECK_MODE = "record";
   });
+
+  /** A person in a team, with the team's plan as given. */
+  async function member(s: Setup, who: typeof MANAGER, billingStatus: "active" | "canceled") {
+    await s.t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", { email: who.email, clerkId: who.subject });
+      const organizationId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus });
+      await ctx.db.insert("organization_members", { userId, organizationId, role: "manager" });
+    });
+    return s.t.withIdentity(who);
+  }
 
   test("a question the check would hold carries its reasons and note; a keep or an unchecked question carries nothing", async () => {
     const s = await setup();
@@ -1095,7 +1108,7 @@ describe("the flag on the schedule grid", () => {
     const kept = await generated(s, { text: "Kept one?", status: "public", heldForReview: undefined, qualityCheck: { ...KEEP, wouldPublish: true, ...stamp } });
     const unchecked = await generated(s, { text: "Unchecked one?", status: "public", heldForReview: undefined });
 
-    const pool = await s.t.query(api.core.questions.getPublicQuestions, {});
+    const pool = await (await member(s, MANAGER, "active")).query(api.core.questions.getPublicQuestions, {});
 
     expect(pool.map((row) => [row._id, row.claudeFlag])).toEqual([
       [held, { reasons: ["awkward_wording"], safety: ["humiliation"], note: "Stiff phrasing." }],
@@ -1114,7 +1127,8 @@ describe("the flag on the schedule grid", () => {
     const risky = await generated(s, { ...live, text: "Kept, with a concern?", qualityCheck: { ...KEEP, safety: ["trauma"], wouldPublish: false, ...stamp } });
     const approved = await generated(s, { ...live, text: "Held, then approved?", reviewRevision: 1, qualityCheck: { ...HOLD, wouldPublish: false, ...stamp } });
 
-    const pool = await s.t.query(api.core.questions.getPublicQuestions, {});
+    const manager = await member(s, MANAGER, "active");
+    const pool = await manager.query(api.core.questions.getPublicQuestions, {});
 
     expect(pool.map((row) => [row._id, row.claudeFlag])).toEqual([
       [risky, { reasons: [], safety: ["trauma"], note: "Clear and easy to answer." }],
@@ -1123,7 +1137,27 @@ describe("the flag on the schedule grid", () => {
 
     // Switching the check off takes every flag down, with no deploy.
     process.env.QUALITY_CHECK_MODE = "off";
-    expect((await s.t.query(api.core.questions.getPublicQuestions, {})).map((row) => row.claudeFlag)).toEqual([undefined, undefined]);
+    expect((await manager.query(api.core.questions.getPublicQuestions, {})).map((row) => row.claudeFlag)).toEqual([undefined, undefined]);
+  });
+
+  test("the flag goes to a signed-in member of a team with an active plan, and to nobody else who can call the query", async () => {
+    const s = await setup();
+    const runId = await s.t.mutation(internal.internal.generation.createGenerationRun, {
+      purpose: "quality_check", batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "",
+    });
+    const held = await generated(s, {
+      text: "Flagged one?", status: "public", heldForReview: undefined,
+      qualityCheck: { ...HOLD, wouldPublish: false, model: QUALITY_CHECK_MODEL, promptVersion: 1, runId, checkedAt: 1 },
+    });
+    const flagOf = async (caller: { query: typeof s.t.query }) => (await caller.query(api.core.questions.getPublicQuestions, {})).map((row) => [row._id, row.claudeFlag]);
+
+    // The query needs no sign-in: the question is there for anyone, the check's reasons and note are not.
+    expect(await flagOf(s.t)).toEqual([[held, undefined]]);
+    await s.t.run((ctx) => ctx.db.insert("users", { email: VISITOR.email, clerkId: VISITOR.subject }));
+    expect(await flagOf(s.t.withIdentity(VISITOR))).toEqual([[held, undefined]]);
+    expect(await flagOf(await member(s, { ...VISITOR, subject: "lapsed-clerk", tokenIdentifier: "test|lapsed-clerk", email: "lapsed@example.com" }, "canceled"))).toEqual([[held, undefined]]);
+
+    expect(await flagOf(await member(s, MANAGER, "active"))).toEqual([[held, { reasons: ["awkward_wording"], safety: ["humiliation"], note: "Stiff phrasing." }]]);
   });
 });
 
@@ -1230,6 +1264,19 @@ describe("an admin's edit of a checked question", () => {
     await s.t.withIdentity(ADMIN).mutation(api.admin.pruning.undoReview, { reviewId: review._id });
 
     expect(await question(s, questionId)).toMatchObject({ status: "pending", safetyFlags: ["humiliation"], qualityCheck: { verdict: "hold" } });
+  });
+
+  test("a pool-page update that names only the tone removes the style, so the verdict goes with it", async () => {
+    const s = await setup();
+    const questionId = await checked(s);
+
+    // updateCategories writes both slugs: the one that isn't given is removed from the question.
+    await s.t.withIdentity(ADMIN).mutation(api.admin.questions.updateCategories, { updates: [{ id: questionId, tone: "warm" }] });
+
+    const after = await question(s, questionId);
+    expect(after?.style).toBeUndefined();
+    expect(after).toMatchObject({ tone: "warm", safetyFlags: [] });
+    expect(after?.qualityCheck).toBeUndefined();
   });
 
   test("resending the same style and tone, as Approve does, keeps the verdict", async () => {
