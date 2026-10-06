@@ -1063,6 +1063,7 @@ export const triggerPoolGeneration = action({
 
 		// A run generates once per combination, and each generation is at least one AI call, so
 		// the number is checked before anything is generated.
+		// gstack-shortcut(dec-ac90015f-ff40-41c9-a552-4ea9cc608703): the count is only checked to be a whole number of one or more, upgrade when the pool trigger follow-up in TODOS.md is picked up.
 		const maxCombinations = args.maxCombinations ?? 10;
 		if (!Number.isInteger(maxCombinations) || maxCombinations < 1) {
 			throw new ConvexError({ code: "POOL_SETUP", message: "maxCombinations must be a whole number of 1 or more." });
