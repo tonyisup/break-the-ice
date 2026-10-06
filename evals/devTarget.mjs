@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { parse } from "dotenv";
 
 // `npx convex run` targets whatever these name, from the shell or else from .env.local and .env,
@@ -32,4 +34,12 @@ export function assertDevTarget(root) {
     console.error("No Convex deployment is configured (CONVEX_DEPLOYMENT in .env.local). The eval only runs on dev.");
     process.exit(1);
   }
+}
+
+const exec = promisify(execFile);
+
+/** Runs a Convex function on the deployment the CLI targets from `root`, and returns what it returned. */
+export async function convexRun(root, fn, args) {
+  const { stdout } = await exec("npx", ["convex", "run", fn, JSON.stringify(args)], { cwd: root, maxBuffer: 16 * 1024 * 1024 });
+  return JSON.parse(stdout.slice(stdout.search(/[[{]/)));
 }

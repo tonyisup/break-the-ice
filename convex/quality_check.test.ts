@@ -646,7 +646,7 @@ describe("checking a question in record mode", () => {
 
     expect(await check(s, questionId)).toBe("failed");
 
-    expect(logged).toHaveBeenCalledWith("Failed to mark the quality check's run as failed", expect.anything());
+    expect(logged).toHaveBeenCalledWith("Failed to mark generation run as failed", expect.anything());
     expect((await question(s, questionId))?.qualityCheck).toBeUndefined();
     expect(await queuedChecks(s)).toEqual([[questionId, 2, 5]]);
   });
@@ -794,6 +794,42 @@ describe("the four ways a question is generated, in record mode", () => {
     },
   );
 
+  test("a check counts toward the budget of the generation that made the question, so people's questions can't use up the daily email's", async () => {
+    // The day's user budget is already spent; the hard cap is not.
+    process.env.AI_DAILY_BUDGET_USD = "1";
+    process.env.AI_DAILY_HARD_CAP_USD = "5";
+    const s = await app();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const classOf = async (purpose: "feed" | "nightly_pool" | "newsletter", text: string) => {
+      const runId = await s.t.run(async (ctx) => {
+        const blueprint = await ctx.db.query("promptBlueprints").first();
+        return ctx.db.insert("generationRuns", { status: "succeeded", purpose, blueprintId: blueprint!._id, batchSize: 1, model: "m", temperature: 0, assembledPrompt: "", resultQuestionIds: [], createdAt: 0 });
+      });
+      const { insertedQuestionIds } = await s.t.mutation(internal.internal.generation.insertGeneratedQuestions, {
+        runId, styleId: s.styleId, toneId: s.toneId, styleSlug: "reflective", toneSlug: "warm", styleVersion: 1, toneVersion: 1, candidates: [{ text }],
+      });
+      const scheduled = await s.t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+      const job = scheduled.find((entry) => entry.name.includes("qualityCheck") && (entry.args[0] as { questionId: string }).questionId === insertedQuestionIds[0]);
+      return [insertedQuestionIds[0], (job!.args[0] as { spendClass?: string }).spendClass] as const;
+    };
+    const [fromFeed, feedClass] = await classOf("feed", "What would you cook for a friend tonight?");
+    const [fromPool, poolClass] = await classOf("nightly_pool", "Which song do you skip every single time?");
+    const [, emailClass] = await classOf("newsletter", "What chore do you secretly enjoy doing?");
+    expect([feedClass, poolClass, emailClass]).toEqual(["user", "system", "system"]);
+
+    await s.t.run((ctx) => ctx.db.insert("aiSpendDays", { day: spendDay(Date.now()), spendClass: "user", costUsd: 1, calls: 40 }));
+    answers(KEEP);
+
+    // The person's question is refused its check; the pool's still gets one.
+    expect(await s.t.action(internal.internal.qualityCheck.checkQuestion, { questionId: fromFeed, spendClass: "user" })).toBe("failed");
+    expect(await s.t.action(internal.internal.qualityCheck.checkQuestion, { questionId: fromPool, spendClass: "system" })).toBe("checked");
+    expect(create).toHaveBeenCalledTimes(1);
+    // The retry keeps the class it was scheduled with.
+    expect((await s.t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect()))
+      .filter((entry) => entry.name.includes("qualityCheck") && entry.state.kind === "pending" && (entry.args[0] as { attempt?: number }).attempt === 2)
+      .map((entry) => (entry.args[0] as { spendClass?: string }).spendClass)).toEqual(["user"]);
+  });
+
   test("with the mode off, none of this happens: a feed question is saved and no check is queued", async () => {
     const s = await app();
     process.env.QUALITY_CHECK_MODE = "off";
@@ -826,12 +862,13 @@ describe("the four ways a question is generated, in record mode", () => {
       safetyFlags: ["humiliation"],
       qualityCheck: { ...HOLD, wouldPublish: false, model: QUALITY_CHECK_MODEL, promptVersion: QUALITY_CHECK_PROMPT_VERSION },
     });
-    // One generation for the person, one check for the owner: each on its own run and budget.
+    // One generation and one check, each on its own run. The check counts toward the same
+    // budget as the generation that made the question: a person asked for this one.
     expect((await runs(s)).map((run) => [run.purpose, run.status, run.sourceQuestionId])).toEqual([
       ["feed", "succeeded", undefined],
       ["quality_check", "succeeded", queue[0]._id],
     ]);
-    expect((await spend(s)).sort()).toEqual([["system", 0.006, 1], ["user", 0.01, 1]]);
+    expect(await spend(s)).toEqual([["user", 0.016, 2]]);
     expect(await queuedChecks(s)).toEqual([]);
   });
 });

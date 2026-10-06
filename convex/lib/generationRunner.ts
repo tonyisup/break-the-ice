@@ -8,7 +8,7 @@ import {
   buildRemixPrompts,
   parseQuestionObjects,
 } from "./promptArchitecture";
-import { callReserveUsd, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
+import { callReserveUsd, generationSpendClass, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 import { type AiUnansweredSlot, holdAiUnanswered, releaseAiUnanswered } from "./aiRateLimit";
@@ -201,7 +201,12 @@ export function maxOutputTokens(batchSize: number): number {
 // given back. A cut-off keeps the slot whatever the request then comes to.
 export async function createChatCompletionWithRetry(
   ctx: ActionCtx,
-  spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
+  spend: {
+    spendClass: SpendClass;
+    runId: Id<"generationRuns">;
+    /** A scheduled job nobody is waiting on: it holds none of a person's unanswered-call slots. */
+    unattended?: boolean;
+  },
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   let promptChars = 0;
@@ -212,14 +217,15 @@ export async function createChatCompletionWithRetry(
     promptBytes += utf8.encode(message.content).length;
   }
   assertPromptSize(promptChars);
-  // Priced at the default model's rates, also for a model the eval harness names.
+  // Priced at the default model's rates, also for a model the eval harness names and for the
+  // quality check, whose model is priced the same today (QUALITY_CHECK_MODEL).
   const reserveUsd = callReserveUsd(promptBytes, params.max_tokens, GENERATION_PRICE_USD_PER_MTOK);
 
   const maxAttempts = getOpenRouterMaxAttempts();
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const slot = await holdAiUnanswered(ctx, spend.spendClass);
+    const slot = spend.unattended ? null : await holdAiUnanswered(ctx, spend.spendClass);
     let reservation: AiReservation;
     try {
       reservation = await reserveAiSpend(ctx, spend.spendClass, reserveUsd, slot?.day);
@@ -292,7 +298,7 @@ function wasPaidInFull(completion: OpenAI.Chat.Completions.ChatCompletion): bool
 }
 
 /** Records a run's failure without letting a failed write replace the original error. */
-async function markRunFailed(ctx: ActionCtx, runId: Id<"generationRuns">, error: unknown, fallbackMessage: string): Promise<void> {
+export async function markRunFailed(ctx: ActionCtx, runId: Id<"generationRuns">, error: unknown, fallbackMessage: string): Promise<void> {
   try {
     await ctx.runMutation(internal.internal.generation.failGenerationRun, {
       runId,
@@ -308,7 +314,7 @@ async function markRunFailed(ctx: ActionCtx, runId: Id<"generationRuns">, error:
  * The model answered, but with nothing we can use: empty, not JSON, no questions in it, or
  * cut off by our output cap partway through.
  */
-class UnusableOutputError extends Error {
+export class UnusableOutputError extends Error {
   constructor(
     message: string,
     readonly rawResponse?: string,
@@ -498,10 +504,7 @@ export async function runPersistedQuestionGeneration(
   };
   questions: any[];
 }> {
-  // Only the daily email and the admin-triggered pool are system spend. Everything
-  // else (feed generation, matrix fill, any purpose added later) is user spend.
-  const spendClass: SpendClass =
-    args.purpose === "newsletter" || args.purpose === "nightly_pool" ? "system" : "user";
+  const spendClass = generationSpendClass(args.purpose);
   await ensureAiBudget(ctx, spendClass);
 
   const temperature = args.temperature ?? DEFAULT_GENERATION_TEMPERATURE;

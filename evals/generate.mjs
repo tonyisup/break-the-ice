@@ -5,13 +5,12 @@
 // things out, and marks the run "+local". --model generates with that OpenRouter model (like
 // anthropic/claude-sonnet-5.5) instead of the app's default. A run keeps one model: a rerun without
 // --model uses the run's own.
-import { execFile, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { mapLimit } from "./async.mjs";
-import { assertDevTarget } from "./devTarget.mjs";
+import { assertDevTarget, convexRun } from "./devTarget.mjs";
 import { cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess, writeJson } from "./runRecord.mjs";
 
 // Two at a time keeps a run to a few minutes without bursting the provider's rate limit.
@@ -94,11 +93,6 @@ if (todo.length && earlierCommits.some((earlier) => earlier !== commit)) {
   process.exit(1);
 }
 
-const exec = promisify(execFile);
-async function convexRun(fn, args) {
-  const { stdout } = await exec("npx", ["convex", "run", fn, JSON.stringify(args)], { cwd: root, maxBuffer: 16 * 1024 * 1024 });
-  return JSON.parse(stdout.slice(stdout.search(/[[{]/)));
-}
 
 // Each invocation records its commit, the library it searched, and the generation runs it made.
 const invocations = previous?.invocations ?? [];
@@ -114,7 +108,7 @@ function save() {
  */
 async function collectAttempts(invocation) {
   try {
-    const fresh = await convexRun("internal/evalData:evalRunAttempts", {
+    const fresh = await convexRun(root, "internal/evalData:evalRunAttempts", {
       runLabel: run,
       since: invocation.startedAtMs - CLOCK_SLACK_MS,
       ...(invocation.endedAtMs ? { until: invocation.endedAtMs + CLOCK_SLACK_MS } : {}),
@@ -137,7 +131,7 @@ for (const invocation of invocations.filter((inv) => inv.attemptsComplete !== tr
 if (todo.length) {
   // Read before the invocation is recorded: if this first call fails (evals off on dev, the CLI
   // not signed in), no model was called, so nothing about this invocation is saved.
-  const library = await convexRun("internal/evals:evalLibraryStats", {}).catch((error) => {
+  const library = await convexRun(root, "internal/evals:evalLibraryStats", {}).catch((error) => {
     console.error(`Couldn't read the library from dev (${cliError(error)}). Nothing was generated.`);
     process.exit(1);
   });
@@ -157,7 +151,7 @@ if (todo.length) {
       ...(model ? { model } : {}),
     };
     try {
-      const result = await convexRun("internal/evals:generateEvalBatch", args);
+      const result = await convexRun(root, "internal/evals:generateEvalBatch", args);
       recordSuccess(batches, seed, result, commit);
       invocation.generated.push(seed.id);
       console.log(`${seed.id} ${seed.style}/${seed.tone}${seed.topic ? `/${seed.topic}` : ""}: ${result.candidates.length} questions`);

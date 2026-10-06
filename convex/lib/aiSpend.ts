@@ -11,6 +11,15 @@ import { getZonedCalendarDate } from "./timezone";
 
 export type SpendClass = "user" | "system";
 
+/**
+ * The budget a generation counts toward, by its purpose. Only the daily email and the
+ * admin-triggered pool are system spend. Everything else (feed generation, matrix fill, any
+ * purpose added later) is user spend. A question's quality check counts the same way.
+ */
+export function generationSpendClass(purpose: string): SpendClass {
+  return purpose === "newsletter" || purpose === "nightly_pool" ? "system" : "user";
+}
+
 export const DEFAULT_DAILY_BUDGET_USD = 1;
 export const DEFAULT_DAILY_HARD_CAP_USD = 5;
 // The least a call is set aside at. An unpriced call is charged everything set aside for it,

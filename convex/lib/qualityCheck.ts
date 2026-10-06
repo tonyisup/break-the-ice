@@ -1,7 +1,8 @@
 import { v, type Infer } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { editorialReason } from "./questionReviewValidators";
-import type { TaxonomyDefinition } from "./taxonomyDefinitions";
+import { stripCodeFences } from "./promptArchitecture";
+import { taxonomyDefinition } from "./taxonomyDefinitions";
 
 // The quality check: one model call that judges a generated question against the owner's
 // labeling rubric. This file is the pure part: the instructions, the answer parser and the
@@ -24,25 +25,16 @@ const MIN_PUBLISH_CONFIDENCE = 5;
 
 export const QUALITY_REASONS = ["awkward_wording", "unclear_answer", "style_tone_mismatch", "repeated_construction"] as const;
 export const QUALITY_SAFETY_FLAGS = ["trauma", "targets_person", "sexual_illegal", "politics_religion", "humiliation"] as const;
-export type QualityReason = (typeof QUALITY_REASONS)[number];
-export type QualitySafetyFlag = (typeof QUALITY_SAFETY_FLAGS)[number];
-
-export type QualityVerdict = {
-  verdict: "keep" | "hold";
-  reasons: QualityReason[];
-  safety: QualitySafetyFlag[];
-  /** 1 to 5: how sure the judge is of its verdict. */
-  confidence: number;
-  note: string;
-};
 
 export const qualityVerdict = v.object({
   verdict: v.union(v.literal("keep"), v.literal("hold")),
   reasons: v.array(editorialReason),
   safety: v.array(v.string()),
+  /** 1 to 5. For a keep, whether it can be published unread; for a hold, how sure the judge is. */
   confidence: v.number(),
   note: v.string(),
 });
+export type QualityVerdict = Infer<typeof qualityVerdict>;
 
 /** What a check leaves on a question. */
 export const qualityCheckSnapshot = v.object({
@@ -70,12 +62,14 @@ export function qualityCheckMode(): QualityCheckMode {
   return "off";
 }
 
-export type QualityCheckSubject = {
-  text: string;
-  style: TaxonomyDefinition;
-  tone: TaxonomyDefinition;
-  topic: TaxonomyDefinition | null;
-};
+/** What the judge is shown: the question, and short definitions of what it was asked to be. */
+export const qualityCheckSubject = v.object({
+  text: v.string(),
+  style: taxonomyDefinition,
+  tone: taxonomyDefinition,
+  topic: v.union(v.null(), taxonomyDefinition),
+});
+export type QualityCheckSubject = Infer<typeof qualityCheckSubject>;
 
 // The owner's labeling rubric, for one question at a time. The verdict and the confidence
 // answer two different questions on purpose. A hold is shown to people as a flag, so it has to
@@ -155,7 +149,7 @@ function knownValues<T extends string>(value: unknown, known: readonly T[]): T[]
 export function parseQualityVerdict(raw: string): QualityVerdict | null {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+    parsed = JSON.parse(stripCodeFences(raw));
   } catch {
     return null;
   }
@@ -195,6 +189,7 @@ export function flagsQuestion(verdict: { verdict: "keep" | "hold"; safety: reado
  * takes the flag off, since an admin has then looked at it. Switching the mode off hides
  * every flag.
  */
+// gstack-shortcut(dec-73fb363c-9bb6-4c12-95da-fc399eae1f70): the flag is on the schedule grid only and clears on any admin review action, upgrade when the matrix-fill ownership issue is built.
 export function claudeFlag(question: {
   qualityCheck?: QualityCheckSnapshot;
   reviewRevision?: number;

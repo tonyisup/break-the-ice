@@ -1,14 +1,12 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
-import { qualityCheckMode, qualityVerdict, sameJudgedSubject, wouldPublish, type QualityVerdict } from "../lib/qualityCheck";
+import { qualityCheckMode, qualityCheckSubject, qualityVerdict, sameJudgedSubject, wouldPublish } from "../lib/qualityCheck";
 import { isRetiredQuestion, isUserWrittenQuestion } from "../lib/questionAccess";
 import { taxonomyDefinitions } from "../lib/taxonomyDefinitions";
 
 /** Pending questions read per page of the backfill's scan, to stay well within a query's limits. */
 const HELD_PAGE_SIZE = 200;
-
-const definition = v.object({ slug: v.string(), name: v.string(), definition: v.string() });
 
 /** What the check read on a question. A verdict is only saved while all of it is unchanged. */
 const judgedSubject = v.object({
@@ -44,7 +42,7 @@ export const questionForCheck = internalQuery({
   returns: v.union(
     v.null(),
     v.object({
-      subject: v.object({ text: v.string(), style: definition, tone: definition, topic: v.union(v.null(), definition) }),
+      subject: qualityCheckSubject,
       read: judgedSubject,
     }),
   ),
@@ -86,11 +84,10 @@ export const saveQualityCheck = internalMutation({
     if (qualityCheckMode() === "off") return { saved: false };
     const question = await ctx.db.get(args.questionId);
     if (!question || question.qualityCheck || !sameJudgedSubject(question, args.read)) return { saved: false };
-    const verdict = args.verdict as QualityVerdict;
     await ctx.db.patch(args.questionId, {
       qualityCheck: {
         ...args.verdict,
-        wouldPublish: wouldPublish(verdict),
+        wouldPublish: wouldPublish(args.verdict),
         model: args.model,
         promptVersion: args.promptVersion,
         runId: args.runId,

@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { CURLY_QUOTE, fingerprintText, normalizeQuestion, validateGeneratedQuestion } from "./promptArchitecture";
+import { taxonomyDefinition } from "./taxonomyDefinitions";
 
 /**
  * Evals spend AI budget and write generation runs, so they only run where a deployment opts in
@@ -14,9 +15,8 @@ export function assertEvalsEnabled(): void {
   }
 }
 
-const definition = v.object({ slug: v.string(), name: v.string(), definition: v.string() });
 /** The short style, tone and topic definitions Jev grades fit against. */
-export const evalDefinitionsResult = v.object({ style: definition, tone: definition, topic: v.union(v.null(), definition) });
+export const evalDefinitionsResult = v.object({ style: taxonomyDefinition, tone: taxonomyDefinition, topic: v.union(v.null(), taxonomyDefinition) });
 
 export type EvalPipelineOutcome = "saved" | "duplicate" | "rejected";
 

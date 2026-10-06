@@ -5,15 +5,14 @@
 // names fewer questions. When evals/owner-labels.json exists, it also sets the verdicts beside
 // the owner's labels and evaluates the pass rule. --only-labeled judges just the questions
 // that file has labels for.
-import { execFile, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { mapLimit } from "./async.mjs";
-import { assertDevTarget } from "./devTarget.mjs";
+import { assertDevTarget, convexRun } from "./devTarget.mjs";
 import { compareWithLabels, passRule, savedQuestions } from "./judgeRecord.mjs";
-import { writeJson } from "./runRecord.mjs";
+import { cliError, writeJson } from "./runRecord.mjs";
 
 // A call judges its questions one after another, a few seconds each.
 const QUESTIONS_PER_CALL = 10;
@@ -79,11 +78,6 @@ const save = () =>
     results: [...questions.map((question) => byText.get(question.text)).filter(Boolean), ...[...byText.values()].filter((result) => !asked.has(result.text))],
   });
 
-const exec = promisify(execFile);
-async function convexRun(fn, args) {
-  const { stdout } = await exec("npx", ["convex", "run", fn, JSON.stringify(args)], { cwd: root, maxBuffer: 16 * 1024 * 1024 });
-  return JSON.parse(stdout.slice(stdout.search(/[[{]/)));
-}
 
 let failures = 0;
 if (todo.length) {
@@ -93,12 +87,12 @@ if (todo.length) {
   await mapLimit(calls, CALL_CONCURRENCY, async (call) => {
     let answer;
     try {
-      answer = await convexRun("internal/qualityCheck:evalQualityCheck", {
+      answer = await convexRun(root, "internal/qualityCheck:evalQualityCheck", {
         items: call.map(({ text, style, tone, topic }) => ({ text, style, tone, topic })),
       });
     } catch (error) {
       failures += call.length;
-      console.error(`A call of ${call.length} questions failed: ${String(error.stderr || error.message).trim().split("\n").pop()}`);
+      console.error(`A call of ${call.length} questions failed: ${cliError(error)}`);
       return;
     }
     if (record.model !== null && (record.model !== answer.model || record.promptVersion !== answer.promptVersion)) {

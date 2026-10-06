@@ -5,6 +5,7 @@ import type { Doc } from "../_generated/dataModel";
 import { ensurePaidOrganizationMember, isOrganizationPaid } from "../auth";
 import { findCanonicalUser } from "../lib/users";
 import { isQuestionPublic, isRetiredQuestion } from "../lib/questionAccess";
+import { claudeFlag } from "../lib/qualityCheck";
 import {
   DEFAULT_ORGANIZATION_TIME_ZONE,
   getZonedCalendarDate,
@@ -547,6 +548,14 @@ export const autoSchedule = mutation({
     if (candidates.length === 0) {
       throw new Error(
         "No matching questions in the pool. Generate some via admin or relax axis filters.",
+      );
+    }
+    // A question the quality check flagged is for a person to choose after reading why, on the
+    // grid. Auto-fill never places one.
+    candidates = candidates.filter((q) => !claudeFlag(q));
+    if (candidates.length === 0) {
+      throw new Error(
+        "Every matching question is flagged by AI review. Assign one by hand after reading why, or generate more.",
       );
     }
 
