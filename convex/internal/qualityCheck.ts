@@ -21,10 +21,12 @@ import {
   buildQualityCheckPrompts,
   flagsQuestion,
   parseQualityVerdict,
+  qualityCheckContext,
   qualityCheckMode,
   qualityCheckSubject,
   qualityVerdict,
   wouldPublish,
+  type QualityCheckContext,
   type QualityCheckSubject,
   type QualityVerdict,
 } from "../lib/qualityCheck";
@@ -56,9 +58,10 @@ async function judge(
   ctx: ActionCtx,
   subject: QualityCheckSubject,
   sourceQuestionId?: Id<"questions">,
+  context?: QualityCheckContext,
 ): Promise<{ verdict: QualityVerdict; runId: Id<"generationRuns">; model: string }> {
   await ensureAiBudget(ctx, "system");
-  const prompts = buildQualityCheckPrompts(subject);
+  const prompts = buildQualityCheckPrompts(subject, context);
   const runId = await ctx.runMutation(internal.internal.generation.createGenerationRun, {
     purpose: "quality_check",
     styleSlug: subject.style.slug,
@@ -214,7 +217,9 @@ export const checkPendingQuestions = internalAction({
  */
 export const evalQualityCheck = internalAction({
   args: {
-    items: v.array(qualityCheckSubject),
+    // `context` is for measuring whether the owner's own decisions make the check agree with
+    // the owner more often. The app's checks don't pass one.
+    items: v.array(v.object({ ...qualityCheckSubject.fields, context: v.optional(qualityCheckContext) })),
   },
   returns: v.object({
     model: v.string(),
@@ -240,7 +245,8 @@ export const evalQualityCheck = internalAction({
         continue;
       }
       try {
-        const { verdict } = await judge(ctx, item);
+        const { context, ...subject } = item;
+        const { verdict } = await judge(ctx, subject, undefined, context);
         results.push({ text: item.text, verdict, wouldPublish: wouldPublish(verdict), wouldFlag: flagsQuestion(verdict) });
       } catch (error) {
         results.push({ text: item.text, error: error instanceof Error ? error.message : String(error) });
