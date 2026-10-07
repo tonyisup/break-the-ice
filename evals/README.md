@@ -143,6 +143,52 @@ would no longer publish it (the judge doesn't give the same answer every time), 
 says so instead of deciding. Keep the judged file a set was drawn from. That is an observed rate, not a proof: 4 rejects in
 95 shows the true rate is unlikely to be above about 10%.
 
+## Trying another way of asking
+
+`generate.mjs --brief` generates the same seeds with a different prompt: the short brief in
+`brief.mjs`. It says who the questions are for in a few lines, describes the style, tone and
+topic in a sentence each (`brief.json`), and shows the model the owner's own decisions as the
+standard: questions of the style the owner kept and rejected, with the reasons, and a few
+kept questions of other styles. The decisions are read from `evals/judged/owner-decisions.json`
+(git-ignored), a list of `{ "text", "style", "verdict", "reasons" }` with style slugs. The
+prompt is sent in place of the app's through the same eval-only action, so the model, the
+temperature, the output cap and the save step's checks are the same; only what is asked
+differs. A run records the brief it used and keeps it.
+
+To find out which way of asking the owner prefers, generate one run each way and set them
+side by side:
+
+```bash
+node evals/generate.mjs pairs-app
+node evals/generate.mjs pairs-brief --brief
+node evals/pairs.mjs build my-pairs pairs-app pairs-brief
+```
+
+`build` pairs one question from each run for the same seed, four pairs a seed unless
+`--per-seed` says otherwise, and writes two files to `evals/judged/my-pairs/`. `pairs.json`
+is what the owner is shown: the style, tone and topic, and a left and a right question, with
+nothing that says which run wrote which. `key.json` says which side is which run and stays on
+this machine. Questions that share eight words in a row with one the owner has already
+judged, or that both runs wrote, are left out. A round holds one pair per seed, and half of
+each round has the first run on the left.
+
+For each pair the owner picks the better question, or says both are fine, or neither is.
+`node evals/pairs.mjs score my-pairs choices.json` reads those choices (a JSON object from
+pair id to `left`, `right`, `both` or `neither`). The rule is fixed before anything is
+labeled:
+
+- Only whole rounds count, starting from the first, and at least three of them. The owner
+  can stop after any round; nobody looks at the result before then.
+- Among the pairs where one question was picked, a run is called better when an exact
+  two-sided sign test is below 0.05. With 80 pairs and a fifth of them tied, that takes 41 of
+  the 64 picks.
+- "Both" and "neither" are counted and reported, and so is how many seeds lean each way, but
+  they don't decide it.
+
+A pick says which question is better, not that it is good enough to publish. Pairs from the
+same seed come from one call each way, so they are not independent; read the seed count
+beside the sign test.
+
 ## Reading the numbers
 
 - The official baseline is `runs/v0-5-2.json`: three replicate runs of the same seeds on the

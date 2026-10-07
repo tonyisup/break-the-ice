@@ -1,15 +1,18 @@
 // Generates the eval's questions on the dev deployment, one batch per seed, without saving them to
-// the library. Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--allow-local]
+// the library. Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--brief] [--allow-local]
 // Rerunning the same run name retries only the seeds that failed. Commit convex/ and push it to dev
 // (npx convex dev --once) first: --allow-local runs with uncommitted convex/ changes, for trying
 // things out, and marks the run "+local". --model generates with that OpenRouter model (like
 // anthropic/claude-sonnet-5.5) instead of the app's default. A run keeps one model: a rerun without
-// --model uses the run's own.
+// --model uses the run's own. --brief asks with the short brief (brief.mjs and brief.json, with the
+// owner's decisions from evals/judged/owner-decisions.json as its examples) in place of the app's
+// prompt; a run keeps one way of asking too.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapLimit } from "./async.mjs";
+import { briefLabel, briefPrompts, missingFromBrief } from "./brief.mjs";
 import { assertDevTarget, convexRun } from "./devTarget.mjs";
 import { cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess, writeJson } from "./runRecord.mjs";
 
@@ -19,15 +22,17 @@ const GENERATION_CONCURRENCY = 2;
 // slack on each side (the run label keeps other runs out).
 const CLOCK_SLACK_MS = 60_000;
 
-const USAGE = "Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--allow-local]   (run names: lowercase letters, digits and dashes, not starting with a dash)";
+const USAGE = "Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--brief] [--allow-local]   (run names: lowercase letters, digits and dashes, not starting with a dash)";
 const [run, ...flags] = process.argv.slice(2);
 // Anything else after the run name is refused, so a misplaced or misspelled flag can't quietly
 // start a paid run with the default model.
 let model; // undefined until given; null means the deployment's default model
 let allowLocal = false;
+let brief = false;
 let badArgs = !run || !/^[a-z0-9][a-z0-9-]*$/.test(run);
 for (let i = 0; i < flags.length && !badArgs; i += 1) {
   if (flags[i] === "--allow-local") allowLocal = true;
+  else if (flags[i] === "--brief") brief = true;
   else if (flags[i] === "--model" && model === undefined && flags[i + 1] && !flags[i + 1].startsWith("-")) model = flags[++i];
   else badArgs = true;
 }
@@ -75,6 +80,31 @@ if (reachedModel && model !== previousModel) {
   console.error(`Run "${run}" was generated with ${named(previousModel)}, not ${named(model)}. A run keeps one model; rerun without --model, or start a new run name.`);
   process.exit(1);
 }
+// The brief's wording and examples are part of what a run measures, like its model. Read before
+// anything is generated, so a seed the brief doesn't cover stops the run and not one batch of it.
+let briefSetup = null;
+if (brief) {
+  const decisionsPath = join(here, "judged", "owner-decisions.json");
+  if (!existsSync(decisionsPath)) {
+    console.error(`--brief shows the model the owner's decisions, and ${decisionsPath} doesn't exist.`);
+    process.exit(1);
+  }
+  const taxonomy = JSON.parse(readFileSync(join(here, "brief.json"), "utf8"));
+  const decisions = JSON.parse(readFileSync(decisionsPath, "utf8"));
+  const missing = missingFromBrief(seeds, taxonomy);
+  if (missing.length) {
+    console.error(`evals/brief.json has no entry for: ${missing.join(", ")}.`);
+    process.exit(1);
+  }
+  briefSetup = { taxonomy, decisions, label: briefLabel(taxonomy, decisions) };
+}
+const asked = briefSetup?.label ?? null;
+const previousAsked = previous?.prompt ?? null;
+if (reachedModel && asked !== previousAsked) {
+  const named = (value) => value ?? "the app's prompt";
+  console.error(`Run "${run}" was generated with ${named(previousAsked)}, not ${named(asked)}. A run keeps one way of asking; start a new run name.`);
+  process.exit(1);
+}
 const batches = new Map((previous?.batches ?? []).map((batch) => [batch.seed.id, batch]));
 const todo = pendingSeeds(seeds, batches);
 
@@ -99,7 +129,7 @@ const invocations = previous?.invocations ?? [];
 let attempts = previous?.attempts ?? [];
 const createdAt = previous?.createdAt ?? new Date().toISOString();
 function save() {
-  writeJson(outPath, { run, deployment: "dev", createdAt, model, batchSize, invocations, attempts, batches: orderedBatches(seeds, batches) });
+  writeJson(outPath, { run, deployment: "dev", createdAt, model, ...(asked ? { prompt: asked } : {}), batchSize, invocations, attempts, batches: orderedBatches(seeds, batches) });
 }
 
 /**
@@ -139,7 +169,7 @@ if (todo.length) {
   invocations.push(invocation);
   // Saved before any model call, so an interrupted run still knows when its calls started.
   save();
-  console.log(`${todo.length} of ${seeds.length} seeds to generate for run "${run}" at ${commit} with ${model ?? "the default model"}.`);
+  console.log(`${todo.length} of ${seeds.length} seeds to generate for run "${run}" at ${commit} with ${model ?? "the default model"}${asked ? ` and ${asked}` : ""}.`);
   await mapLimit(todo, GENERATION_CONCURRENCY, async (seed) => {
     const args = {
       runLabel: run,
@@ -149,6 +179,7 @@ if (todo.length) {
       batchSize,
       ...(seed.topic ? { topicSlug: seed.topic } : {}),
       ...(model ? { model } : {}),
+      ...(briefSetup ? { prompt: briefPrompts({ seed, batchSize, taxonomy: briefSetup.taxonomy, decisions: briefSetup.decisions }) } : {}),
     };
     try {
       const result = await convexRun(root, "internal/evals:generateEvalBatch", args);

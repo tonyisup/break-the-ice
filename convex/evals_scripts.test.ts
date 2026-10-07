@@ -859,6 +859,147 @@ console.log(JSON.stringify(answers[fn]));
       expect(readRunFile("preset-run/generated.json").model).toBeNull();
       // Nine script runs: about 2s here, but a busy machine can pass the default 5s.
     }, 30_000);
+
+    test("--brief sends the short brief with the owner's decisions, records it, and a run keeps one way of asking", () => {
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd: root });
+      git("init", "-q");
+      git("commit", "-q", "--allow-empty", "-m", "start");
+      writeFileSync(join(evalsDir, "seeds.json"), JSON.stringify({ batchSize: 2, seeds: [{ id: "s01", style: "a", tone: "t", topic: "food" }] }));
+      const brief = {
+        version: 1,
+        styles: { a: { name: "Style A", brief: "Pick one." } },
+        tones: { t: { name: "Tone T", brief: "Plain." } },
+        topics: {},
+      };
+      writeFileSync(join(evalsDir, "brief.json"), JSON.stringify(brief));
+      // A stand-in for `npx convex run` that logs each call and answers as dev would.
+      const bin = join(root, "bin");
+      const calls = join(root, "calls.jsonl");
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, "fake-convex.mjs"),
+        `import { appendFileSync } from "node:fs";
+const [, , fn, json] = process.argv.slice(2);
+const args = JSON.parse(json);
+appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ fn, args }) + "\\n");
+const answers = {
+  "internal/evals:evalLibraryStats": { publicQuestions: 10, withEmbedding: 10 },
+  "internal/evals:generateEvalBatch": { runId: "r-" + args.seedId, model: "m", candidates: [] },
+  "internal/evalData:evalRunAttempts": [{ runId: "r-s01", status: "succeeded" }],
+};
+console.log(JSON.stringify(answers[fn]));
+`,
+      );
+      writeFileSync(join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, "fake-convex.mjs")}" "$@"\n`, { mode: 0o755 });
+      const PATH = `${bin}:/usr/bin:/bin`;
+      const made = () => existsSync(calls);
+
+      // Without the owner's decisions, or with a seed the brief doesn't cover, nothing is generated.
+      const noDecisions = runScript("generate.mjs", ["brief-run", "--brief"], { PATH });
+      expect(noDecisions.status).toBe(1);
+      expect(noDecisions.stderr).toMatch(/--brief shows the model the owner's decisions, and .*owner-decisions\.json doesn't exist/);
+      mkdirSync(join(evalsDir, "judged"));
+      writeFileSync(
+        join(evalsDir, "judged", "owner-decisions.json"),
+        JSON.stringify([{ text: "Which one would you keep?", style: "a", verdict: "keep", reasons: [] }]),
+      );
+      const uncovered = runScript("generate.mjs", ["brief-run", "--brief"], { PATH });
+      expect(uncovered.status).toBe(1);
+      expect(uncovered.stderr).toMatch(/evals\/brief\.json has no entry for: topics\/food\./);
+      expect(made()).toBe(false);
+      expect(existsSync(join(evalsDir, "runs", "brief-run", "generated.json"))).toBe(false);
+
+      writeFileSync(join(evalsDir, "brief.json"), JSON.stringify({ ...brief, topics: { food: { name: "Food", brief: "Eating." } } }));
+      const first = runScript("generate.mjs", ["brief-run", "--brief"], { PATH });
+      expect(first.status, first.stderr).toBe(0);
+      expect(first.stdout).toMatch(/with the default model and brief-v1-[0-9a-f]{12}\./);
+      const [batchCall] = readFileSync(calls, "utf8").trim().split("\n").map((line) => JSON.parse(line)).filter((call) => call.fn === "internal/evals:generateEvalBatch");
+      expect(batchCall.args).toMatchObject({ runLabel: "brief-run", seedId: "s01", styleSlug: "a", toneSlug: "t", topicSlug: "food", batchSize: 2 });
+      expect(batchCall.args.prompt.systemPrompt).toMatch(/You write icebreaker questions for Break the Ice/);
+      expect(batchCall.args.prompt.userPrompt).toMatch(/^Style: Style A\. Pick one\.\nTone: Tone T\. Plain\.\nTopic: Food\. Eating\./);
+      expect(batchCall.args.prompt.userPrompt).toContain('- "Which one would you keep?"');
+      expect(batchCall.args.prompt.userPrompt).toContain("Write 2 new questions");
+      expect(readRunFile("brief-run/generated.json").prompt).toMatch(/^brief-v1-[0-9a-f]{12}$/);
+
+      // The run was asked with the brief: not with the app's prompt, and not with other decisions.
+      const plain = runScript("generate.mjs", ["brief-run"], { PATH });
+      expect(plain.status).toBe(1);
+      expect(plain.stderr).toMatch(/was generated with brief-v1-[0-9a-f]{12}, not the app's prompt\. A run keeps one way of asking/);
+      writeFileSync(join(evalsDir, "judged", "owner-decisions.json"), "[]");
+      const otherDecisions = runScript("generate.mjs", ["brief-run", "--brief"], { PATH });
+      expect(otherDecisions.status).toBe(1);
+      expect(otherDecisions.stderr).toMatch(/A run keeps one way of asking/);
+
+      // A run made with the app's prompt records no prompt, sends none, and can't switch to the brief.
+      rmSync(calls);
+      const app = runScript("generate.mjs", ["app-run"], { PATH });
+      expect(app.status, app.stderr).toBe(0);
+      expect(readFileSync(calls, "utf8")).not.toContain('"prompt"');
+      expect(readRunFile("app-run/generated.json")).not.toHaveProperty("prompt");
+      const switched = runScript("generate.mjs", ["app-run", "--brief"], { PATH });
+      expect(switched.status).toBe(1);
+      expect(switched.stderr).toMatch(/was generated with the app's prompt, not brief-v1-/);
+    }, 30_000);
+  });
+
+  describe("pairs", () => {
+    const batch = (seedId: string, run: string) => ({
+      seed: { id: seedId },
+      ok: true,
+      result: {
+        definitions: { style: { slug: "a", name: "Style A", definition: "…" }, tone: { slug: "t", name: "Tone T", definition: "…" }, topic: null },
+        candidates: [1, 2, 3].map((n) => ({ text: `${run} ${seedId} question ${n}?`, outcome: "saved" })),
+      },
+    });
+    const readJudged = (path: string) => JSON.parse(readFileSync(join(evalsDir, "judged", path), "utf8"));
+
+    test("build writes the pairs and their key apart, never redraws a name, and score reads whole rounds", () => {
+      for (const run of ["app", "brief"]) writeRun(run, { "generated.json": { batches: [batch("s01", run), batch("s02", run)] } });
+
+      for (const args of [[], ["build"], ["build", "t1", "app"], ["build", "t1", "app", "app"], ["build", "Bad", "app", "brief"], ["build", "t1", "app", "brief", "--per-seed", "0"], ["score", "t1"]]) {
+        const bad = runScript("pairs.mjs", args);
+        expect(bad.status, args.join(" ")).toBe(1);
+        expect(bad.stderr, args.join(" ")).toMatch(/Usage: node evals\/pairs\.mjs build/);
+      }
+      const missing = runScript("pairs.mjs", ["build", "t1", "app", "no-such-run"]);
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toMatch(/Run node evals\/generate\.mjs no-such-run first/);
+      expect(existsSync(join(evalsDir, "judged"))).toBe(false);
+
+      const built = runScript("pairs.mjs", ["build", "t1", "app", "brief", "--per-seed", "2"]);
+      expect(built.status, built.stderr).toBe(0);
+      expect(built.stdout).toMatch(/4 pairs in 2 rounds \(2, 2\) written to/);
+      expect(built.stdout).toMatch(/0 from app, 0 from brief/);
+      const pairs = readJudged("t1/pairs.json");
+      const key = readJudged("t1/key.json");
+      expect(pairs).toHaveLength(4);
+      expect(JSON.stringify(Object.keys(pairs[0]).sort())).toBe('["id","left","order","right","round","style","tone","topic"]');
+      expect(key).toMatchObject({ name: "t1", a: "app", b: "brief", perSeed: 2 });
+      expect(Object.keys(key.sides)).toEqual(["p001", "p002", "p003", "p004"]);
+
+      const again = runScript("pairs.mjs", ["build", "t1", "app", "brief"]);
+      expect(again.status).toBe(1);
+      expect(again.stderr).toMatch(/already holds pairs\. Use a new name/);
+      expect(readJudged("t1/pairs.json")).toEqual(pairs);
+
+      // The owner picked the brief's question in every pair of round 1 and has not finished round 2.
+      const choices: Record<string, string> = {};
+      for (const pair of pairs.slice(0, 3)) choices[pair.id] = key.sides[pair.id].left === "b" ? "left" : "right";
+      const choicesFile = join(root, "choices.json");
+      writeFileSync(choicesFile, JSON.stringify(choices));
+      const scored = runScript("pairs.mjs", ["score", "t1", choicesFile]);
+      expect(scored.status, scored.stderr).toBe(0);
+      expect(scored.stdout).toMatch(/3 pairs answered; 2 counted, in 1 whole rounds\./);
+      expect(scored.stdout).toMatch(/Picked app: 0\. Picked brief: 2\. Both fine: 0\. Neither: 0\./);
+      expect(scored.stdout).toMatch(/Too few whole rounds to read/);
+      expect(readJudged("t1/result.json")).toMatchObject({ rounds: 1, counted: 2, tally: { a: 0, b: 2 }, verdict: "too few rounds" });
+
+      const noPairs = runScript("pairs.mjs", ["score", "t2", choicesFile]);
+      expect(noPairs.stderr).toMatch(/No pairs named "t2"\. Run build first/);
+      const noChoices = runScript("pairs.mjs", ["score", "t1", join(root, "nope.json")]);
+      expect(noChoices.stderr).toMatch(/nope\.json doesn't exist/);
+    }, 30_000);
   });
 
   describe("score", () => {

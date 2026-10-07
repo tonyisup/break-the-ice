@@ -627,6 +627,11 @@ export async function runPreviewQuestionGeneration(
     spendClass?: SpendClass;
     /** An OpenRouter model to use instead of GENERATION_MODEL. Only the eval harness sets it. */
     model?: string;
+    /**
+     * A system and user prompt to send instead of the one built from the style, tone and topic,
+     * which are still looked up for the run's record. Only the eval harness sets it.
+     */
+    promptOverride?: { systemPrompt: string; userPrompt: string };
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -648,7 +653,7 @@ export async function runPreviewQuestionGeneration(
 
   const model = args.model ?? GENERATION_MODEL;
   const temperature = args.temperature ?? 0.85;
-  const prompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
+  const built: GenerationPrompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
     styleId: args.styleId,
     styleSlug: args.styleSlug,
     toneId: args.toneId,
@@ -661,6 +666,7 @@ export async function runPreviewQuestionGeneration(
     currentQuestion: args.currentQuestion,
     userContext: args.userContext,
   });
+  const prompt: GenerationPrompt = args.promptOverride ? { ...built, ...args.promptOverride } : built;
 
   assertPromptSize(prompt.systemPrompt.length + prompt.userPrompt.length);
 
