@@ -4,26 +4,31 @@
 // only what is still missing and keeps every verdict the file already has, also when the rerun
 // names fewer questions. When evals/owner-labels.json exists, it also sets the verdicts beside
 // the owner's labels and evaluates the pass rule. --only-labeled judges just the questions
-// that file has labels for.
+// that file has labels for. --context shows the judge the owner's decisions beside each
+// question (evals/judged/owner-decisions.json, named by evals/brief.json), which the app's own
+// check never gets; a name keeps one way of judging.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapLimit } from "./async.mjs";
 import { assertDevTarget, convexRun } from "./devTarget.mjs";
-import { compareWithLabels, passRule, savedQuestions } from "./judgeRecord.mjs";
+import { compareWithLabels, contextLabel, judgeContext, passRule, savedQuestions } from "./judgeRecord.mjs";
 import { cliError, writeJson } from "./runRecord.mjs";
 
 // A call judges its questions one after another, a few seconds each.
 const QUESTIONS_PER_CALL = 10;
 const CALL_CONCURRENCY = 2;
-// About what a check cost on Opus 5.5 in Oct 2026, for the estimate printed before a paid run.
+// About what a check cost on Opus 5.5 in Oct 2026, alone and with the owner's decisions beside
+// it, for the estimate printed before a paid run.
 const USD_PER_CHECK = 0.01;
+const USD_PER_CHECK_WITH_CONTEXT = 0.02;
 
-const USAGE = "Usage: node evals/judge.mjs <name> <run>... [--only-labeled]   (names: lowercase letters, digits and dashes)";
+const USAGE = "Usage: node evals/judge.mjs <name> <run>... [--only-labeled] [--context]   (names: lowercase letters, digits and dashes)";
 const [name, ...rest] = process.argv.slice(2);
 const onlyLabeled = rest.includes("--only-labeled");
-const runNames = rest.filter((arg) => arg !== "--only-labeled");
+const withContext = rest.includes("--context");
+const runNames = rest.filter((arg) => arg !== "--only-labeled" && arg !== "--context");
 const validName = (value) => /^[a-z0-9][a-z0-9-]*$/.test(value);
 if (!name || !validName(name) || runNames.length === 0 || !runNames.every(validName) || new Set(runNames).size !== runNames.length) {
   console.error(USAGE);
@@ -55,6 +60,22 @@ const outDir = join(here, "judged");
 const outPath = join(outDir, `${name}.json`);
 mkdirSync(outDir, { recursive: true });
 const previous = existsSync(outPath) ? JSON.parse(readFileSync(outPath, "utf8")) : null;
+let contextSetup = null;
+if (withContext) {
+  const decisionsPath = join(outDir, "owner-decisions.json");
+  if (!existsSync(decisionsPath)) {
+    console.error(`--context shows the judge the owner's decisions, and ${decisionsPath} doesn't exist.`);
+    process.exit(1);
+  }
+  const decisions = JSON.parse(readFileSync(decisionsPath, "utf8"));
+  contextSetup = { decisions, names: JSON.parse(readFileSync(join(here, "brief.json"), "utf8")), label: contextLabel(decisions) };
+}
+const shown = contextSetup?.label ?? null;
+if (previous && (previous.context ?? null) !== shown) {
+  const named = (value) => (value ? `the owner's decisions (${value})` : "no decisions shown");
+  console.error(`"${name}" was judged with ${named(previous.context ?? null)}, not ${named(shown)}. A name keeps one way of judging; start a new name.`);
+  process.exit(1);
+}
 // A question whose check failed before is tried again.
 const byText = new Map((previous?.results ?? []).filter((result) => result.verdict).map((result) => [result.text, result]));
 const todo = questions.filter((question) => !byText.has(question.text));
@@ -68,6 +89,7 @@ const record = {
   commits: [...new Set([...(previous?.commits ?? []), ...(todo.length ? [commit] : [])])],
   model: previous?.model ?? null,
   promptVersion: previous?.promptVersion ?? null,
+  ...(shown ? { context: shown } : {}),
 };
 // In the runs' order, so the file reads the same however the calls finished. Verdicts on
 // questions this run didn't name follow: they were paid for, and a set may have been drawn from them.
@@ -92,14 +114,20 @@ if (todo.length && record.model !== null) {
   }
 }
 if (todo.length) {
-  console.log(`${todo.length} of ${questions.length} questions to judge for "${name}" at ${commit}, about $${(todo.length * USD_PER_CHECK).toFixed(2)}.`);
+  console.log(`${todo.length} of ${questions.length} questions to judge for "${name}" at ${commit}, about $${(todo.length * (contextSetup ? USD_PER_CHECK_WITH_CONTEXT : USD_PER_CHECK)).toFixed(2)}.`);
   const calls = [];
   for (let i = 0; i < todo.length; i += QUESTIONS_PER_CALL) calls.push(todo.slice(i, i + QUESTIONS_PER_CALL));
   await mapLimit(calls, CALL_CONCURRENCY, async (call) => {
     let answer;
     try {
       answer = await convexRun(root, "internal/qualityCheck:evalQualityCheck", {
-        items: call.map(({ text, style, tone, topic }) => ({ text, style, tone, topic })),
+        items: call.map(({ text, style, tone, topic }) => ({
+          text,
+          style,
+          tone,
+          topic,
+          ...(contextSetup ? { context: judgeContext(contextSetup.decisions, style.slug, contextSetup.names) } : {}),
+        })),
       });
     } catch (error) {
       failures += call.length;

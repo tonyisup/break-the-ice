@@ -1,12 +1,13 @@
 // Generates the eval's questions on the dev deployment, one batch per seed, without saving them to
-// the library. Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--brief] [--allow-local]
+// the library. Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--brief] [--seeds <name>] [--allow-local]
 // Rerunning the same run name retries only the seeds that failed. Commit convex/ and push it to dev
 // (npx convex dev --once) first: --allow-local runs with uncommitted convex/ changes, for trying
 // things out, and marks the run "+local". --model generates with that OpenRouter model (like
 // anthropic/claude-sonnet-5.5) instead of the app's default. A run keeps one model: a rerun without
 // --model uses the run's own. --brief asks with the short brief (brief.mjs and brief.json, with the
 // owner's decisions from evals/judged/owner-decisions.json as its examples) in place of the app's
-// prompt; a run keeps one way of asking too.
+// prompt; a run keeps one way of asking too. --seeds reads evals/<name>.json in place of seeds.json,
+// for a set of seeds the standard runs don't use; a run keeps its seeds file.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -22,17 +23,19 @@ const GENERATION_CONCURRENCY = 2;
 // slack on each side (the run label keeps other runs out).
 const CLOCK_SLACK_MS = 60_000;
 
-const USAGE = "Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--brief] [--allow-local]   (run names: lowercase letters, digits and dashes, not starting with a dash)";
+const USAGE = "Usage: node evals/generate.mjs <run-name> [--model <openrouter-model>] [--brief] [--seeds <name>] [--allow-local]   (run and seeds names: lowercase letters, digits and dashes, not starting with a dash)";
 const [run, ...flags] = process.argv.slice(2);
 // Anything else after the run name is refused, so a misplaced or misspelled flag can't quietly
 // start a paid run with the default model.
 let model; // undefined until given; null means the deployment's default model
 let allowLocal = false;
 let brief = false;
+let seedsName; // undefined until given
 let badArgs = !run || !/^[a-z0-9][a-z0-9-]*$/.test(run);
 for (let i = 0; i < flags.length && !badArgs; i += 1) {
   if (flags[i] === "--allow-local") allowLocal = true;
   else if (flags[i] === "--brief") brief = true;
+  else if (flags[i] === "--seeds" && seedsName === undefined && /^[a-z0-9][a-z0-9-]*$/.test(flags[i + 1] ?? "")) seedsName = flags[++i];
   else if (flags[i] === "--model" && model === undefined && flags[i + 1] && !flags[i + 1].startsWith("-")) model = flags[++i];
   else badArgs = true;
 }
@@ -45,7 +48,13 @@ const root = join(here, "..");
 
 assertDevTarget(root);
 
-const { batchSize, seeds } = JSON.parse(readFileSync(join(here, "seeds.json"), "utf8"));
+seedsName ??= "seeds";
+const seedsPath = join(here, `${seedsName}.json`);
+if (!existsSync(seedsPath)) {
+  console.error(`${seedsPath} doesn't exist.`);
+  process.exit(1);
+}
+const { batchSize, seeds } = JSON.parse(readFileSync(seedsPath, "utf8"));
 const runDir = join(here, "runs", run);
 const outPath = join(runDir, "generated.json");
 mkdirSync(runDir, { recursive: true });
@@ -63,6 +72,11 @@ process.on("exit", () => rmSync(lockPath, { force: true }));
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(1));
 
 const previous = existsSync(outPath) ? JSON.parse(readFileSync(outPath, "utf8")) : null;
+// Batches are kept by seed id, so a run can't move to a file whose ids mean other seeds.
+if (previous && (previous.seeds ?? "seeds") !== seedsName) {
+  console.error(`Run "${run}" was generated from evals/${previous.seeds ?? "seeds"}.json, not evals/${seedsName}.json. A run keeps its seeds file; start a new run name.`);
+  process.exit(1);
+}
 // Runs from before --model existed have no model recorded, and used the default. A run that never
 // reached a model (every seed refused as "setup", such as a --model the deployment's name check
 // rejects) can still switch. A well-formed name the provider doesn't know does reach it, and
@@ -129,7 +143,18 @@ const invocations = previous?.invocations ?? [];
 let attempts = previous?.attempts ?? [];
 const createdAt = previous?.createdAt ?? new Date().toISOString();
 function save() {
-  writeJson(outPath, { run, deployment: "dev", createdAt, model, ...(asked ? { prompt: asked } : {}), batchSize, invocations, attempts, batches: orderedBatches(seeds, batches) });
+  writeJson(outPath, {
+    run,
+    deployment: "dev",
+    createdAt,
+    model,
+    ...(asked ? { prompt: asked } : {}),
+    ...(seedsName === "seeds" ? {} : { seeds: seedsName }),
+    batchSize,
+    invocations,
+    attempts,
+    batches: orderedBatches(seeds, batches),
+  });
 }
 
 /**

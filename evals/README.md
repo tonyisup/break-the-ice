@@ -189,6 +189,41 @@ A pick says which question is better, not that it is good enough to publish. Pai
 same seed come from one call each way, so they are not independent; read the seed count
 beside the sign test.
 
+A style whose form is the style (either/or, would you rather, one word) carries a `form` line
+in `brief.json`. The brief asks for variety in how a sentence is built, and without that line
+the variety pulls such a style's questions out of the style.
+
+## Picking the best of a batch
+
+The question that decides publishing is not which prompt is better but how often the owner
+rejects what would be published. This measures it for a larger batch from which only the best
+are taken:
+
+```bash
+node evals/generate.mjs cells-brief --brief --seeds seeds-new-cells
+node evals/judge.mjs cells-judged cells-brief --context
+node evals/select.mjs draw cells-set cells-judged --start 363
+```
+
+- `--seeds seeds-new-cells` generates from `evals/seeds-new-cells.json`: 24 combinations of the
+  same styles, tones and topics that the first 20 seeds don't use, eight questions each. The
+  owner has read the first 20 seeds' output many times over, which makes a repeated
+  construction hard to judge; these are cells nobody has seen.
+- `judge.mjs --context` shows the judge the owner's decisions beside each question: the latest
+  ten of the question's style, then the latest of other styles, 24 in all with at most twelve
+  keeps and twelve rejects. The app's own check never gets these. A check costs about 2 cents
+  this way.
+- `select.mjs draw` takes, from each batch, up to three questions the judge kept at confidence
+  4 or 5 with no reasons and no safety flags, surest first, and one more at random from the
+  rest of the batch as a control. It writes `cards.json` for the labeling page (style, tone,
+  topic and text, nothing else) and `key.json`, which stays on this machine.
+
+The owner labels the cards keep or reject, blind. `node evals/select.mjs score cells-set
+labels.json` reads the labels (a JSON object from card id to `{ "verdict": ... }`) and
+applies the first blind set's rule to the picked cards: at most 1 in 20 rejected, on at least
+60 of them, an "unsure" counted as a reject. It also prints the controls' rate and, weighing
+the two by their share of the batches, about what the rate would be with no picking.
+
 ## Reading the numbers
 
 - The official baseline is `runs/v0-5-2.json`: three replicate runs of the same seeds on the

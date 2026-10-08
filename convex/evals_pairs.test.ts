@@ -88,6 +88,15 @@ describe("the short brief", () => {
     expect(userPrompt).toMatch(/"Other keep \d\?" \[style-\d\]/);
   });
 
+  test("a style that is its form says so, and the system prompt makes it the exception to varying the sentence", () => {
+    const withForm = { ...taxonomy, styles: { ...taxonomy.styles, "would-you-rather": { name: "Would You Rather", brief: "Choose between two.", form: "Begins 'Would you rather'." } } };
+    const { systemPrompt, userPrompt } = briefPrompts({ seed: { id: "s02", style: "would-you-rather", tone: "bold" }, taxonomy: withForm, decisions: [], batchSize: 2 });
+    expect(userPrompt.split("\n")[0]).toBe("Style: Would You Rather. Choose between two. Set form: Begins 'Would you rather'.");
+    expect(systemPrompt).toMatch(/The exception is a style with a set form: there, keep the form in every question/);
+    // A style without one gets no such line.
+    expect(briefPrompts({ seed, taxonomy: withForm, decisions: [], batchSize: 2 }).userPrompt).not.toContain("Set form");
+  });
+
   test("names what a set of seeds uses that the brief doesn't cover, and the shipped brief covers the shipped seeds", () => {
     expect(
       missingFromBrief(
@@ -98,8 +107,15 @@ describe("the short brief", () => {
 
     const evals = join(__dirname, "..", "evals");
     const shipped = JSON.parse(readFileSync(join(evals, "brief.json"), "utf8"));
-    const { seeds } = JSON.parse(readFileSync(join(evals, "seeds.json"), "utf8"));
-    expect(missingFromBrief(seeds, shipped)).toEqual([]);
+    for (const file of ["seeds.json", "seeds-new-cells.json"]) {
+      const { seeds } = JSON.parse(readFileSync(join(evals, file), "utf8"));
+      expect(missingFromBrief(seeds, shipped), file).toEqual([]);
+    }
+    // The new cells are new: no style and tone pair of theirs is one the first seeds use.
+    const pairsOf = (file: string) =>
+      (JSON.parse(readFileSync(join(evals, file), "utf8")).seeds as Array<{ style: string; tone: string }>).map((s) => `${s.style}/${s.tone}`);
+    expect(pairsOf("seeds-new-cells.json").filter((pair) => pairsOf("seeds.json").includes(pair))).toEqual([]);
+    expect(new Set(pairsOf("seeds-new-cells.json")).size).toBe(24);
   });
 
   test("the label changes when the wording of a line or the decisions shown change", () => {

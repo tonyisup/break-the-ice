@@ -940,6 +940,28 @@ console.log(JSON.stringify(answers[fn]));
       const switched = runScript("generate.mjs", ["app-run", "--brief"], { PATH });
       expect(switched.status).toBe(1);
       expect(switched.stderr).toMatch(/was generated with the app's prompt, not brief-v1-/);
+
+      // --seeds reads another seeds file, which the run then keeps.
+      for (const flags of [["--seeds"], ["--seeds", "Bad Name"], ["--seeds", "a", "--seeds", "b"]]) {
+        expect(runScript("generate.mjs", ["cells-run", ...flags], { PATH }).stderr, flags.join(" ")).toMatch(/Usage: node evals\/generate\.mjs/);
+      }
+      const noFile = runScript("generate.mjs", ["cells-run", "--seeds", "more-seeds"], { PATH });
+      expect(noFile.status).toBe(1);
+      expect(noFile.stderr).toMatch(/more-seeds\.json doesn't exist/);
+      writeFileSync(join(evalsDir, "more-seeds.json"), JSON.stringify({ batchSize: 3, seeds: [{ id: "n01", style: "a", tone: "t" }] }));
+      rmSync(calls);
+      const cells = runScript("generate.mjs", ["cells-run", "--seeds", "more-seeds"], { PATH });
+      expect(cells.status, cells.stderr).toBe(0);
+      expect(readFileSync(calls, "utf8")).toContain('"seedId":"n01"');
+      expect(readFileSync(calls, "utf8")).toContain('"batchSize":3');
+      expect(readRunFile("cells-run/generated.json")).toMatchObject({ seeds: "more-seeds", batchSize: 3 });
+      expect(readRunFile("app-run/generated.json")).not.toHaveProperty("seeds");
+      const moved = runScript("generate.mjs", ["cells-run"], { PATH });
+      expect(moved.status).toBe(1);
+      expect(moved.stderr).toMatch(/was generated from evals\/more-seeds\.json, not evals\/seeds\.json\. A run keeps its seeds file/);
+      const movedBack = runScript("generate.mjs", ["app-run", "--seeds", "more-seeds"], { PATH });
+      expect(movedBack.status).toBe(1);
+      expect(movedBack.stderr).toMatch(/was generated from evals\/seeds\.json, not evals\/more-seeds\.json/);
     }, 30_000);
   });
 
@@ -1463,7 +1485,7 @@ console.log(JSON.stringify(answers[fn]));
       readFileSync(join(root, "calls.jsonl"), "utf8")
         .trim()
         .split("\n")
-        .map((line) => JSON.parse(line) as { fn: string; texts: string[]; keys: string[] });
+        .map((line) => JSON.parse(line) as { fn: string; texts: string[]; keys: string[]; contexts: unknown[] });
     /**
      * A dev target, a commit to record, and a stand-in for `npx convex run` that logs each call
      * and answers as dev would: a hold for a question starting "On hold", otherwise a keep the
@@ -1482,7 +1504,7 @@ console.log(JSON.stringify(answers[fn]));
         `import { appendFileSync } from "node:fs";
 const [, , fn, json] = process.argv.slice(2);
 const { items } = JSON.parse(json);
-appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ fn, texts: items.map((item) => item.text), keys: Object.keys(items[0] ?? {}).sort() }) + "\\n");
+appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ fn, texts: items.map((item) => item.text), keys: Object.keys(items[0] ?? {}).sort(), contexts: items.map((item) => item.context ?? null) }) + "\\n");
 if (items.some((item) => item.text === process.env.FAIL_CALL)) {
   console.error("Uncaught ConvexError: Evals are off on this deployment");
   process.exit(1);
@@ -1679,6 +1701,127 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       const fewerRuns = runScript("judge.mjs", ["wide", "r1"], { PATH });
       expect(fewerRuns.status, fewerRuns.stderr).toBe(0);
       expect(fewerRuns.stdout).toContain("Pass rule: PASS. The owner rejected 3 of 60 the check would publish; at most 3 are allowed.");
+    }, 30_000);
+
+    test("--context shows the judge the owner's decisions beside each question, and a name keeps one way of judging", () => {
+      const PATH = devStandIn();
+      writeRun("r1", { "generated.json": generatedRun(["Question 1?", "Question 2?"]) });
+
+      const noDecisions = runScript("judge.mjs", ["shown", "r1", "--context"], { PATH });
+      expect(noDecisions.status).toBe(1);
+      expect(noDecisions.stderr).toMatch(/--context shows the judge the owner's decisions, and .*owner-decisions\.json doesn't exist/);
+      expect(existsSync(join(root, "calls.jsonl"))).toBe(false);
+
+      writeFileSync(
+        join(evalsDir, "judged", "owner-decisions.json"),
+        JSON.stringify([
+          { text: "Kept, same style?", style: "reflective", tone: "warm", verdict: "keep", reasons: [] },
+          { text: "Rejected, other style?", style: "other", tone: "warm", verdict: "reject", reasons: ["awkward_wording"] },
+        ]),
+      );
+      writeFileSync(join(evalsDir, "brief.json"), JSON.stringify({ version: 1, styles: { reflective: { name: "Reflective" } }, tones: { warm: { name: "Warm" } }, topics: {} }));
+      const shown = runScript("judge.mjs", ["shown", "r1", "--context"], { PATH });
+      expect(shown.status, shown.stderr).toBe(0);
+      expect(shown.stdout).toMatch(/2 of 2 questions to judge for "shown" at \w+, about \$0\.04\./);
+      const [call] = calls();
+      expect(call.keys).toEqual(["context", "style", "text", "tone", "topic"]);
+      expect(call.contexts).toEqual([
+        {
+          sameStyle: [{ text: "Kept, same style?", style: "Reflective", tone: "Warm", verdict: "keep", reasons: [] }],
+          others: [{ text: "Rejected, other style?", style: "other", tone: "Warm", verdict: "reject", reasons: ["awkward_wording"] }],
+        },
+        expect.anything(),
+      ]);
+      expect(readJudged("shown").context).toMatch(/^owner-[0-9a-f]{12}$/);
+      expect(readJudged("shown").results).toHaveLength(2);
+
+      // The same name without the decisions, with other decisions, or a plain name with them: refused.
+      const plain = runScript("judge.mjs", ["shown", "r1"], { PATH });
+      expect(plain.status).toBe(1);
+      expect(plain.stderr).toMatch(/"shown" was judged with the owner's decisions \(owner-[0-9a-f]{12}\), not no decisions shown\. A name keeps one way of judging/);
+      expect(runScript("judge.mjs", ["bare", "r1"], { PATH }).status).toBe(0);
+      expect(readJudged("bare")).not.toHaveProperty("context");
+      const added = runScript("judge.mjs", ["bare", "r1", "--context"], { PATH });
+      expect(added.status).toBe(1);
+      expect(added.stderr).toMatch(/"bare" was judged with no decisions shown, not the owner's decisions/);
+      writeFileSync(join(evalsDir, "judged", "owner-decisions.json"), "[]");
+      const others = runScript("judge.mjs", ["shown", "r1", "--context"], { PATH });
+      expect(others.status).toBe(1);
+      expect(others.stderr).toMatch(/A name keeps one way of judging/);
+    }, 30_000);
+  });
+
+  describe("select", () => {
+    const definitions = { style: { slug: "a", name: "Style A", definition: "…" }, tone: { slug: "t", name: "Tone T", definition: "…" }, topic: null };
+    const texts = (seedId: string) => [1, 2, 3, 4].map((n) => `${seedId} question ${n}?`);
+    const readJudged = (path: string) => JSON.parse(readFileSync(join(evalsDir, "judged", path), "utf8"));
+
+    test("draw picks the surest of each batch with controls from the rest, never redraws a name, and score applies the rule", () => {
+      writeRun("r1", {
+        "generated.json": {
+          batches: ["s01", "s02"].map((seedId) => ({
+            seed: { id: seedId },
+            ok: true,
+            result: { definitions, candidates: texts(seedId).map((text) => ({ text, outcome: "saved" })) },
+          })),
+        },
+      });
+      // Question 1 of each seed is kept at 5, question 2 at 4, question 3 at 3, question 4 is held.
+      const verdictOf = (text: string) => {
+        const n = Number(text.match(/question (\d)/)?.[1]);
+        return { verdict: n === 4 ? "hold" : "keep", reasons: n === 4 ? ["awkward_wording"] : [], safety: [], confidence: n === 4 ? 5 : 6 - n, note: "" };
+      };
+      const judged = (list: string[]) => ({ name: "j1", runs: ["r1"], context: "owner-abc", results: list.map((text) => ({ text, run: "r1", seedId: text.slice(0, 3), verdict: verdictOf(text) })) });
+      mkdirSync(join(evalsDir, "judged"), { recursive: true });
+
+      for (const args of [[], ["draw"], ["draw", "t1"], ["draw", "t1", "Bad"], ["draw", "t1", "j1", "--pick"], ["draw", "t1", "j1", "--pick", "0"], ["draw", "t1", "j1", "--best", "2"], ["score", "t1"]]) {
+        const bad = runScript("select.mjs", args);
+        expect(bad.status, args.join(" ")).toBe(1);
+        expect(bad.stderr, args.join(" ")).toMatch(/Usage: node evals\/select\.mjs draw/);
+      }
+      const notJudged = runScript("select.mjs", ["draw", "t1", "j1"]);
+      expect(notJudged.stderr).toMatch(/Run node evals\/judge\.mjs j1 <run>\.\.\. first/);
+      writeFileSync(join(evalsDir, "judged", "j1.json"), JSON.stringify(judged([...texts("s01"), ...texts("s02").slice(0, 3)])));
+      const partly = runScript("select.mjs", ["draw", "t1", "j1"]);
+      expect(partly.status).toBe(1);
+      expect(partly.stderr).toMatch(/1 of the runs' 8 questions aren't judged in "j1"/);
+      expect(existsSync(join(evalsDir, "judged", "t1"))).toBe(false);
+
+      writeFileSync(join(evalsDir, "judged", "j1.json"), JSON.stringify(judged([...texts("s01"), ...texts("s02")])));
+      const drawn = runScript("select.mjs", ["draw", "t1", "j1", "--pick", "1", "--controls", "2", "--start", "363"]);
+      expect(drawn.status, drawn.stderr).toBe(0);
+      expect(drawn.stdout).toContain("8 questions in 2 batches: 4 were kept at confidence 4 or 5 with nothing against them. Picked 2 (0 batches had none to pick) and drew 4 from the rest.");
+      expect(drawn.stdout).toMatch(/6 cards, q363 to q368, written to/);
+      const cards = readJudged("t1/cards.json");
+      const key = readJudged("t1/key.json");
+      expect(cards.map((card: { id: string }) => card.id)).toEqual(["q363", "q364", "q365", "q366", "q367", "q368"]);
+      expect(JSON.stringify(Object.keys(cards[0]).sort())).toBe('["id","order","style","text","tone","topic"]');
+      expect(cards[0]).toMatchObject({ style: "Style A", tone: "Tone T", topic: null });
+      expect(key).toMatchObject({ name: "t1", pick: 1, controls: 2, judged: "j1", context: "owner-abc" });
+      const picked = cards.filter((card: { id: string }) => key.groups[card.id].group === "picked").map((card: { text: string }) => card.text);
+      expect(picked.sort()).toEqual(["s01 question 1?", "s02 question 1?"]);
+
+      const again = runScript("select.mjs", ["draw", "t1", "j1"]);
+      expect(again.status).toBe(1);
+      expect(again.stderr).toMatch(/already holds a set\. Use a new name/);
+
+      // The owner kept both picked cards and rejected one control; one control has no label yet.
+      const controls = cards.filter((card: { id: string }) => key.groups[card.id].group === "control").map((card: { id: string }) => card.id);
+      const labels: Record<string, { verdict: string }> = Object.fromEntries(cards.map((card: { id: string }) => [card.id, { verdict: "keep" }]));
+      labels[controls[0]] = { verdict: "reject" };
+      delete labels[controls[1]];
+      const labelsFile = join(root, "labels.json");
+      writeFileSync(labelsFile, JSON.stringify(labels));
+      const scored = runScript("select.mjs", ["score", "t1", labelsFile]);
+      expect(scored.status, scored.stderr).toBe(0);
+      expect(scored.stdout).toContain("Picked: 2 of 2 labeled, 0 rejected (0%).");
+      expect(scored.stdout).toContain("From the rest of each batch: 3 of 4 labeled, 1 rejected (33%).");
+      expect(scored.stdout).toContain("With no picking, about 25% of a batch would be rejected.");
+      expect(scored.stdout).toContain("Pass rule: not decided. Needs at least 60 picked cards; there are 2.");
+      expect(readJudged("t1/result.json")).toMatchObject({ picked: { cards: 2, rejected: 0 }, control: { labeled: 3, rejected: 1 } });
+
+      expect(runScript("select.mjs", ["score", "t2", labelsFile]).stderr).toMatch(/No set named "t2"\. Run draw first/);
+      expect(runScript("select.mjs", ["score", "t1", join(root, "nope.json")]).stderr).toMatch(/nope\.json doesn't exist/);
     }, 30_000);
   });
 });

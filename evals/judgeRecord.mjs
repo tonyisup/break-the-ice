@@ -1,4 +1,5 @@
 // What judge.mjs does with run files, verdicts and the owner's labels. Pure, so it can be tested.
+import { createHash } from "node:crypto";
 
 /** At most this share of the questions Claude would publish may be ones the owner rejects. */
 const PASS_REJECT_SHARE = 1 / 20;
@@ -88,4 +89,46 @@ export function passRule(group) {
   }
   const allowed = allowedRejects(group.wouldPublish);
   return { decided: true, pass: group.wouldPublishRejected <= allowed, rejected: group.wouldPublishRejected, allowed, of: group.wouldPublish };
+}
+
+/** How many of the owner's decisions the judge is shown with one question (judge.mjs --context). */
+const CONTEXT_SAME_STYLE = 10;
+const CONTEXT_TOTAL = 24;
+const CONTEXT_PER_VERDICT = 12;
+
+/**
+ * The owner's decisions the judge is shown beside a question of `styleSlug`: the latest ten of
+ * that style, then the latest of other styles up to 24 in all, with at most twelve keeps and
+ * twelve rejects among the other styles' and the same style's together. `decisions` are in the
+ * order the owner made them, as `{ text, style, tone, verdict, reasons }` with slugs; `names`
+ * maps slugs to the names the judge reads. Each list comes back oldest first.
+ * @param {Array<{ text: string, style: string, tone: string, verdict: string, reasons?: string[] }>} decisions
+ * @param {string} styleSlug
+ * @param {{ styles?: Record<string, { name: string }>, tones?: Record<string, { name: string }> }} names
+ */
+export function judgeContext(decisions, styleSlug, names) {
+  const example = (decision) => ({
+    text: decision.text,
+    style: names.styles?.[decision.style]?.name ?? decision.style,
+    tone: names.tones?.[decision.tone]?.name ?? decision.tone,
+    verdict: decision.verdict,
+    reasons: decision.reasons ?? [],
+  });
+  const decided = decisions.filter((decision) => decision.verdict === "keep" || decision.verdict === "reject");
+  const sameStyle = decided.filter((decision) => decision.style === styleSlug).slice(-CONTEXT_SAME_STYLE);
+  const counts = { keep: 0, reject: 0 };
+  for (const decision of sameStyle) counts[decision.verdict] += 1;
+  const others = [];
+  for (const decision of decided.filter((d) => d.style !== styleSlug).reverse()) {
+    if (sameStyle.length + others.length >= CONTEXT_TOTAL) break;
+    if (counts[decision.verdict] >= CONTEXT_PER_VERDICT) continue;
+    counts[decision.verdict] += 1;
+    others.push(decision);
+  }
+  return { sameStyle: sameStyle.map(example), others: others.reverse().map(example) };
+}
+
+/** Names the decisions a judged file was shown, so a file never mixes verdicts made with different ones. */
+export function contextLabel(decisions) {
+  return `owner-${createHash("sha256").update(JSON.stringify(decisions)).digest("hex").slice(0, 12)}`;
 }
