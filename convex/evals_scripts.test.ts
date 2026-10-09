@@ -1485,7 +1485,7 @@ console.log(JSON.stringify(answers[fn]));
       readFileSync(join(root, "calls.jsonl"), "utf8")
         .trim()
         .split("\n")
-        .map((line) => JSON.parse(line) as { fn: string; texts: string[]; keys: string[]; contexts: unknown[] });
+        .map((line) => JSON.parse(line) as { fn: string; texts: string[]; keys: string[]; contexts: unknown[]; model: string | null });
     /**
      * A dev target, a commit to record, and a stand-in for `npx convex run` that logs each call
      * and answers as dev would: a hold for a question starting "On hold", otherwise a keep the
@@ -1503,8 +1503,8 @@ console.log(JSON.stringify(answers[fn]));
         join(bin, "fake-convex.mjs"),
         `import { appendFileSync } from "node:fs";
 const [, , fn, json] = process.argv.slice(2);
-const { items } = JSON.parse(json);
-appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ fn, texts: items.map((item) => item.text), keys: Object.keys(items[0] ?? {}).sort(), contexts: items.map((item) => item.context ?? null) }) + "\\n");
+const { items, model } = JSON.parse(json);
+appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ fn, texts: items.map((item) => item.text), keys: Object.keys(items[0] ?? {}).sort(), contexts: items.map((item) => item.context ?? null), model: model ?? null }) + "\\n");
 if (items.some((item) => item.text === process.env.FAIL_CALL)) {
   console.error("Uncaught ConvexError: Evals are off on this deployment");
   process.exit(1);
@@ -1517,7 +1517,7 @@ const results = items.map((item) => {
 });
 // VERSION_2_TEXT: a call holding that question is answered by a deployment that has moved to v2.
 const version = items.some((item) => item.text === process.env.VERSION_2_TEXT) ? 2 : Number(process.env.PROMPT_VERSION ?? 1);
-console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: version, results }));
+console.log(JSON.stringify({ model: model ?? "anthropic/claude-opus-5.5", promptVersion: version, results }));
 `,
       );
       writeFileSync(join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, "fake-convex.mjs")}" "$@"\n`, { mode: 0o755 });
@@ -1748,6 +1748,74 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       const others = runScript("judge.mjs", ["shown", "r1", "--context"], { PATH });
       expect(others.status).toBe(1);
       expect(others.stderr).toMatch(/A name keeps one way of judging/);
+    }, 30_000);
+  });
+
+  describe("judge --model", () => {
+    const style = { slug: "reflective", name: "Reflective", definition: "Looks back." };
+    const tone = { slug: "warm", name: "Warm", definition: "Kind." };
+    const generatedRun = (texts: string[]) => ({
+      batches: [{ seed: { id: "s01" }, ok: true, result: { definitions: { style, tone, topic: null }, candidates: texts.map((text) => ({ text, outcome: "saved" })) } }],
+    });
+    const readJudged = (name: string) => JSON.parse(readFileSync(join(evalsDir, "judged", `${name}.json`), "utf8"));
+    const calls = () =>
+      readFileSync(join(root, "calls.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as { texts: string[]; model: string | null });
+
+    test("sends the model with every call, records it, and a name keeps its model", () => {
+      // A dev target and a stand-in for `npx convex run` that answers with the model it was asked for.
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd: root });
+      git("init", "-q");
+      git("commit", "-q", "--allow-empty", "-m", "start");
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, "fake-convex.mjs"),
+        `import { appendFileSync } from "node:fs";
+const [, , , json] = process.argv.slice(2);
+const { items, model } = JSON.parse(json);
+appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ texts: items.map((item) => item.text), model: model ?? null }) + "\\n");
+const verdict = { verdict: "keep", reasons: [], safety: [], confidence: 5, note: "" };
+console.log(JSON.stringify({ model: model ?? "anthropic/claude-opus-5.5", promptVersion: 1, results: items.map((item) => ({ text: item.text, verdict, wouldPublish: true, wouldFlag: false })) }));
+`,
+      );
+      writeFileSync(join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, "fake-convex.mjs")}" "$@"\n`, { mode: 0o755 });
+      const PATH = `${bin}:/usr/bin:/bin`;
+      writeRun("r1", { "generated.json": generatedRun(["Question 1?"]) });
+      writeRun("r2", { "generated.json": generatedRun(["Question 2?"]) });
+
+      for (const args of [["haiku", "r1", "--model"], ["haiku", "r1", "--model", "--context"]]) {
+        const bad = runScript("judge.mjs", args, { PATH });
+        expect(bad.status, args.join(" ")).toBe(1);
+        expect(bad.stderr, args.join(" ")).toMatch(/Usage: node evals\/judge\.mjs/);
+      }
+
+      // The flag can sit before or after the runs.
+      const first = runScript("judge.mjs", ["haiku", "--model", "anthropic/claude-haiku-5.5", "r1"], { PATH });
+      expect(first.status, first.stderr).toBe(0);
+      expect(first.stdout).toMatch(/about \$0\.01 at the app's model's price \(anthropic\/claude-haiku-5\.5 may differ\)\./);
+      expect(first.stdout).toMatch(/Judged 1 of 1 by anthropic\/claude-haiku-5\.5 with instructions v1/);
+      expect(calls()).toEqual([{ texts: ["Question 1?"], model: "anthropic/claude-haiku-5.5" }]);
+      expect(readJudged("haiku").model).toBe("anthropic/claude-haiku-5.5");
+
+      // More to judge under the same name: with the same model it goes on, without it it is refused
+      // before a question is sent.
+      const plain = runScript("judge.mjs", ["haiku", "r1", "r2"], { PATH });
+      expect(plain.status).toBe(1);
+      expect(plain.stderr).toMatch(/"haiku" was judged by anthropic\/claude-haiku-5\.5 with instructions v1; the deployment now has anthropic\/claude-opus-5\.5 v1\. Start a new name\./);
+      expect(calls().slice(-1)[0]).toEqual({ texts: [], model: null });
+      const more = runScript("judge.mjs", ["haiku", "r1", "r2", "--model", "anthropic/claude-haiku-5.5"], { PATH });
+      expect(more.status, more.stderr).toBe(0);
+      expect(calls().slice(-2)).toEqual([
+        { texts: [], model: "anthropic/claude-haiku-5.5" },
+        { texts: ["Question 2?"], model: "anthropic/claude-haiku-5.5" },
+      ]);
+      expect(readJudged("haiku").results).toHaveLength(2);
+
+      // Without the flag no model is sent, and the app's is recorded.
+      expect(runScript("judge.mjs", ["plain", "r1"], { PATH }).status).toBe(0);
+      expect(calls().slice(-1)[0]).toEqual({ texts: ["Question 1?"], model: null });
+      expect(readJudged("plain").model).toBe("anthropic/claude-opus-5.5");
     }, 30_000);
   });
 

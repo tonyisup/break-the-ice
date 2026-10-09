@@ -6,7 +6,9 @@
 // the owner's labels and evaluates the pass rule. --only-labeled judges just the questions
 // that file has labels for. --context shows the judge the owner's decisions beside each
 // question (evals/judged/owner-decisions.json, named by evals/brief.json), which the app's own
-// check never gets; a name keeps one way of judging.
+// check never gets; a name keeps one way of judging. --model judges with that OpenRouter model
+// (like anthropic/claude-haiku-5.5) instead of the app's, to measure it against the same labels;
+// a name keeps one model, so give every rerun of that name the same --model.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -24,8 +26,12 @@ const CALL_CONCURRENCY = 2;
 const USD_PER_CHECK = 0.01;
 const USD_PER_CHECK_WITH_CONTEXT = 0.02;
 
-const USAGE = "Usage: node evals/judge.mjs <name> <run>... [--only-labeled] [--context]   (names: lowercase letters, digits and dashes)";
-const [name, ...rest] = process.argv.slice(2);
+const USAGE = "Usage: node evals/judge.mjs <name> <run>... [--only-labeled] [--context] [--model <openrouter-model>]   (names: lowercase letters, digits and dashes)";
+const [name, ...given] = process.argv.slice(2);
+// --model takes the word after it; a missing or flag-like value falls through to the usage error.
+const modelAt = given.indexOf("--model");
+const model = modelAt >= 0 && given[modelAt + 1] && !given[modelAt + 1].startsWith("-") ? given[modelAt + 1] : null;
+const rest = modelAt >= 0 && model ? [...given.slice(0, modelAt), ...given.slice(modelAt + 2)] : given;
 const onlyLabeled = rest.includes("--only-labeled");
 const withContext = rest.includes("--context");
 const runNames = rest.filter((arg) => arg !== "--only-labeled" && arg !== "--context");
@@ -104,7 +110,7 @@ const save = () =>
 let failures = 0;
 if (todo.length && record.model !== null) {
   // An empty call costs nothing and says which model and instructions dev has now.
-  const deployed = await convexRun(root, "internal/qualityCheck:evalQualityCheck", { items: [] }).catch((error) => {
+  const deployed = await convexRun(root, "internal/qualityCheck:evalQualityCheck", { items: [], ...(model ? { model } : {}) }).catch((error) => {
     console.error(`Couldn't ask dev which instructions it has (${cliError(error)}). Nothing was judged.`);
     process.exit(1);
   });
@@ -114,7 +120,7 @@ if (todo.length && record.model !== null) {
   }
 }
 if (todo.length) {
-  console.log(`${todo.length} of ${questions.length} questions to judge for "${name}" at ${commit}, about $${(todo.length * (contextSetup ? USD_PER_CHECK_WITH_CONTEXT : USD_PER_CHECK)).toFixed(2)}.`);
+  console.log(`${todo.length} of ${questions.length} questions to judge for "${name}" at ${commit}, about $${(todo.length * (contextSetup ? USD_PER_CHECK_WITH_CONTEXT : USD_PER_CHECK)).toFixed(2)}${model ? ` at the app's model's price (${model} may differ)` : ""}.`);
   const calls = [];
   for (let i = 0; i < todo.length; i += QUESTIONS_PER_CALL) calls.push(todo.slice(i, i + QUESTIONS_PER_CALL));
   await mapLimit(calls, CALL_CONCURRENCY, async (call) => {
@@ -128,6 +134,7 @@ if (todo.length) {
           topic,
           ...(contextSetup ? { context: judgeContext(contextSetup.decisions, style.slug, contextSetup.names) } : {}),
         })),
+        ...(model ? { model } : {}),
       });
     } catch (error) {
       failures += call.length;

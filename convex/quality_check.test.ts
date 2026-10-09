@@ -1045,6 +1045,33 @@ describe("the check for measuring against labels", () => {
     expect(create).toHaveBeenCalledTimes(2);
   });
 
+  test("it judges with the app's model unless given another OpenRouter model, and refuses a name that isn't one", async () => {
+    process.env.EVALS_ENABLED = "true";
+    const s = await setup();
+    answers(KEEP);
+    const withModel = (model: string) => s.t.action(internal.internal.qualityCheck.evalQualityCheck, { items: [items[0]], model });
+
+    for (const model of ["", "claude-haiku-5.5", "anthropic/claude haiku", "https://example.com/model"]) {
+      await expect(withModel(model), model).rejects.toThrow(/isn't an OpenRouter model name/);
+    }
+    expect(create).not.toHaveBeenCalled();
+    expect(await runs(s)).toEqual([]);
+
+    const haiku = await withModel("anthropic/claude-haiku-5.5");
+    expect(haiku).toMatchObject({ model: "anthropic/claude-haiku-5.5", promptVersion: QUALITY_CHECK_PROMPT_VERSION });
+    expect(haiku.results).toEqual([{ text: items[0].text, verdict: KEEP, wouldPublish: true, wouldFlag: false }]);
+    expect((await evaluate(s, [items[0]])).model).toBe(QUALITY_CHECK_MODEL);
+
+    // Same instructions, same settings: only the model differs, and each run records its own.
+    const sent: Array<{ model: string }> = create.mock.calls.map((call: unknown[]) => call[0] as { model: string });
+    expect(sent.map((params) => params.model)).toEqual(["anthropic/claude-haiku-5.5", QUALITY_CHECK_MODEL]);
+    expect({ ...sent[0], model: QUALITY_CHECK_MODEL }).toEqual(sent[1]);
+    expect((await runs(s)).map((run) => [run.purpose, run.model])).toEqual([
+      ["quality_check", "anthropic/claude-haiku-5.5"],
+      ["quality_check", QUALITY_CHECK_MODEL],
+    ]);
+  });
+
   test("more than 25 texts in one call are refused", async () => {
     process.env.EVALS_ENABLED = "true";
     const s = await setup();

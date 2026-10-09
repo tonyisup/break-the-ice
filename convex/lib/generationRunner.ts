@@ -183,6 +183,16 @@ const REMIX_ANSWER_TOKENS = 150;
 const JSON_BASE_TOKENS = 300;
 const TOKENS_PER_QUESTION = 200;
 
+/** Refuses a model name that isn't an OpenRouter one, before it can reach the provider. */
+export function assertOpenRouterModel(model: string): void {
+  if (!OPENROUTER_MODEL.test(model)) {
+    throw new ConvexError({
+      code: "AI_MODEL_NAME",
+      message: `"${model}" isn't an OpenRouter model name like "anthropic/claude-sonnet-5.5".`,
+    });
+  }
+}
+
 export function maxOutputTokens(batchSize: number): number {
   return REASONING_ALLOWANCE_TOKENS + JSON_BASE_TOKENS + TOKENS_PER_QUESTION * batchSize;
 }
@@ -642,12 +652,7 @@ export async function runPreviewQuestionGeneration(
 }> {
   // Checked here, where the name reaches the provider, so no caller can pass one through
   // unchecked, and before anything is read or charged.
-  if (args.model !== undefined && !OPENROUTER_MODEL.test(args.model)) {
-    throw new ConvexError({
-      code: "AI_MODEL_NAME",
-      message: `"${args.model}" isn't an OpenRouter model name like "anthropic/claude-sonnet-5.5".`,
-    });
-  }
+  if (args.model !== undefined) assertOpenRouterModel(args.model);
   const spendClass = args.spendClass ?? "user";
   await ensureAiBudget(ctx, spendClass);
 
