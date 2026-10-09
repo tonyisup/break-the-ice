@@ -1775,6 +1775,7 @@ console.log(JSON.stringify({ model: model ?? "anthropic/claude-opus-5.5", prompt
 const [, , , json] = process.argv.slice(2);
 const { items, model } = JSON.parse(json);
 appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ texts: items.map((item) => item.text), model: model ?? null }) + "\\n");
+appendFileSync(${JSON.stringify(join(root, "styles.jsonl"))}, JSON.stringify(items.map((item) => [item.style.name, item.style.definition, item.tone.definition])) + "\\n");
 const verdict = { verdict: "keep", reasons: [], safety: [], confidence: 5, note: "" };
 console.log(JSON.stringify({ model: model ?? "anthropic/claude-opus-5.5", promptVersion: 1, results: items.map((item) => ({ text: item.text, verdict, wouldPublish: true, wouldFlag: false })) }));
 `,
@@ -1816,6 +1817,32 @@ console.log(JSON.stringify({ model: model ?? "anthropic/claude-opus-5.5", prompt
       expect(runScript("judge.mjs", ["plain", "r1"], { PATH }).status).toBe(0);
       expect(calls().slice(-1)[0]).toEqual({ texts: ["Question 1?"], model: null });
       expect(readJudged("plain").model).toBe("anthropic/claude-opus-5.5");
+
+      // --brief describes the style and tone with the brief's lines, stops when it has none, and
+      // a name keeps the way it was judged.
+      writeFileSync(join(evalsDir, "brief.json"), JSON.stringify({ version: 2, styles: {}, tones: { warm: { name: "Warm", brief: "Kind and plain." } }, topics: {} }));
+      const uncovered = runScript("judge.mjs", ["lines", "r1", "--brief"], { PATH });
+      expect(uncovered.status).toBe(1);
+      expect(uncovered.stderr).toMatch(/evals\/brief\.json has no line for the style, tone or topic of: reflective\/warm\./);
+      writeFileSync(
+        join(evalsDir, "brief.json"),
+        JSON.stringify({ version: 2, styles: { reflective: { name: "Reflective", brief: "Looks back on one moment.", form: "Starts 'Looking back'." } }, tones: { warm: { name: "Warm", brief: "Kind and plain." } }, topics: {} }),
+      );
+      const before = calls().length;
+      const lines = runScript("judge.mjs", ["lines", "r1", "--brief"], { PATH });
+      expect(lines.status, lines.stderr).toBe(0);
+      expect(calls().length).toBe(before + 1);
+      expect(readJudged("lines").definitions).toBe("brief-v2");
+      const described = readFileSync(join(root, "styles.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      expect(described.at(-1)).toEqual([["Reflective", "Looks back on one moment. Set form: Starts 'Looking back'.", "Kind and plain."]]);
+      expect(described[0]).toEqual([["Reflective", "Looks back.", "Kind."]]);
+      expect(readJudged("plain")).not.toHaveProperty("definitions");
+      const mixed = runScript("judge.mjs", ["lines", "r1", "r2"], { PATH });
+      expect(mixed.status).toBe(1);
+      expect(mixed.stderr).toMatch(/"lines" was judged with the brief's lines \(brief-v2\), not the app's definitions\. A name keeps one way of judging/);
+      const added = runScript("judge.mjs", ["plain", "r1", "--brief"], { PATH });
+      expect(added.status).toBe(1);
+      expect(added.stderr).toMatch(/"plain" was judged with the app's definitions, not the brief's lines \(brief-v2\)/);
     }, 30_000);
   });
 

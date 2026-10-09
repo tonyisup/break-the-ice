@@ -132,3 +132,23 @@ export function judgeContext(decisions, styleSlug, names) {
 export function contextLabel(decisions) {
   return `owner-${createHash("sha256").update(JSON.stringify(decisions)).digest("hex").slice(0, 12)}`;
 }
+
+/**
+ * A question described to the judge by the brief's own lines for its style, tone and topic, in
+ * place of the app's definitions. A question the brief wrote was never told the app's fill-in
+ * template, so a judge shown that template marks it down for not following it. Returns null
+ * when the brief has no line for one of them.
+ * @param {{ style: { slug: string }, tone: { slug: string }, topic: { slug: string } | null }} question
+ * @param {{ styles: Record<string, { name: string, brief: string, form?: string }>, tones: Record<string, { name: string, brief: string }>, topics: Record<string, { name: string, brief: string }> }} taxonomy
+ */
+export function briefDefinitions(question, taxonomy) {
+  const style = taxonomy.styles?.[question.style.slug];
+  const tone = taxonomy.tones?.[question.tone.slug];
+  const topic = question.topic ? taxonomy.topics?.[question.topic.slug] : null;
+  if (!style || !tone || (question.topic && !topic)) return null;
+  return {
+    style: { slug: question.style.slug, name: style.name, definition: `${style.brief}${style.form ? ` Set form: ${style.form}` : ""}` },
+    tone: { slug: question.tone.slug, name: tone.name, definition: tone.brief },
+    topic: question.topic && topic ? { slug: question.topic.slug, name: topic.name, definition: topic.brief } : null,
+  };
+}

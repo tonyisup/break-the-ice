@@ -8,14 +8,16 @@
 // question (evals/judged/owner-decisions.json, named by evals/brief.json), which the app's own
 // check never gets; a name keeps one way of judging. --model judges with that OpenRouter model
 // (like anthropic/claude-haiku-5.5) instead of the app's, to measure it against the same labels;
-// a name keeps one model, so give every rerun of that name the same --model.
+// a name keeps one model, so give every rerun of that name the same --model. --brief describes
+// each question's style, tone and topic to the judge with the brief's own lines (evals/brief.json)
+// in place of the app's definitions, for questions generate.mjs --brief wrote; a name keeps that too.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapLimit } from "./async.mjs";
 import { assertDevTarget, convexRun } from "./devTarget.mjs";
-import { compareWithLabels, contextLabel, judgeContext, passRule, savedQuestions } from "./judgeRecord.mjs";
+import { briefDefinitions, compareWithLabels, contextLabel, judgeContext, passRule, savedQuestions } from "./judgeRecord.mjs";
 import { cliError, writeJson } from "./runRecord.mjs";
 
 // A call judges its questions one after another, a few seconds each.
@@ -26,7 +28,7 @@ const CALL_CONCURRENCY = 2;
 const USD_PER_CHECK = 0.01;
 const USD_PER_CHECK_WITH_CONTEXT = 0.02;
 
-const USAGE = "Usage: node evals/judge.mjs <name> <run>... [--only-labeled] [--context] [--model <openrouter-model>]   (names: lowercase letters, digits and dashes)";
+const USAGE = "Usage: node evals/judge.mjs <name> <run>... [--only-labeled] [--context] [--brief] [--model <openrouter-model>]   (names: lowercase letters, digits and dashes)";
 const [name, ...given] = process.argv.slice(2);
 // --model takes the word after it; a missing or flag-like value falls through to the usage error.
 const modelAt = given.indexOf("--model");
@@ -34,7 +36,8 @@ const model = modelAt >= 0 && given[modelAt + 1] && !given[modelAt + 1].startsWi
 const rest = modelAt >= 0 && model ? [...given.slice(0, modelAt), ...given.slice(modelAt + 2)] : given;
 const onlyLabeled = rest.includes("--only-labeled");
 const withContext = rest.includes("--context");
-const runNames = rest.filter((arg) => arg !== "--only-labeled" && arg !== "--context");
+const withBrief = rest.includes("--brief");
+const runNames = rest.filter((arg) => !["--only-labeled", "--context", "--brief"].includes(arg));
 const validName = (value) => /^[a-z0-9][a-z0-9-]*$/.test(value);
 if (!name || !validName(name) || runNames.length === 0 || !runNames.every(validName) || new Set(runNames).size !== runNames.length) {
   console.error(USAGE);
@@ -60,7 +63,20 @@ if (onlyLabeled && !labels) {
   process.exit(1);
 }
 const labeledTexts = new Set((labels ?? []).map((card) => card.text));
-const questions = savedQuestions(runs).filter((question) => !onlyLabeled || labeledTexts.has(question.text));
+let questions = savedQuestions(runs).filter((question) => !onlyLabeled || labeledTexts.has(question.text));
+// The brief's lines replace the app's definitions before anything is sent, and a question the
+// brief has no line for stops the run.
+const described = withBrief ? `brief-v${JSON.parse(readFileSync(join(here, "brief.json"), "utf8")).version}` : null;
+if (withBrief) {
+  const taxonomy = JSON.parse(readFileSync(join(here, "brief.json"), "utf8"));
+  const uncovered = questions.filter((question) => !briefDefinitions(question, taxonomy));
+  if (uncovered.length) {
+    const slugs = [...new Set(uncovered.map((q) => `${q.style.slug}/${q.tone.slug}${q.topic ? `/${q.topic.slug}` : ""}`))];
+    console.error(`evals/brief.json has no line for the style, tone or topic of: ${slugs.join(", ")}.`);
+    process.exit(1);
+  }
+  questions = questions.map((question) => ({ ...question, ...briefDefinitions(question, taxonomy) }));
+}
 
 const outDir = join(here, "judged");
 const outPath = join(outDir, `${name}.json`);
@@ -82,6 +98,11 @@ if (previous && (previous.context ?? null) !== shown) {
   console.error(`"${name}" was judged with ${named(previous.context ?? null)}, not ${named(shown)}. A name keeps one way of judging; start a new name.`);
   process.exit(1);
 }
+if (previous && (previous.definitions ?? null) !== described) {
+  const named = (value) => (value ? `the brief's lines (${value})` : "the app's definitions");
+  console.error(`"${name}" was judged with ${named(previous.definitions ?? null)}, not ${named(described)}. A name keeps one way of judging; start a new name.`);
+  process.exit(1);
+}
 // A question whose check failed before is tried again.
 const byText = new Map((previous?.results ?? []).filter((result) => result.verdict).map((result) => [result.text, result]));
 const todo = questions.filter((question) => !byText.has(question.text));
@@ -96,6 +117,7 @@ const record = {
   model: previous?.model ?? null,
   promptVersion: previous?.promptVersion ?? null,
   ...(shown ? { context: shown } : {}),
+  ...(described ? { definitions: described } : {}),
 };
 // In the runs' order, so the file reads the same however the calls finished. Verdicts on
 // questions this run didn't name follow: they were paid for, and a set may have been drawn from them.
