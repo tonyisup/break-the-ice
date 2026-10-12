@@ -558,7 +558,13 @@ describe("run record", () => {
 
     expect(exited).toBe("The command exited with code 1 and printed no error.");
     expect(stopped).toBe("The command was stopped by SIGTERM and printed no error.");
-    expect(exited + stopped).not.toContain("secret text");
+    // npm repeats the command line in a notice of its own, which is not the tool's error.
+    const notices = `npm notice run break-the-ice@0.6.0 npx\nnpm notice run 'convex' run fn {"prompt":"secret text"}\n`;
+    const noticed = cliError({ message, stderr: notices, code: 1 });
+    const failedAfter = cliError({ message, stderr: `${notices}TypeError: fetch failed\n`, code: 1 });
+    expect(noticed).toBe(exited);
+    expect(failedAfter).toBe("TypeError: fetch failed");
+    expect(exited + stopped + noticed + failedAfter).not.toContain("secret text");
   });
 
   test("a failure recorded with its stage keeps that stage, whatever its message would be read as", () => {
@@ -998,15 +1004,18 @@ console.log(JSON.stringify(answers[fn]));
       const decision = "Which one would you keep?";
       mkdirSync(join(evalsDir, "judged"));
       writeFileSync(join(evalsDir, "judged", "owner-decisions.json"), JSON.stringify([{ text: decision, style: "a", verdict: "keep", reasons: [] }]));
-      // A stand-in for `npx convex run` whose batch call always fails: with nothing printed, or,
-      // with ECHO set, as a refusal that prints the call's arguments back.
+      // A stand-in for `npx convex run` whose batch call always fails, after npm's notice of the
+      // command line: with nothing more printed, or, with ECHO set, as a refusal that prints the
+      // call's arguments back, or, with PAUSED set, as the budget's refusal.
       const bin = join(root, "bin");
       mkdirSync(bin);
       writeFileSync(
         join(bin, "fake-convex.mjs"),
         `const [, , fn, json] = process.argv.slice(2);
 if (fn === "internal/evals:generateEvalBatch") {
+  console.error("npm notice run 'convex' run " + fn + " " + json);
   if (process.env.ECHO) console.error(json + "\\nServer Error");
+  if (process.env.PAUSED) console.error("Uncaught ConvexError: AI_BUDGET_PAUSED");
   process.exit(1);
 }
 console.log(JSON.stringify(fn === "internal/evals:evalLibraryStats" ? { publicQuestions: 10, withEmbedding: 10 } : []));
@@ -1016,7 +1025,8 @@ console.log(JSON.stringify(fn === "internal/evals:evalLibraryStats" ? { publicQu
       const PATH = `${bin}:/usr/bin:/bin`;
       const record = () => readFileSync(join(evalsDir, "runs", "brief-run", "generated.json"), "utf8");
       const failures = () => JSON.parse(record()).batches[0].failures.map((failure: { stage: string; message: string }) => [failure.stage, failure.message]);
-      const silently = ["cli", "The command exited with code 1 and printed no error."];
+      const kept = "A --brief run's record doesn't keep an error's text, which can quote the prompt.";
+      const silently = ["cli", `The call failed. ${kept}`];
 
       const silent = runScript("generate.mjs", ["brief-run", "--brief"], { PATH });
       expect(silent.status, silent.stderr).toBe(0);
@@ -1030,12 +1040,14 @@ console.log(JSON.stringify(fn === "internal/evals:evalLibraryStats" ? { publicQu
       // The error did hold the prompt: whoever ran the command is shown it.
       expect(echoed.stdout).toContain(decision);
       expect(echoed.stdout).toContain("1 seeds failed; rerun with --brief to retry them.");
-      expect(failures()).toEqual([
-        silently,
-        ["server", "The error printed the call's arguments, which hold the brief's prompt, so its text isn't kept here."],
-      ]);
+      // A known error code is kept, with the step it failed at.
+      const paused = runScript("generate.mjs", ["brief-run", "--brief"], { PATH, PAUSED: "1" });
+      expect(paused.status, paused.stderr).toBe(0);
+      expect(paused.stdout).toContain("s01 failed: Uncaught ConvexError: AI_BUDGET_PAUSED");
+      expect(failures()).toEqual([silently, ["server", `The call failed. ${kept}`], ["budget", `The call failed (AI_BUDGET_PAUSED). ${kept}`]]);
       expect(record()).not.toContain(decision);
       expect(record()).not.toContain("systemPrompt");
+      expect(record()).not.toContain("npm notice");
     }, 30_000);
   });
 
@@ -1880,13 +1892,13 @@ console.log(JSON.stringify({ model: model ?? "anthropic/claude-opus-5.5", prompt
           others: [{ text: "Kept, same style?", style: "Reflective", tone: "Warm", verdict: "keep", reasons: [] }],
         },
       ]);
-      expect(readJudged("shown").context).toMatch(/^owner-[0-9a-f]{12}$/);
+      expect(readJudged("shown").context).toMatch(/^owner-v2-[0-9a-f]{12}$/);
       expect(readJudged("shown").results).toHaveLength(2);
 
       // The same name without the decisions, with other decisions, or a plain name with them: refused.
       const plain = runScript("judge.mjs", ["shown", "r1"], { PATH });
       expect(plain.status).toBe(1);
-      expect(plain.stderr).toMatch(/"shown" was judged with the owner's decisions \(owner-[0-9a-f]{12}\), not no decisions shown\. A name keeps one way of judging/);
+      expect(plain.stderr).toMatch(/"shown" was judged with the owner's decisions \(owner-v2-[0-9a-f]{12}\), not no decisions shown\. A name keeps one way of judging; rerun with --context, or start a new name\./);
       expect(runScript("judge.mjs", ["bare", "r1"], { PATH }).status).toBe(0);
       expect(readJudged("bare")).not.toHaveProperty("context");
       const added = runScript("judge.mjs", ["bare", "r1", "--context"], { PATH });

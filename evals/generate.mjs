@@ -215,16 +215,12 @@ if (todo.length) {
       console.log(`${seed.id} ${seed.style}/${seed.tone}${seed.topic ? `/${seed.topic}` : ""}: ${result.candidates.length} questions`);
     } catch (error) {
       const message = cliError(error);
-      // With --brief the call's arguments hold the prompt, with the owner's decisions in it, and a
-      // refusal can print its arguments back. That text is shown here and never kept in the record.
-      const quotesPrompt = briefSetup !== null && /systemPrompt|userPrompt/.test(message);
-      recordFailure(
-        batches,
-        seed,
-        quotesPrompt ? "The error printed the call's arguments, which hold the brief's prompt, so its text isn't kept here." : message,
-        commit,
-        classifyFailure(message),
-      );
+      // With --brief the call's arguments hold the prompt, with the owner's decisions in it, and
+      // npm, the CLI or the deployment can print them back. So a --brief run's record keeps the
+      // step that failed and a known error code, and the error's own text is only shown here.
+      const code = message.match(/\b(EVALS_DISABLED|EVAL_SETUP|AI_MODEL_NAME|AI_BUDGET_PAUSED|AI_PROMPT_TOO_LARGE|AI_GENERATION_FAILED)\b/)?.[0];
+      const kept = briefSetup === null ? message : `The call failed${code ? ` (${code})` : ""}. A --brief run's record doesn't keep an error's text, which can quote the prompt.`;
+      recordFailure(batches, seed, kept, commit, classifyFailure(message));
       console.log(`${seed.id} failed: ${message}`);
     }
     save();

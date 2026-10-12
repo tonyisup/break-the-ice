@@ -217,7 +217,7 @@
 3. Have `buildPairs` read run files with `savedQuestions`.
 4. Read flags with `parseArgs` from `node:util` in the four scripts.
 
-Smaller still: give the `--brief` assertions their own test in `convex/evals_scripts.test.ts` (they sit in the one named for `--model`), print the confidence floor in `select.mjs` from its constant, and test bad arguments in the pure modules so fewer tests start a process.
+Smaller still: give the `--brief` assertions their own test in `convex/evals_scripts.test.ts` (they sit in the one named for `--model`), have `select.mjs` say "4 or above" from its constant where it writes "or 5" beside it, and test bad arguments in the pure modules so fewer tests start a process.
 
 **Why:** The scripts repeat a little code and read flags four ways, so a change to one is easy to miss in the others. The script tests add a few seconds to every test run.
 

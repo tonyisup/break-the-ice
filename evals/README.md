@@ -349,5 +349,6 @@ the two by their share of the batches, about what the rate would be with no pick
   twice at once. If it was killed and the file is left behind, delete it.
 - The repo is public. `generated.json` keeps provider and CLI error text from failed calls word
   for word; check it before committing a run that had failures. A `--brief` run's calls carry
-  the prompt, with the owner's decisions in it, so an error that prints a call's arguments back
-  is shown on screen and not kept in the record.
+  the prompt, with the owner's decisions in it, and an error can print a call's arguments back,
+  so such a run's record keeps only the step a failed call broke at and a known error code. The
+  error's own text is shown on screen.

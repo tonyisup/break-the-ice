@@ -69,7 +69,7 @@ describe("the owner's decisions shown to the judge", () => {
 
   test("the label follows the decisions", () => {
     const decisions = [decision(1, "a")];
-    expect(contextLabel(decisions)).toMatch(/^owner-[0-9a-f]{12}$/);
+    expect(contextLabel(decisions)).toMatch(/^owner-v2-[0-9a-f]{12}$/);
     expect(contextLabel(decisions)).toBe(contextLabel([decision(1, "a")]));
     expect(contextLabel(decisions)).not.toBe(contextLabel([decision(2, "a")]));
   });

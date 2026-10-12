@@ -117,14 +117,19 @@ if (withContext) {
   contextSetup = { decisions, names: brief(), label: contextLabel(decisions) };
 }
 const shown = contextSetup?.label ?? null;
+// A label also changes when what it names does, and then no flag brings the old one back.
+const remedy = (flag, had, has, changed) =>
+  !had ? `rerun without ${flag}, or start a new name` : !has ? `rerun with ${flag}, or start a new name` : `${changed} since, so start a new name`;
 if (previous && (previous.context ?? null) !== shown) {
   const named = (value) => (value ? `the owner's decisions (${value})` : "no decisions shown");
-  console.error(`"${name}" was judged with ${named(previous.context ?? null)}, not ${named(shown)}. A name keeps one way of judging; start a new name.`);
+  const how = remedy("--context", previous.context, shown, "the owner's decisions, or how they are shown, have changed");
+  console.error(`"${name}" was judged with ${named(previous.context ?? null)}, not ${named(shown)}. A name keeps one way of judging; ${how}.`);
   process.exit(1);
 }
 if (previous && (previous.definitions ?? null) !== described) {
   const named = (value) => (value ? `the brief's lines (${value})` : "the app's definitions");
-  console.error(`"${name}" was judged with ${named(previous.definitions ?? null)}, not ${named(described)}. A name keeps one way of judging; start a new name.`);
+  const how = remedy("--brief", previous.definitions, described, "the brief has changed");
+  console.error(`"${name}" was judged with ${named(previous.definitions ?? null)}, not ${named(described)}. A name keeps one way of judging; ${how}.`);
   process.exit(1);
 }
 if (previous?.model && model && previous.model !== model) {

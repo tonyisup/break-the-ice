@@ -132,9 +132,13 @@ export function judgeContext(decisions, styleSlug, names, text) {
   return { sameStyle: sameStyle.map(example), others: others.reverse().map(example) };
 }
 
-/** Names the decisions a judged file was shown, so a file never mixes verdicts made with different ones. */
+/**
+ * Names the decisions a judged file was shown, so a file never mixes verdicts made with different
+ * ones. The 2 is the rule for which of them a question is shown (judgeContext): files judged
+ * before a question's own decision was left out carry no number, and are not resumed.
+ */
 export function contextLabel(decisions) {
-  return `owner-${createHash("sha256").update(JSON.stringify(decisions)).digest("hex").slice(0, 12)}`;
+  return `owner-v2-${createHash("sha256").update(JSON.stringify(decisions)).digest("hex").slice(0, 12)}`;
 }
 
 /** Names the brief's lines a judged file was described with: the brief's version and the lines themselves. */

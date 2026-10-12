@@ -18,7 +18,7 @@ export function recordSuccess(batches, seed, result, commit) {
   batches.set(seed.id, { seed, ok: true, commit, failures: batches.get(seed.id)?.failures ?? [], result });
 }
 
-/** `stage` is given when `message` is not the error's own text (generate.mjs --brief), so the step is still read from that. */
+/** `stage` is given when `message` is not the error's own text (generate.mjs --brief), so the step is still the error's. */
 export function recordFailure(batches, seed, message, commit, stage = classifyFailure(message)) {
   const failure = { stage, commit, message };
   batches.set(seed.id, { seed, ok: false, failures: [...(batches.get(seed.id)?.failures ?? []), failure] });
@@ -51,13 +51,13 @@ export function mergeAttempts(existing, fresh) {
 }
 
 /**
- * The last lines of a failed CLI call's output, where the cause is. Never the command line: with
- * nothing on stderr Node's own message is the command and its arguments, which can hold a whole
- * prompt, and run records are committed.
+ * The last lines of a failed CLI call's output, where the cause is. Never the command line: npm
+ * repeats it, arguments and all, in a notice on stderr, and with nothing else there Node's own
+ * message is the command too. The arguments can hold a whole prompt, and run records are committed.
  */
 export function cliError(error) {
   const lastLines = (text) => text.trim().split("\n").slice(-3).join(" ");
-  const stderr = String(error?.stderr ?? "").trim();
+  const stderr = String(error?.stderr ?? "").split("\n").filter((line) => !line.startsWith("npm notice")).join("\n").trim();
   if (stderr) return lastLines(stderr);
   const message = error?.message || String(error);
   if (!message.startsWith("Command failed:")) return lastLines(message);
