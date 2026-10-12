@@ -1,10 +1,12 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
-import { APIError } from "openai";
+import OpenAI, { APIError } from "openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "./lib/promptArchitecture";
+import { BRIEF_SYSTEM_PROMPT } from "./lib/brief";
 import { openRouterClient } from "./lib/generationRunner";
 import { spendDay } from "./lib/aiSpend";
 
@@ -38,17 +40,6 @@ const questionsJson = (...texts: string[]) => JSON.stringify({ questions: texts.
 async function setup() {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
   const ids = await t.run(async (ctx) => {
-    await ctx.db.insert("promptBlueprints", {
-      slug: DEFAULT_BLUEPRINT_SLUG,
-      version: 1,
-      status: "active",
-      systemInstruction: "Write icebreakers.",
-      safetyChecklist: [],
-      qualityChecklist: [],
-      outputFormatInstruction: "Return JSON.",
-      createdAt: 0,
-      updatedAt: 0,
-    });
     // v1 is a legacy row (only the old `id`, no examples); v2 is the active version.
     const styleV1 = await ctx.db.insert("styles", {
       id: "reflective",
@@ -85,8 +76,13 @@ async function setup() {
 }
 
 describe("prompts use the active style, tone and topic", () => {
-  test("an old version's id builds the prompt from the active version, with its examples", async () => {
+  test("an old version's id builds the prompt from the active version's line, and the examples come from the library, not the style", async () => {
     const { t, styleV1, styleV2, toneId } = await setup();
+    await t.run(async (ctx) => {
+      await ctx.db.patch(styleV1, { brief: "The retired wording." });
+      await ctx.db.patch(styleV2, { brief: "Looks back on something small." });
+      await ctx.db.patch(toneId, { brief: "Kind and unhurried." });
+    });
 
     const prompt = await t.query(internal.internal.generation.buildGenerationPrompt, {
       styleId: styleV1,
@@ -96,9 +92,18 @@ describe("prompts use the active style, tone and topic", () => {
 
     expect(prompt.style._id).toBe(styleV2);
     expect(prompt.style.version).toBe(2);
-    const text = `${prompt.systemPrompt}\n${prompt.userPrompt}`;
-    expect(text).toContain("What small win are you proud of this week?");
-    expect(text).not.toMatch(/Good examples:\n- none/);
+    expect(prompt.systemPrompt).toBe(BRIEF_SYSTEM_PROMPT);
+    // The library holds no questions yet, so none are shown: the example written on the style
+    // row belonged to the old prompt.
+    expect(prompt.userPrompt).toBe(
+      [
+        "Style: Reflective v2. Looks back on something small.",
+        "Tone: Warm. Kind and unhurried.",
+        "",
+        "Write 1 new question for this style and tone.",
+        'Return JSON only, in this shape: {"questions":[{"text":"...?"}]}',
+      ].join("\n"),
+    );
   });
 
   test("an entry with no active version can't build a prompt", async () => {
@@ -577,17 +582,20 @@ describe("active versions: scoping and lookups", () => {
       ctx.db.insert("questions", { text: "What is your favorite breakfast?", status: "public", styleId: styleV1, toneId, ...counters }),
     );
     create.mockResolvedValue(completion("Which breakfast could you eat forever?") as never);
-    const userPrompt = (call: number) => (create.mock.calls[call][0] as { messages: Array<{ content: string }> }).messages[1].content;
+    // The style, tone and topic are in the remix's instructions; the question is all it is sent besides.
+    const sent = (call: number) => (create.mock.calls[call][0] as { messages: Array<{ content: string }> }).messages.map((message) => message.content);
 
     await t.withIdentity(ADMIN).action(api.admin.questions.remixQuestion, { id: questionId });
-    expect(userPrompt(0)).toContain("Style: Reflective v2");
+    // Neither has a brief or a description here, so each one's line is its name again.
+    expect(sent(0)[0]).toContain("\nSTYLE: Reflective v2. Reflective v2\nTONE: Warm. Warm\nTOPIC: Keep the topic of the original text\n");
+    expect(sent(0)[1]).toBe('Remix this question: "What is your favorite breakfast?"');
 
     await t.run(async (ctx) => {
       await ctx.db.patch(styleV2, { status: "archived" });
     });
     await t.withIdentity(ADMIN).action(api.admin.questions.remixQuestion, { id: questionId });
-    expect(userPrompt(1)).toContain("Style: General");
-    expect(userPrompt(1)).not.toContain("Reflective");
+    expect(sent(1)[0]).toContain("\nSTYLE: Keep the style of the original text\nTONE: Warm. Warm\n");
+    expect(sent(1).join("\n")).not.toContain("Reflective");
   });
 });
 
@@ -1256,5 +1264,171 @@ describe("bulk category updates", () => {
 
     expect(result.success).toBe(true);
     expect(await t.run(async (ctx) => ctx.db.get(questionId))).toMatchObject({ style: "gym-only", styleId: orgStyleId });
+  });
+});
+
+describe("every path that writes questions sends the short brief", () => {
+  const ME = { subject: "me-clerk", tokenIdentifier: "test|me-clerk", email: "me@example.com" };
+  // What only the old prompt said: its headings, and the fields and the blueprint it was built from.
+  const OLD_PROMPT = [
+    "Structural instruction:",
+    "Cognitive move:",
+    "Quality checklist:",
+    "Open with the words Looking back",
+    "Recall and compare",
+    "Checklist item from the blueprint",
+  ];
+  const THREE_QUESTIONS = questionsJson("What made you laugh this week?", "Which snack do you always come back to?", "What song is stuck in your head?");
+  const sent = (call = 0) => (create.mock.calls[call][0] as { messages: Array<{ role: string; content: string }> }).messages;
+
+  beforeEach(() => {
+    // No scheduled embedding job runs here, and none could reach the provider if one did.
+    vi.spyOn(OpenAI.Embeddings.prototype, "create").mockRejectedValue(new Error("unexpected embedding call"));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  /**
+   * One live style and tone that each have a line, the fields and the blueprint the old prompt
+   * read, and a daily-email reader who manages a paid team.
+   */
+  async function app() {
+    const s = await setup();
+    const organizationId = await s.t.run(async (ctx) => {
+      await ctx.db.patch(s.styleV2, {
+        brief: "Looks back on something small.",
+        structuralInstruction: "Open with the words Looking back.",
+        cognitiveMove: "Recall and compare.",
+      });
+      await ctx.db.patch(s.toneId, { brief: "Kind and unhurried." });
+      await ctx.db.insert("promptBlueprints", {
+        slug: DEFAULT_BLUEPRINT_SLUG,
+        version: 1,
+        status: "active",
+        systemInstruction: "Checklist item from the blueprint.",
+        safetyChecklist: ["Checklist item from the blueprint."],
+        qualityChecklist: ["Checklist item from the blueprint."],
+        outputFormatInstruction: "Checklist item from the blueprint.",
+        createdAt: 0,
+        updatedAt: 0,
+      });
+      const meId = await ctx.db.insert("users", { email: ME.email, clerkId: ME.subject, newsletterSubscriptionStatus: "subscribed" });
+      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
+      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
+      return orgId;
+    });
+    return { ...s, organizationId };
+  }
+  type App = Awaited<ReturnType<typeof app>>;
+  const savedRuns = (s: App) => s.t.run(async (ctx) => ctx.db.query("generationRuns").collect());
+  const cell = { ySlug: "reflective", xSlug: "warm", styleSlug: "reflective", toneSlug: "warm" };
+  const fill = (s: App, topicSlug?: string) =>
+    s.t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, { organizationId: s.organizationId, axisY: "style", axisX: "tone", topicSlug, cells: [cell] });
+  const teamTopicPreview = (s: App) =>
+    s.t.withIdentity(ME).action(api.core.teamPromptActions.previewTopicQuestions, {
+      organizationId: s.organizationId,
+      name: "Recovery",
+      guidance: "Talk about rest days",
+      styleId: s.styleV2,
+      toneId: s.toneId,
+    });
+
+  // Each path from the entry point the app or its schedule calls, with the purpose its run records.
+  const PATHS: Array<[string, string, (s: App) => Promise<unknown>]> = [
+    ["the feed", "feed", (s) => s.t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { anchoredStyleId: s.styleV2, anchoredToneId: s.toneId })],
+    ["the nightly pool", "nightly_pool", (s) => s.t.action(internal.internal.ai.generateNightlyQuestionPool, { targetCount: 1, maxCombinations: 1 })],
+    ["the daily email", "newsletter", (s) => s.t.action(internal.internal.newsletter.getQuestionForUser, { email: ME.email })],
+    ["a grid fill", "feed", (s) => fill(s)],
+    ["an admin preview", "admin_preview", (s) => s.t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId: s.styleV2, toneId: s.toneId })],
+    ["a team's topic preview", "admin_preview", teamTopicPreview],
+  ];
+
+  test.each(PATHS)(
+    "%s sends the brief's instructions and opens with the style's and tone's lines, with nothing from the old prompt, and its run is labelled brief-v2",
+    async (_path, purpose, generate) => {
+      const s = await app();
+      create.mockResolvedValue(completion(THREE_QUESTIONS) as never);
+
+      await generate(s);
+
+      expect(create).toHaveBeenCalledTimes(1);
+      const [system, user] = sent();
+      expect(system).toEqual({ role: "system", content: BRIEF_SYSTEM_PROMPT });
+      expect(user.role).toBe("user");
+      expect(user.content.split("\n").slice(0, 2)).toEqual(["Style: Reflective v2. Looks back on something small.", "Tone: Warm. Kind and unhurried."]);
+      for (const old of OLD_PROMPT) expect(`${system.content}\n${user.content}`).not.toContain(old);
+      // The run names the wording that wrote its prompt, and no blueprint.
+      expect((await savedRuns(s)).map((run) => [run.purpose, run.status, run.promptLabel, run.blueprintId, run.assembledPrompt])).toEqual([
+        [purpose, "succeeded", "brief-v2", undefined, `${BRIEF_SYSTEM_PROMPT}\n\n${user.content}`],
+      ]);
+    },
+  );
+
+  test("a team's topic preview passes the team's words as notes, after the style's and tone's lines", async () => {
+    const s = await app();
+    create.mockResolvedValue(completion(THREE_QUESTIONS) as never);
+
+    await teamTopicPreview(s);
+
+    expect(sent()[1].content).toBe(
+      [
+        "Style: Reflective v2. Looks back on something small.",
+        "Tone: Warm. Kind and unhurried.",
+        "",
+        "Notes from the team or admin:",
+        "Team conversation topic: Recovery",
+        "Desired outcome: Talk about rest days",
+        "Return distinct options that a facilitator can ask exactly as written.",
+        "",
+        "Write 3 new questions for this style and tone.",
+        'Return JSON only, in this shape: {"questions":[{"text":"...?"}]}',
+      ].join("\n"),
+    );
+  });
+
+  test("a grid fill with no topic sends no topic line and saves the question with none, and with a topic sends its line and saves the question under it", async () => {
+    const s = await app();
+    // A topic is in the catalog, and a fill that names none no longer picks one.
+    await s.t.run(async (ctx) =>
+      ctx.db.insert("topics", { id: "weekends", slug: "weekends", name: "Weekends", brief: "Days off and what fills them.", status: "active", version: 1 }),
+    );
+    create
+      .mockResolvedValueOnce(completion(questionsJson("What made you laugh this week?")) as never)
+      .mockResolvedValueOnce(completion(questionsJson("What does a slow Sunday look like for you?")) as never);
+
+    expect(await fill(s)).toMatchObject({ filledCells: 1 });
+    expect(await fill(s, "weekends")).toMatchObject({ filledCells: 1 });
+
+    const lines = (call: number) => sent(call)[1].content.split("\n");
+    expect(sent(0)[1].content).not.toContain("Topic:");
+    expect(lines(0).slice(-2)[0]).toBe("Write 1 new question for this style and tone.");
+    expect(lines(1)[2]).toBe("Topic: Weekends. Days off and what fills them.");
+    expect(lines(1).slice(-2)[0]).toBe("Write 1 new question for this style, tone and topic.");
+    const saved = await s.t.run(async (ctx) => ctx.db.query("questions").collect());
+    expect(saved.map((q) => [q.text, q.topicSlug, q.topic, q.topicId !== undefined])).toEqual([
+      ["What made you laugh this week?", undefined, undefined, false],
+      ["What does a slow Sunday look like for you?", "weekends", "weekends", true],
+    ]);
+    expect((await savedRuns(s)).map((run) => [run.topicSlug, run.promptLabel])).toEqual([
+      [undefined, "brief-v2"],
+      ["weekends", "brief-v2"],
+    ]);
+  });
+
+  test.each<[string, (s: App, questionId: Id<"questions">) => Promise<string>]>([
+    ["an admin's remix", (s, questionId) => s.t.withIdentity(ADMIN).action(api.admin.questions.remixQuestion, { id: questionId })],
+    ["a person's remix", (s, questionId) => s.t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId, styleId: s.styleV2, toneId: s.toneId })],
+  ])("%s is written from the same lines, with nothing from the old prompt, and its run is labelled remix-v2", async (_which, remix) => {
+    const s = await app();
+    const questionId = await s.t.run(async (ctx) =>
+      ctx.db.insert("questions", { text: "What is your favorite breakfast?", status: "public", styleId: s.styleV2, toneId: s.toneId, ...counters }),
+    );
+    create.mockResolvedValue(completion("Which breakfast could you eat forever?") as never);
+
+    await expect(remix(s, questionId)).resolves.toBe("Which breakfast could you eat forever?");
+
+    const prompt = sent().map((message) => message.content).join("\n");
+    expect(prompt).toContain("\nSTYLE: Reflective v2. Looks back on something small.\nTONE: Warm. Kind and unhurried.\n");
+    for (const old of OLD_PROMPT) expect(prompt).not.toContain(old);
+    expect((await savedRuns(s)).map((run) => [run.purpose, run.promptLabel, run.blueprintId])).toEqual([["remix", "remix-v2", undefined]]);
   });
 });

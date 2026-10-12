@@ -41,7 +41,8 @@ const evalBatch = v.object({
   settings: v.object({ maxOutputTokens: v.number(), unusableOutputAttempts: v.number(), neighbours: v.number() }),
   /** The system and user prompt the model got, hashed, so runs can tell a prompt change from noise. */
   promptHash: v.string(),
-  blueprint: v.object({ slug: v.string(), version: v.number() }),
+  /** Which wording wrote the prompt: the app's brief, like "brief-v2", or "given" when the run gave its own. */
+  promptLabel: v.string(),
   style: taxonomyRef,
   tone: taxonomyRef,
   topic: v.union(v.null(), taxonomyRef),
@@ -144,6 +145,8 @@ export const generateEvalBatch = internalAction({
       spendClass: "system",
       model: args.model,
       promptOverride: args.prompt,
+      // One draw of examples per seed, so a rerun and a replicate run ask the same thing.
+      sampleSeed: createHash("sha256").update(args.seedId).digest().readUInt32LE(0) >>> 1,
     });
     const { prompt } = preview;
     const definitions = await ctx.runQuery(internal.internal.evalData.evalDefinitions, {
@@ -181,7 +184,7 @@ export const generateEvalBatch = internalAction({
         neighbours: neighbourCount,
       },
       promptHash: createHash("sha256").update(`${prompt.systemPrompt}\n\n${prompt.userPrompt}`).digest("hex").slice(0, 16),
-      blueprint: { slug: prompt.blueprint.slug, version: prompt.blueprint.version },
+      promptLabel: prompt.promptLabel,
       style: { slug: prompt.style.slug, version: prompt.style.version, name: prompt.style.name },
       tone: { slug: prompt.tone.slug, version: prompt.tone.version, name: prompt.tone.name },
       topic: prompt.topic ? { slug: prompt.topic.slug, version: prompt.topic.version, name: prompt.topic.name } : null,

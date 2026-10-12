@@ -2,7 +2,7 @@
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { getFunctionName } from "convex/server";
-import { APIConnectionError, APIConnectionTimeoutError, APIError, OpenAIError } from "openai";
+import OpenAI, { APIConnectionError, APIConnectionTimeoutError, APIError, OpenAIError } from "openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -13,7 +13,7 @@ import * as aiRateLimitLib from "./lib/aiRateLimit";
 import { ensureAiRateLimit, ensureAiUnansweredLeft, holdAiUnanswered, isAiStopError, releaseAiUnanswered } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
 import { GENERATION_MODEL, maxOutputTokens, openRouterClient } from "./lib/generationRunner";
-import { clampBatchSize, DEFAULT_BLUEPRINT_SLUG } from "./lib/promptArchitecture";
+import { clampBatchSize } from "./lib/promptArchitecture";
 
 // The model call is the only network edge: stub it on the shared client so the rest
 // of the pipeline (budget check, run bookkeeping, spend ledger) runs for real.
@@ -81,17 +81,6 @@ async function throughBackoff<T>(action: Promise<T>): Promise<T> {
 async function setup() {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
   const ids = await t.run(async (ctx) => {
-    await ctx.db.insert("promptBlueprints", {
-      slug: DEFAULT_BLUEPRINT_SLUG,
-      version: 1,
-      status: "active",
-      systemInstruction: "",
-      safetyChecklist: [],
-      qualityChecklist: [],
-      outputFormatInstruction: "",
-      createdAt: 0,
-      updatedAt: 0,
-    });
     const meId = await ctx.db.insert("users", { email: ME.email, clerkId: ME.subject });
     const styleId = await ctx.db.insert("styles", {
       id: "reflective",
@@ -182,8 +171,8 @@ const TEN_QUESTIONS = JSON.stringify({
 function askedFor() {
   return create.mock.calls.map((call: unknown[]) => {
     const { max_tokens, messages } = call[0] as { max_tokens: number; messages: Array<{ content: string }> };
-    const asked = /Generate (\S+) ice-breaker questions/.exec(messages[1].content);
-    if (!asked) throw new Error("askedFor: the user prompt no longer says \"Generate N ice-breaker questions\"");
+    const asked = /^Write (\S+) new questions? for this style/m.exec(messages[1].content);
+    if (!asked) throw new Error("askedFor: the user prompt no longer has a line that starts \"Write N new questions for this style\"");
     return [max_tokens, asked[1]];
   });
 }
@@ -233,11 +222,9 @@ describe("recording what a completion cost", () => {
   test("usage for a run that no longer exists still lands in the ledger", async () => {
     const { t } = await setup();
     const runId = await t.run(async (ctx) => {
-      const blueprint = await ctx.db.query("promptBlueprints").first();
       const id = await ctx.db.insert("generationRuns", {
         status: "running",
         purpose: "feed",
-        blueprintId: blueprint!._id,
         batchSize: 1,
         model: "@preset/break-the-ice-berg-default",
         temperature: 0.9,
@@ -450,21 +437,32 @@ describe("matrix fill", () => {
     expect(await ledger(cell.t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
   });
 
-  test("a single-cell fill refuses a count that isn't a number before it picks a topic", async () => {
-    // No topic is named, and the catalog has none to pick from.
+  test("a single-cell fill given no topic refuses a count that isn't a number, and with a count it can use writes the question with no topic", async () => {
+    // No topic is named, and the catalog has none: a fill no longer picks one.
     const { t, orgId } = await paidOrgMember();
-    // Only reached if the fill isn't refused.
     create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+    vi.spyOn(OpenAI.Embeddings.prototype, "create").mockRejectedValue(new Error("unexpected embedding call"));
     const fill = (count?: number) =>
       t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "reflective", toneSlug: "warm", count });
 
-    // With a count it can use, the fill gets as far as the missing topic.
-    await expect(fill()).rejects.toThrow(/No active topics/);
+    // Refused before a cell is claimed or anything is sent.
     for (const count of [Number.NaN, Infinity, -Infinity]) {
       const error = await fill(count).catch((e: unknown) => e);
       expect(convexErrorData(error)).toMatchObject({ code: ERROR_CODES.AI_COUNT_INVALID });
     }
     expect(create).not.toHaveBeenCalled();
+    expect(await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
+
+    // With a count it can use, the question is written for the style and tone alone.
+    const filled = await fill();
+    expect(filled.count).toBe(1);
+    expect(askedFor()).toEqual([[2500, "1"]]);
+    const { messages } = create.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    expect(messages[1].content).not.toContain("Topic:");
+    expect(messages[1].content).toContain("\nWrite 1 new question for this style and tone.\n");
+    const saved = await t.run(async (ctx) => await ctx.db.get(filled.questionIds[0]));
+    expect(saved).toMatchObject({ styleSlug: "reflective", toneSlug: "warm", status: "public" });
+    expect([saved?.topicSlug, saved?.topicId, saved?.topic]).toEqual([undefined, undefined, undefined]);
   });
 
   test("a single-cell fill refuses a count that isn't a number while another fill holds the cell, and leaves that claim in place", async () => {
@@ -918,11 +916,9 @@ describe("delta review follow-ups", () => {
     const { t } = await setup();
     const day = spendDay(Date.now());
     const runId = await t.run(async (ctx) => {
-      const blueprintId = (await ctx.db.query("promptBlueprints").first())!._id;
       return await ctx.db.insert("generationRuns", {
         status: "running",
         purpose: "remix",
-        blueprintId,
         batchSize: 1,
         model: "@preset/break-the-ice-berg-default",
         temperature: 0.9,

@@ -411,15 +411,22 @@ function parseCandidates(
 
 type GenerationPurpose = "feed" | "admin_preview" | "admin_accept" | "nightly_pool" | "newsletter" | "remix";
 
+/** What a run records when the eval harness gave the prompt, in place of the brief's label. */
+export const GIVEN_PROMPT_LABEL = "given";
+/** What a remix run records: the remix has its own short prompt, built from the same lines. */
+export const REMIX_PROMPT_LABEL = "remix-v2";
+
+/** A fresh draw of which of the owner's decisions a prompt shows (buildGenerationPrompt). */
+function randomSampleSeed(): number {
+  return Math.floor(Math.random() * 2 ** 31);
+}
+
 type GenerationPrompt = {
   batchSize: number;
   systemPrompt: string;
   userPrompt: string;
-  blueprint: {
-    _id: Id<"promptBlueprints">;
-    slug: string;
-    version: number;
-  };
+  /** Which wording wrote the prompt, like "brief-v2". */
+  promptLabel: string;
   style: {
     _id: Id<"styles">;
     slug: string;
@@ -455,7 +462,7 @@ async function createRun(
   return await ctx.runMutation(internal.internal.generation.createGenerationRun, {
     purpose: args.purpose,
     requestedByUserId: args.requestedByUserId,
-    blueprintId: prompt.blueprint._id,
+    promptLabel: prompt.promptLabel,
     styleId: prompt.style._id,
     toneId: prompt.tone._id,
     topicId: prompt.topic?._id,
@@ -486,7 +493,6 @@ export async function runPersistedQuestionGeneration(
     topicId?: Id<"topics">;
     topicSlug?: string;
     batchSize?: number;
-    blueprintSlug?: string;
     excludedQuestions?: string[];
     currentQuestion?: string;
     userContext?: string;
@@ -525,10 +531,10 @@ export async function runPersistedQuestionGeneration(
     topicId: args.topicId,
     topicSlug: args.topicSlug,
     batchSize: args.batchSize,
-    blueprintSlug: args.blueprintSlug,
     excludedQuestions: args.excludedQuestions,
     currentQuestion: args.currentQuestion,
     userContext: args.userContext,
+    sampleSeed: randomSampleSeed(),
   });
 
   assertPromptSize(prompt.systemPrompt.length + prompt.userPrompt.length);
@@ -628,12 +634,16 @@ export async function runPreviewQuestionGeneration(
     toneSlug?: string;
     topicId?: Id<"topics">;
     topicSlug?: string;
-    blueprintSlug?: string;
     excludedQuestions?: string[];
     currentQuestion?: string;
     userContext?: string;
     temperature?: number;
     batchSize?: number;
+    /**
+     * Which of the owner's decisions the prompt shows. Drawn at random unless given; the eval
+     * harness gives one per seed, so a rerun asks the same thing.
+     */
+    sampleSeed?: number;
     /** "system" for admin tools; team previews are user spend. */
     spendClass?: SpendClass;
     /** An OpenRouter model to use instead of GENERATION_MODEL. Only the eval harness sets it. */
@@ -667,12 +677,14 @@ export async function runPreviewQuestionGeneration(
     topicId: args.topicId,
     topicSlug: args.topicSlug,
     batchSize: args.batchSize ?? 1,
-    blueprintSlug: args.blueprintSlug,
     excludedQuestions: args.excludedQuestions,
     currentQuestion: args.currentQuestion,
     userContext: args.userContext,
+    sampleSeed: args.sampleSeed ?? randomSampleSeed(),
   });
-  const prompt: GenerationPrompt = args.promptOverride ? { ...built, ...args.promptOverride } : built;
+  const prompt: GenerationPrompt = args.promptOverride
+    ? { ...built, ...args.promptOverride, promptLabel: GIVEN_PROMPT_LABEL }
+    : built;
 
   assertPromptSize(prompt.systemPrompt.length + prompt.userPrompt.length);
 
@@ -745,11 +757,6 @@ export async function runRemixQuestion(
   const spendClass = args.spendClass ?? "user";
   await ensureAiBudget(ctx, spendClass);
 
-  const blueprint = await ctx.runQuery(internal.internal.generation.getDefaultPromptBlueprint, {});
-  if (!blueprint) {
-    throw new Error("Default prompt blueprint not found");
-  }
-
   const prompts = buildRemixPrompts({
     questionText: args.questionText,
     style: args.style,
@@ -763,7 +770,7 @@ export async function runRemixQuestion(
     const runId = await ctx.runMutation(internal.internal.generation.createGenerationRun, {
       purpose: "remix",
       requestedByUserId: args.requestedByUserId,
-      blueprintId: blueprint._id,
+      promptLabel: REMIX_PROMPT_LABEL,
       styleId: args.style?._id,
       toneId: args.tone?._id,
       topicId: args.topic?._id,

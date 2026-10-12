@@ -18,9 +18,8 @@ export function recordSuccess(batches, seed, result, commit) {
   batches.set(seed.id, { seed, ok: true, commit, failures: batches.get(seed.id)?.failures ?? [], result });
 }
 
-/** `stage` is given when `message` is not the error's own text (generate.mjs --brief), so the step is still the error's. */
-export function recordFailure(batches, seed, message, commit, stage = classifyFailure(message)) {
-  const failure = { stage, commit, message };
+export function recordFailure(batches, seed, message, commit) {
+  const failure = { stage: classifyFailure(message), commit, message };
   batches.set(seed.id, { seed, ok: false, failures: [...(batches.get(seed.id)?.failures ?? []), failure] });
 }
 

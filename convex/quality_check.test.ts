@@ -8,6 +8,7 @@ import schema from "./schema";
 import { ERROR_MESSAGES } from "./constants";
 import { QUALITY_CHECK_BACKFILL_LIMIT, QUALITY_CHECK_BACKFILL_TIME_BUDGET_MS, QUALITY_CHECK_RETRY_DELAY_MS } from "./internal/qualityCheck";
 import { MAX_PROMPT_CHARS, spendDay } from "./lib/aiSpend";
+import { BRIEF_PROMPT_LABEL } from "./lib/brief";
 import { openRouterClient } from "./lib/generationRunner";
 import { DEFAULT_BLUEPRINT_SLUG } from "./lib/promptArchitecture";
 import {
@@ -412,7 +413,8 @@ describe("checking a question in record mode", () => {
       batchSize: 1,
       temperature: 0,
     });
-    expect(run.blueprintId).toBeUndefined();
+    // A check is not written by the brief or from a blueprint, so its run names neither.
+    expect([run.promptLabel, run.blueprintId]).toEqual([undefined, undefined]);
     // Charged to system spend, whoever's request generated the question.
     expect(await spend(s)).toEqual([["system", 0.006, 1]]);
   });
@@ -428,11 +430,16 @@ describe("checking a question in record mode", () => {
     const params = create.mock.calls[0][0] as { model: string; max_tokens: number; temperature: number; messages: Array<{ content: string }> };
     expect(params).toMatchObject({ model: QUALITY_CHECK_MODEL, max_tokens: 1200, temperature: 0, response_format: { type: "json_object" } });
     const prompt = params.messages.map((message) => message.content).join("\n");
-    expect(prompt).toContain('Question (a JSON string):\n"What small thing made you smile today?"');
-    expect(prompt).toContain("Style: Reflective\nLooks back on something small. Structure: Ask for a reflection");
-    expect(prompt).toContain("Tone: Warm\nBe warm");
+    // Each is described by the one line the generator was given: this style has a description
+    // and no brief yet, and this tone has neither, so it goes by its name.
+    expect(params.messages[1].content).toBe(
+      'Style: Reflective\nLooks back on something small.\n\nTone: Warm\nWarm\n\nTopic: none\n\nQuestion (a JSON string):\n"What small thing made you smile today?"',
+    );
+    // The old template's structure and guidance are no longer shown.
+    expect(prompt).not.toContain("Ask for a reflection");
+    expect(prompt).not.toContain("Be warm");
     expect(prompt).not.toContain("The generator's own reasoning.");
-    expect((await question(s, questionId))?.qualityCheck).toMatchObject({ verdict: "keep", wouldPublish: true });
+    expect((await question(s, questionId))?.qualityCheck).toMatchObject({ verdict: "keep", wouldPublish: true, promptVersion: 2 });
   });
 
   test("a question published at once keeps its status whatever the verdict", async () => {
@@ -709,7 +716,8 @@ describe("checking a question in record mode", () => {
     expect(await check(s, withTopic)).toBe("checked");
     expect(await check(s, topicGone)).toBe("checked");
 
-    expect(promptOf(0)).toContain("Topic: Food. Cooking and eating. Covers: snacks, recipes.\n\nQuestion (a JSON string):\n\"What snack do you always pack?\"");
+    // The topic's line, with no list of what it covers.
+    expect(promptOf(0)).toContain("\n\nTopic: Food. Cooking and eating.\n\nQuestion (a JSON string):\n\"What snack do you always pack?\"");
     expect(promptOf(1)).toContain('Topic: none\n\nQuestion (a JSON string):\n"What did you pack last time?"');
     expect((await runs(s)).map((run) => [run.sourceQuestionId, run.topicSlug])).toEqual([
       [withTopic, "food"],
@@ -767,17 +775,6 @@ describe("the four ways a question is generated, in record mode", () => {
     process.env.QUALITY_CHECK_MODE = "record";
     const s = await setup();
     const ids = await s.t.run(async (ctx) => {
-      await ctx.db.insert("promptBlueprints", {
-        slug: DEFAULT_BLUEPRINT_SLUG,
-        version: 1,
-        status: "active",
-        systemInstruction: "",
-        safetyChecklist: [],
-        qualityChecklist: [],
-        outputFormatInstruction: "",
-        createdAt: 0,
-        updatedAt: 0,
-      });
       const meId = await ctx.db.insert("users", { email: ME.email, clerkId: ME.subject });
       return { meId };
     });
@@ -1564,18 +1561,23 @@ describe("who gets to read a verdict", () => {
   });
 });
 
-describe("a generation's run still names its blueprint", () => {
-  test("only a check's run may be saved without one", async () => {
+describe("a generation's run names the wording that wrote its prompt", () => {
+  test("a generation's run is saved with its prompt's label and needs no blueprint, and a check's run has neither", async () => {
     const s = await setup();
     const run = { batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "" };
 
-    await expect(s.t.mutation(internal.internal.generation.createGenerationRun, { ...run, purpose: "feed" })).rejects.toThrow(/A feed run needs its blueprint/);
-    await expect(s.t.mutation(internal.internal.generation.createGenerationRun, { ...run, purpose: "quality_check" })).resolves.toBeDefined();
+    const feedRunId = await s.t.mutation(internal.internal.generation.createGenerationRun, { ...run, purpose: "feed", promptLabel: BRIEF_PROMPT_LABEL });
+    const checkRunId = await s.t.mutation(internal.internal.generation.createGenerationRun, { ...run, purpose: "quality_check" });
+
+    expect((await runs(s)).map((row) => [row._id, row.purpose, row.promptLabel, row.blueprintId])).toEqual([
+      [feedRunId, "feed", "brief-v2", undefined],
+      [checkRunId, "quality_check", undefined, undefined],
+    ]);
   });
 });
 
 describe("generation runs, now that a run can be a check with no blueprint", () => {
-  test("a check's run reads back like any other run, and a generation's run still keeps its blueprint", async () => {
+  test("a check's run reads back like any other run, and a run that is still given a blueprint keeps it", async () => {
     const s = await setup();
     const blueprintId = await s.t.run((ctx) =>
       ctx.db.insert("promptBlueprints", {

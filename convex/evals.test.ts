@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import schema from "./schema";
 import { spendDay, worstCaseCallCostUsd } from "./lib/aiSpend";
-import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "./lib/promptArchitecture";
+import { fingerprintText } from "./lib/promptArchitecture";
 import { checkEvalCandidates, evalFingerprint } from "./lib/evalChecks";
 import { classifyFailure } from "../evals/runRecord.mjs";
 import { GENERATION_MODEL, openRouterClient } from "./lib/generationRunner";
@@ -16,6 +16,8 @@ let create: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   create = vi.spyOn(openRouterClient.chat.completions, "create");
+  // No test reaches the real embedding service; the neighbour tests set their own answers.
+  vi.spyOn(OpenAI.Embeddings.prototype, "create").mockResolvedValue({ data: [{ embedding: atCosine(1) }] } as never);
   process.env.EVALS_ENABLED = "true";
 });
 afterEach(() => {
@@ -42,18 +44,8 @@ function completion(content: string) {
 
 async function setup() {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+  // No prompt blueprint: the brief needs none.
   await t.run(async (ctx) => {
-    await ctx.db.insert("promptBlueprints", {
-      slug: DEFAULT_BLUEPRINT_SLUG,
-      version: 1,
-      status: "active",
-      systemInstruction: "Write icebreakers.",
-      safetyChecklist: [],
-      qualityChecklist: [],
-      outputFormatInstruction: "Return JSON.",
-      createdAt: 0,
-      updatedAt: 0,
-    });
     await ctx.db.insert("styles", {
       id: "desert-island",
       slug: "desert-island",
@@ -259,30 +251,45 @@ describe("eval data", () => {
 
   test("definitions describe the exact versions a prompt used, and stay short", async () => {
     const t = await setup();
-    const { styleId, toneId } = await t.run(async (ctx) => ({
+    const { archivedStyleId, styleId, toneId } = await t.run(async (ctx) => ({
+      archivedStyleId: (await ctx.db.query("styles").filter((q) => q.eq(q.field("version"), 1)).first())!._id,
       styleId: (await ctx.db.query("styles").filter((q) => q.eq(q.field("version"), 2)).first())!._id,
       toneId: (await ctx.db.query("tones").first())!._id,
     }));
 
     const definitions = await t.query(internal.internal.evalData.evalDefinitions, { styleId, toneId });
 
-    expect(definitions.style).toEqual({
-      slug: "desert-island",
-      name: "Desert Island",
-      definition: "Prioritization game. Structure: You can only bring ___.",
-    });
-    expect(definitions.tone.definition.length).toBeLessThanOrEqual(300);
-    expect(definitions.tone.definition.endsWith("…")).toBe(true);
+    // Neither row has a brief yet: the style falls back to its description, and the tone, which
+    // has no description either, to its name. The old guidance for the AI is not read.
+    expect(definitions.style).toEqual({ slug: "desert-island", name: "Desert Island", definition: "Prioritization game." });
+    expect(definitions.tone).toEqual({ slug: "witty", name: "Witty", definition: "Witty" });
     expect(definitions.topic).toBeNull();
+    // The version asked for, not the latest one of its slug.
+    const archived = await t.query(internal.internal.evalData.evalDefinitions, { styleId: archivedStyleId, toneId });
+    expect(archived.style).toEqual({ slug: "desert-island", name: "Desert Island v1", definition: "Desert Island v1" });
+
+    // A long line is cut at 300 characters, the last of them an ellipsis.
+    const longLine = "Be clever. ".repeat(60).trim();
+    await t.run((ctx) => ctx.db.patch(toneId, { brief: `${longLine}\n` }));
+    const cut = await t.query(internal.internal.evalData.evalDefinitions, { styleId, toneId });
+    expect(cut.tone.definition).toBe(`${longLine.slice(0, 299)}…`);
+    expect(cut.tone.definition).toHaveLength(300);
+    // One of exactly 300 characters is left whole.
+    const exact = "x".repeat(300);
+    await t.run((ctx) => ctx.db.patch(toneId, { brief: exact }));
+    expect((await t.query(internal.internal.evalData.evalDefinitions, { styleId, toneId })).tone.definition).toBe(exact);
   });
 
-  test("definitions use the fields the generator is given", async () => {
+  test("a definition is the entry's brief line, with a style's set form, and none of the old template fields", async () => {
     const t = await setup();
     const ids = await t.run(async (ctx) => ({
       styleId: await ctx.db.insert("styles", {
         id: "open-ended",
         slug: "open-ended",
         name: "Open Ended",
+        brief: "The person shares a small story of their own.",
+        form: "Starts 'Tell us about'.",
+        description: "Not this description.",
         structure: "Legacy structure.",
         structuralInstruction: "Ask one open question.",
         example: "Legacy example.",
@@ -296,9 +303,10 @@ describe("eval data", () => {
         id: "cozy",
         slug: "cozy",
         name: "Cozy",
-        description: "Warm and\n  unhurried.",
-        aiGuidance: "Not this.",
-        promptGuidanceForAI: "Nor this.",
+        brief: "Warm and\n  unhurried.",
+        description: "Not this.",
+        aiGuidance: "Nor this.",
+        promptGuidanceForAI: "Nor this either.",
         languageCues: ["soft", "homey"],
         color: "#444444",
         icon: "coffee",
@@ -309,6 +317,7 @@ describe("eval data", () => {
         id: "food",
         slug: "food",
         name: "Food",
+        brief: "Everyday eating.",
         description: "Cooking and eating.",
         scopeBoundaries: ["snacks", "recipes"],
         example: "Your go-to snack.",
@@ -320,9 +329,21 @@ describe("eval data", () => {
     const definitions = await t.query(internal.internal.evalData.evalDefinitions, ids);
 
     expect(definitions).toEqual({
-      style: { slug: "open-ended", name: "Open Ended", definition: "Structure: Ask one open question. Example: What made you smile today?" },
-      tone: { slug: "cozy", name: "Cozy", definition: "Warm and unhurried. Sounds: soft, homey." },
-      topic: { slug: "food", name: "Food", definition: "Cooking and eating. Covers: snacks, recipes." },
+      style: { slug: "open-ended", name: "Open Ended", definition: "The person shares a small story of their own. Set form: Starts 'Tell us about'." },
+      tone: { slug: "cozy", name: "Cozy", definition: "Warm and unhurried." },
+      topic: { slug: "food", name: "Food", definition: "Everyday eating." },
+    });
+
+    // Without a brief each falls back to its description, and a style keeps its set form.
+    await t.run(async (ctx) => {
+      await ctx.db.patch(ids.styleId, { brief: undefined });
+      await ctx.db.patch(ids.toneId, { brief: undefined });
+      await ctx.db.patch(ids.topicId, { brief: undefined });
+    });
+    expect(await t.query(internal.internal.evalData.evalDefinitions, ids)).toEqual({
+      style: { slug: "open-ended", name: "Open Ended", definition: "Not this description. Set form: Starts 'Tell us about'." },
+      tone: { slug: "cozy", name: "Cozy", definition: "Not this." },
+      topic: { slug: "food", name: "Food", definition: "Cooking and eating." },
     });
   });
 
@@ -340,13 +361,15 @@ describe("eval data", () => {
     expect(classifyFailure(String(error))).toBe("setup");
   });
 
-  test("every example in a definition is one the prompt showed the model", async () => {
+  test("each definition is the line the prompt gave the model, and neither shows the old examples", async () => {
     const t = await setup();
     await t.run(async (ctx) => {
       await ctx.db.insert("styles", {
         id: "open-ended",
         slug: "open-ended",
         name: "Open Ended",
+        brief: "The person shares a small story of their own.",
+        form: "Starts 'Tell us about'.",
         structure: "Ask anything.",
         example: "Legacy example the prompt never shows.",
         examples: [{ text: "What made you smile today?" }],
@@ -378,11 +401,14 @@ describe("eval data", () => {
       topicId: prompt.topic?._id,
     });
 
-    const examples = [definitions.style, definitions.tone, definitions.topic!].flatMap((d) =>
-      [...d.definition.matchAll(/Example: (.+?)$/g)].map((match) => match[1]),
-    );
-    expect(examples).toEqual(["What made you smile today?"]);
-    for (const example of examples) expect(`${prompt.systemPrompt}\n${prompt.userPrompt}`).toContain(example);
+    expect(prompt.userPrompt.split("\n").slice(0, 3)).toEqual([
+      `Style: Open Ended. ${definitions.style.definition}`,
+      `Tone: Witty. ${definitions.tone.definition}`,
+      `Topic: Food. ${definitions.topic!.definition}`,
+    ]);
+    expect(definitions.style.definition).toBe("The person shares a small story of their own. Set form: Starts 'Tell us about'.");
+    const shown = `${prompt.systemPrompt}\n${prompt.userPrompt}\n${JSON.stringify(definitions)}`;
+    for (const old of ["What made you smile today?", "Legacy example", "Topic example", "Ask anything."]) expect(shown).not.toContain(old);
   });
 
   test("approved and legacy status-less questions are neighbours; held-for-review and textless ones are not", async () => {
@@ -524,7 +550,7 @@ describe("generateEvalBatch", () => {
     expect(batch.definitions.topic).toEqual({ slug: "food", name: "Food", definition: "Cooking and eating." });
     expect(batch.temperature).toBe(0.3);
     expect(create.mock.calls[0][0]).toMatchObject({ model: batch.model, temperature: 0.3 });
-    expect(batch.blueprint).toEqual({ slug: DEFAULT_BLUEPRINT_SLUG, version: 1 });
+    expect(batch.promptLabel).toBe("brief-v2");
     expect(batch.candidates).toEqual([
       {
         text: "Which dish would you cook for a stranger on a desert island?",
@@ -720,6 +746,67 @@ describe("generateEvalBatch", () => {
     expect(batch.candidates.map((c) => c.outcome)).toEqual(["saved", "rejected"]);
     const run = await t.run((ctx) => ctx.db.get(batch.runId));
     expect(run?.assembledPrompt).toBe(`${prompt.systemPrompt}\n\n${prompt.userPrompt}`);
+    // The batch and its run say the prompt was not the app's.
+    expect(batch.promptLabel).toBe("given");
+    expect(run?.promptLabel).toBe("given");
+  });
+
+  test("a batch says which wording wrote its prompt, the app's brief unless one was given, and its run needs no blueprint", async () => {
+    const t = await setup();
+    create.mockResolvedValue(completion(questionsJson("Which one book would you bring to a desert island?")) as never);
+    const base = { runLabel: "test", seedId: "s01", styleSlug: "desert-island", toneSlug: "witty", batchSize: 1, neighbours: 0 };
+
+    const brief = await t.action(internal.internal.evals.generateEvalBatch, base);
+    const given = await t.action(internal.internal.evals.generateEvalBatch, {
+      ...base,
+      prompt: { systemPrompt: "You write icebreakers a coach reads out.", userPrompt: "Write 1. Return JSON." },
+    });
+
+    expect(brief.promptLabel).toBe("brief-v2");
+    expect(given.promptLabel).toBe("given");
+    const [system, user] = create.mock.calls[0][0].messages.map((message: { content: string }) => message.content);
+    expect(system).toMatch(/^You write icebreaker questions for Break the Ice\./);
+    // The tone has no brief and no description, so its line is its name.
+    expect(user).toMatch(/^Style: Desert Island\. Prioritization game\.\nTone: Witty\. Witty\n/);
+    const runs = await t.run((ctx) => ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => [run.promptLabel, run.blueprintId])).toEqual([
+      ["brief-v2", undefined],
+      ["given", undefined],
+    ]);
+    expect(await t.run((ctx) => ctx.db.query("promptBlueprints").collect())).toEqual([]);
+  });
+
+  test("a seed id always draws the same examples, whatever the run, and another seed id draws others", async () => {
+    const t = await setup();
+    const kept = Array.from({ length: 14 }, (_, i) => `Which of your ${i + 1} island keepsakes would you save first?`);
+    await t.run(async (ctx) => {
+      const style = (await ctx.db.query("styles").filter((q) => q.eq(q.field("version"), 2)).first())!;
+      for (const text of kept) await ctx.db.insert("questions", { text, styleId: style._id, status: "public", ...counters });
+    });
+    create.mockResolvedValue(completion(questionsJson("Which album would you bring to a desert island?")) as never);
+    const base = { styleSlug: "desert-island", toneSlug: "witty", batchSize: 1, neighbours: 0 };
+
+    const first = await t.action(internal.internal.evals.generateEvalBatch, { ...base, runLabel: "run-a", seedId: "s01" });
+    const replicate = await t.action(internal.internal.evals.generateEvalBatch, { ...base, runLabel: "run-b", seedId: "s01" });
+    const other = await t.action(internal.internal.evals.generateEvalBatch, { ...base, runLabel: "run-a", seedId: "s02" });
+
+    const userPrompts = create.mock.calls.map((call: unknown[]) => (call[0] as { messages: Array<{ content: string }> }).messages[1].content);
+    const examplesOf = (userPrompt: string) =>
+      userPrompt
+        .split("Questions of this style the owner kept, which are already in the library:\n")[1]
+        .split("\n\n")[0]
+        .split("\n")
+        .map((line) => JSON.parse(line.slice(2)) as string);
+    // Ten of the fourteen are shown, so which ten and in what order is a draw.
+    for (const userPrompt of userPrompts) {
+      expect(examplesOf(userPrompt)).toHaveLength(10);
+      expect(new Set(examplesOf(userPrompt)).size).toBe(10);
+      for (const example of examplesOf(userPrompt)) expect(kept).toContain(example);
+    }
+    expect(userPrompts[1]).toBe(userPrompts[0]);
+    expect(replicate.promptHash).toBe(first.promptHash);
+    expect(examplesOf(userPrompts[2])).not.toEqual(examplesOf(userPrompts[0]));
+    expect(other.promptHash).not.toBe(first.promptHash);
   });
 
   test("a batch on a named model sets aside what the default model's prices allow, and settles to the cost reported", async () => {

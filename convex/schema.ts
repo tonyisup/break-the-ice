@@ -145,7 +145,10 @@ export default defineSchema({
     status: generationRunStatus,
     purpose: generationRunPurpose,
     requestedByUserId: v.optional(v.string()),
+    // Runs from before the short brief point at the blueprint their prompt was built from.
     blueprintId: v.optional(v.id("promptBlueprints")),
+    // Which wording wrote the prompt, like "brief-v2" (lib/brief.ts). A check's run has none.
+    promptLabel: v.optional(v.string()),
     styleId: v.optional(v.id("styles")),
     toneId: v.optional(v.id("tones")),
     topicId: v.optional(v.id("topics")),

@@ -2,22 +2,12 @@
 
 import { ConvexError, v } from "convex/values";
 import { action, type ActionCtx } from "../_generated/server";
-import { api, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration, wasCutOffFailure } from "../lib/generationRunner";
 import { ensureAiRateLimit, ensureAiUnansweredLeft, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
 import { ensureAiBudget, keptAiReservation } from "../lib/aiSpendGuard";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
-
-async function pickRandomActiveTopicSlug(ctx: ActionCtx): Promise<string> {
-	const topics = await ctx.runQuery(api.core.topics.getTopics, {});
-	if (topics.length === 0) {
-		throw new Error(
-			"No active topics in the catalog. Add a topic in admin or pick a global topic in the UI.",
-		);
-	}
-	return topics[Math.floor(Math.random() * topics.length)]!.slug;
-}
 
 const axisValidator = v.union(
 	v.literal("style"),
@@ -128,7 +118,7 @@ function questionsPerCell(count: number | undefined): number {
 /**
  * Fill empty cells on the 2D schedule matrix (one generation per visible cell).
  * Each entry matches how the UI buckets questions: same axis-Y slug and axis-X slug,
- * with a shared topic for ALL cells (or random if topicSlug is omitted).
+ * with a shared topic for ALL cells, or no topic when topicSlug is omitted.
  */
 export const fillEmptyCells = action({
 	args: {
@@ -143,7 +133,7 @@ export const fillEmptyCells = action({
 				toneSlug: v.string(),
 			}),
 		),
-		/** Optional: one topic applied to EVERY cell. If omitted, each cell gets a random topic. */
+		/** Optional: one topic applied to EVERY cell. If omitted, the cells are generated with no topic. */
 		topicSlug: v.optional(v.string()),
 		countPerCell: v.optional(v.number()),
 	},
@@ -182,13 +172,12 @@ export const fillEmptyCells = action({
 			args.topicSlug,
 		);
 
+		// A topic is a theme chosen on purpose. With none chosen, a question is written for its
+		// style and tone alone: a topic stacked on at random got questions rejected more often.
+		const effectiveTopic = args.topicSlug || undefined;
+
 		for (const cell of args.cells) {
 			totalCells++;
-
-			const effectiveTopic =
-				args.topicSlug !== undefined && args.topicSlug !== ""
-					? args.topicSlug
-					: await pickRandomActiveTopicSlug(ctx);
 
 			const cellKey = `${cell.ySlug}|${cell.xSlug}`;
 			if (occupied.has(cellKey)) {
@@ -224,7 +213,7 @@ export const fillEmptyCells = action({
 					totalGenerated += result.saveResult.insertedCount;
 					occupied.add(cellKey);
 					console.log(
-						`Filled matrix cell (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug}, topic=${effectiveTopic ?? "random"}) → ${result.saveResult.insertedCount} questions`,
+						`Filled matrix cell (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug}, topic=${effectiveTopic ?? "none"}) → ${result.saveResult.insertedCount} questions`,
 					);
 				} else {
 					skippedExisting++;
@@ -309,10 +298,8 @@ export const fillSingleCell = action({
 
 		const clampedCount = questionsPerCell(args.count);
 
-		const effectiveTopic =
-			args.topicSlug !== undefined && args.topicSlug !== ""
-				? args.topicSlug
-				: await pickRandomActiveTopicSlug(ctx);
+		// As in fillEmptyCells: no topic chosen means no topic.
+		const effectiveTopic = args.topicSlug || undefined;
 
 		if (
 			await publicSlugTripleExists(ctx, {
@@ -324,7 +311,7 @@ export const fillSingleCell = action({
 			return { count: 0, questionIds: [] };
 		}
 
-		const cellKey = `${args.styleSlug}|${args.toneSlug}|${effectiveTopic}`;
+		const cellKey = `${args.styleSlug}|${args.toneSlug}|${effectiveTopic ?? ""}`;
 		const claim = await ctx.runMutation(
 			internal.internal.matrixFillLocks.claimMatrixFillCell,
 			{ organizationId: args.organizationId, cellKey },

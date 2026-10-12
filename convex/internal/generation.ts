@@ -3,14 +3,24 @@ import { api, internal } from "../_generated/api";
 import { internalMutation, internalQuery, QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import {
-  DEFAULT_BLUEPRINT_SLUG,
-  buildGenerationPrompts,
+  BRIEF_KEPT_EXAMPLES,
+  BRIEF_OTHER_STYLE_EXAMPLES,
+  BRIEF_PROMPT_LABEL,
+  BRIEF_REJECTED_EXAMPLES,
+  buildBriefPrompts,
+  seededRandom,
+  shuffled,
+  type BriefExamples,
+} from "../lib/brief";
+import {
   clampBatchSize,
   fingerprintText,
   normalizeQuestion,
   validateGeneratedQuestion,
 } from "../lib/promptArchitecture";
 import { qualityCheckMode } from "../lib/qualityCheck";
+import { isQuestionPublic } from "../lib/questionAccess";
+import { byLatestVersion, latestActiveVersion } from "../lib/taxonomy";
 
 async function getLatestActiveBySlug(
   ctx: QueryCtx,
@@ -29,28 +39,23 @@ async function getLatestActiveBySlug(
 ): Promise<Doc<"topics">>;
 async function getLatestActiveBySlug(
   ctx: QueryCtx,
-  table: "promptBlueprints",
+  table: "styles" | "tones" | "topics",
   slug: string,
-): Promise<Doc<"promptBlueprints">>;
-async function getLatestActiveBySlug(
-  ctx: QueryCtx,
-  table: "styles" | "tones" | "topics" | "promptBlueprints",
-  slug: string,
-) {
+): Promise<Doc<"styles"> | Doc<"tones"> | Doc<"topics">> {
+  // The three tables share these indexes and fields; "styles" stands in for whichever it is.
   const bySlug = await ctx.db
-    .query(table)
+    .query(table as "styles")
     .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
   // Legacy style, tone and topic rows may carry only the old `id` field.
-  const byLegacyId =
-    table === "promptBlueprints"
-      ? []
-      : await ctx.db.query(table as "styles").withIndex("by_my_id", (q) => q.eq("id", slug)).collect();
-  const docs = [...new Map([...bySlug, ...byLegacyId].map((doc) => [doc._id, doc])).values()];
+  const byLegacyId = await ctx.db.query(table as "styles").withIndex("by_my_id", (q) => q.eq("id", slug)).collect();
+  const docs: Array<Doc<"styles"> | Doc<"tones"> | Doc<"topics">> = [
+    ...new Map([...bySlug, ...byLegacyId].map((doc) => [doc._id, doc])).values(),
+  ];
 
   const latest = docs
     .filter((doc) => (doc.status ?? "active") === "active")
-    .sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0];
+    .sort(byLatestVersion)[0];
 
   if (!latest) {
     throw new ConvexError(`No active ${table} entry found for slug "${slug}".`);
@@ -88,7 +93,7 @@ async function getLatestActiveSibling(
     [...siblings.values()]
       .filter((sibling) => sibling.organizationId === doc.organizationId)
       .filter((sibling) => (sibling.status ?? "active") === "active")
-      .sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0] ?? null
+      .sort(byLatestVersion)[0] ?? null
   );
 }
 
@@ -147,37 +152,87 @@ export const getActiveTaxonomyById = internalQuery({
   },
 });
 
-export const getDefaultPromptBlueprint = internalQuery({
-  args: {},
-  returns: v.union(
-    v.null(),
-    v.object({
-      _id: v.id("promptBlueprints"),
-      slug: v.string(),
-      version: v.number(),
-      systemInstruction: v.string(),
-      safetyChecklist: v.array(v.string()),
-      qualityChecklist: v.array(v.string()),
-      outputFormatInstruction: v.string(),
-    }),
-  ),
-  handler: async (ctx) => {
-    try {
-      const blueprint = await getLatestActiveBySlug(ctx, "promptBlueprints", DEFAULT_BLUEPRINT_SLUG);
-      return {
-        _id: blueprint._id,
-        slug: blueprint.slug,
-        version: blueprint.version,
-        systemInstruction: blueprint.systemInstruction,
-        safetyChecklist: blueprint.safetyChecklist,
-        qualityChecklist: blueprint.qualityChecklist,
-        outputFormatInstruction: blueprint.outputFormatInstruction,
-      };
-    } catch {
-      return null;
-    }
-  },
-});
+/** Public questions read per version of a style when looking for examples. */
+const EXAMPLE_POOL = 200;
+/** How far back the rejected examples look, in retired questions of the style. */
+const REJECTED_LOOKBACK = 60;
+/** Public questions read per version of another style, to find one from the shared library. */
+const OTHER_STYLE_POOL = 30;
+
+/**
+ * The owner's decisions the brief shows for a style, read from the library: public questions
+ * of the style, retired ones a reviewer gave a reason for, and one public question from each of
+ * a few other live styles. Only the shared library counts, never a team's or a person's
+ * questions. Which ones are shown is drawn with `sampleSeed`, so one seed gives one prompt.
+ */
+async function readBriefExamples(ctx: QueryCtx, style: Doc<"styles">, sampleSeed: number): Promise<BriefExamples> {
+  const random = seededRandom(sampleSeed);
+  const slugOf = (row: Doc<"styles">) => row.slug ?? row.id;
+  // Never a team's or a person's question, and never a copy that was retired as a duplicate.
+  const inSharedLibrary = (question: Doc<"questions">) =>
+    Boolean(question.text) && !question.organizationId && !question.kind && !question.duplicateOf;
+  // A question keeps the id of the style version it was written for, so every version of a
+  // style is searched. The styles table is a few dozen rows.
+  const allStyles = await ctx.db.query("styles").collect();
+  const versionsOf = (slug: string, organizationId: Doc<"styles">["organizationId"]) =>
+    allStyles.filter((row) => slugOf(row) === slug && row.organizationId === organizationId);
+  const questionsOf = async (rows: Doc<"styles">[], statuses: Array<Doc<"questions">["status"]>, count: number) => {
+    const pages = await Promise.all(
+      rows.flatMap((row) =>
+        statuses.map((status) =>
+          ctx.db
+            .query("questions")
+            .withIndex("by_styleId_status", (q) => q.eq("styleId", row._id).eq("status", status))
+            .order("desc")
+            .take(count),
+        ),
+      ),
+    );
+    return pages.flat().filter(inSharedLibrary);
+  };
+  // A public question is one the lists show: older rows are public with "approved" or no status.
+  const publicOf = async (rows: Doc<"styles">[], count: number) =>
+    (await questionsOf(rows, ["public", "approved", undefined], count)).filter(isQuestionPublic);
+
+  const ownVersions = versionsOf(slugOf(style), style.organizationId);
+  const kept = shuffled(await publicOf(ownVersions, EXAMPLE_POOL), random)
+    .slice(0, BRIEF_KEPT_EXAMPLES)
+    .map((question) => question.text ?? "");
+
+  const retired = (await questionsOf(ownVersions, ["pruned"], REJECTED_LOOKBACK))
+    .sort((a, b) => b._creationTime - a._creationTime)
+    .slice(0, REJECTED_LOOKBACK);
+  const withReasons = (
+    await Promise.all(
+      retired.map(async (question) => {
+        const reviews = await ctx.db
+          .query("pruning")
+          .withIndex("by_questionId_and_status", (q) => q.eq("questionId", question._id).eq("status", "approved"))
+          .collect();
+        const reasons = [...new Set(reviews.flatMap((review) => review.editorialReasons ?? []))];
+        return reasons.length ? [{ text: question.text ?? "", reasons }] : [];
+      }),
+    )
+  ).flat();
+  const rejected = shuffled(withReasons, random).slice(0, BRIEF_REJECTED_EXAMPLES);
+
+  const otherLiveSlugs = [
+    ...new Set(allStyles.filter((row) => !row.organizationId && (row.status ?? "active") === "active").map(slugOf)),
+  ]
+    .filter((slug) => slug !== slugOf(style))
+    .sort();
+  const otherStyles: BriefExamples["otherStyles"] = [];
+  for (const slug of shuffled(otherLiveSlugs, random)) {
+    if (otherStyles.length === BRIEF_OTHER_STYLE_EXAMPLES) break;
+    const versions = versionsOf(slug, undefined);
+    const pool = await publicOf(versions, OTHER_STYLE_POOL);
+    if (pool.length === 0) continue;
+    const picked = pool[Math.floor(random() * pool.length)];
+    otherStyles.push({ text: picked.text ?? "", style: latestActiveVersion(versions)?.name ?? slug });
+  }
+
+  return { kept, rejected, otherStyles };
+}
 
 export const buildGenerationPrompt = internalQuery({
   args: {
@@ -187,21 +242,18 @@ export const buildGenerationPrompt = internalQuery({
     toneSlug: v.optional(v.string()),
     topicId: v.optional(v.id("topics")),
     topicSlug: v.optional(v.string()),
-    blueprintSlug: v.optional(v.string()),
     batchSize: v.optional(v.number()),
     excludedQuestions: v.optional(v.array(v.string())),
     currentQuestion: v.optional(v.string()),
     userContext: v.optional(v.string()),
+    /** Draws which of the owner's decisions the prompt shows. The calling action picks it at random. */
+    sampleSeed: v.optional(v.number()),
   },
   returns: v.object({
     batchSize: v.number(),
     systemPrompt: v.string(),
     userPrompt: v.string(),
-    blueprint: v.object({
-      _id: v.id("promptBlueprints"),
-      slug: v.string(),
-      version: v.number(),
-    }),
+    promptLabel: v.string(),
     style: v.object({
       _id: v.id("styles"),
       slug: v.string(),
@@ -226,39 +278,32 @@ export const buildGenerationPrompt = internalQuery({
   }),
   handler: async (ctx, args) => {
     const batchSize = clampBatchSize(args.batchSize ?? 1);
-    const blueprintSlug = args.blueprintSlug ?? DEFAULT_BLUEPRINT_SLUG;
 
-    const [style, tone, topic, blueprint] = await Promise.all([
+    const [style, tone, topic] = await Promise.all([
       getTaxonomyDoc(ctx, "styles", { id: args.styleId, slug: args.styleSlug }),
       getTaxonomyDoc(ctx, "tones", { id: args.toneId, slug: args.toneSlug }),
       getTaxonomyDoc(ctx, "topics", { id: args.topicId, slug: args.topicSlug }),
-      getLatestActiveBySlug(ctx, "promptBlueprints", blueprintSlug),
     ]);
 
     if (!style || !tone) {
       throw new ConvexError("Style and tone are required to build a generation prompt.");
     }
 
-    const prompts = buildGenerationPrompts({
+    const prompts = buildBriefPrompts({
       style,
       tone,
       topic,
-      blueprint,
       batchSize,
-      excludedQuestions: args.excludedQuestions,
-      currentQuestion: args.currentQuestion,
-      userContext: args.userContext,
+      examples: await readBriefExamples(ctx, style, args.sampleSeed ?? 0),
+      seen: [...(args.excludedQuestions ?? []), ...(args.currentQuestion ? [args.currentQuestion] : [])],
+      notes: args.userContext,
     });
 
     return {
       batchSize,
       systemPrompt: prompts.systemPrompt,
       userPrompt: prompts.userPrompt,
-      blueprint: {
-        _id: blueprint._id,
-        slug: blueprint.slug,
-        version: blueprint.version,
-      },
+      promptLabel: BRIEF_PROMPT_LABEL,
       style: {
         _id: style._id,
         slug: style.slug ?? style.id,
@@ -295,7 +340,10 @@ export const createGenerationRun = internalMutation({
       v.literal("quality_check"),
     ),
     requestedByUserId: v.optional(v.string()),
+    // No caller sends one since the short brief. Still accepted, for an action that started
+    // before a deploy and creates its run after it.
     blueprintId: v.optional(v.id("promptBlueprints")),
+    promptLabel: v.optional(v.string()),
     styleId: v.optional(v.id("styles")),
     toneId: v.optional(v.id("tones")),
     topicId: v.optional(v.id("topics")),
@@ -314,15 +362,12 @@ export const createGenerationRun = internalMutation({
   },
   returns: v.id("generationRuns"),
   handler: async (ctx, args) => {
-    // Only a check has no blueprint: a generation's run always records the one its prompt came from.
-    if (args.purpose !== "quality_check" && !args.blueprintId) {
-      throw new Error(`A ${args.purpose} run needs its blueprint`);
-    }
     return await ctx.db.insert("generationRuns", {
       status: "running",
       purpose: args.purpose,
       requestedByUserId: args.requestedByUserId,
       blueprintId: args.blueprintId,
+      promptLabel: args.promptLabel,
       styleId: args.styleId,
       toneId: args.toneId,
       topicId: args.topicId,
