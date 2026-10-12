@@ -30,7 +30,7 @@ vi.mock("@/hooks/useWorkspace", () => ({
 
 vi.mock("@/components/header/TeamWorkspaceMenu", () => ({ TeamWorkspaceMenu: () => null }));
 vi.mock("@/components/ui/theme-toggle", () => ({ ThemeToggle: () => null }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("react-router-dom", () => ({ Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a> }));
 
 vi.mock("../../../../convex/_generated/api", () => ({
@@ -319,32 +319,33 @@ describe("OrgWeeklyCurationPage delivery-day controls", () => {
   });
 });
 
+/** A grid of one style and two tones: the cozy cell lists a question, the bold cell is empty. */
+function matrixWithOneEmptyCell() {
+  (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
+    if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
+    if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
+    if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
+    if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
+    if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
+    if (fn === "getCurationPreview") return { totalResponses: 0, coachCount: 0, confidence: "insufficient", recommendations: [] };
+    if (fn === "getStyles") return [{ id: "rapid-fire-either", slug: "rapid-fire-either", name: "Rapid fire", icon: "zap", color: "#888888" }];
+    if (fn === "getTones") {
+      return [
+        { id: "cozy", slug: "cozy", name: "Cozy", icon: "heart", color: "#888888" },
+        { id: "bold", slug: "bold", name: "Bold", icon: "flame", color: "#888888" },
+      ];
+    }
+    if (fn === "getTopics") return [];
+    if (fn === "getPublicQuestions") {
+      return [{ _id: "q-cozy", text: "A cozy question?", style: "rapid-fire-either", tone: "cozy", topic: "music" }];
+    }
+    return undefined;
+  });
+}
+
 describe("OrgWeeklyCurationPage matrix fill errors", () => {
   const PAUSED = ERROR_MESSAGES.AI_BUDGET_PAUSED;
   const RATE_LIMITED = ERROR_MESSAGES.AI_RATE_LIMITED;
-
-  function matrixWithOneEmptyCell() {
-    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string) => {
-      if (fn === "getEffectiveEntitlements") return { canUseTeamFeatures: true };
-      if (fn === "getOrgSettings") return { weekStartDay: "monday", timeZone: "UTC", activeDeliveryDays: ["monday"] };
-      if (fn === "listSchedulesForUser" || fn === "listSchedules") return [];
-      if (fn === "getOrganizations") return [{ _id: "org-1", _creationTime: 1 }];
-      if (fn === "getCurrentUser") return { planTier: "team", organizationRole: "manager" };
-      if (fn === "getCurationPreview") return { totalResponses: 0, coachCount: 0, confidence: "insufficient", recommendations: [] };
-      if (fn === "getStyles") return [{ id: "rapid-fire-either", slug: "rapid-fire-either", name: "Rapid fire", icon: "zap", color: "#888888" }];
-      if (fn === "getTones") {
-        return [
-          { id: "cozy", slug: "cozy", name: "Cozy", icon: "heart", color: "#888888" },
-          { id: "bold", slug: "bold", name: "Bold", icon: "flame", color: "#888888" },
-        ];
-      }
-      if (fn === "getTopics") return [];
-      if (fn === "getPublicQuestions") {
-        return [{ _id: "q-cozy", text: "A cozy question?", style: "rapid-fire-either", tone: "cozy", topic: "music" }];
-      }
-      return undefined;
-    });
-  }
 
   function failingActions(failures: Partial<Record<"fillEmptyCells" | "fillSingleCell", unknown>>) {
     (useAction as ReturnType<typeof vi.fn>).mockImplementation((fn: string) =>
@@ -386,6 +387,85 @@ describe("OrgWeeklyCurationPage matrix fill errors", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Generate" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Cell is locked"));
+  });
+});
+
+describe("OrgWeeklyCurationPage matrix fill results", () => {
+  // A new question is reviewed before the grid lists it, so each message says where it went.
+  function fillResults(results: Partial<Record<"fillEmptyCells" | "fillSingleCell", unknown>>) {
+    (useAction as ReturnType<typeof vi.fn>).mockImplementation((fn: string) =>
+      vi.fn().mockResolvedValue(fn in results ? results[fn as keyof typeof results] : undefined),
+    );
+  }
+
+  it.each([
+    [1, "Wrote 1 question for this cell. It shows here once reviewed."],
+    [2, "Wrote 2 questions for this cell. They show here once reviewed."],
+  ])("says a single-cell fill that wrote %i shows on the grid once reviewed", async (count, message) => {
+    matrixWithOneEmptyCell();
+    fillResults({ fillSingleCell: { count, questionIds: Array.from({ length: count }, (_, i) => `q-new-${i}`), waitingForReview: true } });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(message));
+    expect(toast.info).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("says the cell already has a question waiting for review when a single-cell fill wrote nothing for that reason", async () => {
+    matrixWithOneEmptyCell();
+    fillResults({ fillSingleCell: { count: 0, questionIds: [], waitingForReview: true } });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith("This cell already has a question waiting for review."));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled();
+  });
+
+  it("keeps the plain message when a single-cell fill wrote nothing and no question is waiting", async () => {
+    matrixWithOneEmptyCell();
+    fillResults({ fillSingleCell: { count: 0, questionIds: [], waitingForReview: false } });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Generated 0 questions for this cell"));
+    expect(toast.info).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  const batch = (totalCells: number, filledCells: number, totalQuestionsGenerated: number, skippedInvalidTaxonomy = 0, skippedWaitingForReview = 0) => ({
+    totalCells,
+    filledCells,
+    totalQuestionsGenerated,
+    skippedExisting: totalCells - filledCells - skippedInvalidTaxonomy,
+    skippedWaitingForReview,
+    skippedInvalidTaxonomy,
+  });
+
+  it.each([
+    ["wrote questions", batch(2, 2, 2), "Wrote 2 questions for 2/2 cells. They show here once reviewed."],
+    ["wrote questions and skipped a deleted style or tone", batch(3, 2, 2, 1), "Wrote 2 questions for 2/3 cells · 1 skipped (deleted taxonomy). They show here once reviewed."],
+    ["wrote one question", batch(2, 1, 1), "Wrote 1 question for 1/2 cells. It shows here once reviewed."],
+    ["wrote questions and found a cell already waiting for review", batch(3, 2, 2, 0, 1), "Wrote 2 questions for 2/3 cells · 1 already waiting for review. They show here once reviewed."],
+    ["wrote nothing because every cell is waiting for review", batch(2, 0, 0, 0, 2), "Wrote 0 questions for 0/2 cells · 2 already waiting for review"],
+    ["found one cell waiting and another's style deleted", batch(2, 0, 0, 1, 1), "Wrote 0 questions for 0/2 cells · 1 already waiting for review · 1 skipped (deleted taxonomy)"],
+    ["wrote nothing", batch(2, 0, 0), "Wrote 0 questions for 0/2 cells"],
+    ["wrote nothing and skipped a deleted style or tone", batch(2, 0, 0, 2), "Wrote 0 questions for 0/2 cells · 2 skipped (deleted taxonomy)"],
+  ])("after a batch fill that %s, gives the counts, and says new questions show once reviewed only if it wrote any", async (_what, result, message) => {
+    matrixWithOneEmptyCell();
+    fillResults({ fillEmptyCells: result });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Fill Empty Cells" }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith(message));
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Fill Empty Cells" })).toBeEnabled();
   });
 });
 

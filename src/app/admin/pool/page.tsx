@@ -32,6 +32,7 @@ import { Slider } from "@/components/ui/slider"
 type PoolStats = {
     totalQuestions: number
     availableQuestions: number
+    awaitingReviewQuestions: number
     distributedQuestions: number
     byStyleTone: Array<{
         style: string
@@ -48,6 +49,7 @@ type PoolQuestion = {
     reviewRevision?: number
     text?: string
     poolStatus?: "available" | "distributed"
+    awaitingReview: boolean
     style?: {
         _id: string
         name: string
@@ -108,7 +110,7 @@ export default function PoolPage() {
         setIsGenerating(true)
         try {
             const result = await triggerGeneration({ targetCount: targetCountPerStyleTone })
-            toast.success(`Generated ${result.questionsGenerated} questions across ${result.combinationsProcessed} style/tone combinations`)
+            toast.success(`Generated ${result.questionsGenerated} questions across ${result.combinationsProcessed} style/tone combinations. They wait for review before they can be assigned.`)
             if (result.errors.length > 0) {
                 toast.warning(`${result.errors.length} errors occurred during generation`)
             }
@@ -123,7 +125,8 @@ export default function PoolPage() {
     const handleAssign = async () => {
         setIsAssigning(true)
         try {
-            const result = await triggerAssignment({})
+            // The pool on screen: a pool is reviewed first, so it is often handed out on a later day.
+            const result = await triggerAssignment({ poolDate: selectedDate })
             toast.success(`Assigned ${result.totalAssigned} questions to ${result.usersProcessed} users`)
             if (result.errors.length > 0) {
                 toast.warning(`${result.errors.length} errors occurred during assignment`)
@@ -226,7 +229,7 @@ export default function PoolPage() {
                         </Button>
                         <Button
                             onClick={handleAssign}
-                            disabled={!isToday || isAssigning || (stats?.availableQuestions ?? 0) === 0}
+                            disabled={isAssigning || (stats?.availableQuestions ?? 0) === 0}
                             className="gap-2"
                         >
                             {isAssigning ? (
@@ -285,7 +288,10 @@ export default function PoolPage() {
                                 </div>
                             </div>
                             <p className="text-3xl font-bold mt-2">{stats.availableQuestions}</p>
-                            <p className="text-xs text-muted-foreground mt-1">Ready for assignment</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Ready for assignment
+                                {stats.awaitingReviewQuestions > 0 ? ` · ${stats.awaitingReviewQuestions} waiting for review` : ""}
+                            </p>
                         </CardContent>
                     </Card>
 
@@ -455,7 +461,7 @@ export default function PoolPage() {
                                             variant={question.poolStatus === "distributed" ? "default" : "secondary"}
                                             className={question.poolStatus === "distributed" ? "bg-purple-500 hover:bg-purple-500" : ""}
                                         >
-                                            {question.poolStatus === "distributed" ? "Distributed" : "Available"}
+                                            {question.poolStatus === "distributed" ? "Distributed" : question.awaitingReview ? "In review" : "Available"}
                                         </Badge>
                                         <div className="flex items-center gap-1">
                                             <Button

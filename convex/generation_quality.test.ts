@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
+import { convexErrorData } from "./lib/errorData";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "./lib/promptArchitecture";
 import { BRIEF_SYSTEM_PROMPT } from "./lib/brief";
 import { openRouterClient } from "./lib/generationRunner";
@@ -223,7 +224,7 @@ describe("prompt context", () => {
   });
 });
 
-describe("new feed and daily-email questions wait for review", () => {
+describe("new feed, daily-email and nightly-pool questions wait for review", () => {
   async function generateForReader(t: Awaited<ReturnType<typeof setup>>["t"], styleId: string, toneId: string) {
     const userId = await t.run(async (ctx) => ctx.db.insert("users", { email: "reader@example.com", clerkId: "reader-clerk" }));
     create.mockResolvedValue(completion(questionsJson("What made you laugh this week?")) as never);
@@ -295,7 +296,7 @@ describe("new feed and daily-email questions wait for review", () => {
     expect(await t.query(api.core.questions.getQuestionById, { id })).toBeNull();
   });
 
-  test("the nightly pool still saves public questions", async () => {
+  test("the nightly pool saves its questions held for review too, each marked available for the pool's date", async () => {
     const { t } = await setup();
     // The pool only runs when a daily-email subscriber is close to running out of unseen questions.
     await t.run(async (ctx) =>
@@ -308,7 +309,12 @@ describe("new feed and daily-email questions wait for review", () => {
     expect(result.errors).toEqual([]);
     expect(result.questionsGenerated).toBe(1);
     const saved = await t.run(async (ctx) => ctx.db.query("questions").collect());
-    expect(saved.map((q) => q.status)).toEqual(["public"]);
+    expect(saved.map((q) => [q.status, q.heldForReview, q.poolStatus])).toEqual([["pending", true, "available"]]);
+    expect(saved[0].poolDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // It waits in the admin's queue, and no shared list shows it.
+    const queue = await t.withIdentity(ADMIN).query(api.admin.questions.getPendingQuestions, {});
+    expect(queue.map((q: { _id: string }) => q._id)).toEqual([saved[0]._id]);
+    expect(await t.query(api.core.questions.getPublicQuestions, {})).toEqual([]);
   });
 });
 
@@ -911,7 +917,7 @@ describe("remix and preview retries", () => {
   });
 });
 
-describe("where held questions stay out, and what stays public", () => {
+describe("where held questions stay out", () => {
   test("the daily email pool skips a held question until it is approved", async () => {
     const { t } = await setup();
     const aiId = await insertAiQuestion(t);
@@ -931,7 +937,7 @@ describe("where held questions stay out, and what stays public", () => {
     expect((await pick())?._id).toBe(aiId);
   });
 
-  test("matrix fill still saves its questions as public", async () => {
+  test("a matrix fill's question is held too: it waits in the admin's queue, and the team's grid and the feed don't list it", async () => {
     const { t } = await setup();
     const ME = { subject: "me-clerk", tokenIdentifier: "test|me-clerk", email: "me@example.com" };
     const orgId = await t.run(async (ctx) => {
@@ -943,7 +949,7 @@ describe("where held questions stay out, and what stays public", () => {
     });
     create.mockResolvedValue(completion(questionsJson("Which small thing made you smile today?")) as never);
 
-    await t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+    const result = await t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
       organizationId: orgId,
       axisY: "style",
       axisX: "tone",
@@ -951,8 +957,376 @@ describe("where held questions stay out, and what stays public", () => {
       cells: [{ ySlug: "reflective", xSlug: "warm", styleSlug: "reflective", toneSlug: "warm" }],
     });
 
+    expect(result).toEqual({ totalCells: 1, filledCells: 1, totalQuestionsGenerated: 1, skippedExisting: 0, skippedWaitingForReview: 0, skippedInvalidTaxonomy: 0 });
     const saved = await t.run(async (ctx) => ctx.db.query("questions").collect());
-    expect(saved.map((q) => [q.text, q.status])).toEqual([["Which small thing made you smile today?", "public"]]);
+    expect(saved.map((q) => [q.text, q.status, q.heldForReview])).toEqual([["Which small thing made you smile today?", "pending", true]]);
+    const queue = await t.withIdentity(ADMIN).query(api.admin.questions.getPendingQuestions, {});
+    expect(queue.map((q: { _id: string }) => q._id)).toEqual([saved[0]._id]);
+    // The grid shows the library list, so the cell stays empty for the team until the review.
+    expect(await t.withIdentity(ME).query(api.core.questions.getPublicQuestions, {})).toEqual([]);
+    expect(
+      await t.query(internal.internal.questions.getRandomQuestionsInternal, { count: 10, seen: [], hidden: [], hiddenStyles: [], hiddenTones: [] }),
+    ).toEqual([]);
+  });
+});
+
+describe("a grid cell and the nightly pool while their questions wait for review", () => {
+  const ME = { subject: "me-clerk", tokenIdentifier: "test|me-clerk", email: "me@example.com" };
+  const POOL_DATE = "2026-10-12";
+  const NOTHING_APPROVED = "No pool questions available. A pool question is handed out once it has been approved in the review queue.";
+  const KEPT = "Questions of this style the owner kept, which are already in the library:";
+
+  beforeEach(() => {
+    // The pool is written and handed out by date, so the day is pinned.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.setSystemTime(Date.UTC(2026, 9, 12, 19, 0));
+    // A test names each answer it expects. Any other call fails here instead of reaching a provider.
+    create.mockRejectedValue(new Error("unexpected provider call") as never);
+    vi.spyOn(OpenAI.Embeddings.prototype, "create").mockRejectedValue(new Error("unexpected embedding call"));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  /** A manager of a paid team, and two more tones, so the Reflective row of the grid has three cells. */
+  async function team() {
+    const s = await setup();
+    const ids = await s.t.run(async (ctx) => {
+      const meId = await ctx.db.insert("users", { email: ME.email, clerkId: ME.subject });
+      const organizationId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
+      await ctx.db.insert("organization_members", { userId: meId, organizationId, role: "manager" });
+      for (const slug of ["bold", "dry"]) {
+        await ctx.db.insert("tones", { id: slug, slug, name: slug, promptGuidanceForAI: "x", color: "#333333", icon: "flame", status: "active", version: 1 });
+      }
+      return { meId, organizationId };
+    });
+    return { ...s, ...ids };
+  }
+  type Team = Awaited<ReturnType<typeof team>>;
+
+  /** The model's next answers, one question each. */
+  const writes = (...texts: string[]) => {
+    for (const text of texts) create.mockResolvedValueOnce(completion(questionsJson(text)) as never);
+  };
+  const fillBatch = (s: Team, tones: string[]) =>
+    s.t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+      organizationId: s.organizationId,
+      axisY: "style",
+      axisX: "tone",
+      cells: tones.map((toneSlug) => ({ ySlug: "reflective", xSlug: toneSlug, styleSlug: "reflective", toneSlug })),
+    });
+  const fillOne = (s: Team, toneSlug: string) =>
+    s.t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: s.organizationId, styleSlug: "reflective", toneSlug });
+  const stored = (t: TestConvex, id: Id<"questions">) => t.run(async (ctx) => ctx.db.get(id));
+  const allQuestions = (t: TestConvex) => t.run(async (ctx) => ctx.db.query("questions").collect());
+  const reviewQueue = async (t: TestConvex): Promise<Id<"questions">[]> =>
+    (await t.withIdentity(ADMIN).query(api.admin.questions.getPendingQuestions, {})).map((q: { _id: Id<"questions"> }) => q._id);
+  /** Exactly what the Approve button sends. */
+  async function approve(t: TestConvex, id: Id<"questions">) {
+    const question = (await stored(t, id))!;
+    await t.withIdentity(ADMIN).mutation(api.admin.questions.updateQuestion, {
+      id,
+      expectedRevision: question.reviewRevision ?? 0,
+      reviewReason: "Looks good",
+      text: question.text,
+      style: question.style,
+      tone: question.tone,
+      status: "public",
+    });
+  }
+
+  test("a batch fill skips a cell whose only question is waiting for review, with no model call, and still fills the cell beside it", async () => {
+    const s = await team();
+    writes("What made you laugh this week?", "Which risk are you glad you took?");
+    expect(await fillBatch(s, ["warm"])).toMatchObject({ filledCells: 1, totalQuestionsGenerated: 1 });
+
+    const again = await fillBatch(s, ["warm", "bold"]);
+
+    expect(again).toEqual({ totalCells: 2, filledCells: 1, totalQuestionsGenerated: 1, skippedExisting: 1, skippedWaitingForReview: 1, skippedInvalidTaxonomy: 0 });
+    // One call for each question written: the cell with a question waiting cost nothing.
+    expect(create).toHaveBeenCalledTimes(2);
+    expect((await allQuestions(s.t)).map((q) => [q.text, q.tone, q.status, q.heldForReview])).toEqual([
+      ["What made you laugh this week?", "warm", "pending", true],
+      ["Which risk are you glad you took?", "bold", "pending", true],
+    ]);
+
+    // With a question waiting in both cells, a third fill writes nothing and calls nothing.
+    expect(await fillBatch(s, ["warm", "bold"])).toEqual({ totalCells: 2, filledCells: 0, totalQuestionsGenerated: 0, skippedExisting: 2, skippedWaitingForReview: 2, skippedInvalidTaxonomy: 0 });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await s.t.run(async (ctx) => ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
+  });
+
+  // Pending questions that aren't the shared library's. None of them takes a grid cell.
+  test.each<[string, (s: Team) => Record<string, unknown>]>([
+    ["a person's own submission", (s) => ({ authorId: s.meId })],
+    ["a team's own question", (s) => ({ organizationId: s.organizationId, isAIGenerated: true, heldForReview: true })],
+    ["a person's own question of the personal kind", (s) => ({ authorId: s.meId, kind: "personal", heldForReview: true })],
+  ])("a cell whose only pending question is %s is not taken: a batch fill and a single-cell fill both write to it", async (_whose, fields) => {
+    const s = await team();
+    await s.t.run(async (ctx) => {
+      for (const tone of ["warm", "bold"]) {
+        await ctx.db.insert("questions", { text: `Pending in the ${tone} cell?`, style: "reflective", tone, status: "pending", ...counters, ...fields(s) });
+      }
+    });
+    writes("What made you laugh this week?", "Which risk are you glad you took?");
+
+    expect(await fillBatch(s, ["warm"])).toEqual({ totalCells: 1, filledCells: 1, totalQuestionsGenerated: 1, skippedExisting: 0, skippedWaitingForReview: 0, skippedInvalidTaxonomy: 0 });
+    expect(await fillOne(s, "bold")).toMatchObject({ count: 1, waitingForReview: true });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  test("a single-cell fill writes one question to wait for review, and asked again it writes nothing, calls no model and says one is waiting", async () => {
+    const s = await team();
+    writes("What made you laugh this week?");
+
+    const first = await fillOne(s, "warm");
+
+    expect(first).toEqual({ count: 1, questionIds: [expect.any(String)], waitingForReview: true });
+    expect(await stored(s.t, first.questionIds[0])).toMatchObject({
+      text: "What made you laugh this week?",
+      style: "reflective",
+      tone: "warm",
+      status: "pending",
+      heldForReview: true,
+    });
+    expect(await reviewQueue(s.t)).toEqual(first.questionIds);
+
+    expect(await fillOne(s, "warm")).toEqual({ count: 0, questionIds: [], waitingForReview: true });
+    expect(create).toHaveBeenCalledTimes(1);
+    const { runs, locks } = await s.t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      locks: await ctx.db.query("matrixFillCellLocks").collect(),
+    }));
+    expect(runs).toHaveLength(1);
+    expect(locks).toEqual([]);
+  });
+
+  test("a question the feed or the daily email wrote for a cell's style and tone, still waiting, takes the cell too", async () => {
+    const s = await team();
+    await insertAiQuestion(s.t, { style: "reflective", tone: "dry" });
+
+    expect(await fillOne(s, "dry")).toEqual({ count: 0, questionIds: [], waitingForReview: true });
+    expect(await fillBatch(s, ["dry"])).toMatchObject({ filledCells: 0, skippedExisting: 1, skippedWaitingForReview: 1 });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test.each<[string, "public" | "approved" | undefined]>([
+    ["a public question", "public"],
+    ["a question approved under the older status", "approved"],
+    ["an old question with no status", undefined],
+  ])("a single-cell fill of a cell that lists %s writes nothing and says none is waiting, even when another one is", async (_what, status) => {
+    const s = await team();
+    await s.t.run(async (ctx) =>
+      ctx.db.insert("questions", { text: "Which workout do you secretly love?", style: "reflective", tone: "warm", status, ...counters }),
+    );
+    await insertAiQuestion(s.t, { style: "reflective", tone: "warm" });
+
+    expect(await fillOne(s, "warm")).toEqual({ count: 0, questionIds: [], waitingForReview: false });
+    // A batch fill counts the cell as taken, and not as one the grid shows empty.
+    expect(await fillBatch(s, ["warm"])).toMatchObject({ filledCells: 0, skippedExisting: 1, skippedWaitingForReview: 0 });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["retired", "pruned"],
+    ["rejected in review", "private"],
+  ] as const)("once the question waiting in a cell is %s, the cell can be filled again", async (_how, status) => {
+    const s = await team();
+    writes("What made you laugh this week?", "Which small win are you proud of this month?");
+    const { questionIds: [firstId] } = await fillOne(s, "warm");
+    await s.t.run(async (ctx) => ctx.db.patch(firstId, { status }));
+
+    const second = await fillOne(s, "warm");
+
+    expect(second).toMatchObject({ count: 1, waitingForReview: true });
+    expect(second.questionIds).not.toContain(firstId);
+    expect(await reviewQueue(s.t)).toEqual(second.questionIds);
+    // The new question takes the cell in its turn.
+    expect(await fillBatch(s, ["warm"])).toMatchObject({ filledCells: 0, skippedExisting: 1, skippedWaitingForReview: 1 });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  test("once an admin approves a grid fill's question it is public and on the team's grid, and a later fill skips the cell as listed", async () => {
+    const s = await team();
+    writes("What made you laugh this week?");
+    const { questionIds: [id] } = await fillOne(s, "warm");
+
+    await approve(s.t, id);
+
+    const approved = await stored(s.t, id);
+    expect([approved?.status, approved?.heldForReview]).toEqual(["public", undefined]);
+    expect(await reviewQueue(s.t)).toEqual([]);
+    expect((await s.t.withIdentity(ME).query(api.core.questions.getPublicQuestions, {})).map((q) => q._id)).toEqual([id]);
+    expect(await fillOne(s, "warm")).toEqual({ count: 0, questionIds: [], waitingForReview: false });
+    expect(await fillBatch(s, ["warm"])).toEqual({ totalCells: 1, filledCells: 0, totalQuestionsGenerated: 0, skippedExisting: 1, skippedWaitingForReview: 0, skippedInvalidTaxonomy: 0 });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  test("a grid fill's question is not shown to the generator as one the owner kept until it is approved", async () => {
+    const s = await team();
+    writes("What made you laugh this week?", "Which risk are you glad you took?");
+    const { questionIds: [id] } = await fillOne(s, "warm");
+
+    // The next prompt for the style, as the fill of the cell beside it sends it.
+    await fillOne(s, "bold");
+    const next = (create.mock.calls[1][0] as { messages: Array<{ content: string }> }).messages[1].content;
+    expect(next).not.toContain(KEPT);
+    expect(next).not.toContain("What made you laugh this week?");
+
+    await approve(s.t, id);
+
+    const { userPrompt } = await s.t.query(internal.internal.generation.buildGenerationPrompt, { styleSlug: "reflective", toneSlug: "dry", batchSize: 1 });
+    expect(userPrompt).toContain(`\n${KEPT}\n- "What made you laugh this week?"\n\n`);
+    // The question still waiting is still not shown.
+    expect(userPrompt).not.toContain("Which risk are you glad you took?");
+  });
+
+  /** A daily-email subscriber, and a pool run that writes three questions for today's pool. */
+  async function poolRun() {
+    const s = await setup();
+    const readerId = await s.t.run(async (ctx) =>
+      ctx.db.insert("users", { email: READER.email, clerkId: READER.subject, newsletterSubscriptionStatus: "subscribed" }),
+    );
+    create.mockResolvedValueOnce(
+      completion(questionsJson("What song is stuck in your head?", "Which smell takes you back to childhood?", "What chore do you secretly enjoy?")) as never,
+    );
+    const result = await s.t.action(internal.internal.ai.generateNightlyQuestionPool, { targetCount: 3, maxCombinations: 1 });
+    expect(result).toEqual({ questionsGenerated: 3, combinationsProcessed: 1, errors: [] });
+    // The hand-out reports by email once it has processed someone. Nothing leaves the test.
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("unexpected network call"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    return { ...s, readerId, ids: (await allQuestions(s.t)).map((q) => q._id) };
+  }
+  const handOut = (t: TestConvex, poolDate?: string) =>
+    t.action(internal.internal.questions.assignPoolQuestionsToUsers, { questionsPerUser: 6, poolDate });
+  const poolRows = async (t: TestConvex) => (await allQuestions(t)).map((q) => [q.status, q.heldForReview, q.poolDate, q.poolStatus]);
+  const handedOut = async (t: TestConvex) =>
+    (await t.run(async (ctx) => ctx.db.query("userQuestions").collect())).map((row) => [row.userId, row.questionId, row.status]);
+
+  test("the pool's questions are saved held for today's pool, none is handed out while none is approved, and then only the approved one is", async () => {
+    const s = await poolRun();
+    const HELD = ["pending", true, POOL_DATE, "available"];
+    expect(await poolRows(s.t)).toEqual([HELD, HELD, HELD]);
+    expect(await reviewQueue(s.t)).toEqual(s.ids);
+
+    expect(await handOut(s.t)).toEqual({ usersProcessed: 0, totalAssigned: 0, errors: [NOTHING_APPROVED] });
+    expect(await handedOut(s.t)).toEqual([]);
+    expect(await poolRows(s.t)).toEqual([HELD, HELD, HELD]);
+
+    await approve(s.t, s.ids[1]);
+
+    expect(await handOut(s.t)).toEqual({ usersProcessed: 1, totalAssigned: 1, errors: [] });
+    expect(await handedOut(s.t)).toEqual([[s.readerId, s.ids[1], "unseen"]]);
+    // The two still waiting stay in the pool, unassigned.
+    expect(await poolRows(s.t)).toEqual([HELD, ["public", undefined, POOL_DATE, "distributed"], HELD]);
+    expect(await reviewQueue(s.t)).toEqual([s.ids[0], s.ids[2]]);
+  });
+
+  test("the hand-out reads only the pool questions the lists show, however many held ones were written first", async () => {
+    const { t } = await setup();
+    const pool = { poolDate: POOL_DATE, poolStatus: "available" as const, isAIGenerated: true, ...counters };
+    const ids = await t.run(async (ctx) => ({
+      held: await ctx.db.insert("questions", { text: "Still waiting?", status: "pending", heldForReview: true, ...pool }),
+      rejected: await ctx.db.insert("questions", { text: "Rejected in review?", status: "private", ...pool }),
+      retired: await ctx.db.insert("questions", { text: "Approved, then retired?", status: "pruned", prunedAt: 1, ...pool }),
+      // Older pruning set only the time and left the status as it was.
+      retiredTheOldWay: await ctx.db.insert("questions", { text: "Approved, then pruned the old way?", status: "approved", prunedAt: 1, ...pool }),
+      approved: await ctx.db.insert("questions", { text: "Approved in review?", status: "public", ...pool }),
+      approvedLongAgo: await ctx.db.insert("questions", { text: "Approved under the older status?", status: "approved", ...pool }),
+      // A copy retired as a duplicate still opens by its link, and is not handed out.
+      retiredDuplicate: await ctx.db.insert("questions", {
+        text: "Approved, then retired as a copy?",
+        status: "pruned",
+        prunedAt: 1,
+        duplicateOf: await ctx.db.insert("questions", { text: "The one that was kept?", status: "public", ...counters }),
+        duplicateWasPublic: true,
+        ...pool,
+      }),
+      alreadyHandedOut: await ctx.db.insert("questions", { text: "Handed out already?", status: "public", ...pool, poolStatus: "distributed" }),
+      anotherDay: await ctx.db.insert("questions", { text: "Approved for another day's pool?", status: "public", ...pool, poolDate: "2026-10-11" }),
+    }));
+    const available = async (limit?: number): Promise<Id<"questions">[]> =>
+      (await t.query(internal.internal.questions.getAvailablePoolQuestions, { poolDate: POOL_DATE, limit })).map((q: { _id: Id<"questions"> }) => q._id);
+
+    expect(await available()).toEqual([ids.approved, ids.approvedLongAgo]);
+    // The limit counts approved questions, so the ones written before them can't use it up.
+    expect(await available(1)).toEqual([ids.approved]);
+  });
+
+  test("the admin's pool page counts held questions apart: all awaiting review after a run, one available once approved, one distributed once handed out", async () => {
+    const s = await poolRun();
+    const admin = s.t.withIdentity(ADMIN);
+    const stats = async () => {
+      const { totalQuestions, availableQuestions, awaitingReviewQuestions, distributedQuestions } = await admin.query(api.admin.questions.getPoolStats, { poolDate: POOL_DATE });
+      return { totalQuestions, availableQuestions, awaitingReviewQuestions, distributedQuestions };
+    };
+    /** Each pool question's row, as [handed out or not, still awaiting review], in the order they were written. */
+    const rows = async () => {
+      const listed = await admin.query(api.admin.questions.getPoolQuestions, { poolDate: POOL_DATE });
+      return s.ids.map((id) => {
+        const row = listed.find((candidate) => candidate._id === id);
+        return [row?.poolStatus, row?.awaitingReview];
+      });
+    };
+
+    expect(await stats()).toEqual({ totalQuestions: 3, availableQuestions: 0, awaitingReviewQuestions: 3, distributedQuestions: 0 });
+    expect(await rows()).toEqual([["available", true], ["available", true], ["available", true]]);
+
+    await approve(s.t, s.ids[1]);
+
+    expect(await stats()).toEqual({ totalQuestions: 3, availableQuestions: 1, awaitingReviewQuestions: 2, distributedQuestions: 0 });
+    expect(await rows()).toEqual([["available", true], ["available", false], ["available", true]]);
+
+    await handOut(s.t);
+
+    expect(await stats()).toEqual({ totalQuestions: 3, availableQuestions: 0, awaitingReviewQuestions: 2, distributedQuestions: 1 });
+    expect(await rows()).toEqual([["available", true], ["distributed", false], ["available", true]]);
+  });
+
+  test("a pool question rejected or retired in review is neither available nor awaiting review on the admin's pool page", async () => {
+    const s = await poolRun();
+    const admin = s.t.withIdentity(ADMIN);
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch(s.ids[0], { status: "private", heldForReview: undefined });
+      await ctx.db.patch(s.ids[1], { status: "pruned", prunedAt: 1, heldForReview: undefined });
+    });
+
+    const { totalQuestions, availableQuestions, awaitingReviewQuestions, distributedQuestions } = await admin.query(api.admin.questions.getPoolStats, { poolDate: POOL_DATE });
+    expect({ totalQuestions, availableQuestions, awaitingReviewQuestions, distributedQuestions }).toEqual({
+      totalQuestions: 3,
+      availableQuestions: 0,
+      awaitingReviewQuestions: 1,
+      distributedQuestions: 0,
+    });
+    const listed = await admin.query(api.admin.questions.getPoolQuestions, { poolDate: POOL_DATE });
+    expect(s.ids.map((id) => listed.find((row) => row._id === id)?.awaitingReview)).toEqual([false, false, true]);
+  });
+
+  test("a pool approved the day after it was written is handed out when the hand-out is given that pool's date, and not by a hand-out of the new day's pool", async () => {
+    const s = await poolRun();
+    vi.setSystemTime(Date.UTC(2026, 9, 13, 19, 0));
+    await approve(s.t, s.ids[0]);
+
+    // With no date the hand-out reads today's pool, which has nothing.
+    expect(await handOut(s.t)).toEqual({ usersProcessed: 0, totalAssigned: 0, errors: [NOTHING_APPROVED] });
+    expect(await handedOut(s.t)).toEqual([]);
+
+    expect(await handOut(s.t, POOL_DATE)).toEqual({ usersProcessed: 1, totalAssigned: 1, errors: [] });
+    expect(await handedOut(s.t)).toEqual([[s.readerId, s.ids[0], "unseen"]]);
+    expect((await stored(s.t, s.ids[0]))?.poolStatus).toBe("distributed");
+  });
+
+  test("the admin's Assign hands out the pool for the date it is given, and refuses a date that isn't written as one", async () => {
+    const s = await poolRun();
+    const admin = s.t.withIdentity(ADMIN);
+    vi.setSystemTime(Date.UTC(2026, 9, 13, 19, 0));
+    await approve(s.t, s.ids[2]);
+
+    const refused = await admin.action(api.admin.questions.triggerPoolAssignment, { poolDate: "yesterday" }).catch((error: unknown) => error);
+    expect(convexErrorData(refused)).toEqual({ code: "POOL_SETUP", message: "poolDate must be a date written as YYYY-MM-DD." });
+    expect(await handedOut(s.t)).toEqual([]);
+
+    expect(await admin.action(api.admin.questions.triggerPoolAssignment, { poolDate: POOL_DATE })).toEqual({ usersProcessed: 1, totalAssigned: 1, errors: [] });
+    expect(await handedOut(s.t)).toEqual([[s.readerId, s.ids[2], "unseen"]]);
+    await expect(s.t.withIdentity(READER).action(api.admin.questions.triggerPoolAssignment, { poolDate: POOL_DATE })).rejects.toThrow();
   });
 });
 

@@ -1317,10 +1317,17 @@ const questionPool = useQuery(
         cells,
       });
 
-      let msg = `Filled ${result.filledCells}/${result.totalCells} cells (${result.totalQuestionsGenerated} questions)`;
+      const written = result.totalQuestionsGenerated;
+      let msg = `Wrote ${written} question${written !== 1 ? "s" : ""} for ${result.filledCells}/${result.totalCells} cells`;
+      // A cell can look empty here and be taken: its question is still in review.
+      if (result.skippedWaitingForReview > 0) {
+        msg += ` · ${result.skippedWaitingForReview} already waiting for review`;
+      }
       if (result.skippedInvalidTaxonomy > 0) {
         msg += ` · ${result.skippedInvalidTaxonomy} skipped (deleted taxonomy)`;
       }
+      // A new question is reviewed before the grid lists it.
+      if (written > 0) msg += `. ${written !== 1 ? "They show" : "It shows"} here once reviewed.`;
       toast.success(msg);
     } catch (e: any) {
       toast.error(readableError(e, "Failed to fill empty cells"));
@@ -1355,7 +1362,13 @@ const questionPool = useQuery(
         count: 1,
       });
 
-      toast.success(`Generated ${result.count} question${result.count !== 1 ? "s" : ""} for this cell`);
+      if (result.count > 0) {
+        toast.success(`Wrote ${result.count} question${result.count !== 1 ? "s" : ""} for this cell. ${result.count !== 1 ? "They show" : "It shows"} here once reviewed.`);
+      } else if (result.waitingForReview) {
+        toast.info("This cell already has a question waiting for review.");
+      } else {
+        toast.success("Generated 0 questions for this cell");
+      }
     } catch (e: any) {
       toast.error(readableError(e, "Failed to generate for this cell"));
     } finally {

@@ -453,15 +453,16 @@ describe("matrix fill", () => {
     expect(create).not.toHaveBeenCalled();
     expect(await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
 
-    // With a count it can use, the question is written for the style and tone alone.
+    // With a count it can use, the question is written for the style and tone alone, and it
+    // waits for review like any other generated question.
     const filled = await fill();
-    expect(filled.count).toBe(1);
+    expect(filled).toMatchObject({ count: 1, waitingForReview: true });
     expect(askedFor()).toEqual([[2500, "1"]]);
     const { messages } = create.mock.calls[0][0] as { messages: Array<{ content: string }> };
     expect(messages[1].content).not.toContain("Topic:");
     expect(messages[1].content).toContain("\nWrite 1 new question for this style and tone.\n");
     const saved = await t.run(async (ctx) => await ctx.db.get(filled.questionIds[0]));
-    expect(saved).toMatchObject({ styleSlug: "reflective", toneSlug: "warm", status: "public" });
+    expect(saved).toMatchObject({ styleSlug: "reflective", toneSlug: "warm", status: "pending", heldForReview: true });
     expect([saved?.topicSlug, saved?.topicId, saved?.topic]).toEqual([undefined, undefined, undefined]);
   });
 
@@ -475,8 +476,9 @@ describe("matrix fill", () => {
     const fill = (count: number) =>
       t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic", count });
 
-    // With a count it can use, a fill that finds the cell held has nothing to do.
-    expect(await fill(1)).toEqual({ count: 0, questionIds: [] });
+    // With a count it can use, a fill that finds another fill on the cell has nothing to do, and
+    // says no question is waiting for review there: none was written.
+    expect(await fill(1)).toEqual({ count: 0, questionIds: [], waitingForReview: false });
     for (const count of [Number.NaN, Infinity, -Infinity]) {
       const error = await fill(count).catch((e: unknown) => e);
       expect(convexErrorData(error)).toMatchObject({ code: ERROR_CODES.AI_COUNT_INVALID });
@@ -1694,7 +1696,7 @@ describe("calls that may have been billed without an answer", () => {
     // The manager is told how far the fill got; the provider's error goes to the log.
     expect(convexErrorData(stopped)).toEqual({
       code: ERROR_CODES.AI_GENERATION_FAILED,
-      message: "Filled 0 cells, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.",
+      message: "Wrote questions for 0 cells, then stopped because the AI didn't finish an answer. What was written is saved and shows once reviewed. Try the rest again later.",
       filledCells: 0,
       totalCells: 2,
     });
@@ -2261,7 +2263,7 @@ describe("calls a person may have unanswered in one day", () => {
     // A message the planner can show, not the provider's own error.
     expect(convexErrorData(stopped)).toEqual({
       code: ERROR_CODES.AI_GENERATION_FAILED,
-      message: "Filled 1 cell, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.",
+      message: "Wrote questions for 1 cell, then stopped because the AI didn't finish an answer. What was written is saved and shows once reviewed. Try the rest again later.",
       filledCells: 1,
       totalCells: 3,
     });

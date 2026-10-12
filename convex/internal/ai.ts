@@ -287,6 +287,9 @@ export const generateNightlyQuestionPool = internalAction({
 					temperature: 0.85,
 					poolDate: today,
 					poolStatus: "available",
+					// A pool question waits for review like a feed question, and is handed out once
+					// an admin approves it (getAvailablePoolQuestions).
+					status: "pending",
 				});
 				questionsGenerated += result.saveResult.insertedCount;
 			} catch (error: unknown) {

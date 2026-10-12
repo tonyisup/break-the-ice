@@ -338,7 +338,7 @@ describe("scheduling a check when a question is saved", () => {
   test("in record mode every saved question gets a check, held for review or published at once", async () => {
     process.env.QUALITY_CHECK_MODE = "record";
     const s = await setup();
-    // Feed and daily-email questions are saved pending; matrix fill and the nightly pool publish.
+    // Every generation path now saves pending. A save given no status still publishes.
     const held = await save(s, ["What small thing made you smile today?", "Which smell takes you back to childhood?"], "pending");
     const published = await save(s, ["What chore do you secretly enjoy?"]);
 
@@ -840,45 +840,50 @@ describe("the four ways a question is generated, in record mode", () => {
     expect(checks).toEqual([[saved._id, 1, 0]]);
   });
 
-  test("a matrix fill's question is public at once and never enters the owner's queue, whatever the verdict", async () => {
+  test("a matrix fill's question is held for review like a feed question, with a check queued, and reaches the team's grid only once an admin approves it", async () => {
     const s = await app();
     generates("What chore do you secretly enjoy doing?");
 
     await viaFill(s);
 
     const { saved, checks } = await outcome(s);
-    expect(saved.status).toBe("public");
-    expect(saved.heldForReview).toBeUndefined();
+    expect(saved).toMatchObject({ status: "pending", heldForReview: true });
     expect(checks).toEqual([[saved._id, 1, 0]]);
+    const grid = () => s.t.withIdentity(ME).query(api.core.questions.getPublicQuestions, {});
 
     answers(HOLD);
     await check(s, saved._id);
 
-    // The team's managers see the flag on their grid; the owner's queue stays empty.
-    expect(await question(s, saved._id)).toMatchObject({ status: "public", qualityCheck: { verdict: "hold" } });
+    // Whatever the verdict, the question waits in the owner's queue and the team's grid doesn't list it.
+    expect(await question(s, saved._id)).toMatchObject({ status: "pending", heldForReview: true, qualityCheck: { verdict: "hold" } });
+    expect(await reviewQueue(s)).toEqual([saved._id]);
+    expect(await grid()).toEqual([]);
+
+    await s.t.withIdentity(ADMIN).mutation(api.admin.questions.updateQuestion, { id: saved._id, expectedRevision: 0, reviewReason: "Looks good", status: "public" });
+
+    // The owner's decision stands over the check's, so the grid lists it with no flag.
     expect(await reviewQueue(s)).toEqual([]);
-    const grid = await s.t.withIdentity(ME).query(api.core.questions.getPublicQuestions, {});
-    expect(grid.find((row) => row._id === saved._id)?.claudeFlag).toEqual({ reasons: ["awkward_wording"], safety: ["humiliation"], note: "Stiff phrasing." });
+    expect((await grid()).map((row) => [row._id, row.status, row.claudeFlag])).toEqual([[saved._id, "public", undefined]]);
   });
 
-  test("a nightly-pool question is public at once as before, with a check queued", async () => {
+  test("a nightly-pool question is held for review too, marked available for its pool date, with a check queued", async () => {
     const s = await app();
     generates("What habit would you keep if you moved abroad?");
 
     await viaPool(s);
 
     const { saved, checks } = await outcome(s);
-    expect(saved).toMatchObject({ status: "public", poolStatus: "available" });
-    expect(saved.heldForReview).toBeUndefined();
+    expect(saved).toMatchObject({ status: "pending", heldForReview: true, poolStatus: "available", poolDate: "2026-10-06" });
     expect(checks).toEqual([[saved._id, 1, 0]]);
+    expect(await reviewQueue(s)).toEqual([saved._id]);
   });
 
   // What a path saves never depends on the mode. Only whether a check is queued does.
   const PATHS = [
     ["feed", viaFeed, { status: "pending", heldForReview: true }],
     ["daily-email", viaEmail, { status: "pending", heldForReview: true }],
-    ["matrix fill", viaFill, { status: "public" }],
-    ["nightly-pool", viaPool, { status: "public", poolStatus: "available" }],
+    ["matrix fill", viaFill, { status: "pending", heldForReview: true }],
+    ["nightly-pool", viaPool, { status: "pending", heldForReview: true, poolStatus: "available" }],
   ] as const;
   test.each((["off", "publish"] as const).flatMap((mode) => PATHS.map(([name, generate, saved]) => [mode, name, generate, saved] as const)))(
     "with the mode %s, a %s question is saved as in record mode, and a check is queued only if the mode isn't off",
@@ -892,7 +897,8 @@ describe("the four ways a question is generated, in record mode", () => {
       const { saved, checks } = await outcome(s);
       expect(saved).toMatchObject(expected);
       expect(checks).toEqual(mode === "off" ? [] : [[saved._id, 1, 0]]);
-      expect(await reviewQueue(s)).toEqual(saved.status === "pending" ? [saved._id] : []);
+      // Every path's question waits in the owner's review queue.
+      expect(await reviewQueue(s)).toEqual([saved._id]);
     },
   );
 

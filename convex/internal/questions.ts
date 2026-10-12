@@ -8,7 +8,7 @@ import { cosineSimilarity } from "../lib/embeddings";
 import { doc } from "convex-helpers/validators";
 import schema from "../schema";
 import { duplicateGroup } from "../lib/questionReferences";
-import { isPrivateUserQuestion, isRetiredQuestion } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion } from "../lib/questionAccess";
 
 export const questionByIdResultValidator = v.nullable(doc(schema, "questions"));
 
@@ -330,47 +330,12 @@ export const checkExactDuplicate = internalQuery({
 	},
 });
 
-// Helper: Save a pool question with proper metadata
-export const savePoolQuestion = internalMutation({
-	args: {
-		text: v.string(),
-		styleId: v.id("styles"),
-		style: v.string(),
-		toneId: v.id("tones"),
-		tone: v.string(),
-		poolDate: v.string(),
-	},
-	returns: v.union(v.id("questions"), v.null()),
-	handler: async (ctx, args) => {
-		const existing = await ctx.db
-			.query("questions")
-			.withIndex("by_text", (q) => q.eq("text", args.text))
-			.first();
+/** The most pool questions read for one date. A pool run writes a few dozen. */
+const POOL_READ_LIMIT = 1000;
 
-		if (existing) {
-			return null;
-		}
-
-		return await ctx.db.insert("questions", {
-			text: args.text,
-			styleId: args.styleId,
-			style: args.style,
-			toneId: args.toneId,
-			tone: args.tone,
-			poolDate: args.poolDate,
-			poolStatus: "available",
-			status: "public",
-			isAIGenerated: true,
-			totalLikes: 0,
-			totalThumbsDown: 0,
-			totalShows: 0,
-			averageViewDuration: 0,
-			lastShownAt: 0,
-		});
-	},
-});
-
-// Get available pool questions for a specific date
+// Get available pool questions for a specific date. A pool question waits for review like any
+// generated one, so only the ones an admin has approved are handed out, and never one that
+// was retired since (a retired duplicate still opens by link, which isQuestionPublic allows).
 export const getAvailablePoolQuestions = internalQuery({
 	args: {
 		poolDate: v.string(),
@@ -379,12 +344,13 @@ export const getAvailablePoolQuestions = internalQuery({
 	returns: v.array(v.any()),
 	handler: async (ctx, args) => {
 		const limit = args.limit ?? 100;
-		return await ctx.db
+		const available = await ctx.db
 			.query("questions")
 			.withIndex("by_poolDate_and_poolStatus", (q) =>
 				q.eq("poolDate", args.poolDate).eq("poolStatus", "available")
 			)
-			.take(limit);
+			.take(POOL_READ_LIMIT);
+		return available.filter((question) => isQuestionPublic(question) && !isRetiredQuestion(question)).slice(0, limit);
 	},
 });
 
@@ -478,6 +444,11 @@ export const getUsersWithLowUnseenCount = internalQuery({
 export const assignPoolQuestionsToUsers = internalAction({
 	args: {
 		questionsPerUser: v.number(),
+		/**
+		 * The pool to hand out, by the date it was written (YYYY-MM-DD, UTC). Today's when
+		 * omitted. A pool is reviewed before it is handed out, which can be a day or more later.
+		 */
+		poolDate: v.optional(v.string()),
 	},
 	returns: v.object({
 		usersProcessed: v.number(),
@@ -486,7 +457,7 @@ export const assignPoolQuestionsToUsers = internalAction({
 	}),
 	handler: async (ctx, args) => {
 		const { questionsPerUser } = args;
-		const today = new Date().toISOString().split('T')[0];
+		const poolDate = args.poolDate ?? new Date().toISOString().split('T')[0];
 
 		let usersProcessed = 0;
 		let totalAssigned = 0;
@@ -494,12 +465,12 @@ export const assignPoolQuestionsToUsers = internalAction({
 
 		const poolQuestions: Array<Doc<"questions">> = await ctx.runQuery(
 			internal.internal.questions.getAvailablePoolQuestions,
-			{ poolDate: today, limit: 200 }
+			{ poolDate, limit: 200 }
 		);
 
 		if (poolQuestions.length === 0) {
-			console.log("No pool questions available for today");
-			return { usersProcessed: 0, totalAssigned: 0, errors: ["No pool questions available"] };
+			console.log(`No approved pool questions available for ${poolDate}`);
+			return { usersProcessed: 0, totalAssigned: 0, errors: ["No pool questions available. A pool question is handed out once it has been approved in the review queue."] };
 		}
 
 		const subscribers: Array<Doc<"users">> = await ctx.runQuery(
@@ -599,7 +570,7 @@ export const assignPoolQuestionsToUsers = internalAction({
 			const subject = `📬 Pool Questions Assigned: ${totalAssigned} to ${usersProcessed} users`;
 			const html = `
         <h2>Pool Question Assignment Summary</h2>
-        <p><strong>Date:</strong> ${today}</p>
+        <p><strong>Pool date:</strong> ${poolDate}</p>
         <p><strong>Users Processed:</strong> ${usersProcessed}</p>
         <p><strong>Total Questions Assigned:</strong> ${totalAssigned}</p>
         <p><strong>Questions Per User Target:</strong> ${questionsPerUser}</p>
