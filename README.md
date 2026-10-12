@@ -7,8 +7,12 @@ workshops, and social gatherings. Browse a scrolling feed, filter by style, tone
 and save questions to use again. Team workspaces add shared collections and scheduled prompts.
 
 The admin tools support question editing, generation, pruning review, and duplicate review.
-AI generation is implemented in the [generation runner](./convex/lib/generationRunner.ts)
-and [prompt architecture](./convex/lib/promptArchitecture.ts).
+AI generation is implemented in the [generation runner](./convex/lib/generationRunner.ts).
+Every question is asked for with one short prompt, the [brief](./convex/lib/brief.ts): who the
+questions are for, one line for the style, the tone and the topic (the "Prompt line" on each
+admin page, or the description until one is written), and questions the owner kept and
+rejected, read from the library. A topic is a theme chosen on purpose: filling the schedule
+grid with no topic chosen writes questions for the style and tone alone.
 
 ## Documentation
 

@@ -198,12 +198,12 @@
 
 **What:** Three gaps left from the review of the pairs and pick-the-best scripts:
 1. Tie a labels or choices file to its set. `select.mjs score` and `pairs.mjs score` match by card or pair id alone, every pair set starts at `p001`, and a drawn set starts at `q001` unless `--start` is given, so a file from another set is scored without a warning.
-2. Keep Jev scoring off a `--brief` run, or make it right. The run's record carries the app's definitions and blueprint, which the brief never showed the model, so `score.mjs` grades fit against the wrong text and `compare.mjs` sees unchanged definitions.
+2. Decide a comparison without the fit questions when a run was given its own prompt. Such a run records `promptLabel: "given"` and the app's definitions, which that prompt may never have shown the model, and `compare.mjs` only reports the label as a change.
 3. Record the model that answered each check. With `--model`, a judged file records the model asked for, and a preset or router name can resolve to different models between calls.
 
 **Why:** Each can print a number that looks right and isn't, with no error. All three take a script run by hand on the wrong input.
 
-**Context:** (1) `scoreSet` in `evals/selectRecord.mjs`, `scorePairs` in `evals/pairsRecord.mjs` and the `--start` default in `evals/select.mjs`; the first blind set was matched by question text. (2) `generateEvalBatch` in `convex/internal/evals.ts` returns the built prompt's blueprint and definitions also when a prompt was given; see `definitionsHash` in `evals/score.mjs` and the without-fit rule in `evals/compare.mjs`. The README says not to compare such a run, and the gap closes if the brief becomes the app's own prompt. (3) `evalQualityCheck` in `convex/internal/qualityCheck.ts` returns its `model` argument, and `judge()` already has the resolved one. Deferred by the owner during the pre-landing review, 2026-10-12.
+**Context:** (1) `scoreSet` in `evals/selectRecord.mjs`, `scorePairs` in `evals/pairsRecord.mjs` and the `--start` default in `evals/select.mjs`; the first blind set was matched by question text. (2) `generateEvalBatch` in `convex/internal/evals.ts` returns the built prompt's definitions also when a prompt was given; see `taxonomyHashOf` in `evals/stats.mjs` and the without-fit rule in `evals/compare.mjs`. The two runs the eval's own brief wrote (`pairs1-brief`, `cells-brief`) are refused by `score.mjs` and `judge.mjs`. (3) `evalQualityCheck` in `convex/internal/qualityCheck.ts` returns its `model` argument, and `judge()` already has the resolved one. Deferred by the owner during the pre-landing review, 2026-10-12.
 
 **Effort:** S
 **Priority:** P3
@@ -211,25 +211,20 @@
 
 ### Tighten the blind-set scripts after the adversarial review
 
-**What:** Nine points from the last review of the eval scripts. The first two matter before the next `--brief` judging:
-1. Have `judge.mjs --brief` refuse a run whose brief version isn't `brief.json`'s (`pairs1-brief` is version 1, from before the `form` lines), and say when `--brief` is used on a run the app's prompt wrote.
-2. Apply the keeps-one checks in `judge.mjs` and `generate.mjs` only when there is something to send, so a finished name can still be re-read after the decisions file or the brief has changed. A name judged with `--context` before the own-decision rule can't be reprinted today.
-3. Cover the user prompt's wording in a `--brief` run's label, or refuse uncommitted changes to `evals/brief.mjs` and `evals/brief.json` as `generate.mjs` already does for `convex/`.
-4. Record a version of the judge's added context instructions in a judged file and compare it on a rerun, as `promptVersion` is.
-5. Weigh each control by the size of the rest of its batch in the no-picking rate, which leans low when batches differ.
-6. Check the decisions' shape in `generate.mjs --brief` before any paid call, as `judge.mjs --context` does.
-7. Count the seeds `buildPairs` leaves out because one run has no usable question for them, and refuse two runs from different seeds files.
-8. Decide whether the number of cards a cell gets (one for a batch with no pick, four for a full one) tells the labeler too much.
-9. Have the two `score` commands refuse a labels or choices file inside the repo that git doesn't ignore.
+**What:** Six points left from the last review of the eval scripts:
+1. Apply the `--context` label check in `judge.mjs` only when there is something to send, so a finished name can still be re-read after the decisions file has changed. A name judged with `--context` before the own-decision rule can't be reprinted today.
+2. Record a version of the judge's added context instructions in a judged file and compare it on a rerun, as `promptVersion` is.
+3. Weigh each control by the size of the rest of its batch in the no-picking rate, which leans low when batches differ.
+4. Count the seeds `buildPairs` leaves out because one run has no usable question for them, and refuse two runs from different seeds files.
+5. Decide whether the number of cards a cell gets (one for a batch with no pick, four for a full one) tells the labeler too much.
+6. Have the two `score` commands refuse a labels or choices file inside the repo that git doesn't ignore.
 
-Also say in `generate.mjs`'s comment and in the message it records that a `--brief` run's `attempts[].error` still keeps the deployment's stored error for a failed model call, or reduce that field for such runs. The README already says so.
+**Why:** (1) and (2) can put verdicts made under different instructions into one file with no error, or lock a finished file. (3) and (4) shift a printed number a little. (5) and (6) protect the blind and keep the owner's labels out of the repo.
 
-**Why:** (1) to (4) can put verdicts or questions made under different instructions into one file with no error. (5) and (7) shift a printed number a little. (6) can waste a paid call. (8) and (9) protect the blind and keep the owner's labels out of the repo.
+**Context:** (1) the checks near the top of `evals/judge.mjs`. (2) `CONTEXT_INSTRUCTIONS` in `convex/lib/qualityCheck.ts` and what `evalQualityCheck` returns. (3) `wholeBatch` in `evals/selectRecord.mjs`; the key doesn't store each batch's size. (4) `buildPairs` in `evals/pairsRecord.mjs`. (5) `drawSet` in `evals/selectRecord.mjs`: every seed in `seeds-new-cells.json` is a distinct style, tone and topic, all shown on the card. (6) `evals/select.mjs` and `evals/pairs.mjs`. Three more points went away with the eval's own brief, when the app took it over. Deferred by the owner during the adversarial review, 2026-10-12.
 
-**Context:** (1) and (2) the checks near the top of `evals/judge.mjs` and the `reachedModel` check in `evals/generate.mjs`; a run's label and the judge's label hash different things today, so only the `brief-v<N>-` prefix can be compared. (3) `briefLabel` in `evals/brief.mjs` hashes the system prompt, `brief.json` and the decisions, not the lines `briefPrompts` adds around them. (4) `CONTEXT_INSTRUCTIONS` in `convex/lib/qualityCheck.ts` and what `evalQualityCheck` returns. (5) `wholeBatch` in `evals/selectRecord.mjs`; the key doesn't store each batch's size. (6) `briefPrompts` is called before the `try` in `generate.mjs`. (7) `buildPairs` in `evals/pairsRecord.mjs`. (8) `drawSet` in `evals/selectRecord.mjs`: every seed in `seeds-new-cells.json` is a distinct style, tone and topic, all shown on the card. (9) `evals/select.mjs` and `evals/pairs.mjs`. Deferred by the owner during the adversarial review, 2026-10-12.
-
-**Effort:** M
-**Priority:** P2
+**Effort:** S
+**Priority:** P3
 **Depends on:** None
 
 ### Tidy the eval scripts' shared code
@@ -240,7 +235,7 @@ Also say in `generate.mjs`'s comment and in the message it records that a `--bri
 3. Have `buildPairs` read run files with `savedQuestions`.
 4. Read flags with `parseArgs` from `node:util` in the four scripts.
 
-Smaller still: give the `--brief` assertions their own test in `convex/evals_scripts.test.ts` (they sit in the one named for `--model`), have `select.mjs` say "4 or above" from its constant where it writes "or 5" beside it, and test bad arguments in the pure modules so fewer tests start a process.
+Smaller still: have `select.mjs` say "4 or above" from its constant where it writes "or 5" beside it, and test bad arguments in the pure modules so fewer tests start a process.
 
 **Why:** The scripts repeat a little code and read flags four ways, so a change to one is easy to miss in the others. The script tests add a few seconds to every test run.
 
