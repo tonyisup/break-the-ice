@@ -168,7 +168,7 @@ says so instead of deciding. Keep the judged file a set was drawn from. That is 
 
 `generate.mjs --brief` generates the same seeds with a different prompt: the short brief in
 `brief.mjs`. It says who the questions are for in a few lines, describes the style, tone and
-topic in a sentence each (`brief.json`), and shows the model the owner's own decisions as the
+topic in a line each (`brief.json`), and shows the model the owner's own decisions as the
 standard: questions of the style the owner kept and rejected, with the reasons, and a few
 kept questions of other styles. The decisions are read from `evals/judged/owner-decisions.json`
 (git-ignored), a list of `{ "text", "style", "tone", "verdict", "reasons" }` with style and
@@ -244,10 +244,10 @@ node evals/select.mjs draw cells-set cells-judged --start 363
   (see "Measuring the quality check").
 - `select.mjs draw` takes, from each batch, up to three questions the judge kept at confidence
   4 or 5 with no reasons and no safety flags, surest first, and one more at random from the
-  rest of the batch as a control. It writes `cards.json` for the labeling page (style, tone,
-  topic and text, nothing else) and `key.json`, which stays on this machine. `--start` is the
-  number of the first card: one past the last card already on the labeling page, which was
-  q362 when this set was drawn.
+  rest of the batch as a control. It writes `cards.json` for the labeling page (each card's
+  number, style, tone, topic and text, nothing else) and `key.json`, which stays on this
+  machine. `--start` is the number of the first card: one past the last card already on the
+  labeling page, which was q362 when this set was drawn.
 
 The owner labels the cards keep or reject, blind. `node evals/select.mjs score cells-set
 evals/judged/cells-set/labels.json` reads the labels (a JSON object from card id to
@@ -350,5 +350,7 @@ the two by their share of the batches, about what the rate would be with no pick
 - The repo is public. `generated.json` keeps provider and CLI error text from failed calls word
   for word; check it before committing a run that had failures. A `--brief` run's calls carry
   the prompt, with the owner's decisions in it, and an error can print a call's arguments back,
-  so such a run's record keeps only the step a failed call broke at and a known error code. The
-  error's own text is shown on screen.
+  so for such a run a failed call's own output isn't kept: its batch records only the step the
+  call broke at and a known error code, and the output is shown on screen. The deployment's
+  stored error for each failed model call (`attempts[].error`) is still kept word for word, as
+  for any run, so the check before committing applies to a `--brief` run too.
