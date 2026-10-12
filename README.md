@@ -143,7 +143,9 @@ Admins see it in the review queue and on a question's page, and a hold or a safe
 marked in their lists. A signed-in member of a team sees one thing: on the schedule grid, a
 question the check held, or raised a safety concern about, is marked "Flagged", with the
 reasons and note in its details, until an admin acts on the question. Auto-fill Week and the coach-feedback
-suggestions leave a flagged question out. Changing a question's wording, style, tone or topic
+suggestions leave a flagged question out. Every generated question is now reviewed before it
+is public, and a review clears the mark, so it only shows on a question a matrix fill or the
+pool published before they were held. Changing a question's wording, style, tone or topic
 drops its verdict.
 
 Each check is a small call, about 1 cent, charged to system spend whoever generated the
@@ -153,17 +155,22 @@ under the same hard cap as the daily email. One that fails is tried once more fi
 later. Questions still waiting in the review queue without a verdict can
 be checked with `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`,
 then with `false` (up to 50 a run; it stops early if the provider isn't answering). That
-doesn't reach questions that were published at once: a matrix fill's or nightly pool's question
-whose check failed twice, or that was saved while the mode was off, stays unchecked and shows
-no flag. Setting the mode back to `off` stops new checks and hides every flag, with no deploy.
+doesn't reach a question that was published before it was checked: one a matrix fill or the
+nightly pool published at once, before those were held for review too, stays unchecked and
+shows no flag. Setting the mode back to `off` stops new checks and hides every flag, with no
+deploy.
 Reverting the code after checks have run needs the schema's additions kept, because Convex
 refuses a schema that stored rows don't fit.
 
-New AI questions from the feed and the daily email wait for review in the admin queue at
-`/admin/questions`. The person they were made for still gets them, and anyone with the link
-can open them, but they stay out of the shared feed, collections, daily-email picks and team
-schedules until an admin approves them. Matrix fill, the nightly pool and admin tools
-publish directly.
+New AI questions from the feed, the daily email, matrix fill and the nightly pool wait for
+review in the admin queue at `/admin/questions`. The person a feed or email question was made
+for still gets it, and anyone with the link can open one, but they stay out of the shared
+feed, collections, daily-email picks, the schedule grid and team schedules until an admin
+approves them. A grid cell with a question waiting for review counts as filled, so it isn't
+written twice, and a pool question is handed out only once it is approved. Because a new
+question is public only after review, the questions the brief shows the model as kept are ones
+a person let through, apart from any a matrix fill or the pool published before they were
+held. Only the admin tools publish directly.
 
 ## Stack
 

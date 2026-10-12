@@ -119,9 +119,18 @@ planner and pick one of the days the week shows.
 **Auto-fill** and **Auto-fill Week** never place a question marked **Flagged**.
 This message means no other question is left for the week: every question that
 matches the matrix's row and column selection is either flagged or already
-assigned this week. Widen the selection, generate a question for an empty cell,
-or use the **Write** or **Topic** tab. To use a flagged question anyway, select
+assigned this week. Widen the selection, or use the **Write** or **Topic** tab.
+A question generated for an empty cell is reviewed before it shows in the
+matrix, so it won't fill the gap today. To use a flagged question anyway, select
 **View full** on it to read the concern, then assign it yourself.
+
+### “This cell already has a question waiting for review”
+
+A question the AI writes for the matrix is reviewed by an admin of the app
+before it appears there. After **Generate** or **Fill Empty Cells** the planner
+says how many questions it wrote, and that they show once reviewed. Until then
+the cell stays empty and isn't written again. To assign something now, pick a
+library question, or use the **Write** or **Topic** tab.
 
 ### The week will not publish
 

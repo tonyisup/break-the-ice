@@ -297,9 +297,9 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 ### Check published questions whose check never landed
 
-**What:** Give `checkPendingQuestions` a way to reach generated questions that were published at once (a matrix fill's or the nightly pool's) and have no verdict.
+**What:** Give `checkPendingQuestions` a way to reach generated questions that were published at once and have no verdict: the ones a matrix fill or the nightly pool wrote before those were held for review.
 
-**Why:** The backfill covers the review queue only. A fill's or pool's question whose check failed twice, or that was saved while the check was off, stays unchecked and shows no flag, which looks the same as a question the check kept.
+**Why:** The backfill covers the review queue only. A fill's or pool's question from before, whose check failed twice or that was saved while the check was off, stays unchecked and shows no flag, which looks the same as a question the check kept. New ones are held, so the backfill reaches them.
 
 **Context:** `heldQuestionsWithoutCheck` in `convex/internal/qualityCheckData.ts` reads pending questions that are held for review. Widening it to every live generated question would also check the library the owner picked by hand and could flag those, so it needs a start date or a marker for "published without review". `checkQuestion` logs when it gives up on a question.
 
