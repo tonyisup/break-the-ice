@@ -339,11 +339,18 @@ the two by their share of the batches, about what the rate would be with no pick
   picks were no better than the rest of the batch. It was judged with `--context` before
   `judge.mjs` had its `--brief`, so that judge read the definitions of the time, built from
   the long prompt's templates.
-- Neither of those two brief runs is scored with Jev. Their records carry the definitions of
-  the time, built from the long prompt's templates, which their questions were never shown, so
-  `score.mjs` would grade their fit against the wrong text and `compare.mjs` wouldn't notice:
-  don't compare one against a baseline. `judge.mjs` shows the judge the definitions a run
-  recorded, so don't judge one of the two under a new name either.
+- Neither of those two brief runs is scored with Jev, and neither can be. Their records carry
+  the definitions of the time, built from the long prompt's templates, which their questions
+  were never shown, so `score.mjs` and `judge.mjs` refuse a run the eval's own brief wrote.
+- `runs/brief-app-cells-r1` (Oct 12, 2026) is the first run written by the app's own brief, on
+  `seeds-new-cells.json` after `seedBriefLines` gave dev's styles, tones and topics their
+  lines. All 24 batches came back, for $0.52. Of 192 questions the save step kept 182. None of
+  those shares eight words in a row with a public question of its style on dev (205 public
+  questions). All 16 either/or questions are two options joined by "or", all 16 would-you-
+  rather questions begin "Would you rather", and all 16 one-word questions say so. The ten the
+  save step refused: five either/or questions under its six-word minimum, such as "Top bunk or
+  bottom bunk?", and five the model wrote as a request ("Name one smell that...") with no
+  question mark. Nobody has labeled this run.
 - Seven primary rates decide a comparison, chosen up front, each over independent units: pass,
   review and block rates (over every generated question, before the code checks); the library
   likely-duplicate rate (exact library copies count as duplicates); the share of batches with a
