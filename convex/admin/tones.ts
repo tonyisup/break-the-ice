@@ -10,7 +10,7 @@ import {
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
-import { defaultQualityRubric, defaultToneAxesValue, latestVersion } from "../lib/taxonomy";
+import { defaultQualityRubric, defaultToneAxesValue, editedLine, latestVersion } from "../lib/taxonomy";
 import { DEFAULT_TONE_COLOR, DEFAULT_TONE_ICON } from "../core/tones";
 
 const USER_TONE_REASSIGN_BATCH_SIZE = 200;
@@ -73,6 +73,7 @@ const toneFields = {
   description: v.optional(v.string()),
   promptGuidanceForAI: v.string(),
   aiGuidance: v.string(),
+  brief: v.optional(v.string()),
   color: v.string(),
   icon: v.string(),
   order: v.optional(v.float64()),
@@ -115,6 +116,7 @@ function mapTone(tone: Doc<"tones">) {
     description: tone.description,
     promptGuidanceForAI,
     aiGuidance: tone.aiGuidance ?? promptGuidanceForAI,
+    brief: tone.brief,
     color: tone.color ?? DEFAULT_TONE_COLOR,
     icon: tone.icon ?? DEFAULT_TONE_ICON,
     order: tone.order,
@@ -175,6 +177,7 @@ export const createTone = mutation({
     color: v.string(),
     icon: v.string(),
     order: v.optional(v.float64()),
+    brief: v.optional(v.string()),
     aiGuidance: v.optional(v.string()),
     commonFailureModes: v.optional(v.array(v.string())),
     distinctFrom: v.optional(v.array(v.string())),
@@ -223,6 +226,7 @@ export const createTone = mutation({
       description: args.description,
       promptGuidanceForAI: args.promptGuidanceForAI,
       aiGuidance: args.aiGuidance ?? args.promptGuidanceForAI,
+      brief: editedLine(args.brief, undefined),
       color: args.color,
       icon: args.icon,
       order: args.order,
@@ -251,6 +255,7 @@ export const updateTone = mutation({
     color: v.string(),
     icon: v.string(),
     order: v.optional(v.float64()),
+    brief: v.optional(v.string()),
     aiGuidance: v.optional(v.string()),
     commonFailureModes: v.optional(v.array(v.string())),
     distinctFrom: v.optional(v.array(v.string())),
@@ -288,13 +293,14 @@ export const updateTone = mutation({
 
     const now = Date.now();
     // Fields the edit form doesn't send keep the current version's value instead of
-    // falling back to empty defaults.
+    // falling back to empty defaults. So does the prompt line, and a blank one sent clears it.
     if ((existingTone.status ?? "active") === "draft") {
       await ctx.db.patch(args._id, {
         name: args.name,
         description: args.description,
         promptGuidanceForAI: args.promptGuidanceForAI,
         aiGuidance: args.aiGuidance ?? args.promptGuidanceForAI,
+        brief: editedLine(args.brief, existingTone.brief),
         color: args.color,
         icon: args.icon,
         order: args.order,
@@ -325,6 +331,7 @@ export const updateTone = mutation({
       description: args.description,
       promptGuidanceForAI: args.promptGuidanceForAI,
       aiGuidance: args.aiGuidance ?? args.promptGuidanceForAI,
+      brief: editedLine(args.brief, existingTone.brief),
       color: args.color,
       icon: args.icon,
       order: args.order,

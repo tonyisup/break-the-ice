@@ -34,7 +34,6 @@ export default function GeneratorPage() {
     const tones = useQuery(api.core.tones.getTones, {})
     const topics = useQuery(api.core.topics.getTopics, {})
     const tags = useQuery(api.core.tags.getTags)
-    const promptBlueprints = useQuery(api.admin.promptBlueprints.listBlueprints, { limit: 50 })
 
     const generateAIQuestions = useAction(api.admin.ai.generateAIQuestions)
     const saveAIQuestion = useMutation(api.core.questions.saveAIQuestion)
@@ -44,7 +43,6 @@ export default function GeneratorPage() {
     const [selectedStyleId, setSelectedStyleId] = React.useState<Id<"styles"> | null>(null)
     const [selectedToneId, setSelectedToneId] = React.useState<Id<"tones"> | null>(null)
     const [selectedTopicId, setSelectedTopicId] = React.useState<Id<"topics"> | null>(null)
-    const [selectedBlueprintSlug, setSelectedBlueprintSlug] = React.useState("icebreaker-default")
     const [isGenerating, setIsGenerating] = React.useState(false)
     const [isSaving, setIsSaving] = React.useState(false)
     const [expandedTagGroupings, setExpandedTagGroupings] = React.useState<Set<string>>(new Set())
@@ -58,7 +56,7 @@ export default function GeneratorPage() {
     React.useEffect(() => {
         setGeneratedQuestions([])
         setActiveTabIndex("0")
-    }, [selectedStyleId, selectedToneId, selectedTopicId, selectedBlueprintSlug])
+    }, [selectedStyleId, selectedToneId, selectedTopicId])
 
     const handleTagToggle = (tagName: string) => {
         setGeneratedQuestions([]) // Reset on tag change too
@@ -119,7 +117,6 @@ export default function GeneratorPage() {
                 styleId: selectedStyleId,
                 toneId: selectedToneId,
                 topicId: selectedTopicId || undefined,
-                blueprintSlug: selectedBlueprintSlug,
             })
             if (generatedQuestion?.text) {
                 const newQuestions = [...generatedQuestions, generatedQuestion]
@@ -188,7 +185,7 @@ export default function GeneratorPage() {
 
     const tagGroupings = tags ? Array.from(new Set(tags.map(tag => tag.grouping))).sort() : []
 
-    if (!styles || !tones || !tags || !topics || !promptBlueprints) {
+    if (!styles || !tones || !tags || !topics) {
         return (
             <div className="flex items-center justify-center h-full p-12">
                 <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -245,21 +242,6 @@ export default function GeneratorPage() {
                                 >
                                     <option value="">General</option>
                                     {topics.map(topic => <option key={topic._id} value={topic._id}>{topic.name}</option>)}
-                                </select>
-                            </label>
-
-                            <label className="grid gap-2 text-sm font-medium">
-                                <span>Prompt blueprint</span>
-                                <select
-                                    value={selectedBlueprintSlug}
-                                    onChange={(event) => setSelectedBlueprintSlug(event.target.value)}
-                                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                >
-                                    {promptBlueprints.map(blueprint => (
-                                        <option key={blueprint._id} value={blueprint.slug}>
-                                            {blueprint.slug} v{blueprint.version} · {blueprint.status}
-                                        </option>
-                                    ))}
                                 </select>
                             </label>
                         </CardContent>

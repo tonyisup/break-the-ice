@@ -63,6 +63,8 @@ export default function StylesPage() {
 		icon: "Sparkles",
 		order: 0,
 		promptGuidanceForAI: "",
+		brief: "",
+		form: "",
 		example: ""
 	})
 
@@ -96,6 +98,8 @@ export default function StylesPage() {
 				icon: "Sparkles",
 				order: (styles?.length ?? 0) + 1,
 				promptGuidanceForAI: "",
+				brief: "",
+				form: "",
 				example: ""
 			})
 		} catch (error) {
@@ -114,6 +118,8 @@ export default function StylesPage() {
 				color: s.color,
 				icon: s.icon,
 				promptGuidanceForAI: s.promptGuidanceForAI,
+				brief: s.brief ?? "",
+				form: s.form ?? "",
 				order: s.order,
 				example: s.example || undefined
 			})
@@ -256,6 +262,25 @@ export default function StylesPage() {
 										value={newStyle.promptGuidanceForAI}
 										onChange={e => setNewStyle({ ...newStyle, promptGuidanceForAI: e.target.value })}
 									/>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="newStyleBrief" className="text-sm font-medium">Prompt line</label>
+									<textarea
+										id="newStyleBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={newStyle.brief}
+										onChange={e => setNewStyle({ ...newStyle, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this style. Leave blank to use the description.</p>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="newStyleForm" className="text-sm font-medium">Set form (optional)</label>
+									<Input
+										id="newStyleForm"
+										value={newStyle.form}
+										onChange={e => setNewStyle({ ...newStyle, form: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">Only for a style whose form is the style, like either/or. Every question keeps it.</p>
 								</div>
 								<div className="grid gap-2">
 									<label className="text-sm font-medium">Example Question</label>
@@ -476,6 +501,25 @@ export default function StylesPage() {
 										value={editingStyle.promptGuidanceForAI ?? ""}
 										onChange={e => setEditingStyle({ ...editingStyle, promptGuidanceForAI: e.target.value })}
 									/>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="editStyleBrief" className="text-sm font-medium">Prompt line</label>
+									<textarea
+										id="editStyleBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={editingStyle.brief ?? ""}
+										onChange={e => setEditingStyle({ ...editingStyle, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this style. Leave blank to use the description.</p>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="editStyleForm" className="text-sm font-medium">Set form (optional)</label>
+									<Input
+										id="editStyleForm"
+										value={editingStyle.form ?? ""}
+										onChange={e => setEditingStyle({ ...editingStyle, form: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">Only for a style whose form is the style, like either/or. Every question keeps it.</p>
 								</div>
 							</div>
 							<DialogFooter>

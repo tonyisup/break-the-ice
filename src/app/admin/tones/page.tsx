@@ -60,7 +60,8 @@ export default function TonesPage() {
 		color: "#10b981",
 		icon: "Music",
 		order: 0,
-		promptGuidanceForAI: ""
+		promptGuidanceForAI: "",
+		brief: ""
 	})
 
 	const filteredTones = tones?.filter(t =>
@@ -90,7 +91,8 @@ export default function TonesPage() {
 				color: "#10b981",
 				icon: "Music",
 				order: (tones?.length ?? 0) + 1,
-				promptGuidanceForAI: ""
+				promptGuidanceForAI: "",
+				brief: ""
 			})
 		} catch (error) {
 			toast.error("Failed to create tone")
@@ -106,6 +108,7 @@ export default function TonesPage() {
 				color: t.color,
 				icon: t.icon,
 				promptGuidanceForAI: t.promptGuidanceForAI,
+				brief: t.brief ?? "",
 				order: t.order
 			})
 			toast.success("Tone updated")
@@ -235,6 +238,16 @@ export default function TonesPage() {
 										value={newTone.promptGuidanceForAI}
 										onChange={e => setNewTone({ ...newTone, promptGuidanceForAI: e.target.value })}
 									/>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="newToneBrief" className="text-sm font-medium">Prompt line</label>
+									<textarea
+										id="newToneBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={newTone.brief}
+										onChange={e => setNewTone({ ...newTone, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this tone. Leave blank to use the description.</p>
 								</div>
 							</div>
 							<DialogFooter>
@@ -424,6 +437,16 @@ export default function TonesPage() {
 										value={editingTone.promptGuidanceForAI ?? ""}
 										onChange={e => setEditingTone({ ...editingTone, promptGuidanceForAI: e.target.value })}
 									/>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="editToneBrief" className="text-sm font-medium">Prompt line</label>
+									<textarea
+										id="editToneBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={editingTone.brief ?? ""}
+										onChange={e => setEditingTone({ ...editingTone, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this tone. Leave blank to use the description.</p>
 								</div>
 							</div>
 							<DialogFooter>

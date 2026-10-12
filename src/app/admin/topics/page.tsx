@@ -61,6 +61,7 @@ export default function TopicsPage() {
 		description: "",
 		example: "",
 		promptGuidanceForAI: "",
+		brief: "",
 		order: 0,
 		startDate: "",
 		endDate: "",
@@ -96,6 +97,7 @@ export default function TopicsPage() {
 				description: "",
 				example: "",
 				promptGuidanceForAI: "",
+				brief: "",
 				order: (topics?.length ?? 0) + 1,
 				startDate: "",
 				endDate: "",
@@ -117,6 +119,7 @@ export default function TopicsPage() {
 				description: t.description,
 				example: t.example,
 				promptGuidanceForAI: t.promptGuidanceForAI,
+				brief: t.brief ?? "",
 				order: t.order,
 				startDate: t.startDate,
 				endDate: t.endDate,
@@ -280,6 +283,16 @@ export default function TopicsPage() {
 										value={newTopic.promptGuidanceForAI}
 										onChange={e => setNewTopic({ ...newTopic, promptGuidanceForAI: e.target.value })}
 									/>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="newTopicBrief" className="text-sm font-medium">Prompt line</label>
+									<textarea
+										id="newTopicBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={newTopic.brief}
+										onChange={e => setNewTopic({ ...newTopic, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this topic. Leave blank to use the description.</p>
 								</div>
 							</div>
 							<DialogFooter>
@@ -565,6 +578,16 @@ export default function TopicsPage() {
 										value={editingTopic.promptGuidanceForAI}
 										onChange={e => setEditingTopic({ ...editingTopic, promptGuidanceForAI: e.target.value })}
 									/>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="editTopicBrief" className="text-sm font-medium">Prompt line</label>
+									<textarea
+										id="editTopicBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={editingTopic.brief ?? ""}
+										onChange={e => setEditingTopic({ ...editingTopic, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this topic. Leave blank to use the description.</p>
 								</div>
 							</div>
 							<DialogFooter>
