@@ -10,6 +10,7 @@ import {
   GENERATION_PROVIDER,
   UnusableOutputError,
   assertOpenRouterModel,
+  assertPromptSize,
   createChatCompletionWithRetry,
   getChatCompletionContent,
   markRunFailed,
@@ -65,6 +66,8 @@ async function judge(
 ): Promise<{ verdict: QualityVerdict; runId: Id<"generationRuns">; model: string }> {
   await ensureAiBudget(ctx, "system");
   const prompts = buildQualityCheckPrompts(subject, context);
+  // Before the run row, like every other call: the owner's decisions can make a prompt of any size.
+  assertPromptSize(prompts.systemPrompt.length + prompts.userPrompt.length);
   const runId = await ctx.runMutation(internal.internal.generation.createGenerationRun, {
     purpose: "quality_check",
     styleSlug: subject.style.slug,
@@ -214,7 +217,8 @@ export const checkPendingQuestions = internalAction({
 
 /**
  * The same check on questions given as text, for measuring it against the owner's labels
- * (evals/judge.mjs). Nothing is saved on any question. Runs only where EVALS_ENABLED is set
+ * (evals/judge.mjs), optionally with the owner's decisions beside a question or with another
+ * model. Nothing is saved on any question. Runs only where EVALS_ENABLED is set
  * (dev), and is charged to that deployment's system budget. After a call that gets no answer
  * the rest are reported as not sent.
  */

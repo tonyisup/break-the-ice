@@ -1,8 +1,11 @@
 // What pairs.mjs does with two generated runs and the owner's choices. Pure, so it can be tested.
 import { seededShuffle } from "./brief.mjs";
 
-/** A card sharing this many words in a row with a question the owner has already judged is left out. */
-export const NEAR_COPY_WORDS = 8;
+/**
+ * A card sharing this many words in a row with a question the owner has already judged is left
+ * out. A shorter question is left out only when it is one of those questions, word for word.
+ */
+const NEAR_COPY_WORDS = 8;
 /** The result is read at whole rounds only (one pair per seed), and at no fewer than this many. */
 export const MIN_ROUNDS = 3;
 /** One way of asking is called better when the sign test on the pairs with a pick is below this. */
@@ -11,11 +14,12 @@ export const CHOICES = ["left", "right", "both", "neither"];
 
 const wordsOf = (text) => text.toLowerCase().replace(/[^a-z0-9' ]+/g, " ").split(/\s+/).filter(Boolean);
 
-/** Every run of `length` words in a row found in `texts`. */
+/** Every run of `length` words in a row found in `texts`. A text shorter than that is one run, whole. */
 export function wordRuns(texts, length = NEAR_COPY_WORDS) {
   const runs = new Set();
   for (const text of texts) {
     const words = wordsOf(text);
+    if (words.length > 0 && words.length < length) runs.add(words.join(" "));
     for (let i = 0; i + length <= words.length; i += 1) runs.add(words.slice(i, i + length).join(" "));
   }
   return runs;
@@ -24,6 +28,7 @@ export function wordRuns(texts, length = NEAR_COPY_WORDS) {
 /** Whether `text` repeats one of `runs`: a near copy of something already seen. */
 export function isNearCopy(text, runs, length = NEAR_COPY_WORDS) {
   const words = wordsOf(text);
+  if (words.length > 0 && words.length < length) return runs.has(words.join(" "));
   for (let i = 0; i + length <= words.length; i += 1) {
     if (runs.has(words.slice(i, i + length).join(" "))) return true;
   }
@@ -145,7 +150,7 @@ export function scorePairs({ pairs, key, choices }) {
   const seedLeans = { a: 0, b: 0, even: 0 };
   for (const seed of seeds.values()) seedLeans[seed.a > seed.b ? "a" : seed.b > seed.a ? "b" : "even"] += 1;
   const verdict =
-    rounds < Math.min(MIN_ROUNDS, lastRound) ? "too few rounds" : p >= PICK_ALPHA ? "no difference shown" : tally.a > tally.b ? "a" : "b";
+    rounds < MIN_ROUNDS ? "too few rounds" : p >= PICK_ALPHA ? "no difference shown" : tally.a > tally.b ? "a" : "b";
   return {
     rounds,
     counted: counted.length,

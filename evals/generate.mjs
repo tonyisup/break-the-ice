@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { mapLimit } from "./async.mjs";
 import { briefLabel, briefPrompts, missingFromBrief } from "./brief.mjs";
 import { assertDevTarget, convexRun } from "./devTarget.mjs";
-import { cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess, writeJson } from "./runRecord.mjs";
+import { classifyFailure, cliError, mergeAttempts, orderedBatches, pendingSeeds, recordFailure, recordSuccess, writeJson } from "./runRecord.mjs";
 
 // Two at a time keeps a run to a few minutes without bursting the provider's rate limit.
 const GENERATION_CONCURRENCY = 2;
@@ -74,7 +74,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exi
 const previous = existsSync(outPath) ? JSON.parse(readFileSync(outPath, "utf8")) : null;
 // Batches are kept by seed id, so a run can't move to a file whose ids mean other seeds.
 if (previous && (previous.seeds ?? "seeds") !== seedsName) {
-  console.error(`Run "${run}" was generated from evals/${previous.seeds ?? "seeds"}.json, not evals/${seedsName}.json. A run keeps its seeds file; start a new run name.`);
+  console.error(`Run "${run}" was generated from evals/${previous.seeds ?? "seeds"}.json, not evals/${seedsName}.json. A run keeps its seeds file; rerun with ${previous.seeds ? `--seeds ${previous.seeds}` : "no --seeds"}, or start a new run name.`);
   process.exit(1);
 }
 // Runs from before --model existed have no model recorded, and used the default. A run that never
@@ -116,7 +116,9 @@ const asked = briefSetup?.label ?? null;
 const previousAsked = previous?.prompt ?? null;
 if (reachedModel && asked !== previousAsked) {
   const named = (value) => value ?? "the app's prompt";
-  console.error(`Run "${run}" was generated with ${named(previousAsked)}, not ${named(asked)}. A run keeps one way of asking; start a new run name.`);
+  // A label also changes when the brief or the owner's decisions do, and then no flag brings the old one back.
+  const remedy = !previousAsked ? "rerun without --brief, or start a new run name" : !asked ? "rerun with --brief, or start a new run name" : "the brief or the owner's decisions have changed since, so start a new run name";
+  console.error(`Run "${run}" was generated with ${named(previousAsked)}, not ${named(asked)}. A run keeps one way of asking; ${remedy}.`);
   process.exit(1);
 }
 const batches = new Map((previous?.batches ?? []).map((batch) => [batch.seed.id, batch]));
@@ -213,7 +215,16 @@ if (todo.length) {
       console.log(`${seed.id} ${seed.style}/${seed.tone}${seed.topic ? `/${seed.topic}` : ""}: ${result.candidates.length} questions`);
     } catch (error) {
       const message = cliError(error);
-      recordFailure(batches, seed, message, commit);
+      // With --brief the call's arguments hold the prompt, with the owner's decisions in it, and a
+      // refusal can print its arguments back. That text is shown here and never kept in the record.
+      const quotesPrompt = briefSetup !== null && /systemPrompt|userPrompt/.test(message);
+      recordFailure(
+        batches,
+        seed,
+        quotesPrompt ? "The error printed the call's arguments, which hold the brief's prompt, so its text isn't kept here." : message,
+        commit,
+        classifyFailure(message),
+      );
       console.log(`${seed.id} failed: ${message}`);
     }
     save();
@@ -228,12 +239,15 @@ const failed = pending.length;
 // would be refused the same way on a plain rerun.
 const refused = failed > 0 && pending.every((seed) => batches.get(seed.id)?.failures.at(-1)?.stage === "setup");
 const incomplete = invocations.some((inv) => inv.attemptsComplete !== true);
+// A rerun uses the run's own model, but has to be given its --brief and --seeds again.
+const again = [asked ? "--brief" : null, seedsName === "seeds" ? null : `--seeds ${seedsName}`].filter(Boolean).join(" ");
+const rerun = again ? `rerun with ${again}` : "rerun";
 console.log(
   refused
-    ? `${failed} seeds were refused before generating; fix the setup (pass the right --model if the name was refused), then rerun.`
+    ? `${failed} seeds were refused before generating; fix the setup (pass the right --model if the name was refused), then ${rerun}.`
     : failed
-      ? `${failed} seeds failed; rerun to retry them.`
+      ? `${failed} seeds failed; ${rerun} to retry them.`
       : incomplete
-        ? "Generation records incomplete; rerun to fetch them."
+        ? `Generation records incomplete; ${rerun} to fetch them.`
         : "All seeds generated.",
 );

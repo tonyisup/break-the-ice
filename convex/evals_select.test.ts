@@ -1,7 +1,7 @@
 // Picking the best of a judged batch and reading the owner's labels on it (evals/selectRecord.mjs),
 // and the owner's decisions the judge is shown (judgeContext in evals/judgeRecord.mjs).
 import { describe, expect, test } from "vitest";
-import { MIN_PASS_CARDS, briefDefinitions, contextLabel, judgeContext } from "../evals/judgeRecord.mjs";
+import { MIN_PASS_CARDS, briefDefinitions, contextLabel, definitionsLabel, judgeContext } from "../evals/judgeRecord.mjs";
 import { PICK_MIN_CONFIDENCE, clearsBar, drawSet, scoreSet } from "../evals/selectRecord.mjs";
 
 type Verdict = { verdict: "keep" | "hold"; reasons: string[]; safety: string[]; confidence: number };
@@ -52,6 +52,21 @@ describe("the owner's decisions shown to the judge", () => {
     expect(judgeContext([], "a", names)).toEqual({ sameStyle: [], others: [] });
   });
 
+  test("a question the owner has already decided on is shown only the decisions made before that one", () => {
+    const decisions = [decision(1, "a"), decision(2, "b", "reject"), decision(3, "a", "reject"), decision(4, "a"), decision(5, "b")];
+    const shown = (text?: string) => {
+      const context = judgeContext(decisions, "a", names, text);
+      return [context.sameStyle.map((example) => example.text), context.others.map((example) => example.text)];
+    };
+
+    expect(shown("a reject 3?")).toEqual([["a keep 1?"], ["b reject 2?"]]);
+    expect(shown("a keep 1?")).toEqual([[], []]);
+    // A question with no decision of its own, or none named at all, is shown them all, as before.
+    const all = [["a keep 1?", "a reject 3?", "a keep 4?"], ["b reject 2?", "b keep 5?"]];
+    expect(shown("Never decided?")).toEqual(all);
+    expect(shown()).toEqual(all);
+  });
+
   test("the label follows the decisions", () => {
     const decisions = [decision(1, "a")];
     expect(contextLabel(decisions)).toMatch(/^owner-[0-9a-f]{12}$/);
@@ -85,6 +100,13 @@ describe("the brief's lines as the judge's definitions", () => {
     expect(briefDefinitions({ style: old("zz"), tone: old("t"), topic: null }, taxonomy)).toBeNull();
     expect(briefDefinitions({ style: old("a"), tone: old("zz"), topic: null }, taxonomy)).toBeNull();
     expect(briefDefinitions({ style: old("a"), tone: old("t"), topic: old("zz") }, taxonomy)).toBeNull();
+  });
+
+  test("the label names the brief's version and its lines, so one reworded line gives another label", () => {
+    const label = definitionsLabel({ version: 2, ...taxonomy });
+    expect(label).toMatch(/^brief-v2-[0-9a-f]{12}$/);
+    expect(definitionsLabel({ version: 2, ...taxonomy })).toBe(label);
+    expect(definitionsLabel({ version: 2, ...taxonomy, tones: { t: { name: "Tone T", brief: "Plainer." } } })).not.toBe(label);
   });
 });
 

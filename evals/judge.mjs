@@ -6,7 +6,8 @@
 // the owner's labels and evaluates the pass rule. --only-labeled judges just the questions
 // that file has labels for. --context shows the judge the owner's decisions beside each
 // question (evals/judged/owner-decisions.json, named by evals/brief.json), which the app's own
-// check never gets; a name keeps one way of judging. --model judges with that OpenRouter model
+// check never gets. A question the owner has already decided on is shown only the decisions made
+// before that one. A name keeps one way of judging. --model judges with that OpenRouter model
 // (like anthropic/claude-haiku-5.5) instead of the app's, to measure it against the same labels;
 // a name keeps one model, so give every rerun of that name the same --model. --brief describes
 // each question's style, tone and topic to the judge with the brief's own lines (evals/brief.json)
@@ -17,7 +18,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapLimit } from "./async.mjs";
 import { assertDevTarget, convexRun } from "./devTarget.mjs";
-import { briefDefinitions, compareWithLabels, contextLabel, judgeContext, passRule, savedQuestions } from "./judgeRecord.mjs";
+import { briefDefinitions, compareWithLabels, contextLabel, definitionsLabel, judgeContext, passRule, savedQuestions } from "./judgeRecord.mjs";
 import { cliError, writeJson } from "./runRecord.mjs";
 
 // A call judges its questions one after another, a few seconds each.
@@ -43,6 +44,12 @@ if (!name || !validName(name) || runNames.length === 0 || !runNames.every(validN
   console.error(USAGE);
   process.exit(1);
 }
+// evals/judged/owner-decisions.json holds the owner's decisions (--context reads it). A judged
+// file of that name would be written over them.
+if (name === "owner-decisions") {
+  console.error('"owner-decisions" is the file the owner\'s decisions are read from. Use another name.');
+  process.exit(1);
+}
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 assertDevTarget(root);
@@ -56,6 +63,14 @@ const runs = runNames.map((run) => {
   return { run, generated: JSON.parse(readFileSync(path, "utf8")) };
 });
 
+// A run asked with the short brief was never told the app's fill-in templates, so a judge shown
+// those marks its questions down for not following them.
+const briefRuns = runs.filter(({ generated }) => generated.prompt).map(({ run }) => run);
+if (briefRuns.length && !withBrief) {
+  console.error(`${briefRuns.join(", ")} ${briefRuns.length === 1 ? "was" : "were"} generated with --brief, so the judge has to read the brief's lines too: add --brief.`);
+  process.exit(1);
+}
+
 const labelsPath = join(here, "owner-labels.json");
 const labels = existsSync(labelsPath) ? JSON.parse(readFileSync(labelsPath, "utf8")).cards : null;
 if (onlyLabeled && !labels) {
@@ -66,9 +81,12 @@ const labeledTexts = new Set((labels ?? []).map((card) => card.text));
 let questions = savedQuestions(runs).filter((question) => !onlyLabeled || labeledTexts.has(question.text));
 // The brief's lines replace the app's definitions before anything is sent, and a question the
 // brief has no line for stops the run.
-const described = withBrief ? `brief-v${JSON.parse(readFileSync(join(here, "brief.json"), "utf8")).version}` : null;
+// Read once, and only when a flag needs it.
+let briefFile;
+const brief = () => (briefFile ??= JSON.parse(readFileSync(join(here, "brief.json"), "utf8")));
+const described = withBrief ? definitionsLabel(brief()) : null;
 if (withBrief) {
-  const taxonomy = JSON.parse(readFileSync(join(here, "brief.json"), "utf8"));
+  const taxonomy = brief();
   const uncovered = questions.filter((question) => !briefDefinitions(question, taxonomy));
   if (uncovered.length) {
     const slugs = [...new Set(uncovered.map((q) => `${q.style.slug}/${q.tone.slug}${q.topic ? `/${q.topic.slug}` : ""}`))];
@@ -90,7 +108,13 @@ if (withContext) {
     process.exit(1);
   }
   const decisions = JSON.parse(readFileSync(decisionsPath, "utf8"));
-  contextSetup = { decisions, names: JSON.parse(readFileSync(join(here, "brief.json"), "utf8")), label: contextLabel(decisions) };
+  // The judge is shown each decision's style and tone, so one without them stops the run before a paid call.
+  const incomplete = decisions.filter((decision) => ![decision?.text, decision?.style, decision?.tone].every((value) => typeof value === "string" && value)).length;
+  if (incomplete) {
+    console.error(`${incomplete} of the decisions in ${decisionsPath} have no text, style or tone. Each is { text, style, tone, verdict, reasons }.`);
+    process.exit(1);
+  }
+  contextSetup = { decisions, names: brief(), label: contextLabel(decisions) };
 }
 const shown = contextSetup?.label ?? null;
 if (previous && (previous.context ?? null) !== shown) {
@@ -101,6 +125,10 @@ if (previous && (previous.context ?? null) !== shown) {
 if (previous && (previous.definitions ?? null) !== described) {
   const named = (value) => (value ? `the brief's lines (${value})` : "the app's definitions");
   console.error(`"${name}" was judged with ${named(previous.definitions ?? null)}, not ${named(described)}. A name keeps one way of judging; start a new name.`);
+  process.exit(1);
+}
+if (previous?.model && model && previous.model !== model) {
+  console.error(`"${name}" was judged by ${previous.model}, not ${model}. A name keeps one model: rerun with --model ${previous.model} (or with no --model, if that is the app's own), or start a new name.`);
   process.exit(1);
 }
 // A question whose check failed before is tried again.
@@ -131,13 +159,16 @@ const save = () =>
 
 let failures = 0;
 if (todo.length && record.model !== null) {
-  // An empty call costs nothing and says which model and instructions dev has now.
+  // An empty call costs nothing and says which model (the one asked for, or dev's own) and
+  // instructions this run would judge with.
   const deployed = await convexRun(root, "internal/qualityCheck:evalQualityCheck", { items: [], ...(model ? { model } : {}) }).catch((error) => {
     console.error(`Couldn't ask dev which instructions it has (${cliError(error)}). Nothing was judged.`);
     process.exit(1);
   });
   if (record.model !== deployed.model || record.promptVersion !== deployed.promptVersion) {
-    console.error(`"${name}" was judged by ${record.model} with instructions v${record.promptVersion}; the deployment now has ${deployed.model} v${deployed.promptVersion}. Start a new name.`);
+    // With no --model the answer is the app's own judge, so a name judged with --model reads as changed too.
+    const hint = !model && record.model !== deployed.model ? ` If "${name}" was judged with --model, rerun with --model ${record.model} instead.` : "";
+    console.error(`"${name}" was judged by ${record.model} with instructions v${record.promptVersion}; the deployment now has ${deployed.model} v${deployed.promptVersion}. Start a new name.${hint}`);
     process.exit(1);
   }
 }
@@ -154,7 +185,7 @@ if (todo.length) {
           style,
           tone,
           topic,
-          ...(contextSetup ? { context: judgeContext(contextSetup.decisions, style.slug, contextSetup.names) } : {}),
+          ...(contextSetup ? { context: judgeContext(contextSetup.decisions, style.slug, contextSetup.names, text) } : {}),
         })),
         ...(model ? { model } : {}),
       });

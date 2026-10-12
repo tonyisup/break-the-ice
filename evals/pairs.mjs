@@ -55,6 +55,8 @@ if (command === "build") {
   const perRound = Array.from({ length: rounds }, (_, r) => pairs.filter((pair) => pair.round === r + 1).length);
   console.log(`${pairs.length} pairs in ${rounds} rounds (${perRound.join(", ")}) written to ${dir}.`);
   console.log(`Left out as near copies of questions already judged, or written by both runs: ${leftOut.a} from ${runA}, ${leftOut.b} from ${runB}.`);
+  if (!existsSync(decisionsPath)) console.log(`${decisionsPath} doesn't exist, so no question was checked against ones the owner has already judged.`);
+  if (rounds < MIN_ROUNDS) console.log(`That is fewer than the ${MIN_ROUNDS} whole rounds score needs, so this set can't give a result.`);
 } else {
   const [choicesFile, ...extra] = rest;
   if (!choicesFile || extra.length) fail(USAGE);

@@ -101,12 +101,15 @@ const CONTEXT_PER_VERDICT = 12;
  * that style, then the latest of other styles up to 24 in all, with at most twelve keeps and
  * twelve rejects among the other styles' and the same style's together. `decisions` are in the
  * order the owner made them, as `{ text, style, tone, verdict, reasons }` with slugs; `names`
- * maps slugs to the names the judge reads. Each list comes back oldest first.
+ * maps slugs to the names the judge reads. Each list comes back oldest first. When the owner
+ * has already decided on `text`, the question being judged, only the decisions made before
+ * that one are shown: never the question's own, and nothing decided after the owner saw it.
  * @param {Array<{ text: string, style: string, tone: string, verdict: string, reasons?: string[] }>} decisions
  * @param {string} styleSlug
  * @param {{ styles?: Record<string, { name: string }>, tones?: Record<string, { name: string }> }} names
+ * @param {string} [text]
  */
-export function judgeContext(decisions, styleSlug, names) {
+export function judgeContext(decisions, styleSlug, names, text) {
   const example = (decision) => ({
     text: decision.text,
     style: names.styles?.[decision.style]?.name ?? decision.style,
@@ -114,7 +117,8 @@ export function judgeContext(decisions, styleSlug, names) {
     verdict: decision.verdict,
     reasons: decision.reasons ?? [],
   });
-  const decided = decisions.filter((decision) => decision.verdict === "keep" || decision.verdict === "reject");
+  const own = text === undefined ? -1 : decisions.findIndex((decision) => decision.text === text);
+  const decided = (own < 0 ? decisions : decisions.slice(0, own)).filter((decision) => decision.verdict === "keep" || decision.verdict === "reject");
   const sameStyle = decided.filter((decision) => decision.style === styleSlug).slice(-CONTEXT_SAME_STYLE);
   const counts = { keep: 0, reject: 0 };
   for (const decision of sameStyle) counts[decision.verdict] += 1;
@@ -131,6 +135,11 @@ export function judgeContext(decisions, styleSlug, names) {
 /** Names the decisions a judged file was shown, so a file never mixes verdicts made with different ones. */
 export function contextLabel(decisions) {
   return `owner-${createHash("sha256").update(JSON.stringify(decisions)).digest("hex").slice(0, 12)}`;
+}
+
+/** Names the brief's lines a judged file was described with: the brief's version and the lines themselves. */
+export function definitionsLabel(taxonomy) {
+  return `brief-v${taxonomy.version}-${createHash("sha256").update(JSON.stringify(taxonomy)).digest("hex").slice(0, 12)}`;
 }
 
 /**

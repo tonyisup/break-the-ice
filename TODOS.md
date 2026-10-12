@@ -194,6 +194,39 @@
 **Priority:** P3
 **Depends on:** None
 
+### Guard the hand-run eval scripts against a wrong file or a wrong run
+
+**What:** Three gaps left from the review of the pairs and pick-the-best scripts:
+1. Tie a labels or choices file to its set. `select.mjs score` and `pairs.mjs score` match by card or pair id alone, every pair set starts at `p001`, and a drawn set starts at `q001` unless `--start` is given, so a file from another set is scored without a warning.
+2. Keep Jev scoring off a `--brief` run, or make it right. The run's record carries the app's definitions and blueprint, which the brief never showed the model, so `score.mjs` grades fit against the wrong text and `compare.mjs` sees unchanged definitions.
+3. Record the model that answered each check. With `--model`, a judged file records the model asked for, and a preset or router name can resolve to different models between calls.
+
+**Why:** Each can print a number that looks right and isn't, with no error. All three take a script run by hand on the wrong input.
+
+**Context:** (1) `scoreSet` in `evals/selectRecord.mjs`, `scorePairs` in `evals/pairsRecord.mjs` and the `--start` default in `evals/select.mjs`; the first blind set was matched by question text. (2) `generateEvalBatch` in `convex/internal/evals.ts` returns the built prompt's blueprint and definitions also when a prompt was given; see `definitionsHash` in `evals/score.mjs` and the without-fit rule in `evals/compare.mjs`. The README says not to compare such a run, and the gap closes if the brief becomes the app's own prompt. (3) `evalQualityCheck` in `convex/internal/qualityCheck.ts` returns its `model` argument, and `judge()` already has the resolved one. Deferred by the owner during the pre-landing review, 2026-10-12.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Tidy the eval scripts' shared code
+
+**What:** Four tidy-ups from the same review, none of which changes what a script does:
+1. Drop the `length` parameter of `wordRuns` and `isNearCopy`, which nothing sets.
+2. Move the JSON reader, the name check and the run loader that `pairs.mjs`, `select.mjs` and `judge.mjs` each define into `evals/runRecord.mjs`.
+3. Have `buildPairs` read run files with `savedQuestions`.
+4. Read flags with `parseArgs` from `node:util` in the four scripts.
+
+Smaller still: give the `--brief` assertions their own test in `convex/evals_scripts.test.ts` (they sit in the one named for `--model`), print the confidence floor in `select.mjs` from its constant, and test bad arguments in the pure modules so fewer tests start a process.
+
+**Why:** The scripts repeat a little code and read flags four ways, so a change to one is easy to miss in the others. The script tests add a few seconds to every test run.
+
+**Context:** `evals/pairsRecord.mjs`, `evals/judgeRecord.mjs` (`savedQuestions`), `evals/runRecord.mjs`, and the flag handling at the top of `evals/generate.mjs`, `judge.mjs`, `pairs.mjs` and `select.mjs`. The tests match each script's usage text on stderr. `savedQuestions` keeps a text repeated inside one run only the first time, where `buildPairs` can show it under two seeds: cover that with a test before switching. Deferred by the owner during the pre-landing review, 2026-10-12.
+
+**Effort:** S
+**Priority:** P4
+**Depends on:** None
+
 ### Check remix output before showing it
 
 **What:** Reject a remix whose `finish_reason` isn't "stop", not just "length". Run the generation text checks on it too: length, one question mark, a single line.
@@ -643,7 +676,7 @@
 
 **Why:** The worst-case call is now 4,300 output tokens, about $0.017 on today's model. If the OpenRouter preset is pointed at a pricier model, which needs no deploy, calls could cost more than they reserve and overshoot the daily cap before settling. Eval runs with `--model` can already name a pricier model on dev: Opus 5.5 averaged about $0.023 a call. The reservation is also what a call is charged when it times out or its response can't be parsed (`keepAiReservation`), since its real cost is never reported.
 
-**Context:** `reserveAiSpend` in `convex/lib/aiSpendGuard.ts`, `convex/lib/aiSpend.ts`, `maxOutputTokens` in `convex/lib/generationRunner.ts`, and the named-model path in `generateEvalBatch` (`convex/internal/evals.ts`). Deferred during the v0.3.2.0 review (decision 9ce5b30c) and again for eval models in the v0.4.9.0 review (decision 6f390dcf).
+**Context:** `reserveAiSpend` in `convex/lib/aiSpendGuard.ts`, `convex/lib/aiSpend.ts`, `maxOutputTokens` in `convex/lib/generationRunner.ts`, and the named-model paths in `generateEvalBatch` (`convex/internal/evals.ts`) and `evalQualityCheck` (`convex/internal/qualityCheck.ts`). Deferred during the v0.3.2.0 review (decision 9ce5b30c) and again for eval models in the v0.4.9.0 review (decision 6f390dcf).
 
 **Effort:** M
 **Priority:** P3

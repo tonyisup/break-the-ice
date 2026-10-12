@@ -6,7 +6,7 @@
 // 4 or 5 with nothing against them, adds --controls (1 unless said) drawn at random from the rest
 // of each batch, and writes evals/judged/<name>/cards.json, for the labeling page, and key.json,
 // which says which card is which and stays on this machine. --start numbers the cards from there
-// (363 follows the cards already in Question Labels). score reads the owner's labels, a JSON
+// (one past the last card already on the labeling page). score reads the owner's labels, a JSON
 // object from card id to { "verdict": "keep" | "reject" | "unsure" }, and applies the first blind
 // set's rule to the picked cards. evals/judged/ is git-ignored.
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -40,7 +40,7 @@ if (command === "draw") {
   const options = { "--pick": 3, "--controls": 1, "--start": 1 };
   if (!named(judgedName) || flags.length % 2) fail(USAGE);
   for (let i = 0; i < flags.length; i += 2) {
-    if (!(flags[i] in options) || !/^\d{1,4}$/.test(flags[i + 1])) fail(USAGE);
+    if (!Object.hasOwn(options, flags[i]) || !/^\d{1,4}$/.test(flags[i + 1])) fail(USAGE);
     options[flags[i]] = Number(flags[i + 1]);
   }
   if (options["--pick"] < 1 || options["--start"] < 1) fail(USAGE);
@@ -49,6 +49,8 @@ if (command === "draw") {
   const judgedPath = join(here, "judged", `${judgedName}.json`);
   if (!existsSync(judgedPath)) fail(`Run node evals/judge.mjs ${judgedName} <run>... first.`);
   const judged = readJson(judgedPath);
+  // The run names become paths, so they are checked like the names given on the command line.
+  if (!Array.isArray(judged.runs) || !judged.runs.every(named)) fail(`${judgedPath} doesn't say which runs it was judged from.`);
   const runs = judged.runs.map((run) => {
     const path = join(here, "runs", run, "generated.json");
     if (!existsSync(path)) fail(`Run "${run}", which "${judgedName}" was judged from, has no generated.json.`);
@@ -68,7 +70,7 @@ if (command === "draw") {
     verdict: verdicts.get(question.text),
   }));
   const { cards, key } = drawSet({ name, questions, pick: options["--pick"], controls: options["--controls"], start: options["--start"] });
-  if (!cards.length) fail("Nothing to draw: the judged file has no verdicts for these runs.");
+  if (!cards.length) fail("Nothing to draw: the runs saved no question, or none was kept at the bar and no controls were asked for.");
   mkdirSync(dir, { recursive: true });
   writeJson(cardsPath, cards);
   writeJson(keyPath, { ...key, judged: judgedName, context: judged.context ?? null });

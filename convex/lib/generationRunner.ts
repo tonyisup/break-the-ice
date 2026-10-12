@@ -162,7 +162,7 @@ async function sleep(ms: number): Promise<void> {
 }
 
 /** Refuses a prompt over the size ceiling. Callers check before creating their run row. */
-function assertPromptSize(chars: number): void {
+export function assertPromptSize(chars: number): void {
   if (chars > MAX_PROMPT_CHARS) {
     throw new ConvexError({ code: ERROR_CODES.AI_PROMPT_TOO_LARGE, message: ERROR_MESSAGES.AI_PROMPT_TOO_LARGE });
   }
@@ -222,8 +222,9 @@ export async function createChatCompletionWithRetry(
     promptBytes += utf8.encode(message.content).length;
   }
   assertPromptSize(promptChars);
-  // Priced at the default model's rates, also for a model the eval harness names and for the
-  // quality check, whose model is priced the same today (QUALITY_CHECK_MODEL).
+  // Priced at the default model's rates, also for a model the eval harness names, to generate or
+  // to judge, and for the quality check, whose own model is priced the same today
+  // (QUALITY_CHECK_MODEL).
   const reserveUsd = callReserveUsd(promptBytes, params.max_tokens, GENERATION_PRICE_USD_PER_MTOK);
 
   const maxAttempts = getOpenRouterMaxAttempts();

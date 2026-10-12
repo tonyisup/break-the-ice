@@ -100,7 +100,7 @@ export function briefPrompts({ seed, taxonomy, decisions, batchSize }) {
   if (rejects.length) {
     lines.push("", "Questions of this style the owner rejected:");
     for (const decision of rejects) {
-      const reasons = decision.reasons.map((reason) => REASONS[reason] ?? reason).join("; ");
+      const reasons = (decision.reasons ?? []).map((reason) => REASONS[reason] ?? reason).join("; ");
       lines.push(`- ${quote(decision.text)}${reasons ? ` (${reasons})` : ""}`);
     }
   }

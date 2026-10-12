@@ -88,6 +88,12 @@ describe("the short brief", () => {
     expect(userPrompt).toMatch(/"Other keep \d\?" \[style-\d\]/);
   });
 
+  test("a rejected decision with no reasons recorded is listed without one", () => {
+    const bare = { text: "Stranded: which snack do you ration last?", style: "desert-island", verdict: "reject" };
+    const { userPrompt } = briefPrompts({ seed, taxonomy, decisions: [bare], batchSize: 5 });
+    expect(userPrompt).toContain('Questions of this style the owner rejected:\n- "Stranded: which snack do you ration last?"\n\nWrite 5 new questions');
+  });
+
   test("a style that is its form says so, and the system prompt makes it the exception to varying the sentence", () => {
     const withForm = { ...taxonomy, styles: { ...taxonomy.styles, "would-you-rather": { name: "Would You Rather", brief: "Choose between two.", form: "Begins 'Would you rather'." } } };
     const { systemPrompt, userPrompt } = briefPrompts({ seed: { id: "s02", style: "would-you-rather", tone: "bold" }, taxonomy: withForm, decisions: [], batchSize: 2 });
@@ -223,6 +229,22 @@ describe("blind pairs", () => {
     expect(isNearCopy("Short one?", runs)).toBe(false);
   });
 
+  test("a judged question shorter than eight words is a near copy of itself only, and is left out like any other", () => {
+    const runs = wordRuns(["Tea or coffee?"]);
+    expect(isNearCopy("Tea or coffee?", runs)).toBe(true);
+    expect(isNearCopy("TEA, or coffee!", runs)).toBe(true);
+    expect(isNearCopy("Tea or cocoa?", runs)).toBe(false);
+    // A longer question that only starts with it is another question.
+    expect(isNearCopy("Tea or coffee first thing on a slow Sunday morning?", runs)).toBe(false);
+
+    const a = { run: "app", generated: { batches: [batch("s1", "x", ["tea or COFFEE", "App one?"])] } };
+    const b = { run: "brief", generated: { batches: [batch("s1", "x", ["Brief one?", "Tea or cocoa?"])] } };
+    const { pairs, leftOut } = buildPairs({ name: "t1", a, b, perSeed: 4, seen: ["Tea or coffee?"] });
+
+    expect(leftOut).toEqual({ a: 1, b: 0 });
+    expect(pairs.flatMap((pair) => [pair.left, pair.right]).sort()).toEqual(["App one?", expect.stringMatching(/^(Brief one|Tea or cocoa)\?$/)]);
+  });
+
   test("the sign test is exact and two-sided", () => {
     expect(signTest(5, 10)).toBe(1);
     expect(signTest(0, 0)).toBe(1);
@@ -260,6 +282,19 @@ describe("blind pairs", () => {
       const gap = { ...choices };
       delete gap[pairs.find((pair) => pair.round === 2)!.id];
       expect(scorePairs({ pairs, key, choices: gap })).toMatchObject({ rounds: 1, counted: 6, verdict: "too few rounds" });
+    });
+
+    test("a set of one or two rounds in all is too few to read, however one-sided the picks", () => {
+      for (const perSeed of [1, 2]) {
+        const small = buildPairs({ name: "t1", a: run("app"), b: run("brief"), perSeed });
+        const choices = Object.fromEntries(small.pairs.map((pair) => [pair.id, small.key.sides[pair.id].left === "b" ? "left" : "right"]));
+
+        const result = scorePairs({ pairs: small.pairs, key: small.key, choices });
+
+        expect(result, `${perSeed} rounds`).toMatchObject({ rounds: perSeed, counted: perSeed * 6, tally: { a: 0, b: perSeed * 6 }, verdict: "too few rounds" });
+        // The picks alone would have called it.
+        expect(result.p, `${perSeed} rounds`).toBeLessThan(0.05);
+      }
     });
 
     test("ties are counted but don't decide it, an even split shows no difference, and a made-up choice isn't an answer", () => {
