@@ -9,6 +9,8 @@ import { assertEvalsEnabled } from "../lib/evalChecks";
 import {
   GENERATION_PROVIDER,
   UnusableOutputError,
+  assertOpenRouterModel,
+  assertPromptSize,
   createChatCompletionWithRetry,
   getChatCompletionContent,
   markRunFailed,
@@ -21,10 +23,12 @@ import {
   buildQualityCheckPrompts,
   flagsQuestion,
   parseQualityVerdict,
+  qualityCheckContext,
   qualityCheckMode,
   qualityCheckSubject,
   qualityVerdict,
   wouldPublish,
+  type QualityCheckContext,
   type QualityCheckSubject,
   type QualityVerdict,
 } from "../lib/qualityCheck";
@@ -56,16 +60,21 @@ async function judge(
   ctx: ActionCtx,
   subject: QualityCheckSubject,
   sourceQuestionId?: Id<"questions">,
+  context?: QualityCheckContext,
+  /** Another model to judge with. Only the eval sets it; its spend is set aside at the default model's prices. */
+  model: string = QUALITY_CHECK_MODEL,
 ): Promise<{ verdict: QualityVerdict; runId: Id<"generationRuns">; model: string }> {
   await ensureAiBudget(ctx, "system");
-  const prompts = buildQualityCheckPrompts(subject);
+  const prompts = buildQualityCheckPrompts(subject, context);
+  // Before the run row, like every other call: the owner's decisions can make a prompt of any size.
+  assertPromptSize(prompts.systemPrompt.length + prompts.userPrompt.length);
   const runId = await ctx.runMutation(internal.internal.generation.createGenerationRun, {
     purpose: "quality_check",
     styleSlug: subject.style.slug,
     toneSlug: subject.tone.slug,
     topicSlug: subject.topic?.slug,
     batchSize: 1,
-    model: QUALITY_CHECK_MODEL,
+    model,
     provider: GENERATION_PROVIDER,
     temperature: QUALITY_CHECK_TEMPERATURE,
     assembledPrompt: [prompts.systemPrompt, prompts.userPrompt].join("\n\n"),
@@ -74,7 +83,7 @@ async function judge(
 
   try {
     const completion = await createChatCompletionWithRetry(ctx, { spendClass: "system", runId }, {
-      model: QUALITY_CHECK_MODEL,
+      model,
       temperature: QUALITY_CHECK_TEMPERATURE,
       max_tokens: QUALITY_CHECK_MAX_OUTPUT_TOKENS,
       response_format: { type: "json_object" },
@@ -87,7 +96,7 @@ async function judge(
     const verdict = parseQualityVerdict(rawResponse);
     if (!verdict) throw new UnusableOutputError("The quality check's answer couldn't be read", rawResponse);
     await ctx.runMutation(internal.internal.generation.completeGenerationRun, { runId, rawResponse });
-    return { verdict, runId, model: completion.model ?? QUALITY_CHECK_MODEL };
+    return { verdict, runId, model: completion.model ?? model };
   } catch (error) {
     await markRunFailed(ctx, runId, error, "Quality check failed");
     throw error;
@@ -208,13 +217,18 @@ export const checkPendingQuestions = internalAction({
 
 /**
  * The same check on questions given as text, for measuring it against the owner's labels
- * (evals/judge.mjs). Nothing is saved on any question. Runs only where EVALS_ENABLED is set
+ * (evals/judge.mjs), optionally with the owner's decisions beside a question or with another
+ * model. Nothing is saved on any question. Runs only where EVALS_ENABLED is set
  * (dev), and is charged to that deployment's system budget. After a call that gets no answer
  * the rest are reported as not sent.
  */
 export const evalQualityCheck = internalAction({
   args: {
-    items: v.array(qualityCheckSubject),
+    // `context` is for measuring whether the owner's own decisions make the check agree with
+    // the owner more often. The app's checks don't pass one.
+    items: v.array(v.object({ ...qualityCheckSubject.fields, context: v.optional(qualityCheckContext) })),
+    /** An OpenRouter model to judge with instead of the app's, like "anthropic/claude-haiku-5.5", to measure it against the same labels. */
+    model: v.optional(v.string()),
   },
   returns: v.object({
     model: v.string(),
@@ -231,6 +245,7 @@ export const evalQualityCheck = internalAction({
   }),
   handler: async (ctx, args) => {
     assertEvalsEnabled();
+    if (args.model !== undefined) assertOpenRouterModel(args.model);
     if (args.items.length > EVAL_MAX_ITEMS) throw new Error(`Pass at most ${EVAL_MAX_ITEMS} questions a call.`);
     const results: Array<{ text: string; verdict?: QualityVerdict; wouldPublish?: boolean; wouldFlag?: boolean; error?: string }> = [];
     let unanswered = false;
@@ -240,13 +255,14 @@ export const evalQualityCheck = internalAction({
         continue;
       }
       try {
-        const { verdict } = await judge(ctx, item);
+        const { context, ...subject } = item;
+        const { verdict } = await judge(ctx, subject, undefined, context, args.model);
         results.push({ text: item.text, verdict, wouldPublish: wouldPublish(verdict), wouldFlag: flagsQuestion(verdict) });
       } catch (error) {
         results.push({ text: item.text, error: error instanceof Error ? error.message : String(error) });
         unanswered = keptAiReservation(error);
       }
     }
-    return { model: QUALITY_CHECK_MODEL, promptVersion: QUALITY_CHECK_PROMPT_VERSION, results };
+    return { model: args.model ?? QUALITY_CHECK_MODEL, promptVersion: QUALITY_CHECK_PROMPT_VERSION, results };
   },
 });

@@ -2,6 +2,23 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.6.1.0] - 2026-10-12
+
+### Added
+- A second way of asking the model for questions can be tried against the app's prompt. `node evals/generate.mjs <run> --brief` generates the eval seeds from a short brief: who the questions are for, one line for each style, tone and topic (`evals/brief.json`), and the owner's own keeps and rejects as the standard. The model, the temperature and the save step's checks stay the same; only what is asked differs.
+- Blind pairs. `node evals/pairs.mjs build <name> <run-a> <run-b>` sets one question from each of two runs side by side for the same seed, with nothing that says which run wrote which, and `score` reads the owner's choices with a rule fixed beforehand: whole rounds only, at least three, and an exact sign test below 0.05.
+- Picking the best of a batch. `node evals/select.mjs draw <name> <judged-name>` takes the questions the judge is surest of from each batch, adds one at random from the rest as a control, and writes the cards for the owner to label blind. `score` applies the blind set's rule: at most 1 reject in 20 of the picked cards, on at least 60.
+- `node evals/judge.mjs` takes three new options. `--context` shows the judge the owner's decisions beside each question, and a question the owner has already decided on is shown only the decisions made before that one. `--model` judges with another OpenRouter model, to measure it against the same labels. `--brief` describes a question to the judge with the brief's own lines, for questions the brief wrote.
+- `node evals/generate.mjs <run> --seeds <name>` generates from another seeds file. `evals/seeds-new-cells.json` holds 24 combinations of the same styles, tones and topics that the first 20 seeds don't use, eight questions each.
+- The run records of the first two blind tests: `pairs1-app`, `pairs1-brief` and `cells-brief` under `evals/runs/`.
+
+### Changed
+- `evals/README.md` describes each procedure and records what the two tests found. In 72 blind pairs the owner picked the short brief's question 29 times and the app's 16 (p = 0.07), which by the rule shows no difference, though 12 of 19 seeds leaned to the brief. The first pick-the-best set failed its rule: the owner rejected 20 of the 68 picked cards (29%), the same share as of the controls, so the judge's picks were no better than the rest of the batch.
+- A failed `npx convex run` is reported by the tool's own last lines, never by its command line: npm's notices are dropped, and a call that printed nothing is reported by how it ended.
+- A `--brief` run keeps none of a failed call's output in its record, only the step the call broke at and a known error code, because the call's arguments hold a prompt that quotes the owner's decisions. The output is still shown on screen.
+- A run generated with `--brief` is judged only with `--brief`, and `judge.mjs` and `generate.mjs` name the flag to rerun with when a rerun asks for something else than the name was made with.
+- Nothing in the app changes. The quality check's own prompt and model are the same, and the eval-only options run only where `EVALS_ENABLED` is set.
+
 ## [0.6.0.0] - 2026-10-06
 
 ### Added

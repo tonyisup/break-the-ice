@@ -162,7 +162,7 @@ async function sleep(ms: number): Promise<void> {
 }
 
 /** Refuses a prompt over the size ceiling. Callers check before creating their run row. */
-function assertPromptSize(chars: number): void {
+export function assertPromptSize(chars: number): void {
   if (chars > MAX_PROMPT_CHARS) {
     throw new ConvexError({ code: ERROR_CODES.AI_PROMPT_TOO_LARGE, message: ERROR_MESSAGES.AI_PROMPT_TOO_LARGE });
   }
@@ -182,6 +182,16 @@ const REMIX_ANSWER_TOKENS = 150;
 // reasoning allowance cover a long one.
 const JSON_BASE_TOKENS = 300;
 const TOKENS_PER_QUESTION = 200;
+
+/** Refuses a model name that isn't an OpenRouter one, before it can reach the provider. */
+export function assertOpenRouterModel(model: string): void {
+  if (!OPENROUTER_MODEL.test(model)) {
+    throw new ConvexError({
+      code: "AI_MODEL_NAME",
+      message: `"${model}" isn't an OpenRouter model name like "anthropic/claude-sonnet-5.5".`,
+    });
+  }
+}
 
 export function maxOutputTokens(batchSize: number): number {
   return REASONING_ALLOWANCE_TOKENS + JSON_BASE_TOKENS + TOKENS_PER_QUESTION * batchSize;
@@ -212,8 +222,9 @@ export async function createChatCompletionWithRetry(
     promptBytes += utf8.encode(message.content).length;
   }
   assertPromptSize(promptChars);
-  // Priced at the default model's rates, also for a model the eval harness names and for the
-  // quality check, whose model is priced the same today (QUALITY_CHECK_MODEL).
+  // Priced at the default model's rates, also for a model the eval harness names, to generate or
+  // to judge, and for the quality check, whose own model is priced the same today
+  // (QUALITY_CHECK_MODEL).
   const reserveUsd = callReserveUsd(promptBytes, params.max_tokens, GENERATION_PRICE_USD_PER_MTOK);
 
   const maxAttempts = getOpenRouterMaxAttempts();
@@ -627,6 +638,11 @@ export async function runPreviewQuestionGeneration(
     spendClass?: SpendClass;
     /** An OpenRouter model to use instead of GENERATION_MODEL. Only the eval harness sets it. */
     model?: string;
+    /**
+     * A system and user prompt to send instead of the one built from the style, tone and topic,
+     * which are still looked up for the run's record. Only the eval harness sets it.
+     */
+    promptOverride?: { systemPrompt: string; userPrompt: string };
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -637,18 +653,13 @@ export async function runPreviewQuestionGeneration(
 }> {
   // Checked here, where the name reaches the provider, so no caller can pass one through
   // unchecked, and before anything is read or charged.
-  if (args.model !== undefined && !OPENROUTER_MODEL.test(args.model)) {
-    throw new ConvexError({
-      code: "AI_MODEL_NAME",
-      message: `"${args.model}" isn't an OpenRouter model name like "anthropic/claude-sonnet-5.5".`,
-    });
-  }
+  if (args.model !== undefined) assertOpenRouterModel(args.model);
   const spendClass = args.spendClass ?? "user";
   await ensureAiBudget(ctx, spendClass);
 
   const model = args.model ?? GENERATION_MODEL;
   const temperature = args.temperature ?? 0.85;
-  const prompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
+  const built: GenerationPrompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
     styleId: args.styleId,
     styleSlug: args.styleSlug,
     toneId: args.toneId,
@@ -661,6 +672,7 @@ export async function runPreviewQuestionGeneration(
     currentQuestion: args.currentQuestion,
     userContext: args.userContext,
   });
+  const prompt: GenerationPrompt = args.promptOverride ? { ...built, ...args.promptOverride } : built;
 
   assertPromptSize(prompt.systemPrompt.length + prompt.userPrompt.length);
 

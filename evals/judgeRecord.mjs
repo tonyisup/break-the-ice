@@ -1,4 +1,5 @@
 // What judge.mjs does with run files, verdicts and the owner's labels. Pure, so it can be tested.
+import { createHash } from "node:crypto";
 
 /** At most this share of the questions Claude would publish may be ones the owner rejects. */
 const PASS_REJECT_SHARE = 1 / 20;
@@ -88,4 +89,79 @@ export function passRule(group) {
   }
   const allowed = allowedRejects(group.wouldPublish);
   return { decided: true, pass: group.wouldPublishRejected <= allowed, rejected: group.wouldPublishRejected, allowed, of: group.wouldPublish };
+}
+
+/** How many of the owner's decisions the judge is shown with one question (judge.mjs --context). */
+const CONTEXT_SAME_STYLE = 10;
+const CONTEXT_TOTAL = 24;
+const CONTEXT_PER_VERDICT = 12;
+
+/**
+ * The owner's decisions the judge is shown beside a question of `styleSlug`: the latest ten of
+ * that style, then the latest of other styles up to 24 in all, with at most twelve keeps and
+ * twelve rejects among the other styles' and the same style's together. `decisions` are in the
+ * order the owner made them, as `{ text, style, tone, verdict, reasons }` with slugs; `names`
+ * maps slugs to the names the judge reads. Each list comes back oldest first. When the owner
+ * has already decided on `text`, the question being judged, only the decisions made before
+ * that one are shown: never the question's own, and nothing decided after the owner saw it.
+ * @param {Array<{ text: string, style: string, tone: string, verdict: string, reasons?: string[] }>} decisions
+ * @param {string} styleSlug
+ * @param {{ styles?: Record<string, { name: string }>, tones?: Record<string, { name: string }> }} names
+ * @param {string} [text]
+ */
+export function judgeContext(decisions, styleSlug, names, text) {
+  const example = (decision) => ({
+    text: decision.text,
+    style: names.styles?.[decision.style]?.name ?? decision.style,
+    tone: names.tones?.[decision.tone]?.name ?? decision.tone,
+    verdict: decision.verdict,
+    reasons: decision.reasons ?? [],
+  });
+  const own = text === undefined ? -1 : decisions.findIndex((decision) => decision.text === text);
+  const decided = (own < 0 ? decisions : decisions.slice(0, own)).filter((decision) => decision.verdict === "keep" || decision.verdict === "reject");
+  const sameStyle = decided.filter((decision) => decision.style === styleSlug).slice(-CONTEXT_SAME_STYLE);
+  const counts = { keep: 0, reject: 0 };
+  for (const decision of sameStyle) counts[decision.verdict] += 1;
+  const others = [];
+  for (const decision of decided.filter((d) => d.style !== styleSlug).reverse()) {
+    if (sameStyle.length + others.length >= CONTEXT_TOTAL) break;
+    if (counts[decision.verdict] >= CONTEXT_PER_VERDICT) continue;
+    counts[decision.verdict] += 1;
+    others.push(decision);
+  }
+  return { sameStyle: sameStyle.map(example), others: others.reverse().map(example) };
+}
+
+/**
+ * Names the decisions a judged file was shown, so a file never mixes verdicts made with different
+ * ones. The 2 is the rule for which of them a question is shown (judgeContext): files judged
+ * before a question's own decision was left out carry no number, and are not resumed.
+ */
+export function contextLabel(decisions) {
+  return `owner-v2-${createHash("sha256").update(JSON.stringify(decisions)).digest("hex").slice(0, 12)}`;
+}
+
+/** Names the brief's lines a judged file was described with: the brief's version and the lines themselves. */
+export function definitionsLabel(taxonomy) {
+  return `brief-v${taxonomy.version}-${createHash("sha256").update(JSON.stringify(taxonomy)).digest("hex").slice(0, 12)}`;
+}
+
+/**
+ * A question described to the judge by the brief's own lines for its style, tone and topic, in
+ * place of the app's definitions. A question the brief wrote was never told the app's fill-in
+ * template, so a judge shown that template marks it down for not following it. Returns null
+ * when the brief has no line for one of them.
+ * @param {{ style: { slug: string }, tone: { slug: string }, topic: { slug: string } | null }} question
+ * @param {{ styles: Record<string, { name: string, brief: string, form?: string }>, tones: Record<string, { name: string, brief: string }>, topics: Record<string, { name: string, brief: string }> }} taxonomy
+ */
+export function briefDefinitions(question, taxonomy) {
+  const style = taxonomy.styles?.[question.style.slug];
+  const tone = taxonomy.tones?.[question.tone.slug];
+  const topic = question.topic ? taxonomy.topics?.[question.topic.slug] : null;
+  if (!style || !tone || (question.topic && !topic)) return null;
+  return {
+    style: { slug: question.style.slug, name: style.name, definition: `${style.brief}${style.form ? ` Set form: ${style.form}` : ""}` },
+    tone: { slug: question.tone.slug, name: tone.name, definition: tone.brief },
+    topic: question.topic && topic ? { slug: question.topic.slug, name: topic.name, definition: topic.brief } : null,
+  };
 }

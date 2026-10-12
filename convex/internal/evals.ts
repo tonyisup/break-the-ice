@@ -93,8 +93,8 @@ async function nearestLibraryQuestions(ctx: ActionCtx, text: string, count: numb
 }
 
 /**
- * One eval batch: today's prompt builder with the default model (or the model given), run like an
- * admin preview so nothing is added to the library. Returns each question with what the save
+ * One eval batch: today's prompt builder (or the prompt given) with the default model (or the
+ * model given), run like an admin preview so nothing is added to the library. Returns each question with what the save
  * step would have done with it and its nearest library questions, for the harness in `evals/` to
  * score. Runs only where EVALS_ENABLED is set (dev).
  */
@@ -112,6 +112,11 @@ export const generateEvalBatch = internalAction({
     neighbours: v.optional(v.number()),
     /** An OpenRouter model to generate with instead of the default, like "anthropic/claude-sonnet-5.5". */
     model: v.optional(v.string()),
+    /**
+     * A prompt to send instead of the app's, for trying another way of asking on the same seeds.
+     * It must ask for the app's JSON shape, since the answer is read the same way.
+     */
+    prompt: v.optional(v.object({ systemPrompt: v.string(), userPrompt: v.string() })),
   },
   returns: evalBatch,
   handler: async (ctx, args): Promise<EvalBatch> => {
@@ -121,6 +126,9 @@ export const generateEvalBatch = internalAction({
     assertWhole("batchSize", args.batchSize, 1, MAX_BATCH_SIZE);
     const neighbourCount = args.neighbours ?? DEFAULT_NEIGHBOURS;
     assertWhole("neighbours", neighbourCount, 0, MAX_NEIGHBOURS);
+    if (args.prompt && !(args.prompt.systemPrompt.trim() && args.prompt.userPrompt.trim())) {
+      throw new ConvexError({ code: "EVAL_SETUP", message: "prompt needs a system prompt and a user prompt." });
+    }
     // gstack-shortcut(dec-6f390dcf-d794-46ba-887f-dd13edb5e9c0): a named model is reserved at the default model's prices, upgrade when evals name pricier models.
     const model = args.model ?? GENERATION_MODEL;
     const temperature = args.temperature ?? DEFAULT_GENERATION_TEMPERATURE;
@@ -135,6 +143,7 @@ export const generateEvalBatch = internalAction({
       temperature,
       spendClass: "system",
       model: args.model,
+      promptOverride: args.prompt,
     });
     const { prompt } = preview;
     const definitions = await ctx.runQuery(internal.internal.evalData.evalDefinitions, {

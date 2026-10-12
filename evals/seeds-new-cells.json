@@ -1,0 +1,29 @@
+{
+  "batchSize": 8,
+  "seeds": [
+    {"id": "n01", "style": "gratitude-lightning", "tone": "reflective"},
+    {"id": "n02", "style": "one-word-whip-around", "tone": "edgy-provocative", "topic": "childhood-nostalgia"},
+    {"id": "n03", "style": "one-word-whip-around", "tone": "nerdy-geeky"},
+    {"id": "n04", "style": "desert-island", "tone": "playful"},
+    {"id": "n05", "style": "rapid-fire-either", "tone": "bold", "topic": "music"},
+    {"id": "n06", "style": "super-power-caveats", "tone": "mysterious-intriguing", "topic": "technology"},
+    {"id": "n07", "style": "if-this-but-that", "tone": "deep-thoughtful", "topic": "food"},
+    {"id": "n08", "style": "desert-island", "tone": "grounded", "topic": "work"},
+    {"id": "n09", "style": "open-ended", "tone": "fun-silly"},
+    {"id": "n10", "style": "super-power-caveats", "tone": "outdoorsy-adventurous"},
+    {"id": "n11", "style": "future-chapter", "tone": "wholesome-uplifting", "topic": "music"},
+    {"id": "n12", "style": "would-you-rather", "tone": "cozy"},
+    {"id": "n13", "style": "time-capsule-snapshot", "tone": "witty", "topic": "travel"},
+    {"id": "n14", "style": "rapid-fire-either", "tone": "fun-silly", "topic": "childhood-nostalgia"},
+    {"id": "n15", "style": "how-to-know-me", "tone": "quick-energizer", "topic": "home-life"},
+    {"id": "n16", "style": "how-to-know-me", "tone": "mysterious-intriguing", "topic": "internet-habits"},
+    {"id": "n17", "style": "future-chapter", "tone": "quick-energizer"},
+    {"id": "n18", "style": "formative-moment", "tone": "outdoorsy-adventurous"},
+    {"id": "n19", "style": "gratitude-lightning", "tone": "candid"},
+    {"id": "n20", "style": "time-capsule-snapshot", "tone": "nostalgic"},
+    {"id": "n21", "style": "open-ended", "tone": "tender"},
+    {"id": "n22", "style": "would-you-rather", "tone": "grounded"},
+    {"id": "n23", "style": "formative-moment", "tone": "professional"},
+    {"id": "n24", "style": "values-in-practice", "tone": "health-fitness"}
+  ]
+}

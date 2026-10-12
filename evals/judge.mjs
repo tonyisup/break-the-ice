@@ -4,29 +4,50 @@
 // only what is still missing and keeps every verdict the file already has, also when the rerun
 // names fewer questions. When evals/owner-labels.json exists, it also sets the verdicts beside
 // the owner's labels and evaluates the pass rule. --only-labeled judges just the questions
-// that file has labels for.
+// that file has labels for. --context shows the judge the owner's decisions beside each
+// question (evals/judged/owner-decisions.json, named by evals/brief.json), which the app's own
+// check never gets. A question the owner has already decided on is shown only the decisions made
+// before that one. A name keeps one way of judging. --model judges with that OpenRouter model
+// (like anthropic/claude-haiku-5.5) instead of the app's, to measure it against the same labels;
+// a name keeps one model, so give every rerun of that name the same --model. --brief describes
+// each question's style, tone and topic to the judge with the brief's own lines (evals/brief.json)
+// in place of the app's definitions, for questions generate.mjs --brief wrote; a name keeps that too.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapLimit } from "./async.mjs";
 import { assertDevTarget, convexRun } from "./devTarget.mjs";
-import { compareWithLabels, passRule, savedQuestions } from "./judgeRecord.mjs";
+import { briefDefinitions, compareWithLabels, contextLabel, definitionsLabel, judgeContext, passRule, savedQuestions } from "./judgeRecord.mjs";
 import { cliError, writeJson } from "./runRecord.mjs";
 
 // A call judges its questions one after another, a few seconds each.
 const QUESTIONS_PER_CALL = 10;
 const CALL_CONCURRENCY = 2;
-// About what a check cost on Opus 5.5 in Oct 2026, for the estimate printed before a paid run.
+// About what a check cost on Opus 5.5 in Oct 2026, alone and with the owner's decisions beside
+// it, for the estimate printed before a paid run.
 const USD_PER_CHECK = 0.01;
+const USD_PER_CHECK_WITH_CONTEXT = 0.02;
 
-const USAGE = "Usage: node evals/judge.mjs <name> <run>... [--only-labeled]   (names: lowercase letters, digits and dashes)";
-const [name, ...rest] = process.argv.slice(2);
+const USAGE = "Usage: node evals/judge.mjs <name> <run>... [--only-labeled] [--context] [--brief] [--model <openrouter-model>]   (names: lowercase letters, digits and dashes)";
+const [name, ...given] = process.argv.slice(2);
+// --model takes the word after it; a missing or flag-like value falls through to the usage error.
+const modelAt = given.indexOf("--model");
+const model = modelAt >= 0 && given[modelAt + 1] && !given[modelAt + 1].startsWith("-") ? given[modelAt + 1] : null;
+const rest = modelAt >= 0 && model ? [...given.slice(0, modelAt), ...given.slice(modelAt + 2)] : given;
 const onlyLabeled = rest.includes("--only-labeled");
-const runNames = rest.filter((arg) => arg !== "--only-labeled");
+const withContext = rest.includes("--context");
+const withBrief = rest.includes("--brief");
+const runNames = rest.filter((arg) => !["--only-labeled", "--context", "--brief"].includes(arg));
 const validName = (value) => /^[a-z0-9][a-z0-9-]*$/.test(value);
 if (!name || !validName(name) || runNames.length === 0 || !runNames.every(validName) || new Set(runNames).size !== runNames.length) {
   console.error(USAGE);
+  process.exit(1);
+}
+// evals/judged/owner-decisions.json holds the owner's decisions (--context reads it). A judged
+// file of that name would be written over them.
+if (name === "owner-decisions") {
+  console.error('"owner-decisions" is the file the owner\'s decisions are read from. Use another name.');
   process.exit(1);
 }
 const here = dirname(fileURLToPath(import.meta.url));
@@ -42,6 +63,14 @@ const runs = runNames.map((run) => {
   return { run, generated: JSON.parse(readFileSync(path, "utf8")) };
 });
 
+// A run asked with the short brief was never told the app's fill-in templates, so a judge shown
+// those marks its questions down for not following them.
+const briefRuns = runs.filter(({ generated }) => generated.prompt).map(({ run }) => run);
+if (briefRuns.length && !withBrief) {
+  console.error(`${briefRuns.join(", ")} ${briefRuns.length === 1 ? "was" : "were"} generated with --brief, so the judge has to read the brief's lines too: add --brief.`);
+  process.exit(1);
+}
+
 const labelsPath = join(here, "owner-labels.json");
 const labels = existsSync(labelsPath) ? JSON.parse(readFileSync(labelsPath, "utf8")).cards : null;
 if (onlyLabeled && !labels) {
@@ -49,12 +78,64 @@ if (onlyLabeled && !labels) {
   process.exit(1);
 }
 const labeledTexts = new Set((labels ?? []).map((card) => card.text));
-const questions = savedQuestions(runs).filter((question) => !onlyLabeled || labeledTexts.has(question.text));
+let questions = savedQuestions(runs).filter((question) => !onlyLabeled || labeledTexts.has(question.text));
+// The brief's lines replace the app's definitions before anything is sent, and a question the
+// brief has no line for stops the run.
+// Read once, and only when a flag needs it.
+let briefFile;
+const brief = () => (briefFile ??= JSON.parse(readFileSync(join(here, "brief.json"), "utf8")));
+const described = withBrief ? definitionsLabel(brief()) : null;
+if (withBrief) {
+  const taxonomy = brief();
+  const uncovered = questions.filter((question) => !briefDefinitions(question, taxonomy));
+  if (uncovered.length) {
+    const slugs = [...new Set(uncovered.map((q) => `${q.style.slug}/${q.tone.slug}${q.topic ? `/${q.topic.slug}` : ""}`))];
+    console.error(`evals/brief.json has no line for the style, tone or topic of: ${slugs.join(", ")}.`);
+    process.exit(1);
+  }
+  questions = questions.map((question) => ({ ...question, ...briefDefinitions(question, taxonomy) }));
+}
 
 const outDir = join(here, "judged");
 const outPath = join(outDir, `${name}.json`);
 mkdirSync(outDir, { recursive: true });
 const previous = existsSync(outPath) ? JSON.parse(readFileSync(outPath, "utf8")) : null;
+let contextSetup = null;
+if (withContext) {
+  const decisionsPath = join(outDir, "owner-decisions.json");
+  if (!existsSync(decisionsPath)) {
+    console.error(`--context shows the judge the owner's decisions, and ${decisionsPath} doesn't exist.`);
+    process.exit(1);
+  }
+  const decisions = JSON.parse(readFileSync(decisionsPath, "utf8"));
+  // The judge is shown each decision's style and tone, so one without them stops the run before a paid call.
+  const incomplete = decisions.filter((decision) => ![decision?.text, decision?.style, decision?.tone].every((value) => typeof value === "string" && value)).length;
+  if (incomplete) {
+    console.error(`${incomplete} of the decisions in ${decisionsPath} have no text, style or tone. Each is { text, style, tone, verdict, reasons }.`);
+    process.exit(1);
+  }
+  contextSetup = { decisions, names: brief(), label: contextLabel(decisions) };
+}
+const shown = contextSetup?.label ?? null;
+// A label also changes when what it names does, and then no flag brings the old one back.
+const remedy = (flag, had, has, changed) =>
+  !had ? `rerun without ${flag}, or start a new name` : !has ? `rerun with ${flag}, or start a new name` : `${changed} since, so start a new name`;
+if (previous && (previous.context ?? null) !== shown) {
+  const named = (value) => (value ? `the owner's decisions (${value})` : "no decisions shown");
+  const how = remedy("--context", previous.context, shown, "the owner's decisions, or how they are shown, have changed");
+  console.error(`"${name}" was judged with ${named(previous.context ?? null)}, not ${named(shown)}. A name keeps one way of judging; ${how}.`);
+  process.exit(1);
+}
+if (previous && (previous.definitions ?? null) !== described) {
+  const named = (value) => (value ? `the brief's lines (${value})` : "the app's definitions");
+  const how = remedy("--brief", previous.definitions, described, "the brief has changed");
+  console.error(`"${name}" was judged with ${named(previous.definitions ?? null)}, not ${named(described)}. A name keeps one way of judging; ${how}.`);
+  process.exit(1);
+}
+if (previous?.model && model && previous.model !== model) {
+  console.error(`"${name}" was judged by ${previous.model}, not ${model}. A name keeps one model: rerun with --model ${previous.model} (or with no --model, if that is the app's own), or start a new name.`);
+  process.exit(1);
+}
 // A question whose check failed before is tried again.
 const byText = new Map((previous?.results ?? []).filter((result) => result.verdict).map((result) => [result.text, result]));
 const todo = questions.filter((question) => !byText.has(question.text));
@@ -68,6 +149,8 @@ const record = {
   commits: [...new Set([...(previous?.commits ?? []), ...(todo.length ? [commit] : [])])],
   model: previous?.model ?? null,
   promptVersion: previous?.promptVersion ?? null,
+  ...(shown ? { context: shown } : {}),
+  ...(described ? { definitions: described } : {}),
 };
 // In the runs' order, so the file reads the same however the calls finished. Verdicts on
 // questions this run didn't name follow: they were paid for, and a set may have been drawn from them.
@@ -81,25 +164,35 @@ const save = () =>
 
 let failures = 0;
 if (todo.length && record.model !== null) {
-  // An empty call costs nothing and says which model and instructions dev has now.
-  const deployed = await convexRun(root, "internal/qualityCheck:evalQualityCheck", { items: [] }).catch((error) => {
+  // An empty call costs nothing and says which model (the one asked for, or dev's own) and
+  // instructions this run would judge with.
+  const deployed = await convexRun(root, "internal/qualityCheck:evalQualityCheck", { items: [], ...(model ? { model } : {}) }).catch((error) => {
     console.error(`Couldn't ask dev which instructions it has (${cliError(error)}). Nothing was judged.`);
     process.exit(1);
   });
   if (record.model !== deployed.model || record.promptVersion !== deployed.promptVersion) {
-    console.error(`"${name}" was judged by ${record.model} with instructions v${record.promptVersion}; the deployment now has ${deployed.model} v${deployed.promptVersion}. Start a new name.`);
+    // With no --model the answer is the app's own judge, so a name judged with --model reads as changed too.
+    const hint = !model && record.model !== deployed.model ? ` If "${name}" was judged with --model, rerun with --model ${record.model} instead.` : "";
+    console.error(`"${name}" was judged by ${record.model} with instructions v${record.promptVersion}; the deployment now has ${deployed.model} v${deployed.promptVersion}. Start a new name.${hint}`);
     process.exit(1);
   }
 }
 if (todo.length) {
-  console.log(`${todo.length} of ${questions.length} questions to judge for "${name}" at ${commit}, about $${(todo.length * USD_PER_CHECK).toFixed(2)}.`);
+  console.log(`${todo.length} of ${questions.length} questions to judge for "${name}" at ${commit}, about $${(todo.length * (contextSetup ? USD_PER_CHECK_WITH_CONTEXT : USD_PER_CHECK)).toFixed(2)}${model ? ` at the app's model's price (${model} may differ)` : ""}.`);
   const calls = [];
   for (let i = 0; i < todo.length; i += QUESTIONS_PER_CALL) calls.push(todo.slice(i, i + QUESTIONS_PER_CALL));
   await mapLimit(calls, CALL_CONCURRENCY, async (call) => {
     let answer;
     try {
       answer = await convexRun(root, "internal/qualityCheck:evalQualityCheck", {
-        items: call.map(({ text, style, tone, topic }) => ({ text, style, tone, topic })),
+        items: call.map(({ text, style, tone, topic }) => ({
+          text,
+          style,
+          tone,
+          topic,
+          ...(contextSetup ? { context: judgeContext(contextSetup.decisions, style.slug, contextSetup.names, text) } : {}),
+        })),
+        ...(model ? { model } : {}),
       });
     } catch (error) {
       failures += call.length;

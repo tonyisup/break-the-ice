@@ -550,6 +550,31 @@ describe("run record", () => {
     expect(cliError(error)).toBe("line 2 ✖ Failed Uncaught ConvexError: Evals are off");
     expect(cliError(new Error("spawn npx ENOENT"))).toBe("spawn npx ENOENT");
   });
+
+  test("a CLI failure that printed nothing is reported by how it ended, never by its command line", () => {
+    const message = 'Command failed: npx convex run fn {"prompt":"secret text"}';
+    const exited = cliError({ message, code: 1 });
+    const stopped = cliError({ message, stderr: "\n", code: null, signal: "SIGTERM" });
+
+    expect(exited).toBe("The command exited with code 1 and printed no error.");
+    expect(stopped).toBe("The command was stopped by SIGTERM and printed no error.");
+    // npm repeats the command line in a notice of its own, which is not the tool's error.
+    const notices = `npm notice run break-the-ice@0.6.0 npx\nnpm notice run 'convex' run fn {"prompt":"secret text"}\n`;
+    const noticed = cliError({ message, stderr: notices, code: 1 });
+    const failedAfter = cliError({ message, stderr: `${notices}TypeError: fetch failed\n`, code: 1 });
+    expect(noticed).toBe(exited);
+    expect(failedAfter).toBe("TypeError: fetch failed");
+    expect(exited + stopped + noticed + failedAfter).not.toContain("secret text");
+  });
+
+  test("a failure recorded with its stage keeps that stage, whatever its message would be read as", () => {
+    const batches = new Map();
+    const message = "The error's own text isn't kept here.";
+    recordFailure(batches, seeds[0], message, "abc123", "server");
+
+    expect(classifyFailure(message)).toBe("cli");
+    expect(batches.get("s01").failures).toEqual([{ stage: "server", commit: "abc123", message }]);
+  });
 });
 
 describe("scripts", () => {
@@ -858,6 +883,291 @@ console.log(JSON.stringify(answers[fn]));
       ]);
       expect(readRunFile("preset-run/generated.json").model).toBeNull();
       // Nine script runs: about 2s here, but a busy machine can pass the default 5s.
+    }, 30_000);
+
+    test("--brief sends the short brief with the owner's decisions, records it, and a run keeps one way of asking", () => {
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd: root });
+      git("init", "-q");
+      git("commit", "-q", "--allow-empty", "-m", "start");
+      writeFileSync(join(evalsDir, "seeds.json"), JSON.stringify({ batchSize: 2, seeds: [{ id: "s01", style: "a", tone: "t", topic: "food" }] }));
+      const brief = {
+        version: 1,
+        styles: { a: { name: "Style A", brief: "Pick one." } },
+        tones: { t: { name: "Tone T", brief: "Plain." } },
+        topics: {},
+      };
+      writeFileSync(join(evalsDir, "brief.json"), JSON.stringify(brief));
+      // A stand-in for `npx convex run` that logs each call and answers as dev would.
+      const bin = join(root, "bin");
+      const calls = join(root, "calls.jsonl");
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, "fake-convex.mjs"),
+        `import { appendFileSync } from "node:fs";
+const [, , fn, json] = process.argv.slice(2);
+const args = JSON.parse(json);
+appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ fn, args }) + "\\n");
+const answers = {
+  "internal/evals:evalLibraryStats": { publicQuestions: 10, withEmbedding: 10 },
+  "internal/evals:generateEvalBatch": { runId: "r-" + args.seedId, model: "m", candidates: [] },
+  "internal/evalData:evalRunAttempts": [{ runId: "r-s01", status: "succeeded" }],
+};
+console.log(JSON.stringify(answers[fn]));
+`,
+      );
+      writeFileSync(join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, "fake-convex.mjs")}" "$@"\n`, { mode: 0o755 });
+      const PATH = `${bin}:/usr/bin:/bin`;
+      const made = () => existsSync(calls);
+
+      // Without the owner's decisions, or with a seed the brief doesn't cover, nothing is generated.
+      const noDecisions = runScript("generate.mjs", ["brief-run", "--brief"], { PATH });
+      expect(noDecisions.status).toBe(1);
+      expect(noDecisions.stderr).toMatch(/--brief shows the model the owner's decisions, and .*owner-decisions\.json doesn't exist/);
+      mkdirSync(join(evalsDir, "judged"));
+      writeFileSync(
+        join(evalsDir, "judged", "owner-decisions.json"),
+        JSON.stringify([{ text: "Which one would you keep?", style: "a", verdict: "keep", reasons: [] }]),
+      );
+      const uncovered = runScript("generate.mjs", ["brief-run", "--brief"], { PATH });
+      expect(uncovered.status).toBe(1);
+      expect(uncovered.stderr).toMatch(/evals\/brief\.json has no entry for: topics\/food\./);
+      expect(made()).toBe(false);
+      expect(existsSync(join(evalsDir, "runs", "brief-run", "generated.json"))).toBe(false);
+
+      writeFileSync(join(evalsDir, "brief.json"), JSON.stringify({ ...brief, topics: { food: { name: "Food", brief: "Eating." } } }));
+      const first = runScript("generate.mjs", ["brief-run", "--brief"], { PATH });
+      expect(first.status, first.stderr).toBe(0);
+      expect(first.stdout).toMatch(/with the default model and brief-v1-[0-9a-f]{12}\./);
+      const [batchCall] = readFileSync(calls, "utf8").trim().split("\n").map((line) => JSON.parse(line)).filter((call) => call.fn === "internal/evals:generateEvalBatch");
+      expect(batchCall.args).toMatchObject({ runLabel: "brief-run", seedId: "s01", styleSlug: "a", toneSlug: "t", topicSlug: "food", batchSize: 2 });
+      expect(batchCall.args.prompt.systemPrompt).toMatch(/You write icebreaker questions for Break the Ice/);
+      expect(batchCall.args.prompt.userPrompt).toMatch(/^Style: Style A\. Pick one\.\nTone: Tone T\. Plain\.\nTopic: Food\. Eating\./);
+      expect(batchCall.args.prompt.userPrompt).toContain('- "Which one would you keep?"');
+      expect(batchCall.args.prompt.userPrompt).toContain("Write 2 new questions");
+      expect(readRunFile("brief-run/generated.json").prompt).toMatch(/^brief-v1-[0-9a-f]{12}$/);
+
+      // The run was asked with the brief: not with the app's prompt, and not with other decisions.
+      const plain = runScript("generate.mjs", ["brief-run"], { PATH });
+      expect(plain.status).toBe(1);
+      expect(plain.stderr).toMatch(/was generated with brief-v1-[0-9a-f]{12}, not the app's prompt\. A run keeps one way of asking/);
+      expect(plain.stderr).toContain("A run keeps one way of asking; rerun with --brief, or start a new run name.");
+      writeFileSync(join(evalsDir, "judged", "owner-decisions.json"), "[]");
+      const otherDecisions = runScript("generate.mjs", ["brief-run", "--brief"], { PATH });
+      expect(otherDecisions.status).toBe(1);
+      expect(otherDecisions.stderr).toMatch(/A run keeps one way of asking/);
+
+      // A run made with the app's prompt records no prompt, sends none, and can't switch to the brief.
+      rmSync(calls);
+      const app = runScript("generate.mjs", ["app-run"], { PATH });
+      expect(app.status, app.stderr).toBe(0);
+      expect(readFileSync(calls, "utf8")).not.toContain('"prompt"');
+      expect(readRunFile("app-run/generated.json")).not.toHaveProperty("prompt");
+      const switched = runScript("generate.mjs", ["app-run", "--brief"], { PATH });
+      expect(switched.status).toBe(1);
+      expect(switched.stderr).toMatch(/was generated with the app's prompt, not brief-v1-/);
+
+      // --seeds reads another seeds file, which the run then keeps.
+      for (const flags of [["--seeds"], ["--seeds", "Bad Name"], ["--seeds", "a", "--seeds", "b"]]) {
+        expect(runScript("generate.mjs", ["cells-run", ...flags], { PATH }).stderr, flags.join(" ")).toMatch(/Usage: node evals\/generate\.mjs/);
+      }
+      const noFile = runScript("generate.mjs", ["cells-run", "--seeds", "more-seeds"], { PATH });
+      expect(noFile.status).toBe(1);
+      expect(noFile.stderr).toMatch(/more-seeds\.json doesn't exist/);
+      writeFileSync(join(evalsDir, "more-seeds.json"), JSON.stringify({ batchSize: 3, seeds: [{ id: "n01", style: "a", tone: "t" }] }));
+      rmSync(calls);
+      const cells = runScript("generate.mjs", ["cells-run", "--seeds", "more-seeds"], { PATH });
+      expect(cells.status, cells.stderr).toBe(0);
+      expect(readFileSync(calls, "utf8")).toContain('"seedId":"n01"');
+      expect(readFileSync(calls, "utf8")).toContain('"batchSize":3');
+      expect(readRunFile("cells-run/generated.json")).toMatchObject({ seeds: "more-seeds", batchSize: 3 });
+      expect(readRunFile("app-run/generated.json")).not.toHaveProperty("seeds");
+      const moved = runScript("generate.mjs", ["cells-run"], { PATH });
+      expect(moved.status).toBe(1);
+      expect(moved.stderr).toMatch(/was generated from evals\/more-seeds\.json, not evals\/seeds\.json\. A run keeps its seeds file/);
+      expect(moved.stderr).toContain("A run keeps its seeds file; rerun with --seeds more-seeds, or start a new run name.");
+      const movedBack = runScript("generate.mjs", ["app-run", "--seeds", "more-seeds"], { PATH });
+      expect(movedBack.status).toBe(1);
+      expect(movedBack.stderr).toMatch(/was generated from evals\/seeds\.json, not evals\/more-seeds\.json/);
+    }, 30_000);
+
+    test("a failed --brief batch is recorded without the prompt's text, and the closing line says to rerun with --brief", () => {
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd: root });
+      git("init", "-q");
+      git("commit", "-q", "--allow-empty", "-m", "start");
+      writeFileSync(join(evalsDir, "seeds.json"), JSON.stringify({ batchSize: 2, seeds: [{ id: "s01", style: "a", tone: "t" }] }));
+      writeFileSync(
+        join(evalsDir, "brief.json"),
+        JSON.stringify({ version: 1, styles: { a: { name: "Style A", brief: "Pick one." } }, tones: { t: { name: "Tone T", brief: "Plain." } }, topics: {} }),
+      );
+      const decision = "Which one would you keep?";
+      mkdirSync(join(evalsDir, "judged"));
+      writeFileSync(join(evalsDir, "judged", "owner-decisions.json"), JSON.stringify([{ text: decision, style: "a", verdict: "keep", reasons: [] }]));
+      // A stand-in for `npx convex run` whose batch call always fails, after npm's notice of the
+      // command line: with nothing more printed, or, with ECHO set, as a refusal that prints the
+      // call's arguments back, or, with PAUSED set, as the budget's refusal.
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, "fake-convex.mjs"),
+        `const [, , fn, json] = process.argv.slice(2);
+if (fn === "internal/evals:generateEvalBatch") {
+  console.error("npm notice run 'convex' run " + fn + " " + json);
+  if (process.env.ECHO) console.error(json + "\\nServer Error");
+  if (process.env.PAUSED) console.error("Uncaught ConvexError: AI_BUDGET_PAUSED");
+  process.exit(1);
+}
+console.log(JSON.stringify(fn === "internal/evals:evalLibraryStats" ? { publicQuestions: 10, withEmbedding: 10 } : []));
+`,
+      );
+      writeFileSync(join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, "fake-convex.mjs")}" "$@"\n`, { mode: 0o755 });
+      const PATH = `${bin}:/usr/bin:/bin`;
+      const record = () => readFileSync(join(evalsDir, "runs", "brief-run", "generated.json"), "utf8");
+      const failures = () => JSON.parse(record()).batches[0].failures.map((failure: { stage: string; message: string }) => [failure.stage, failure.message]);
+      const kept = "A --brief run's record doesn't keep an error's text, which can quote the prompt.";
+      const silently = ["cli", `The call failed. ${kept}`];
+
+      const silent = runScript("generate.mjs", ["brief-run", "--brief"], { PATH });
+      expect(silent.status, silent.stderr).toBe(0);
+      expect(silent.stdout).toContain("1 seeds failed; rerun with --brief to retry them.");
+      expect(failures()).toEqual([silently]);
+      expect(record()).not.toContain(decision);
+      expect(record()).not.toContain("systemPrompt");
+
+      const echoed = runScript("generate.mjs", ["brief-run", "--brief"], { PATH, ECHO: "1" });
+      expect(echoed.status, echoed.stderr).toBe(0);
+      // The error did hold the prompt: whoever ran the command is shown it.
+      expect(echoed.stdout).toContain(decision);
+      expect(echoed.stdout).toContain("1 seeds failed; rerun with --brief to retry them.");
+      // A known error code is kept, with the step it failed at.
+      const paused = runScript("generate.mjs", ["brief-run", "--brief"], { PATH, PAUSED: "1" });
+      expect(paused.status, paused.stderr).toBe(0);
+      expect(paused.stdout).toContain("s01 failed: Uncaught ConvexError: AI_BUDGET_PAUSED");
+      expect(failures()).toEqual([silently, ["server", `The call failed. ${kept}`], ["budget", `The call failed (AI_BUDGET_PAUSED). ${kept}`]]);
+      expect(record()).not.toContain(decision);
+      expect(record()).not.toContain("systemPrompt");
+      expect(record()).not.toContain("npm notice");
+    }, 30_000);
+  });
+
+  describe("pairs", () => {
+    const batch = (seedId: string, run: string) => ({
+      seed: { id: seedId },
+      ok: true,
+      result: {
+        definitions: { style: { slug: "a", name: "Style A", definition: "…" }, tone: { slug: "t", name: "Tone T", definition: "…" }, topic: null },
+        candidates: [1, 2, 3].map((n) => ({ text: `${run} ${seedId} question ${n}?`, outcome: "saved" })),
+      },
+    });
+    const readJudged = (path: string) => JSON.parse(readFileSync(join(evalsDir, "judged", path), "utf8"));
+
+    test("build writes the pairs and their key apart, never redraws a name, and score reads whole rounds", () => {
+      for (const run of ["app", "brief"]) writeRun(run, { "generated.json": { batches: [batch("s01", run), batch("s02", run)] } });
+
+      for (const args of [[], ["build"], ["build", "t1", "app"], ["build", "t1", "app", "app"], ["build", "Bad", "app", "brief"], ["build", "t1", "app", "brief", "--per-seed", "0"], ["score", "t1"]]) {
+        const bad = runScript("pairs.mjs", args);
+        expect(bad.status, args.join(" ")).toBe(1);
+        expect(bad.stderr, args.join(" ")).toMatch(/Usage: node evals\/pairs\.mjs build/);
+      }
+      const missing = runScript("pairs.mjs", ["build", "t1", "app", "no-such-run"]);
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toMatch(/Run node evals\/generate\.mjs no-such-run first/);
+      expect(existsSync(join(evalsDir, "judged"))).toBe(false);
+
+      const built = runScript("pairs.mjs", ["build", "t1", "app", "brief", "--per-seed", "2"]);
+      expect(built.status, built.stderr).toBe(0);
+      expect(built.stdout).toMatch(/4 pairs in 2 rounds \(2, 2\) written to/);
+      expect(built.stdout).toMatch(/0 from app, 0 from brief/);
+      const pairs = readJudged("t1/pairs.json");
+      const key = readJudged("t1/key.json");
+      expect(pairs).toHaveLength(4);
+      expect(JSON.stringify(Object.keys(pairs[0]).sort())).toBe('["id","left","order","right","round","style","tone","topic"]');
+      expect(key).toMatchObject({ name: "t1", a: "app", b: "brief", perSeed: 2 });
+      expect(Object.keys(key.sides)).toEqual(["p001", "p002", "p003", "p004"]);
+
+      const again = runScript("pairs.mjs", ["build", "t1", "app", "brief"]);
+      expect(again.status).toBe(1);
+      expect(again.stderr).toMatch(/already holds pairs\. Use a new name/);
+      expect(readJudged("t1/pairs.json")).toEqual(pairs);
+
+      // The owner picked the brief's question in every pair of round 1 and has not finished round 2.
+      const choices: Record<string, string> = {};
+      for (const pair of pairs.slice(0, 3)) choices[pair.id] = key.sides[pair.id].left === "b" ? "left" : "right";
+      const choicesFile = join(root, "choices.json");
+      writeFileSync(choicesFile, JSON.stringify(choices));
+      const scored = runScript("pairs.mjs", ["score", "t1", choicesFile]);
+      expect(scored.status, scored.stderr).toBe(0);
+      expect(scored.stdout).toMatch(/3 pairs answered; 2 counted, in 1 whole rounds\./);
+      expect(scored.stdout).toMatch(/Picked app: 0\. Picked brief: 2\. Both fine: 0\. Neither: 0\./);
+      expect(scored.stdout).toMatch(/Too few whole rounds to read/);
+      expect(readJudged("t1/result.json")).toMatchObject({ rounds: 1, counted: 2, tally: { a: 0, b: 2 }, verdict: "too few rounds" });
+
+      const noPairs = runScript("pairs.mjs", ["score", "t2", choicesFile]);
+      expect(noPairs.stderr).toMatch(/No pairs named "t2"\. Run build first/);
+      const noChoices = runScript("pairs.mjs", ["score", "t1", join(root, "nope.json")]);
+      expect(noChoices.stderr).toMatch(/nope\.json doesn't exist/);
+    }, 30_000);
+
+    // Value: protects=build keeps a question off the cards when the owner has already judged a near copy of it, and writes nothing when no pair is left;
+    // fails_when=build stops reading the owner's judged questions, so they are shown again with no error, or an empty set is written and takes the name;
+    // why_new=evals_pairs.test.ts hands buildPairs its seen list directly, and the test above builds with no decisions file;
+    // seam=none; no_claim=that eight words in a row is the right measure of a near copy.
+    test("build leaves out near copies of questions the owner has already judged, and writes nothing when no pair is left", () => {
+      const withTexts = (seedId: string, texts: string[]) => ({
+        ...batch(seedId, "x"),
+        result: { ...batch(seedId, "x").result, candidates: texts.map((text) => ({ text, outcome: "saved" })) },
+      });
+      writeRun("app", { "generated.json": { batches: [withTexts("s01", ["Which mug would you keep if every other mug you own vanished?", "App two?", "App three?"])] } });
+      writeRun("brief", { "generated.json": { batches: [withTexts("s01", ["Brief one?", "Brief two?", "Brief three?"])] } });
+      writeRun("elsewhere", { "generated.json": { batches: [batch("s09", "elsewhere")] } });
+      mkdirSync(join(evalsDir, "judged"));
+      writeFileSync(
+        join(evalsDir, "judged", "owner-decisions.json"),
+        JSON.stringify([{ text: "Which MUG would you keep, if every other mug you own vanished tonight?", style: "a", verdict: "reject", reasons: [] }]),
+      );
+
+      const built = runScript("pairs.mjs", ["build", "t1", "app", "brief"]);
+      expect(built.status, built.stderr).toBe(0);
+      expect(built.stdout).toMatch(/2 pairs in 2 rounds \(1, 1\) written to/);
+      expect(built.stdout).toContain("Left out as near copies of questions already judged, or written by both runs: 1 from app, 0 from brief.");
+      expect(built.stdout).toContain("That is fewer than the 3 whole rounds score needs, so this set can't give a result.");
+      expect(built.stdout).not.toContain("doesn't exist");
+      const shown = readJudged("t1/pairs.json").flatMap((pair: { left: string; right: string }) => [pair.left, pair.right]);
+      expect(shown.filter((text: string) => text.startsWith("App")).sort()).toEqual(["App three?", "App two?"]);
+      expect(shown.join(" ")).not.toContain("mug");
+
+      const none = runScript("pairs.mjs", ["build", "t2", "app", "elsewhere"]);
+      expect(none.status).toBe(1);
+      expect(none.stderr).toMatch(/The two runs share no seed with a saved question in each\./);
+      expect(existsSync(join(evalsDir, "judged", "t2"))).toBe(false);
+    }, 30_000);
+
+    test("build says when there were no judged questions to check against, and score names the run picked more often or shows no difference", () => {
+      for (const run of ["app", "brief"]) writeRun(run, { "generated.json": { batches: [batch("s01", run), batch("s02", run)] } });
+
+      const built = runScript("pairs.mjs", ["build", "t1", "app", "brief", "--per-seed", "3"]);
+      expect(built.status, built.stderr).toBe(0);
+      expect(built.stdout).toMatch(/6 pairs in 3 rounds \(2, 2, 2\) written to/);
+      expect(built.stdout).toMatch(/owner-decisions\.json doesn't exist, so no question was checked against ones the owner has already judged\.$/m);
+      expect(built.stdout).not.toContain("fewer than the 3 whole rounds");
+
+      const pairs: Array<{ id: string }> = readJudged("t1/pairs.json");
+      const key = readJudged("t1/key.json");
+      const score = (choose: (pairId: string) => string) => {
+        const choicesFile = join(root, "choices.json");
+        writeFileSync(choicesFile, JSON.stringify(Object.fromEntries(pairs.map((pair) => [pair.id, choose(pair.id)]))));
+        return runScript("pairs.mjs", ["score", "t1", choicesFile]);
+      };
+      const oneWay = score((pairId) => (key.sides[pairId].left === "b" ? "left" : "right"));
+      expect(oneWay.status, oneWay.stderr).toBe(0);
+      expect(oneWay.stdout).toMatch(/6 pairs answered; 6 counted, in 3 whole rounds\./);
+      expect(oneWay.stdout).toMatch(/Picked app: 0\. Picked brief: 6\. Both fine: 0\. Neither: 0\./);
+      expect(oneWay.stdout).toMatch(/^brief was picked more often\.$/m);
+      const ties = score(() => "both");
+      expect(ties.status, ties.stderr).toBe(0);
+      expect(ties.stdout).toMatch(/Picked app: 0\. Picked brief: 0\. Both fine: 6\. Neither: 0\./);
+      expect(ties.stdout).toMatch(/^No difference shown\.$/m);
     }, 30_000);
   });
 
@@ -1322,7 +1632,7 @@ console.log(JSON.stringify(answers[fn]));
       readFileSync(join(root, "calls.jsonl"), "utf8")
         .trim()
         .split("\n")
-        .map((line) => JSON.parse(line) as { fn: string; texts: string[]; keys: string[] });
+        .map((line) => JSON.parse(line) as { fn: string; texts: string[]; keys: string[]; contexts: unknown[]; model: string | null });
     /**
      * A dev target, a commit to record, and a stand-in for `npx convex run` that logs each call
      * and answers as dev would: a hold for a question starting "On hold", otherwise a keep the
@@ -1340,8 +1650,8 @@ console.log(JSON.stringify(answers[fn]));
         join(bin, "fake-convex.mjs"),
         `import { appendFileSync } from "node:fs";
 const [, , fn, json] = process.argv.slice(2);
-const { items } = JSON.parse(json);
-appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ fn, texts: items.map((item) => item.text), keys: Object.keys(items[0] ?? {}).sort() }) + "\\n");
+const { items, model } = JSON.parse(json);
+appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ fn, texts: items.map((item) => item.text), keys: Object.keys(items[0] ?? {}).sort(), contexts: items.map((item) => item.context ?? null), model: model ?? null }) + "\\n");
 if (items.some((item) => item.text === process.env.FAIL_CALL)) {
   console.error("Uncaught ConvexError: Evals are off on this deployment");
   process.exit(1);
@@ -1354,7 +1664,7 @@ const results = items.map((item) => {
 });
 // VERSION_2_TEXT: a call holding that question is answered by a deployment that has moved to v2.
 const version = items.some((item) => item.text === process.env.VERSION_2_TEXT) ? 2 : Number(process.env.PROMPT_VERSION ?? 1);
-console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: version, results }));
+console.log(JSON.stringify({ model: model ?? "anthropic/claude-opus-5.5", promptVersion: version, results }));
 `,
       );
       writeFileSync(join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, "fake-convex.mjs")}" "$@"\n`, { mode: 0o755 });
@@ -1471,6 +1781,8 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       const changed = runScript("judge.mjs", ["other", "r1", "r2"], { PATH, PROMPT_VERSION: "2" });
       expect(changed.status).toBe(1);
       expect(changed.stderr).toMatch(/"other" was judged by anthropic\/claude-opus-5\.5 with instructions v1; the deployment now has anthropic\/claude-opus-5\.5 v2\. Start a new name\./);
+      // The model is the same one, so nothing points at --model.
+      expect(changed.stderr).not.toContain("--model");
       // It found that out before sending a question, so nothing was paid for and thrown away.
       expect(calls().slice(-1)[0].texts).toEqual([]);
 
@@ -1538,6 +1850,400 @@ console.log(JSON.stringify({ model: "anthropic/claude-opus-5.5", promptVersion: 
       const fewerRuns = runScript("judge.mjs", ["wide", "r1"], { PATH });
       expect(fewerRuns.status, fewerRuns.stderr).toBe(0);
       expect(fewerRuns.stdout).toContain("Pass rule: PASS. The owner rejected 3 of 60 the check would publish; at most 3 are allowed.");
+    }, 30_000);
+
+    test("--context shows the judge the owner's decisions beside each question, and a name keeps one way of judging", () => {
+      const PATH = devStandIn();
+      const other = { slug: "other", name: "Other", definition: "Anything else." };
+      writeRun("r1", {
+        "generated.json": {
+          batches: [
+            ...generatedRun(["Question 1?"]).batches,
+            { seed: { id: "s02" }, ok: true, result: { definitions: { style: other, tone, topic: null }, candidates: [{ text: "Question 2?", outcome: "saved" }] } },
+          ],
+        },
+      });
+
+      const noDecisions = runScript("judge.mjs", ["shown", "r1", "--context"], { PATH });
+      expect(noDecisions.status).toBe(1);
+      expect(noDecisions.stderr).toMatch(/--context shows the judge the owner's decisions, and .*owner-decisions\.json doesn't exist/);
+      expect(existsSync(join(root, "calls.jsonl"))).toBe(false);
+
+      writeFileSync(
+        join(evalsDir, "judged", "owner-decisions.json"),
+        JSON.stringify([
+          { text: "Kept, same style?", style: "reflective", tone: "warm", verdict: "keep", reasons: [] },
+          { text: "Rejected, other style?", style: "other", tone: "warm", verdict: "reject", reasons: ["awkward_wording"] },
+        ]),
+      );
+      writeFileSync(join(evalsDir, "brief.json"), JSON.stringify({ version: 1, styles: { reflective: { name: "Reflective" } }, tones: { warm: { name: "Warm" } }, topics: {} }));
+      const shown = runScript("judge.mjs", ["shown", "r1", "--context"], { PATH });
+      expect(shown.status, shown.stderr).toBe(0);
+      expect(shown.stdout).toMatch(/2 of 2 questions to judge for "shown" at \w+, about \$0\.04\./);
+      const [call] = calls();
+      expect(call.keys).toEqual(["context", "style", "text", "tone", "topic"]);
+      expect(call.contexts).toEqual([
+        {
+          sameStyle: [{ text: "Kept, same style?", style: "Reflective", tone: "Warm", verdict: "keep", reasons: [] }],
+          others: [{ text: "Rejected, other style?", style: "other", tone: "Warm", verdict: "reject", reasons: ["awkward_wording"] }],
+        },
+        {
+          sameStyle: [{ text: "Rejected, other style?", style: "other", tone: "Warm", verdict: "reject", reasons: ["awkward_wording"] }],
+          others: [{ text: "Kept, same style?", style: "Reflective", tone: "Warm", verdict: "keep", reasons: [] }],
+        },
+      ]);
+      expect(readJudged("shown").context).toMatch(/^owner-v2-[0-9a-f]{12}$/);
+      expect(readJudged("shown").results).toHaveLength(2);
+
+      // The same name without the decisions, with other decisions, or a plain name with them: refused.
+      const plain = runScript("judge.mjs", ["shown", "r1"], { PATH });
+      expect(plain.status).toBe(1);
+      expect(plain.stderr).toMatch(/"shown" was judged with the owner's decisions \(owner-v2-[0-9a-f]{12}\), not no decisions shown\. A name keeps one way of judging; rerun with --context, or start a new name\./);
+      expect(runScript("judge.mjs", ["bare", "r1"], { PATH }).status).toBe(0);
+      expect(readJudged("bare")).not.toHaveProperty("context");
+      const added = runScript("judge.mjs", ["bare", "r1", "--context"], { PATH });
+      expect(added.status).toBe(1);
+      expect(added.stderr).toMatch(/"bare" was judged with no decisions shown, not the owner's decisions/);
+      writeFileSync(join(evalsDir, "judged", "owner-decisions.json"), "[]");
+      const others = runScript("judge.mjs", ["shown", "r1", "--context"], { PATH });
+      expect(others.status).toBe(1);
+      expect(others.stderr).toMatch(/A name keeps one way of judging/);
+    }, 30_000);
+
+    test("--context shows a question the owner has already decided on only the decisions made before that one, and stops at a decision with no tone", () => {
+      const PATH = devStandIn();
+      writeRun("r1", { "generated.json": generatedRun(["Already decided?", "Never decided?"]) });
+      writeFileSync(join(evalsDir, "brief.json"), JSON.stringify({ version: 1, styles: { reflective: { name: "Reflective" } }, tones: { warm: { name: "Warm" } }, topics: {} }));
+      const decisions = [
+        { text: "Decided first?", style: "reflective", tone: "warm", verdict: "keep", reasons: [] },
+        { text: "Already decided?", style: "reflective", tone: "warm", verdict: "reject", reasons: ["awkward_wording"] },
+        { text: "Decided later?", style: "other", tone: "warm", verdict: "keep", reasons: [] },
+      ];
+      const decisionsFile = join(evalsDir, "judged", "owner-decisions.json");
+      mkdirSync(join(evalsDir, "judged"));
+
+      writeFileSync(decisionsFile, JSON.stringify([decisions[0], { text: "No tone?", style: "reflective", verdict: "keep", reasons: [] }]));
+      const incomplete = runScript("judge.mjs", ["shown", "r1", "--context"], { PATH });
+      expect(incomplete.status).toBe(1);
+      expect(incomplete.stderr).toMatch(/1 of the decisions in .*owner-decisions\.json have no text, style or tone\./);
+      expect(existsSync(join(root, "calls.jsonl"))).toBe(false);
+      expect(existsSync(join(evalsDir, "judged", "shown.json"))).toBe(false);
+
+      writeFileSync(decisionsFile, JSON.stringify(decisions));
+      const shown = runScript("judge.mjs", ["shown", "r1", "--context"], { PATH });
+      expect(shown.status, shown.stderr).toBe(0);
+      const first = { text: "Decided first?", style: "Reflective", tone: "Warm", verdict: "keep", reasons: [] };
+      // Neither its own decision nor the one made after it; a question with no decision is shown all three.
+      expect(calls()[0].contexts).toEqual([
+        { sameStyle: [first], others: [] },
+        {
+          sameStyle: [first, { text: "Already decided?", style: "Reflective", tone: "Warm", verdict: "reject", reasons: ["awkward_wording"] }],
+          others: [{ text: "Decided later?", style: "other", tone: "Warm", verdict: "keep", reasons: [] }],
+        },
+      ]);
+    }, 30_000);
+
+    test("refuses the name owner-decisions, which is the file the owner's decisions are read from", () => {
+      const PATH = devStandIn();
+      writeRun("r1", { "generated.json": generatedRun(["Question 1?"]) });
+      const decisionsFile = join(evalsDir, "judged", "owner-decisions.json");
+      const decisions = JSON.stringify([{ text: "Kept one?", style: "reflective", tone: "warm", verdict: "keep", reasons: [] }]);
+      mkdirSync(join(evalsDir, "judged"));
+      writeFileSync(decisionsFile, decisions);
+
+      const refused = runScript("judge.mjs", ["owner-decisions", "r1"], { PATH });
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toMatch(/"owner-decisions" is the file the owner's decisions are read from\. Use another name\./);
+      expect(readFileSync(decisionsFile, "utf8")).toBe(decisions);
+      expect(existsSync(join(root, "calls.jsonl"))).toBe(false);
+    }, 30_000);
+
+    test("a run generated with --brief is judged only with --brief", () => {
+      const PATH = devStandIn();
+      writeRun("asked", { "generated.json": { ...generatedRun(["Question 1?"]), prompt: "brief-v1-0123456789ab" } });
+      writeFileSync(
+        join(evalsDir, "brief.json"),
+        JSON.stringify({ version: 1, styles: { reflective: { name: "Reflective", brief: "Looks back on one moment." } }, tones: { warm: { name: "Warm", brief: "Kind and plain." } }, topics: {} }),
+      );
+
+      const refused = runScript("judge.mjs", ["plain", "asked"], { PATH });
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toMatch(/^asked was generated with --brief, so the judge has to read the brief's lines too: add --brief\.$/m);
+      expect(existsSync(join(root, "calls.jsonl"))).toBe(false);
+      expect(existsSync(join(evalsDir, "judged"))).toBe(false);
+
+      const judged = runScript("judge.mjs", ["lines", "asked", "--brief"], { PATH });
+      expect(judged.status, judged.stderr).toBe(0);
+      expect(calls().map((call) => call.texts)).toEqual([["Question 1?"]]);
+    }, 30_000);
+  });
+
+  describe("judge --model", () => {
+    const style = { slug: "reflective", name: "Reflective", definition: "Looks back." };
+    const tone = { slug: "warm", name: "Warm", definition: "Kind." };
+    const generatedRun = (texts: string[]) => ({
+      batches: [{ seed: { id: "s01" }, ok: true, result: { definitions: { style, tone, topic: null }, candidates: texts.map((text) => ({ text, outcome: "saved" })) } }],
+    });
+    const readJudged = (name: string) => JSON.parse(readFileSync(join(evalsDir, "judged", `${name}.json`), "utf8"));
+    const calls = () =>
+      readFileSync(join(root, "calls.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as { texts: string[]; model: string | null });
+
+    test("sends the model with every call, records it, and a name keeps its model", () => {
+      // A dev target and a stand-in for `npx convex run` that answers with the model it was asked for.
+      writeFileSync(join(root, ".env.local"), "CONVEX_DEPLOYMENT=dev:quiet-otter-1\n");
+      const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd: root });
+      git("init", "-q");
+      git("commit", "-q", "--allow-empty", "-m", "start");
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, "fake-convex.mjs"),
+        `import { appendFileSync } from "node:fs";
+const [, , , json] = process.argv.slice(2);
+const { items, model } = JSON.parse(json);
+appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({ texts: items.map((item) => item.text), model: model ?? null }) + "\\n");
+appendFileSync(${JSON.stringify(join(root, "styles.jsonl"))}, JSON.stringify(items.map((item) => [item.style.name, item.style.definition, item.tone.definition])) + "\\n");
+const verdict = { verdict: "keep", reasons: [], safety: [], confidence: 5, note: "" };
+console.log(JSON.stringify({ model: model ?? "anthropic/claude-opus-5.5", promptVersion: 1, results: items.map((item) => ({ text: item.text, verdict, wouldPublish: true, wouldFlag: false })) }));
+`,
+      );
+      writeFileSync(join(bin, "npx"), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, "fake-convex.mjs")}" "$@"\n`, { mode: 0o755 });
+      const PATH = `${bin}:/usr/bin:/bin`;
+      writeRun("r1", { "generated.json": generatedRun(["Question 1?"]) });
+      writeRun("r2", { "generated.json": generatedRun(["Question 2?"]) });
+
+      for (const args of [["haiku", "r1", "--model"], ["haiku", "r1", "--model", "--context"]]) {
+        const bad = runScript("judge.mjs", args, { PATH });
+        expect(bad.status, args.join(" ")).toBe(1);
+        expect(bad.stderr, args.join(" ")).toMatch(/Usage: node evals\/judge\.mjs/);
+      }
+
+      // The flag can sit before or after the runs.
+      const first = runScript("judge.mjs", ["haiku", "--model", "anthropic/claude-haiku-5.5", "r1"], { PATH });
+      expect(first.status, first.stderr).toBe(0);
+      expect(first.stdout).toMatch(/about \$0\.01 at the app's model's price \(anthropic\/claude-haiku-5\.5 may differ\)\./);
+      expect(first.stdout).toMatch(/Judged 1 of 1 by anthropic\/claude-haiku-5\.5 with instructions v1/);
+      expect(calls()).toEqual([{ texts: ["Question 1?"], model: "anthropic/claude-haiku-5.5" }]);
+      expect(readJudged("haiku").model).toBe("anthropic/claude-haiku-5.5");
+
+      // More to judge under the same name: with the same model it goes on, without it it is refused
+      // before a question is sent.
+      const plain = runScript("judge.mjs", ["haiku", "r1", "r2"], { PATH });
+      expect(plain.status).toBe(1);
+      expect(plain.stderr).toMatch(/"haiku" was judged by anthropic\/claude-haiku-5\.5 with instructions v1; the deployment now has anthropic\/claude-opus-5\.5 v1\. Start a new name\./);
+      expect(calls().slice(-1)[0]).toEqual({ texts: [], model: null });
+      expect(plain.stderr).toContain('Start a new name. If "haiku" was judged with --model, rerun with --model anthropic/claude-haiku-5.5 instead.');
+      // Another model is refused from the name's own record, before anything is sent.
+      const sent = calls().length;
+      const otherModel = runScript("judge.mjs", ["haiku", "r1", "r2", "--model", "anthropic/claude-sonnet-5.5"], { PATH });
+      expect(otherModel.status).toBe(1);
+      expect(otherModel.stderr).toContain('"haiku" was judged by anthropic/claude-haiku-5.5, not anthropic/claude-sonnet-5.5. A name keeps one model: rerun with --model anthropic/claude-haiku-5.5');
+      expect(calls()).toHaveLength(sent);
+      const more = runScript("judge.mjs", ["haiku", "r1", "r2", "--model", "anthropic/claude-haiku-5.5"], { PATH });
+      expect(more.status, more.stderr).toBe(0);
+      expect(calls().slice(-2)).toEqual([
+        { texts: [], model: "anthropic/claude-haiku-5.5" },
+        { texts: ["Question 2?"], model: "anthropic/claude-haiku-5.5" },
+      ]);
+      expect(readJudged("haiku").results).toHaveLength(2);
+
+      // Without the flag no model is sent, and the app's is recorded.
+      expect(runScript("judge.mjs", ["plain", "r1"], { PATH }).status).toBe(0);
+      expect(calls().slice(-1)[0]).toEqual({ texts: ["Question 1?"], model: null });
+      expect(readJudged("plain").model).toBe("anthropic/claude-opus-5.5");
+
+      // --brief describes the style and tone with the brief's lines, stops when it has none, and
+      // a name keeps the way it was judged.
+      writeFileSync(join(evalsDir, "brief.json"), JSON.stringify({ version: 2, styles: {}, tones: { warm: { name: "Warm", brief: "Kind and plain." } }, topics: {} }));
+      const uncovered = runScript("judge.mjs", ["lines", "r1", "--brief"], { PATH });
+      expect(uncovered.status).toBe(1);
+      expect(uncovered.stderr).toMatch(/evals\/brief\.json has no line for the style, tone or topic of: reflective\/warm\./);
+      writeFileSync(
+        join(evalsDir, "brief.json"),
+        JSON.stringify({ version: 2, styles: { reflective: { name: "Reflective", brief: "Looks back on one moment.", form: "Starts 'Looking back'." } }, tones: { warm: { name: "Warm", brief: "Kind and plain." } }, topics: {} }),
+      );
+      const before = calls().length;
+      const lines = runScript("judge.mjs", ["lines", "r1", "--brief"], { PATH });
+      expect(lines.status, lines.stderr).toBe(0);
+      expect(calls().length).toBe(before + 1);
+      expect(readJudged("lines").definitions).toMatch(/^brief-v2-[0-9a-f]{12}$/);
+      const described = readFileSync(join(root, "styles.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      expect(described.at(-1)).toEqual([["Reflective", "Looks back on one moment. Set form: Starts 'Looking back'.", "Kind and plain."]]);
+      expect(described[0]).toEqual([["Reflective", "Looks back.", "Kind."]]);
+      expect(readJudged("plain")).not.toHaveProperty("definitions");
+      const mixed = runScript("judge.mjs", ["lines", "r1", "r2"], { PATH });
+      expect(mixed.status).toBe(1);
+      expect(mixed.stderr).toMatch(/"lines" was judged with the brief's lines \(brief-v2-[0-9a-f]{12}\), not the app's definitions\. A name keeps one way of judging/);
+      const added = runScript("judge.mjs", ["plain", "r1", "--brief"], { PATH });
+      expect(added.status).toBe(1);
+      expect(added.stderr).toMatch(/"plain" was judged with the app's definitions, not the brief's lines \(brief-v2-[0-9a-f]{12}\)/);
+
+      // The label names the lines themselves: one reworded at the same version is another way of judging.
+      const judgedLines = readJudged("lines");
+      const sentLines = calls().length;
+      writeFileSync(
+        join(evalsDir, "brief.json"),
+        JSON.stringify({ version: 2, styles: { reflective: { name: "Reflective", brief: "Looks back on one moment.", form: "Starts 'Looking back'." } }, tones: { warm: { name: "Warm", brief: "Kind, never gushing." } }, topics: {} }),
+      );
+      const reworded = runScript("judge.mjs", ["lines", "r1", "r2", "--brief"], { PATH });
+      expect(reworded.status).toBe(1);
+      expect(reworded.stderr).toMatch(/"lines" was judged with the brief's lines \(brief-v2-[0-9a-f]{12}\), not the brief's lines \(brief-v2-[0-9a-f]{12}\)\. A name keeps one way of judging/);
+      expect(calls()).toHaveLength(sentLines);
+      expect(readJudged("lines")).toEqual(judgedLines);
+    }, 30_000);
+  });
+
+  describe("select", () => {
+    const definitions = { style: { slug: "a", name: "Style A", definition: "…" }, tone: { slug: "t", name: "Tone T", definition: "…" }, topic: null };
+    const texts = (seedId: string) => [1, 2, 3, 4].map((n) => `${seedId} question ${n}?`);
+    const readJudged = (path: string) => JSON.parse(readFileSync(join(evalsDir, "judged", path), "utf8"));
+
+    test("draw picks the surest of each batch with controls from the rest, never redraws a name, and score applies the rule", () => {
+      writeRun("r1", {
+        "generated.json": {
+          batches: ["s01", "s02"].map((seedId) => ({
+            seed: { id: seedId },
+            ok: true,
+            result: { definitions, candidates: texts(seedId).map((text) => ({ text, outcome: "saved" })) },
+          })),
+        },
+      });
+      // Question 1 of each seed is kept at 5, question 2 at 4, question 3 at 3, question 4 is held.
+      const verdictOf = (text: string) => {
+        const n = Number(text.match(/question (\d)/)?.[1]);
+        return { verdict: n === 4 ? "hold" : "keep", reasons: n === 4 ? ["awkward_wording"] : [], safety: [], confidence: n === 4 ? 5 : 6 - n, note: "" };
+      };
+      const judged = (list: string[]) => ({ name: "j1", runs: ["r1"], context: "owner-abc", results: list.map((text) => ({ text, run: "r1", seedId: text.slice(0, 3), verdict: verdictOf(text) })) });
+      mkdirSync(join(evalsDir, "judged"), { recursive: true });
+
+      for (const args of [[], ["draw"], ["draw", "t1"], ["draw", "t1", "Bad"], ["draw", "t1", "j1", "--pick"], ["draw", "t1", "j1", "--pick", "0"], ["draw", "t1", "j1", "--best", "2"], ["score", "t1"]]) {
+        const bad = runScript("select.mjs", args);
+        expect(bad.status, args.join(" ")).toBe(1);
+        expect(bad.stderr, args.join(" ")).toMatch(/Usage: node evals\/select\.mjs draw/);
+      }
+      const notJudged = runScript("select.mjs", ["draw", "t1", "j1"]);
+      expect(notJudged.stderr).toMatch(/Run node evals\/judge\.mjs j1 <run>\.\.\. first/);
+      writeFileSync(join(evalsDir, "judged", "j1.json"), JSON.stringify(judged([...texts("s01"), ...texts("s02").slice(0, 3)])));
+      const partly = runScript("select.mjs", ["draw", "t1", "j1"]);
+      expect(partly.status).toBe(1);
+      expect(partly.stderr).toMatch(/1 of the runs' 8 questions aren't judged in "j1"/);
+      expect(existsSync(join(evalsDir, "judged", "t1"))).toBe(false);
+
+      writeFileSync(join(evalsDir, "judged", "j1.json"), JSON.stringify(judged([...texts("s01"), ...texts("s02")])));
+      const drawn = runScript("select.mjs", ["draw", "t1", "j1", "--pick", "1", "--controls", "2", "--start", "363"]);
+      expect(drawn.status, drawn.stderr).toBe(0);
+      expect(drawn.stdout).toContain("8 questions in 2 batches: 4 were kept at confidence 4 or 5 with nothing against them. Picked 2 (0 batches had none to pick) and drew 4 from the rest.");
+      expect(drawn.stdout).toMatch(/6 cards, q363 to q368, written to/);
+      const cards = readJudged("t1/cards.json");
+      const key = readJudged("t1/key.json");
+      expect(cards.map((card: { id: string }) => card.id)).toEqual(["q363", "q364", "q365", "q366", "q367", "q368"]);
+      expect(JSON.stringify(Object.keys(cards[0]).sort())).toBe('["id","order","style","text","tone","topic"]');
+      expect(cards[0]).toMatchObject({ style: "Style A", tone: "Tone T", topic: null });
+      expect(key).toMatchObject({ name: "t1", pick: 1, controls: 2, judged: "j1", context: "owner-abc" });
+      const picked = cards.filter((card: { id: string }) => key.groups[card.id].group === "picked").map((card: { text: string }) => card.text);
+      expect(picked.sort()).toEqual(["s01 question 1?", "s02 question 1?"]);
+
+      const again = runScript("select.mjs", ["draw", "t1", "j1"]);
+      expect(again.status).toBe(1);
+      expect(again.stderr).toMatch(/already holds a set\. Use a new name/);
+
+      // The owner kept both picked cards and rejected one control; one control has no label yet.
+      const controls = cards.filter((card: { id: string }) => key.groups[card.id].group === "control").map((card: { id: string }) => card.id);
+      const labels: Record<string, { verdict: string }> = Object.fromEntries(cards.map((card: { id: string }) => [card.id, { verdict: "keep" }]));
+      labels[controls[0]] = { verdict: "reject" };
+      delete labels[controls[1]];
+      const labelsFile = join(root, "labels.json");
+      writeFileSync(labelsFile, JSON.stringify(labels));
+      const scored = runScript("select.mjs", ["score", "t1", labelsFile]);
+      expect(scored.status, scored.stderr).toBe(0);
+      expect(scored.stdout).toContain("Picked: 2 of 2 labeled, 0 rejected (0%).");
+      expect(scored.stdout).toContain("From the rest of each batch: 3 of 4 labeled, 1 rejected (33%).");
+      expect(scored.stdout).toContain("With no picking, about 25% of a batch would be rejected.");
+      expect(scored.stdout).toContain("Pass rule: not decided. Needs at least 60 picked cards; there are 2.");
+      expect(readJudged("t1/result.json")).toMatchObject({ picked: { cards: 2, rejected: 0 }, control: { labeled: 3, rejected: 1 } });
+
+      expect(runScript("select.mjs", ["score", "t2", labelsFile]).stderr).toMatch(/No set named "t2"\. Run draw first/);
+      expect(runScript("select.mjs", ["score", "t1", join(root, "nope.json")]).stderr).toMatch(/nope\.json doesn't exist/);
+    }, 30_000);
+
+    // Value: protects=draw keeps two runs of the same seeds as two batches, each with its own pick and control, and stops when a run the judged file names is gone;
+    // fails_when=batches are told apart by seed id alone, so two runs merge into one batch and half the picks go missing with no error;
+    // why_new=the test above draws from one run, and evals_select.test.ts gives drawSet its seed ids ready-made;
+    // seam=none; no_claim=which questions of a batch are picked (evals_select.test.ts covers that).
+    test("two runs of the same seeds stay two batches, and a run the judged file names has to be there", () => {
+      const generated = (run: string) => ({
+        batches: [{ seed: { id: "s01" }, ok: true, result: { definitions, candidates: texts(run).map((text) => ({ text, outcome: "saved" })) } }],
+      });
+      const keep = { verdict: "keep", reasons: [], safety: [], confidence: 5, note: "" };
+      mkdirSync(join(evalsDir, "judged"), { recursive: true });
+      writeFileSync(
+        join(evalsDir, "judged", "j2.json"),
+        JSON.stringify({ name: "j2", runs: ["r1", "r2"], results: ["r1", "r2"].flatMap((run) => texts(run).map((text) => ({ text, run, seedId: "s01", verdict: keep }))) }),
+      );
+      writeRun("r1", { "generated.json": generated("r1") });
+
+      const gone = runScript("select.mjs", ["draw", "t1", "j2", "--pick", "1"]);
+      expect(gone.status).toBe(1);
+      expect(gone.stderr).toMatch(/Run "r2", which "j2" was judged from, has no generated\.json\./);
+      expect(existsSync(join(evalsDir, "judged", "t1"))).toBe(false);
+
+      writeRun("r2", { "generated.json": generated("r2") });
+      const drawn = runScript("select.mjs", ["draw", "t1", "j2", "--pick", "1"]);
+      expect(drawn.status, drawn.stderr).toBe(0);
+      expect(drawn.stdout).toContain("8 questions in 2 batches: 8 were kept at confidence 4 or 5 with nothing against them. Picked 2 (0 batches had none to pick) and drew 2 from the rest.");
+      const cards = readJudged("t1/cards.json");
+      const key = readJudged("t1/key.json");
+      const runsOf = (group: string) =>
+        cards.filter((card: { id: string }) => key.groups[card.id].group === group).map((card: { text: string }) => card.text.slice(0, 2)).sort();
+      expect(runsOf("picked")).toEqual(["r1", "r2"]);
+      expect(runsOf("control")).toEqual(["r1", "r2"]);
+      expect([...new Set(cards.map((card: { id: string }) => key.groups[card.id].seedId))].sort()).toEqual(["r1:s01", "r2:s01"]);
+    }, 30_000);
+
+    test("draw refuses a flag that isn't one of its own, a judged file whose runs aren't run names and runs that saved no question, and writes no set", () => {
+      const judgedFile = (name: string, runs: string[]) => writeFileSync(join(evalsDir, "judged", `${name}.json`), JSON.stringify({ name, runs, results: [] }));
+      mkdirSync(join(evalsDir, "judged"), { recursive: true });
+      writeRun("r0", {
+        "generated.json": { batches: [{ seed: { id: "s01" }, ok: true, result: { definitions, candidates: [{ text: "A copy?", outcome: "duplicate" }] } }] },
+      });
+      judgedFile("j0", ["r0"]);
+      judgedFile("jx", ["../outside"]);
+
+      const flag = runScript("select.mjs", ["draw", "t1", "j0", "toString", "5"]);
+      expect(flag.status).toBe(1);
+      expect(flag.stderr).toMatch(/Usage: node evals\/select\.mjs draw/);
+      const outside = runScript("select.mjs", ["draw", "t1", "jx"]);
+      expect(outside.status).toBe(1);
+      expect(outside.stderr).toMatch(/jx\.json doesn't say which runs it was judged from\./);
+      const nothing = runScript("select.mjs", ["draw", "t1", "j0"]);
+      expect(nothing.status).toBe(1);
+      expect(nothing.stderr).toMatch(/Nothing to draw: the runs saved no question, or none was kept at the bar and no controls were asked for\./);
+      expect(existsSync(join(evalsDir, "judged", "t1"))).toBe(false);
+    }, 30_000);
+
+    test("score passes a set of 60 picked cards when the owner kept every one", () => {
+      const seedIds = Array.from({ length: 15 }, (_, i) => `s${String(i + 1).padStart(2, "0")}`);
+      writeRun("r1", {
+        "generated.json": {
+          batches: seedIds.map((seedId) => ({ seed: { id: seedId }, ok: true, result: { definitions, candidates: texts(seedId).map((text) => ({ text, outcome: "saved" })) } })),
+        },
+      });
+      const keep = { verdict: "keep", reasons: [], safety: [], confidence: 5, note: "" };
+      mkdirSync(join(evalsDir, "judged"), { recursive: true });
+      writeFileSync(
+        join(evalsDir, "judged", "j1.json"),
+        JSON.stringify({ name: "j1", runs: ["r1"], results: seedIds.flatMap((seedId) => texts(seedId).map((text) => ({ text, run: "r1", seedId, verdict: keep }))) }),
+      );
+
+      const drawn = runScript("select.mjs", ["draw", "t1", "j1", "--pick", "4"]);
+      expect(drawn.status, drawn.stderr).toBe(0);
+      expect(drawn.stdout).toContain("Picked 60 (0 batches had none to pick) and drew 0 from the rest.");
+      const labelsFile = join(root, "labels.json");
+      writeFileSync(labelsFile, JSON.stringify(Object.fromEntries(readJudged("t1/cards.json").map((card: { id: string }) => [card.id, { verdict: "keep" }]))));
+      const scored = runScript("select.mjs", ["score", "t1", labelsFile]);
+      expect(scored.status, scored.stderr).toBe(0);
+      expect(scored.stdout).toContain("Picked: 60 of 60 labeled, 0 rejected (0%).");
+      expect(scored.stdout).toContain("Pass rule: PASS. The owner rejected 0 of 60 picked cards; at most 3 are allowed.");
     }, 30_000);
   });
 });

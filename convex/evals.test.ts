@@ -690,6 +690,38 @@ describe("generateEvalBatch", () => {
     ]);
   });
 
+  test("a prompt given replaces the app's, is what the run records and hashes, and is read the same way", async () => {
+    const t = await setup();
+    create.mockResolvedValue(
+      completion(questionsJson("Which one book would you bring to a desert island?", "Too short?")) as never,
+    );
+    const base = { runLabel: "test", seedId: "s01", styleSlug: "desert-island", toneSlug: "witty", batchSize: 2, neighbours: 0 };
+    const prompt = { systemPrompt: "You write icebreakers a coach reads out.", userPrompt: "Write 2. Return JSON." };
+
+    for (const blank of [{ ...prompt, systemPrompt: " " }, { ...prompt, userPrompt: "" }]) {
+      const refused = await t.action(internal.internal.evals.generateEvalBatch, { ...base, prompt: blank }).catch((e: unknown) => e);
+      expect(String(refused)).toMatch(/prompt needs a system prompt and a user prompt/);
+      expect(classifyFailure(String(refused))).toBe("setup");
+    }
+    expect(create).not.toHaveBeenCalled();
+
+    const batch = await t.action(internal.internal.evals.generateEvalBatch, { ...base, prompt });
+
+    expect(create.mock.calls[0][0].messages).toEqual([
+      { role: "system", content: prompt.systemPrompt },
+      { role: "user", content: prompt.userPrompt },
+    ]);
+    expect(create.mock.calls[0][0]).toMatchObject({ model: GENERATION_MODEL, temperature: 0.9 });
+    expect(batch.promptHash).toBe(
+      createHash("sha256").update(`${prompt.systemPrompt}\n\n${prompt.userPrompt}`).digest("hex").slice(0, 16),
+    );
+    // The style and tone are still the seed's, and the save step's checks still apply.
+    expect(batch.style).toEqual({ slug: "desert-island", version: 2, name: "Desert Island" });
+    expect(batch.candidates.map((c) => c.outcome)).toEqual(["saved", "rejected"]);
+    const run = await t.run((ctx) => ctx.db.get(batch.runId));
+    expect(run?.assembledPrompt).toBe(`${prompt.systemPrompt}\n\n${prompt.userPrompt}`);
+  });
+
   test("a batch on a named model sets aside what the default model's prices allow, and settles to the cost reported", async () => {
     const t = await setup();
     const systemSpend = async () =>
