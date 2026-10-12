@@ -1,5 +1,5 @@
 import { v, type Infer } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUserWrittenQuestion, normalizedRetirement } from "../lib/questionAccess";
@@ -7,6 +7,7 @@ import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { settleDuplicateGroup } from "../lib/questionReferences";
 import { defaultIdealPromptLength, defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "../lib/promptArchitecture";
+import { STYLE_BRIEF_LINES, TONE_BRIEF_LINES, TOPIC_BRIEF_LINES, type BriefLine } from "../data/briefLines";
 
 export const PROMPT_BACKFILL_BATCH_SIZE = 100;
 
@@ -1184,5 +1185,104 @@ export const retireLibraryExcept = internalAction({
 		}
 		console.log(`${label} total: ${JSON.stringify(totals)}`);
 		return { ...totals, retiredIds };
+	},
+});
+
+const briefSeedCounts = v.object({ lined: v.number(), archived: v.number() });
+const briefSeedChange = v.object({
+	table: v.union(v.literal("styles"), v.literal("tones"), v.literal("topics")),
+	id: v.string(),
+	slug: v.string(),
+	change: v.union(v.literal("line"), v.literal("archived")),
+});
+type BriefSeedChange = Infer<typeof briefSeedChange>;
+
+/** One table's part of seedBriefLines. The three tables share the fields it reads and writes. */
+async function seedBriefLinesFor(
+	ctx: MutationCtx,
+	table: BriefSeedChange["table"],
+	lines: Record<string, BriefLine>,
+	dryRun: boolean,
+) {
+	const counts = { lined: 0, archived: 0 };
+	const changes: BriefSeedChange[] = [];
+	const noLine: string[] = [];
+	const now = Date.now();
+	const live = (await ctx.db.query(table as "styles").collect()).filter(
+		(row) => !row.organizationId && (row.status ?? "active") === "active",
+	);
+	const bySlug = new Map<string, typeof live>();
+	for (const row of live) {
+		const slug = row.slug ?? row.id;
+		bySlug.set(slug, [...(bySlug.get(slug) ?? []), row]);
+	}
+	for (const [slug, rows] of bySlug) {
+		// A row with no version beside a numbered one is the copy from before versions existed.
+		const outdated = rows.length > 1 && rows.some((row) => row.version !== undefined) ? rows.filter((row) => row.version === undefined) : [];
+		for (const row of outdated) {
+			counts.archived += 1;
+			changes.push({ table, id: row._id, slug, change: "archived" });
+			if (!dryRun) await ctx.db.patch(row._id, { status: "archived", updatedAt: now });
+		}
+		const line = lines[slug];
+		if (!line) {
+			noLine.push(`${table}/${slug}`);
+			continue;
+		}
+		for (const row of rows.filter((candidate) => !outdated.includes(candidate))) {
+			// A line or a form an admin has already written stays.
+			const brief = row.brief?.trim() ? undefined : line.brief;
+			const form = table === "styles" && line.form && !row.form?.trim() ? line.form : undefined;
+			if (brief === undefined && form === undefined) continue;
+			counts.lined += 1;
+			changes.push({ table, id: row._id, slug, change: "line" });
+			if (!dryRun) {
+				await ctx.db.patch(row._id, { ...(brief !== undefined ? { brief } : {}), ...(form !== undefined ? { form } : {}), updatedAt: now });
+			}
+		}
+	}
+	const noLiveRow = Object.keys(lines)
+		.filter((slug) => !bySlug.has(slug))
+		.map((slug) => `${table}/${slug}`);
+	return { counts, changes, noLine, noLiveRow };
+}
+
+/**
+ * One-time setup for the short brief: gives each live shared style, tone and topic its one line
+ * (convex/data/briefLines.ts), and a style its set form, where the row has none yet. A line an
+ * admin has already written is left alone, and so are teams' own entries. Where one slug has two
+ * live rows and one of them has no version, that row is archived: it is the copy from before
+ * versions existed, and it used to hide the rewrite beside it. With `dryRun` it writes nothing
+ * and reports what a real run would change, and a second real run changes nothing. Run
+ * `npx convex run internal/migrations:seedBriefLines '{"dryRun":true}'`, then with `false`.
+ */
+export const seedBriefLines = internalMutation({
+	args: { dryRun: v.boolean() },
+	returns: v.object({
+		styles: briefSeedCounts,
+		tones: briefSeedCounts,
+		topics: briefSeedCounts,
+		changes: v.array(briefSeedChange),
+		/** Slugs with a line in the data and no live row, like "styles/micro-ritual". */
+		noLiveRow: v.array(v.string()),
+		/** Live entries with no line in the data: they are read by their description. */
+		noLine: v.array(v.string()),
+	}),
+	handler: async (ctx, args) => {
+		const styles = await seedBriefLinesFor(ctx, "styles", STYLE_BRIEF_LINES, args.dryRun);
+		const tones = await seedBriefLinesFor(ctx, "tones", TONE_BRIEF_LINES, args.dryRun);
+		const topics = await seedBriefLinesFor(ctx, "topics", TOPIC_BRIEF_LINES, args.dryRun);
+		const result = {
+			styles: styles.counts,
+			tones: tones.counts,
+			topics: topics.counts,
+			changes: [...styles.changes, ...tones.changes, ...topics.changes],
+			noLiveRow: [...styles.noLiveRow, ...tones.noLiveRow, ...topics.noLiveRow].sort(),
+			noLine: [...styles.noLine, ...tones.noLine, ...topics.noLine].sort(),
+		};
+		const label = `seedBriefLines${args.dryRun ? " (dry run)" : ""}`;
+		for (const change of result.changes) console.log(`${label} ${change.table}/${change.slug} ${change.id}: ${change.change}`);
+		console.log(`${label} total: ${JSON.stringify({ styles: result.styles, tones: result.tones, topics: result.topics })}`);
+		return result;
 	},
 });
