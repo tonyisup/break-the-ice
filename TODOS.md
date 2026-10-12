@@ -209,6 +209,29 @@
 **Priority:** P3
 **Depends on:** None
 
+### Tighten the blind-set scripts after the adversarial review
+
+**What:** Nine points from the last review of the eval scripts. The first two matter before the next `--brief` judging:
+1. Have `judge.mjs --brief` refuse a run whose brief version isn't `brief.json`'s (`pairs1-brief` is version 1, from before the `form` lines), and say when `--brief` is used on a run the app's prompt wrote.
+2. Apply the keeps-one checks in `judge.mjs` and `generate.mjs` only when there is something to send, so a finished name can still be re-read after the decisions file or the brief has changed. A name judged with `--context` before the own-decision rule can't be reprinted today.
+3. Cover the user prompt's wording in a `--brief` run's label, or refuse uncommitted changes to `evals/brief.mjs` and `evals/brief.json` as `generate.mjs` already does for `convex/`.
+4. Record a version of the judge's added context instructions in a judged file and compare it on a rerun, as `promptVersion` is.
+5. Weigh each control by the size of the rest of its batch in the no-picking rate, which leans low when batches differ.
+6. Check the decisions' shape in `generate.mjs --brief` before any paid call, as `judge.mjs --context` does.
+7. Count the seeds `buildPairs` leaves out because one run has no usable question for them, and refuse two runs from different seeds files.
+8. Decide whether the number of cards a cell gets (one for a batch with no pick, four for a full one) tells the labeler too much.
+9. Have the two `score` commands refuse a labels or choices file inside the repo that git doesn't ignore.
+
+Also say in `generate.mjs`'s comment and in the message it records that a `--brief` run's `attempts[].error` still keeps the deployment's stored error for a failed model call, or reduce that field for such runs. The README already says so.
+
+**Why:** (1) to (4) can put verdicts or questions made under different instructions into one file with no error. (5) and (7) shift a printed number a little. (6) can waste a paid call. (8) and (9) protect the blind and keep the owner's labels out of the repo.
+
+**Context:** (1) and (2) the checks near the top of `evals/judge.mjs` and the `reachedModel` check in `evals/generate.mjs`; a run's label and the judge's label hash different things today, so only the `brief-v<N>-` prefix can be compared. (3) `briefLabel` in `evals/brief.mjs` hashes the system prompt, `brief.json` and the decisions, not the lines `briefPrompts` adds around them. (4) `CONTEXT_INSTRUCTIONS` in `convex/lib/qualityCheck.ts` and what `evalQualityCheck` returns. (5) `wholeBatch` in `evals/selectRecord.mjs`; the key doesn't store each batch's size. (6) `briefPrompts` is called before the `try` in `generate.mjs`. (7) `buildPairs` in `evals/pairsRecord.mjs`. (8) `drawSet` in `evals/selectRecord.mjs`: every seed in `seeds-new-cells.json` is a distinct style, tone and topic, all shown on the card. (9) `evals/select.mjs` and `evals/pairs.mjs`. Deferred by the owner during the adversarial review, 2026-10-12.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
 ### Tidy the eval scripts' shared code
 
 **What:** Four tidy-ups from the same review, none of which changes what a script does:
