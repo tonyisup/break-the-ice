@@ -1,0 +1,45 @@
+{
+  "$schema": "https://github.com/garrytan/gstack/docs/pregate.md#pregate-v1",
+  "runner": "npx vitest run {files}",
+  "dependencies": {
+    "convex/internal/evals.ts": [
+      "convex/evals.test.ts"
+    ],
+    "convex/internal/qualityCheck.ts": [
+      "convex/quality_check.test.ts"
+    ],
+    "evals/generate.mjs": [
+      "convex/evals_scripts.test.ts"
+    ],
+    "evals/judge.mjs": [
+      "convex/evals_scripts.test.ts"
+    ],
+    "evals/pairs.mjs": [
+      "convex/evals_scripts.test.ts"
+    ],
+    "evals/select.mjs": [
+      "convex/evals_scripts.test.ts"
+    ],
+    "evals/brief.json": [
+      "convex/evals_pairs.test.ts"
+    ],
+    "evals/seeds*.json": [
+      "convex/evals_pairs.test.ts",
+      "convex/evals_scripts.test.ts"
+    ],
+    "evals/runs/**": [],
+    "**/*.md": [],
+    "VERSION": [],
+    "package.json": [],
+    "package-lock.json": [],
+    ".gitignore": [],
+    ".gstack/pregate.json": []
+  },
+  "selection": {},
+  "warn": [],
+  "strays": {
+    "allow": [
+      ".gstack"
+    ]
+  }
+}

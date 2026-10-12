@@ -70,7 +70,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.gstack/
+# gstack's working files stay local; the ship pre-gate's policy is shared.
+.gstack/*
+!.gstack/pregate.json
 
 # eval harness: Jev response cache (rerun without paying again)
 evals/runs/*/jev-cache.jsonl
