@@ -1236,7 +1236,7 @@ export const pageQuestionMatrixCellKeys = internalQuery({
 	},
 });
 
-/** Paginate until we find a question matching style/tone/topic slugs (public or approved). */
+/** Paginate until we find a question matching style/tone/topic slugs: public, approved, or held for review (isHeldLibraryQuestion). */
 export const pageQuestionsMatchingSlugTriple = internalQuery({
 	args: {
 		/** "pending" counts only questions held for review (isHeldLibraryQuestion). */

@@ -4,6 +4,9 @@ import { mutation, query } from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { latestVersion } from "../lib/taxonomy";
 
+// Nothing reads a prompt blueprint since the short brief (lib/brief.ts) replaced them. These
+// functions stay for one release, so an admin page that was open during the deploy keeps
+// working, and old runs still point at a blueprint row. TODOS.md has the removal.
 const MAX_BLUEPRINT_SCAN = 1000;
 
 const blueprintFields = {

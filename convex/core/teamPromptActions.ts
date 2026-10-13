@@ -49,7 +49,6 @@ export async function runTopicPreviewWithUsage(
     `Team conversation topic: ${name}`,
     `Desired outcome: ${guidance}`,
     boundaries ? `Boundaries: ${boundaries}` : undefined,
-    "Return distinct options that a facilitator can ask exactly as written.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -65,6 +64,9 @@ export async function runTopicPreviewWithUsage(
       styleId: args.styleId,
       toneId: args.toneId,
       userContext,
+      // The notes are the team's own words and the answer goes straight back to the team, so
+      // the owner's rejections and their reasons stay out of this prompt.
+      withoutRejected: true,
       batchSize: PREVIEW_COUNT,
     });
 

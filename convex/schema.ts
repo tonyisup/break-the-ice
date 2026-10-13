@@ -36,7 +36,7 @@ const generationRunPurpose = v.union(
   v.literal("newsletter"),
   v.literal("remix"),
   // One call that judges a generated question (internal/qualityCheck.ts). Its run has no
-  // blueprint, and names the question it judged as sourceQuestionId.
+  // prompt label, and names the question it judged as sourceQuestionId.
   v.literal("quality_check"),
 );
 

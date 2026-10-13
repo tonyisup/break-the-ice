@@ -36,12 +36,16 @@ export type EvalCandidateCheck = {
  * earlier in the batch, then an exact copy already in the library, then the code checks. The
  * eval harness uses this to report what the save step would have kept without saving anything.
  */
-export function checkEvalCandidates(texts: string[], libraryFingerprints: ReadonlySet<string>): EvalCandidateCheck[] {
+export function checkEvalCandidates(
+  texts: string[],
+  libraryFingerprints: ReadonlySet<string>,
+  options: { setForm?: boolean } = {},
+): EvalCandidateCheck[] {
   const seen = new Set<string>();
   return texts.map((raw) => {
     const text = normalizeQuestion(raw);
     const fingerprint = evalFingerprint(raw);
-    const codeRejections = validateGeneratedQuestion(text);
+    const codeRejections = validateGeneratedQuestion(text, options);
     let duplicateOf: EvalCandidateCheck["duplicateOf"] = null;
     if (seen.has(fingerprint)) {
       duplicateOf = "batch";

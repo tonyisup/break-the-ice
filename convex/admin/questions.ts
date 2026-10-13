@@ -991,6 +991,8 @@ export const getPoolQuestions = query({
 		poolStatus: v.optional(v.union(v.literal("available"), v.literal("distributed"))),
 		/** In the review queue, so it can't be handed out yet. */
 		awaitingReview: v.boolean(),
+		/** Approved, not retired and not yet handed out: what Assign hands out. */
+		readyToAssign: v.boolean(),
 		style: v.optional(v.object({
 			_id: v.id("styles"),
 			name: v.string(),
@@ -1048,6 +1050,7 @@ export const getPoolQuestions = query({
                 reviewRevision: q.reviewRevision,
 				poolStatus: q.poolStatus,
 				awaitingReview: q.status === "pending",
+				readyToAssign: q.poolStatus === "available" && isQuestionPublic(q) && !isRetiredQuestion(q),
 				style: styleDoc ? {
 					_id: styleDoc._id,
 					name: styleDoc.name,

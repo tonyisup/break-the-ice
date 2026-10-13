@@ -1580,6 +1580,18 @@ describe("a generation's run names the wording that wrote its prompt", () => {
       [checkRunId, "quality_check", undefined, undefined],
     ]);
   });
+
+  test("a generation's run that names neither a prompt label nor a blueprint is refused, and nothing is saved", async () => {
+    const s = await setup();
+    const run = { batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "" };
+
+    for (const purpose of ["feed", "nightly_pool", "newsletter", "admin_preview", "remix"] as const) {
+      await expect(s.t.mutation(internal.internal.generation.createGenerationRun, { ...run, purpose })).rejects.toThrow(
+        `A ${purpose} run needs its prompt label`,
+      );
+    }
+    expect(await runs(s)).toEqual([]);
+  });
 });
 
 describe("generation runs, now that a run can be a check with no blueprint", () => {

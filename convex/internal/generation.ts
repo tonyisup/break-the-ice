@@ -19,7 +19,7 @@ import {
   validateGeneratedQuestion,
 } from "../lib/promptArchitecture";
 import { qualityCheckMode } from "../lib/qualityCheck";
-import { isQuestionPublic } from "../lib/questionAccess";
+import { isQuestionPublic, isUserWrittenQuestion } from "../lib/questionAccess";
 import { byLatestVersion, latestActiveVersion } from "../lib/taxonomy";
 
 async function getLatestActiveBySlug(
@@ -152,7 +152,7 @@ export const getActiveTaxonomyById = internalQuery({
   },
 });
 
-/** Public questions read per version of a style when looking for examples. */
+/** Public questions read per version of a style, for each of the three statuses a public question can have. */
 const EXAMPLE_POOL = 200;
 /** How far back the rejected examples look, in retired questions of the style. */
 const REJECTED_LOOKBACK = 60;
@@ -165,12 +165,17 @@ const OTHER_STYLE_POOL = 30;
  * a few other live styles. Only the shared library counts, never a team's or a person's
  * questions. Which ones are shown is drawn with `sampleSeed`, so one seed gives one prompt.
  */
-async function readBriefExamples(ctx: QueryCtx, style: Doc<"styles">, sampleSeed: number): Promise<BriefExamples> {
+async function readBriefExamples(
+  ctx: QueryCtx,
+  style: Doc<"styles">,
+  sampleSeed: number,
+  withoutRejected = false,
+): Promise<BriefExamples> {
   const random = seededRandom(sampleSeed);
   const slugOf = (row: Doc<"styles">) => row.slug ?? row.id;
   // Never a team's or a person's question, and never a copy that was retired as a duplicate.
   const inSharedLibrary = (question: Doc<"questions">) =>
-    Boolean(question.text) && !question.organizationId && !question.kind && !question.duplicateOf;
+    Boolean(question.text) && !isUserWrittenQuestion(question) && !question.duplicateOf;
   // A question keeps the id of the style version it was written for, so every version of a
   // style is searched. The styles table is a few dozen rows.
   const allStyles = await ctx.db.query("styles").collect();
@@ -199,9 +204,11 @@ async function readBriefExamples(ctx: QueryCtx, style: Doc<"styles">, sampleSeed
     .slice(0, BRIEF_KEPT_EXAMPLES)
     .map((question) => question.text ?? "");
 
-  const retired = (await questionsOf(ownVersions, ["pruned"], REJECTED_LOOKBACK))
-    .sort((a, b) => b._creationTime - a._creationTime)
-    .slice(0, REJECTED_LOOKBACK);
+  const retired = withoutRejected
+    ? []
+    : (await questionsOf(ownVersions, ["pruned"], REJECTED_LOOKBACK))
+        .sort((a, b) => b._creationTime - a._creationTime)
+        .slice(0, REJECTED_LOOKBACK);
   const withReasons = (
     await Promise.all(
       retired.map(async (question) => {
@@ -248,6 +255,11 @@ export const buildGenerationPrompt = internalQuery({
     userContext: v.optional(v.string()),
     /** Draws which of the owner's decisions the prompt shows. The calling action picks it at random. */
     sampleSeed: v.optional(v.number()),
+    /**
+     * Leaves the owner's rejections and their reasons out. A team's preview sets it: its notes
+     * are the team's own words and its answer goes straight back to the team.
+     */
+    withoutRejected: v.optional(v.boolean()),
   },
   returns: v.object({
     batchSize: v.number(),
@@ -259,6 +271,8 @@ export const buildGenerationPrompt = internalQuery({
       slug: v.string(),
       version: v.number(),
       name: v.string(),
+      /** The style has a set form, so the save step lets its short questions through. */
+      setForm: v.boolean(),
     }),
     tone: v.object({
       _id: v.id("tones"),
@@ -294,7 +308,7 @@ export const buildGenerationPrompt = internalQuery({
       tone,
       topic,
       batchSize,
-      examples: await readBriefExamples(ctx, style, args.sampleSeed ?? 0),
+      examples: await readBriefExamples(ctx, style, args.sampleSeed ?? 0, args.withoutRejected ?? false),
       seen: [...(args.excludedQuestions ?? []), ...(args.currentQuestion ? [args.currentQuestion] : [])],
       notes: args.userContext,
     });
@@ -309,6 +323,7 @@ export const buildGenerationPrompt = internalQuery({
         slug: style.slug ?? style.id,
         version: style.version ?? 1,
         name: style.name,
+        setForm: Boolean(style.form?.trim()),
       },
       tone: {
         _id: tone._id,
@@ -362,6 +377,10 @@ export const createGenerationRun = internalMutation({
   },
   returns: v.id("generationRuns"),
   handler: async (ctx, args) => {
+    // Only a check has neither: a generation's run always says what wrote its prompt.
+    if (args.purpose !== "quality_check" && !args.promptLabel && !args.blueprintId) {
+      throw new Error(`A ${args.purpose} run needs its prompt label`);
+    }
     return await ctx.db.insert("generationRuns", {
       status: "running",
       purpose: args.purpose,
@@ -518,12 +537,14 @@ export const insertGeneratedQuestions = internalMutation({
     const insertedQuestionIds: Id<"questions">[] = [];
     const duplicates: Array<{ text: string; reason: string }> = [];
     const rejected: Array<{ text: string; reasons: string[] }> = [];
+    // A style with a set form asks for short questions, so it has a lower floor.
+    const setForm = Boolean((await ctx.db.get(args.styleId))?.form?.trim());
     const seenFingerprints = new Set<string>();
 
     for (const candidate of args.candidates) {
       const text = normalizeQuestion(candidate.text);
       const fingerprint = fingerprintText(text);
-      const reasons = validateGeneratedQuestion(text);
+      const reasons = validateGeneratedQuestion(text, { setForm });
 
       if (seenFingerprints.has(fingerprint)) {
         duplicates.push({ text, reason: "duplicate within batch" });

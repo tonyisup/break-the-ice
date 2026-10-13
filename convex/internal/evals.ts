@@ -157,7 +157,9 @@ export const generateEvalBatch = internalAction({
 
     const fingerprints = preview.previewTexts.map(evalFingerprint);
     const matches = await ctx.runQuery(internal.internal.evalData.libraryFingerprintMatches, { fingerprints });
-    const checks = checkEvalCandidates(preview.previewTexts, new Set(fingerprints.filter((_, i) => matches[i] > 0)));
+    const checks = checkEvalCandidates(preview.previewTexts, new Set(fingerprints.filter((_, i) => matches[i] > 0)), {
+      setForm: prompt.style.setForm,
+    });
 
     const candidates = [];
     for (const { fingerprint: _fingerprint, ...check } of checks) {

@@ -7,6 +7,7 @@ import type { ActionCtx } from "../_generated/server";
 import {
   buildRemixPrompts,
   parseQuestionObjects,
+  REMIX_PROMPT_LABEL,
 } from "./promptArchitecture";
 import { callReserveUsd, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
 import { ConvexError } from "convex/values";
@@ -413,9 +414,6 @@ type GenerationPurpose = "feed" | "admin_preview" | "admin_accept" | "nightly_po
 
 /** What a run records when the eval harness gave the prompt, in place of the brief's label. */
 export const GIVEN_PROMPT_LABEL = "given";
-/** What a remix run records: the remix has its own short prompt, built from the same lines. */
-export const REMIX_PROMPT_LABEL = "remix-v2";
-
 /** A fresh draw of which of the owner's decisions a prompt shows (buildGenerationPrompt). */
 function randomSampleSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -432,6 +430,7 @@ type GenerationPrompt = {
     slug: string;
     version: number;
     name: string;
+    setForm: boolean;
   };
   tone: {
     _id: Id<"tones">;
@@ -499,8 +498,11 @@ export async function runPersistedQuestionGeneration(
     temperature?: number;
     poolDate?: string;
     poolStatus?: "available" | "distributed";
-    /** "pending" holds new questions for review (unlisted); the default is public. */
-    status?: "public" | "pending";
+    /**
+     * "pending" holds the new questions for review (unlisted), which is what every generating
+     * path does. Required, so a new caller chooses and none publishes unreviewed by leaving it out.
+     */
+    status: "public" | "pending";
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -577,7 +579,7 @@ export async function runPersistedQuestionGeneration(
         toneVersion: prompt.tone.version,
         topicVersion: prompt.topic?.version,
         candidates: parsedQuestions,
-        status: args.status ?? "public",
+        status: args.status,
         poolDate: args.poolDate,
         poolStatus: args.poolStatus,
       });
@@ -644,6 +646,8 @@ export async function runPreviewQuestionGeneration(
      * harness gives one per seed, so a rerun asks the same thing.
      */
     sampleSeed?: number;
+    /** Leaves the owner's rejections out of the prompt. A team's preview sets it. */
+    withoutRejected?: boolean;
     /** "system" for admin tools; team previews are user spend. */
     spendClass?: SpendClass;
     /** An OpenRouter model to use instead of GENERATION_MODEL. Only the eval harness sets it. */
@@ -681,6 +685,7 @@ export async function runPreviewQuestionGeneration(
     currentQuestion: args.currentQuestion,
     userContext: args.userContext,
     sampleSeed: args.sampleSeed ?? randomSampleSeed(),
+    withoutRejected: args.withoutRejected,
   });
   const prompt: GenerationPrompt = args.promptOverride
     ? { ...built, ...args.promptOverride, promptLabel: GIVEN_PROMPT_LABEL }

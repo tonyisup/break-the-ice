@@ -5,8 +5,6 @@ import { briefEntry } from "./brief";
 export const DEFAULT_BLUEPRINT_SLUG = "icebreaker-default";
 export const MAX_BATCH_SIZE = 10;
 
-export type PromptExample = { text: string; note?: string };
-
 export type TaxonomyDoc = {
   _id: string;
   slug?: string;
@@ -18,8 +16,6 @@ export type TaxonomyDoc = {
   aiGuidance?: string;
   promptGuidanceForAI?: string;
   distinctFrom?: string[];
-  examples?: PromptExample[];
-  antiExamples?: PromptExample[];
   commonFailureModes?: string[];
 };
 
@@ -84,14 +80,23 @@ export function fingerprintText(text: string) {
   return `q_${fnv1a(normalized)}`;
 }
 
-export function validateGeneratedQuestion(text: string) {
+/** The shortest question the save step keeps. */
+const SHORTEST = { characters: 24, words: 6 };
+/**
+ * A style with a set form, like either/or, asks for short questions on purpose ("Tea or
+ * coffee?"), and the usual floor refused about a third of them.
+ */
+const SHORTEST_WITH_SET_FORM = { characters: 10, words: 3 };
+
+export function validateGeneratedQuestion(text: string, options: { setForm?: boolean } = {}) {
   const reasons: string[] = [];
   const questionMarks = (text.match(/\?/g) ?? []).length;
   const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const shortest = options.setForm ? SHORTEST_WITH_SET_FORM : SHORTEST;
 
-  if (text.length < 24) reasons.push("too short");
+  if (text.length < shortest.characters) reasons.push("too short");
   if (text.length > 220) reasons.push("too long");
-  if (wordCount < 6) reasons.push("too few words");
+  if (wordCount < shortest.words) reasons.push("too few words");
   if (questionMarks !== 1) reasons.push("must contain exactly one question mark");
   if (!text.endsWith("?")) reasons.push("must end with a question mark");
   if (/\n/.test(text)) reasons.push("must be a single card prompt");
@@ -241,8 +246,15 @@ export function parseQuestionTexts(raw: string) {
 }
 
 /**
+ * What a remix run records as the wording that wrote its prompt. Bump it with the remix
+ * prompt below.
+ */
+export const REMIX_PROMPT_LABEL = "remix-v2";
+
+/**
  * The remix prompt: one question reworded. The style, tone and topic are described by the same
- * line the generator and the judge read (lib/brief.ts).
+ * line the generator and the judge read (lib/brief.ts). The question goes in as a JSON string,
+ * so a quote mark or a line break in it can't end the quoted part.
  */
 export function buildRemixPrompts(args: {
   questionText: string;
@@ -262,7 +274,7 @@ export function buildRemixPrompts(args: {
       topic ? `TOPIC: ${briefEntry(topic)}` : "TOPIC: Keep the topic of the original text",
       "Keep exactly one question. End with a single question mark.",
     ].join("\n"),
-    userPrompt: `Remix this question: "${questionText}"`,
+    userPrompt: `Remix this question: ${JSON.stringify(questionText)}`,
   };
 }
 
