@@ -1194,18 +1194,23 @@ const briefSeedCounts = v.object({
 	/** Drafts given one, so activating a draft made before this ran doesn't drop the line. */
 	drafts: v.number(),
 	archived: v.number(),
+	/** Copies archived before this run that still had questions or hidden entries pointing at them. */
+	moved: v.number(),
 });
 const briefSeedChange = v.object({
 	table: v.union(v.literal("styles"), v.literal("tones"), v.literal("topics")),
 	id: v.string(),
 	slug: v.string(),
-	change: v.union(v.literal("line"), v.literal("archived")),
+	change: v.union(v.literal("line"), v.literal("archived"), v.literal("moved")),
 	/** For a line: which fields were written. A field an admin had already filled is left alone. */
 	wrote: v.optional(v.union(v.literal("brief"), v.literal("form"), v.literal("brief and form"))),
 	/** For a line: the row is a draft, not the live version. */
 	draft: v.optional(v.boolean()),
-	/** For an archived row: the live row its questions and people's hidden entries move to. */
+	/** For an archived or moved row: the live row its questions and people's hidden entries move to. */
 	replacedBy: v.optional(v.string()),
+	/** For an archived or moved row: how many questions and hidden entries pointed at it (counted up to 1,000). */
+	questions: v.optional(v.number()),
+	hidden: v.optional(v.number()),
 });
 type BriefSeedChange = Infer<typeof briefSeedChange>;
 
@@ -1231,6 +1236,30 @@ async function repointTaxonomyRows(ctx: MutationCtx, table: BriefSeedChange["tab
 	}
 }
 
+/** The most rows counted for a report. Production has a few hundred questions. */
+const POINTING_COUNT_CAP = 1000;
+
+/** How many questions, and people's hidden entries, point at a style, tone or topic row by id. */
+async function pointingAt(ctx: MutationCtx, table: BriefSeedChange["table"], id: string) {
+	if (table === "styles") {
+		const styleId = id as Id<"styles">;
+		return {
+			questions: (await ctx.db.query("questions").withIndex("by_style", (q) => q.eq("styleId", styleId)).take(POINTING_COUNT_CAP)).length,
+			hidden: (await ctx.db.query("userStyles").withIndex("by_styleId", (q) => q.eq("styleId", styleId)).take(POINTING_COUNT_CAP)).length,
+		};
+	}
+	if (table === "tones") {
+		const toneId = id as Id<"tones">;
+		return {
+			questions: (await ctx.db.query("questions").withIndex("by_tone", (q) => q.eq("toneId", toneId)).take(POINTING_COUNT_CAP)).length,
+			hidden: (await ctx.db.query("userTones").withIndex("by_toneId", (q) => q.eq("toneId", toneId)).take(POINTING_COUNT_CAP)).length,
+		};
+	}
+	const topicId = id as Id<"topics">;
+	// People hide styles and tones, not topics.
+	return { questions: (await ctx.db.query("questions").withIndex("by_topic", (q) => q.eq("topicId", topicId)).take(POINTING_COUNT_CAP)).length, hidden: 0 };
+}
+
 /** One table's part of seedBriefLines. The three tables share the fields it reads and writes. */
 async function seedBriefLinesFor(
 	ctx: MutationCtx,
@@ -1238,7 +1267,7 @@ async function seedBriefLinesFor(
 	lines: Record<string, BriefLine>,
 	dryRun: boolean,
 ) {
-	const counts = { lined: 0, drafts: 0, archived: 0 };
+	const counts = { lined: 0, drafts: 0, archived: 0, moved: 0 };
 	const changes: BriefSeedChange[] = [];
 	const noLine: string[] = [];
 	const now = Date.now();
@@ -1262,6 +1291,12 @@ async function seedBriefLinesFor(
 		}
 	};
 
+	/** Moves what points at `copy` to the live row. The question batch only moves onto a row whose status is written out. */
+	const moveTo = async (copy: (typeof shared)[number], replacement: (typeof shared)[number]) => {
+		if (replacement.status === undefined) await ctx.db.patch(replacement._id, { status: "active" });
+		await repointTaxonomyRows(ctx, table, copy._id, replacement._id);
+	};
+
 	for (const [slug, rows] of bySlug) {
 		// A row with no version beside a numbered one is the copy from before versions existed.
 		const outdated = rows.length > 1 && rows.some((row) => row.version !== undefined) ? rows.filter((row) => row.version === undefined) : [];
@@ -1269,14 +1304,16 @@ async function seedBriefLinesFor(
 		const replacement = outdated.length ? latestActiveVersion(current) : null;
 		for (const row of outdated) {
 			counts.archived += 1;
-			changes.push({ table, id: row._id, slug, change: "archived", ...(replacement ? { replacedBy: replacement._id } : {}) });
+			changes.push({
+				table,
+				id: row._id,
+				slug,
+				change: "archived",
+				...(replacement ? { replacedBy: replacement._id, ...(await pointingAt(ctx, table, row._id)) } : {}),
+			});
 			if (dryRun) continue;
 			await ctx.db.patch(row._id, { status: "archived", updatedAt: now });
-			if (replacement) {
-				// The question batch only moves rows onto a row whose status is written out.
-				if (replacement.status === undefined) await ctx.db.patch(replacement._id, { status: "active" });
-				await repointTaxonomyRows(ctx, table, row._id, replacement._id);
-			}
+			if (replacement) await moveTo(row, replacement);
 		}
 		const line = lines[slug];
 		if (!line) {
@@ -1284,6 +1321,17 @@ async function seedBriefLinesFor(
 			continue;
 		}
 		for (const row of current) await giveLine(row, line, false);
+	}
+	// A copy archived before this run can still have rows pointing at it: an earlier run moved
+	// nothing, or a batch stopped. This run finishes the move, and reports nothing once none is left.
+	for (const copy of shared.filter((row) => row.version === undefined && row.status === "archived")) {
+		const replacement = latestActiveVersion((bySlug.get(slugOf(copy)) ?? []).filter((row) => row.version !== undefined));
+		if (!replacement) continue;
+		const pointing = await pointingAt(ctx, table, copy._id);
+		if (pointing.questions === 0 && pointing.hidden === 0) continue;
+		counts.moved += 1;
+		changes.push({ table, id: copy._id, slug: slugOf(copy), change: "moved", replacedBy: replacement._id, ...pointing });
+		if (!dryRun) await moveTo(copy, replacement);
 	}
 	// A draft made before this ran has no line either, and activating it would put the entry
 	// back on its description and drop a set form.
@@ -1304,18 +1352,22 @@ async function seedBriefLinesFor(
  * one slug has two live rows and one of them has no version, that row is archived: it is the
  * copy from before versions existed, and it used to hide the rewrite beside it. Questions and
  * people's hidden styles and tones that point at the archived row are moved to the live one in
- * the background, as when a version is activated. With `dryRun` it writes nothing and reports
- * what a real run would change, and a second real run changes nothing.
+ * the background, as when a version is activated; the report says how many of each. A copy an
+ * earlier run archived is finished the same way while anything still points at it. With `dryRun`
+ * it writes nothing and reports what a real run would change. Once the background moves are
+ * done, another run changes nothing: a dry run that reports no changes is the check.
  *
  * Run it straight after the deploy, before anyone opens the admin style pages: from the deploy
  * on, the lists already show the numbered row, and until this has run the rows point at the old
- * copy and no entry has its line. Run
+ * copy and no entry has its line. Take a backup first, then run
  * `npx convex run internal/migrations:seedBriefLines '{"dryRun":true}'`, then with `false`.
  *
- * To undo by hand, the log names every row: clear `brief` or `form` on a row it wrote (the log
- * says which), and set an archived row's status back to "active". Reverting the code needs the
- * schema's new optional fields (`brief`, `form`, `promptLabel`) kept, because Convex refuses a
- * schema that stored rows don't fit.
+ * The move is one way: a moved question or hidden entry looks like any other on the live row,
+ * so a backup is its only undo. A line or a form can be cleared by hand; the log names every
+ * row and which fields it wrote. If the code is reverted, leave the copies archived: the lists
+ * then show the numbered row, which is where everything now points, and keep the schema's new
+ * optional fields (`brief`, `form`, `promptLabel`), because Convex refuses a schema that stored
+ * rows don't fit.
  */
 export const seedBriefLines = internalMutation({
 	args: { dryRun: v.boolean() },
@@ -1343,7 +1395,13 @@ export const seedBriefLines = internalMutation({
 		};
 		const label = `seedBriefLines${args.dryRun ? " (dry run)" : ""}`;
 		for (const change of result.changes) {
-			const detail = change.change === "line" ? `line (${change.wrote}${change.draft ? ", draft" : ""})` : `archived${change.replacedBy ? `, replaced by ${change.replacedBy}` : ""}`;
+			const moving = change.replacedBy ? `${change.replacedBy} (${change.questions ?? 0} questions, ${change.hidden ?? 0} hidden entries)` : "";
+			const detail =
+				change.change === "line"
+					? `line (${change.wrote}${change.draft ? ", draft" : ""})`
+					: change.change === "moved"
+						? `moved to ${moving}`
+						: `archived${moving ? `, replaced by ${moving}` : ""}`;
 			console.log(`${label} ${change.table}/${change.slug} ${change.id}: ${detail}`);
 		}
 		console.log(`${label} total: ${JSON.stringify({ styles: result.styles, tones: result.tones, topics: result.topics })}`);

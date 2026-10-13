@@ -503,6 +503,27 @@ describe("the prompt line on admin edits", () => {
     expect(styles.map((style) => [style.slug, style.name, style.brief])).toEqual([["either-or", "Either/Or", "The rewrite."]]);
   });
 
+  test("activating a version moves a person's hidden entry from a version that was archived by hand, for a style and for a tone", async () => {
+    const { t, admin } = app();
+    const ids = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", { email: "reader@example.com" });
+      const oldStyle = await ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "archived", version: 1 });
+      const draftStyle = await ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "draft", version: 2 });
+      const oldTone = await ctx.db.insert("tones", { id: "warm", slug: "warm", ...toneForm, status: "archived", version: 1 });
+      const draftTone = await ctx.db.insert("tones", { id: "warm", slug: "warm", ...toneForm, status: "draft", version: 2 });
+      const hiddenStyle = await ctx.db.insert("userStyles", { userId, styleId: oldStyle, status: "hidden", updatedAt: 0 });
+      const hiddenTone = await ctx.db.insert("userTones", { userId, toneId: oldTone, status: "hidden", updatedAt: 0 });
+      return { draftStyle, draftTone, hiddenStyle, hiddenTone };
+    });
+
+    await admin.mutation(api.admin.styles.activateStyleVersion, { id: ids.draftStyle });
+    await admin.mutation(api.admin.tones.activateToneVersion, { id: ids.draftTone });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const after = await t.run(async (ctx) => [await ctx.db.get(ids.hiddenStyle), await ctx.db.get(ids.hiddenTone)] as const);
+    expect([after[0]?.styleId, after[1]?.toneId]).toEqual([ids.draftStyle, ids.draftTone]);
+  });
+
   test("an edit of a live style is listed as a draft beside it, so it can be activated, and an activated draft becomes the live row", async () => {
     const { t, admin } = app();
     const liveId = await t.run((ctx) =>
@@ -521,15 +542,16 @@ describe("the prompt line on admin edits", () => {
     ]);
     const draft = (await admin.query(api.admin.styles.listStyles, {})).find((style) => style.status === "draft")!;
 
-    // Editing the live row again makes a newer draft, and only the newest draft is listed.
+    // Editing the live row again makes another draft, and the first one stays listed with its edit.
     await admin.mutation(api.admin.styles.updateStyle, { _id: liveId, id: "either-or", ...styleForm, brief: "A third wording." });
     expect(await listed()).toEqual([
       ["active", 1, "Two things, pick one."],
+      ["draft", 2, "Two everyday things, and the person picks one."],
       ["draft", 3, "A third wording."],
     ]);
 
     await admin.mutation(api.admin.styles.activateStyleVersion, { id: draft._id });
-    // The second draft is still newer than the row that is live now, so it stays listed beside it.
+    // The other draft is still newer than the row that is live now, so it stays listed beside it.
     expect(await listed()).toEqual([
       ["active", 2, "Two everyday things, and the person picks one."],
       ["draft", 3, "A third wording."],

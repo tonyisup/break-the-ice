@@ -88,15 +88,17 @@ export const listStyles = query({
       if (!grouped.has(slug)) grouped.set(slug, []);
       grouped.get(slug)!.push(style);
     }
-    // For each style: the live row, which is the one the generator reads, and beside it a
-    // newer draft when there is one. An edit of a live style is saved as a draft, and a draft
-    // that isn't listed can never be activated.
+    // For each style: the live row, which is the one the generator reads, and after it every
+    // draft newer than it, oldest first. An edit of a live style is saved as a draft, and a
+    // draft that isn't listed can never be activated.
     return Array.from(grouped.values())
       .flatMap((docs) => {
         const live = latestActiveVersion(docs);
-        const newest = latestVersion(docs)!;
-        if (!live) return [newest];
-        return newest.status === "draft" && newest._id !== live._id ? [live, newest] : [live];
+        if (!live) return [latestVersion(docs)!];
+        const newerDrafts = docs
+          .filter((doc) => doc.status === "draft" && (doc.version ?? 1) > (live.version ?? 1))
+          .sort((a, b) => (a.version ?? 1) - (b.version ?? 1));
+        return [live, ...newerDrafts];
       })
       .map(mapAdminStyle)
       .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
@@ -346,18 +348,20 @@ export const activateStyleVersion = mutation({
         status: "archived",
         updatedAt: Date.now(),
       });
+    }
+
+    // Questions and people's hidden entries move from every other version, not only the one
+    // that was live: a version archived by hand can still have entries pointing at it.
+    for (const sibling of siblings) {
+      if (sibling._id === args.id) continue;
       await ctx.scheduler.runAfter(
         0,
         internal.admin.styles.reassignUserStylesBatch,
         {
-          previousStyleId: previousActive._id,
+          previousStyleId: sibling._id,
           nextStyleId: args.id,
         },
       );
-    }
-
-    for (const sibling of siblings) {
-      if (sibling._id === args.id) continue;
       await ctx.scheduler.runAfter(
         0,
         internal.admin.styles.reassignQuestionsForStyleBatch,
@@ -398,10 +402,22 @@ export const reassignUserStylesBatch = internalMutation({
       .take(USER_STYLE_REASSIGN_BATCH_SIZE);
 
     for (const userStyle of userStyles) {
-      await ctx.db.patch(userStyle._id, {
-        styleId: args.nextStyleId,
-        updatedAt: Date.now(),
-      });
+      // Someone who marked both rows already has an entry for the next one: that one stays,
+      // or the style would be listed twice for them and one unhide wouldn't clear it.
+      const already = await ctx.db
+        .query("userStyles")
+        .withIndex("by_userId_organizationId_and_styleId", (q) =>
+          q.eq("userId", userStyle.userId).eq("organizationId", userStyle.organizationId).eq("styleId", args.nextStyleId),
+        )
+        .first();
+      if (already) {
+        await ctx.db.delete(userStyle._id);
+      } else {
+        await ctx.db.patch(userStyle._id, {
+          styleId: args.nextStyleId,
+          updatedAt: Date.now(),
+        });
+      }
     }
 
     if (userStyles.length === USER_STYLE_REASSIGN_BATCH_SIZE) {

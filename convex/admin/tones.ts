@@ -369,18 +369,20 @@ export const activateToneVersion = mutation({
         status: "archived",
         updatedAt: Date.now(),
       });
+    }
+
+    // Questions and people's hidden entries move from every other version, not only the one
+    // that was live: a version archived by hand can still have entries pointing at it.
+    for (const sibling of siblings) {
+      if (sibling._id === args.id) continue;
       await ctx.scheduler.runAfter(
         0,
         internal.admin.tones.reassignUserTonesBatch,
         {
-          previousToneId: previousActive._id,
+          previousToneId: sibling._id,
           nextToneId: args.id,
         },
       );
-    }
-
-    for (const sibling of siblings) {
-      if (sibling._id === args.id) continue;
       await ctx.scheduler.runAfter(
         0,
         internal.admin.tones.reassignQuestionsForToneBatch,
@@ -408,10 +410,22 @@ export const reassignUserTonesBatch = internalMutation({
       .take(USER_TONE_REASSIGN_BATCH_SIZE);
 
     for (const userTone of userTones) {
-      await ctx.db.patch(userTone._id, {
-        toneId: args.nextToneId,
-        updatedAt: Date.now(),
-      });
+      // Someone who marked both rows already has an entry for the next one: that one stays,
+      // or the tone would be listed twice for them and one unhide wouldn't clear it.
+      const already = await ctx.db
+        .query("userTones")
+        .withIndex("by_userId_organizationId_and_toneId", (q) =>
+          q.eq("userId", userTone.userId).eq("organizationId", userTone.organizationId).eq("toneId", args.nextToneId),
+        )
+        .first();
+      if (already) {
+        await ctx.db.delete(userTone._id);
+      } else {
+        await ctx.db.patch(userTone._id, {
+          toneId: args.nextToneId,
+          updatedAt: Date.now(),
+        });
+      }
     }
 
     if (userTones.length === USER_TONE_REASSIGN_BATCH_SIZE) {

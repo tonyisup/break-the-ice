@@ -96,9 +96,9 @@ describe("seeding the brief's lines", () => {
 
     const report = await seed(t, true);
 
-    expect(report.styles).toEqual({ lined: 14, drafts: 0, archived: 3 });
-    expect(report.tones).toEqual({ lined: 19, drafts: 0, archived: 1 });
-    expect(report.topics).toEqual({ lined: 8, drafts: 0, archived: 0 });
+    expect(report.styles).toEqual({ lined: 14, drafts: 0, archived: 3, moved: 0 });
+    expect(report.tones).toEqual({ lined: 19, drafts: 0, archived: 1, moved: 0 });
+    expect(report.topics).toEqual({ lined: 8, drafts: 0, archived: 0, moved: 0 });
     expect(report.changes).toHaveLength(14 + 3 + 19 + 1 + 8);
     // Each archived copy names the live row that takes over what points at it.
     const numbered = new Map(before.styles.filter((row) => row.version === 1 && row.status === "active").map((row) => [row.slug, row._id]));
@@ -127,12 +127,14 @@ describe("seeding the brief's lines", () => {
 
     const report = await seed(t, false);
     expect([report.styles, report.tones, report.topics]).toEqual([
-      { lined: 14, drafts: 0, archived: 3 },
-      { lined: 19, drafts: 0, archived: 1 },
-      { lined: 8, drafts: 0, archived: 0 },
+      { lined: 14, drafts: 0, archived: 3, moved: 0 },
+      { lined: 19, drafts: 0, archived: 1, moved: 0 },
+      { lined: 8, drafts: 0, archived: 0, moved: 0 },
     ]);
     // Every change is logged with what was written, so a row can be put back by hand.
-    expect(log.mock.calls.filter(([line]) => /: (line \((brief|form|brief and form)\)|archived, replaced by \S+)$/.test(String(line)))).toHaveLength(report.changes.length);
+    expect(
+      log.mock.calls.filter(([line]) => /: (line \((brief|form|brief and form)\)|archived, replaced by \S+ \(0 questions, 0 hidden entries\))$/.test(String(line))),
+    ).toHaveLength(report.changes.length);
 
     const after = await rows(t);
     const live = <T extends { status?: string }>(list: T[]) => list.filter((row) => row.status === "active");
@@ -156,9 +158,9 @@ describe("seeding the brief's lines", () => {
 
     const again = await seed(t, false);
     expect([again.styles, again.tones, again.topics]).toEqual([
-      { lined: 0, drafts: 0, archived: 0 },
-      { lined: 0, drafts: 0, archived: 0 },
-      { lined: 0, drafts: 0, archived: 0 },
+      { lined: 0, drafts: 0, archived: 0, moved: 0 },
+      { lined: 0, drafts: 0, archived: 0, moved: 0 },
+      { lined: 0, drafts: 0, archived: 0, moved: 0 },
     ]);
     expect(again.changes).toEqual([]);
     expect(await rows(t)).toEqual(after);
@@ -182,8 +184,8 @@ describe("seeding the brief's lines", () => {
 
     const report = await seed(t, false);
 
-    expect(report.styles).toEqual({ lined: 3, drafts: 0, archived: 0 });
-    expect(report.tones).toEqual({ lined: 0, drafts: 1, archived: 0 });
+    expect(report.styles).toEqual({ lined: 3, drafts: 0, archived: 0, moved: 0 });
+    expect(report.tones).toEqual({ lined: 0, drafts: 1, archived: 0, moved: 0 });
     expect(report.changes.map((change) => [change.table, change.slug, change.change, change.wrote]).sort()).toEqual([
       ["styles", "micro-ritual", "line", "brief"],
       ["styles", "micro-ritual", "line", "brief"],
@@ -243,9 +245,9 @@ describe("seeding the brief's lines", () => {
 
     // A dry run names where each archived copy's rows would go, and moves nothing.
     const planned = await seed(t, true);
-    expect(planned.changes.filter((change) => change.change === "archived").map((change) => [change.id, change.replacedBy])).toEqual([
-      [ids.oldStyle, ids.liveStyle],
-      [ids.oldTone, ids.liveTone],
+    expect(planned.changes.filter((change) => change.change === "archived").map((change) => [change.id, change.replacedBy, change.questions, change.hidden])).toEqual([
+      [ids.oldStyle, ids.liveStyle, 1, 1],
+      [ids.oldTone, ids.liveTone, 1, 1],
     ]);
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect((await t.run((ctx) => ctx.db.get(ids.question)))?.styleId).toBe(ids.oldStyle);
@@ -303,7 +305,7 @@ describe("seeding the brief's lines", () => {
     // A dry run names the live row the copy's questions would go to, and moves nothing.
     const planned = await seed(t, true);
     expect(planned.changes.filter((change) => change.change === "archived")).toEqual([
-      { table: "topics", id: ids.oldTopic, slug: "food", change: "archived", replacedBy: ids.liveTopic },
+      { table: "topics", id: ids.oldTopic, slug: "food", change: "archived", replacedBy: ids.liveTopic, questions: 1, hidden: 0 },
     ]);
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(await topicIds()).toEqual([ids.oldTopic, ids.liveTopic, ids.otherTopic]);
@@ -311,9 +313,9 @@ describe("seeding the brief's lines", () => {
     const report = await seed(t, false);
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
-    expect(report.topics).toEqual({ lined: 2, drafts: 0, archived: 1 });
+    expect(report.topics).toEqual({ lined: 2, drafts: 0, archived: 1, moved: 0 });
     // The log says where the copy's questions went, for putting a row back by hand.
-    expect(log).toHaveBeenCalledWith(`seedBriefLines topics/food ${ids.oldTopic}: archived, replaced by ${ids.liveTopic}`);
+    expect(log).toHaveBeenCalledWith(`seedBriefLines topics/food ${ids.oldTopic}: archived, replaced by ${ids.liveTopic} (1 questions, 0 hidden entries)`);
     const after = await t.run(async (ctx) => ({
       old: await ctx.db.get(ids.oldTopic),
       live: await ctx.db.get(ids.liveTopic),
@@ -327,6 +329,118 @@ describe("seeding the brief's lines", () => {
     expect(embedding).not.toHaveBeenCalled();
   });
 
+  test("a copy an earlier run archived without moving anything is finished by a re-run, which then has nothing left to do", async () => {
+    const t = convexTest(schema, modules);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const ids = await t.run(async (ctx) => {
+      const oldStyle = await ctx.db.insert("styles", style("would-you-rather", { version: undefined, status: "archived" }));
+      const liveStyle = await ctx.db.insert("styles", style("would-you-rather", STYLE_BRIEF_LINES["would-you-rather"]));
+      const question = await ctx.db.insert("questions", {
+        text: "Would you rather fly or swim?",
+        status: "public",
+        style: "would-you-rather",
+        styleId: oldStyle,
+        totalLikes: 0,
+        totalShows: 0,
+        averageViewDuration: 0,
+      });
+      const userId = await ctx.db.insert("users", { email: "reader@example.com" });
+      const hidden = await ctx.db.insert("userStyles", { userId, styleId: oldStyle, status: "hidden", updatedAt: 0 });
+      return { oldStyle, liveStyle, question, hidden };
+    });
+    const moved = { table: "styles", id: ids.oldStyle, slug: "would-you-rather", change: "moved", replacedBy: ids.liveStyle, questions: 1, hidden: 1 };
+
+    // A dry run says what is still to move, and moves nothing.
+    const planned = await seed(t, true);
+    expect([planned.styles, planned.changes]).toEqual([{ lined: 0, drafts: 0, archived: 0, moved: 1 }, [moved]]);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect((await t.run((ctx) => ctx.db.get(ids.question)))?.styleId).toBe(ids.oldStyle);
+
+    const report = await seed(t, false);
+    expect(report.changes).toEqual([moved]);
+    expect(log.mock.calls.map(([line]) => String(line))).toContain(
+      `seedBriefLines styles/would-you-rather ${ids.oldStyle}: moved to ${ids.liveStyle} (1 questions, 1 hidden entries)`,
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const after = await t.run(async (ctx) => ({ question: await ctx.db.get(ids.question), hidden: await ctx.db.get(ids.hidden) }));
+    expect([after.question?.styleId, after.hidden?.styleId]).toEqual([ids.liveStyle, ids.liveStyle]);
+    // With nothing left pointing at the copy, a run reports no change: that is the check that the move is done.
+    const again = await seed(t, true);
+    expect([again.styles, again.changes]).toEqual([{ lined: 0, drafts: 0, archived: 0, moved: 0 }, []]);
+  });
+
+  test("a person who hid both the old copy and the live row is left with one hidden entry, for a style and for a tone", async () => {
+    const t = convexTest(schema, modules);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const ids = await t.run(async (ctx) => {
+      const oldStyle = await ctx.db.insert("styles", style("would-you-rather", { version: undefined }));
+      const liveStyle = await ctx.db.insert("styles", style("would-you-rather"));
+      const oldTone = await ctx.db.insert("tones", tone("nostalgic", { version: undefined }));
+      const liveTone = await ctx.db.insert("tones", tone("nostalgic"));
+      const userId = await ctx.db.insert("users", { email: "reader@example.com" });
+      const otherUserId = await ctx.db.insert("users", { email: "other@example.com" });
+      for (const styleId of [oldStyle, liveStyle]) await ctx.db.insert("userStyles", { userId, styleId, status: "hidden", updatedAt: 0 });
+      for (const toneId of [oldTone, liveTone]) await ctx.db.insert("userTones", { userId, toneId, status: "hidden", updatedAt: 0 });
+      // Someone who hid only the old copy keeps their one entry, moved.
+      await ctx.db.insert("userStyles", { userId: otherUserId, styleId: oldStyle, status: "hidden", updatedAt: 0 });
+      return { liveStyle, liveTone, userId, otherUserId };
+    });
+
+    await seed(t, false);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const rows = await t.run(async (ctx) => ({ styles: await ctx.db.query("userStyles").collect(), tones: await ctx.db.query("userTones").collect() }));
+    expect(rows.styles.map((row) => [row.userId, row.styleId]).sort()).toEqual(
+      [
+        [ids.userId, ids.liveStyle],
+        [ids.otherUserId, ids.liveStyle],
+      ].sort(),
+    );
+    expect(rows.tones.map((row) => [row.userId, row.toneId])).toEqual([[ids.userId, ids.liveTone]]);
+  });
+
+  test("a Settings save made before the move keeps a hidden entry the page never listed, and still removes one the person unhid", async () => {
+    const t = convexTest(schema, modules);
+    const READER = { subject: "reader-clerk", tokenIdentifier: "test|reader-clerk", email: "reader@example.com" };
+    const ids = await t.run(async (ctx) => {
+      // As production is between the deploy and the seed: the lists show the numbered row,
+      // and the person's hidden entries still point at the old copies.
+      const oldStyle = await ctx.db.insert("styles", style("would-you-rather", { version: undefined }));
+      const liveStyle = await ctx.db.insert("styles", style("would-you-rather"));
+      const otherStyle = await ctx.db.insert("styles", style("desert-island"));
+      const goneStyle = await ctx.db.insert("styles", style("open-ended"));
+      const oldTone = await ctx.db.insert("tones", tone("nostalgic", { version: undefined }));
+      const liveTone = await ctx.db.insert("tones", tone("nostalgic"));
+      const otherTone = await ctx.db.insert("tones", tone("bold"));
+      const userId = await ctx.db.insert("users", { email: READER.email, clerkId: READER.subject });
+      for (const styleId of [oldStyle, otherStyle, goneStyle]) await ctx.db.insert("userStyles", { userId, styleId, status: "hidden", updatedAt: 0 });
+      for (const toneId of [oldTone, otherTone]) await ctx.db.insert("userTones", { userId, toneId, status: "hidden", updatedAt: 0 });
+      await ctx.db.delete(goneStyle);
+      return { oldStyle, liveStyle, otherStyle, oldTone, liveTone, otherTone };
+    });
+    const reader = t.withIdentity(READER);
+    expect((await reader.query(api.core.styles.getStyles, {})).map((row) => row._id).sort()).toEqual([ids.liveStyle, ids.otherStyle].sort());
+
+    // What the page sends: the ids it lists that are still hidden. Here the person unhid everything it showed.
+    await reader.mutation(api.core.userSettings.updateHiddenStyles, { hiddenStyles: [] });
+    await reader.mutation(api.core.userSettings.updateHiddenTones, { hiddenTones: [] });
+
+    const kept = await t.run(async (ctx) => ({ styles: await ctx.db.query("userStyles").collect(), tones: await ctx.db.query("userTones").collect() }));
+    // The listed style and tone are unhidden, and the entry for a deleted style is cleaned up.
+    // The entries for the old copies stay: the page never showed them, so leaving them out was no choice.
+    expect(kept.styles.map((row) => row.styleId)).toEqual([ids.oldStyle]);
+    expect(kept.tones.map((row) => row.toneId)).toEqual([ids.oldTone]);
+
+    // The seed then moves them to the live rows, where the page lists and can unhide them.
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await seed(t, false);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(await reader.query(api.core.userSettings.getHiddenStyleIds, {})).toEqual([ids.liveStyle]);
+    await reader.mutation(api.core.userSettings.updateHiddenStyles, { hiddenStyles: [] });
+    expect(await t.run((ctx) => ctx.db.query("userStyles").collect())).toEqual([]);
+  });
+
   test("a copy that has only the old id, with no slug, status or version, is archived beside its rewrite", async () => {
     const t = convexTest(schema, modules);
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -337,7 +451,7 @@ describe("seeding the brief's lines", () => {
 
     const report = await seed(t, false);
 
-    expect(report.styles).toEqual({ lined: 1, drafts: 0, archived: 1 });
+    expect(report.styles).toEqual({ lined: 1, drafts: 0, archived: 1, moved: 0 });
     const after = await t.run(async (ctx) => ({ old: await ctx.db.get(ids.old), rewrite: await ctx.db.get(ids.rewrite) }));
     expect([after.old?.status, after.old?.brief]).toEqual(["archived", undefined]);
     expect(after.rewrite).toMatchObject({ status: "active", brief: STYLE_BRIEF_LINES["open-ended"].brief });
@@ -353,7 +467,7 @@ describe("seeding the brief's lines", () => {
     });
 
     const report = await seed(t, false);
-    expect(report.styles).toEqual({ lined: 1, drafts: 1, archived: 0 });
+    expect(report.styles).toEqual({ lined: 1, drafts: 1, archived: 0, moved: 0 });
     await t.withIdentity({ subject: "admin", tokenIdentifier: "test|admin", metadata: { isAdmin: "true" } }).mutation(api.admin.styles.activateStyleVersion, { id: draft });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 

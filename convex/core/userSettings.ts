@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { mutation, query, type MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
 import {
@@ -11,6 +11,8 @@ import {
 import { getUserOrCreate } from "./users";
 import { canReadQuestion, readableQuestionIds, withoutVerdict } from "../lib/questionAccess";
 import { findCanonicalUser } from "../lib/users";
+import { latestActiveVersion } from "../lib/taxonomy";
+import { findTaxonomyVersions } from "../lib/taxonomyLookup";
 
 const workspaceOrganizationIdArg = {
 	organizationId: v.optional(v.id("organizations")),
@@ -329,6 +331,27 @@ export const updateHiddenQuestions = mutation({
 	},
 });
 
+/**
+ * Whether leaving a hidden style or tone out of a save means the person unhid it. The Settings
+ * page sends only the ids it lists, and it lists one row for each style or tone: the live
+ * version. An entry for any other row, such as an older copy that hasn't been moved to the live
+ * one yet, was never on the page to unhide, so it stays. An entry for a deleted row goes.
+ */
+async function canBeUnhidden(
+	ctx: MutationCtx,
+	table: "styles" | "tones",
+	id: Id<"styles"> | Id<"tones">,
+	organizationId: Id<"organizations"> | undefined,
+): Promise<boolean> {
+	const row = await ctx.db.get(id);
+	if (!row) return true;
+	// As the lists do: a workspace sees its own entries and the shared ones, one row for each slug.
+	const versions = (await findTaxonomyVersions(ctx.db, table, row.slug ?? row.id)).filter(
+		(version) => version.organizationId === undefined || version.organizationId === organizationId,
+	);
+	return latestActiveVersion(versions)?._id === row._id;
+}
+
 export const updateHiddenStyles = mutation({
 	args: {
 		hiddenStyles: v.array(v.id("styles")),
@@ -354,7 +377,7 @@ export const updateHiddenStyles = mutation({
 
 		const newHiddenSet = new Set(args.hiddenStyles);
 		for (const us of existingHiddenStyles) {
-			if (!newHiddenSet.has(us.styleId)) {
+			if (!newHiddenSet.has(us.styleId) && (await canBeUnhidden(ctx, "styles", us.styleId, organizationId))) {
 				await ctx.db.delete(us._id);
 			}
 		}
@@ -418,7 +441,7 @@ export const updateHiddenTones = mutation({
 
 		const newHiddenSet = new Set(args.hiddenTones);
 		for (const ut of existingHiddenTones) {
-			if (!newHiddenSet.has(ut.toneId)) {
+			if (!newHiddenSet.has(ut.toneId) && (await canBeUnhidden(ctx, "tones", ut.toneId, organizationId))) {
 				await ctx.db.delete(ut._id);
 			}
 		}
