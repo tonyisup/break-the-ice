@@ -1108,6 +1108,64 @@ describe("a grid cell and the nightly pool while their questions wait for review
     expect(create).not.toHaveBeenCalled();
   });
 
+  // Value: protects=on a grid with topics along one side, a batch fill writes a cell's question under that cell's topic, and the cell is taken while it waits;
+  // fails_when=the fill stops putting the cell's topic on the question, or the question waiting in a topic cell stops counting as taking it;
+  // why_new=every fill test here is of a style-by-tone grid, and none has topics along a side;
+  // seam=none; no_claim=what the model writes about the topic (provider mocked), or how the page picks the tone for a style-by-topic cell.
+  test("on a grid with topics along one side, a batch fill writes a cell's question under the cell's topic, and a second fill finds the cell taken", async () => {
+    const s = await team();
+    await s.t.run(async (ctx) => ctx.db.insert("topics", { id: "weekends", slug: "weekends", name: "Weekends", status: "active", version: 1 }));
+    writes("What does a slow Sunday look like for you?", "Which weekend habit would you never give up?");
+    // What the schedule page sends for a style-by-topic grid: no shared topic, and each cell's
+    // row and column with the style and tone to write it in.
+    const fillTopicCell = (topicSlug?: string) =>
+      s.t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+        organizationId: s.organizationId,
+        axisY: "style",
+        axisX: "topic",
+        topicSlug,
+        cells: [{ ySlug: "reflective", xSlug: "weekends", styleSlug: "reflective", toneSlug: "warm" }],
+      });
+
+    expect(await fillTopicCell()).toMatchObject({ filledCells: 1, totalQuestionsGenerated: 1 });
+    expect((await allQuestions(s.t)).map((q) => [q.text, q.style, q.tone, q.topic])).toEqual([
+      ["What does a slow Sunday look like for you?", "reflective", "warm", "weekends"],
+    ]);
+
+    expect(await fillTopicCell()).toMatchObject({ filledCells: 0, skippedExisting: 1, skippedWaitingForReview: 1 });
+    // The cell's topic is the column's, whatever shared topic comes with the request.
+    expect(await fillTopicCell("music")).toMatchObject({ filledCells: 0, skippedExisting: 1, skippedWaitingForReview: 1 });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  // Value: protects=with topics down the side of the grid, each row's cell gets that row's topic, not the first row's or none;
+  // fails_when=the fill reads the topic from the wrong side of the grid, or gives every cell one topic;
+  // why_new=the test above has topics across the top and a single cell;
+  // seam=none; no_claim=what the model writes about each topic (provider mocked).
+  test("with topics down the side, a batch fill writes each row's cell under that row's topic, and a second fill finds both taken", async () => {
+    const s = await team();
+    await s.t.run(async (ctx) => {
+      for (const slug of ["weekends", "music"]) await ctx.db.insert("topics", { id: slug, slug, name: slug, status: "active", version: 1 });
+    });
+    writes("What does a slow Sunday look like for you?", "Which song do you never skip?");
+    const fillTopicRows = () =>
+      s.t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+        organizationId: s.organizationId,
+        axisY: "topic",
+        axisX: "tone",
+        cells: ["weekends", "music"].map((topic) => ({ ySlug: topic, xSlug: "warm", styleSlug: "reflective", toneSlug: "warm" })),
+      });
+
+    expect(await fillTopicRows()).toMatchObject({ filledCells: 2, totalQuestionsGenerated: 2 });
+    expect((await allQuestions(s.t)).map((q) => [q.text, q.tone, q.topic])).toEqual([
+      ["What does a slow Sunday look like for you?", "warm", "weekends"],
+      ["Which song do you never skip?", "warm", "music"],
+    ]);
+
+    expect(await fillTopicRows()).toMatchObject({ filledCells: 0, skippedExisting: 2, skippedWaitingForReview: 2 });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
   test.each<[string, "public" | "approved" | undefined]>([
     ["a public question", "public"],
     ["a question approved under the older status", "approved"],
@@ -1788,6 +1846,52 @@ describe("every path that writes questions sends the short brief", () => {
     ]);
   });
 
+  // Value: protects=a run that saves a question and a run that previews one each draw their own ten of a style's kept questions, so prompts don't all show one set;
+  // fails_when=either runner stops giving the prompt a fresh seed, or gives one the shuffle reads as the same every time, such as a fraction;
+  // why_new=the draw is only tested with a seed handed to buildGenerationPrompt or made by the eval harness, and no path here had more kept questions than a prompt shows;
+  // seam=none; no_claim=what the model makes of the examples (provider mocked). Three runs can draw the same ten by chance, about once in 10^18.
+  test.each<[string, (s: App) => Promise<unknown>]>([
+    [
+      "a question written for a reader",
+      async (s) =>
+        s.t.action(internal.internal.ai.generateAIQuestionForUser, {
+          userId: (await s.t.run(async (ctx) => ctx.db.query("users").first()))!._id,
+          bypassAIUsage: true,
+          purpose: "newsletter",
+          anchoredStyleId: s.styleV2,
+          anchoredToneId: s.toneId,
+        }),
+    ],
+    ["an admin preview", (s) => s.t.withIdentity(ADMIN).action(api.admin.ai.generateAIQuestions, { selectedTags: [], styleId: s.styleV2, toneId: s.toneId })],
+  ])("%s draws which kept questions it shows afresh each time, so three runs don't all show the same ten of fourteen", async (_path, generate) => {
+    const s = await app();
+    const kept = Array.from({ length: 14 }, (_, i) => `Which of your ${i + 1} oldest habits would you keep?`);
+    await s.t.run(async (ctx) => {
+      for (const text of kept) await ctx.db.insert("questions", { text, styleId: s.styleV2, status: "public", ...counters });
+    });
+    // A new answer each time, so a saved question is never skipped as a copy of the one before.
+    // A fourth call would fail here and not reach a provider.
+    create.mockRejectedValue(new Error("unexpected provider call") as never);
+    for (const text of ["What made you laugh this week?", "Which snack do you always come back to?", "What song is stuck in your head?"]) {
+      create.mockResolvedValueOnce(completion(questionsJson(text)) as never);
+    }
+
+    for (let run = 0; run < 3; run += 1) await generate(s);
+
+    expect(create).toHaveBeenCalledTimes(3);
+    const shown = [0, 1, 2].map((call) => {
+      const lines = sent(call)[1].content.split("\n");
+      const start = lines.indexOf("Questions of this style the owner kept, which are already in the library:");
+      return lines.slice(start + 1, lines.indexOf("", start));
+    });
+    for (const lines of shown) {
+      expect(lines).toHaveLength(10);
+      expect(new Set(lines).size).toBe(10);
+      for (const line of lines) expect(kept.map((text) => `- "${text}"`)).toContain(line);
+    }
+    expect(new Set(shown.map((lines) => lines.join("\n"))).size).toBeGreaterThan(1);
+  });
+
   test.each<[string, (s: App, questionId: Id<"questions">) => Promise<string>]>([
     ["an admin's remix", (s, questionId) => s.t.withIdentity(ADMIN).action(api.admin.questions.remixQuestion, { id: questionId })],
     ["a person's remix", (s, questionId) => s.t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId, styleId: s.styleV2, toneId: s.toneId })],
@@ -1804,5 +1908,42 @@ describe("every path that writes questions sends the short brief", () => {
     expect(prompt).toContain("\nSTYLE: Reflective v2. Looks back on something small.\nTONE: Warm. Kind and unhurried.\n");
     for (const old of OLD_PROMPT) expect(prompt).not.toContain(old);
     expect((await savedRuns(s)).map((run) => [run.purpose, run.promptLabel, run.blueprintId])).toEqual([["remix", "remix-v2", undefined]]);
+  });
+
+  // Value: protects=a remix of a question that has a topic names the topic by its line after the style's and tone's, and its run records the topic;
+  // fails_when=the remix prompt drops the topic's line, fills it from another entry, or the topic no longer reaches the remix from the question or the request;
+  // why_new=every remix test here is of a question with no topic, so only "Keep the topic of the original text" was ever checked;
+  // seam=none; no_claim=that the reworded question stays on the topic (provider mocked; unit only).
+  test("a remix of a question that has a topic names the topic by its line too, for an admin and for a person, and its run records the topic", async () => {
+    const s = await app();
+    const { questionId, topicId } = await s.t.run(async (ctx) => {
+      const topicId = await ctx.db.insert("topics", { id: "weekends", slug: "weekends", name: "Weekends", brief: "Days off and what fills them.", status: "active", version: 1 });
+      const questionId = await ctx.db.insert("questions", {
+        text: "What is your favorite weekend breakfast?",
+        status: "public",
+        styleId: s.styleV2,
+        toneId: s.toneId,
+        topicId,
+        ...counters,
+      });
+      return { questionId, topicId };
+    });
+    create.mockResolvedValue(completion("Which breakfast makes a weekend for you?") as never);
+
+    // An admin's remix reads the topic from the question; a person's is given it by the page.
+    await s.t.withIdentity(ADMIN).action(api.admin.questions.remixQuestion, { id: questionId });
+    await s.t.withIdentity(ME).action(api.core.questions.remixQuestionForUser, { questionId, styleId: s.styleV2, toneId: s.toneId, topicId });
+
+    expect(create).toHaveBeenCalledTimes(2);
+    for (const call of [0, 1]) {
+      expect(sent(call)[0].content).toContain(
+        "\nSTYLE: Reflective v2. Looks back on something small.\nTONE: Warm. Kind and unhurried.\nTOPIC: Weekends. Days off and what fills them.\n",
+      );
+      expect(sent(call)[0].content).not.toContain("Keep the topic of the original text");
+    }
+    expect((await savedRuns(s)).map((run) => [run.purpose, run.topicSlug, run.promptLabel])).toEqual([
+      ["remix", "weekends", "remix-v2"],
+      ["remix", "weekends", "remix-v2"],
+    ]);
   });
 });

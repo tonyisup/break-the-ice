@@ -121,7 +121,8 @@ function questionsPerCell(count: number | undefined): number {
 /**
  * Fill empty cells on the 2D schedule matrix (one generation per visible cell).
  * Each entry matches how the UI buckets questions: same axis-Y slug and axis-X slug,
- * with a shared topic for ALL cells, or no topic when topicSlug is omitted. A new question
+ * with a shared topic for ALL cells, or no topic when topicSlug is omitted. On a grid with
+ * topics along one side, each cell's question is written under that cell's topic. A new question
  * waits for review like any other generated one: the grid lists it once an admin approves it,
  * and until then its cell counts as taken.
  */
@@ -138,7 +139,10 @@ export const fillEmptyCells = action({
 				toneSlug: v.string(),
 			}),
 		),
-		/** Optional: one topic applied to EVERY cell. If omitted, the cells are generated with no topic. */
+		/**
+		 * Optional: one topic applied to EVERY cell. If omitted, the cells are generated with no
+		 * topic. Not used when an axis is "topic": each cell then has its own.
+		 */
 		topicSlug: v.optional(v.string()),
 		countPerCell: v.optional(v.number()),
 	},
@@ -173,19 +177,25 @@ export const fillEmptyCells = action({
 		let skippedInvalidTaxonomy = 0;
 		let totalGenerated = 0;
 
+		// A topic is a theme chosen on purpose: the one the whole grid is given, or, on a grid
+		// with topics along one side, the cell's own, which is also what makes the question
+		// land in that cell. With none chosen, a question is written for its style and tone
+		// alone: a topic stacked on at random got questions rejected more often.
+		const hasTopicAxis = args.axisY === "topic" || args.axisX === "topic";
+		const sharedTopic = hasTopicAxis ? undefined : args.topicSlug || undefined;
+		const topicOf = (cell: { ySlug: string; xSlug: string }): string | undefined =>
+			args.axisY === "topic" ? cell.ySlug : args.axisX === "topic" ? cell.xSlug : sharedTopic;
+
 		const occupied = await collectMatrixOccupiedKeys(
 			ctx,
 			args.axisY,
 			args.axisX,
-			args.topicSlug,
+			sharedTopic,
 		);
-
-		// A topic is a theme chosen on purpose. With none chosen, a question is written for its
-		// style and tone alone: a topic stacked on at random got questions rejected more often.
-		const effectiveTopic = args.topicSlug || undefined;
 
 		for (const cell of args.cells) {
 			totalCells++;
+			const effectiveTopic = topicOf(cell);
 
 			const cellKey = `${cell.ySlug}|${cell.xSlug}`;
 			const taken = occupied.get(cellKey);
