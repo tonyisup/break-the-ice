@@ -1696,7 +1696,7 @@ describe("calls that may have been billed without an answer", () => {
     // The manager is told how far the fill got; the provider's error goes to the log.
     expect(convexErrorData(stopped)).toEqual({
       code: ERROR_CODES.AI_GENERATION_FAILED,
-      message: "Wrote questions for 0 cells, then stopped because the AI didn't finish an answer. What was written is saved and shows once reviewed. Try the rest again later.",
+      message: "Stopped before any question was written, because the AI didn't finish an answer. Try again later.",
       filledCells: 0,
       totalCells: 2,
     });
@@ -2263,7 +2263,7 @@ describe("calls a person may have unanswered in one day", () => {
     // A message the planner can show, not the provider's own error.
     expect(convexErrorData(stopped)).toEqual({
       code: ERROR_CODES.AI_GENERATION_FAILED,
-      message: "Wrote questions for 1 cell, then stopped because the AI didn't finish an answer. What was written is saved and shows once reviewed. Try the rest again later.",
+      message: "Wrote questions for 1 cell, then stopped because the AI didn't finish an answer. The questions written are saved and will show here after the Break the Ice team reviews them. Try the rest again later.",
       filledCells: 1,
       totalCells: 3,
     });

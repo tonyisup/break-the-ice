@@ -507,18 +507,20 @@ export const insertGeneratedQuestions = internalMutation({
     candidates: v.array(
       v.object({
         text: v.string(),
+        // Accepted and not kept: the brief asks for no note, and what a model adds unasked
+        // isn't stored or sent back with the question.
         rationale: v.optional(v.string()),
       }),
     ),
-    status: v.optional(
-      v.union(
-        v.literal("pending"),
-        v.literal("approved"),
-        v.literal("public"),
-        v.literal("private"),
-        v.literal("pruning"),
-        v.literal("pruned"),
-      ),
+    // Required: the runner always holds its questions ("pending"), and nothing saves a
+    // generated question as public by leaving this out.
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("public"),
+      v.literal("private"),
+      v.literal("pruning"),
+      v.literal("pruned"),
     ),
     poolDate: v.optional(v.string()),
     poolStatus: v.optional(v.union(v.literal("available"), v.literal("distributed"))),
@@ -589,9 +591,8 @@ export const insertGeneratedQuestions = internalMutation({
         topicVersion: args.topicVersion,
         generationRunId: args.runId,
         safetyFlags: [],
-        moderationNotes: candidate.rationale,
         quality: {},
-        status: args.status ?? "public",
+        status: args.status,
         heldForReview: args.status === "pending" ? true : undefined,
         poolDate: args.poolDate,
         poolStatus: args.poolStatus,

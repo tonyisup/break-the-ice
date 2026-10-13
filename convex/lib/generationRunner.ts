@@ -498,11 +498,6 @@ export async function runPersistedQuestionGeneration(
     temperature?: number;
     poolDate?: string;
     poolStatus?: "available" | "distributed";
-    /**
-     * "pending" holds the new questions for review (unlisted), which is what every generating
-     * path does. Required, so a new caller chooses and none publishes unreviewed by leaving it out.
-     */
-    status: "public" | "pending";
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -579,7 +574,9 @@ export async function runPersistedQuestionGeneration(
         toneVersion: prompt.tone.version,
         topicVersion: prompt.topic?.version,
         candidates: parsedQuestions,
-        status: args.status,
+        // Every generated question waits for review (unlisted). The person a feed or daily-email
+        // question was made for still gets it; nobody else sees it in a shared list until then.
+        status: "pending",
         poolDate: args.poolDate,
         poolStatus: args.poolStatus,
       });

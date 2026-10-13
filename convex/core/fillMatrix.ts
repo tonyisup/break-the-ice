@@ -100,8 +100,9 @@ async function cellOccupancy(
  * only the cells this request filled: some of the cells asked for may have been filled already.
  */
 function fillStoppedMessage(filledCells: number): string {
+	if (filledCells === 0) return "Stopped before any question was written, because the AI didn't finish an answer. Try again later.";
 	const cells = filledCells === 1 ? "1 cell" : `${filledCells} cells`;
-	return `Wrote questions for ${cells}, then stopped because the AI didn't finish an answer. What was written is saved and shows once reviewed. Try the rest again later.`;
+	return `Wrote questions for ${cells}, then stopped because the AI didn't finish an answer. The questions written are saved and will show here after the Break the Ice team reviews them. Try the rest again later.`;
 }
 
 /**
@@ -226,7 +227,6 @@ export const fillEmptyCells = action({
 					toneSlug: cell.toneSlug,
 					topicSlug: effectiveTopic,
 					batchSize: countPerCell,
-					status: "pending",
 				});
 
 				if (result.saveResult.insertedCount > 0) {
@@ -354,7 +354,6 @@ export const fillSingleCell = action({
 				toneSlug: args.toneSlug,
 				topicSlug: effectiveTopic,
 				batchSize: clampedCount,
-				status: "pending",
 			});
 
 			return {

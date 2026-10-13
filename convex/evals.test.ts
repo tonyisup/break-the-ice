@@ -177,6 +177,7 @@ describe("checkEvalCandidates mirrors the save step", () => {
       toneSlug: "witty",
       styleVersion: 2,
       toneVersion: 1,
+      status: "public",
       candidates: texts.map((text) => ({ text })),
     });
     const insertedTexts = await t.run(async (ctx) =>

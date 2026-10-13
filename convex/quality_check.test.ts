@@ -120,7 +120,9 @@ async function queuedChecks(s: Setup) {
 const check = (s: Setup, questionId: Id<"questions">, attempt?: number) =>
   s.t.action(internal.internal.qualityCheck.checkQuestion, { questionId, attempt });
 
-function save(s: Setup, texts: string[], status?: "pending") {
+// The save step takes the status it is given. The app's runner always gives "pending"; these
+// tests give "public" where they need a question the lists show.
+function save(s: Setup, texts: string[], status: "pending" | "public" = "public") {
   return s.t.mutation(internal.internal.generation.insertGeneratedQuestions, {
     styleId: s.styleId,
     toneId: s.toneId,
@@ -338,9 +340,11 @@ describe("scheduling a check when a question is saved", () => {
   test("in record mode every saved question gets a check, held for review or published at once", async () => {
     process.env.QUALITY_CHECK_MODE = "record";
     const s = await setup();
-    // Every generation path now saves pending. A save given no status still publishes.
+    // Every generation path saves pending. The save step still checks a question given another status.
     const held = await save(s, ["What small thing made you smile today?", "Which smell takes you back to childhood?"], "pending");
     const published = await save(s, ["What chore do you secretly enjoy?"]);
+    // The helper's candidates each carry a note the brief never asks for: it is not kept.
+    expect((await s.t.run((ctx) => ctx.db.query("questions").collect())).map((q) => q.moderationNotes)).toEqual([undefined, undefined, undefined]);
 
     const saved = [...held.insertedQuestionIds, ...published.insertedQuestionIds];
     expect(await queuedChecks(s)).toEqual(saved.map((questionId) => [questionId, 1, 0]));

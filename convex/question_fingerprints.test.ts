@@ -66,6 +66,7 @@ async function setup() {
       toneSlug: "warm",
       styleVersion: 1,
       toneVersion: 1,
+      status: "public",
       candidates: texts.map((text) => ({ text })),
     });
   return { t, insertGenerated, ...taxonomy };
