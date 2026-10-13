@@ -111,7 +111,8 @@ export default function TonesPage() {
 				brief: t.brief ?? "",
 				order: t.order
 			})
-			toast.success("Tone updated")
+			// Only a draft is changed in place. Any other row is saved as a new draft version.
+			toast.success(t.status === "draft" ? "Tone updated" : "Saved as a new draft version. Activate it for the AI to use it.")
 			setEditingTone(null)
 		} catch (error) {
 			toast.error("Failed to update tone")
@@ -234,13 +235,14 @@ export default function TonesPage() {
 									<label className="text-sm font-medium">AI Guidance</label>
 									<textarea
 										className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										placeholder="Provide specific instructions for the LLM on how to achieve this tone..."
+										placeholder="Used for matching, not for writing questions."
 										value={newTone.promptGuidanceForAI}
 										onChange={e => setNewTone({ ...newTone, promptGuidanceForAI: e.target.value })}
 									/>
+									<p className="text-xs text-muted-foreground">Not sent to the AI when it writes questions. The Prompt Line is what it reads.</p>
 								</div>
 								<div className="grid gap-2">
-									<label htmlFor="newToneBrief" className="text-sm font-medium">Prompt line</label>
+									<label htmlFor="newToneBrief" className="text-sm font-medium">Prompt Line (Optional)</label>
 									<textarea
 										id="newToneBrief"
 										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -363,7 +365,7 @@ export default function TonesPage() {
 									<td className="px-6 py-4 text-right">
 										<div className="flex items-center justify-end gap-1">
 											{tone.status !== "active" && (
-												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={() => handleActivate(tone._id)}>
+												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" title="Activate Version" aria-label="Activate Version" onClick={() => handleActivate(tone._id)}>
 													<Check className="size-3.5" />
 												</Button>
 											)}
@@ -437,9 +439,10 @@ export default function TonesPage() {
 										value={editingTone.promptGuidanceForAI ?? ""}
 										onChange={e => setEditingTone({ ...editingTone, promptGuidanceForAI: e.target.value })}
 									/>
+									<p className="text-xs text-muted-foreground">Not sent to the AI when it writes questions. The Prompt Line is what it reads.</p>
 								</div>
 								<div className="grid gap-2">
-									<label htmlFor="editToneBrief" className="text-sm font-medium">Prompt line</label>
+									<label htmlFor="editToneBrief" className="text-sm font-medium">Prompt Line (Optional)</label>
 									<textarea
 										id="editToneBrief"
 										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

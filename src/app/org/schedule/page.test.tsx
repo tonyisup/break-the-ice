@@ -399,9 +399,9 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
   }
 
   it.each([
-    [1, "Wrote 1 question for this cell. It shows here once reviewed."],
-    [2, "Wrote 2 questions for this cell. They show here once reviewed."],
-  ])("says a single-cell fill that wrote %i shows on the grid once reviewed", async (count, message) => {
+    [1, "Wrote 1 question for this cell. It will show here after the Break the Ice team reviews it."],
+    [2, "Wrote 2 questions for this cell. They will show here after the Break the Ice team reviews them."],
+  ])("says a single-cell fill that wrote %i shows on the grid after the Break the Ice team reviews it", async (count, message) => {
     matrixWithOneEmptyCell();
     fillResults({ fillSingleCell: { count, questionIds: Array.from({ length: count }, (_, i) => `q-new-${i}`), waitingForReview: true } });
 
@@ -426,16 +426,22 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
     expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled();
   });
 
-  it("keeps the plain message when a single-cell fill wrote nothing and no question is waiting", async () => {
+  it("says no new question was written, and doesn't call it a success, when a single-cell fill wrote nothing and none is waiting", async () => {
     matrixWithOneEmptyCell();
     fillResults({ fillSingleCell: { count: 0, questionIds: [], waitingForReview: false } });
 
     render(<OrgWeeklyCurationPage />);
     fireEvent.click(screen.getByRole("button", { name: "Generate" }));
 
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Generated 0 questions for this cell"));
-    expect(toast.info).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(toast.info).toHaveBeenCalledWith(
+        "No new question was written for this cell. It may already have one, or the AI repeated an existing question.",
+      ),
+    );
+    expect(toast.info).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled();
   });
 
   const batch = (totalCells: number, filledCells: number, totalQuestionsGenerated: number, skippedInvalidTaxonomy = 0, skippedWaitingForReview = 0) => ({
@@ -448,15 +454,12 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
   });
 
   it.each([
-    ["wrote questions", batch(2, 2, 2), "Wrote 2 questions for 2/2 cells. They show here once reviewed."],
-    ["wrote questions and skipped a deleted style or tone", batch(3, 2, 2, 1), "Wrote 2 questions for 2/3 cells · 1 skipped (deleted taxonomy). They show here once reviewed."],
-    ["wrote one question", batch(2, 1, 1), "Wrote 1 question for 1/2 cells. It shows here once reviewed."],
-    ["wrote questions and found a cell already waiting for review", batch(3, 2, 2, 0, 1), "Wrote 2 questions for 2/3 cells · 1 already waiting for review. They show here once reviewed."],
-    ["wrote nothing because every cell is waiting for review", batch(2, 0, 0, 0, 2), "Wrote 0 questions for 0/2 cells · 2 already waiting for review"],
-    ["found one cell waiting and another's style deleted", batch(2, 0, 0, 1, 1), "Wrote 0 questions for 0/2 cells · 1 already waiting for review · 1 skipped (deleted taxonomy)"],
-    ["wrote nothing", batch(2, 0, 0), "Wrote 0 questions for 0/2 cells"],
-    ["wrote nothing and skipped a deleted style or tone", batch(2, 0, 0, 2), "Wrote 0 questions for 0/2 cells · 2 skipped (deleted taxonomy)"],
-  ])("after a batch fill that %s, gives the counts, and says new questions show once reviewed only if it wrote any", async (_what, result, message) => {
+    ["wrote questions", batch(2, 2, 2), "Wrote 2 questions for 2/2 cells. They will show here after the Break the Ice team reviews them."],
+    ["wrote questions and skipped a deleted style or tone", batch(3, 2, 2, 1), "Wrote 2 questions for 2/3 cells · 1 skipped (deleted taxonomy). They will show here after the Break the Ice team reviews them."],
+    ["wrote one question", batch(2, 1, 1), "Wrote 1 question for 1/2 cells. It will show here after the Break the Ice team reviews it."],
+    ["wrote questions and found a cell already waiting for review", batch(3, 2, 2, 0, 1), "Wrote 2 questions for 2/3 cells · 1 already waiting for review. They will show here after the Break the Ice team reviews them."],
+    ["wrote questions, found a cell waiting and another's style deleted", batch(4, 2, 2, 1, 1), "Wrote 2 questions for 2/4 cells · 1 already waiting for review · 1 skipped (deleted taxonomy). They will show here after the Break the Ice team reviews them."],
+  ])("after a batch fill that %s, gives the counts and says they show after the Break the Ice team's review", async (_what, result, message) => {
     matrixWithOneEmptyCell();
     fillResults({ fillEmptyCells: result });
 
@@ -464,8 +467,68 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
     fireEvent.click(screen.getByRole("button", { name: "Fill Empty Cells" }));
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith(message));
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.info).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Fill Empty Cells" })).toBeEnabled();
+  });
+
+  it.each([
+    ["because every cell is waiting for review", batch(2, 0, 0, 0, 2), "Wrote 0 questions for 0/2 cells · 2 already waiting for review"],
+    ["with one cell waiting and another's style deleted", batch(2, 0, 0, 1, 1), "Wrote 0 questions for 0/2 cells · 1 already waiting for review · 1 skipped (deleted taxonomy)"],
+    ["with no cell skipped for review or a deleted style", batch(2, 0, 0), "Wrote 0 questions for 0/2 cells"],
+    ["and skipped a deleted style or tone", batch(2, 0, 0, 2), "Wrote 0 questions for 0/2 cells · 2 skipped (deleted taxonomy)"],
+  ])("after a batch fill that wrote nothing %s, gives the counts as plain information, not a success, and says nothing about review", async (_what, result, message) => {
+    matrixWithOneEmptyCell();
+    fillResults({ fillEmptyCells: result });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Fill Empty Cells" }));
+
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith(message));
+    expect(toast.info).toHaveBeenCalledTimes(1);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Fill Empty Cells" })).toBeEnabled();
+  });
+});
+
+describe("OrgWeeklyCurationPage topic control", () => {
+  it("offers one topic or no topic, and says a grid with no topic is written for the style and tone alone", () => {
+    matrixWithOneEmptyCell();
+    render(<OrgWeeklyCurationPage />);
+
+    // No topic is the starting choice, and nothing promises a random one.
+    expect(screen.getByRole("button", { name: "No topic" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Random" })).toBeNull();
+    expect(screen.getByText("Questions are written for the style and tone alone.")).toBeInTheDocument();
+    expect(screen.queryByText(/random topic/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "One topic" }));
+    expect(screen.queryByText("Questions are written for the style and tone alone.")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "No topic" }));
+    expect(screen.getByText("Questions are written for the style and tone alone.")).toBeInTheDocument();
+  });
+
+  it("sends no topic with a fill when no topic is chosen", async () => {
+    matrixWithOneEmptyCell();
+    const fillSingleCell = vi.fn().mockResolvedValue({ count: 1, questionIds: ["q-new"], waitingForReview: true });
+    (useAction as ReturnType<typeof vi.fn>).mockImplementation((fn: string) =>
+      fn === "fillSingleCell" ? fillSingleCell : vi.fn().mockResolvedValue(undefined),
+    );
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => expect(fillSingleCell).toHaveBeenCalledTimes(1));
+    expect(fillSingleCell).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      styleSlug: "rapid-fire-either",
+      toneSlug: "bold",
+      topicSlug: undefined,
+      count: 1,
+    });
   });
 });
 

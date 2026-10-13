@@ -128,9 +128,10 @@ matrix, so it won't fill the gap today. To use a flagged question anyway, select
 
 A question the AI writes for the matrix is reviewed by an admin of the app
 before it appears there. After **Generate** or **Fill Empty Cells** the planner
-says how many questions it wrote, and that they show once reviewed. Until then
-the cell stays empty and isn't written again. To assign something now, pick a
-library question, or use the **Write** or **Topic** tab.
+says how many questions it wrote, and that they will show after the Break the
+Ice team reviews them. Until then the cell stays empty and isn't written again.
+To assign something now, pick a library question, or use the **Write** or
+**Topic** tab.
 
 ### The week will not publish
 

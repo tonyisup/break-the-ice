@@ -602,6 +602,13 @@ function readableError(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
 }
 
+// What a fill toast says about the questions it wrote: the grid lists them only once reviewed.
+function showsAfterReview(written: number): string {
+  return written === 1
+    ? "It will show here after the Break the Ice team reviews it."
+    : "They will show here after the Break the Ice team reviews them.";
+}
+
 export default function OrgWeeklyCurationPage() {
   const { activeWorkspace, setActiveWorkspace, workspaceHydrated } = useWorkspace();
   const { isSignedIn, isLoaded: authLoaded, orgId: clerkOrgId } = useAuth();
@@ -719,16 +726,16 @@ const questionPool = useQuery(
   const [axisYSelected, setAxisYSelected] = React.useState<Set<string>>(new Set());
   const [axisXSelected, setAxisXSelected] = React.useState<Set<string>>(new Set());
 
-  /* --- Third axis control: "Topic" — global vs random per cell --- */
-  type TopicPolicy = "global" | "random";
-  const [topicPolicy, setTopicPolicy] = React.useState<TopicPolicy>("random");
+  /* --- Third axis control: "Topic" — one topic for the whole grid, or none --- */
+  type TopicPolicy = "global" | "none";
+  const [topicPolicy, setTopicPolicy] = React.useState<TopicPolicy>("none");
   const [globalTopicId, setGlobalTopicId] = React.useState<string | undefined>();
   /* Resolve the effective topic slug used for generating questions */
   const effectiveTopicSlug = React.useMemo(() => {
     if (topicPolicy === "global" && topics) {
       return topics.find(t => t.id === globalTopicId)?.slug;
     }
-    return undefined; // random
+    return undefined; // no topic: the question is written for its style and tone alone
   }, [topicPolicy, globalTopicId, topics]);
 
   /** Global topic for generation/pool only when topic is not already a visible matrix axis. */
@@ -1327,8 +1334,11 @@ const questionPool = useQuery(
         msg += ` · ${result.skippedInvalidTaxonomy} skipped (deleted taxonomy)`;
       }
       // A new question is reviewed before the grid lists it.
-      if (written > 0) msg += `. ${written !== 1 ? "They show" : "It shows"} here once reviewed.`;
-      toast.success(msg);
+      if (written > 0) {
+        toast.success(`${msg}. ${showsAfterReview(written)}`);
+      } else {
+        toast.info(msg);
+      }
     } catch (e: any) {
       toast.error(readableError(e, "Failed to fill empty cells"));
     } finally {
@@ -1363,11 +1373,11 @@ const questionPool = useQuery(
       });
 
       if (result.count > 0) {
-        toast.success(`Wrote ${result.count} question${result.count !== 1 ? "s" : ""} for this cell. ${result.count !== 1 ? "They show" : "It shows"} here once reviewed.`);
+        toast.success(`Wrote ${result.count} question${result.count !== 1 ? "s" : ""} for this cell. ${showsAfterReview(result.count)}`);
       } else if (result.waitingForReview) {
         toast.info("This cell already has a question waiting for review.");
       } else {
-        toast.success("Generated 0 questions for this cell");
+        toast.info("No new question was written for this cell. It may already have one, or the AI repeated an existing question.");
       }
     } catch (e: any) {
       toast.error(readableError(e, "Failed to generate for this cell"));
@@ -1720,52 +1730,61 @@ const questionPool = useQuery(
                 <label className="text-xs font-medium text-muted-foreground">
                   Third axis (topic per cell)
                 </label>
-                <div className="flex gap-1">
-                  {(["global", "random"] as TopicPolicy[]).map((m) => (
-                    <Button
-                      key={m}
-                      variant={topicPolicy === m ? "default" : "outline"}
-                      size="sm"
-                      className="flex-1 text-xs px-1 capitalize"
-                      onClick={() => setTopicPolicy(m)}
-                    >
-                      {m === "global" ? "One topic" : "Random"}
-                    </Button>
-                  ))}
-                </div>
-                {topicPolicy === "global" && topics && (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="w-full justify-start text-sm font-normal h-8">
-                        {globalTopicId
-                          ? (topics.find(t => t.id === globalTopicId)?.name ?? "Select topic")
-                          : "Select topic"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-52 p-2" align="start">
-                      <ScrollArea className="h-48">
-                        <div className="space-y-1">
-                          {topics.map((t) => (
-                            <button
-                              key={t.id}
-                              onClick={() => setGlobalTopicId(t.id)}
-                              className={cn(
-                                "w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent truncate",
-                                globalTopicId === t.id && "bg-accent"
-                              )}
-                            >
-                              {t.name as string}
-                            </button>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </PopoverContent>
-                  </Popover>
-                )}
-                {topicPolicy === "random" && (
+                {axisY === "topic" || axisX === "topic" ? (
+                  // Topics are already a row or a column, so there is nothing to choose here.
                   <p className="text-[10px] text-muted-foreground">
-                    Each cell gets a random topic from the available pool.
+                    Topics run along one side of the grid, so each cell is written under its own topic.
                   </p>
+                ) : (
+                  <>
+                    <div className="flex gap-1">
+                      {(["global", "none"] as TopicPolicy[]).map((m) => (
+                        <Button
+                          key={m}
+                          variant={topicPolicy === m ? "default" : "outline"}
+                          size="sm"
+                          className="flex-1 text-xs px-1 capitalize"
+                          onClick={() => setTopicPolicy(m)}
+                        >
+                          {m === "global" ? "One topic" : "No topic"}
+                        </Button>
+                      ))}
+                    </div>
+                    {topicPolicy === "global" && topics && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="w-full justify-start text-sm font-normal h-8">
+                            {globalTopicId
+                              ? (topics.find(t => t.id === globalTopicId)?.name ?? "Select topic")
+                              : "Select topic"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-52 p-2" align="start">
+                          <ScrollArea className="h-48">
+                            <div className="space-y-1">
+                              {topics.map((t) => (
+                                <button
+                                  key={t.id}
+                                  onClick={() => setGlobalTopicId(t.id)}
+                                  className={cn(
+                                    "w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-accent truncate",
+                                    globalTopicId === t.id && "bg-accent"
+                                  )}
+                                >
+                                  {t.name as string}
+                                </button>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                    {topicPolicy === "none" && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Questions are written for the style and tone alone.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
 

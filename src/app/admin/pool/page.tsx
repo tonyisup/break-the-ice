@@ -28,6 +28,7 @@ import { iconMap } from "@/components/ui/icons/icons"
 import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
 import { Slider } from "@/components/ui/slider"
+import { Link } from "react-router-dom"
 
 type PoolStats = {
     totalQuestions: number
@@ -50,6 +51,7 @@ type PoolQuestion = {
     text?: string
     poolStatus?: "available" | "distributed"
     awaitingReview: boolean
+    readyToAssign: boolean
     style?: {
         _id: string
         name: string
@@ -62,6 +64,48 @@ type PoolQuestion = {
         icon: string
         color: string
     }
+}
+
+type RowStatus = "distributed" | "waiting" | "available" | "notApproved"
+
+/** Where a pool question stands. Only an approved one that hasn't been handed out is available. */
+function rowStatus(question: PoolQuestion): RowStatus {
+    if (question.poolStatus === "distributed") return "distributed"
+    if (question.awaitingReview) return "waiting"
+    return question.readyToAssign ? "available" : "notApproved"
+}
+
+const ROW_BADGES: Record<RowStatus, { label: string; variant: "default" | "secondary" | "outline"; className: string }> = {
+    distributed: { label: "Distributed", variant: "default", className: "bg-purple-500 hover:bg-purple-500" },
+    waiting: {
+        label: "Waiting for review",
+        variant: "outline",
+        className: "border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-400",
+    },
+    available: { label: "Available", variant: "secondary", className: "" },
+    // Rejected or retired in review, so it is never handed out.
+    notApproved: { label: "Not approved", variant: "outline", className: "text-muted-foreground" },
+}
+
+/** A row's status, with a link to the question's own page while it waits for review. */
+function RowStatusBadge({ question }: { question: PoolQuestion }) {
+    const status = rowStatus(question)
+    const badge = ROW_BADGES[status]
+    return (
+        <>
+            <Badge variant={badge.variant} className={badge.className}>
+                {badge.label}
+            </Badge>
+            {status === "waiting" && (
+                <Link
+                    to={`/admin/questions/${question._id}`}
+                    className="text-xs font-medium text-primary hover:underline"
+                >
+                    Review
+                </Link>
+            )}
+        </>
+    )
 }
 
 export default function PoolPage() {
@@ -110,7 +154,12 @@ export default function PoolPage() {
         setIsGenerating(true)
         try {
             const result = await triggerGeneration({ targetCount: targetCountPerStyleTone })
-            toast.success(`Generated ${result.questionsGenerated} questions across ${result.combinationsProcessed} style/tone combinations. They wait for review before they can be assigned.`)
+            const summary = `Generated ${result.questionsGenerated} questions across ${result.combinationsProcessed} style/tone combinations.`
+            toast.success(
+                result.questionsGenerated > 0
+                    ? `${summary} Approve them under Pending Review on the Questions page before assigning.`
+                    : summary,
+            )
             if (result.errors.length > 0) {
                 toast.warning(`${result.errors.length} errors occurred during generation`)
             }
@@ -127,7 +176,7 @@ export default function PoolPage() {
         try {
             // The pool on screen: a pool is reviewed first, so it is often handed out on a later day.
             const result = await triggerAssignment({ poolDate: selectedDate })
-            toast.success(`Assigned ${result.totalAssigned} questions to ${result.usersProcessed} users`)
+            toast.success(`Assigned ${result.totalAssigned} questions from the ${selectedDate} pool to ${result.usersProcessed} users`)
             if (result.errors.length > 0) {
                 toast.warning(`${result.errors.length} errors occurred during assignment`)
             }
@@ -290,7 +339,14 @@ export default function PoolPage() {
                             <p className="text-3xl font-bold mt-2">{stats.availableQuestions}</p>
                             <p className="text-xs text-muted-foreground mt-1">
                                 Ready for assignment
-                                {stats.awaitingReviewQuestions > 0 ? ` · ${stats.awaitingReviewQuestions} waiting for review` : ""}
+                                {stats.awaitingReviewQuestions > 0 && (
+                                    <>
+                                        {" · "}
+                                        <Link to="/admin/questions" className="underline underline-offset-2 hover:text-foreground">
+                                            {stats.awaitingReviewQuestions} waiting for review
+                                        </Link>
+                                    </>
+                                )}
                             </p>
                         </CardContent>
                     </Card>
@@ -364,7 +420,7 @@ export default function PoolPage() {
                                 className="h-7 px-3"
                                 onClick={() => setStatusFilter("available")}
                             >
-                                Available
+                                Not distributed
                             </Button>
                             <Button
                                 variant={statusFilter === "distributed" ? "secondary" : "ghost"}
@@ -457,12 +513,7 @@ export default function PoolPage() {
                                         </div>
                                     </div>
                                     <div className="flex flex-col items-end gap-2">
-                                        <Badge
-                                            variant={question.poolStatus === "distributed" ? "default" : "secondary"}
-                                            className={question.poolStatus === "distributed" ? "bg-purple-500 hover:bg-purple-500" : ""}
-                                        >
-                                            {question.poolStatus === "distributed" ? "Distributed" : question.awaitingReview ? "In review" : "Available"}
-                                        </Badge>
+                                        <RowStatusBadge question={question} />
                                         <div className="flex items-center gap-1">
                                             <Button
                                                 variant="ghost"
