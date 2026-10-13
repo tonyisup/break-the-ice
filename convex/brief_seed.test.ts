@@ -1,19 +1,24 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
+import OpenAI from "openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { STYLE_BRIEF_LINES, TONE_BRIEF_LINES, TOPIC_BRIEF_LINES } from "./data/briefLines";
+import { openRouterClient } from "./lib/generationRunner";
 
 type TestConvex = ReturnType<typeof convexTest>;
 
 const modules = import.meta.glob("./**/*.ts");
 
 // A real run schedules the batches that move questions and hidden entries off an archived copy.
-// With the clock faked they run only where a test asks them to.
+// With the clock faked they run only where a test asks them to, and neither provider can be
+// reached from scheduled work.
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.spyOn(openRouterClient.chat.completions, "create").mockRejectedValue(new Error("unexpected model call"));
+  vi.spyOn(OpenAI.Embeddings.prototype, "create").mockRejectedValue(new Error("unexpected embedding call"));
 });
 
 afterEach(() => {
@@ -262,6 +267,64 @@ describe("seeding the brief's lines", () => {
     // The question's card looks its style up by id, and the lists show the same row.
     expect(await t.query(api.core.styles.getStyleById, { id: after.question!.styleId! })).toMatchObject({ _id: ids.liveStyle });
     expect((await t.query(api.core.styles.getStyles, {})).map((row) => row._id)).toEqual([ids.liveStyle]);
+  });
+
+  // Value: protects=a topic's copy from before versions is archived by the seed, and the questions written under it move to the live topic, whose status is written out so the move can run;
+  // fails_when=the seed archives a topic's copy and leaves its questions on the archived row, moves another topic's questions, or moves anything on a dry run;
+  // why_new=the test above moves a style's and a tone's rows, and the production-shaped lists have no doubled topic, so the topic's own batch was never scheduled in a test;
+  // seam=none; no_claim=a library larger than one batch (three questions here), or what a model would be sent: both clients are stubbed and must not be called.
+  test("a topic's copy from before versions is archived too, and the questions written under it move to the live topic, leaving another topic's alone", async () => {
+    const t = convexTest(schema, modules);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    // The batches that move questions call no model. These stop a call from leaving the machine if one ever did.
+    const model = vi.spyOn(openRouterClient.chat.completions, "create").mockRejectedValue(new Error("unexpected model call"));
+    const embedding = vi.spyOn(OpenAI.Embeddings.prototype, "create").mockRejectedValue(new Error("unexpected embedding call"));
+    const ids = await t.run(async (ctx) => {
+      const oldTopic = await ctx.db.insert("topics", topic("food", { version: undefined, name: "Old copy" }));
+      // The rewrite's status was never written out; it counts as live all the same.
+      const { status: _status, ...unstated } = topic("food");
+      const liveTopic = await ctx.db.insert("topics", unstated);
+      const otherTopic = await ctx.db.insert("topics", topic("music"));
+      const question = (text: string, slug: string, topicId: Id<"topics">) =>
+        ctx.db.insert("questions", { text, status: "public", topic: slug, topicId, totalLikes: 0, totalShows: 0, averageViewDuration: 0 });
+      return {
+        oldTopic,
+        liveTopic,
+        otherTopic,
+        underOldCopy: await question("Which snack do you always come back to?", "food", oldTopic),
+        underLiveRow: await question("What did you eat for breakfast today?", "food", liveTopic),
+        underOtherTopic: await question("Which song do you never skip?", "music", otherTopic),
+      };
+    });
+    /** The topic row each question points at: the one under the old copy, the one under the live row, the other topic's. */
+    const topicIds = () =>
+      t.run(async (ctx) => Promise.all([ids.underOldCopy, ids.underLiveRow, ids.underOtherTopic].map(async (id) => (await ctx.db.get(id))?.topicId)));
+
+    // A dry run names the live row the copy's questions would go to, and moves nothing.
+    const planned = await seed(t, true);
+    expect(planned.changes.filter((change) => change.change === "archived")).toEqual([
+      { table: "topics", id: ids.oldTopic, slug: "food", change: "archived", replacedBy: ids.liveTopic },
+    ]);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(await topicIds()).toEqual([ids.oldTopic, ids.liveTopic, ids.otherTopic]);
+
+    const report = await seed(t, false);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    expect(report.topics).toEqual({ lined: 2, drafts: 0, archived: 1 });
+    // The log says where the copy's questions went, for putting a row back by hand.
+    expect(log).toHaveBeenCalledWith(`seedBriefLines topics/food ${ids.oldTopic}: archived, replaced by ${ids.liveTopic}`);
+    const after = await t.run(async (ctx) => ({
+      old: await ctx.db.get(ids.oldTopic),
+      live: await ctx.db.get(ids.liveTopic),
+      moved: await ctx.db.get(ids.underOldCopy),
+    }));
+    expect([after.old?.status, after.old?.brief]).toEqual(["archived", undefined]);
+    expect(after.live).toMatchObject({ status: "active", brief: TOPIC_BRIEF_LINES.food.brief });
+    expect(await topicIds()).toEqual([ids.liveTopic, ids.liveTopic, ids.otherTopic]);
+    expect(after.moved).toMatchObject({ topic: "food", topicSlug: "food", topicVersion: 1 });
+    expect(model).not.toHaveBeenCalled();
+    expect(embedding).not.toHaveBeenCalled();
   });
 
   test("a copy that has only the old id, with no slug, status or version, is archived beside its rewrite", async () => {

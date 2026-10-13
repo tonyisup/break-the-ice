@@ -474,6 +474,61 @@ describe("generateEvalBatch", () => {
     expect(batch.fingerprintCollisions).toBe(0);
   });
 
+  // Value: protects=an eval batch for a style with a set form reports a short question as the save step treats it: saved for that style, refused for a style with no set form;
+  // fails_when=the batch stops passing the style's set form to its dry check, so an eval of an either/or style counts as refused the short questions the app would keep;
+  // why_new=the batch tests here use a style with no set form, and convex/brief.test.ts gives the dry check its flag by hand, not through a batch;
+  // seam=none; no_claim=what a model writes for a set form (provider mocked), or how the eval scripts score the outcome.
+  test("a batch for a style with a set form reports a short question as saved, as the save step keeps it, and the same question as refused for a style without one", async () => {
+    const t = await setup();
+    const { eitherOrId, toneId } = await t.run(async (ctx) => ({
+      eitherOrId: await ctx.db.insert("styles", {
+        id: "either-or",
+        slug: "either-or",
+        name: "Either/Or",
+        structure: "",
+        color: "#111111",
+        icon: "anchor",
+        status: "active",
+        version: 1,
+        form: "Two short options joined by 'or' and nothing else.",
+      }),
+      toneId: (await ctx.db.query("tones").first())!._id,
+    }));
+    // The second is under even a set form's floor.
+    const texts = ["Tea or coffee?", "Why not?"];
+    create.mockResolvedValue(completion(questionsJson(...texts)) as never);
+    const batchFor = async (styleSlug: string, seedId: string) => {
+      const batch = await t.action(internal.internal.evals.generateEvalBatch, { runLabel: "test", seedId, styleSlug, toneSlug: "witty", batchSize: 2, neighbours: 0 });
+      return batch.candidates.map((candidate) => [candidate.text, candidate.outcome, candidate.codeRejections]);
+    };
+
+    const withSetForm = await batchFor("either-or", "s01");
+    const withoutOne = await batchFor("desert-island", "s02");
+
+    expect(withSetForm).toEqual([
+      ["Tea or coffee?", "saved", []],
+      ["Why not?", "rejected", ["too short", "too few words"]],
+    ]);
+    expect(withoutOne).toEqual([
+      ["Tea or coffee?", "rejected", ["too short", "too few words"]],
+      ["Why not?", "rejected", ["too short", "too few words"]],
+    ]);
+    // Neither batch added to the library, and the save step then does with the set-form batch what the batch said.
+    expect(await t.run(async (ctx) => ctx.db.query("questions").collect())).toEqual([]);
+    const saved = await t.mutation(internal.internal.generation.insertGeneratedQuestions, {
+      styleId: eitherOrId,
+      toneId,
+      styleSlug: "either-or",
+      toneSlug: "witty",
+      styleVersion: 1,
+      toneVersion: 1,
+      candidates: texts.map((text) => ({ text })),
+      status: "pending",
+    });
+    expect([saved.insertedCount, saved.rejected]).toEqual([1, [{ text: "Why not?", reasons: ["too short", "too few words"] }]]);
+    expect(await t.run(async (ctx) => (await ctx.db.query("questions").collect()).map((question) => question.text))).toEqual(["Tea or coffee?"]);
+  });
+
   test("neighbours are the closest shared public questions, each once, five by default", async () => {
     const t = await setup();
     const embedCreate = vi

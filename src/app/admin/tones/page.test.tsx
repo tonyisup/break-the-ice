@@ -139,4 +139,28 @@ describe("admin tones: the prompt line", () => {
     expect(toast.success).toHaveBeenCalledTimes(1);
     expect(updateTone).toHaveBeenCalledWith(expect.objectContaining({ _id: "tone-1-draft" }));
   });
+
+  // Value: protects=on the tones list, the draft the save message tells the admin to activate has a button named Activate Version that activates that draft, and the live row has none;
+  // fails_when=the icon button loses its name, shows on the live row, or activates a row other than the one it sits on;
+  // why_new=no test of this page finds or presses the activate button, and only the styles page's tests do on theirs;
+  // seam=none; no_claim=what activating does on the server (the mutation is mocked, and convex/admin_taxonomy_versions.test.ts covers it), or the grid view's menu.
+  it("the draft row has an Activate Version button that activates that draft, and the live row has none", async () => {
+    const activateToneVersion = vi.fn().mockResolvedValue(null);
+    vi.mocked(useMutation).mockImplementation(((name: string) => (name === "activateToneVersion" ? activateToneVersion : vi.fn())) as never);
+    vi.mocked(useQuery).mockReturnValue([warm, { ...warm, _id: "tone-1-draft", version: 3, status: "draft" }]);
+    render(<TonesPage />);
+    const liveRow = screen.getByText("active v2").closest("tr")!;
+    const draftRow = screen.getByText("draft v3").closest("tr")!;
+
+    expect(within(liveRow).queryByRole("button", { name: "Activate Version" })).toBeNull();
+    const activate = within(draftRow).getByRole("button", { name: "Activate Version" });
+    // The name shows on hover too, since the button is only a check mark.
+    expect(activate).toHaveAttribute("title", "Activate Version");
+    fireEvent.click(activate);
+
+    await waitFor(() => expect(activateToneVersion).toHaveBeenCalledTimes(1));
+    expect(activateToneVersion).toHaveBeenCalledWith({ id: "tone-1-draft" });
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Tone version activated"));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
 });

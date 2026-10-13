@@ -503,7 +503,7 @@ describe("the prompt line on admin edits", () => {
     expect(styles.map((style) => [style.slug, style.name, style.brief])).toEqual([["either-or", "Either/Or", "The rewrite."]]);
   });
 
-  test("an edit of a live style is listed as a draft beside it, so it can be activated, and activating it leaves one row", async () => {
+  test("an edit of a live style is listed as a draft beside it, so it can be activated, and an activated draft becomes the live row", async () => {
     const { t, admin } = app();
     const liveId = await t.run((ctx) =>
       ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "active", version: 1, brief: "Two things, pick one." }),
@@ -529,6 +529,34 @@ describe("the prompt line on admin edits", () => {
     ]);
 
     await admin.mutation(api.admin.styles.activateStyleVersion, { id: draft._id });
-    expect((await listed())[0]).toEqual(["active", 2, "Two everyday things, and the person picks one."]);
+    // The second draft is still newer than the row that is live now, so it stays listed beside it.
+    expect(await listed()).toEqual([
+      ["active", 2, "Two everyday things, and the person picks one."],
+      ["draft", 3, "A third wording."],
+    ]);
+  });
+
+  // Value: protects=a style with no live row is still in the admin's styles list, once: a style just created shows as its draft until it is activated, and a style with only archived versions shows its newest;
+  // fails_when=the list returns only styles that have a live row, so a new style can't be found to activate, or it returns every version of a style that has none live;
+  // why_new=every styles-list test here starts from a live row, so the list's answer for a style with none was never asked for;
+  // seam=none; no_claim=what the page draws for such a row, or how the app's own lists treat a style that isn't live.
+  test("a style with no live row is still listed, once: a new style as its draft until it is activated, and an archived style as its newest version", async () => {
+    const { t, admin } = app();
+    const listed = async () => (await admin.query(api.admin.styles.listStyles, {})).map((style) => [style.slug, style.status, style.version]);
+
+    const created = await admin.mutation(api.admin.styles.createStyle, { id: "one-word", ...styleForm, name: "One Word" });
+    expect(await listed()).toEqual([["one-word", "draft", 1]]);
+
+    await admin.mutation(api.admin.styles.activateStyleVersion, { id: created });
+    expect(await listed()).toEqual([["one-word", "active", 1]]);
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("styles", { id: "retired", slug: "retired", ...styleForm, name: "Retired", status: "archived", version: 1 });
+      await ctx.db.insert("styles", { id: "retired", slug: "retired", ...styleForm, name: "Retired", status: "archived", version: 2 });
+    });
+    expect(await listed()).toEqual([
+      ["one-word", "active", 1],
+      ["retired", "archived", 2],
+    ]);
   });
 });

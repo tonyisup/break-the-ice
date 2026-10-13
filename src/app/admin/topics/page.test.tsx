@@ -137,4 +137,25 @@ describe("admin topics: the prompt line", () => {
     expect(toast.success).toHaveBeenCalledTimes(1);
     expect(updateTopic).toHaveBeenCalledWith(expect.objectContaining({ _id: "topic-1-draft" }));
   });
+
+  // Value: protects=on the topics list, the draft the save message tells the admin to activate has a button named Activate Version that activates that draft, and the live row has none;
+  // fails_when=the icon button loses its name, shows on the live row, or activates a row other than the one it sits on;
+  // why_new=no test of this page finds or presses the activate button; the tones and styles pages each have one;
+  // seam=none; no_claim=what activating does on the server (the mutation is mocked, and convex/admin_taxonomy_versions.test.ts covers it).
+  it("the draft row has an Activate Version button that activates that draft, and the live row has none", async () => {
+    const activateTopicVersion = vi.fn().mockResolvedValue(null);
+    vi.mocked(useMutation).mockImplementation(((name: string) => (name === "activateTopicVersion" ? activateTopicVersion : vi.fn())) as never);
+    vi.mocked(useQuery).mockReturnValue([weekends, { ...weekends, _id: "topic-1-draft", version: 3, status: "draft" }]);
+    render(<TopicsPage />);
+    const liveRow = screen.getByText("active v2").closest("tr")!;
+    const draftRow = screen.getByText("draft v3").closest("tr")!;
+
+    expect(within(liveRow).queryByRole("button", { name: "Activate Version" })).toBeNull();
+    fireEvent.click(within(draftRow).getByRole("button", { name: "Activate Version" }));
+
+    await waitFor(() => expect(activateTopicVersion).toHaveBeenCalledTimes(1));
+    expect(activateTopicVersion).toHaveBeenCalledWith({ _id: "topic-1-draft" });
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Topic version activated"));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
 });

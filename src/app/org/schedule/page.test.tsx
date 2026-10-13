@@ -530,6 +530,99 @@ describe("OrgWeeklyCurationPage topic control", () => {
       count: 1,
     });
   });
+
+  // Value: protects=on a grid with topics along a side, the page shows a note in place of the topic choice and asks for each cell under that cell's own topic, by both fill routes;
+  // fails_when=the choice of one topic or none stays on screen beside a topic axis, a cell's fill leaves its topic out or sends another, or the batch fill stops saying which side holds the topics;
+  // why_new=every fill test here is on the style-by-tone grid, where no cell has a topic of its own, and no test put topics on a side;
+  // seam=none; no_claim=what the server writes for the topic it is sent (the fill actions are mocked, and convex/generation_quality.test.ts covers them).
+  it("with topics along a side, shows a note in place of the topic choice, and asks for each cell under its own topic", async () => {
+    // The grid above, with two topics to put along a side: the cozy question is about music, and nothing is about food.
+    matrixWithOneEmptyCell();
+    const withoutTopics = (useQuery as ReturnType<typeof vi.fn>).getMockImplementation() as (fn: string, ...rest: unknown[]) => unknown;
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((fn: string, ...rest: unknown[]) =>
+      fn === "getTopics"
+        ? [
+            { id: "music", slug: "music", name: "Music", icon: "zap", color: "#888888" },
+            { id: "food", slug: "food", name: "Food", icon: "heart", color: "#888888" },
+          ]
+        : withoutTopics(fn, ...rest),
+    );
+    const fillSingleCell = vi.fn().mockResolvedValue({ count: 1, questionIds: ["q-new"], waitingForReview: true });
+    const fillEmptyCells = vi.fn().mockResolvedValue({
+      totalCells: 2,
+      filledCells: 1,
+      totalQuestionsGenerated: 1,
+      skippedExisting: 1,
+      skippedWaitingForReview: 0,
+      skippedInvalidTaxonomy: 0,
+    });
+    (useAction as ReturnType<typeof vi.fn>).mockImplementation((fn: string) =>
+      fn === "fillSingleCell" ? fillSingleCell : fn === "fillEmptyCells" ? fillEmptyCells : vi.fn().mockResolvedValue(undefined),
+    );
+    const NOTE = "Topics run along one side of the grid, so each cell is written under its own topic.";
+    const axisButton = (axis: string, name: string) => within(screen.getByText(axis).parentElement!).getByRole("button", { name });
+
+    render(<OrgWeeklyCurationPage />);
+    expect(screen.queryByText(NOTE)).toBeNull();
+
+    // Topics as the columns: one style down the side, music and food across.
+    fireEvent.click(axisButton("Secondary axis (cols)", "Topic"));
+
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "One topic" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "No topic" })).toBeNull();
+    expect(screen.queryByText("Questions are written for the style and tone alone.")).toBeNull();
+
+    // The music cell lists the question, so the one empty cell is food's. No tone is on the grid, so the first one is used.
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(fillSingleCell).toHaveBeenCalledTimes(1));
+    expect(fillSingleCell).toHaveBeenLastCalledWith({
+      organizationId: "org-1",
+      styleSlug: "rapid-fire-either",
+      toneSlug: "cozy",
+      topicSlug: "food",
+      count: 1,
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Fill Empty Cells" })).toBeEnabled());
+
+    // The batch fill names the side the topics are on, and each cell carries its topic as its column.
+    fireEvent.click(screen.getByRole("button", { name: "Fill Empty Cells" }));
+    await waitFor(() => expect(fillEmptyCells).toHaveBeenCalledTimes(1));
+    expect(fillEmptyCells).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      axisY: "style",
+      axisX: "topic",
+      topicSlug: undefined,
+      cells: [
+        { ySlug: "rapid-fire-either", xSlug: "music", styleSlug: "rapid-fire-either", toneSlug: "cozy" },
+        { ySlug: "rapid-fire-either", xSlug: "food", styleSlug: "rapid-fire-either", toneSlug: "cozy" },
+      ],
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Fill Empty Cells" })).toBeEnabled());
+
+    // With tones back as the columns, the choice returns.
+    fireEvent.click(axisButton("Secondary axis (cols)", "Tone"));
+    expect(screen.queryByText(NOTE)).toBeNull();
+    expect(screen.getByRole("button", { name: "No topic" })).toBeInTheDocument();
+
+    // Topics as the rows, tones across: the last cell is food and bold, and no style is on the grid.
+    fireEvent.click(axisButton("Primary axis (rows)", "Topic"));
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "No topic" })).toBeNull();
+
+    const emptyCells = screen.getAllByRole("button", { name: "Generate" });
+    expect(emptyCells).toHaveLength(3);
+    fireEvent.click(emptyCells[emptyCells.length - 1]);
+    await waitFor(() => expect(fillSingleCell).toHaveBeenCalledTimes(2));
+    expect(fillSingleCell).toHaveBeenLastCalledWith({
+      organizationId: "org-1",
+      styleSlug: "rapid-fire-either",
+      toneSlug: "bold",
+      topicSlug: "food",
+      count: 1,
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+  });
 });
 
 describe("OrgWeeklyCurationPage Team prompt input validation", () => {
