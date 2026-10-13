@@ -475,7 +475,7 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 **Why:** A question written for the grid shows only once an admin approves it. The planner says so in a toast, but after a reload the cell looks empty again, and the only way to learn it is taken is to press Generate and read "This cell already has a question waiting for review."
 
-**Context:** `fillSingleCell` returns `waitingForReview` and `fillEmptyCells` a count, `skippedWaitingForReview` (`convex/core/fillMatrix.ts`); neither names the cells, and nothing the grid reads lists held questions. It needs a query a team member may call that returns only the style, tone and topic of held library questions (`isHeldLibraryQuestion` in `convex/core/questions.ts`), never their text, and a label in the cell in `src/app/org/schedule/page.tsx`. A line under the Question Matrix heading saying new questions are approved first would help too.
+**Context:** `fillSingleCell` returns `waitingForReview` and `fillEmptyCells` a count, `skippedWaitingForReview` (`convex/core/fillMatrix.ts`); neither names the cells, and nothing the grid reads lists held questions. It needs a query a team member may call that returns only the style, tone and topic of held library questions (`isUnlistedAiQuestion` in `convex/lib/questionAccess.ts`), never their text, and a label in the cell in `src/app/org/schedule/page.tsx`. A line under the Question Matrix heading saying new questions are approved first would help too.
 
 **Effort:** M
 **Priority:** P2
@@ -535,7 +535,7 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 ### Decide what exact-text dedupe does with held and rejected questions
 
-**What:** `insertGeneratedQuestions` skips any candidate whose fingerprint matches an existing question, including held and rejected ones, so that text can never be saved as public by matrix fill, the nightly pool or admin generation. Matrix fill also counts the collision as an existing cell.
+**What:** `insertGeneratedQuestions` skips any candidate whose fingerprint matches an existing question, including held and rejected ones, so that text can never be saved again by matrix fill, the nightly pool or the feed. Matrix fill also counts the collision as an existing cell.
 
 **Why:** Unreviewed and rejected rows quietly block good text and make matrix fill report cells it didn't fill.
 

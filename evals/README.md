@@ -350,7 +350,9 @@ the two by their share of the batches, about what the rate would be with no pick
   rather questions begin "Would you rather", and all 16 one-word questions say so. The ten the
   save step refused: five either/or questions under its six-word minimum, such as "Top bunk or
   bottom bunk?", and five the model wrote as a request ("Name one smell that...") with no
-  question mark. Nobody has labeled this run.
+  question mark. The minimum was six words when the run was made; since then a style with a set
+  form may save a question as short as three words, so those five would be kept today. The run
+  was not generated again. Nobody has labeled this run.
 - Seven primary rates decide a comparison, chosen up front, each over independent units: pass,
   review and block rates (over every generated question, before the code checks); the library
   likely-duplicate rate (exact library copies count as duplicates); the share of batches with a
