@@ -441,6 +441,55 @@ describe("seeding the brief's lines", () => {
     expect(await t.run((ctx) => ctx.db.query("userStyles").collect())).toEqual([]);
   });
 
+  test("an archived copy with no live numbered row beside it is left alone, questions and all", async () => {
+    const t = convexTest(schema, modules);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const ids = await t.run(async (ctx) => {
+      // A style retired before versions existed: nothing replaced it, so there is nowhere to move to.
+      const retired = await ctx.db.insert("styles", style("one-word-whip", { version: undefined, status: "archived" }));
+      // And one whose only numbered row is a draft, which is not live.
+      const oldCopy = await ctx.db.insert("styles", style("domain-swap", { version: undefined, status: "archived" }));
+      await ctx.db.insert("styles", style("domain-swap", { status: "draft", version: 2 }));
+      const questions = [];
+      for (const [slug, styleId] of [["one-word-whip", retired], ["domain-swap", oldCopy]] as const) {
+        questions.push(await ctx.db.insert("questions", { text: `A question of ${slug}?`, status: "public", style: slug, styleId, totalLikes: 0, totalShows: 0, averageViewDuration: 0 }));
+      }
+      return { retired, oldCopy, questions };
+    });
+
+    const report = await seed(t, false);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    expect([report.styles, report.changes]).toEqual([{ lined: 0, drafts: 0, archived: 0, moved: 0 }, []]);
+    const after = await t.run(async (ctx) => Promise.all(ids.questions.map((id) => ctx.db.get(id))));
+    expect(after.map((question) => question?.styleId)).toEqual([ids.retired, ids.oldCopy]);
+  });
+
+  test("a team's own style of the same name doesn't stop a person unhiding the shared one, and in the team's workspace the team's row is the one listed", async () => {
+    const t = convexTest(schema, modules);
+    const READER = { subject: "reader-clerk", tokenIdentifier: "test|reader-clerk", email: "reader@example.com" };
+    const ids = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", { email: READER.email, clerkId: READER.subject });
+      const organizationId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
+      await ctx.db.insert("organization_members", { userId, organizationId, role: "member" });
+      const shared = await ctx.db.insert("styles", style("open-ended"));
+      // The team's own entry is a higher version of the same slug.
+      const teams = await ctx.db.insert("styles", style("open-ended", { organizationId, version: 2 }));
+      const personal = await ctx.db.insert("userStyles", { userId, styleId: shared, status: "hidden", updatedAt: 0 });
+      const inTeam = await ctx.db.insert("userStyles", { userId, organizationId, styleId: shared, status: "hidden", updatedAt: 0 });
+      return { organizationId, shared, teams, personal, inTeam };
+    });
+    const reader = t.withIdentity(READER);
+
+    // Personal workspace: only shared rows count, so the shared row is the listed one and can be unhidden.
+    await reader.mutation(api.core.userSettings.updateHiddenStyles, { hiddenStyles: [] });
+    expect(await t.run((ctx) => ctx.db.get(ids.personal))).toBeNull();
+
+    // The team's workspace lists the team's row for this slug, so the shared row was never on its page: the entry stays.
+    await reader.mutation(api.core.userSettings.updateHiddenStyles, { hiddenStyles: [], organizationId: ids.organizationId });
+    expect((await t.run((ctx) => ctx.db.get(ids.inTeam)))?.styleId).toBe(ids.shared);
+  });
+
   test("a copy that has only the old id, with no slug, status or version, is archived beside its rewrite", async () => {
     const t = convexTest(schema, modules);
     vi.spyOn(console, "log").mockImplementation(() => {});

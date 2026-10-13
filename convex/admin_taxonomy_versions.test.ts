@@ -556,6 +556,15 @@ describe("the prompt line on admin edits", () => {
       ["active", 2, "Two everyday things, and the person picks one."],
       ["draft", 3, "A third wording."],
     ]);
+
+    // A draft older than the live row is not offered: activating it would put a stale version live.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "draft", version: 1, brief: "A stale draft." });
+    });
+    expect((await listed()).map(([status, version]) => [status, version])).toEqual([
+      ["active", 2],
+      ["draft", 3],
+    ]);
   });
 
   // Value: protects=a style with no live row is still in the admin's styles list, once: a style just created shows as its draft until it is activated, and a style with only archived versions shows its newest;

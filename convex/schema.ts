@@ -205,7 +205,7 @@ export default defineSchema({
     totalThumbsDown: v.optional(v.number()),
     totalShows: v.number(),
     isAIGenerated: v.optional(v.boolean()),
-    // Set only when feed or daily-email generation saves a question to wait for review.
+    // Set when generation saves a question to wait for review, which every generating path does.
     // Such a pending question is unlisted (open by link); other pending rows stay hidden.
     heldForReview: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),

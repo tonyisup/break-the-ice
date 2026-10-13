@@ -1585,6 +1585,15 @@ describe("a generation's run names the wording that wrote its prompt", () => {
     ]);
   });
 
+  test("a save that names no status is refused, so no caller publishes a generated question by leaving it out", async () => {
+    const s = await setup();
+    const args = { styleId: s.styleId, toneId: s.toneId, styleSlug: "reflective", toneSlug: "warm", styleVersion: 1, toneVersion: 1, candidates: [{ text: "What small thing made you smile today?" }] };
+
+    // The types refuse this too; the cast stands in for a caller that slipped past them.
+    await expect(s.t.mutation(internal.internal.generation.insertGeneratedQuestions, args as never)).rejects.toThrow(/status/);
+    expect(await s.t.run((ctx) => ctx.db.query("questions").collect())).toEqual([]);
+  });
+
   test("a generation's run that names neither a prompt label nor a blueprint is refused, and nothing is saved", async () => {
     const s = await setup();
     const run = { batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "" };

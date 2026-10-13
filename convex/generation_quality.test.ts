@@ -195,7 +195,7 @@ describe("prompt context", () => {
     expect(prompt).not.toContain("Which liked question is nearest?");
   });
 
-  test("a library question the reader saw is listed as seen, and their own personal questions never reach the prompt", async () => {
+  test("library questions the reader saw or hid are listed as seen, and their own personal questions never reach the prompt", async () => {
     const { t, styleV2, toneId } = await setup();
     const userId = await t.run(async (ctx) => {
       const userId = await ctx.db.insert("users", { email: "reader@example.com", clerkId: "reader-clerk" });
@@ -208,6 +208,8 @@ describe("prompt context", () => {
       }
       const libraryId = await ctx.db.insert("questions", { text: "Which snack do you always come back to?", status: "public", ...counters });
       await ctx.db.insert("userQuestions", { userId, questionId: libraryId, status: "seen", updatedAt: 2 });
+      const hiddenId = await ctx.db.insert("questions", { text: "Which chore do you secretly enjoy?", status: "public", ...counters });
+      await ctx.db.insert("userQuestions", { userId, questionId: hiddenId, status: "hidden", updatedAt: 3 });
       return userId;
     });
     create.mockResolvedValue(completion(questionsJson("What made you laugh this week?")) as never);
@@ -221,7 +223,10 @@ describe("prompt context", () => {
     });
 
     const [, user] = (create.mock.calls[0][0] as { messages: Array<{ content: string }> }).messages;
-    expect(user.content).toContain('The reader has just seen these, so write nothing like them:\n- "Which snack do you always come back to?"\n');
+    // The ones they saw, then the ones they hid.
+    expect(user.content).toContain(
+      'The reader has just seen these, so write nothing like them:\n- "Which snack do you always come back to?"\n- "Which chore do you secretly enjoy?"\n',
+    );
     // Wording the reader wrote stays out of a prompt that also shows the owner's decisions.
     expect(JSON.stringify(create.mock.calls[0][0])).not.toMatch(/What should our team be called|Who would you trust with your passwords/);
   });
