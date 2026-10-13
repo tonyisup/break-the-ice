@@ -5,7 +5,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUserWrittenQuestion, normalizedRetirement } from "../lib/questionAccess";
 import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { settleDuplicateGroup } from "../lib/questionReferences";
-import { defaultIdealPromptLength, defaultQualityRubric, defaultToneAxesValue } from "../lib/taxonomy";
+import { defaultIdealPromptLength, defaultQualityRubric, defaultToneAxesValue, latestActiveVersion } from "../lib/taxonomy";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "../lib/promptArchitecture";
 import { STYLE_BRIEF_LINES, TONE_BRIEF_LINES, TOPIC_BRIEF_LINES, type BriefLine } from "../data/briefLines";
 
@@ -1130,8 +1130,8 @@ export const retireLibraryExceptPage = internalMutation({
  * - A question published while it runs is retired too if a later page reaches it.
  * - A pending duplicate group it empties leaves the duplicates page but stays in the admin
  *   dashboard's count.
- * - With a small library the feed and the daily email generate new questions far more often,
- *   and matrix fill and the nightly pool still publish theirs to the library without review.
+ * - With a small library the feed and the daily email generate new questions far more often.
+ *   Every generating path holds its questions for review.
  *
  * Take a backup, run it with dryRun first (`kept` should be the number of different IDs you
  * passed), then for real, then with dryRun again (`retired` should then be 0); add --prod after
@@ -1188,14 +1188,48 @@ export const retireLibraryExcept = internalAction({
 	},
 });
 
-const briefSeedCounts = v.object({ lined: v.number(), archived: v.number() });
+const briefSeedCounts = v.object({
+	/** Live rows given a line or a form. */
+	lined: v.number(),
+	/** Drafts given one, so activating a draft made before this ran doesn't drop the line. */
+	drafts: v.number(),
+	archived: v.number(),
+});
 const briefSeedChange = v.object({
 	table: v.union(v.literal("styles"), v.literal("tones"), v.literal("topics")),
 	id: v.string(),
 	slug: v.string(),
 	change: v.union(v.literal("line"), v.literal("archived")),
+	/** For a line: which fields were written. A field an admin had already filled is left alone. */
+	wrote: v.optional(v.union(v.literal("brief"), v.literal("form"), v.literal("brief and form"))),
+	/** For a line: the row is a draft, not the live version. */
+	draft: v.optional(v.boolean()),
+	/** For an archived row: the live row its questions and people's hidden entries move to. */
+	replacedBy: v.optional(v.string()),
 });
 type BriefSeedChange = Infer<typeof briefSeedChange>;
+
+/**
+ * Moves what points at an archived row by id onto the live row, as activating a version does:
+ * questions keep the id of the row they were written under, and a person's hidden styles and
+ * tones are stored by id. Each batch reschedules itself until nothing is left.
+ */
+async function repointTaxonomyRows(ctx: MutationCtx, table: BriefSeedChange["table"], previousId: string, nextId: string) {
+	if (table === "styles") {
+		const ids = { previousStyleId: previousId as Id<"styles">, nextStyleId: nextId as Id<"styles"> };
+		await ctx.scheduler.runAfter(0, internal.admin.styles.reassignUserStylesBatch, ids);
+		await ctx.scheduler.runAfter(0, internal.admin.styles.reassignQuestionsForStyleBatch, ids);
+	} else if (table === "tones") {
+		const ids = { previousToneId: previousId as Id<"tones">, nextToneId: nextId as Id<"tones"> };
+		await ctx.scheduler.runAfter(0, internal.admin.tones.reassignUserTonesBatch, ids);
+		await ctx.scheduler.runAfter(0, internal.admin.tones.reassignQuestionsForToneBatch, ids);
+	} else {
+		await ctx.scheduler.runAfter(0, internal.admin.topics.reassignQuestionsForTopicBatch, {
+			previousTopicId: previousId as Id<"topics">,
+			nextTopicId: nextId as Id<"topics">,
+		});
+	}
+}
 
 /** One table's part of seedBriefLines. The three tables share the fields it reads and writes. */
 async function seedBriefLinesFor(
@@ -1204,42 +1238,58 @@ async function seedBriefLinesFor(
 	lines: Record<string, BriefLine>,
 	dryRun: boolean,
 ) {
-	const counts = { lined: 0, archived: 0 };
+	const counts = { lined: 0, drafts: 0, archived: 0 };
 	const changes: BriefSeedChange[] = [];
 	const noLine: string[] = [];
 	const now = Date.now();
-	const live = (await ctx.db.query(table as "styles").collect()).filter(
-		(row) => !row.organizationId && (row.status ?? "active") === "active",
-	);
+	const shared = (await ctx.db.query(table as "styles").collect()).filter((row) => !row.organizationId);
+	const slugOf = (row: (typeof shared)[number]) => row.slug ?? row.id;
+	const live = shared.filter((row) => (row.status ?? "active") === "active");
 	const bySlug = new Map<string, typeof live>();
-	for (const row of live) {
-		const slug = row.slug ?? row.id;
-		bySlug.set(slug, [...(bySlug.get(slug) ?? []), row]);
-	}
+	for (const row of live) bySlug.set(slugOf(row), [...(bySlug.get(slugOf(row)) ?? []), row]);
+
+	/** Writes the slug's line, and a style's form, where the row has none. A line or a form an admin wrote stays. */
+	const giveLine = async (row: (typeof shared)[number], line: BriefLine, draft: boolean) => {
+		const brief = row.brief?.trim() ? undefined : line.brief;
+		const form = table === "styles" && line.form && !row.form?.trim() ? line.form : undefined;
+		if (brief === undefined && form === undefined) return;
+		if (draft) counts.drafts += 1;
+		else counts.lined += 1;
+		const wrote = brief !== undefined && form !== undefined ? "brief and form" : brief !== undefined ? "brief" : "form";
+		changes.push({ table, id: row._id, slug: slugOf(row), change: "line", wrote, ...(draft ? { draft } : {}) });
+		if (!dryRun) {
+			await ctx.db.patch(row._id, { ...(brief !== undefined ? { brief } : {}), ...(form !== undefined ? { form } : {}), updatedAt: now });
+		}
+	};
+
 	for (const [slug, rows] of bySlug) {
 		// A row with no version beside a numbered one is the copy from before versions existed.
 		const outdated = rows.length > 1 && rows.some((row) => row.version !== undefined) ? rows.filter((row) => row.version === undefined) : [];
+		const current = rows.filter((row) => !outdated.includes(row));
+		const replacement = outdated.length ? latestActiveVersion(current) : null;
 		for (const row of outdated) {
 			counts.archived += 1;
-			changes.push({ table, id: row._id, slug, change: "archived" });
-			if (!dryRun) await ctx.db.patch(row._id, { status: "archived", updatedAt: now });
+			changes.push({ table, id: row._id, slug, change: "archived", ...(replacement ? { replacedBy: replacement._id } : {}) });
+			if (dryRun) continue;
+			await ctx.db.patch(row._id, { status: "archived", updatedAt: now });
+			if (replacement) {
+				// The question batch only moves rows onto a row whose status is written out.
+				if (replacement.status === undefined) await ctx.db.patch(replacement._id, { status: "active" });
+				await repointTaxonomyRows(ctx, table, row._id, replacement._id);
+			}
 		}
 		const line = lines[slug];
 		if (!line) {
 			noLine.push(`${table}/${slug}`);
 			continue;
 		}
-		for (const row of rows.filter((candidate) => !outdated.includes(candidate))) {
-			// A line or a form an admin has already written stays.
-			const brief = row.brief?.trim() ? undefined : line.brief;
-			const form = table === "styles" && line.form && !row.form?.trim() ? line.form : undefined;
-			if (brief === undefined && form === undefined) continue;
-			counts.lined += 1;
-			changes.push({ table, id: row._id, slug, change: "line" });
-			if (!dryRun) {
-				await ctx.db.patch(row._id, { ...(brief !== undefined ? { brief } : {}), ...(form !== undefined ? { form } : {}), updatedAt: now });
-			}
-		}
+		for (const row of current) await giveLine(row, line, false);
+	}
+	// A draft made before this ran has no line either, and activating it would put the entry
+	// back on its description and drop a set form.
+	for (const row of shared.filter((candidate) => candidate.status === "draft")) {
+		const line = lines[slugOf(row)];
+		if (line) await giveLine(row, line, true);
 	}
 	const noLiveRow = Object.keys(lines)
 		.filter((slug) => !bySlug.has(slug))
@@ -1248,13 +1298,24 @@ async function seedBriefLinesFor(
 }
 
 /**
- * One-time setup for the short brief: gives each live shared style, tone and topic its one line
- * (convex/data/briefLines.ts), and a style its set form, where the row has none yet. A line an
- * admin has already written is left alone, and so are teams' own entries. Where one slug has two
- * live rows and one of them has no version, that row is archived: it is the copy from before
- * versions existed, and it used to hide the rewrite beside it. With `dryRun` it writes nothing
- * and reports what a real run would change, and a second real run changes nothing. Run
+ * One-time setup for the short brief: gives each shared style, tone and topic its one line
+ * (convex/data/briefLines.ts), and a style its set form, where the live row or a draft has none
+ * yet. A line an admin has already written is left alone, and so are teams' own entries. Where
+ * one slug has two live rows and one of them has no version, that row is archived: it is the
+ * copy from before versions existed, and it used to hide the rewrite beside it. Questions and
+ * people's hidden styles and tones that point at the archived row are moved to the live one in
+ * the background, as when a version is activated. With `dryRun` it writes nothing and reports
+ * what a real run would change, and a second real run changes nothing.
+ *
+ * Run it straight after the deploy, before anyone opens the admin style pages: from the deploy
+ * on, the lists already show the numbered row, and until this has run the rows point at the old
+ * copy and no entry has its line. Run
  * `npx convex run internal/migrations:seedBriefLines '{"dryRun":true}'`, then with `false`.
+ *
+ * To undo by hand, the log names every row: clear `brief` or `form` on a row it wrote (the log
+ * says which), and set an archived row's status back to "active". Reverting the code needs the
+ * schema's new optional fields (`brief`, `form`, `promptLabel`) kept, because Convex refuses a
+ * schema that stored rows don't fit.
  */
 export const seedBriefLines = internalMutation({
 	args: { dryRun: v.boolean() },
@@ -1281,7 +1342,10 @@ export const seedBriefLines = internalMutation({
 			noLine: [...styles.noLine, ...tones.noLine, ...topics.noLine].sort(),
 		};
 		const label = `seedBriefLines${args.dryRun ? " (dry run)" : ""}`;
-		for (const change of result.changes) console.log(`${label} ${change.table}/${change.slug} ${change.id}: ${change.change}`);
+		for (const change of result.changes) {
+			const detail = change.change === "line" ? `line (${change.wrote}${change.draft ? ", draft" : ""})` : `archived${change.replacedBy ? `, replaced by ${change.replacedBy}` : ""}`;
+			console.log(`${label} ${change.table}/${change.slug} ${change.id}: ${detail}`);
+		}
 		console.log(`${label} total: ${JSON.stringify({ styles: result.styles, tones: result.tones, topics: result.topics })}`);
 		return result;
 	},

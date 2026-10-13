@@ -10,7 +10,7 @@ import {
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
-import { defaultIdealPromptLength, defaultQualityRubric, editedLine, latestVersion } from "../lib/taxonomy";
+import { defaultIdealPromptLength, defaultQualityRubric, editedLine, latestActiveVersion, latestVersion } from "../lib/taxonomy";
 import { mapStyle, styleFields } from "../lib/styleHelpers";
 
 const MAX_STYLES = 500;
@@ -88,11 +88,17 @@ export const listStyles = query({
       if (!grouped.has(slug)) grouped.set(slug, []);
       grouped.get(slug)!.push(style);
     }
+    // For each style: the live row, which is the one the generator reads, and beside it a
+    // newer draft when there is one. An edit of a live style is saved as a draft, and a draft
+    // that isn't listed can never be activated.
     return Array.from(grouped.values())
-      .map((docs) => {
-        const active = docs.find((doc) => (doc.status ?? "active") === "active");
-        return mapAdminStyle(active ?? latestVersion(docs)!);
+      .flatMap((docs) => {
+        const live = latestActiveVersion(docs);
+        const newest = latestVersion(docs)!;
+        if (!live) return [newest];
+        return newest.status === "draft" && newest._id !== live._id ? [live, newest] : [live];
       })
+      .map(mapAdminStyle)
       .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
   },
 });

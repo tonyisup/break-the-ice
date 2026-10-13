@@ -490,4 +490,45 @@ describe("the prompt line on admin edits", () => {
     expect(await admin.query(api.admin.tones.listTones, {})).toMatchObject([{ slug: "warm", brief: "Kind and unhurried." }]);
     expect(await admin.query(api.admin.topics.listTopics, {})).toMatchObject([{ slug: "weekends", brief: "Days off." }]);
   });
+
+  test("the styles list shows the row the generator reads when a copy with no version is still live beside the rewrite", async () => {
+    const { t, admin } = app();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, name: "Old copy" });
+      await ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "active", version: 1, brief: "The rewrite." });
+    });
+
+    const styles = await admin.query(api.admin.styles.listStyles, {});
+
+    expect(styles.map((style) => [style.slug, style.name, style.brief])).toEqual([["either-or", "Either/Or", "The rewrite."]]);
+  });
+
+  test("an edit of a live style is listed as a draft beside it, so it can be activated, and activating it leaves one row", async () => {
+    const { t, admin } = app();
+    const liveId = await t.run((ctx) =>
+      ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "active", version: 1, brief: "Two things, pick one." }),
+    );
+    const listed = async () =>
+      (await admin.query(api.admin.styles.listStyles, {})).map((style) => [style.status, style.version, style.brief]);
+    expect(await listed()).toEqual([["active", 1, "Two things, pick one."]]);
+
+    await admin.mutation(api.admin.styles.updateStyle, { _id: liveId, id: "either-or", ...styleForm, brief: "Two everyday things, and the person picks one." });
+
+    // The live row is still what the generator reads; the edit waits beside it as a draft.
+    expect(await listed()).toEqual([
+      ["active", 1, "Two things, pick one."],
+      ["draft", 2, "Two everyday things, and the person picks one."],
+    ]);
+    const draft = (await admin.query(api.admin.styles.listStyles, {})).find((style) => style.status === "draft")!;
+
+    // Editing the live row again makes a newer draft, and only the newest draft is listed.
+    await admin.mutation(api.admin.styles.updateStyle, { _id: liveId, id: "either-or", ...styleForm, brief: "A third wording." });
+    expect(await listed()).toEqual([
+      ["active", 1, "Two things, pick one."],
+      ["draft", 3, "A third wording."],
+    ]);
+
+    await admin.mutation(api.admin.styles.activateStyleVersion, { id: draft._id });
+    expect((await listed())[0]).toEqual(["active", 2, "Two everyday things, and the person picks one."]);
+  });
 });
