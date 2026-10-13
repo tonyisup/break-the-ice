@@ -27,6 +27,45 @@
       "convex/evals_pairs.test.ts",
       "convex/evals_scripts.test.ts"
     ],
+    "convex/_generated/api.d.ts": [],
+    "convex/admin/ai.ts": [
+      "convex/admin_ai.test.ts",
+      "convex/ai_spend_completion.test.ts",
+      "convex/generation_quality.test.ts"
+    ],
+    "convex/admin/questions.ts": [
+      "convex/generation_quality.test.ts",
+      "convex/quality_check.test.ts",
+      "convex/question_review.test.ts"
+    ],
+    "convex/admin/styles.ts": [
+      "convex/admin_taxonomy_versions.test.ts"
+    ],
+    "convex/admin/tones.ts": [
+      "convex/admin_taxonomy_versions.test.ts"
+    ],
+    "convex/admin/topics.ts": [
+      "convex/admin_taxonomy_versions.test.ts"
+    ],
+    "convex/core/fillMatrix.ts": [
+      "convex/generation_quality.test.ts",
+      "convex/ai_spend_completion.test.ts",
+      "convex/quality_check.test.ts",
+      "convex/ai_rate_limit.test.ts"
+    ],
+    "convex/internal/ai.ts": [
+      "convex/generation_quality.test.ts",
+      "convex/ai_spend_completion.test.ts",
+      "convex/quality_check.test.ts"
+    ],
+    "convex/internal/generation.ts": [
+      "convex/brief.test.ts",
+      "convex/brief_seed.test.ts",
+      "convex/generation_quality.test.ts"
+    ],
+    "evals/score.mjs": [
+      "convex/evals_scripts.test.ts"
+    ],
     "evals/runs/**": [],
     "**/*.md": [],
     "VERSION": [],
@@ -36,7 +75,9 @@
     ".gstack/pregate.json": []
   },
   "selection": {},
-  "warn": [],
+  "warn": [
+    "literals"
+  ],
   "strays": {
     "allow": [
       ".gstack"
