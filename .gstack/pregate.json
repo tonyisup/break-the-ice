@@ -91,6 +91,16 @@
     "convex/crons.ts": [
       "convex/admin_taxonomy_versions.test.ts"
     ],
+    "convex/core/userSettings.ts": [
+      "convex/brief_seed.test.ts",
+      "convex/quality_check.test.ts",
+      "convex/question_access.test.ts",
+      "convex/workspace_engagement.test.ts"
+    ],
+    "convex/internal/users.ts": [
+      "convex/internal/users.test.ts",
+      "convex/generation_quality.test.ts"
+    ],
     "evals/runs/**": [],
     "**/*.md": [],
     "VERSION": [],
