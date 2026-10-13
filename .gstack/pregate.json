@@ -85,6 +85,12 @@
     "convex/lib/evalChecks.ts": [
       "convex/evals.test.ts"
     ],
+    "convex/admin/promptBlueprints.ts": [
+      "convex/admin_taxonomy_versions.test.ts"
+    ],
+    "convex/crons.ts": [
+      "convex/admin_taxonomy_versions.test.ts"
+    ],
     "evals/runs/**": [],
     "**/*.md": [],
     "VERSION": [],
