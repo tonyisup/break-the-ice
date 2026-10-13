@@ -9,10 +9,19 @@ and save questions to use again. Team workspaces add shared collections and sche
 The admin tools support question editing, generation, pruning review, and duplicate review.
 AI generation is implemented in the [generation runner](./convex/lib/generationRunner.ts).
 Every question is asked for with one short prompt, the [brief](./convex/lib/brief.ts): who the
-questions are for, one line for the style, the tone and the topic (the "Prompt line" on each
+questions are for, one line for the style, the tone and the topic (the "Prompt Line" on each
 admin page, or the description until one is written), and questions the owner kept and
-rejected, read from the library. A topic is a theme chosen on purpose: filling the schedule
-grid with no topic chosen writes questions for the style and tone alone.
+rejected, read from the library. A rejected question is shown only when the review that retired
+it gave an editorial reason, and never in a team's topic preview, whose notes are the team's own
+words. A style with a set form, like either/or, keeps questions as short as three words; every
+other style needs six. A topic is a theme chosen on purpose: filling the schedule grid with no
+topic chosen writes questions for the style and tone alone, and on a grid with topics along one
+side each cell is written under its own topic.
+
+The lines are in [`convex/data/briefLines.ts`](./convex/data/briefLines.ts) and reach the
+database through a one-time step, run straight after the deploy that brings the brief:
+`npx convex run internal/migrations:seedBriefLines '{"dryRun":true}'`, then with `false`. Until
+it has run, entries are read by their old description and no style has its set form.
 
 ## Documentation
 

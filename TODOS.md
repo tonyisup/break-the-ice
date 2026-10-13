@@ -269,6 +269,30 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 **Priority:** P3
 **Depends on:** None
 
+### Don't write a second pool while one waits for review
+
+**What:** Before Generate Pool writes, check for a pool that is still waiting for review or approved and not handed out, and say so.
+
+**Why:** A pool is written only when subscribers are low on unseen questions, and a hand-out used to follow the same day and close that gate. A pool now waits for review and may be handed out on a later day, so the gate stays open and each Generate writes another full pool on system spend, under the daily cap. The pool page shows what is waiting for one date only.
+
+**Context:** `generateNightlyQuestionPool` in `convex/internal/ai.ts` returns early only when no subscriber is low. `by_poolDate_and_poolStatus` finds a date's pool; waiting pools on other dates need a scan or a small index. The commented-out crons in `convex/crons.ts` can't be switched back on as written for the same reason.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Remove what is left of prompt blueprints
+
+**What:** Delete the admin blueprint functions, the blueprint seed rows and the arguments kept for one release.
+
+**Why:** Nothing reads a prompt blueprint since the short brief replaced them. The leftovers were kept so an admin page that was open during that deploy keeps working, and they read as live code.
+
+**Context:** `convex/admin/promptBlueprints.ts` (six functions, no caller); the `promptBlueprints` rows and upsert in `convex/seed.ts`; `blueprintSlug` on `admin/ai:generateAIQuestions` (accepted and ignored; `convex/generation_quality.test.ts` has the test to delete with it); `blueprintId` on `createGenerationRun`; `DEFAULT_BLUEPRINT_SLUG` and the migration stage that seeded it. Keep the `promptBlueprints` table and `generationRuns.blueprintId`: older runs point at a blueprint row. Regenerate `convex/_generated/api.d.ts` after.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** One release after the short brief ships
+
 ## Quality check
 
 ### Finish the flag a team sees on its schedule grid
@@ -445,6 +469,18 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 **Priority:** P3
 **Depends on:** None
 
+### Show which grid cells have a question waiting for review
+
+**What:** Mark a schedule-grid cell whose AI question is waiting for review, in place of the Generate button, and keep the mark after a reload.
+
+**Why:** A question written for the grid shows only once an admin approves it. The planner says so in a toast, but after a reload the cell looks empty again, and the only way to learn it is taken is to press Generate and read "This cell already has a question waiting for review."
+
+**Context:** `fillSingleCell` returns `waitingForReview` and `fillEmptyCells` a count, `skippedWaitingForReview` (`convex/core/fillMatrix.ts`); neither names the cells, and nothing the grid reads lists held questions. It needs a query a team member may call that returns only the style, tone and topic of held library questions (`isHeldLibraryQuestion` in `convex/core/questions.ts`), never their text, and a label in the cell in `src/app/org/schedule/page.tsx`. A line under the Question Matrix heading saying new questions are approved first would help too.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
 ## Privacy
 
 ### Document the signed-out session id and regenerate it on revoke
@@ -542,6 +578,18 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 **Context:** `convex/internal/generation.ts`; `resolveTaxonomySlug` in `convex/lib/taxonomyLookup.ts` already takes an organization. Pre-existing; noticed in the v0.3.0.0 review.
 
 **Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Record a reason when a question is rejected in the review queue
+
+**What:** Let Reject in the review queue take the four editorial reasons, and have the brief read them.
+
+**Why:** The brief shows the model questions the owner rejected, with the reason for each. It reads retired questions whose approved prune review has `editorialReasons` (`readBriefExamples` in `convex/internal/generation.ts`). Reject in the queue saves the question as private with a free-text reason and writes no such row, so nothing rejected there reaches a prompt, and every generated question now passes through that queue.
+
+**Context:** Only the prune page's flag form writes `editorialReasons` (`convex/admin/pruning.ts`). Until the labeled rejects are imported with their reasons (issue #349), production has none, and the "rejected" section of the prompt is empty. Either store the queue's reasons where the brief already reads, or have `readBriefExamples` also read AI questions rejected in review. A person's own submission must stay out either way (`isUserWrittenQuestion`). Add a test that a queue rejection shows up in the next prompt for its style.
+
+**Effort:** M
 **Priority:** P2
 **Depends on:** None
 
@@ -646,6 +694,18 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 **Effort:** S
 **Priority:** P3
 **Depends on:** A growing review backlog
+
+### Find a taken grid cell by index, not by reading every question
+
+**What:** Give `questions` an index on the fields the grid's cell check compares, and read that range.
+
+**Why:** To learn whether a cell is taken, a fill pages through every public question and every question waiting for review, 256 at a time (`collectMatrixOccupiedKeys` and `cellOccupancy` in `convex/core/fillMatrix.ts`). An empty cell, the case that goes on to generate, never matches, so each Generate reads the whole library and the whole review queue first. It is a handful of reads at a few hundred questions and about 80 calls at 20,000.
+
+**Context:** `pageQuestionMatrixCellKeys` and `pageQuestionsMatchingSlugTriple` in `convex/core/questions.ts` read `by_status` and compare style, tone and topic in code. An index such as `["style", "tone", "status"]` lets an empty cell read no rows; the topic and held-for-review tests can stay as filters on the few rows left. For a whole grid, look up the request's cells (50 at most) through the same index.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** None
 
 ## Tests and docs
 

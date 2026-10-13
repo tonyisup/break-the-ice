@@ -35,7 +35,7 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
 - `brief.mjs`, `brief.json`: what is left of the eval's own copy of the short brief, from before
   the app generated with it. `brief.mjs` is the seeded shuffle that `pairs.mjs` and `select.mjs`
   draw their sets with. `brief.json` gives `judge.mjs --context` the names of the styles and
-  tones; nothing reads its `brief` and `form` lines any more.
+  tones, and holds nothing else now: the lines themselves are in `convex/data/briefLines.ts`.
 - `seeds-new-cells.json`: 24 more seeds, eight questions each, on combinations `seeds.json`
   doesn't use.
 - `jev.mjs`: the Jev questions and cutoffs. The judge is pinned (`JEV_MODEL`), and summaries
@@ -186,7 +186,7 @@ Until the app generated with it, the short brief was a second prompt that lived 
 `generate.mjs --brief` sent it in place of the app's prompt through the same eval-only action,
 so the model, the temperature, the output cap and the save step's checks were the same and
 only what was asked differed. It said who the questions are for in a few lines, described the
-style, tone and topic in a line each (`brief.json`), and showed the model the owner's own
+style, tone and topic in a line each (now `convex/data/briefLines.ts`), and showed the model the owner's own
 decisions as the standard: questions of the style the owner kept and rejected, with the
 reasons, and a few kept questions of other styles, read from
 `evals/judged/owner-decisions.json`. One run was generated each way on the 20 standard seeds,
