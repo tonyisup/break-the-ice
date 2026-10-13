@@ -21,7 +21,8 @@
       "convex/evals_scripts.test.ts"
     ],
     "evals/brief.json": [
-      "convex/evals_pairs.test.ts"
+      "convex/evals_pairs.test.ts",
+      "convex/evals_scripts.test.ts"
     ],
     "evals/seeds*.json": [
       "convex/evals_pairs.test.ts",
@@ -65,6 +66,24 @@
     ],
     "evals/score.mjs": [
       "convex/evals_scripts.test.ts"
+    ],
+    "convex/core/questions.ts": [
+      "convex/generation_quality.test.ts",
+      "convex/quality_check.test.ts"
+    ],
+    "convex/internal/questions.ts": [
+      "convex/generation_quality.test.ts",
+      "convex/quality_check.test.ts"
+    ],
+    "convex/internal/migrations.ts": [
+      "convex/brief_seed.test.ts"
+    ],
+    "convex/core/teamPromptActions.ts": [
+      "convex/core/teamPromptActions.test.ts",
+      "convex/generation_quality.test.ts"
+    ],
+    "convex/lib/evalChecks.ts": [
+      "convex/evals.test.ts"
     ],
     "evals/runs/**": [],
     "**/*.md": [],
