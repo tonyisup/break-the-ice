@@ -454,11 +454,11 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
   });
 
   it.each([
-    ["wrote questions", batch(2, 2, 2), "Wrote 2 questions for 2/2 cells. They will show here after the Break the Ice team reviews them."],
-    ["wrote questions and skipped a deleted style or tone", batch(3, 2, 2, 1), "Wrote 2 questions for 2/3 cells · 1 skipped (deleted taxonomy). They will show here after the Break the Ice team reviews them."],
-    ["wrote one question", batch(2, 1, 1), "Wrote 1 question for 1/2 cells. It will show here after the Break the Ice team reviews it."],
-    ["wrote questions and found a cell already waiting for review", batch(3, 2, 2, 0, 1), "Wrote 2 questions for 2/3 cells · 1 already waiting for review. They will show here after the Break the Ice team reviews them."],
-    ["wrote questions, found a cell waiting and another's style deleted", batch(4, 2, 2, 1, 1), "Wrote 2 questions for 2/4 cells · 1 already waiting for review · 1 skipped (deleted taxonomy). They will show here after the Break the Ice team reviews them."],
+    ["wrote questions", batch(2, 2, 2), "Wrote 2 questions. They will show here after the Break the Ice team reviews them."],
+    ["wrote questions and skipped a deleted style or tone", batch(3, 2, 2, 1), "Wrote 2 questions. 1 cell uses a style, tone or topic that no longer exists. They will show here after the Break the Ice team reviews them."],
+    ["wrote one question", batch(2, 1, 1), "Wrote 1 question. It will show here after the Break the Ice team reviews it."],
+    ["wrote questions and found a cell already waiting for review", batch(3, 2, 2, 0, 1), "Wrote 2 questions. 1 cell already had a question waiting for review. They will show here after the Break the Ice team reviews them."],
+    ["wrote questions, found a cell waiting and another's style deleted", batch(4, 2, 2, 1, 1), "Wrote 2 questions. 1 cell already had a question waiting for review. 1 cell uses a style, tone or topic that no longer exists. They will show here after the Break the Ice team reviews them."],
   ])("after a batch fill that %s, gives the counts and says they show after the Break the Ice team's review", async (_what, result, message) => {
     matrixWithOneEmptyCell();
     fillResults({ fillEmptyCells: result });
@@ -474,10 +474,10 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
   });
 
   it.each([
-    ["because every cell is waiting for review", batch(2, 0, 0, 0, 2), "Wrote 0 questions for 0/2 cells · 2 already waiting for review"],
-    ["with one cell waiting and another's style deleted", batch(2, 0, 0, 1, 1), "Wrote 0 questions for 0/2 cells · 1 already waiting for review · 1 skipped (deleted taxonomy)"],
-    ["with no cell skipped for review or a deleted style", batch(2, 0, 0), "Wrote 0 questions for 0/2 cells"],
-    ["and skipped a deleted style or tone", batch(2, 0, 0, 2), "Wrote 0 questions for 0/2 cells · 2 skipped (deleted taxonomy)"],
+    ["because every cell is waiting for review", batch(2, 0, 0, 0, 2), "No new questions were written. 2 cells already have a question waiting for review."],
+    ["with one cell waiting and another's style deleted", batch(2, 0, 0, 1, 1), "No new questions were written. 1 cell already has a question waiting for review. 1 cell uses a style, tone or topic that no longer exists."],
+    ["with no cell skipped for review or a deleted style", batch(2, 0, 0), "No new questions were written. Every cell already has a question, or the AI repeated an existing one."],
+    ["and skipped a deleted style or tone", batch(2, 0, 0, 2), "No new questions were written. 2 cells use a style, tone or topic that no longer exists."],
   ])("after a batch fill that wrote nothing %s, gives the counts as plain information, not a success, and says nothing about review", async (_what, result, message) => {
     matrixWithOneEmptyCell();
     fillResults({ fillEmptyCells: result });
@@ -491,12 +491,60 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
     expect(toast.error).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Fill Empty Cells" })).toBeEnabled();
   });
+
+  // Value: protects=the batch toast says only what happened, with no share of the grid's cells, and counts waiting cells as "1 cell" or "2 cells" with the verb to match;
+  // fails_when=the fraction of cells comes back (3 of 25 reads as 22 failures), a count of cells loses its plural, or one waiting cell reads "1 cell already have";
+  // why_new=the tables above are on grids of two to four cells, with one waiting cell beside written questions and never one waiting cell alone;
+  // seam=none; no_claim=that the server's counts are right (the fill action is mocked, and convex/generation_quality.test.ts covers it).
+  it.each([
+    [
+      "wrote three questions on a 25-cell grid with two cells waiting",
+      "success" as const,
+      batch(25, 3, 3, 0, 2),
+      "Wrote 3 questions. 2 cells already had a question waiting for review. They will show here after the Break the Ice team reviews them.",
+    ],
+    [
+      "wrote one question on a 25-cell grid",
+      "success" as const,
+      batch(25, 1, 1),
+      "Wrote 1 question. It will show here after the Break the Ice team reviews it.",
+    ],
+    [
+      "wrote nothing on a 25-cell grid with one cell waiting",
+      "info" as const,
+      batch(25, 0, 0, 0, 1),
+      "No new questions were written. 1 cell already has a question waiting for review.",
+    ],
+    [
+      "wrote nothing on a 25-cell grid where every cell is listed",
+      "info" as const,
+      batch(25, 0, 0),
+      "No new questions were written. Every cell already has a question, or the AI repeated an existing one.",
+    ],
+  ])("after a batch fill that %s, says what happened and not how much of the grid it was", async (_what, kind, result, message) => {
+    matrixWithOneEmptyCell();
+    fillResults({ fillEmptyCells: result });
+
+    render(<OrgWeeklyCurationPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Fill Empty Cells" }));
+
+    await waitFor(() => expect(toast[kind]).toHaveBeenCalledWith(message));
+    const said = [...vi.mocked(toast.success).mock.calls, ...vi.mocked(toast.info).mock.calls].map(([text]) => String(text));
+    expect(said).toHaveLength(1);
+    // Nothing in it counts the grid: no "3/25", and no 25 at all.
+    expect(said[0]).not.toMatch(/\/|25/);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
 });
 
 describe("OrgWeeklyCurationPage topic control", () => {
   it("offers one topic or no topic, and says a grid with no topic is written for the style and tone alone", () => {
     matrixWithOneEmptyCell();
     render(<OrgWeeklyCurationPage />);
+
+    // The control is named for what it sets.
+    expect(screen.getByText("Topic", { selector: "label" })).toBeInTheDocument();
+    expect(screen.queryByText(/third axis/i)).toBeNull();
 
     // No topic is the starting choice, and nothing promises a random one.
     expect(screen.getByRole("button", { name: "No topic" })).toBeInTheDocument();

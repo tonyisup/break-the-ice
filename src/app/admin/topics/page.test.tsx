@@ -41,7 +41,7 @@ const weekends = {
   brief: "Days off: plans, habits and small pleasures.",
 };
 
-const NOT_SENT = "Not sent to the AI when it writes questions. The Prompt Line is what it reads.";
+const NOT_SENT = "Not sent to the AI when it writes questions; the Prompt Line is. Still used to match questions to people.";
 const DRAFT_SAVED = "Saved as a new draft version. Activate it for the AI to use it.";
 
 describe("admin topics: the prompt line", () => {
@@ -107,14 +107,37 @@ describe("admin topics: the prompt line", () => {
     const { unmount } = render(<TopicsPage />);
     fireEvent.click(screen.getByRole("button", { name: "Add Topic" }));
     const createDialog = await screen.findByRole("dialog");
-    expect(within(createDialog).getAllByText(NOT_SENT)).toHaveLength(1);
-    expect(within(createDialog).getByPlaceholderText("Used for matching, not for writing questions.")).toBeInTheDocument();
+    const createNotes = within(createDialog).getAllByText(NOT_SENT);
+    expect(createNotes).toHaveLength(1);
+    expect(within(createNotes[0].parentElement!).getByText("AI Guidance")).toBeInTheDocument();
+    // What the field is still for is in the note, which stays, and not in a placeholder, which goes once the box is typed in.
+    expect(createNotes[0].parentElement!.querySelector("textarea")).not.toHaveAttribute("placeholder");
+    expect(within(createDialog).queryByPlaceholderText("Used for matching, not for writing questions.")).toBeNull();
     expect(within(createDialog).queryByPlaceholderText(/for the AI when generating/i)).toBeNull();
     unmount();
 
     await openEditForm();
     const note = within(screen.getByRole("dialog")).getByText(NOT_SENT);
     expect(within(note.parentElement!).getByText("AI Guidance")).toBeInTheDocument();
+    expect(note.parentElement!.querySelector("textarea")).not.toHaveAttribute("placeholder");
+  });
+
+  // Value: protects=after a topic is created, the message says it was saved as a draft the AI won't use until it is activated;
+  // fails_when=the message goes back to "created successfully", or says nothing about activating;
+  // why_new=the test of creating a topic checks what is sent and never reads the message that follows;
+  // seam=none; no_claim=that the server saves a new topic as a draft (the mutation is mocked; createTopic in convex/admin/topics.ts sets the status).
+  it("creating a topic says it was saved as a draft that still has to be activated", async () => {
+    render(<TopicsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Add Topic" }));
+
+    fireEvent.change(await screen.findByPlaceholderText("e.g. holidays"), { target: { value: "commutes" } });
+    fireEvent.change(screen.getByPlaceholderText("e.g. Holiday Season"), { target: { value: "Commutes" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create Topic" }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Topic created as a draft. Activate it for the AI to use it."));
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("saving an edit of a live topic says it was saved as a draft that still has to be activated", async () => {

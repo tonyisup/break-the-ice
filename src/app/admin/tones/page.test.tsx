@@ -43,7 +43,7 @@ const warm = {
   brief: "Kind and unhurried, like a friend asking.",
 };
 
-const NOT_SENT = "Not sent to the AI when it writes questions. The Prompt Line is what it reads.";
+const NOT_SENT = "Not sent to the AI when it writes questions; the Prompt Line is. Still used to match questions to people.";
 const DRAFT_SAVED = "Saved as a new draft version. Activate it for the AI to use it.";
 
 describe("admin tones: the prompt line", () => {
@@ -109,14 +109,37 @@ describe("admin tones: the prompt line", () => {
     const { unmount } = render(<TonesPage />);
     fireEvent.click(screen.getByRole("button", { name: "Add Tone" }));
     const createDialog = await screen.findByRole("dialog");
-    expect(within(createDialog).getAllByText(NOT_SENT)).toHaveLength(1);
-    expect(within(createDialog).getByPlaceholderText("Used for matching, not for writing questions.")).toBeInTheDocument();
+    const createNotes = within(createDialog).getAllByText(NOT_SENT);
+    expect(createNotes).toHaveLength(1);
+    expect(within(createNotes[0].parentElement!).getByText("AI Guidance")).toBeInTheDocument();
+    // What the field is still for is in the note, which stays, and not in a placeholder, which goes once the box is typed in.
+    expect(createNotes[0].parentElement!.querySelector("textarea")).not.toHaveAttribute("placeholder");
+    expect(within(createDialog).queryByPlaceholderText("Used for matching, not for writing questions.")).toBeNull();
     expect(within(createDialog).queryByPlaceholderText(/instructions for the LLM/i)).toBeNull();
     unmount();
 
     await openEditForm();
     const note = within(screen.getByRole("dialog")).getByText(NOT_SENT);
     expect(within(note.parentElement!).getByText("AI Guidance")).toBeInTheDocument();
+    expect(note.parentElement!.querySelector("textarea")).not.toHaveAttribute("placeholder");
+  });
+
+  // Value: protects=after a tone is created, the message says it was saved as a draft the AI won't use until it is activated;
+  // fails_when=the message goes back to "created successfully", or says nothing about activating;
+  // why_new=the test of creating a tone checks what is sent and never reads the message that follows;
+  // seam=none; no_claim=that the server saves a new tone as a draft (the mutation is mocked; createTone in convex/admin/tones.ts sets the status).
+  it("creating a tone says it was saved as a draft that still has to be activated", async () => {
+    render(<TonesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Add Tone" }));
+
+    fireEvent.change(await screen.findByPlaceholderText("e.g. funny"), { target: { value: "dry" } });
+    fireEvent.change(screen.getByPlaceholderText("e.g. Funny & Silly"), { target: { value: "Dry" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create Tone" }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Tone created as a draft. Activate it for the AI to use it."));
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("saving an edit of a live tone says it was saved as a draft that still has to be activated", async () => {

@@ -101,11 +101,12 @@ made a lot of AI requests in a short time, retry in a few minutes. If it says
 several of your AI requests are still running or got no answer today, wait for
 the running ones to finish and try again; once five have gone without an answer
 in a day, topic options and matrix fill come back the next day. If a matrix
-fill says it stopped because the AI didn't finish an answer, the cells it
-reports as filled are saved, and the call it stopped at counts toward those
-five; try the rest later. If your team has used its matrix fills, more become
-available through the day. Library and **Write** assignments keep working
-either way.
+fill says it stopped because the AI didn't finish an answer, any questions it
+wrote before stopping are saved and will show after the Break the Ice team
+reviews them; until then their cells still look empty. The call it stopped at
+counts toward those five; try the rest later. If your team has used its matrix
+fills, more become available through the day. Library and **Write** assignments
+keep working either way.
 
 ### “This schedule is already published or completed”
 
@@ -132,6 +133,9 @@ says how many questions it wrote, and that they will show after the Break the
 Ice team reviews them. Until then the cell stays empty and isn't written again.
 To assign something now, pick a library question, or use the **Write** or
 **Topic** tab.
+
+If the planner says no new question was written for this cell, nothing was
+added: select **Generate** again, or pick a library question.
 
 ### The week will not publish
 

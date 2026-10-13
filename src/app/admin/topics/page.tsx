@@ -89,7 +89,7 @@ export default function TopicsPage() {
 				takeoverStartDate: newTopic.takeoverStartDate ? new Date(newTopic.takeoverStartDate).getTime() : undefined,
 				takeoverEndDate: newTopic.takeoverEndDate ? new Date(newTopic.takeoverEndDate).getTime() : undefined,
 			})
-			toast.success("Topic created successfully")
+			toast.success("Topic created as a draft. Activate it for the AI to use it.")
 			setIsCreateDialogOpen(false)
 			setNewTopic({
 				id: "",
@@ -280,11 +280,10 @@ export default function TopicsPage() {
 									<label className="text-sm font-medium">AI Guidance</label>
 									<textarea
 										className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										placeholder="Used for matching, not for writing questions."
 										value={newTopic.promptGuidanceForAI}
 										onChange={e => setNewTopic({ ...newTopic, promptGuidanceForAI: e.target.value })}
 									/>
-									<p className="text-xs text-muted-foreground">Not sent to the AI when it writes questions. The Prompt Line is what it reads.</p>
+									<p className="text-xs text-muted-foreground">Not sent to the AI when it writes questions; the Prompt Line is. Still used to match questions to people.</p>
 								</div>
 								<div className="grid gap-2">
 									<label htmlFor="newTopicBrief" className="text-sm font-medium">Prompt Line (Optional)</label>
@@ -580,7 +579,7 @@ export default function TopicsPage() {
 										value={editingTopic.promptGuidanceForAI}
 										onChange={e => setEditingTopic({ ...editingTopic, promptGuidanceForAI: e.target.value })}
 									/>
-									<p className="text-xs text-muted-foreground">Not sent to the AI when it writes questions. The Prompt Line is what it reads.</p>
+									<p className="text-xs text-muted-foreground">Not sent to the AI when it writes questions; the Prompt Line is. Still used to match questions to people.</p>
 								</div>
 								<div className="grid gap-2">
 									<label htmlFor="editTopicBrief" className="text-sm font-medium">Prompt Line (Optional)</label>

@@ -726,7 +726,7 @@ const questionPool = useQuery(
   const [axisYSelected, setAxisYSelected] = React.useState<Set<string>>(new Set());
   const [axisXSelected, setAxisXSelected] = React.useState<Set<string>>(new Set());
 
-  /* --- Third axis control: "Topic" — one topic for the whole grid, or none --- */
+  /* --- Topic control: one topic for the whole grid, or none --- */
   type TopicPolicy = "global" | "none";
   const [topicPolicy, setTopicPolicy] = React.useState<TopicPolicy>("none");
   const [globalTopicId, setGlobalTopicId] = React.useState<string | undefined>();
@@ -1324,20 +1324,25 @@ const questionPool = useQuery(
         cells,
       });
 
+      // Every cell of the grid is sent, filled or not, so the message counts what happened
+      // and not how much of the grid that was.
       const written = result.totalQuestionsGenerated;
-      let msg = `Wrote ${written} question${written !== 1 ? "s" : ""} for ${result.filledCells}/${result.totalCells} cells`;
       // A cell can look empty here and be taken: its question is still in review.
-      if (result.skippedWaitingForReview > 0) {
-        msg += ` · ${result.skippedWaitingForReview} already waiting for review`;
-      }
-      if (result.skippedInvalidTaxonomy > 0) {
-        msg += ` · ${result.skippedInvalidTaxonomy} skipped (deleted taxonomy)`;
-      }
-      // A new question is reviewed before the grid lists it.
+      const waiting = result.skippedWaitingForReview;
+      const waitingCells = `${waiting} cell${waiting !== 1 ? "s" : ""}`;
+      const gone = result.skippedInvalidTaxonomy;
+      const skipped = gone > 0
+        ? ` ${gone} cell${gone !== 1 ? "s use" : " uses"} a style, tone or topic that no longer exists.`
+        : "";
       if (written > 0) {
-        toast.success(`${msg}. ${showsAfterReview(written)}`);
+        const alreadyWaiting = waiting > 0 ? ` ${waitingCells} already had a question waiting for review.` : "";
+        // A new question is reviewed before the grid lists it.
+        toast.success(`Wrote ${written} question${written !== 1 ? "s" : ""}.${alreadyWaiting}${skipped} ${showsAfterReview(written)}`);
+      } else if (waiting > 0) {
+        toast.info(`No new questions were written. ${waitingCells} already ${waiting !== 1 ? "have" : "has"} a question waiting for review.${skipped}`);
       } else {
-        toast.info(msg);
+        // With cells skipped for a missing style, that is the reason to give; otherwise the usual one.
+        toast.info(`No new questions were written.${skipped || " Every cell already has a question, or the AI repeated an existing one."}`);
       }
     } catch (e: any) {
       toast.error(readableError(e, "Failed to fill empty cells"));
@@ -1725,10 +1730,10 @@ const questionPool = useQuery(
 
               <Separator />
 
-              {/* Third axis: Topic mode */}
+              {/* Topic for the whole grid */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">
-                  Third axis (topic per cell)
+                  Topic
                 </label>
                 {axisY === "topic" || axisX === "topic" ? (
                   // Topics are already a row or a column, so there is nothing to choose here.
