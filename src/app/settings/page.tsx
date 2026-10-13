@@ -153,28 +153,10 @@ const SettingsPage = () => {
     hiddenQuestions.includes(q._id)
   );
 
-  // Sync with backend IDs (filtering out invalid ones)
-  useEffect(() => {
-    if (allStyles) {
-      const serverIds = allStyles.map(s => s._id);
-      const localIds = hiddenStyles;
-      const filteredIds = localIds?.filter(id => serverIds.includes(id));
-      if (filteredIds && localIds && filteredIds?.length !== localIds?.length) {
-        setHiddenStyles(filteredIds);
-      }
-    }
-  }, [allStyles, hiddenStyles, setHiddenStyles]);
-
-  useEffect(() => {
-    if (allTones) {
-      const serverIds = allTones.map(t => t._id);
-      const localIds = hiddenTones;
-      const filteredIds = localIds?.filter(id => serverIds.includes(id));
-      if (filteredIds && localIds && filteredIds?.length !== localIds?.length) {
-        setHiddenTones(filteredIds);
-      }
-    }
-  }, [allTones, hiddenTones, setHiddenTones]);
+  // A hidden id this page doesn't list (an older version of a style or tone, or a deleted
+  // one) is left where it is. The page counts and draws only what it lists, and nothing here
+  // saves on its own: the save keeps such an entry on purpose (canBeUnhidden in
+  // convex/core/userSettings.ts), so a clean-up that asked again on every render never ended.
 
   useEffect(() => {
     if (hiddenQuestionObjects) {

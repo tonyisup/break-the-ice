@@ -155,4 +155,29 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Reflective")).toBeDefined();
     expect(screen.getByText("Warm")).toBeDefined();
   });
+
+  // Value: protects=opening Settings never saves on its own, so a hidden style or tone the page doesn't list (an older version waiting to be moved) is neither dropped nor asked about again and again;
+  // fails_when=a clean-up on load comes back and calls the save for ids the page doesn't list, which the server now keeps, so the call would repeat on every render;
+  // why_new=the page had no test of what it does on load with a hidden id it doesn't list;
+  // seam=none; no_claim=what the server does with a save (convex/brief_seed.test.ts covers the save keeping such an entry).
+  it("leaves a hidden style or tone it doesn't list alone on load, and still counts only what it lists", () => {
+    const setHiddenStyles = vi.fn();
+    const setHiddenTones = vi.fn();
+    mockUseStorageContext.mockReturnValue({
+      ...mockUseStorageContext(),
+      hiddenStyles: ["style-old-copy"],
+      setHiddenStyles,
+      hiddenTones: ["tone-old-copy"],
+      setHiddenTones,
+    });
+
+    const { rerender } = render(<SettingsPage />);
+    rerender(<SettingsPage />);
+
+    expect(setHiddenStyles).not.toHaveBeenCalled();
+    expect(setHiddenTones).not.toHaveBeenCalled();
+    // The listed style and tone are not hidden, whatever else the list holds.
+    expect(screen.getByText("Reflective")).toBeDefined();
+    expect(screen.getByText("Warm")).toBeDefined();
+  });
 });
