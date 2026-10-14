@@ -293,6 +293,30 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 **Priority:** P3
 **Depends on:** One release after the short brief ships
 
+### Move hidden entries to the live row when the move runs
+
+**What:** Make the batches that move people's hidden styles and tones (`reassignUserStylesBatch`, `reassignUserTonesBatch` in `convex/admin/styles.ts` and `tones.ts`) move each entry to the style's or tone's live row at the time the batch runs, not to the id it was scheduled with.
+
+**Why:** Activation schedules these moves from every older version, and the one-time seed schedules its own. Two activations within seconds, or one during the seed's move, can finish in the wrong order and leave an entry on an archived row. The hidden lists leave such an entry out since 0.7.0.0, so that hide silently stops applying.
+
+**Context:** The question batches already check the target is live. Look the target up with `latestActiveVersion` over the slug's versions each batch. Deferred by the owner at ship review (2026-10-14).
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### List a draft beside a live style that has no version number
+
+**What:** Use the same rule for a missing version number in the admin Styles list as in `byLatestVersion` (`convex/lib/taxonomy.ts`), which counts it as 0.
+
+**Why:** `listStyles` in `convex/admin/styles.ts` lists drafts newer than the live row with `(doc.version ?? 1) > (live.version ?? 1)`. A live style saved before versions existed, with a version-1 draft beside it, never lists that draft, so it can't be activated from the Styles page.
+
+**Context:** The one-time seed leaves such a pair alone, because only one of the two rows is live. Add a case to `convex/admin_taxonomy_versions.test.ts`. Deferred by the owner at ship review (2026-10-14).
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## Quality check
 
 ### Finish the flag a team sees on its schedule grid
@@ -445,6 +469,18 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 ## Team prompts
 
+### Count only a grid fill's own held questions as taking a cell
+
+**What:** A grid cell should count as taken by a question waiting for review only when a grid fill wrote that question, not when any held AI question for the cell's style and tone exists.
+
+**Why:** Since 0.7.0.0 every generated question is held for review, and the grid's check counts every held AI library question (`isUnlistedAiQuestion`), whoever it was written for. A question from someone's feed, daily email or the nightly pool blocks its style and tone cell on every team's grid, ignoring topic when none is chosen, until it is reviewed. Fill Empty Cells then writes nothing for cells that look empty and says a question is waiting.
+
+**Context:** `collectMatrixOccupiedKeys` and `cellOccupancy` in `convex/core/fillMatrix.ts` read `pageQuestionMatrixCellKeys` and `pageQuestionsMatchingSlugTriple` in `convex/core/questions.ts` with `status: "pending"`. A fill saves its questions through `runPersistedQuestionGeneration` with `purpose: "feed"`, so nothing on the question tells it apart. Give fill runs their own purpose, or mark the question when a fill saves it (and say which organization asked), and count only those. Keep the rule that a fill's own held question takes its cell, so a second fill doesn't write another. Deferred by the owner at ship review (2026-10-14).
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** None
+
 ### Show readable errors for library question schedule changes
 
 **What:** Give `assignQuestion`, `unassignQuestion` and the publish path in `convex/core/schedules.ts` the same readable refusals Team prompts use (`SCHEDULE_NOT_DRAFT`, `SCHEDULE_DAY_INACTIVE`), and show them on the schedule page through `readableError` instead of `e.message`.
@@ -571,14 +607,14 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 ### Scope generation's slug lookups to the caller's organization
 
-**What:** Slug lookups in generation aren't organization-scoped the way ID lookups now are. The specifics are in the owner's private plan doc ("Security follow-ups").
+**What:** Slug lookups in generation aren't organization-scoped the way ID lookups now are. The specifics are in the owner's private plan doc ("Security follow-ups"). Also decide whether a question a grid fill writes under a team's own topic belongs to that team rather than the shared library.
 
-**Why:** Taxonomy lookups should respect organization boundaries everywhere.
+**Why:** Taxonomy lookups should respect organization boundaries everywhere. Since 0.7.0.0 a batch grid fill with topics along one side passes each cell's topic, so the lookup is reached from more places.
 
-**Context:** `convex/internal/generation.ts`; `resolveTaxonomySlug` in `convex/lib/taxonomyLookup.ts` already takes an organization. Pre-existing; noticed in the v0.3.0.0 review.
+**Context:** `convex/internal/generation.ts`; `resolveTaxonomySlug` in `convex/lib/taxonomyLookup.ts` already takes an organization. The grid's callers are in `convex/core/fillMatrix.ts`. Pre-existing; noticed in the v0.3.0.0 review, widened in 0.7.0.0. Every such question still waits for review before any list shows it.
 
 **Effort:** S
-**Priority:** P2
+**Priority:** P1
 **Depends on:** None
 
 ### Record a reason when a question is rejected in the review queue

@@ -2,6 +2,31 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.7.0.0] - 2026-10-14
+
+### Added
+- Every question the AI writes now comes from one short brief: who the questions are for, one line for each style, tone and topic, and the owner's own decisions as the standard. A prompt shows up to ten questions of the style the owner kept, up to six the owner rejected with the reasons, and one kept question from each of six other styles. The feed, the daily email, the nightly pool, grid fill, the admin preview, a team's topic preview and remix all use it, and each run records which wording wrote its prompt (`brief-v2`, or `remix-v2` for a remix).
+- Admins can write the Prompt Line for each style, tone and topic, the one line the AI reads about it, and a Set Form for a style whose questions all follow one pattern, such as either/or. The admin pages say which fields the AI reads and which it doesn't.
+- A one-time step gives each shared style, tone and topic its line, and a style its set form. Run it straight after the deploy, after taking a backup: `npx convex run internal/migrations:seedBriefLines '{"dryRun":true}'`, then with `false`. Where a style or tone still has a copy from before versions existed beside its numbered row, the copy is archived, and its questions and people's hidden entries move to the live row. A dry run once the move is done reports no changes.
+- The pool page counts the questions waiting for review beside the ones ready to assign, marks each question Waiting for review, Available, Not approved or Distributed with a link to review it, and assigns the pool for the date on screen, so a pool approved a day late can still be handed out.
+
+### Changed
+- Every generated question waits for review before anyone else sees it: grid fills and the nightly pool now too, as the feed and the daily email already did. The person a feed or daily-email question was made for still gets it. The pool hands out only approved questions. A grid cell whose question is waiting counts as taken, and the schedule planner says so after a fill. For now that includes any AI question for the cell's style and tone that waits for review, one from someone's feed too.
+- A grid fill with no topic chosen writes questions for the style and tone alone, instead of under a random topic, and on a grid with topics along one side each cell is written under its own topic. The planner's control reads One topic or No topic.
+- After a grid fill the planner says how many questions it wrote and that they show once reviewed, how many cells already had a question waiting, and how many cells couldn't be filled and can be tried again later.
+- A style with a set form can save a question as short as three words ("Tea or coffee?"); other styles keep the six-word minimum.
+- A team's notes and an admin's tags go into the prompt as quoted lines the AI keeps to and takes no other instruction from, and a team's topic preview shows the AI none of the owner's rejections. The questions a reader has just seen are passed on without the reader's own or a team's, and a note the model adds unasked isn't stored.
+- The admin Styles and Tones lists show the live version and every newer draft, marked Live or Draft. Creating or editing an entry saves a draft for an admin to activate, and activating a version moves questions and hidden entries from every older version.
+- Settings no longer tidies the hidden styles and tones when it opens. The lists it reads hold only what it can show, so a hide on an older copy is kept until the step above moves it.
+- The quality check and the eval judge read the same line the AI is given.
+- The eval scripts refuse a run or judged file made with the eval's own brief, which the app's brief replaces.
+
+### Removed
+- The admin generator's prompt blueprint menu: the brief replaced blueprints. Their data stays for one release, so a page open during the deploy keeps working.
+- `node evals/generate.mjs --brief` and `node evals/judge.mjs --brief`.
+
+Between the deploy and the one-time step, entries are read by their old description, no style has its set form, and a style or tone someone hid on the old copy of a doubled entry doesn't show as hidden. If this release is rolled back, leave the archived copies archived and keep the schema's new optional fields (`brief`, `form`, `promptLabel`): Convex refuses a schema that stored rows don't fit.
+
 ## [0.6.1.0] - 2026-10-12
 
 ### Added
