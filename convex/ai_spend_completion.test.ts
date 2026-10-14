@@ -2230,6 +2230,44 @@ describe("calls a person may have unanswered in one day", () => {
     expect(await slotsLeft(t)).toBe(4);
   });
 
+  // Value: protects=a batch cell whose AI call is refused without stopping the fill is counted in no result field, which the planner reads as a cell that couldn't be filled;
+  // fails_when=the fill counts that cell as skipped (the planner then says every cell already has a question), or stops the whole fill on a refusal;
+  // why_new=no test reached fillEmptyCells' catch for an error that neither stops the fill nor names a missing style;
+  // seam=none; no_claim=what the planner says for these counts (src/app/org/schedule/page.test.tsx, action mocked), or real provider errors (a 400 stands in).
+  test("a matrix batch carries on past a cell whose AI call is refused, and counts that cell in no field", async () => {
+    const { t, meId } = await setup();
+    const orgId = await matrixOrg(t, meId);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    create
+      .mockRejectedValueOnce(refused(400, "invalid request"))
+      .mockResolvedValueOnce(completion(JSON.stringify({ questions: [{ text: "What small win are you proud of this week?" }] }), { cost: 0.01 }) as never);
+
+    const result = await t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+      organizationId: orgId,
+      axisY: "style",
+      axisX: "tone",
+      topicSlug: "any-topic",
+      cells: [
+        { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
+        { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
+      ],
+    });
+
+    expect(result).toEqual({
+      totalCells: 2,
+      filledCells: 1,
+      totalQuestionsGenerated: 1,
+      skippedExisting: 0,
+      skippedWaitingForReview: 0,
+      skippedInvalidTaxonomy: 0,
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(logged.mock.calls.some(([message]) => String(message).startsWith("Failed to fill cell"))).toBe(true);
+    expect(await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
+  });
+
   test("a matrix batch stops at a cell whose answer is cut off and says how far it got: later cells aren't tried, one slot is kept and the cell is freed", async () => {
     const { t, meId } = await setup();
     const orgId = await matrixOrg(t, meId);

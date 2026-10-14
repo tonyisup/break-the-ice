@@ -483,6 +483,8 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
     // Not "every cell already has a question": the cells failed, and trying again may work.
     ["because every cell's AI call failed", batch(2, 0, 0, 0, 0, 2), "No new questions were written. 2 cells couldn't be filled. Try them again later."],
     ["with one cell waiting and another failed", batch(2, 0, 0, 0, 1, 1), "No new questions were written. 1 cell already has a question waiting for review. 1 cell couldn't be filled. Try it again later."],
+    // Both reasons, so neither hides the other.
+    ["with a deleted style and a failed cell", batch(2, 0, 0, 1, 0, 1), "No new questions were written. 1 cell uses a style, tone or topic that no longer exists. 1 cell couldn't be filled. Try it again later."],
   ])("after a batch fill that wrote nothing %s, gives the counts as plain information, not a success, and says nothing about review", async (_what, result, message) => {
     matrixWithOneEmptyCell();
     fillResults({ fillEmptyCells: result });
