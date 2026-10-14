@@ -1,7 +1,9 @@
+import { briefEntry } from "./brief";
+
+// The blueprint table is no longer read: the short brief (lib/brief.ts) replaced it. The slug
+// is kept for the migration that seeded it.
 export const DEFAULT_BLUEPRINT_SLUG = "icebreaker-default";
 export const MAX_BATCH_SIZE = 10;
-
-export type PromptExample = { text: string; note?: string };
 
 export type TaxonomyDoc = {
   _id: string;
@@ -10,15 +12,15 @@ export type TaxonomyDoc = {
   version?: number;
   name: string;
   description?: string;
+  brief?: string;
   aiGuidance?: string;
   promptGuidanceForAI?: string;
   distinctFrom?: string[];
-  examples?: PromptExample[];
-  antiExamples?: PromptExample[];
   commonFailureModes?: string[];
 };
 
 export type StylePromptDoc = TaxonomyDoc & {
+  form?: string;
   structure?: string;
   structuralInstruction?: string;
   cognitiveMove?: string;
@@ -37,37 +39,11 @@ export type TopicPromptDoc = TaxonomyDoc & {
   accessibilityNotes?: string;
 };
 
-export type PromptBlueprintDoc = {
-  _id: string;
-  slug: string;
-  version: number;
-  systemInstruction: string;
-  safetyChecklist: string[];
-  qualityChecklist: string[];
-  outputFormatInstruction: string;
-};
-
 export function clampBatchSize(value: number) {
   // NaN passes through Math.min and Math.max, and Infinity would come out as the largest batch.
   // The output cap is sized from the result, so a value that isn't a number is one question.
   if (!Number.isFinite(value)) return 1;
   return Math.max(1, Math.min(MAX_BATCH_SIZE, Math.floor(value)));
-}
-
-function bullet(items: string[]) {
-  return items
-    .filter((item) => item.trim().length > 0)
-    .map((item) => `- ${item}`)
-    .join("\n");
-}
-
-function formatExamples(examples: PromptExample[] | undefined) {
-  if (!examples || examples.length === 0) return "- none";
-
-  return examples
-    .slice(0, 3)
-    .map((example) => (example.note ? `- ${example.text} - ${example.note}` : `- ${example.text}`))
-    .join("\n");
 }
 
 // Curly quotes are written as escapes. Typed literally, an editor or paste can turn them into
@@ -104,14 +80,23 @@ export function fingerprintText(text: string) {
   return `q_${fnv1a(normalized)}`;
 }
 
-export function validateGeneratedQuestion(text: string) {
+/** The shortest question the save step keeps. */
+const SHORTEST = { characters: 24, words: 6 };
+/**
+ * A style with a set form, like either/or, asks for short questions on purpose ("Tea or
+ * coffee?"), and the usual floor refused about a third of them.
+ */
+const SHORTEST_WITH_SET_FORM = { characters: 10, words: 3 };
+
+export function validateGeneratedQuestion(text: string, options: { setForm?: boolean } = {}) {
   const reasons: string[] = [];
   const questionMarks = (text.match(/\?/g) ?? []).length;
   const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const shortest = options.setForm ? SHORTEST_WITH_SET_FORM : SHORTEST;
 
-  if (text.length < 24) reasons.push("too short");
+  if (text.length < shortest.characters) reasons.push("too short");
   if (text.length > 220) reasons.push("too long");
-  if (wordCount < 6) reasons.push("too few words");
+  if (wordCount < shortest.words) reasons.push("too few words");
   if (questionMarks !== 1) reasons.push("must contain exactly one question mark");
   if (!text.endsWith("?")) reasons.push("must end with a question mark");
   if (/\n/.test(text)) reasons.push("must be a single card prompt");
@@ -260,106 +245,17 @@ export function parseQuestionTexts(raw: string) {
   return parseQuestionObjects(raw).map((item) => item.text);
 }
 
-export function buildGenerationPrompts(args: {
-  style: StylePromptDoc;
-  tone: TonePromptDoc;
-  topic?: TopicPromptDoc | null;
-  blueprint: PromptBlueprintDoc;
-  batchSize: number;
-  excludedQuestions?: string[];
-  currentQuestion?: string;
-  userContext?: string;
-}) {
-  const { style, tone, topic, blueprint, batchSize, excludedQuestions = [], currentQuestion, userContext } = args;
+/**
+ * What a remix run records as the wording that wrote its prompt. Bump it with the remix
+ * prompt below.
+ */
+export const REMIX_PROMPT_LABEL = "remix-v2";
 
-  const systemPrompt = [
-    "You generate ice-breaker questions for a scrolling feed.",
-    "Optimize for prompt quality, feed diversity, embedding separability,",
-    "replayability, and low-friction engagement.",
-    "",
-    "Global non-negotiables:",
-    "- One card contains one prompt and one question mark.",
-    "- The prompt must be understood in a few seconds.",
-    "- Prefer specific scenes, constraints, trade-offs, memories, habits,",
-    "  values, taste, or quirks over generic favorites.",
-    "- Low-stakes vulnerability beats high-stakes intensity.",
-    "- Avoid bland prompts, trauma mining, explicit sexual content,",
-    "  self-harm, criminal confession framing, humiliation mechanics,",
-    "  panic scenarios, and default politics or religion.",
-    "- Keep prompts answerable without niche expertise or perfect memory.",
-    "- Do not copy examples verbatim.",
-    "",
-    blueprint.systemInstruction,
-    "",
-    "Quality checklist:",
-    bullet(blueprint.qualityChecklist),
-    "",
-    "Safety checklist:",
-    bullet(blueprint.safetyChecklist),
-    "",
-    "Output rules:",
-    `- Return exactly ${batchSize} questions.`,
-    "- Return JSON only.",
-    '- Use this shape: {"questions":[{"text":"...?", "rationale":"..."}]}',
-    '- "rationale" should be short and optional, but "text" is required.',
-    blueprint.outputFormatInstruction,
-  ].join("\n");
-
-  const effectiveStyleGuidance = style.aiGuidance ?? style.promptGuidanceForAI ?? "";
-  const effectiveToneGuidance = tone.aiGuidance ?? tone.promptGuidanceForAI ?? "";
-  const effectiveTopicGuidance = topic ? (topic.aiGuidance ?? topic.promptGuidanceForAI ?? "") : "";
-  const excluded = [...excludedQuestions];
-  if (currentQuestion) excluded.push(currentQuestion);
-
-  const userPrompt = [
-    `Generate ${batchSize} ice-breaker questions for this taxonomy combo.`,
-    "",
-    "STYLE",
-    `Name: ${style.name}`,
-    `Description: ${style.description ?? ""}`,
-    `Cognitive move: ${style.cognitiveMove ?? "not specified"}`,
-    `Social function: ${style.socialFunction ?? "not specified"}`,
-    `Structural instruction: ${style.structuralInstruction ?? style.structure ?? ""}`,
-    `Answer shape: ${style.answerShape ?? "short conversational answer"}`,
-    `AI guidance: ${effectiveStyleGuidance}`,
-    `Distinct from: ${(style.distinctFrom ?? []).join(", ") || "none listed"}`,
-    "Good examples:",
-    formatExamples(style.examples),
-    "Avoid examples like:",
-    formatExamples(style.antiExamples),
-    "",
-    "TONE",
-    `Name: ${tone.name}`,
-    `Description: ${tone.description ?? ""}`,
-    `AI guidance: ${effectiveToneGuidance}`,
-    `Language cues: ${(tone.languageCues ?? []).join(", ") || "none listed"}`,
-    `Avoid cues: ${(tone.avoidCues ?? []).join(", ") || "none listed"}`,
-    "",
-    "TOPIC",
-    `Name: ${topic?.name ?? "General"}`,
-    `Description: ${topic?.description ?? ""}`,
-    `AI guidance: ${effectiveTopicGuidance}`,
-    `Scope boundaries: ${(topic?.scopeBoundaries ?? []).join(", ") || "none listed"}`,
-    `Reference pool: ${(topic?.referencePool ?? []).slice(0, 12).join(", ") || "none listed"}`,
-    "",
-    "Important generation notes:",
-    "- Preserve the style as structure, not topic or tone.",
-    "- Let tone affect wording and emotional temperature, not format.",
-    "- Let topic shape the semantic domain, not the structure.",
-    "- Make each question distinct enough to avoid repetitive feed feel.",
-    "- Avoid obvious or default answers.",
-    "- Favor prompts that reveal taste, habits, memories, priorities, humor profile, or small confessions.",
-    excluded.length > 0
-      ? `- Avoid topics, patterns, or phrasing similar to these seen questions:\n${bullet(excluded)}`
-      : "",
-    userContext ? `User context:\n- ${userContext}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  return { systemPrompt, userPrompt };
-}
-
+/**
+ * The remix prompt: one question reworded. The style, tone and topic are described by the same
+ * line the generator and the judge read (lib/brief.ts). The question goes in as a JSON string,
+ * so a quote mark or a line break in it can't end the quoted part.
+ */
 export function buildRemixPrompts(args: {
   questionText: string;
   style?: StylePromptDoc | null;
@@ -368,30 +264,17 @@ export function buildRemixPrompts(args: {
 }) {
   const { questionText, style, tone, topic } = args;
 
-  const effectiveStyleStructure = style?.structuralInstruction ?? style?.structure ?? "Direct and engaging";
-  const effectiveToneGuidance = tone?.aiGuidance ?? tone?.promptGuidanceForAI ?? "Keep the tone of the original text";
-  const effectiveTopicGuidance = topic?.aiGuidance ?? topic?.promptGuidanceForAI ?? "Keep the topic of the original text";
-
   return {
     systemPrompt: [
       "You are a world-class creative writer specializing in social psychology and ice-breakers.",
       'TASK: Remix the user\'s question. Change the words and phrasing completely.',
       "FORMAT: Return only the new question text as a plain string.",
-      `STYLE STRUCTURE: ${effectiveStyleStructure}`,
-      `TONE GUIDE: ${effectiveToneGuidance}`,
-      `TOPIC FOCUS: ${effectiveTopicGuidance}`,
+      style ? `STYLE: ${briefEntry(style)}` : "STYLE: Keep the style of the original text",
+      tone ? `TONE: ${briefEntry(tone)}` : "TONE: Keep the tone of the original text",
+      topic ? `TOPIC: ${briefEntry(topic)}` : "TOPIC: Keep the topic of the original text",
       "Keep exactly one question. End with a single question mark.",
     ].join("\n"),
-    userPrompt: [
-      `Remix this question: "${questionText}"`,
-      "",
-      "Context:",
-      `Style: ${style?.name ?? "General"} (${style?.description ?? ""})`,
-      `Tone: ${tone?.name ?? "General"} (${tone?.description ?? ""})`,
-      topic ? `Topic: ${topic.name} (${topic.description ?? ""})` : "",
-    ]
-      .filter(Boolean)
-      .join("\n"),
+    userPrompt: `Remix this question: ${JSON.stringify(questionText)}`,
   };
 }
 

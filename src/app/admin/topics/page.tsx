@@ -61,6 +61,7 @@ export default function TopicsPage() {
 		description: "",
 		example: "",
 		promptGuidanceForAI: "",
+		brief: "",
 		order: 0,
 		startDate: "",
 		endDate: "",
@@ -88,7 +89,7 @@ export default function TopicsPage() {
 				takeoverStartDate: newTopic.takeoverStartDate ? new Date(newTopic.takeoverStartDate).getTime() : undefined,
 				takeoverEndDate: newTopic.takeoverEndDate ? new Date(newTopic.takeoverEndDate).getTime() : undefined,
 			})
-			toast.success("Topic created successfully")
+			toast.success("Topic created as a draft. Activate it for the AI to use it.")
 			setIsCreateDialogOpen(false)
 			setNewTopic({
 				id: "",
@@ -96,6 +97,7 @@ export default function TopicsPage() {
 				description: "",
 				example: "",
 				promptGuidanceForAI: "",
+				brief: "",
 				order: (topics?.length ?? 0) + 1,
 				startDate: "",
 				endDate: "",
@@ -117,6 +119,7 @@ export default function TopicsPage() {
 				description: t.description,
 				example: t.example,
 				promptGuidanceForAI: t.promptGuidanceForAI,
+				brief: t.brief ?? "",
 				order: t.order,
 				startDate: t.startDate,
 				endDate: t.endDate,
@@ -125,7 +128,8 @@ export default function TopicsPage() {
 				icon: t.icon,
 				color: t.color
 			})
-			toast.success("Topic updated")
+			// Only a draft is changed in place. Any other row is saved as a new draft version.
+			toast.success(t.status === "draft" ? "Topic updated" : "Saved as a new draft version. Activate it for the AI to use it.")
 			setEditingTopic(null)
 		} catch (error) {
 			toast.error("Failed to update topic")
@@ -276,10 +280,20 @@ export default function TopicsPage() {
 									<label className="text-sm font-medium">AI Guidance</label>
 									<textarea
 										className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										placeholder="Provide context for the AI when generating questions for this topic..."
 										value={newTopic.promptGuidanceForAI}
 										onChange={e => setNewTopic({ ...newTopic, promptGuidanceForAI: e.target.value })}
 									/>
+									<p className="text-xs text-muted-foreground">Not sent to the AI when it writes questions; the Prompt Line is. Still used to match questions to people.</p>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="newTopicBrief" className="text-sm font-medium">Prompt Line (Optional)</label>
+									<textarea
+										id="newTopicBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={newTopic.brief}
+										onChange={e => setNewTopic({ ...newTopic, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this topic. Leave blank to use the description.</p>
 								</div>
 							</div>
 							<DialogFooter>
@@ -450,7 +464,7 @@ export default function TopicsPage() {
 									<td className="px-6 py-4 text-right">
 										<div className="flex items-center justify-end gap-1">
 											{topic.status !== "active" && (
-												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={() => handleActivate(topic._id)}>
+												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" title="Activate Version" aria-label="Activate Version" onClick={() => handleActivate(topic._id)}>
 													<Check className="size-3.5" />
 												</Button>
 											)}
@@ -565,6 +579,17 @@ export default function TopicsPage() {
 										value={editingTopic.promptGuidanceForAI}
 										onChange={e => setEditingTopic({ ...editingTopic, promptGuidanceForAI: e.target.value })}
 									/>
+									<p className="text-xs text-muted-foreground">Not sent to the AI when it writes questions; the Prompt Line is. Still used to match questions to people.</p>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="editTopicBrief" className="text-sm font-medium">Prompt Line (Optional)</label>
+									<textarea
+										id="editTopicBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={editingTopic.brief ?? ""}
+										onChange={e => setEditingTopic({ ...editingTopic, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this topic. Leave blank to use the description.</p>
 								</div>
 							</div>
 							<DialogFooter>

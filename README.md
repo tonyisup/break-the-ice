@@ -7,8 +7,24 @@ workshops, and social gatherings. Browse a scrolling feed, filter by style, tone
 and save questions to use again. Team workspaces add shared collections and scheduled prompts.
 
 The admin tools support question editing, generation, pruning review, and duplicate review.
-AI generation is implemented in the [generation runner](./convex/lib/generationRunner.ts)
-and [prompt architecture](./convex/lib/promptArchitecture.ts).
+AI generation is implemented in the [generation runner](./convex/lib/generationRunner.ts).
+Every question is asked for with one short prompt, the [brief](./convex/lib/brief.ts): who the
+questions are for, one line for the style, the tone and the topic (the "Prompt Line" on each
+admin page, or the description until one is written), and questions the owner kept and
+rejected, read from the library. A rejected question is shown only when the review that retired
+it gave an editorial reason, and never in a team's topic preview, whose notes are the team's own
+words. A style with a set form, like either/or, keeps questions as short as three words; every
+other style needs six. A topic is a theme chosen on purpose: filling the schedule grid with no
+topic chosen writes questions for the style and tone alone, and on a grid with topics along one
+side each cell is written under its own topic.
+
+The lines are in [`convex/data/briefLines.ts`](./convex/data/briefLines.ts) and reach the
+database through a one-time step, run straight after the deploy that brings the brief:
+`npx convex run --prod internal/migrations:seedBriefLines '{"dryRun":true}'`, then
+`npx convex run --prod internal/migrations:seedBriefLines '{"dryRun":false}'`. Until
+it has run, entries are read by their old description and no style has its set form, and a style
+or tone someone hid on the old copy of a doubled entry doesn't show as hidden in Settings, so its
+questions can reach them; the seed moves the hidden entry to the live row.
 
 ## Documentation
 
@@ -139,7 +155,9 @@ Admins see it in the review queue and on a question's page, and a hold or a safe
 marked in their lists. A signed-in member of a team sees one thing: on the schedule grid, a
 question the check held, or raised a safety concern about, is marked "Flagged", with the
 reasons and note in its details, until an admin acts on the question. Auto-fill Week and the coach-feedback
-suggestions leave a flagged question out. Changing a question's wording, style, tone or topic
+suggestions leave a flagged question out. Every generated question is now reviewed before it
+is public, and a review clears the mark, so it only shows on a question a matrix fill or the
+pool published before they were held. Changing a question's wording, style, tone or topic
 drops its verdict.
 
 Each check is a small call, about 1 cent, charged to system spend whoever generated the
@@ -149,17 +167,22 @@ under the same hard cap as the daily email. One that fails is tried once more fi
 later. Questions still waiting in the review queue without a verdict can
 be checked with `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`,
 then with `false` (up to 50 a run; it stops early if the provider isn't answering). That
-doesn't reach questions that were published at once: a matrix fill's or nightly pool's question
-whose check failed twice, or that was saved while the mode was off, stays unchecked and shows
-no flag. Setting the mode back to `off` stops new checks and hides every flag, with no deploy.
+doesn't reach a question that was published before it was checked: one a matrix fill or the
+nightly pool published at once, before those were held for review too, stays unchecked and
+shows no flag. Setting the mode back to `off` stops new checks and hides every flag, with no
+deploy.
 Reverting the code after checks have run needs the schema's additions kept, because Convex
 refuses a schema that stored rows don't fit.
 
-New AI questions from the feed and the daily email wait for review in the admin queue at
-`/admin/questions`. The person they were made for still gets them, and anyone with the link
-can open them, but they stay out of the shared feed, collections, daily-email picks and team
-schedules until an admin approves them. Matrix fill, the nightly pool and admin tools
-publish directly.
+New AI questions from the feed, the daily email, matrix fill and the nightly pool wait for
+review in the admin queue at `/admin/questions`. The person a feed or email question was made
+for still gets it, and anyone with the link can open one, but they stay out of the shared
+feed, collections, daily-email picks, the schedule grid and team schedules until an admin
+approves them. A grid cell with a question waiting for review counts as filled, so it isn't
+written twice, and a pool question is handed out only once it is approved. Because a new
+question is public only after review, the questions the brief shows the model as kept are ones
+a person let through, apart from any a matrix fill or the pool published before they were
+held. Only the admin tools publish directly.
 
 ## Stack
 

@@ -286,6 +286,8 @@ export const generateNightlyQuestionPool = internalAction({
 					batchSize: targetCount,
 					temperature: 0.85,
 					poolDate: today,
+					// A pool question waits for review like any generated one, and is handed out once
+					// an admin approves it (getAvailablePoolQuestions).
 					poolStatus: "available",
 				});
 				questionsGenerated += result.saveResult.insertedCount;
@@ -456,9 +458,6 @@ export const generateAIQuestionForUser = internalAction({
 				topicId: topic?._id,
 				batchSize: count,
 				excludedQuestions: [...recentlySeen, ...blockedQuestions],
-				// Feed and daily-email questions wait for review before anyone else sees them
-				// in a shared list; the person they were made for still gets them.
-				status: "pending",
 			});
 			return result.questions as (Doc<"questions"> | null)[];
 		} catch (error) {

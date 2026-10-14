@@ -46,7 +46,7 @@ In many fitness group training classes, the coach starts with a "Question of the
 - ✅ Embedding-based similarity/duplicate detection (384-dim vectors)
 - ✅ Nightly generation pool system for batch AI generation
 - ✅ Daily AI spend cap, per-call cost tracking, and per-person/per-team AI rate limits
-- ✅ Admin review queue for new feed and daily-email AI questions, held out of shared lists until approved
+- ✅ Admin review queue for new AI questions from the feed, daily email, matrix fill and nightly pool, held out of shared lists until approved
 - ✅ Optional AI quality check of generated questions (record-only, off by default): verdicts for admins, and a "Flagged" mark on the team schedule grid; Auto-fill and the feedback suggestions leave flagged questions out
 - ✅ Configurable pruning pipeline with settings
 - ✅ Analytics with view duration tracking

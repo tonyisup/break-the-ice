@@ -47,6 +47,9 @@ export const baseTaxonomyFields = {
   slug: v.optional(v.string()),
   status: v.optional(lifecycleStatus),
   version: v.optional(v.number()),
+  // The one line the generator and the judge read about this entry (lib/brief.ts). Until an
+  // entry has one, they read its description.
+  brief: v.optional(v.string()),
   aiGuidance: v.optional(v.string()),
   safetyNotes: v.optional(v.string()),
   commonFailureModes: v.optional(v.array(v.string())),
@@ -59,6 +62,8 @@ export const baseTaxonomyFields = {
 };
 
 export const styleVersionFields = {
+  // Set only for a style whose form is the style, like either/or: every question keeps it.
+  form: v.optional(v.string()),
   cognitiveMove: v.optional(v.string()),
   socialFunction: v.optional(v.string()),
   structuralInstruction: v.optional(v.string()),
@@ -109,14 +114,35 @@ export function defaultIdealPromptLength() {
   };
 }
 
-export function latestActiveVersion<T extends { status?: string; version?: number }>(
+/**
+ * Highest version first. A row with no version loses to any numbered one, and of two alike the
+ * newer wins: a row from before versions existed used to tie with version 1 and, being older,
+ * hide the rewrite.
+ */
+export function byLatestVersion(
+  a: { version?: number; _creationTime?: number },
+  b: { version?: number; _creationTime?: number },
+): number {
+  return (b.version ?? 0) - (a.version ?? 0) || (b._creationTime ?? 0) - (a._creationTime ?? 0);
+}
+
+export function latestActiveVersion<T extends { status?: string; version?: number; _creationTime?: number }>(
   docs: T[],
 ): T | null {
   const active = docs
     .filter((doc) => (doc.status ?? "active") === "active")
-    .sort((a, b) => (b.version ?? 1) - (a.version ?? 1));
+    .sort(byLatestVersion);
 
   return active[0] ?? null;
+}
+
+/**
+ * What an admin edit saves for an entry's prompt line or set form: the text trimmed, nothing
+ * when it was sent blank, and the current value when the form didn't send it at all.
+ */
+export function editedLine(sent: string | undefined, current: string | undefined): string | undefined {
+  if (sent === undefined) return current;
+  return sent.trim() || undefined;
 }
 
 export function latestVersion<T extends { version?: number }>(docs: T[]): T | null {

@@ -101,11 +101,12 @@ made a lot of AI requests in a short time, retry in a few minutes. If it says
 several of your AI requests are still running or got no answer today, wait for
 the running ones to finish and try again; once five have gone without an answer
 in a day, topic options and matrix fill come back the next day. If a matrix
-fill says it stopped because the AI didn't finish an answer, the cells it
-reports as filled are saved, and the call it stopped at counts toward those
-five; try the rest later. If your team has used its matrix fills, more become
-available through the day. Library and **Write** assignments keep working
-either way.
+fill says it stopped because the AI didn't finish an answer, any questions it
+wrote before stopping are saved and will show after the Break the Ice team
+reviews them; until then their cells still look empty. The call it stopped at
+counts toward those five; try the rest later. If your team has used its matrix
+fills, more become available through the day. Library and **Write** assignments
+keep working either way.
 
 ### “This schedule is already published or completed”
 
@@ -119,9 +120,24 @@ planner and pick one of the days the week shows.
 **Auto-fill** and **Auto-fill Week** never place a question marked **Flagged**.
 This message means no other question is left for the week: every question that
 matches the matrix's row and column selection is either flagged or already
-assigned this week. Widen the selection, generate a question for an empty cell,
-or use the **Write** or **Topic** tab. To use a flagged question anyway, select
+assigned this week. Widen the selection, or use the **Write** or **Topic** tab.
+A question generated for an empty cell is reviewed before it shows in the
+matrix, so it won't fill the gap today. To use a flagged question anyway, select
 **View full** on it to read the concern, then assign it yourself.
+
+### “This cell already has a question waiting for review”
+
+A question the AI writes for the matrix is reviewed by an admin of the app
+before it appears there. After **Generate** or **Fill Empty Cells** the planner
+says how many questions it wrote, and that they will show after the Break the
+Ice team reviews them. Until then the cell stays empty and isn't written again.
+To assign something now, pick a library question, or use the **Write** or
+**Topic** tab.
+
+If the planner says no new question was written for this cell, nothing was
+added: select **Generate** again, or pick a library question. If **Fill Empty
+Cells** says some cells couldn't be filled, the AI call for those cells failed
+and nothing was written for them; try them again later.
 
 ### The week will not publish
 

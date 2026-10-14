@@ -299,6 +299,8 @@ export const generateAIQuestions = action({
 		tone: v.optional(v.string()),
 		topicId: v.optional(v.id("topics")),
 		topic: v.optional(v.string()),
+		// Ignored since the short brief replaced prompt blueprints. Kept so an admin page loaded
+		// before that deploy can still call this.
 		blueprintSlug: v.optional(v.string()),
 	},
 	returns: v.object({
@@ -316,7 +318,6 @@ export const generateAIQuestions = action({
 			toneSlug: args.tone,
 			topicId: args.topicId,
 			topicSlug: args.topic,
-			blueprintSlug: args.blueprintSlug,
 			excludedQuestions: args.excludedQuestions,
 			currentQuestion: args.currentQuestion,
 			userContext: args.selectedTags.length > 0 ? `Preferred tags: ${args.selectedTags.join(", ")}` : undefined,

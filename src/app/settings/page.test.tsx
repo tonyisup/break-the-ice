@@ -41,9 +41,12 @@ vi.mock("@/components/header", () => ({
 }));
 
 vi.mock("@/components/collapsible-section/CollapsibleSection", () => ({
-  CollapsibleSection: ({ title, children }: any) => (
+  CollapsibleSection: ({ title, children, visibleCount, hiddenCount }: any) => (
     <section>
       <h2>{title}</h2>
+      {visibleCount !== undefined && hiddenCount !== undefined && (
+        <p data-testid={`counts-${title}`}>{`${visibleCount} shown, ${hiddenCount} hidden`}</p>
+      )}
       <div>{children}</div>
     </section>
   ),
@@ -154,5 +157,34 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Manage Tones")).toBeDefined();
     expect(screen.getByText("Reflective")).toBeDefined();
     expect(screen.getByText("Warm")).toBeDefined();
+  });
+
+  // Value: protects=opening Settings never saves on its own, so a hidden style or tone the page doesn't list (an older version waiting to be moved) is neither dropped nor asked about again and again;
+  // fails_when=a clean-up on load comes back and calls the save for ids the page doesn't list, which the server now keeps, so the call would repeat on every render;
+  // why_new=the page had no test of what it does on load with a hidden id it doesn't list;
+  // seam=none; no_claim=what the server does with a save (convex/brief_seed.test.ts covers the save keeping such an entry).
+  it("leaves a hidden style or tone it doesn't list alone on load, and still counts only what it lists", () => {
+    const setHiddenStyles = vi.fn();
+    const setHiddenTones = vi.fn();
+    mockUseStorageContext.mockReturnValue({
+      ...mockUseStorageContext(),
+      // An id the page doesn't list beside the listed style, which is hidden too.
+      hiddenStyles: ["style-old-copy", "style-1"],
+      setHiddenStyles,
+      hiddenTones: ["tone-old-copy"],
+      setHiddenTones,
+    });
+
+    const { rerender } = render(<SettingsPage />);
+    rerender(<SettingsPage />);
+
+    expect(setHiddenStyles).not.toHaveBeenCalled();
+    expect(setHiddenTones).not.toHaveBeenCalled();
+    // The listed style shows as hidden and the listed tone as not, and the counts take in only
+    // what the page lists.
+    expect(screen.getByRole("button", { name: "Toggle style Reflective" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Toggle tone Warm" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("counts-Manage Styles").textContent).toBe("0 shown, 1 hidden");
+    expect(screen.getByTestId("counts-Manage Tones").textContent).toBe("1 shown, 0 hidden");
   });
 });

@@ -1,7 +1,7 @@
 // Picking the best of a judged batch and reading the owner's labels on it (evals/selectRecord.mjs),
 // and the owner's decisions the judge is shown (judgeContext in evals/judgeRecord.mjs).
 import { describe, expect, test } from "vitest";
-import { MIN_PASS_CARDS, briefDefinitions, contextLabel, definitionsLabel, judgeContext } from "../evals/judgeRecord.mjs";
+import { MIN_PASS_CARDS, contextLabel, judgeContext } from "../evals/judgeRecord.mjs";
 import { PICK_MIN_CONFIDENCE, clearsBar, drawSet, scoreSet } from "../evals/selectRecord.mjs";
 
 type Verdict = { verdict: "keep" | "hold"; reasons: string[]; safety: string[]; confidence: number };
@@ -72,41 +72,6 @@ describe("the owner's decisions shown to the judge", () => {
     expect(contextLabel(decisions)).toMatch(/^owner-v2-[0-9a-f]{12}$/);
     expect(contextLabel(decisions)).toBe(contextLabel([decision(1, "a")]));
     expect(contextLabel(decisions)).not.toBe(contextLabel([decision(2, "a")]));
-  });
-});
-
-describe("the brief's lines as the judge's definitions", () => {
-  const taxonomy = {
-    styles: { a: { name: "Style A", brief: "Pick one." }, b: { name: "Style B", brief: "Two options.", form: "'X or Y?'." } },
-    tones: { t: { name: "Tone T", brief: "Plain." } },
-    topics: { food: { name: "Food", brief: "Eating." } },
-  };
-  const old = (slug: string) => ({ slug, name: "Old name", definition: "Old template: <fill in>?" });
-
-  test("each is the brief's sentence, with a style's set form, under the brief's name", () => {
-    expect(briefDefinitions({ style: old("b"), tone: old("t"), topic: old("food") }, taxonomy)).toEqual({
-      style: { slug: "b", name: "Style B", definition: "Two options. Set form: 'X or Y?'." },
-      tone: { slug: "t", name: "Tone T", definition: "Plain." },
-      topic: { slug: "food", name: "Food", definition: "Eating." },
-    });
-    expect(briefDefinitions({ style: old("a"), tone: old("t"), topic: null }, taxonomy)).toEqual({
-      style: { slug: "a", name: "Style A", definition: "Pick one." },
-      tone: { slug: "t", name: "Tone T", definition: "Plain." },
-      topic: null,
-    });
-  });
-
-  test("a style, tone or topic the brief has no line for gives nothing, so the caller can stop", () => {
-    expect(briefDefinitions({ style: old("zz"), tone: old("t"), topic: null }, taxonomy)).toBeNull();
-    expect(briefDefinitions({ style: old("a"), tone: old("zz"), topic: null }, taxonomy)).toBeNull();
-    expect(briefDefinitions({ style: old("a"), tone: old("t"), topic: old("zz") }, taxonomy)).toBeNull();
-  });
-
-  test("the label names the brief's version and its lines, so one reworded line gives another label", () => {
-    const label = definitionsLabel({ version: 2, ...taxonomy });
-    expect(label).toMatch(/^brief-v2-[0-9a-f]{12}$/);
-    expect(definitionsLabel({ version: 2, ...taxonomy })).toBe(label);
-    expect(definitionsLabel({ version: 2, ...taxonomy, tones: { t: { name: "Tone T", brief: "Plainer." } } })).not.toBe(label);
   });
 });
 

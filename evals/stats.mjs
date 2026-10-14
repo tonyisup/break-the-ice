@@ -5,6 +5,19 @@ import { createHash } from "node:crypto";
 /** A short, stable fingerprint of any JSON value. */
 export const hashOf = (value) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 
+/**
+ * A fingerprint of what each batch's prompt was written from: its wording, and the versions of
+ * the style, tone and topic. A record made before the app generated with the brief names a
+ * blueprint where a later one has a prompt label, and hashes as it always did.
+ */
+export function taxonomyHashOf(okBatches) {
+  return hashOf(
+    okBatches
+      .map((batch) => [batch.seed.id, batch.result.promptLabel ?? batch.result.blueprint, batch.result.style, batch.result.tone, batch.result.topic])
+      .sort(),
+  );
+}
+
 /** Rounds to `places` decimals; null for a missing or non-finite value instead of a fake 0. */
 export const round = (n, places = 3) =>
   typeof n === "number" && Number.isFinite(n) ? Math.round(n * 10 ** places) / 10 ** places : null;

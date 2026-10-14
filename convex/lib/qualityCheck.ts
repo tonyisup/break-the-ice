@@ -15,8 +15,10 @@ import { taxonomyDefinition } from "./taxonomyDefinitions";
 export const QUALITY_CHECK_MODEL = "anthropic/claude-opus-5.5";
 // Bumped when the instructions, the parser's rules or the publish rule change after a release,
 // so verdicts can be told apart. 1 is the first released wording; the drafts measured on dev
-// before it carried 1 as well, so a judged file from before the release isn't comparable.
-export const QUALITY_CHECK_PROMPT_VERSION = 1;
+// before it carried 1 as well, so a judged file from before the release isn't comparable. 2 has
+// the same instructions, but the style, tone and topic are described by their line in the short
+// brief, where 1 was shown the old fill-in templates (lib/taxonomyDefinitions.ts).
+export const QUALITY_CHECK_PROMPT_VERSION = 2;
 export const QUALITY_CHECK_TEMPERATURE = 0;
 // The answer is one small JSON object, under 100 tokens. Opus 5.5 spends a few hundred hidden
 // reasoning tokens before it, and they count toward the cap: at 400, 18 of 60 answers on dev
@@ -55,9 +57,11 @@ type QualityCheckMode = "off" | "record" | "publish";
  * QUALITY_CHECK_MODE on this deployment: `off` (the default) schedules no checks and shows no
  * flag. `record` saves a verdict on every question the save step inserts (the feed's, the
  * daily email's, a matrix fill's and the nightly pool's; not one an admin accepts on the
- * generator page) and changes nothing about who can see a question; a hold or a safety flag is then marked on a team's schedule grid and
+ * generator page) and changes nothing about who can see a question; a hold or a safety flag on a public question is then marked on a team's schedule grid and
  * left out of Auto-fill Week and the coach-feedback suggestions until an admin acts on the
- * question (claudeFlag). `publish` is accepted, and behaves as `record` until publishing is built. Anything else is off, with a
+ * question (claudeFlag). Every one of those paths now saves its question held for review, and an
+ * admin's review clears the mark, so it is reached only by a question published before its
+ * path was held. `publish` is accepted, and behaves as `record` until publishing is built. Anything else is off, with a
  * warning, so a misspelled value doesn't pass for a quiet day.
  */
 export function qualityCheckMode(): QualityCheckMode {

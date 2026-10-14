@@ -9,6 +9,7 @@ import {
 	decrementAiUsageForWorkspace,
 } from "../lib/aiUsageWorkspace";
 import { PERSONAL_BILLING_SUBJECT } from "../lib/billingSubjects";
+import { isUserWrittenQuestion } from "../lib/questionAccess";
 
 export const userValidator = v.object({
 	_id: v.id("users"),
@@ -365,8 +366,10 @@ export const updateUsersWithMissingEmbeddingsAction = internalAction({
 // Rows whose question was deleted, or has no text, are skipped, so read a few extra.
 const EXCLUSION_ROWS_PER_TEXT = 4;
 
-// The texts of the questions a user most recently gave `status`, newest first. Personal
-// questions keep their text in `customText`.
+// The texts of the questions a user most recently gave `status`, newest first. A person's own
+// questions, a team's prompts and organization questions are left out: this list goes into the
+// generator's prompt, beside the owner's decisions, and only wording the library holds belongs
+// there.
 async function recentQuestionTexts(
 	ctx: QueryCtx,
 	userId: Id<"users">,
@@ -382,10 +385,7 @@ async function recentQuestionTexts(
 
 	const questions = await Promise.all(rows.map((row) => ctx.db.get(row.questionId)));
 	return questions
-		.flatMap((q) => {
-			const text = q?.text ?? q?.customText;
-			return text ? [text] : [];
-		})
+		.flatMap((q) => (q?.text && !isUserWrittenQuestion(q) ? [q.text] : []))
 		.slice(0, limit);
 }
 

@@ -912,7 +912,10 @@ export const getPoolStats = query({
 	},
 	returns: v.object({
 		totalQuestions: v.number(),
+		/** Approved and not yet handed out. */
 		availableQuestions: v.number(),
+		/** Not handed out because they are still in the review queue. */
+		awaitingReviewQuestions: v.number(),
 		distributedQuestions: v.number(),
 		byStyleTone: v.array(v.object({
 			style: v.string(),
@@ -930,7 +933,11 @@ export const getPoolStats = query({
 			.withIndex("by_poolDate_and_poolStatus", (q) => q.eq("poolDate", args.poolDate))
 			.collect();
 
-		const available = allQuestions.filter(q => q.poolStatus === "available");
+		// A pool question waits for review like any generated one, and is handed out once approved.
+		// One rejected or retired since is neither: it is counted only in the total.
+		const notHandedOut = allQuestions.filter(q => q.poolStatus === "available");
+		const available = notHandedOut.filter(q => isQuestionPublic(q) && !isRetiredQuestion(q));
+		const awaitingReview = notHandedOut.filter(q => q.status === "pending");
 		const distributed = allQuestions.filter(q => q.poolStatus === "distributed");
 
 		const styleToneCounts = new Map<string, { style: string; styleName: string; tone: string; toneName: string; count: number }>();
@@ -962,6 +969,7 @@ export const getPoolStats = query({
 		return {
 			totalQuestions: allQuestions.length,
 			availableQuestions: available.length,
+			awaitingReviewQuestions: awaitingReview.length,
 			distributedQuestions: distributed.length,
 			byStyleTone: Array.from(styleToneCounts.values()).sort((a, b) => b.count - a.count),
 		};
@@ -981,6 +989,10 @@ export const getPoolQuestions = query({
 		text: v.optional(v.string()),
         reviewRevision: v.optional(v.number()),
 		poolStatus: v.optional(v.union(v.literal("available"), v.literal("distributed"))),
+		/** In the review queue, so it can't be handed out yet. */
+		awaitingReview: v.boolean(),
+		/** Approved, not retired and not yet handed out: what Assign hands out. */
+		readyToAssign: v.boolean(),
 		style: v.optional(v.object({
 			_id: v.id("styles"),
 			name: v.string(),
@@ -1037,6 +1049,8 @@ export const getPoolQuestions = query({
 				text: q.text,
                 reviewRevision: q.reviewRevision,
 				poolStatus: q.poolStatus,
+				awaitingReview: q.status === "pending",
+				readyToAssign: q.poolStatus === "available" && isQuestionPublic(q) && !isRetiredQuestion(q),
 				style: styleDoc ? {
 					_id: styleDoc._id,
 					name: styleDoc.name,
@@ -1088,6 +1102,8 @@ export const triggerPoolGeneration = action({
 export const triggerPoolAssignment = action({
 	args: {
 		questionsPerUser: v.optional(v.number()),
+		/** The pool to hand out, by the date it was written (YYYY-MM-DD). Today's when omitted. */
+		poolDate: v.optional(v.string()),
 	},
 	returns: v.object({
 		usersProcessed: v.number(),
@@ -1096,9 +1112,13 @@ export const triggerPoolAssignment = action({
 	}),
 	handler: async (ctx, args): Promise<{ usersProcessed: number; totalAssigned: number; errors: string[] }> => {
 		await ensureAdmin(ctx);
+		if (args.poolDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(args.poolDate)) {
+			throw new ConvexError({ code: "POOL_SETUP", message: "poolDate must be a date written as YYYY-MM-DD." });
+		}
 
 		const result: { usersProcessed: number; totalAssigned: number; errors: string[] } = await ctx.runAction(internal.internal.questions.assignPoolQuestionsToUsers, {
 			questionsPerUser: args.questionsPerUser ?? 6,
+			poolDate: args.poolDate,
 		});
 		return result;
 	},

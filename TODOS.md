@@ -198,12 +198,12 @@
 
 **What:** Three gaps left from the review of the pairs and pick-the-best scripts:
 1. Tie a labels or choices file to its set. `select.mjs score` and `pairs.mjs score` match by card or pair id alone, every pair set starts at `p001`, and a drawn set starts at `q001` unless `--start` is given, so a file from another set is scored without a warning.
-2. Keep Jev scoring off a `--brief` run, or make it right. The run's record carries the app's definitions and blueprint, which the brief never showed the model, so `score.mjs` grades fit against the wrong text and `compare.mjs` sees unchanged definitions.
+2. Decide a comparison without the fit questions when a run was given its own prompt. Such a run records `promptLabel: "given"` and the app's definitions, which that prompt may never have shown the model, and `compare.mjs` only reports the label as a change.
 3. Record the model that answered each check. With `--model`, a judged file records the model asked for, and a preset or router name can resolve to different models between calls.
 
 **Why:** Each can print a number that looks right and isn't, with no error. All three take a script run by hand on the wrong input.
 
-**Context:** (1) `scoreSet` in `evals/selectRecord.mjs`, `scorePairs` in `evals/pairsRecord.mjs` and the `--start` default in `evals/select.mjs`; the first blind set was matched by question text. (2) `generateEvalBatch` in `convex/internal/evals.ts` returns the built prompt's blueprint and definitions also when a prompt was given; see `definitionsHash` in `evals/score.mjs` and the without-fit rule in `evals/compare.mjs`. The README says not to compare such a run, and the gap closes if the brief becomes the app's own prompt. (3) `evalQualityCheck` in `convex/internal/qualityCheck.ts` returns its `model` argument, and `judge()` already has the resolved one. Deferred by the owner during the pre-landing review, 2026-10-12.
+**Context:** (1) `scoreSet` in `evals/selectRecord.mjs`, `scorePairs` in `evals/pairsRecord.mjs` and the `--start` default in `evals/select.mjs`; the first blind set was matched by question text. (2) `generateEvalBatch` in `convex/internal/evals.ts` returns the built prompt's definitions also when a prompt was given; see `taxonomyHashOf` in `evals/stats.mjs` and the without-fit rule in `evals/compare.mjs`. The two runs the eval's own brief wrote (`pairs1-brief`, `cells-brief`) are refused by `score.mjs` and `judge.mjs`. (3) `evalQualityCheck` in `convex/internal/qualityCheck.ts` returns its `model` argument, and `judge()` already has the resolved one. Deferred by the owner during the pre-landing review, 2026-10-12.
 
 **Effort:** S
 **Priority:** P3
@@ -211,25 +211,20 @@
 
 ### Tighten the blind-set scripts after the adversarial review
 
-**What:** Nine points from the last review of the eval scripts. The first two matter before the next `--brief` judging:
-1. Have `judge.mjs --brief` refuse a run whose brief version isn't `brief.json`'s (`pairs1-brief` is version 1, from before the `form` lines), and say when `--brief` is used on a run the app's prompt wrote.
-2. Apply the keeps-one checks in `judge.mjs` and `generate.mjs` only when there is something to send, so a finished name can still be re-read after the decisions file or the brief has changed. A name judged with `--context` before the own-decision rule can't be reprinted today.
-3. Cover the user prompt's wording in a `--brief` run's label, or refuse uncommitted changes to `evals/brief.mjs` and `evals/brief.json` as `generate.mjs` already does for `convex/`.
-4. Record a version of the judge's added context instructions in a judged file and compare it on a rerun, as `promptVersion` is.
-5. Weigh each control by the size of the rest of its batch in the no-picking rate, which leans low when batches differ.
-6. Check the decisions' shape in `generate.mjs --brief` before any paid call, as `judge.mjs --context` does.
-7. Count the seeds `buildPairs` leaves out because one run has no usable question for them, and refuse two runs from different seeds files.
-8. Decide whether the number of cards a cell gets (one for a batch with no pick, four for a full one) tells the labeler too much.
-9. Have the two `score` commands refuse a labels or choices file inside the repo that git doesn't ignore.
+**What:** Six points left from the last review of the eval scripts:
+1. Apply the `--context` label check in `judge.mjs` only when there is something to send, so a finished name can still be re-read after the decisions file has changed. A name judged with `--context` before the own-decision rule can't be reprinted today.
+2. Record a version of the judge's added context instructions in a judged file and compare it on a rerun, as `promptVersion` is.
+3. Weigh each control by the size of the rest of its batch in the no-picking rate, which leans low when batches differ.
+4. Count the seeds `buildPairs` leaves out because one run has no usable question for them, and refuse two runs from different seeds files.
+5. Decide whether the number of cards a cell gets (one for a batch with no pick, four for a full one) tells the labeler too much.
+6. Have the two `score` commands refuse a labels or choices file inside the repo that git doesn't ignore.
 
-Also say in `generate.mjs`'s comment and in the message it records that a `--brief` run's `attempts[].error` still keeps the deployment's stored error for a failed model call, or reduce that field for such runs. The README already says so.
+**Why:** (1) and (2) can put verdicts made under different instructions into one file with no error, or lock a finished file. (3) and (4) shift a printed number a little. (5) and (6) protect the blind and keep the owner's labels out of the repo.
 
-**Why:** (1) to (4) can put verdicts or questions made under different instructions into one file with no error. (5) and (7) shift a printed number a little. (6) can waste a paid call. (8) and (9) protect the blind and keep the owner's labels out of the repo.
+**Context:** (1) the checks near the top of `evals/judge.mjs`. (2) `CONTEXT_INSTRUCTIONS` in `convex/lib/qualityCheck.ts` and what `evalQualityCheck` returns. (3) `wholeBatch` in `evals/selectRecord.mjs`; the key doesn't store each batch's size. (4) `buildPairs` in `evals/pairsRecord.mjs`. (5) `drawSet` in `evals/selectRecord.mjs`: every seed in `seeds-new-cells.json` is a distinct style, tone and topic, all shown on the card. (6) `evals/select.mjs` and `evals/pairs.mjs`. Three more points went away with the eval's own brief, when the app took it over. Deferred by the owner during the adversarial review, 2026-10-12.
 
-**Context:** (1) and (2) the checks near the top of `evals/judge.mjs` and the `reachedModel` check in `evals/generate.mjs`; a run's label and the judge's label hash different things today, so only the `brief-v<N>-` prefix can be compared. (3) `briefLabel` in `evals/brief.mjs` hashes the system prompt, `brief.json` and the decisions, not the lines `briefPrompts` adds around them. (4) `CONTEXT_INSTRUCTIONS` in `convex/lib/qualityCheck.ts` and what `evalQualityCheck` returns. (5) `wholeBatch` in `evals/selectRecord.mjs`; the key doesn't store each batch's size. (6) `briefPrompts` is called before the `try` in `generate.mjs`. (7) `buildPairs` in `evals/pairsRecord.mjs`. (8) `drawSet` in `evals/selectRecord.mjs`: every seed in `seeds-new-cells.json` is a distinct style, tone and topic, all shown on the card. (9) `evals/select.mjs` and `evals/pairs.mjs`. Deferred by the owner during the adversarial review, 2026-10-12.
-
-**Effort:** M
-**Priority:** P2
+**Effort:** S
+**Priority:** P3
 **Depends on:** None
 
 ### Tidy the eval scripts' shared code
@@ -240,7 +235,7 @@ Also say in `generate.mjs`'s comment and in the message it records that a `--bri
 3. Have `buildPairs` read run files with `savedQuestions`.
 4. Read flags with `parseArgs` from `node:util` in the four scripts.
 
-Smaller still: give the `--brief` assertions their own test in `convex/evals_scripts.test.ts` (they sit in the one named for `--model`), have `select.mjs` say "4 or above" from its constant where it writes "or 5" beside it, and test bad arguments in the pure modules so fewer tests start a process.
+Smaller still: have `select.mjs` say "4 or above" from its constant where it writes "or 5" beside it, and test bad arguments in the pure modules so fewer tests start a process.
 
 **Why:** The scripts repeat a little code and read flags four ways, so a change to one is easy to miss in the others. The script tests add a few seconds to every test run.
 
@@ -274,6 +269,54 @@ Smaller still: give the `--brief` assertions their own test in `convex/evals_scr
 **Priority:** P3
 **Depends on:** None
 
+### Don't write a second pool while one waits for review
+
+**What:** Before Generate Pool writes, check for a pool that is still waiting for review or approved and not handed out, and say so.
+
+**Why:** A pool is written only when subscribers are low on unseen questions, and a hand-out used to follow the same day and close that gate. A pool now waits for review and may be handed out on a later day, so the gate stays open and each Generate writes another full pool on system spend, under the daily cap. The pool page shows what is waiting for one date only.
+
+**Context:** `generateNightlyQuestionPool` in `convex/internal/ai.ts` returns early only when no subscriber is low. `by_poolDate_and_poolStatus` finds a date's pool; waiting pools on other dates need a scan or a small index. The commented-out crons in `convex/crons.ts` can't be switched back on as written for the same reason.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Remove what is left of prompt blueprints
+
+**What:** Delete the admin blueprint functions, the blueprint seed rows and the arguments kept for one release.
+
+**Why:** Nothing reads a prompt blueprint since the short brief replaced them. The leftovers were kept so an admin page that was open during that deploy keeps working, and they read as live code.
+
+**Context:** `convex/admin/promptBlueprints.ts` (six functions, no caller); the `promptBlueprints` rows and upsert in `convex/seed.ts`; `blueprintSlug` on `admin/ai:generateAIQuestions` (accepted and ignored; `convex/generation_quality.test.ts` has the test to delete with it); `blueprintId` on `createGenerationRun`; `DEFAULT_BLUEPRINT_SLUG` and the migration stage that seeded it. Keep the `promptBlueprints` table and `generationRuns.blueprintId`: older runs point at a blueprint row. Regenerate `convex/_generated/api.d.ts` after.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** One release after the short brief ships
+
+### Move hidden entries to the live row when the move runs
+
+**What:** Make the batches that move people's hidden styles and tones (`reassignUserStylesBatch`, `reassignUserTonesBatch` in `convex/admin/styles.ts` and `tones.ts`) move each entry to the style's or tone's live row at the time the batch runs, not to the id it was scheduled with.
+
+**Why:** Activation schedules these moves from every older version, and the one-time seed schedules its own. Two activations within seconds, or one during the seed's move, can finish in the wrong order and leave an entry on an archived row. The hidden lists leave such an entry out since 0.7.0.0, so that hide silently stops applying.
+
+**Context:** The question batches already check the target is live. Look the target up with `latestActiveVersion` over the slug's versions each batch. Deferred by the owner at ship review (2026-10-14).
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### List a draft beside a live style that has no version number
+
+**What:** Use the same rule for a missing version number in the admin Styles list as in `byLatestVersion` (`convex/lib/taxonomy.ts`), which counts it as 0.
+
+**Why:** `listStyles` in `convex/admin/styles.ts` lists drafts newer than the live row with `(doc.version ?? 1) > (live.version ?? 1)`. A live style saved before versions existed, with a version-1 draft beside it, never lists that draft, so it can't be activated from the Styles page.
+
+**Context:** The one-time seed leaves such a pair alone, because only one of the two rows is live. Add a case to `convex/admin_taxonomy_versions.test.ts`. Deferred by the owner at ship review (2026-10-14).
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## Quality check
 
 ### Finish the flag a team sees on its schedule grid
@@ -302,9 +345,9 @@ Smaller still: give the `--brief` assertions their own test in `convex/evals_scr
 
 ### Check published questions whose check never landed
 
-**What:** Give `checkPendingQuestions` a way to reach generated questions that were published at once (a matrix fill's or the nightly pool's) and have no verdict.
+**What:** Give `checkPendingQuestions` a way to reach generated questions that were published at once and have no verdict: the ones a matrix fill or the nightly pool wrote before those were held for review.
 
-**Why:** The backfill covers the review queue only. A fill's or pool's question whose check failed twice, or that was saved while the check was off, stays unchecked and shows no flag, which looks the same as a question the check kept.
+**Why:** The backfill covers the review queue only. A fill's or pool's question from before, whose check failed twice or that was saved while the check was off, stays unchecked and shows no flag, which looks the same as a question the check kept. New ones are held, so the backfill reaches them.
 
 **Context:** `heldQuestionsWithoutCheck` in `convex/internal/qualityCheckData.ts` reads pending questions that are held for review. Widening it to every live generated question would also check the library the owner picked by hand and could flag those, so it needs a start date or a marker for "published without review". `checkQuestion` logs when it gives up on a question.
 
@@ -426,6 +469,18 @@ Smaller still: give the `--brief` assertions their own test in `convex/evals_scr
 
 ## Team prompts
 
+### Count only a grid fill's own held questions as taking a cell
+
+**What:** A grid cell should count as taken by a question waiting for review only when a grid fill wrote that question, not when any held AI question for the cell's style and tone exists.
+
+**Why:** Since 0.7.0.0 every generated question is held for review, and the grid's check counts every held AI library question (`isUnlistedAiQuestion`), whoever it was written for. A question from someone's feed, daily email or the nightly pool blocks its style and tone cell on every team's grid, ignoring topic when none is chosen, until it is reviewed. Fill Empty Cells then writes nothing for cells that look empty and says a question is waiting.
+
+**Context:** `collectMatrixOccupiedKeys` and `cellOccupancy` in `convex/core/fillMatrix.ts` read `pageQuestionMatrixCellKeys` and `pageQuestionsMatchingSlugTriple` in `convex/core/questions.ts` with `status: "pending"`. A fill saves its questions through `runPersistedQuestionGeneration` with `purpose: "feed"`, so nothing on the question tells it apart. Give fill runs their own purpose, or mark the question when a fill saves it (and say which organization asked), and count only those. Keep the rule that a fill's own held question takes its cell, so a second fill doesn't write another. Deferred by the owner at ship review (2026-10-14).
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** None
+
 ### Show readable errors for library question schedule changes
 
 **What:** Give `assignQuestion`, `unassignQuestion` and the publish path in `convex/core/schedules.ts` the same readable refusals Team prompts use (`SCHEDULE_NOT_DRAFT`, `SCHEDULE_DAY_INACTIVE`), and show them on the schedule page through `readableError` instead of `e.message`.
@@ -448,6 +503,18 @@ Smaller still: give the `--brief` assertions their own test in `convex/evals_scr
 
 **Effort:** S
 **Priority:** P3
+**Depends on:** None
+
+### Show which grid cells have a question waiting for review
+
+**What:** Mark a schedule-grid cell whose AI question is waiting for review, in place of the Generate button, and keep the mark after a reload.
+
+**Why:** A question written for the grid shows only once an admin approves it. The planner says so in a toast, but after a reload the cell looks empty again, and the only way to learn it is taken is to press Generate and read "This cell already has a question waiting for review."
+
+**Context:** `fillSingleCell` returns `waitingForReview` and `fillEmptyCells` a count, `skippedWaitingForReview` (`convex/core/fillMatrix.ts`); neither names the cells, and nothing the grid reads lists held questions. It needs a query a team member may call that returns only the style, tone and topic of held library questions (`isUnlistedAiQuestion` in `convex/lib/questionAccess.ts`), never their text, and a label in the cell in `src/app/org/schedule/page.tsx`. A line under the Question Matrix heading saying new questions are approved first would help too.
+
+**Effort:** M
+**Priority:** P2
 **Depends on:** None
 
 ## Privacy
@@ -504,7 +571,7 @@ Smaller still: give the `--brief` assertions their own test in `convex/evals_scr
 
 ### Decide what exact-text dedupe does with held and rejected questions
 
-**What:** `insertGeneratedQuestions` skips any candidate whose fingerprint matches an existing question, including held and rejected ones, so that text can never be saved as public by matrix fill, the nightly pool or admin generation. Matrix fill also counts the collision as an existing cell.
+**What:** `insertGeneratedQuestions` skips any candidate whose fingerprint matches an existing question, including held and rejected ones, so that text can never be saved again by matrix fill, the nightly pool or the feed. Matrix fill also counts the collision as an existing cell.
 
 **Why:** Unreviewed and rejected rows quietly block good text and make matrix fill report cells it didn't fill.
 
@@ -540,13 +607,25 @@ Smaller still: give the `--brief` assertions their own test in `convex/evals_scr
 
 ### Scope generation's slug lookups to the caller's organization
 
-**What:** Slug lookups in generation aren't organization-scoped the way ID lookups now are. The specifics are in the owner's private plan doc ("Security follow-ups").
+**What:** Slug lookups in generation aren't organization-scoped the way ID lookups now are. The specifics are in the owner's private plan doc ("Security follow-ups"). Also decide whether a question a grid fill writes under a team's own topic belongs to that team rather than the shared library.
 
-**Why:** Taxonomy lookups should respect organization boundaries everywhere.
+**Why:** Taxonomy lookups should respect organization boundaries everywhere. Since 0.7.0.0 a batch grid fill with topics along one side passes each cell's topic, so the lookup is reached from more places.
 
-**Context:** `convex/internal/generation.ts`; `resolveTaxonomySlug` in `convex/lib/taxonomyLookup.ts` already takes an organization. Pre-existing; noticed in the v0.3.0.0 review.
+**Context:** `convex/internal/generation.ts`; `resolveTaxonomySlug` in `convex/lib/taxonomyLookup.ts` already takes an organization. The grid's callers are in `convex/core/fillMatrix.ts`. Pre-existing; noticed in the v0.3.0.0 review, widened in 0.7.0.0. Every such question still waits for review before any list shows it.
 
 **Effort:** S
+**Priority:** P1
+**Depends on:** None
+
+### Record a reason when a question is rejected in the review queue
+
+**What:** Let Reject in the review queue take the four editorial reasons, and have the brief read them.
+
+**Why:** The brief shows the model questions the owner rejected, with the reason for each. It reads retired questions whose approved prune review has `editorialReasons` (`readBriefExamples` in `convex/internal/generation.ts`). Reject in the queue saves the question as private with a free-text reason and writes no such row, so nothing rejected there reaches a prompt, and every generated question now passes through that queue.
+
+**Context:** Only the prune page's flag form writes `editorialReasons` (`convex/admin/pruning.ts`). Until the labeled rejects are imported with their reasons (issue #349), production has none, and the "rejected" section of the prompt is empty. Either store the queue's reasons where the brief already reads, or have `readBriefExamples` also read AI questions rejected in review. A person's own submission must stay out either way (`isUserWrittenQuestion`). Add a test that a queue rejection shows up in the next prompt for its style.
+
+**Effort:** M
 **Priority:** P2
 **Depends on:** None
 
@@ -651,6 +730,18 @@ Smaller still: give the `--brief` assertions their own test in `convex/evals_scr
 **Effort:** S
 **Priority:** P3
 **Depends on:** A growing review backlog
+
+### Find a taken grid cell by index, not by reading every question
+
+**What:** Give `questions` an index on the fields the grid's cell check compares, and read that range.
+
+**Why:** To learn whether a cell is taken, a fill pages through every public question and every question waiting for review, 256 at a time (`collectMatrixOccupiedKeys` and `cellOccupancy` in `convex/core/fillMatrix.ts`). An empty cell, the case that goes on to generate, never matches, so each Generate reads the whole library and the whole review queue first. It is a handful of reads at a few hundred questions and about 80 calls at 20,000.
+
+**Context:** `pageQuestionMatrixCellKeys` and `pageQuestionsMatchingSlugTriple` in `convex/core/questions.ts` read `by_status` and compare style, tone and topic in code. An index such as `["style", "tone", "status"]` lets an empty cell read no rows; the topic and held-for-review tests can stay as filters on the few rows left. For a whole grid, look up the request's cells (50 at most) through the same index.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** None
 
 ## Tests and docs
 

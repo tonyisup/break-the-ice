@@ -7,7 +7,6 @@ import { runTopicPreviewWithUsage } from "./teamPromptActions";
 import { billedFailure, wasAiCallBilled } from "../lib/aiSpendGuard";
 import { convexErrorData } from "../lib/errorData";
 import { openRouterClient } from "../lib/generationRunner";
-import { DEFAULT_BLUEPRINT_SLUG } from "../lib/promptArchitecture";
 import {
   ERROR_CODES,
   ERROR_MESSAGES,
@@ -72,10 +71,10 @@ describe("runTopicPreviewWithUsage", () => {
 
     await runTopicPreviewWithUsage(ctx, { ...args, boundaries: undefined }, generate);
 
-    const { userContext } = generate.mock.calls[0][1];
-    expect(userContext).toContain("Team conversation topic: Launch readiness\n");
-    expect(userContext).toContain("Desired outcome: Surface unspoken concerns.\n");
-    expect(userContext).not.toContain("Boundaries:");
+    const { userContext, withoutRejected } = generate.mock.calls[0][1];
+    expect(userContext).toBe("Team conversation topic: Launch readiness\nDesired outcome: Surface unspoken concerns.");
+    // The answer goes straight back to the team, so the owner's rejections stay out of its prompt.
+    expect(withoutRejected).toBe(true);
   });
 
   it("restores reserved usage when preview generation fails", async () => {
@@ -194,17 +193,6 @@ describe("previewTopicQuestions", () => {
   async function setup() {
     const t = convexTest(schema, convexFunctionModules);
     const ids = await t.run(async (ctx) => {
-      await ctx.db.insert("promptBlueprints", {
-        slug: DEFAULT_BLUEPRINT_SLUG,
-        version: 1,
-        status: "active",
-        systemInstruction: "",
-        safetyChecklist: [],
-        qualityChecklist: [],
-        outputFormatInstruction: "",
-        createdAt: 0,
-        updatedAt: 0,
-      });
       const userId = await ctx.db.insert("users", { email: MANAGER.email, clerkId: MANAGER.subject });
       const organizationId = await ctx.db.insert("organizations", { name: "Launch Crew", planTier: "team", billingStatus: "active" });
       await ctx.db.insert("organization_members", { userId, organizationId, role: "manager" });
@@ -292,9 +280,9 @@ describe("previewTopicQuestions", () => {
       })
       .catch(() => undefined);
 
-    const prompt = JSON.stringify(create.mock.calls[0][0]);
-    expect(prompt).toContain("Team conversation topic: Launch readiness\\n");
-    expect(prompt).toContain("Desired outcome: Surface unspoken concerns.\\n");
-    expect(prompt).not.toContain("Boundaries:");
+    const [, user] = (create.mock.calls[0][0] as { messages: Array<{ content: string }> }).messages;
+    // The team's words go in as quoted lines of notes, trimmed.
+    expect(user.content).toContain('\n- "Team conversation topic: Launch readiness"\n- "Desired outcome: Surface unspoken concerns."\n');
+    expect(user.content).not.toContain("Boundaries:");
   });
 });

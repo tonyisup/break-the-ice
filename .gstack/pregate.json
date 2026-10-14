@@ -1,0 +1,121 @@
+{
+  "$schema": "https://github.com/garrytan/gstack/docs/pregate.md#pregate-v1",
+  "runner": "npx vitest run {files}",
+  "dependencies": {
+    "convex/internal/evals.ts": [
+      "convex/evals.test.ts"
+    ],
+    "convex/internal/qualityCheck.ts": [
+      "convex/quality_check.test.ts"
+    ],
+    "evals/generate.mjs": [
+      "convex/evals_scripts.test.ts"
+    ],
+    "evals/judge.mjs": [
+      "convex/evals_scripts.test.ts"
+    ],
+    "evals/pairs.mjs": [
+      "convex/evals_scripts.test.ts"
+    ],
+    "evals/select.mjs": [
+      "convex/evals_scripts.test.ts"
+    ],
+    "evals/brief.json": [
+      "convex/evals_pairs.test.ts",
+      "convex/evals_scripts.test.ts"
+    ],
+    "evals/seeds*.json": [
+      "convex/evals_pairs.test.ts",
+      "convex/evals_scripts.test.ts"
+    ],
+    "convex/_generated/api.d.ts": [],
+    "convex/admin/ai.ts": [
+      "convex/admin_ai.test.ts",
+      "convex/ai_spend_completion.test.ts",
+      "convex/generation_quality.test.ts"
+    ],
+    "convex/admin/questions.ts": [
+      "convex/generation_quality.test.ts",
+      "convex/quality_check.test.ts",
+      "convex/question_review.test.ts"
+    ],
+    "convex/admin/styles.ts": [
+      "convex/admin_taxonomy_versions.test.ts"
+    ],
+    "convex/admin/tones.ts": [
+      "convex/admin_taxonomy_versions.test.ts"
+    ],
+    "convex/admin/topics.ts": [
+      "convex/admin_taxonomy_versions.test.ts"
+    ],
+    "convex/core/fillMatrix.ts": [
+      "convex/generation_quality.test.ts",
+      "convex/ai_spend_completion.test.ts",
+      "convex/quality_check.test.ts",
+      "convex/ai_rate_limit.test.ts"
+    ],
+    "convex/internal/ai.ts": [
+      "convex/generation_quality.test.ts",
+      "convex/ai_spend_completion.test.ts",
+      "convex/quality_check.test.ts"
+    ],
+    "convex/internal/generation.ts": [
+      "convex/brief.test.ts",
+      "convex/brief_seed.test.ts",
+      "convex/generation_quality.test.ts"
+    ],
+    "evals/score.mjs": [
+      "convex/evals_scripts.test.ts"
+    ],
+    "convex/core/questions.ts": [
+      "convex/generation_quality.test.ts",
+      "convex/quality_check.test.ts"
+    ],
+    "convex/internal/questions.ts": [
+      "convex/generation_quality.test.ts",
+      "convex/quality_check.test.ts"
+    ],
+    "convex/internal/migrations.ts": [
+      "convex/brief_seed.test.ts"
+    ],
+    "convex/core/teamPromptActions.ts": [
+      "convex/core/teamPromptActions.test.ts",
+      "convex/generation_quality.test.ts"
+    ],
+    "convex/lib/evalChecks.ts": [
+      "convex/evals.test.ts"
+    ],
+    "convex/admin/promptBlueprints.ts": [
+      "convex/admin_taxonomy_versions.test.ts"
+    ],
+    "convex/crons.ts": [
+      "convex/admin_taxonomy_versions.test.ts"
+    ],
+    "convex/core/userSettings.ts": [
+      "convex/brief_seed.test.ts",
+      "convex/quality_check.test.ts",
+      "convex/question_access.test.ts",
+      "convex/workspace_engagement.test.ts"
+    ],
+    "convex/internal/users.ts": [
+      "convex/internal/users.test.ts",
+      "convex/generation_quality.test.ts"
+    ],
+    "evals/runs/**": [],
+    "**/*.md": [],
+    "VERSION": [],
+    "package.json": [],
+    "package-lock.json": [],
+    ".gitignore": [],
+    ".gstack/pregate.json": []
+  },
+  "selection": {},
+  "warn": [
+    "literals"
+  ],
+  "strays": {
+    "allow": [
+      ".gstack"
+    ]
+  }
+}

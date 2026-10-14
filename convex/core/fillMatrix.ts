@@ -2,22 +2,12 @@
 
 import { ConvexError, v } from "convex/values";
 import { action, type ActionCtx } from "../_generated/server";
-import { api, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { runPersistedQuestionGeneration, wasCutOffFailure } from "../lib/generationRunner";
 import { ensureAiRateLimit, ensureAiUnansweredLeft, isAiStopError, MATRIX_FILL_MAX_CELLS } from "../lib/aiRateLimit";
 import { ensureAiBudget, keptAiReservation } from "../lib/aiSpendGuard";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
-
-async function pickRandomActiveTopicSlug(ctx: ActionCtx): Promise<string> {
-	const topics = await ctx.runQuery(api.core.topics.getTopics, {});
-	if (topics.length === 0) {
-		throw new Error(
-			"No active topics in the catalog. Add a topic in admin or pick a global topic in the UI.",
-		);
-	}
-	return topics[Math.floor(Math.random() * topics.length)]!.slug;
-}
 
 const axisValidator = v.union(
 	v.literal("style"),
@@ -48,9 +38,10 @@ async function collectMatrixOccupiedKeys(
 	axisY: "style" | "tone" | "topic",
 	axisX: "style" | "tone" | "topic",
 	topicSlug: string | undefined,
-): Promise<Set<string>> {
-	const occupied = new Set<string>();
-	for (const status of ["public", "approved", null] as const) {
+): Promise<Map<string, "listed" | "waiting">> {
+	const occupied = new Map<string, "listed" | "waiting">();
+	// A cell with a question waiting for review is taken too, or every fill would write it another.
+	for (const status of ["public", "approved", null, "pending"] as const) {
 		let cursor: string | null = null;
 		let done = false;
 		do {
@@ -65,7 +56,8 @@ async function collectMatrixOccupiedKeys(
 				},
 			);
 			for (const k of page.keys) {
-				occupied.add(k);
+				if (status !== "pending") occupied.set(k, "listed");
+				else if (!occupied.has(k)) occupied.set(k, "waiting");
 			}
 			done = page.isDone;
 			cursor = page.continueCursor;
@@ -74,11 +66,12 @@ async function collectMatrixOccupiedKeys(
 	return occupied;
 }
 
-async function publicSlugTripleExists(
+/** Whether a cell already has a question the grid lists, or one waiting for review, or neither. */
+async function cellOccupancy(
 	ctx: ActionCtx,
 	args: { styleSlug: string; toneSlug: string; topicSlug?: string },
-): Promise<boolean> {
-	for (const status of ["public", "approved", null] as const) {
+): Promise<"listed" | "waiting" | null> {
+	for (const status of ["public", "approved", null, "pending"] as const) {
 		let cursor: string | null = null;
 		let done = false;
 		do {
@@ -93,13 +86,13 @@ async function publicSlugTripleExists(
 				},
 			);
 			if (page.found) {
-				return true;
+				return status === "pending" ? "waiting" : "listed";
 			}
 			done = page.isDone;
 			cursor = page.continueCursor;
 		} while (!done);
 	}
-	return false;
+	return null;
 }
 
 /**
@@ -107,8 +100,9 @@ async function publicSlugTripleExists(
  * only the cells this request filled: some of the cells asked for may have been filled already.
  */
 function fillStoppedMessage(filledCells: number): string {
-	const filled = filledCells === 1 ? "1 cell" : `${filledCells} cells`;
-	return `Filled ${filled}, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.`;
+	if (filledCells === 0) return "Stopped before any question was written, because the AI didn't finish an answer. Try again later.";
+	const cells = filledCells === 1 ? "1 cell" : `${filledCells} cells`;
+	return `Wrote questions for ${cells}, then stopped because the AI didn't finish an answer. The questions written are saved and will show here after the Break the Ice team reviews them. Try the rest again later.`;
 }
 
 /**
@@ -128,7 +122,10 @@ function questionsPerCell(count: number | undefined): number {
 /**
  * Fill empty cells on the 2D schedule matrix (one generation per visible cell).
  * Each entry matches how the UI buckets questions: same axis-Y slug and axis-X slug,
- * with a shared topic for ALL cells (or random if topicSlug is omitted).
+ * with a shared topic for ALL cells, or no topic when topicSlug is omitted. On a grid with
+ * topics along one side, each cell's question is written under that cell's topic. A new question
+ * waits for review like any other generated one: the grid lists it once an admin approves it,
+ * and until then its cell counts as taken.
  */
 export const fillEmptyCells = action({
 	args: {
@@ -143,7 +140,10 @@ export const fillEmptyCells = action({
 				toneSlug: v.string(),
 			}),
 		),
-		/** Optional: one topic applied to EVERY cell. If omitted, each cell gets a random topic. */
+		/**
+		 * Optional: one topic applied to EVERY cell. If omitted, the cells are generated with no
+		 * topic. Not used when an axis is "topic": each cell then has its own.
+		 */
 		topicSlug: v.optional(v.string()),
 		countPerCell: v.optional(v.number()),
 	},
@@ -152,6 +152,8 @@ export const fillEmptyCells = action({
 		filledCells: v.number(),
 		totalQuestionsGenerated: v.number(),
 		skippedExisting: v.number(),
+		/** How many of the skipped cells look empty on the grid: their question is waiting for review. */
+		skippedWaitingForReview: v.number(),
 		skippedInvalidTaxonomy: v.number(),
 	}),
 	handler: async (ctx, args) => {
@@ -172,33 +174,42 @@ export const fillEmptyCells = action({
 		let totalCells = 0;
 		let filledCells = 0;
 		let skippedExisting = 0;
+		let skippedWaitingForReview = 0;
 		let skippedInvalidTaxonomy = 0;
 		let totalGenerated = 0;
+
+		// A topic is a theme chosen on purpose: the one the whole grid is given, or, on a grid
+		// with topics along one side, the cell's own, which is also what makes the question
+		// land in that cell. With none chosen, a question is written for its style and tone
+		// alone: a topic stacked on at random got questions rejected more often.
+		const hasTopicAxis = args.axisY === "topic" || args.axisX === "topic";
+		const sharedTopic = hasTopicAxis ? undefined : args.topicSlug || undefined;
+		const topicOf = (cell: { ySlug: string; xSlug: string }): string | undefined =>
+			args.axisY === "topic" ? cell.ySlug : args.axisX === "topic" ? cell.xSlug : sharedTopic;
 
 		const occupied = await collectMatrixOccupiedKeys(
 			ctx,
 			args.axisY,
 			args.axisX,
-			args.topicSlug,
+			sharedTopic,
 		);
 
 		for (const cell of args.cells) {
 			totalCells++;
-
-			const effectiveTopic =
-				args.topicSlug !== undefined && args.topicSlug !== ""
-					? args.topicSlug
-					: await pickRandomActiveTopicSlug(ctx);
+			const effectiveTopic = topicOf(cell);
 
 			const cellKey = `${cell.ySlug}|${cell.xSlug}`;
-			if (occupied.has(cellKey)) {
+			const taken = occupied.get(cellKey);
+			if (taken) {
 				skippedExisting++;
+				if (taken === "waiting") skippedWaitingForReview++;
 				continue;
 			}
 
+			const lockKey = `${cell.styleSlug}|${cell.toneSlug}|${effectiveTopic ?? ""}`;
 			const claim = await ctx.runMutation(
 				internal.internal.matrixFillLocks.claimMatrixFillCell,
-				{ organizationId: args.organizationId, cellKey },
+				{ organizationId: args.organizationId, cellKey: lockKey },
 			);
 			if (!claim.claimed) {
 				skippedExisting++;
@@ -222,9 +233,9 @@ export const fillEmptyCells = action({
 				if (result.saveResult.insertedCount > 0) {
 					filledCells++;
 					totalGenerated += result.saveResult.insertedCount;
-					occupied.add(cellKey);
+					occupied.set(cellKey, "waiting");
 					console.log(
-						`Filled matrix cell (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug}, topic=${effectiveTopic ?? "random"}) → ${result.saveResult.insertedCount} questions`,
+						`Filled matrix cell (${args.axisY}=${cell.ySlug}, ${args.axisX}=${cell.xSlug}, topic=${effectiveTopic ?? "none"}) → ${result.saveResult.insertedCount} questions`,
 					);
 				} else {
 					skippedExisting++;
@@ -264,7 +275,7 @@ export const fillEmptyCells = action({
 			} finally {
 				await ctx.runMutation(internal.internal.matrixFillLocks.releaseMatrixFillCell, {
 					organizationId: args.organizationId,
-					cellKey,
+					cellKey: lockKey,
 				});
 			}
 		}
@@ -274,14 +285,15 @@ export const fillEmptyCells = action({
 			filledCells,
 			totalQuestionsGenerated: totalGenerated,
 			skippedExisting,
+			skippedWaitingForReview,
 			skippedInvalidTaxonomy,
 		};
 	},
 });
 
 /**
- * Generate questions for a single cell.
- * Guarded: skips if the cell already has questions.
+ * Generate questions for a single cell. They wait for review before the grid lists them.
+ * Guarded: skips if the cell already has questions, listed or waiting for review.
  */
 export const fillSingleCell = action({
 	args: {
@@ -294,11 +306,13 @@ export const fillSingleCell = action({
 	returns: v.object({
 		count: v.number(),
 		questionIds: v.array(v.id("questions")),
+		/** The cell has a question in the review queue: one just written, or one from before. */
+		waitingForReview: v.boolean(),
 	}),
 	handler: async (
 		ctx,
 		args,
-	): Promise<{ count: number; questionIds: Id<"questions">[] }> => {
+	): Promise<{ count: number; questionIds: Id<"questions">[]; waitingForReview: boolean }> => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity?.tokenIdentifier) {
 			throw new Error("Not authenticated");
@@ -309,28 +323,25 @@ export const fillSingleCell = action({
 
 		const clampedCount = questionsPerCell(args.count);
 
-		const effectiveTopic =
-			args.topicSlug !== undefined && args.topicSlug !== ""
-				? args.topicSlug
-				: await pickRandomActiveTopicSlug(ctx);
+		// As in fillEmptyCells: no topic chosen means no topic.
+		const effectiveTopic = args.topicSlug || undefined;
 
-		if (
-			await publicSlugTripleExists(ctx, {
-				styleSlug: args.styleSlug,
-				toneSlug: args.toneSlug,
-				topicSlug: effectiveTopic,
-			})
-		) {
-			return { count: 0, questionIds: [] };
+		const occupancy = await cellOccupancy(ctx, {
+			styleSlug: args.styleSlug,
+			toneSlug: args.toneSlug,
+			topicSlug: effectiveTopic,
+		});
+		if (occupancy) {
+			return { count: 0, questionIds: [], waitingForReview: occupancy === "waiting" };
 		}
 
-		const cellKey = `${args.styleSlug}|${args.toneSlug}|${effectiveTopic}`;
+		const cellKey = `${args.styleSlug}|${args.toneSlug}|${effectiveTopic ?? ""}`;
 		const claim = await ctx.runMutation(
 			internal.internal.matrixFillLocks.claimMatrixFillCell,
 			{ organizationId: args.organizationId, cellKey },
 		);
 		if (!claim.claimed) {
-			return { count: 0, questionIds: [] };
+			return { count: 0, questionIds: [], waitingForReview: false };
 		}
 
 		try {
@@ -349,6 +360,7 @@ export const fillSingleCell = action({
 			return {
 				count: result.saveResult.insertedCount,
 				questionIds: result.saveResult.insertedQuestionIds,
+				waitingForReview: result.saveResult.insertedCount > 0,
 			};
 		} finally {
 			await ctx.runMutation(internal.internal.matrixFillLocks.releaseMatrixFillCell, {

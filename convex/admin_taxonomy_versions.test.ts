@@ -1,13 +1,17 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
+import OpenAI from "openai";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { openRouterClient } from "./lib/generationRunner";
 import schema from "./schema";
 
 const adminIdentity = { metadata: { isAdmin: "true" } };
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("taxonomy version activation", () => {
@@ -292,5 +296,298 @@ describe("taxonomy version activation", () => {
       counts.current.every((question) => question.styleVersion === 2),
     ).toBe(true);
     expect(counts.userStyle?.styleId).toBe(newStyleId);
+  });
+});
+
+describe("the prompt line on admin edits", () => {
+  // Saving a topic queues its embedding. Nothing here runs queued work, and if something did,
+  // these stop a call from leaving the machine.
+  function app() {
+    vi.useFakeTimers();
+    vi.spyOn(openRouterClient.chat.completions, "create").mockRejectedValue(new Error("unexpected model call"));
+    vi.spyOn(OpenAI.Embeddings.prototype, "create").mockRejectedValue(new Error("unexpected embedding call"));
+    const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+    return { t, admin: t.withIdentity(adminIdentity) };
+  }
+  type App = ReturnType<typeof app>;
+  type AnyId = Id<"styles"> | Id<"tones"> | Id<"topics">;
+  type Row = { _id: AnyId; status?: string; version?: number; brief?: string; form?: string };
+  type Seed = { status: "draft" | "active"; version: number; brief?: string };
+
+  const styleForm = { name: "Either/Or", structure: "Offer two options", color: "#111111", icon: "sparkles" };
+  const toneForm = { name: "Warm", promptGuidanceForAI: "Be warm", color: "#111111", icon: "sun" };
+  const newestFirst = (rows: Row[]) => rows.sort((a, b) => (b.version ?? 0) - (a.version ?? 0));
+
+  // The same three things for each list: seed a row, send the admin form, read the rows back.
+  const kinds: Array<{
+    kind: string;
+    slug: string;
+    seed: (t: App["t"], fields: Seed) => Promise<AnyId>;
+    create: (admin: App["admin"], slug: string, line: { brief?: string }) => Promise<unknown>;
+    edit: (admin: App["admin"], id: AnyId, line: { brief?: string }) => Promise<unknown>;
+    rows: (t: App["t"], slug: string) => Promise<Row[]>;
+  }> = [
+    {
+      kind: "style",
+      slug: "either-or",
+      seed: (t, fields) => t.run((ctx) => ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, ...fields })),
+      create: (admin, slug, line) => admin.mutation(api.admin.styles.createStyle, { id: slug, ...styleForm, ...line }),
+      edit: (admin, id, line) =>
+        admin.mutation(api.admin.styles.updateStyle, { _id: id as Id<"styles">, id: "either-or", ...styleForm, ...line }),
+      rows: (t, slug) =>
+        t.run(async (ctx) => newestFirst(await ctx.db.query("styles").withIndex("by_slug", (q) => q.eq("slug", slug)).collect())),
+    },
+    {
+      kind: "tone",
+      slug: "warm",
+      seed: (t, fields) => t.run((ctx) => ctx.db.insert("tones", { id: "warm", slug: "warm", ...toneForm, ...fields })),
+      create: (admin, slug, line) => admin.mutation(api.admin.tones.createTone, { id: slug, ...toneForm, ...line }),
+      edit: (admin, id, line) => admin.mutation(api.admin.tones.updateTone, { _id: id as Id<"tones">, ...toneForm, ...line }),
+      rows: (t, slug) =>
+        t.run(async (ctx) => newestFirst(await ctx.db.query("tones").withIndex("by_slug", (q) => q.eq("slug", slug)).collect())),
+    },
+    {
+      kind: "topic",
+      slug: "weekends",
+      seed: (t, fields) => t.run((ctx) => ctx.db.insert("topics", { id: "weekends", slug: "weekends", name: "Weekends", ...fields })),
+      create: (admin, slug, line) => admin.mutation(api.admin.topics.createTopic, { id: slug, name: "Weekends", ...line }),
+      edit: (admin, id, line) => admin.mutation(api.admin.topics.updateTopic, { _id: id as Id<"topics">, name: "Weekends", ...line }),
+      rows: (t, slug) =>
+        t.run(async (ctx) => newestFirst(await ctx.db.query("topics").withIndex("by_slug", (q) => q.eq("slug", slug)).collect())),
+    },
+  ];
+
+  for (const { kind, slug, seed, create, edit, rows } of kinds) {
+    test(`creating a ${kind} saves its prompt line trimmed, and a blank line or none saves no line`, async () => {
+      const { t, admin } = app();
+
+      await create(admin, "with-a-line", { brief: "  Two everyday things, and the person picks one.  " });
+      await create(admin, "blank-line", { brief: "   " });
+      await create(admin, "no-line", {});
+
+      expect(await rows(t, "with-a-line")).toMatchObject([
+        { status: "draft", version: 1, brief: "Two everyday things, and the person picks one." },
+      ]);
+      expect((await rows(t, "blank-line"))[0]).not.toHaveProperty("brief");
+      expect((await rows(t, "no-line"))[0]).not.toHaveProperty("brief");
+    });
+
+    test(`editing a live ${kind} keeps its prompt line on the new version, and a line that is sent replaces it or clears it`, async () => {
+      const { t, admin } = app();
+      const live = await seed(t, { status: "active", version: 1, brief: "The old line." });
+      const newest = async () => (await rows(t, slug))[0];
+
+      // An admin page loaded before the field existed sends no line at all.
+      await edit(admin, live, {});
+      expect(await newest()).toMatchObject({ status: "draft", version: 2, brief: "The old line." });
+
+      await edit(admin, live, { brief: "  A new line.  " });
+      expect(await newest()).toMatchObject({ status: "draft", version: 3, brief: "A new line." });
+
+      await edit(admin, live, { brief: " " });
+      const cleared = await newest();
+      expect(cleared).toMatchObject({ status: "draft", version: 4 });
+      expect(cleared).not.toHaveProperty("brief");
+
+      // The live row is the one the generator reads until a draft is activated.
+      expect((await rows(t, slug)).at(-1)).toMatchObject({ _id: live, status: "active", brief: "The old line." });
+    });
+
+    test(`editing a draft ${kind} keeps, replaces or clears its prompt line in place`, async () => {
+      const { t, admin } = app();
+      const draft = await seed(t, { status: "draft", version: 1, brief: "The old line." });
+      const theDraft = async () => {
+        const all = await rows(t, slug);
+        expect(all).toHaveLength(1);
+        return all[0];
+      };
+
+      await edit(admin, draft, {});
+      expect(await theDraft()).toMatchObject({ _id: draft, status: "draft", brief: "The old line." });
+
+      await edit(admin, draft, { brief: "  A new line.  " });
+      expect(await theDraft()).toMatchObject({ _id: draft, brief: "A new line." });
+
+      await edit(admin, draft, { brief: "" });
+      expect(await theDraft()).not.toHaveProperty("brief");
+    });
+  }
+
+  test("a style's set form is saved, kept, replaced and cleared the same way, and its prompt line is left alone", async () => {
+    const { t, admin } = app();
+    const style = kinds[0];
+    const edit = (id: AnyId, fields: { brief?: string; form?: string }) =>
+      admin.mutation(api.admin.styles.updateStyle, { _id: id as Id<"styles">, id: "either-or", ...styleForm, ...fields });
+
+    await admin.mutation(api.admin.styles.createStyle, { id: "one-word", ...styleForm, form: "  The answer is one word.  " });
+    await admin.mutation(api.admin.styles.createStyle, { id: "no-form", ...styleForm, form: " " });
+    expect((await style.rows(t, "one-word"))[0].form).toBe("The answer is one word.");
+    expect((await style.rows(t, "no-form"))[0]).not.toHaveProperty("form");
+
+    const live = await t.run((ctx) =>
+      ctx.db.insert("styles", {
+        id: "either-or",
+        slug: "either-or",
+        ...styleForm,
+        status: "active",
+        version: 1,
+        brief: "The old line.",
+        form: "Two options, no lead-in.",
+      }),
+    );
+    const newest = async () => (await style.rows(t, "either-or"))[0];
+
+    await edit(live, {});
+    expect(await newest()).toMatchObject({ version: 2, brief: "The old line.", form: "Two options, no lead-in." });
+
+    await edit(live, { form: "  Two options and nothing else.  " });
+    expect(await newest()).toMatchObject({ version: 3, brief: "The old line.", form: "Two options and nothing else." });
+
+    await edit(live, { form: "" });
+    const cleared = await newest();
+    expect(cleared).toMatchObject({ version: 4, status: "draft", brief: "The old line." });
+    expect(cleared).not.toHaveProperty("form");
+
+    // Version 4 is a draft, so these edit it in place.
+    await edit(cleared._id, { form: "  Two options, no lead-in.  " });
+    expect(await newest()).toMatchObject({ _id: cleared._id, brief: "The old line.", form: "Two options, no lead-in." });
+
+    await edit(cleared._id, {});
+    expect(await newest()).toMatchObject({ _id: cleared._id, brief: "The old line.", form: "Two options, no lead-in." });
+
+    await edit(cleared._id, { form: " " });
+    const draft = await newest();
+    expect(draft).toMatchObject({ _id: cleared._id, version: 4, brief: "The old line." });
+    expect(draft).not.toHaveProperty("form");
+  });
+
+  test("the admin lists return each entry's prompt line, and a style's set form, for the edit forms to show", async () => {
+    const { t, admin } = app();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("styles", {
+        id: "either-or",
+        slug: "either-or",
+        ...styleForm,
+        status: "active",
+        version: 1,
+        brief: "Two everyday things, and the person picks one.",
+        form: "Two options, no lead-in.",
+      });
+      await ctx.db.insert("styles", { id: "open-ended", slug: "open-ended", ...styleForm, name: "Open Ended", status: "active", version: 1 });
+      await ctx.db.insert("tones", { id: "warm", slug: "warm", ...toneForm, status: "active", version: 1, brief: "Kind and unhurried." });
+      await ctx.db.insert("topics", { id: "weekends", slug: "weekends", name: "Weekends", status: "active", version: 1, brief: "Days off." });
+    });
+
+    const styles = await admin.query(api.admin.styles.listStyles, {});
+    expect(styles.find((style) => style.slug === "either-or")).toMatchObject({
+      brief: "Two everyday things, and the person picks one.",
+      form: "Two options, no lead-in.",
+    });
+    const openEnded = styles.find((style) => style.slug === "open-ended");
+    expect(openEnded).not.toHaveProperty("brief");
+    expect(openEnded).not.toHaveProperty("form");
+
+    expect(await admin.query(api.admin.tones.listTones, {})).toMatchObject([{ slug: "warm", brief: "Kind and unhurried." }]);
+    expect(await admin.query(api.admin.topics.listTopics, {})).toMatchObject([{ slug: "weekends", brief: "Days off." }]);
+  });
+
+  test("the styles list shows the row the generator reads when a copy with no version is still live beside the rewrite", async () => {
+    const { t, admin } = app();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, name: "Old copy" });
+      await ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "active", version: 1, brief: "The rewrite." });
+    });
+
+    const styles = await admin.query(api.admin.styles.listStyles, {});
+
+    expect(styles.map((style) => [style.slug, style.name, style.brief])).toEqual([["either-or", "Either/Or", "The rewrite."]]);
+  });
+
+  test("activating a version moves a person's hidden entry from a version that was archived by hand, for a style and for a tone", async () => {
+    const { t, admin } = app();
+    const ids = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", { email: "reader@example.com" });
+      const oldStyle = await ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "archived", version: 1 });
+      const draftStyle = await ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "draft", version: 2 });
+      const oldTone = await ctx.db.insert("tones", { id: "warm", slug: "warm", ...toneForm, status: "archived", version: 1 });
+      const draftTone = await ctx.db.insert("tones", { id: "warm", slug: "warm", ...toneForm, status: "draft", version: 2 });
+      const hiddenStyle = await ctx.db.insert("userStyles", { userId, styleId: oldStyle, status: "hidden", updatedAt: 0 });
+      const hiddenTone = await ctx.db.insert("userTones", { userId, toneId: oldTone, status: "hidden", updatedAt: 0 });
+      return { draftStyle, draftTone, hiddenStyle, hiddenTone };
+    });
+
+    await admin.mutation(api.admin.styles.activateStyleVersion, { id: ids.draftStyle });
+    await admin.mutation(api.admin.tones.activateToneVersion, { id: ids.draftTone });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const after = await t.run(async (ctx) => [await ctx.db.get(ids.hiddenStyle), await ctx.db.get(ids.hiddenTone)] as const);
+    expect([after[0]?.styleId, after[1]?.toneId]).toEqual([ids.draftStyle, ids.draftTone]);
+  });
+
+  test("an edit of a live style is listed as a draft beside it, so it can be activated, and an activated draft becomes the live row", async () => {
+    const { t, admin } = app();
+    const liveId = await t.run((ctx) =>
+      ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "active", version: 1, brief: "Two things, pick one." }),
+    );
+    const listed = async () =>
+      (await admin.query(api.admin.styles.listStyles, {})).map((style) => [style.status, style.version, style.brief]);
+    expect(await listed()).toEqual([["active", 1, "Two things, pick one."]]);
+
+    await admin.mutation(api.admin.styles.updateStyle, { _id: liveId, id: "either-or", ...styleForm, brief: "Two everyday things, and the person picks one." });
+
+    // The live row is still what the generator reads; the edit waits beside it as a draft.
+    expect(await listed()).toEqual([
+      ["active", 1, "Two things, pick one."],
+      ["draft", 2, "Two everyday things, and the person picks one."],
+    ]);
+    const draft = (await admin.query(api.admin.styles.listStyles, {})).find((style) => style.status === "draft")!;
+
+    // Editing the live row again makes another draft, and the first one stays listed with its edit.
+    await admin.mutation(api.admin.styles.updateStyle, { _id: liveId, id: "either-or", ...styleForm, brief: "A third wording." });
+    expect(await listed()).toEqual([
+      ["active", 1, "Two things, pick one."],
+      ["draft", 2, "Two everyday things, and the person picks one."],
+      ["draft", 3, "A third wording."],
+    ]);
+
+    await admin.mutation(api.admin.styles.activateStyleVersion, { id: draft._id });
+    // The other draft is still newer than the row that is live now, so it stays listed beside it.
+    expect(await listed()).toEqual([
+      ["active", 2, "Two everyday things, and the person picks one."],
+      ["draft", 3, "A third wording."],
+    ]);
+
+    // A draft older than the live row is not offered: activating it would put a stale version live.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("styles", { id: "either-or", slug: "either-or", ...styleForm, status: "draft", version: 1, brief: "A stale draft." });
+    });
+    expect((await listed()).map(([status, version]) => [status, version])).toEqual([
+      ["active", 2],
+      ["draft", 3],
+    ]);
+  });
+
+  // Value: protects=a style with no live row is still in the admin's styles list, once: a style just created shows as its draft until it is activated, and a style with only archived versions shows its newest;
+  // fails_when=the list returns only styles that have a live row, so a new style can't be found to activate, or it returns every version of a style that has none live;
+  // why_new=every styles-list test here starts from a live row, so the list's answer for a style with none was never asked for;
+  // seam=none; no_claim=what the page draws for such a row, or how the app's own lists treat a style that isn't live.
+  test("a style with no live row is still listed, once: a new style as its draft until it is activated, and an archived style as its newest version", async () => {
+    const { t, admin } = app();
+    const listed = async () => (await admin.query(api.admin.styles.listStyles, {})).map((style) => [style.slug, style.status, style.version]);
+
+    const created = await admin.mutation(api.admin.styles.createStyle, { id: "one-word", ...styleForm, name: "One Word" });
+    expect(await listed()).toEqual([["one-word", "draft", 1]]);
+
+    await admin.mutation(api.admin.styles.activateStyleVersion, { id: created });
+    expect(await listed()).toEqual([["one-word", "active", 1]]);
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("styles", { id: "retired", slug: "retired", ...styleForm, name: "Retired", status: "archived", version: 1 });
+      await ctx.db.insert("styles", { id: "retired", slug: "retired", ...styleForm, name: "Retired", status: "archived", version: 2 });
+    });
+    expect(await listed()).toEqual([
+      ["one-word", "active", 1],
+      ["retired", "archived", 2],
+    ]);
   });
 });

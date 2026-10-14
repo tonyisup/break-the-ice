@@ -136,7 +136,8 @@ async function checkOne(ctx: ActionCtx, questionId: Id<"questions">): Promise<Ch
  * Checks one generated question. Scheduled when a question is saved, so whoever is waiting
  * for that question waits no longer. A check that fails is tried once more after
  * QUALITY_CHECK_RETRY_DELAY_MS. After a second failure a question waiting in the review queue
- * is picked up by checkPendingQuestions; one that was published at once stays unchecked.
+ * is picked up by checkPendingQuestions. One published before its path was held for review (a
+ * matrix fill's or the nightly pool's, from before) stays unchecked.
  */
 export const checkQuestion = internalAction({
   args: { questionId: v.id("questions"), attempt: v.optional(v.number()) },
@@ -175,14 +176,15 @@ async function heldWithoutCheck(ctx: ActionCtx, limit: number): Promise<Id<"ques
 
 /**
  * Checks generated questions that are waiting in the review queue with no verdict: ones saved
- * while the check was off, or whose check failed twice. It doesn't cover questions that were
- * published at once (a matrix fill's or the nightly pool's). With dryRun it only lists them.
+ * while the check was off, or whose check failed twice. Every generating path holds its
+ * questions now, so that is all new ones; it doesn't cover a question a matrix fill or the
+ * nightly pool published before they were held. With dryRun it only lists them.
  * Up to QUALITY_CHECK_BACKFILL_LIMIT a run, oldest first. A run stops early, leaving the rest
  * as `notReached`, when a call gets no answer or the run has taken
  * QUALITY_CHECK_BACKFILL_TIME_BUDGET_MS. Run it again for more:
  * `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`.
  */
-// gstack-shortcut(dec-73fb363c-9bb6-4c12-95da-fc399eae1f70): a question published at once is never re-checked after two failures, upgrade when the team-facing flag is finished (TODOS.md, Quality check).
+// gstack-shortcut(dec-73fb363c-9bb6-4c12-95da-fc399eae1f70): a question published before its path was held for review is never re-checked after two failures, upgrade when the team-facing flag is finished (TODOS.md, Quality check).
 export const checkPendingQuestions = internalAction({
   args: { dryRun: v.boolean() },
   returns: v.object({

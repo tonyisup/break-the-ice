@@ -36,7 +36,7 @@ const generationRunPurpose = v.union(
   v.literal("newsletter"),
   v.literal("remix"),
   // One call that judges a generated question (internal/qualityCheck.ts). Its run has no
-  // blueprint, and names the question it judged as sourceQuestionId.
+  // prompt label, and names the question it judged as sourceQuestionId.
   v.literal("quality_check"),
 );
 
@@ -145,7 +145,10 @@ export default defineSchema({
     status: generationRunStatus,
     purpose: generationRunPurpose,
     requestedByUserId: v.optional(v.string()),
+    // Runs from before the short brief point at the blueprint their prompt was built from.
     blueprintId: v.optional(v.id("promptBlueprints")),
+    // Which wording wrote the prompt, like "brief-v2" (lib/brief.ts). A check's run has none.
+    promptLabel: v.optional(v.string()),
     styleId: v.optional(v.id("styles")),
     toneId: v.optional(v.id("tones")),
     topicId: v.optional(v.id("topics")),
@@ -202,7 +205,7 @@ export default defineSchema({
     totalThumbsDown: v.optional(v.number()),
     totalShows: v.number(),
     isAIGenerated: v.optional(v.boolean()),
-    // Set only when feed or daily-email generation saves a question to wait for review.
+    // Set when generation saves a question to wait for review, which every generating path does.
     // Such a pending question is unlisted (open by link); other pending rows stay hidden.
     heldForReview: v.optional(v.boolean()),
     tags: v.optional(v.array(v.string())),

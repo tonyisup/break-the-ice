@@ -5,14 +5,15 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
 
 - `seeds.json`: the fixed inputs (20 batches of 5: every style active on both dev and production,
   tones stepped through, a topic on every other batch). Don't edit it; later runs compare on it.
-- `generate.mjs <run> [--model <openrouter-model>] [--brief] [--seeds <name>]`: runs each seed
-  through today's prompt builder (or the short brief, with `--brief`)
-  and the app's default model (or the one given) on the **dev** deployment
-  (`internal/evals:generateEvalBatch`, run like an admin preview, so nothing is added to the
-  library). Records what the save step would do with each question (code checks, exact
-  duplicates), its 5 nearest public library questions by embedding, a hash of the prompt, the
-  library's size, and every model call dev recorded for the run (including the generator's own
-  retries). Rerun to retry failed seeds; failed attempts stay in the record.
+- `generate.mjs <run> [--model <openrouter-model>] [--seeds <name>]`: runs each seed through the
+  app's own prompt, the short brief (`convex/lib/brief.ts`), and the app's default model (or the
+  one given) on the **dev** deployment (`internal/evals:generateEvalBatch`, run like an admin
+  preview, so nothing is added to the library). Records what the save step would do with each
+  question (code checks, exact duplicates), its 5 nearest public library questions by embedding,
+  a hash of the prompt and the label of the wording that wrote it (`promptLabel`, which is
+  `brief-v2` today), the library's size, and every model call dev recorded for the run
+  (including the generator's own retries). Rerun to retry failed seeds; failed attempts stay in
+  the record.
 - `score.mjs <run>`: scores the run with Jev (needs `TYPESAFE_API_KEY`): the quality and safety
   gate for each question, and the duplicate check (both orders averaged) within each batch, across
   batches of the same style, and against the library neighbours. Also counts repeated opening
@@ -23,7 +24,7 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
   cutoffs, seeds, prompts, definitions, model or library, or failed seeds.
 - `compare.mjs <baseline> <run>...`: tests one or more runs of a changed setup against a baseline
   (see below). Writes `comparison-<baseline>.json` in the first run's folder.
-- `judge.mjs <name> <run>... [--only-labeled] [--context] [--brief] [--model <openrouter-model>]`:
+- `judge.mjs <name> <run>... [--only-labeled] [--context] [--model <openrouter-model>]`:
   runs the app's quality check (`convex/lib/qualityCheck.ts`) over the questions those runs
   would have saved, on dev, and writes its verdicts to `judged/<name>.json`. See "Measuring the
   quality check" below.
@@ -31,8 +32,10 @@ compared against a baseline. Phase 0 of the AI overhaul plan.
   choices. See "Trying another way of asking".
 - `select.mjs draw|score`: draws a blind set of the judge's best picks from each batch and reads
   the owner's labels. See "Picking the best of a batch".
-- `brief.mjs`, `brief.json`: the short brief, a second way of asking, and its one line for each
-  style, tone and topic.
+- `brief.mjs`, `brief.json`: what is left of the eval's own copy of the short brief, from before
+  the app generated with it. `brief.mjs` is the seeded shuffle that `pairs.mjs` and `select.mjs`
+  draw their sets with. `brief.json` gives `judge.mjs --context` the names of the styles and
+  tones, and holds nothing else now: the lines themselves are in `convex/data/briefLines.ts`.
 - `seeds-new-cells.json`: 24 more seeds, eight questions each, on combinations `seeds.json`
   doesn't use.
 - `jev.mjs`: the Jev questions and cutoffs. The judge is pinned (`JEV_MODEL`), and summaries
@@ -55,6 +58,12 @@ node evals/baseline.mjs my-setup my-setup-r1 my-setup-r2 my-setup-r3
 ```
 
 Use run names of your own: rerunning these on a committed run's name rewrites its files.
+
+The prompt shows the model questions from dev's library: public questions of the seed's style,
+retired ones a reviewer gave a reason for, and one public question from each of a few other
+styles. Which of them are shown is drawn from the seed's id, so a rerun and a replicate run ask
+the same thing as long as those questions are the same on dev. When they have changed between
+two runs, the runs' prompts differ, and `baseline.mjs` refuses runs whose prompts differ.
 
 Without `--model` a run uses the app's default, `GENERATION_MODEL` in
 `convex/lib/generationRunner.ts` (Opus 5.5 since Oct 2026). To try another generation model, name
@@ -95,10 +104,12 @@ the fingerprints that the personal, team and organization questions it changes s
 (`fingerprintsCleared`), which can change the library duplicate rate without changing the library
 size, as above.
 
-A run on the default model, Opus 5.5, costs about $0.46 of generation on dev (charged to the dev
-deployment's system AI budget) and about $0.05 of Jev. In Oct 2026 a run cost about $0.12 on
-Gemini 3.8 Flash and $0.14 on Sonnet 5.5. A call that times out has no cost on its run, so a
-run's reported cost leaves it out; the dev budget still counts it.
+A run of the 20 standard seeds on the default model, Opus 5.5, cost about $0.46 of generation on
+dev in Oct 2026 (charged to the dev deployment's system AI budget) and about $0.05 of Jev. That
+was with the long prompt the app sent then; the one run made with the eval's brief on the same
+seeds cost $0.44. In Oct 2026 a run cost about $0.12 on Gemini 3.8 Flash and $0.14 on Sonnet
+5.5. A call that times out has no cost on its run, so a run's reported cost leaves it out; the
+dev budget still counts it.
 
 ## Measuring the quality check
 
@@ -113,9 +124,10 @@ node evals/judge.mjs my-judged v0-5-2-r1 v0-5-2-r2 v0-5-2-r3
 A question that appears in more than one run is judged once. Rerunning the same name judges
 only what is missing, keeps every verdict the file already has, and refuses, before it sends
 a question, if the deployment's judge model or instructions version has changed since, or if
-the rerun asks for another `--model`, `--context` or `--brief` than the name was judged with.
+the rerun asks for another `--model` or `--context` than the name was judged with.
 (The version is `QUALITY_CHECK_PROMPT_VERSION`. Drafts measured before the first release all
-carried 1, so don't rerun a name from before then.) A check costs about 1 cent, charged to the dev deployment's system AI budget. The
+carried 1, so don't rerun a name from before then. It is 2 since the judge reads the brief's
+lines, so a name judged at 1 can't have more added to it.) A check costs about 1 cent, charged to the dev deployment's system AI budget. The
 `judged/` folder is git-ignored: the verdicts stay local, so the owner can label a set drawn
 from them without seeing them.
 
@@ -123,11 +135,13 @@ from them without seeing them.
 measure it against the same labels. A name keeps one model, so give every rerun of that name
 the same `--model`. The cost printed before a run is at the app's model's price.
 
-`--brief` describes each question's style, tone and topic to the judge with the brief's own
-lines (`brief.json`) in place of the app's definitions. It is for questions `generate.mjs
---brief` wrote: they were never told the app's fill-in templates, and a judge shown those
-marks them down for not following them, so `judge.mjs` refuses such a run without it. A name
-keeps its definitions too: the brief's version and its lines.
+The judge reads each question's style, tone and topic as the question's run recorded them. For
+a run generated since the app moved to the brief, each is the same one line the model was given
+(`convex/lib/taxonomyDefinitions.ts`), cut at 300 characters. Before that they were built from
+the long prompt's fill-in templates, and a judge shown those marked a question the brief wrote
+down for not following them, so `judge.mjs` had a `--brief` flag that swapped in the eval's own
+copy of the lines. The flag is gone. A name judged with it says so in its file (`definitions`),
+and `judge.mjs` refuses a rerun of that name: start a new one.
 
 To compare the verdicts with the owner's labels, put the labels in `evals/owner-labels.json`
 (git-ignored; the labels are not stored in this repo):
@@ -166,25 +180,38 @@ says so instead of deciding. Keep the judged file a set was drawn from. That is 
 
 ## Trying another way of asking
 
-`generate.mjs --brief` generates the same seeds with a different prompt: the short brief in
-`brief.mjs`. It says who the questions are for in a few lines, describes the style, tone and
-topic in a line each (`brief.json`), and shows the model the owner's own decisions as the
-standard: questions of the style the owner kept and rejected, with the reasons, and a few
-kept questions of other styles. The decisions are read from `evals/judged/owner-decisions.json`
-(git-ignored), a list of `{ "text", "style", "tone", "verdict", "reasons" }` with style and
-tone slugs, in the order the owner decided, oldest first (`judge.mjs --context` reads the same
-file, and needs the tone and the order). The
-prompt is sent in place of the app's through the same eval-only action, so the model, the
-temperature, the output cap and the save step's checks are the same; only what is asked
-differs. A run records the brief it used and keeps it.
+This is the record of a finished experiment, and of the tool it left.
 
-To find out which way of asking the owner prefers, generate one run each way and set them
-side by side:
+Until the app generated with it, the short brief was a second prompt that lived only here.
+`generate.mjs --brief` sent it in place of the app's prompt through the same eval-only action,
+so the model, the temperature, the output cap and the save step's checks were the same and
+only what was asked differed. It said who the questions are for in a few lines, described the
+style, tone and topic in a line each (now `convex/data/briefLines.ts`), and showed the model the owner's own
+decisions as the standard: questions of the style the owner kept and rejected, with the
+reasons, and a few kept questions of other styles, read from
+`evals/judged/owner-decisions.json`. One run was generated each way on the 20 standard seeds,
+and the two were set side by side as blind pairs for the owner to choose between. The result
+is under "Reading the numbers" (`runs/pairs1-app` and `runs/pairs1-brief`).
+
+The first test used the brief at version 1. Version 2 gave a style whose form is the style
+(either/or, would you rather, one word) a `form` line: the brief asks for variety in how a
+sentence is built, and without that line the variety pulled such a style's questions out of
+the style.
+
+The owner chose the brief for every generator, and the app now builds it itself
+(`convex/lib/brief.ts`): the line for each style, tone and topic is kept on its row (`brief`,
+and `form` on a style), and the examples are read from the library. So `generate.mjs` has no
+`--brief`, and every run is of the app's prompt. A run made with `--brief` says so in its
+record (`prompt`), and `generate.mjs` refuses a rerun of it: start a new run name.
+`generateEvalBatch` still takes a `prompt` argument, for a later experiment; no script sends
+one.
+
+`pairs.mjs` sets any two runs of the same seeds side by side, as it did then:
 
 ```bash
-node evals/generate.mjs pairs-app
-node evals/generate.mjs pairs-brief --brief
-node evals/pairs.mjs build my-pairs pairs-app pairs-brief
+node evals/generate.mjs pairs-a
+node evals/generate.mjs pairs-b --model anthropic/claude-sonnet-5.5
+node evals/pairs.mjs build my-pairs pairs-a pairs-b
 ```
 
 `build` pairs one question from each run for the same seed, four pairs a seed unless
@@ -193,8 +220,9 @@ is what the owner is shown: the style, tone and topic, and a left and a right qu
 nothing that says which run wrote which. `key.json` says which side is which run and stays on
 this machine. Questions that share eight words in a row with one the owner has already
 judged, or that both runs wrote, are left out (a shorter question only when it is one of
-those questions, word for word). A round holds one pair per seed, and half of
-each round has the first run on the left.
+those questions, word for word). The questions already judged are the ones in
+`evals/judged/owner-decisions.json`, when that file exists. A round holds one pair per seed,
+and half of each round has the first run on the left.
 
 For each pair the owner picks the better question, or says both are fine, or neither is.
 `node evals/pairs.mjs score my-pairs evals/judged/my-pairs/choices.json` reads those choices
@@ -215,39 +243,50 @@ A pick says which question is better, not that it is good enough to publish. Pai
 same seed come from one call each way, so they are not independent; read the seed count
 beside the sign test.
 
-A style whose form is the style (either/or, would you rather, one word) carries a `form` line
-in `brief.json`. The brief asks for variety in how a sentence is built, and without that line
-the variety pulls such a style's questions out of the style.
-
 ## Picking the best of a batch
 
+This is the record of the second finished experiment, and of the tools it left.
+
 The question that decides publishing is not which prompt is better but how often the owner
-rejects what would be published. This measures it for a larger batch from which only the best
-are taken:
+rejects what would be published. The experiment measured it for a larger batch from which only
+the best were taken:
+
+- A run was generated with the eval's brief (`generate.mjs --brief`, since removed) from
+  `evals/seeds-new-cells.json`: 24 combinations of the same styles, tones and topics that the
+  first 20 seeds don't use, eight questions each. The owner had read the first 20 seeds' output
+  many times over, which makes a repeated construction hard to judge; these were cells nobody
+  had seen.
+- `judge.mjs --context` judged the run, with the owner's decisions shown beside each question.
+- `select.mjs draw` took the judge's best picks from each batch, with a control from the rest,
+  and the owner labeled the cards blind.
+
+The set failed its rule. The numbers are under "Reading the numbers" (`runs/cells-brief`).
+
+The same three steps work on a run of the app's prompt:
 
 ```bash
-node evals/generate.mjs cells-brief --brief --seeds seeds-new-cells
-node evals/judge.mjs cells-judged cells-brief --context --brief
-node evals/select.mjs draw cells-set cells-judged --start 363
+node evals/generate.mjs cells-run --seeds seeds-new-cells
+node evals/judge.mjs cells-judged cells-run --context
+node evals/select.mjs draw cells-set cells-judged --start <first-card-number>
 ```
 
-- `--seeds seeds-new-cells` generates from `evals/seeds-new-cells.json`: 24 combinations of the
-  same styles, tones and topics that the first 20 seeds don't use, eight questions each. The
-  owner has read the first 20 seeds' output many times over, which makes a repeated
-  construction hard to judge; these are cells nobody has seen.
+- `--seeds seeds-new-cells` generates from `evals/seeds-new-cells.json` in place of
+  `seeds.json`. A run keeps its seeds file, so a rerun has to be given the same `--seeds`.
 - `judge.mjs --context` shows the judge the owner's decisions beside each question: the latest
   ten of the question's style, then the latest of other styles, 24 in all with at most twelve
   keeps and twelve rejects. The app's own check never gets these. A question the owner has
   already decided on is shown only the decisions made before that one, never its own. A check
-  costs about 2 cents this way.
-- `--brief` has the judge read the brief's lines, as the run's questions were written from them
-  (see "Measuring the quality check").
+  costs about 2 cents this way. The decisions are read from
+  `evals/judged/owner-decisions.json` (git-ignored), a list of
+  `{ "text", "style", "tone", "verdict", "reasons" }` with style and tone slugs, in the order
+  the owner decided, oldest first. The judge is shown each style and tone by its name in
+  `brief.json`.
 - `select.mjs draw` takes, from each batch, up to three questions the judge kept at confidence
   4 or 5 with no reasons and no safety flags, surest first, and one more at random from the
   rest of the batch as a control. It writes `cards.json` for the labeling page (each card's
   number, style, tone, topic and text, nothing else) and `key.json`, which stays on this
   machine. `--start` is the number of the first card: one past the last card already on the
-  labeling page, which was q362 when this set was drawn.
+  labeling page, which was q362 when the experiment's set was drawn.
 
 The owner labels the cards keep or reject, blind. `node evals/select.mjs score cells-set
 evals/judged/cells-set/labels.json` reads the labels (a JSON object from card id to
@@ -260,7 +299,9 @@ the two by their share of the batches, about what the rate would be with no pick
 
 - The official baseline is `runs/v0-5-2.json`: three replicate runs of the same seeds on the
   default model, Opus 5.5, at v0.5.2.0 (`v0-5-2-r1` to `-r3`) pooled, 300 questions. Compare a
-  later run with `node evals/compare.mjs v0-5-2 <run>`.
+  later run with `node evals/compare.mjs v0-5-2 <run>`. It was generated with the long prompt
+  the app sent before the brief, so a run made since differs from it in prompts, taxonomy and
+  definitions; `compare.mjs` says so, and decides pass and review without the fit questions.
 - `runs/v0-3-2.json` is the earlier baseline, generated with Gemini 3.8 Flash through an
   OpenRouter preset the app no longer uses. None of the seven primary rates differs detectably
   between the two baselines (`runs/v0-5-2-r1/comparison-v0-3-2.json`). One quality question
@@ -284,7 +325,8 @@ the two by their share of the batches, about what the rate would be with no pick
   named model (Oct 5, 2026). `runs/preset-r1` ran the same day while that preset was temporarily
   pointed at `stealth/space-bunny-alpha`, so it is not a replicate of `v0-3-2`.
 - `runs/pairs1-app` and `runs/pairs1-brief` (Oct 7, 2026) are the two runs of the first blind
-  pairs test, on the 20 standard seeds: the app's prompt, and the short brief at version 1,
+  pairs test, on the 20 standard seeds: the app's prompt of the time, which was the long one,
+  and the short brief at version 1,
   before the `form` lines. Of 72 pairs the owner picked the brief's question in 29 and the
   app's in 16, called both fine in 12 and neither in 15. The sign test on the 45 picks gives
   p = 0.07, so by the rule no difference was shown; of the 19 seeds, 12 leaned to the brief, 2
@@ -295,11 +337,22 @@ the two by their share of the batches, about what the rate would be with no pick
   the run the first pick-the-best set was drawn from. That set failed its rule: of the 68
   picked cards the owner rejected 20 (29%), and of the 24 controls 7 (29%), so the judge's
   picks were no better than the rest of the batch. It was judged with `--context` before
-  `--brief` existed, so that judge read the app's definitions.
-- Neither brief run is scored with Jev. A `--brief` run's record still carries the app's
-  definitions, which its questions were never shown, so `score.mjs` would grade their fit
-  against the wrong text and `compare.mjs` wouldn't notice: don't compare one against a
-  baseline.
+  `judge.mjs` had its `--brief`, so that judge read the definitions of the time, built from
+  the long prompt's templates.
+- Neither of those two brief runs is scored with Jev, and neither can be. Their records carry
+  the definitions of the time, built from the long prompt's templates, which their questions
+  were never shown, so `score.mjs` and `judge.mjs` refuse a run the eval's own brief wrote.
+- `runs/brief-app-cells-r1` (Oct 12, 2026) is the first run written by the app's own brief, on
+  `seeds-new-cells.json` after `seedBriefLines` gave dev's styles, tones and topics their
+  lines. All 24 batches came back, for $0.52. Of 192 questions the save step kept 182. None of
+  those shares eight words in a row with a public question of its style on dev (205 public
+  questions). All 16 either/or questions are two options joined by "or", all 16 would-you-
+  rather questions begin "Would you rather", and all 16 one-word questions say so. The ten the
+  save step refused: five either/or questions under its six-word minimum, such as "Top bunk or
+  bottom bunk?", and five the model wrote as a request ("Name one smell that...") with no
+  question mark. The minimum was six words when the run was made; since then a style with a set
+  form may save a question as short as three words, so those five would be kept today. The run
+  was not generated again. Nobody has labeled this run.
 - Seven primary rates decide a comparison, chosen up front, each over independent units: pass,
   review and block rates (over every generated question, before the code checks); the library
   likely-duplicate rate (exact library copies count as duplicates); the share of batches with a
@@ -348,9 +401,5 @@ the two by their share of the batches, about what the rate would be with no pick
 - `generate.mjs` holds `runs/<run>/.lock` while it runs, so the same run name can't be generated
   twice at once. If it was killed and the file is left behind, delete it.
 - The repo is public. `generated.json` keeps provider and CLI error text from failed calls word
-  for word; check it before committing a run that had failures. A `--brief` run's calls carry
-  the prompt, with the owner's decisions in it, and an error can print a call's arguments back,
-  so for such a run a failed call's own output isn't kept: its batch records only the step the
-  call broke at and a known error code, and the output is shown on screen. The deployment's
-  stored error for each failed model call (`attempts[].error`) is still kept word for word, as
-  for any run, so the check before committing applies to a `--brief` run too.
+  for word, and the deployment's stored error for each failed model call (`attempts[].error`);
+  check it before committing a run that had failures.

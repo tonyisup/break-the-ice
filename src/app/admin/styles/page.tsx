@@ -41,6 +41,35 @@ import { Badge } from "@/components/ui/badge"
 import { ColorPicker } from "@/components/ui/color-picker"
 import { IconPicker } from "@/components/ui/icon-picker"
 import { toast } from "sonner"
+import { convexErrorData } from "../../../../convex/lib/errorData"
+
+type StyleVersion = Pick<Doc<"styles">, "status" | "version">
+
+/** How a version's status reads here. A style saved before versions had a status is live. */
+function statusWord(style: StyleVersion): "Live" | "Draft" | "Archived" {
+	if (style.status === "draft") return "Draft"
+	if (style.status === "archived") return "Archived"
+	return "Live"
+}
+
+/** The status badge of a row or card: only the live version goes without "not live". */
+function versionBadge(style: StyleVersion): string {
+	const word = statusWord(style)
+	const version = `${word} v${style.version ?? 1}`
+	return word === "Live" ? version : `${version}, not live`
+}
+
+/** The line under the edit dialog's title: which version is open, and what Save does to it. */
+function versionLine(style: StyleVersion): string {
+	const word = statusWord(style)
+	const version = `${word} v${style.version ?? 1}.`
+	return word === "Draft"
+		? `${version} Saving changes this draft; activate it for the AI to use it.`
+		: `${version} Saving makes a new draft version, which you then activate.`
+}
+
+const NOT_SENT_HELP = "Not sent to the AI when it writes questions; the Prompt Line is. Still used to match questions to people."
+const SET_FORM_HELP = "Fill in only if every question in this style must follow one pattern. Describe the pattern. The AI keeps it in every question, and questions in this style may then be as short as three words."
 
 export default function StylesPage() {
 	const styles = useQuery(api.admin.styles.listStyles)
@@ -63,6 +92,8 @@ export default function StylesPage() {
 		icon: "Sparkles",
 		order: 0,
 		promptGuidanceForAI: "",
+		brief: "",
+		form: "",
 		example: ""
 	})
 
@@ -85,7 +116,7 @@ export default function StylesPage() {
 				...newStyle,
 				example: newStyle.example || undefined
 			})
-			toast.success("Style created successfully")
+			toast.success("Style created as a draft. Activate it for the AI to use it.")
 			setIsCreateDialogOpen(false)
 			setNewStyle({
 				id: "",
@@ -94,8 +125,11 @@ export default function StylesPage() {
 				structure: "",
 				color: "#6366f1",
 				icon: "Sparkles",
-				order: (styles?.length ?? 0) + 1,
+				// A style can have several rows in the list: its live version and each newer draft.
+				order: new Set((styles ?? []).map(s => s.slug ?? s.id)).size + 1,
 				promptGuidanceForAI: "",
+				brief: "",
+				form: "",
 				example: ""
 			})
 		} catch (error) {
@@ -114,13 +148,18 @@ export default function StylesPage() {
 				color: s.color,
 				icon: s.icon,
 				promptGuidanceForAI: s.promptGuidanceForAI,
+				brief: s.brief ?? "",
+				form: s.form ?? "",
 				order: s.order,
 				example: s.example || undefined
 			})
-			toast.success("Style updated")
+			// Only a draft is changed in place. Any other row is saved as a new draft version.
+			toast.success(s.status === "draft" ? "Style updated" : "Saved as a new draft version. Activate it for the AI to use it.")
 			setEditingStyle(null)
 		} catch (error) {
-			toast.error("Failed to update style")
+			// When the server says why it refused a save, the admin reads its words.
+			const dataMessage = convexErrorData(error)?.message
+			toast.error(typeof dataMessage === "string" ? dataMessage : "Failed to update style")
 		}
 	}
 
@@ -243,19 +282,39 @@ export default function StylesPage() {
 									<label className="text-sm font-medium">Structural Instruction</label>
 									<textarea
 										className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										placeholder="e.g. Start with 'What is your...' or 'Tell me about...'"
 										value={newStyle.structure}
 										onChange={e => setNewStyle({ ...newStyle, structure: e.target.value })}
 									/>
+									<p className="text-xs text-muted-foreground">{NOT_SENT_HELP}</p>
 								</div>
 								<div className="grid gap-2">
 									<label className="text-sm font-medium">AI Guidance</label>
 									<textarea
 										className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										placeholder="Provide specific instructions for the LLM..."
 										value={newStyle.promptGuidanceForAI}
 										onChange={e => setNewStyle({ ...newStyle, promptGuidanceForAI: e.target.value })}
 									/>
+									<p className="text-xs text-muted-foreground">{NOT_SENT_HELP}</p>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="newStyleBrief" className="text-sm font-medium">Prompt Line (Optional)</label>
+									<textarea
+										id="newStyleBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={newStyle.brief}
+										onChange={e => setNewStyle({ ...newStyle, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this style. Leave blank to use the description.</p>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="newStyleForm" className="text-sm font-medium">Set Form (Optional)</label>
+									<Input
+										id="newStyleForm"
+										placeholder="Begins 'Would you rather' and offers two options."
+										value={newStyle.form}
+										onChange={e => setNewStyle({ ...newStyle, form: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">{SET_FORM_HELP}</p>
 								</div>
 								<div className="grid gap-2">
 									<label className="text-sm font-medium">Example Question</label>
@@ -303,8 +362,8 @@ export default function StylesPage() {
 										<h3 className="font-bold text-lg">{style.name}</h3>
 										<div className="flex items-center gap-2">
 											<p className="text-xs text-muted-foreground font-mono">{style.id}</p>
-											<Badge variant={style.status === "active" ? "default" : "secondary"} className="text-[10px]">
-												{style.status} v{style.version}
+											<Badge variant={statusWord(style) === "Live" ? "default" : "secondary"} className="text-[10px]">
+												{versionBadge(style)}
 											</Badge>
 										</div>
 									</div>
@@ -373,10 +432,12 @@ export default function StylesPage() {
 										</div>
 									</td>
 									<td className="px-6 py-4">
-										<div className="flex flex-col">
+										<div className="flex flex-col items-start">
 											<span className="font-bold">{style.name}</span>
 											<span className="text-[10px] text-muted-foreground font-mono">{style.id}</span>
-											<span className="text-[10px] text-muted-foreground">{style.status} v{style.version}</span>
+											<Badge variant={statusWord(style) === "Live" ? "default" : "secondary"} className="text-[10px] mt-1">
+												{versionBadge(style)}
+											</Badge>
 										</div>
 									</td>
 									<td className="px-6 py-4">
@@ -388,7 +449,7 @@ export default function StylesPage() {
 									<td className="px-6 py-4 text-right">
 										<div className="flex items-center justify-end gap-1">
 											{style.status !== "active" && (
-												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={() => handleActivate(style._id)}>
+												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" title="Activate Version" aria-label="Activate Version" onClick={() => handleActivate(style._id)}>
 													<Check className="size-3.5" />
 												</Button>
 											)}
@@ -414,7 +475,7 @@ export default function StylesPage() {
 						<>
 							<DialogHeader>
 								<DialogTitle>Edit Style: {editingStyle.name}</DialogTitle>
-								<DialogDescription>Modify the properties for this question style.</DialogDescription>
+								<DialogDescription>{versionLine(editingStyle)}</DialogDescription>
 							</DialogHeader>
 							<div className="grid gap-6 py-4">
 								<div className="grid grid-cols-2 gap-4">
@@ -468,6 +529,7 @@ export default function StylesPage() {
 										value={editingStyle.structure ?? ""}
 										onChange={e => setEditingStyle({ ...editingStyle, structure: e.target.value })}
 									/>
+									<p className="text-xs text-muted-foreground">{NOT_SENT_HELP}</p>
 								</div>
 								<div className="grid gap-2">
 									<label className="text-sm font-medium">AI Guidance</label>
@@ -476,6 +538,27 @@ export default function StylesPage() {
 										value={editingStyle.promptGuidanceForAI ?? ""}
 										onChange={e => setEditingStyle({ ...editingStyle, promptGuidanceForAI: e.target.value })}
 									/>
+									<p className="text-xs text-muted-foreground">{NOT_SENT_HELP}</p>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="editStyleBrief" className="text-sm font-medium">Prompt Line (Optional)</label>
+									<textarea
+										id="editStyleBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={editingStyle.brief ?? ""}
+										onChange={e => setEditingStyle({ ...editingStyle, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this style. Leave blank to use the description.</p>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="editStyleForm" className="text-sm font-medium">Set Form (Optional)</label>
+									<Input
+										id="editStyleForm"
+										placeholder="Begins 'Would you rather' and offers two options."
+										value={editingStyle.form ?? ""}
+										onChange={e => setEditingStyle({ ...editingStyle, form: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">{SET_FORM_HELP}</p>
 								</div>
 							</div>
 							<DialogFooter>

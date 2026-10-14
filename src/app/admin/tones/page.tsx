@@ -60,7 +60,8 @@ export default function TonesPage() {
 		color: "#10b981",
 		icon: "Music",
 		order: 0,
-		promptGuidanceForAI: ""
+		promptGuidanceForAI: "",
+		brief: ""
 	})
 
 	const filteredTones = tones?.filter(t =>
@@ -81,7 +82,7 @@ export default function TonesPage() {
 			await createTone({
 				...newTone
 			})
-			toast.success("Tone created successfully")
+			toast.success("Tone created as a draft. Activate it for the AI to use it.")
 			setIsCreateDialogOpen(false)
 			setNewTone({
 				id: "",
@@ -90,7 +91,8 @@ export default function TonesPage() {
 				color: "#10b981",
 				icon: "Music",
 				order: (tones?.length ?? 0) + 1,
-				promptGuidanceForAI: ""
+				promptGuidanceForAI: "",
+				brief: ""
 			})
 		} catch (error) {
 			toast.error("Failed to create tone")
@@ -106,9 +108,11 @@ export default function TonesPage() {
 				color: t.color,
 				icon: t.icon,
 				promptGuidanceForAI: t.promptGuidanceForAI,
+				brief: t.brief ?? "",
 				order: t.order
 			})
-			toast.success("Tone updated")
+			// Only a draft is changed in place. Any other row is saved as a new draft version.
+			toast.success(t.status === "draft" ? "Tone updated" : "Saved as a new draft version. Activate it for the AI to use it.")
 			setEditingTone(null)
 		} catch (error) {
 			toast.error("Failed to update tone")
@@ -231,10 +235,20 @@ export default function TonesPage() {
 									<label className="text-sm font-medium">AI Guidance</label>
 									<textarea
 										className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										placeholder="Provide specific instructions for the LLM on how to achieve this tone..."
 										value={newTone.promptGuidanceForAI}
 										onChange={e => setNewTone({ ...newTone, promptGuidanceForAI: e.target.value })}
 									/>
+									<p className="text-xs text-muted-foreground">Not sent to the AI when it writes questions; the Prompt Line is. Still used to match questions to people.</p>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="newToneBrief" className="text-sm font-medium">Prompt Line (Optional)</label>
+									<textarea
+										id="newToneBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={newTone.brief}
+										onChange={e => setNewTone({ ...newTone, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this tone. Leave blank to use the description.</p>
 								</div>
 							</div>
 							<DialogFooter>
@@ -350,7 +364,7 @@ export default function TonesPage() {
 									<td className="px-6 py-4 text-right">
 										<div className="flex items-center justify-end gap-1">
 											{tone.status !== "active" && (
-												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" onClick={() => handleActivate(tone._id)}>
+												<Button variant="ghost" size="icon" className="size-8 text-emerald-600 hover:text-emerald-600" title="Activate Version" aria-label="Activate Version" onClick={() => handleActivate(tone._id)}>
 													<Check className="size-3.5" />
 												</Button>
 											)}
@@ -424,6 +438,17 @@ export default function TonesPage() {
 										value={editingTone.promptGuidanceForAI ?? ""}
 										onChange={e => setEditingTone({ ...editingTone, promptGuidanceForAI: e.target.value })}
 									/>
+									<p className="text-xs text-muted-foreground">Not sent to the AI when it writes questions; the Prompt Line is. Still used to match questions to people.</p>
+								</div>
+								<div className="grid gap-2">
+									<label htmlFor="editToneBrief" className="text-sm font-medium">Prompt Line (Optional)</label>
+									<textarea
+										id="editToneBrief"
+										className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										value={editingTone.brief ?? ""}
+										onChange={e => setEditingTone({ ...editingTone, brief: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">The one line the AI reads about this tone. Leave blank to use the description.</p>
 								</div>
 							</div>
 							<DialogFooter>

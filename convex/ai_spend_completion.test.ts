@@ -2,7 +2,7 @@
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { getFunctionName } from "convex/server";
-import { APIConnectionError, APIConnectionTimeoutError, APIError, OpenAIError } from "openai";
+import OpenAI, { APIConnectionError, APIConnectionTimeoutError, APIError, OpenAIError } from "openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -13,7 +13,7 @@ import * as aiRateLimitLib from "./lib/aiRateLimit";
 import { ensureAiRateLimit, ensureAiUnansweredLeft, holdAiUnanswered, isAiStopError, releaseAiUnanswered } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
 import { GENERATION_MODEL, maxOutputTokens, openRouterClient } from "./lib/generationRunner";
-import { clampBatchSize, DEFAULT_BLUEPRINT_SLUG } from "./lib/promptArchitecture";
+import { clampBatchSize } from "./lib/promptArchitecture";
 
 // The model call is the only network edge: stub it on the shared client so the rest
 // of the pipeline (budget check, run bookkeeping, spend ledger) runs for real.
@@ -81,17 +81,6 @@ async function throughBackoff<T>(action: Promise<T>): Promise<T> {
 async function setup() {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
   const ids = await t.run(async (ctx) => {
-    await ctx.db.insert("promptBlueprints", {
-      slug: DEFAULT_BLUEPRINT_SLUG,
-      version: 1,
-      status: "active",
-      systemInstruction: "",
-      safetyChecklist: [],
-      qualityChecklist: [],
-      outputFormatInstruction: "",
-      createdAt: 0,
-      updatedAt: 0,
-    });
     const meId = await ctx.db.insert("users", { email: ME.email, clerkId: ME.subject });
     const styleId = await ctx.db.insert("styles", {
       id: "reflective",
@@ -182,8 +171,8 @@ const TEN_QUESTIONS = JSON.stringify({
 function askedFor() {
   return create.mock.calls.map((call: unknown[]) => {
     const { max_tokens, messages } = call[0] as { max_tokens: number; messages: Array<{ content: string }> };
-    const asked = /Generate (\S+) ice-breaker questions/.exec(messages[1].content);
-    if (!asked) throw new Error("askedFor: the user prompt no longer says \"Generate N ice-breaker questions\"");
+    const asked = /^Write (\S+) new questions? for this style/m.exec(messages[1].content);
+    if (!asked) throw new Error("askedFor: the user prompt no longer has a line that starts \"Write N new questions for this style\"");
     return [max_tokens, asked[1]];
   });
 }
@@ -233,11 +222,9 @@ describe("recording what a completion cost", () => {
   test("usage for a run that no longer exists still lands in the ledger", async () => {
     const { t } = await setup();
     const runId = await t.run(async (ctx) => {
-      const blueprint = await ctx.db.query("promptBlueprints").first();
       const id = await ctx.db.insert("generationRuns", {
         status: "running",
         purpose: "feed",
-        blueprintId: blueprint!._id,
         batchSize: 1,
         model: "@preset/break-the-ice-berg-default",
         temperature: 0.9,
@@ -450,21 +437,33 @@ describe("matrix fill", () => {
     expect(await ledger(cell.t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
   });
 
-  test("a single-cell fill refuses a count that isn't a number before it picks a topic", async () => {
-    // No topic is named, and the catalog has none to pick from.
+  test("a single-cell fill given no topic refuses a count that isn't a number, and with a count it can use writes the question with no topic", async () => {
+    // No topic is named, and the catalog has none: a fill no longer picks one.
     const { t, orgId } = await paidOrgMember();
-    // Only reached if the fill isn't refused.
     create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
+    vi.spyOn(OpenAI.Embeddings.prototype, "create").mockRejectedValue(new Error("unexpected embedding call"));
     const fill = (count?: number) =>
       t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "reflective", toneSlug: "warm", count });
 
-    // With a count it can use, the fill gets as far as the missing topic.
-    await expect(fill()).rejects.toThrow(/No active topics/);
+    // Refused before a cell is claimed or anything is sent.
     for (const count of [Number.NaN, Infinity, -Infinity]) {
       const error = await fill(count).catch((e: unknown) => e);
       expect(convexErrorData(error)).toMatchObject({ code: ERROR_CODES.AI_COUNT_INVALID });
     }
     expect(create).not.toHaveBeenCalled();
+    expect(await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
+
+    // With a count it can use, the question is written for the style and tone alone, and it
+    // waits for review like any other generated question.
+    const filled = await fill();
+    expect(filled).toMatchObject({ count: 1, waitingForReview: true });
+    expect(askedFor()).toEqual([[2500, "1"]]);
+    const { messages } = create.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    expect(messages[1].content).not.toContain("Topic:");
+    expect(messages[1].content).toContain("\nWrite 1 new question for this style and tone.\n");
+    const saved = await t.run(async (ctx) => await ctx.db.get(filled.questionIds[0]));
+    expect(saved).toMatchObject({ styleSlug: "reflective", toneSlug: "warm", status: "pending", heldForReview: true });
+    expect([saved?.topicSlug, saved?.topicId, saved?.topic]).toEqual([undefined, undefined, undefined]);
   });
 
   test("a single-cell fill refuses a count that isn't a number while another fill holds the cell, and leaves that claim in place", async () => {
@@ -477,8 +476,9 @@ describe("matrix fill", () => {
     const fill = (count: number) =>
       t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic", count });
 
-    // With a count it can use, a fill that finds the cell held has nothing to do.
-    expect(await fill(1)).toEqual({ count: 0, questionIds: [] });
+    // With a count it can use, a fill that finds another fill on the cell has nothing to do, and
+    // says no question is waiting for review there: none was written.
+    expect(await fill(1)).toEqual({ count: 0, questionIds: [], waitingForReview: false });
     for (const count of [Number.NaN, Infinity, -Infinity]) {
       const error = await fill(count).catch((e: unknown) => e);
       expect(convexErrorData(error)).toMatchObject({ code: ERROR_CODES.AI_COUNT_INVALID });
@@ -918,11 +918,9 @@ describe("delta review follow-ups", () => {
     const { t } = await setup();
     const day = spendDay(Date.now());
     const runId = await t.run(async (ctx) => {
-      const blueprintId = (await ctx.db.query("promptBlueprints").first())!._id;
       return await ctx.db.insert("generationRuns", {
         status: "running",
         purpose: "remix",
-        blueprintId,
         batchSize: 1,
         model: "@preset/break-the-ice-berg-default",
         temperature: 0.9,
@@ -1698,7 +1696,7 @@ describe("calls that may have been billed without an answer", () => {
     // The manager is told how far the fill got; the provider's error goes to the log.
     expect(convexErrorData(stopped)).toEqual({
       code: ERROR_CODES.AI_GENERATION_FAILED,
-      message: "Filled 0 cells, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.",
+      message: "Stopped before any question was written, because the AI didn't finish an answer. Try again later.",
       filledCells: 0,
       totalCells: 2,
     });
@@ -2232,6 +2230,44 @@ describe("calls a person may have unanswered in one day", () => {
     expect(await slotsLeft(t)).toBe(4);
   });
 
+  // Value: protects=a batch cell whose AI call is refused without stopping the fill is counted in no result field, which the planner reads as a cell that couldn't be filled;
+  // fails_when=the fill counts that cell as skipped (the planner then says every cell already has a question), or stops the whole fill on a refusal;
+  // why_new=no test reached fillEmptyCells' catch for an error that neither stops the fill nor names a missing style;
+  // seam=none; no_claim=what the planner says for these counts (src/app/org/schedule/page.test.tsx, action mocked), or real provider errors (a 400 stands in).
+  test("a matrix batch carries on past a cell whose AI call is refused, and counts that cell in no field", async () => {
+    const { t, meId } = await setup();
+    const orgId = await matrixOrg(t, meId);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    create
+      .mockRejectedValueOnce(refused(400, "invalid request"))
+      .mockResolvedValueOnce(completion(JSON.stringify({ questions: [{ text: "What small win are you proud of this week?" }] }), { cost: 0.01 }) as never);
+
+    const result = await t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+      organizationId: orgId,
+      axisY: "style",
+      axisX: "tone",
+      topicSlug: "any-topic",
+      cells: [
+        { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
+        { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
+      ],
+    });
+
+    expect(result).toEqual({
+      totalCells: 2,
+      filledCells: 1,
+      totalQuestionsGenerated: 1,
+      skippedExisting: 0,
+      skippedWaitingForReview: 0,
+      skippedInvalidTaxonomy: 0,
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(logged.mock.calls.some(([message]) => String(message).startsWith("Failed to fill cell"))).toBe(true);
+    expect(await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
+  });
+
   test("a matrix batch stops at a cell whose answer is cut off and says how far it got: later cells aren't tried, one slot is kept and the cell is freed", async () => {
     const { t, meId } = await setup();
     const orgId = await matrixOrg(t, meId);
@@ -2265,7 +2301,7 @@ describe("calls a person may have unanswered in one day", () => {
     // A message the planner can show, not the provider's own error.
     expect(convexErrorData(stopped)).toEqual({
       code: ERROR_CODES.AI_GENERATION_FAILED,
-      message: "Filled 1 cell, then stopped because the AI didn't finish an answer. The filled cells are saved. Try the rest again later.",
+      message: "Wrote questions for 1 cell, then stopped because the AI didn't finish an answer. The questions written are saved and will show here after the Break the Ice team reviews them. Try the rest again later.",
       filledCells: 1,
       totalCells: 3,
     });

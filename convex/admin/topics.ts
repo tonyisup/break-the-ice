@@ -9,7 +9,7 @@ import {
 } from "../_generated/server";
 import { ensureAdmin } from "../auth";
 import { Doc } from "../_generated/dataModel";
-import { defaultQualityRubric, latestActiveVersion, latestVersion } from "../lib/taxonomy";
+import { defaultQualityRubric, editedLine, latestActiveVersion, latestVersion } from "../lib/taxonomy";
 import { internal } from "../_generated/api";
 
 const QUESTION_TOPIC_REASSIGN_BATCH_SIZE = 100;
@@ -72,6 +72,7 @@ const topicFields = {
   example: v.optional(v.string()),
   promptGuidanceForAI: v.optional(v.string()),
   aiGuidance: v.string(),
+  brief: v.optional(v.string()),
   order: v.optional(v.number()),
   organizationId: v.optional(v.id("organizations")),
   startDate: v.optional(v.number()),
@@ -113,6 +114,7 @@ function mapTopic(topic: Doc<"topics">) {
     example: topic.example,
     promptGuidanceForAI,
     aiGuidance: topic.aiGuidance ?? promptGuidanceForAI,
+    brief: topic.brief,
     order: topic.order,
     organizationId: topic.organizationId,
     startDate: topic.startDate,
@@ -203,6 +205,7 @@ export const createTopic = mutation({
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
     aiGuidance: v.optional(v.string()),
+    brief: v.optional(v.string()),
     order: v.optional(v.number()),
     organizationId: v.optional(v.id("organizations")),
     startDate: v.optional(v.number()),
@@ -250,6 +253,7 @@ export const createTopic = mutation({
       example: args.example,
       promptGuidanceForAI: args.promptGuidanceForAI,
       aiGuidance: args.aiGuidance ?? args.promptGuidanceForAI ?? "",
+      brief: editedLine(args.brief, undefined),
       order: args.order,
       organizationId: args.organizationId,
       startDate: args.startDate,
@@ -288,6 +292,7 @@ export const updateTopic = mutation({
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
     aiGuidance: v.optional(v.string()),
+    brief: v.optional(v.string()),
     order: v.optional(v.number()),
     organizationId: v.optional(v.id("organizations")),
     startDate: v.optional(v.number()),
@@ -324,12 +329,14 @@ export const updateTopic = mutation({
     const now = Date.now();
     const promptGuidanceForAI = args.promptGuidanceForAI ?? existingTopic.promptGuidanceForAI;
     const aiGuidance = args.aiGuidance ?? promptGuidanceForAI ?? "";
+    const brief = editedLine(args.brief, existingTopic.brief);
 
     if ((existingTopic.status ?? "active") === "draft") {
       const { _id, ...updates } = args;
       await ctx.db.patch(args._id, {
         ...updates,
         aiGuidance,
+        brief,
         updatedAt: now,
       });
 
@@ -360,6 +367,7 @@ export const updateTopic = mutation({
       example: args.example ?? existingTopic.example,
       promptGuidanceForAI,
       aiGuidance,
+      brief,
       order: args.order ?? existingTopic.order,
       organizationId: args.organizationId ?? existingTopic.organizationId,
       startDate: args.startDate ?? existingTopic.startDate,

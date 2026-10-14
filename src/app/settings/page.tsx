@@ -153,28 +153,11 @@ const SettingsPage = () => {
     hiddenQuestions.includes(q._id)
   );
 
-  // Sync with backend IDs (filtering out invalid ones)
-  useEffect(() => {
-    if (allStyles) {
-      const serverIds = allStyles.map(s => s._id);
-      const localIds = hiddenStyles;
-      const filteredIds = localIds?.filter(id => serverIds.includes(id));
-      if (filteredIds && localIds && filteredIds?.length !== localIds?.length) {
-        setHiddenStyles(filteredIds);
-      }
-    }
-  }, [allStyles, hiddenStyles, setHiddenStyles]);
-
-  useEffect(() => {
-    if (allTones) {
-      const serverIds = allTones.map(t => t._id);
-      const localIds = hiddenTones;
-      const filteredIds = localIds?.filter(id => serverIds.includes(id));
-      if (filteredIds && localIds && filteredIds?.length !== localIds?.length) {
-        setHiddenTones(filteredIds);
-      }
-    }
-  }, [allTones, hiddenTones, setHiddenTones]);
+  // Nothing here saves on its own. The hidden lists leave out an entry on an older version of
+  // a style or tone, which a save keeps on purpose (canBeUnhidden in convex/core/userSettings.ts),
+  // so a clean-up on load that asked again on every render never ended. An entry for a deleted
+  // style or tone can still be in a list: the page counts and draws only what it lists, and the
+  // next Include All or Hide All removes it.
 
   useEffect(() => {
     if (hiddenQuestionObjects) {

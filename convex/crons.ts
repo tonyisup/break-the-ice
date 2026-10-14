@@ -70,6 +70,8 @@ crons.interval(
 // );
 
 // Assign pool questions to newsletter subscribers (runs after pool generation)
+// A pool is held for review now and handed out by its date once approved, so this pair can't
+// be switched back on as written: an hour after generation nothing is approved yet.
 // crons.cron(
 //   "assign pool questions to users",
 //   "0 9 * * *", // 11:00 AM UTC (1:00 AM PST / 2:00 AM PDT)

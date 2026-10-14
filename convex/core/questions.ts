@@ -18,7 +18,7 @@ import {
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
 import { findCanonicalUser } from "../lib/users";
-import { canReadQuestion, isQuestionPublic, isReadableByLink, isRetiredQuestion, withoutVerdict } from "../lib/questionAccess";
+import { canReadQuestion, isQuestionPublic, isReadableByLink, isRetiredQuestion, isUnlistedAiQuestion, withoutVerdict } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
@@ -1174,7 +1174,11 @@ const matrixAxisValidator = v.union(
 /** Paginate questions by status and emit matrix cell keys for occupancy checks (fill matrix). */
 export const pageQuestionMatrixCellKeys = internalQuery({
 	args: {
-		status: v.union(v.literal("public"), v.literal("approved"), v.null()),
+		/**
+		 * "pending" counts only AI questions held for review (isUnlistedAiQuestion): a grid cell
+		 * that has one is taken, though the grid doesn't list it yet.
+		 */
+		status: v.union(v.literal("public"), v.literal("approved"), v.literal("pending"), v.null()),
 		axisY: matrixAxisValidator,
 		axisX: matrixAxisValidator,
 		topicSlug: v.optional(v.string()),
@@ -1194,6 +1198,7 @@ export const pageQuestionMatrixCellKeys = internalQuery({
 			.paginate(args.paginationOpts);
 		const keys: string[] = [];
 		for (const q of r.page) {
+			if (args.status === "pending" && !isUnlistedAiQuestion(q)) continue;
 			const y =
 				args.axisY === "style"
 					? q.style
@@ -1226,10 +1231,14 @@ export const pageQuestionMatrixCellKeys = internalQuery({
 	},
 });
 
-/** Paginate until we find a question matching style/tone/topic slugs (public or approved). */
+/** Paginate until we find a question matching style/tone/topic slugs: public, approved, or held for review (isUnlistedAiQuestion). */
 export const pageQuestionsMatchingSlugTriple = internalQuery({
 	args: {
-		status: v.union(v.literal("public"), v.literal("approved"), v.null()),
+		/**
+		 * "pending" counts only AI questions held for review (isUnlistedAiQuestion): a grid cell
+		 * that has one is taken, though the grid doesn't list it yet.
+		 */
+		status: v.union(v.literal("public"), v.literal("approved"), v.literal("pending"), v.null()),
 		styleSlug: v.string(),
 		toneSlug: v.string(),
 		topicSlug: v.optional(v.string()),
@@ -1249,6 +1258,7 @@ export const pageQuestionsMatchingSlugTriple = internalQuery({
 			.paginate(args.paginationOpts);
 		const found = r.page.some(
 			(q) =>
+				(args.status !== "pending" || isUnlistedAiQuestion(q)) &&
 				(q.style ?? "") === args.styleSlug &&
 				(q.tone ?? "") === args.toneSlug &&
 				(args.topicSlug == null || (q.topic ?? "") === args.topicSlug),

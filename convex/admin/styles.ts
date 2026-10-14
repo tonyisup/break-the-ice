@@ -10,12 +10,23 @@ import {
 import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
-import { defaultIdealPromptLength, defaultQualityRubric, latestVersion } from "../lib/taxonomy";
+import { defaultIdealPromptLength, defaultQualityRubric, editedLine, latestActiveVersion, latestVersion } from "../lib/taxonomy";
 import { mapStyle, styleFields } from "../lib/styleHelpers";
 
 const MAX_STYLES = 500;
 const USER_STYLE_REASSIGN_BATCH_SIZE = 200;
 const QUESTION_STYLE_REASSIGN_BATCH_SIZE = 100;
+
+// The admin pages also show the prompt line and the set form, so the owner can edit them.
+const adminStyleFields = {
+  ...styleFields,
+  brief: v.optional(v.string()),
+  form: v.optional(v.string()),
+};
+
+function mapAdminStyle(style: Doc<"styles">) {
+  return { ...mapStyle(style), brief: style.brief, form: style.form };
+}
 
 async function getStyleSiblings(ctx: { db: QueryCtx["db"] }, slug: string) {
   const bySlug = await ctx.db
@@ -67,7 +78,7 @@ async function performQuestionStyleReassignmentBatch(
 
 export const listStyles = query({
   args: {},
-  returns: v.array(v.object(styleFields)),
+  returns: v.array(v.object(adminStyleFields)),
   handler: async (ctx) => {
     await ensureAdmin(ctx);
     const styles = await ctx.db.query("styles").take(MAX_STYLES);
@@ -77,34 +88,42 @@ export const listStyles = query({
       if (!grouped.has(slug)) grouped.set(slug, []);
       grouped.get(slug)!.push(style);
     }
+    // For each style: the live row, which is the one the generator reads, and after it every
+    // draft newer than it, oldest first. An edit of a live style is saved as a draft, and a
+    // draft that isn't listed can never be activated.
     return Array.from(grouped.values())
-      .map((docs) => {
-        const active = docs.find((doc) => (doc.status ?? "active") === "active");
-        return mapStyle(active ?? latestVersion(docs)!);
+      .flatMap((docs) => {
+        const live = latestActiveVersion(docs);
+        if (!live) return [latestVersion(docs)!];
+        const newerDrafts = docs
+          .filter((doc) => doc.status === "draft" && (doc.version ?? 1) > (live.version ?? 1))
+          .sort((a, b) => (a.version ?? 1) - (b.version ?? 1));
+        return [live, ...newerDrafts];
       })
+      .map(mapAdminStyle)
       .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
   },
 });
 
 export const getStyleVersions = query({
   args: { slug: v.string() },
-  returns: v.array(v.object(styleFields)),
+  returns: v.array(v.object(adminStyleFields)),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
     const styles = await getStyleSiblings(ctx, args.slug);
     return styles
       .sort((a, b) => (b.version ?? 1) - (a.version ?? 1))
-      .map(mapStyle);
+      .map(mapAdminStyle);
   },
 });
 
 export const getStyleVersion = query({
   args: { id: v.id("styles") },
-  returns: v.union(v.object(styleFields), v.null()),
+  returns: v.union(v.object(adminStyleFields), v.null()),
   handler: async (ctx, args) => {
     await ensureAdmin(ctx);
     const style = await ctx.db.get(args.id);
-    return style ? mapStyle(style) : null;
+    return style ? mapAdminStyle(style) : null;
   },
 });
 
@@ -119,6 +138,8 @@ export const createStyle = mutation({
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
     order: v.optional(v.float64()),
+    brief: v.optional(v.string()),
+    form: v.optional(v.string()),
     aiGuidance: v.optional(v.string()),
     commonFailureModes: v.optional(v.array(v.string())),
     distinctFrom: v.optional(v.array(v.string())),
@@ -166,6 +187,8 @@ export const createStyle = mutation({
       example: args.example,
       promptGuidanceForAI: args.promptGuidanceForAI,
       aiGuidance: args.aiGuidance ?? args.promptGuidanceForAI ?? "",
+      brief: editedLine(args.brief, undefined),
+      form: editedLine(args.form, undefined),
       order: args.order,
       version: 1,
       status: "draft",
@@ -197,6 +220,8 @@ export const updateStyle = mutation({
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
     order: v.optional(v.float64()),
+    brief: v.optional(v.string()),
+    form: v.optional(v.string()),
     aiGuidance: v.optional(v.string()),
     commonFailureModes: v.optional(v.array(v.string())),
     distinctFrom: v.optional(v.array(v.string())),
@@ -232,7 +257,8 @@ export const updateStyle = mutation({
     // Prompt fields the edit form doesn't send (examples, failure modes, quality and the rest
     // below) keep the current version's value: falling back to empty defaults wiped a style's
     // examples and left prompts with "Good examples: none". structuralInstruction and
-    // aiGuidance still follow the structure and guidance the form sends.
+    // aiGuidance still follow the structure and guidance the form sends. The prompt line and
+    // the set form are kept the same way, and a blank one sent clears it.
     if ((existingStyle.status ?? "active") === "draft") {
       await ctx.db.patch(args._id, {
         name: args.name,
@@ -244,6 +270,8 @@ export const updateStyle = mutation({
         example: args.example,
         promptGuidanceForAI: args.promptGuidanceForAI,
         aiGuidance: args.aiGuidance ?? args.promptGuidanceForAI ?? "",
+        brief: editedLine(args.brief, existingStyle.brief),
+        form: editedLine(args.form, existingStyle.form),
         order: args.order,
         commonFailureModes: args.commonFailureModes ?? existingStyle.commonFailureModes ?? [],
         distinctFrom: args.distinctFrom ?? existingStyle.distinctFrom ?? [],
@@ -278,6 +306,8 @@ export const updateStyle = mutation({
       example: args.example,
       promptGuidanceForAI: args.promptGuidanceForAI,
       aiGuidance: args.aiGuidance ?? args.promptGuidanceForAI ?? "",
+      brief: editedLine(args.brief, existingStyle.brief),
+      form: editedLine(args.form, existingStyle.form),
       order: args.order,
       version: nextVersion,
       status: "draft",
@@ -318,18 +348,20 @@ export const activateStyleVersion = mutation({
         status: "archived",
         updatedAt: Date.now(),
       });
+    }
+
+    // Questions and people's hidden entries move from every other version, not only the one
+    // that was live: a version archived by hand can still have entries pointing at it.
+    for (const sibling of siblings) {
+      if (sibling._id === args.id) continue;
       await ctx.scheduler.runAfter(
         0,
         internal.admin.styles.reassignUserStylesBatch,
         {
-          previousStyleId: previousActive._id,
+          previousStyleId: sibling._id,
           nextStyleId: args.id,
         },
       );
-    }
-
-    for (const sibling of siblings) {
-      if (sibling._id === args.id) continue;
       await ctx.scheduler.runAfter(
         0,
         internal.admin.styles.reassignQuestionsForStyleBatch,
@@ -370,10 +402,22 @@ export const reassignUserStylesBatch = internalMutation({
       .take(USER_STYLE_REASSIGN_BATCH_SIZE);
 
     for (const userStyle of userStyles) {
-      await ctx.db.patch(userStyle._id, {
-        styleId: args.nextStyleId,
-        updatedAt: Date.now(),
-      });
+      // Someone who marked both rows already has an entry for the next one: that one stays,
+      // or the style would be listed twice for them and one unhide wouldn't clear it.
+      const already = await ctx.db
+        .query("userStyles")
+        .withIndex("by_userId_organizationId_and_styleId", (q) =>
+          q.eq("userId", userStyle.userId).eq("organizationId", userStyle.organizationId).eq("styleId", args.nextStyleId),
+        )
+        .first();
+      if (already) {
+        await ctx.db.delete(userStyle._id);
+      } else {
+        await ctx.db.patch(userStyle._id, {
+          styleId: args.nextStyleId,
+          updatedAt: Date.now(),
+        });
+      }
     }
 
     if (userStyles.length === USER_STYLE_REASSIGN_BATCH_SIZE) {

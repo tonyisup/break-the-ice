@@ -27,7 +27,7 @@ import {
 } from "./jev.mjs";
 import { mapLimit } from "./async.mjs";
 import { writeJson } from "./runRecord.mjs";
-import { SCORING_VERSION, failureReason, frameStats, hashOf, mean, median, rate, round, tally, wilson } from "./stats.mjs";
+import { SCORING_VERSION, failureReason, frameStats, hashOf, mean, median, rate, round, tally, taxonomyHashOf, wilson } from "./stats.mjs";
 
 // Jev requests in flight at once, however the steps below nest them.
 const CONCURRENCY = 8;
@@ -52,6 +52,12 @@ if (!existsSync(generatedPath)) {
   process.exit(1);
 }
 const generated = JSON.parse(readFileSync(generatedPath, "utf8"));
+// A run the eval's own brief wrote recorded the long prompt's definitions, which its questions
+// were never shown, so the fit questions would be graded against the wrong text.
+if (generated.prompt) {
+  console.error(`Run "${run}" was generated with the eval's own brief (${generated.prompt}): its record describes each style by a template the questions were never shown, so it can't be scored.`);
+  process.exit(1);
+}
 const summaryPath = join(runDir, "summary.json");
 if (existsSync(summaryPath) && !flags.includes("--force")) {
   const judged = JSON.parse(readFileSync(summaryPath, "utf8")).judge;
@@ -228,9 +234,7 @@ const summary = {
     // Fingerprints that tell replicates apart from runs of a changed prompt, seed set or taxonomy.
     promptSetHash: hashOf(okBatches.map((batch) => [seedKey(batch), batch.result.promptHash]).sort()),
     definitionsHash: hashOf(okBatches.map((batch) => [seedKey(batch), batch.result.definitions]).sort()),
-    taxonomyHash: hashOf(
-      okBatches.map((batch) => [seedKey(batch), batch.result.blueprint, batch.result.style, batch.result.tone, batch.result.topic]).sort(),
-    ),
+    taxonomyHash: taxonomyHashOf(okBatches),
     seedSetHash: hashOf(okBatches.map((batch) => batch.seed).sort((a, b) => a.id.localeCompare(b.id))),
     temperatures: [...new Set(okBatches.map((batch) => batch.result.temperature))],
     batchSize: generated.batchSize,

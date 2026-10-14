@@ -13,7 +13,7 @@ async function setup() {
 	return { t, userId };
 }
 
-type Fields = { text?: string; customText?: string };
+type Fields = { text?: string; customText?: string; authorId?: string; kind?: "personal" };
 
 async function markQuestions(
 	t: Awaited<ReturnType<typeof setup>>["t"],
@@ -36,16 +36,19 @@ describe.each([
 	["seen", internal.internal.users.getRecentlySeenQuestions],
 	["hidden", internal.internal.users.getBlockedQuestions],
 ] as const)("the %s questions excluded from generation", (status, query) => {
-	test("a personal question with only customText contributes its customText", async () => {
+	test("a person's own question is left out, whether it has only its own wording or a reviewed text: only library wording is listed", async () => {
 		const { t, userId } = await setup();
 		await markQuestions(t, userId, status, [
 			{ text: "What made you laugh this week?" },
+			// The list goes into the generator's prompt, so wording a person wrote never joins it.
 			{ customText: "What should our team name be?" },
+			{ text: "Which teammate would you clone?", customText: "Which teammate would you clone?", authorId: "someone" },
+			{ text: "A question of the personal kind?", kind: "personal" },
 		]);
 
 		const texts = await t.query(query, { userId });
 
-		expect(texts).toEqual(["What should our team name be?", "What made you laugh this week?"]);
+		expect(texts).toEqual(["What made you laugh this week?"]);
 	});
 
 	test("a question with no text at all is left out", async () => {
