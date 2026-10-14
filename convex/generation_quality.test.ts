@@ -1260,6 +1260,44 @@ describe("a grid cell and the nightly pool while their questions wait for review
     expect(create).toHaveBeenCalledTimes(2);
   });
 
+  // Value: protects=a grid fill whose answer the save step keeps nothing of (a copy of a library question, or one it refuses) reports nothing written and nothing waiting for review, by both routes, and leaves the cell open to a later fill;
+  // fails_when=either fill says a question is waiting for review when none was saved, counts the cell among those waiting, or treats it as taken so the next fill never asks the model again;
+  // why_new=every fill test here has its answer saved or stops before the model is called, so the exit where the model answered and nothing was kept was never reached;
+  // seam=none; no_claim=what the page says for these counts (src/app/org/schedule/page.test.tsx covers that with the action mocked), or how often a model repeats a question (provider mocked).
+  test.each<[string, string, string]>([
+    ["is a copy of a question already in the library", "Which workout do you secretly love?", "No new questions saved: 1 duplicate, 0 rejected"],
+    ["is one the save step refuses as too short", "Too short?", "No new questions saved: 0 duplicate, 1 rejected"],
+  ])("a fill whose answer %s writes nothing and says none is waiting for review, by both routes, and the cell can still be filled", async (_why, answer, runError) => {
+    const s = await team();
+    // In the library under the dry cell of the grid, so the warm cell itself is empty.
+    const inLibrary = "Which workout do you secretly love?";
+    await s.t.run(async (ctx) =>
+      ctx.db.insert("questions", { text: inLibrary, fingerprint: fingerprintText(inLibrary), style: "reflective", tone: "dry", status: "public", ...counters }),
+    );
+    writes(answer, answer, "What made you laugh this week?");
+
+    expect(await fillOne(s, "warm")).toEqual({ count: 0, questionIds: [], waitingForReview: false });
+    // Nothing was saved, so the cell is not taken: the batch fill asks the model again, and
+    // counts the cell as skipped, not as one whose question is waiting for review.
+    expect(await fillBatch(s, ["warm"])).toEqual({ totalCells: 1, filledCells: 0, totalQuestionsGenerated: 0, skippedExisting: 1, skippedWaitingForReview: 0, skippedInvalidTaxonomy: 0 });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect((await allQuestions(s.t)).map((q) => q.text)).toEqual([inLibrary]);
+    expect(await reviewQueue(s.t)).toEqual([]);
+    const { runs, locks } = await s.t.run(async (ctx) => ({
+      runs: await ctx.db.query("generationRuns").collect(),
+      locks: await ctx.db.query("matrixFillCellLocks").collect(),
+    }));
+    // Each fill reached the save step, and the save step is what kept nothing.
+    expect(runs.map((run) => [run.status, run.error])).toEqual([["failed", runError], ["failed", runError]]);
+    expect(locks).toEqual([]);
+
+    // With an answer the save step keeps, the same cell is written and its question waits for review.
+    const filled = await fillOne(s, "warm");
+    expect(filled).toEqual({ count: 1, questionIds: [expect.any(String)], waitingForReview: true });
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(await reviewQueue(s.t)).toEqual(filled.questionIds);
+  });
+
   test("once an admin approves a grid fill's question it is public and on the team's grid, and a later fill skips the cell as listed", async () => {
     const s = await team();
     writes("What made you laugh this week?");
