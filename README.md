@@ -21,7 +21,9 @@ side each cell is written under its own topic.
 The lines are in [`convex/data/briefLines.ts`](./convex/data/briefLines.ts) and reach the
 database through a one-time step, run straight after the deploy that brings the brief:
 `npx convex run internal/migrations:seedBriefLines '{"dryRun":true}'`, then with `false`. Until
-it has run, entries are read by their old description and no style has its set form.
+it has run, entries are read by their old description and no style has its set form, and a style
+or tone someone hid on the old copy of a doubled entry doesn't show as hidden in Settings, so its
+questions can reach them; the seed moves the hidden entry to the live row.
 
 ## Documentation
 

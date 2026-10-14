@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx } from "../_generated/server";
+import { mutation, query, type QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
 import {
@@ -335,10 +335,11 @@ export const updateHiddenQuestions = mutation({
  * Whether leaving a hidden style or tone out of a save means the person unhid it. The Settings
  * page sends only the ids it lists, and it lists one row for each style or tone: the live
  * version. An entry for any other row, such as an older copy that hasn't been moved to the live
- * one yet, was never on the page to unhide, so it stays. An entry for a deleted row goes.
+ * one yet, was never on the page to unhide, so it stays, and the hidden lists the page reads
+ * leave it out (getHiddenStyleIds, getHiddenToneIds). An entry for a deleted row goes.
  */
 async function canBeUnhidden(
-	ctx: MutationCtx,
+	ctx: QueryCtx,
 	table: "styles" | "tones",
 	id: Id<"styles"> | Id<"tones">,
 	organizationId: Id<"organizations"> | undefined,
@@ -711,7 +712,14 @@ export const getHiddenStyleIds = query({
 					.eq("status", "hidden"),
 			)
 			.collect();
-		const hiddenStyles = hiddenStylesDocs.map((us) => us.styleId);
+		// Only what the Settings page can show, by the rule a save uses (canBeUnhidden). An entry on
+		// an older copy the seed hasn't moved yet is left out: a save keeps it, so a page that tidies
+		// this list when it opens (the build a browser cached before the deploy does) would save
+		// again on every render. Once the seed moves it to the live row, it shows.
+		const hiddenStyles: Id<"styles">[] = [];
+		for (const us of hiddenStylesDocs) {
+			if (await canBeUnhidden(ctx, "styles", us.styleId, organizationId)) hiddenStyles.push(us.styleId);
+		}
 
 		return hiddenStyles;
 	}
@@ -848,7 +856,11 @@ export const getHiddenToneIds = query({
 			)
 			.collect();
 
-		const hiddenTones = hiddenTonesDocs.map((ut) => ut.toneId);
+		// As getHiddenStyleIds: only what the Settings page can show.
+		const hiddenTones: Id<"tones">[] = [];
+		for (const ut of hiddenTonesDocs) {
+			if (await canBeUnhidden(ctx, "tones", ut.toneId, organizationId)) hiddenTones.push(ut.toneId);
+		}
 
 		return hiddenTones;
 	}

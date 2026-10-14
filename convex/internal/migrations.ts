@@ -1359,7 +1359,9 @@ async function seedBriefLinesFor(
  *
  * Run it straight after the deploy, before anyone opens the admin style pages: from the deploy
  * on, the lists already show the numbered row, and until this has run the rows point at the old
- * copy and no entry has its line. Take a backup first, then run
+ * copy and no entry has its line. A person's hidden entry on the old copy is also left out of the
+ * hidden lists the Settings page reads (canBeUnhidden in core/userSettings.ts), so that style or
+ * tone doesn't show as hidden for them until the move. Take a backup first, then run
  * `npx convex run internal/migrations:seedBriefLines '{"dryRun":true}'`, then with `false`.
  *
  * The move is one way: a moved question or hidden entry looks like any other on the live row,

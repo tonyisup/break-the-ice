@@ -264,7 +264,7 @@ describe("seeding the brief's lines", () => {
     }));
     expect([after.oldStyle?.status, after.liveStyle?.status]).toEqual(["archived", "active"]);
     expect(after.question).toMatchObject({ styleId: ids.liveStyle, toneId: ids.liveTone, style: "would-you-rather", tone: "nostalgic" });
-    // A hidden style or tone is stored by id: left on the archived copy, the settings page would drop it.
+    // A hidden style or tone is stored by id: left on the archived copy, it would never show in Settings, where the person could unhide it.
     expect([after.hiddenStyle?.styleId, after.hiddenTone?.toneId]).toEqual([ids.liveStyle, ids.liveTone]);
     // The question's card looks its style up by id, and the lists show the same row.
     expect(await t.query(api.core.styles.getStyleById, { id: after.question!.styleId! })).toMatchObject({ _id: ids.liveStyle });
@@ -400,7 +400,7 @@ describe("seeding the brief's lines", () => {
     expect(rows.tones.map((row) => [row.userId, row.toneId])).toEqual([[ids.userId, ids.liveTone]]);
   });
 
-  test("a Settings save made before the move keeps a hidden entry the page never listed, and still removes one the person unhid", async () => {
+  test("before the move, a Settings save keeps a hidden entry the page never listed and the hidden lists leave it out, and one the person unhid is still removed", async () => {
     const t = convexTest(schema, modules);
     const READER = { subject: "reader-clerk", tokenIdentifier: "test|reader-clerk", email: "reader@example.com" };
     const ids = await t.run(async (ctx) => {
@@ -417,10 +417,15 @@ describe("seeding the brief's lines", () => {
       for (const styleId of [oldStyle, otherStyle, goneStyle]) await ctx.db.insert("userStyles", { userId, styleId, status: "hidden", updatedAt: 0 });
       for (const toneId of [oldTone, otherTone]) await ctx.db.insert("userTones", { userId, toneId, status: "hidden", updatedAt: 0 });
       await ctx.db.delete(goneStyle);
-      return { oldStyle, liveStyle, otherStyle, oldTone, liveTone, otherTone };
+      return { oldStyle, liveStyle, otherStyle, goneStyle, oldTone, liveTone, otherTone };
     });
     const reader = t.withIdentity(READER);
     expect((await reader.query(api.core.styles.getStyles, {})).map((row) => row._id).sort()).toEqual([ids.liveStyle, ids.otherStyle].sort());
+    // The hidden lists hold only what the page can show, so no page, a cached old build included,
+    // finds an id there that a save won't remove and asks again. A deleted style's entry stays
+    // in: a save removes it.
+    expect(await reader.query(api.core.userSettings.getHiddenStyleIds, {})).toEqual([ids.otherStyle, ids.goneStyle]);
+    expect(await reader.query(api.core.userSettings.getHiddenToneIds, {})).toEqual([ids.otherTone]);
 
     // What the page sends: the ids it lists that are still hidden. Here the person unhid everything it showed.
     await reader.mutation(api.core.userSettings.updateHiddenStyles, { hiddenStyles: [] });
@@ -431,6 +436,9 @@ describe("seeding the brief's lines", () => {
     // The entries for the old copies stay: the page never showed them, so leaving them out was no choice.
     expect(kept.styles.map((row) => row.styleId)).toEqual([ids.oldStyle]);
     expect(kept.tones.map((row) => row.toneId)).toEqual([ids.oldTone]);
+    // And the page still sees nothing to tidy: it saves no more.
+    expect(await reader.query(api.core.userSettings.getHiddenStyleIds, {})).toEqual([]);
+    expect(await reader.query(api.core.userSettings.getHiddenToneIds, {})).toEqual([]);
 
     // The seed then moves them to the live rows, where the page lists and can unhide them.
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -488,6 +496,8 @@ describe("seeding the brief's lines", () => {
     // The team's workspace lists the team's row for this slug, so the shared row was never on its page: the entry stays.
     await reader.mutation(api.core.userSettings.updateHiddenStyles, { hiddenStyles: [], organizationId: ids.organizationId });
     expect((await t.run((ctx) => ctx.db.get(ids.inTeam)))?.styleId).toBe(ids.shared);
+    // Nor is it in the team workspace's hidden list, which holds only what that page shows.
+    expect(await reader.query(api.core.userSettings.getHiddenStyleIds, { organizationId: ids.organizationId })).toEqual([]);
   });
 
   test("a copy that has only the old id, with no slug, status or version, is archived beside its rewrite", async () => {

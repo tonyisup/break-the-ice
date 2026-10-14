@@ -41,9 +41,12 @@ vi.mock("@/components/header", () => ({
 }));
 
 vi.mock("@/components/collapsible-section/CollapsibleSection", () => ({
-  CollapsibleSection: ({ title, children }: any) => (
+  CollapsibleSection: ({ title, children, visibleCount, hiddenCount }: any) => (
     <section>
       <h2>{title}</h2>
+      {visibleCount !== undefined && hiddenCount !== undefined && (
+        <p data-testid={`counts-${title}`}>{`${visibleCount} shown, ${hiddenCount} hidden`}</p>
+      )}
       <div>{children}</div>
     </section>
   ),
@@ -176,8 +179,10 @@ describe("SettingsPage", () => {
 
     expect(setHiddenStyles).not.toHaveBeenCalled();
     expect(setHiddenTones).not.toHaveBeenCalled();
-    // The listed style and tone are not hidden, whatever else the list holds.
-    expect(screen.getByText("Reflective")).toBeDefined();
-    expect(screen.getByText("Warm")).toBeDefined();
+    // The listed style and tone show as not hidden, and the counts take in only what the page lists.
+    expect(screen.getByRole("button", { name: "Toggle style Reflective" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Toggle tone Warm" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("counts-Manage Styles").textContent).toBe("1 shown, 0 hidden");
+    expect(screen.getByTestId("counts-Manage Tones").textContent).toBe("1 shown, 0 hidden");
   });
 });

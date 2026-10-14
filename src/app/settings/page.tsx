@@ -153,10 +153,11 @@ const SettingsPage = () => {
     hiddenQuestions.includes(q._id)
   );
 
-  // A hidden id this page doesn't list (an older version of a style or tone, or a deleted
-  // one) is left where it is. The page counts and draws only what it lists, and nothing here
-  // saves on its own: the save keeps such an entry on purpose (canBeUnhidden in
-  // convex/core/userSettings.ts), so a clean-up that asked again on every render never ended.
+  // Nothing here saves on its own. The hidden lists leave out an entry on an older version of
+  // a style or tone, which a save keeps on purpose (canBeUnhidden in convex/core/userSettings.ts),
+  // so a clean-up on load that asked again on every render never ended. An entry for a deleted
+  // style or tone can still be in a list: the page counts and draws only what it lists, and the
+  // next Include All or Hide All removes it.
 
   useEffect(() => {
     if (hiddenQuestionObjects) {
