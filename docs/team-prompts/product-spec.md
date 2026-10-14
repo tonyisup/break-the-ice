@@ -129,7 +129,9 @@ The preview action:
 1. Validates and bounds topic input.
 2. Verifies the caller is an admin or manager in an active Team workspace.
 3. Reserves one unit from the workspace's AI generation allowance.
-4. Uses the existing prompt architecture with the selected style and tone.
+4. Uses the short brief, the prompt every generator uses, with the selected
+   style and tone. It leaves out the brief's examples of questions the app's
+   owner rejected.
 5. Includes topic guidance and boundaries as generation context.
 6. Returns exactly three distinct persistable candidates without adding them to
    the public question pool.
