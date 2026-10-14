@@ -444,11 +444,12 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
     expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled();
   });
 
-  const batch = (totalCells: number, filledCells: number, totalQuestionsGenerated: number, skippedInvalidTaxonomy = 0, skippedWaitingForReview = 0) => ({
+  // A cell whose AI call failed is counted in none of the result's fields, as fillEmptyCells does.
+  const batch = (totalCells: number, filledCells: number, totalQuestionsGenerated: number, skippedInvalidTaxonomy = 0, skippedWaitingForReview = 0, failedCells = 0) => ({
     totalCells,
     filledCells,
     totalQuestionsGenerated,
-    skippedExisting: totalCells - filledCells - skippedInvalidTaxonomy,
+    skippedExisting: totalCells - filledCells - skippedInvalidTaxonomy - failedCells,
     skippedWaitingForReview,
     skippedInvalidTaxonomy,
   });
@@ -458,6 +459,7 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
     ["wrote questions and skipped a deleted style or tone", batch(3, 2, 2, 1), "Wrote 2 questions. 1 cell uses a style, tone or topic that no longer exists. They will show here after the Break the Ice team reviews them."],
     ["wrote one question", batch(2, 1, 1), "Wrote 1 question. It will show here after the Break the Ice team reviews it."],
     ["wrote questions and found a cell already waiting for review", batch(3, 2, 2, 0, 1), "Wrote 2 questions. 1 cell already had a question waiting for review. They will show here after the Break the Ice team reviews them."],
+    ["wrote questions while another cell's AI call failed", batch(3, 2, 2, 0, 0, 1), "Wrote 2 questions. They will show here after the Break the Ice team reviews them. 1 cell couldn't be filled. Try it again later."],
     ["wrote questions, found a cell waiting and another's style deleted", batch(4, 2, 2, 1, 1), "Wrote 2 questions. 1 cell already had a question waiting for review. 1 cell uses a style, tone or topic that no longer exists. They will show here after the Break the Ice team reviews them."],
   ])("after a batch fill that %s, gives the counts and says they show after the Break the Ice team's review", async (_what, result, message) => {
     matrixWithOneEmptyCell();
@@ -478,6 +480,9 @@ describe("OrgWeeklyCurationPage matrix fill results", () => {
     ["with one cell waiting and another's style deleted", batch(2, 0, 0, 1, 1), "No new questions were written. 1 cell already has a question waiting for review. 1 cell uses a style, tone or topic that no longer exists."],
     ["with no cell skipped for review or a deleted style", batch(2, 0, 0), "No new questions were written. Every cell already has a question, or the AI repeated an existing one."],
     ["and skipped a deleted style or tone", batch(2, 0, 0, 2), "No new questions were written. 2 cells use a style, tone or topic that no longer exists."],
+    // Not "every cell already has a question": the cells failed, and trying again may work.
+    ["because every cell's AI call failed", batch(2, 0, 0, 0, 0, 2), "No new questions were written. 2 cells couldn't be filled. Try them again later."],
+    ["with one cell waiting and another failed", batch(2, 0, 0, 0, 1, 1), "No new questions were written. 1 cell already has a question waiting for review. 1 cell couldn't be filled. Try it again later."],
   ])("after a batch fill that wrote nothing %s, gives the counts as plain information, not a success, and says nothing about review", async (_what, result, message) => {
     matrixWithOneEmptyCell();
     fillResults({ fillEmptyCells: result });

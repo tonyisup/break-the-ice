@@ -135,7 +135,9 @@ To assign something now, pick a library question, or use the **Write** or
 **Topic** tab.
 
 If the planner says no new question was written for this cell, nothing was
-added: select **Generate** again, or pick a library question.
+added: select **Generate** again, or pick a library question. If **Fill Empty
+Cells** says some cells couldn't be filled, the AI call for those cells failed
+and nothing was written for them; try them again later.
 
 ### The week will not publish
 

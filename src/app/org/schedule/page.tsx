@@ -1334,15 +1334,22 @@ const questionPool = useQuery(
       const skipped = gone > 0
         ? ` ${gone} cell${gone !== 1 ? "s use" : " uses"} a style, tone or topic that no longer exists.`
         : "";
+      // A cell whose AI call failed is logged by the server and counted in none of these: it is
+      // what is left of the grid once the written and skipped cells are taken away.
+      const failed = Math.max(0, result.totalCells - result.filledCells - result.skippedExisting - gone);
+      const failedCells = failed > 0
+        ? ` ${failed} cell${failed !== 1 ? "s" : ""} couldn't be filled. Try ${failed !== 1 ? "them" : "it"} again later.`
+        : "";
       if (written > 0) {
         const alreadyWaiting = waiting > 0 ? ` ${waitingCells} already had a question waiting for review.` : "";
         // A new question is reviewed before the grid lists it.
-        toast.success(`Wrote ${written} question${written !== 1 ? "s" : ""}.${alreadyWaiting}${skipped} ${showsAfterReview(written)}`);
+        toast.success(`Wrote ${written} question${written !== 1 ? "s" : ""}.${alreadyWaiting}${skipped} ${showsAfterReview(written)}${failedCells}`);
       } else if (waiting > 0) {
-        toast.info(`No new questions were written. ${waitingCells} already ${waiting !== 1 ? "have" : "has"} a question waiting for review.${skipped}`);
+        toast.info(`No new questions were written. ${waitingCells} already ${waiting !== 1 ? "have" : "has"} a question waiting for review.${skipped}${failedCells}`);
       } else {
-        // With cells skipped for a missing style, that is the reason to give; otherwise the usual one.
-        toast.info(`No new questions were written.${skipped || " Every cell already has a question, or the AI repeated an existing one."}`);
+        // With cells skipped for a missing style, or cells that failed, those are the reasons to
+        // give; otherwise the usual one.
+        toast.info(`No new questions were written.${skipped || failedCells ? `${skipped}${failedCells}` : " Every cell already has a question, or the AI repeated an existing one."}`);
       }
     } catch (e: any) {
       toast.error(readableError(e, "Failed to fill empty cells"));
