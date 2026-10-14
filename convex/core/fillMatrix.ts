@@ -206,9 +206,10 @@ export const fillEmptyCells = action({
 				continue;
 			}
 
+			const lockKey = `${cell.styleSlug}|${cell.toneSlug}|${effectiveTopic ?? ""}`;
 			const claim = await ctx.runMutation(
 				internal.internal.matrixFillLocks.claimMatrixFillCell,
-				{ organizationId: args.organizationId, cellKey },
+				{ organizationId: args.organizationId, cellKey: lockKey },
 			);
 			if (!claim.claimed) {
 				skippedExisting++;
@@ -274,7 +275,7 @@ export const fillEmptyCells = action({
 			} finally {
 				await ctx.runMutation(internal.internal.matrixFillLocks.releaseMatrixFillCell, {
 					organizationId: args.organizationId,
-					cellKey,
+					cellKey: lockKey,
 				});
 			}
 		}

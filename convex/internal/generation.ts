@@ -158,6 +158,10 @@ const EXAMPLE_POOL = 200;
 const REJECTED_LOOKBACK = 60;
 /** Public questions read per version of another style, to find one from the shared library. */
 const OTHER_STYLE_POOL = 30;
+/** Style versions read when gathering library examples. */
+const STYLE_POOL = 200;
+/** Approved pruning reviews read per retired question. */
+const PRUNING_REVIEW_POOL = 20;
 
 /**
  * The owner's decisions the brief shows for a style, read from the library: public questions
@@ -177,8 +181,8 @@ async function readBriefExamples(
   const inSharedLibrary = (question: Doc<"questions">) =>
     Boolean(question.text) && !isUserWrittenQuestion(question) && !question.duplicateOf;
   // A question keeps the id of the style version it was written for, so every version of a
-  // style is searched. The styles table is a few dozen rows.
-  const allStyles = await ctx.db.query("styles").collect();
+  // style is searched within the bounded pool.
+  const allStyles = await ctx.db.query("styles").take(STYLE_POOL);
   const versionsOf = (slug: string, organizationId: Doc<"styles">["organizationId"]) =>
     allStyles.filter((row) => slugOf(row) === slug && row.organizationId === organizationId);
   const questionsOf = async (rows: Doc<"styles">[], statuses: Array<Doc<"questions">["status"]>, count: number) => {
@@ -215,7 +219,7 @@ async function readBriefExamples(
         const reviews = await ctx.db
           .query("pruning")
           .withIndex("by_questionId_and_status", (q) => q.eq("questionId", question._id).eq("status", "approved"))
-          .collect();
+          .take(PRUNING_REVIEW_POOL);
         const reasons = [...new Set(reviews.flatMap((review) => review.editorialReasons ?? []))];
         return reasons.length ? [{ text: question.text ?? "", reasons }] : [];
       }),

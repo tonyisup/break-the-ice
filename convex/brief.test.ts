@@ -522,6 +522,41 @@ describe("the owner's decisions a prompt shows, read from the library", () => {
     for (const hidden of ["low engagement", "empty list", "still open", "turned down", "A team's retired", "A person's retired"]) expect(userPrompt).not.toContain(hidden);
   });
 
+  test("rejected examples use at most 20 approved reviews per question", async () => {
+    const { t, eitherOr } = await library();
+    await t.run(async (ctx) => {
+      const questionId = await ctx.db.insert("questions", { text: "Cats or dogs or something?", styleId: eitherOr, status: "pruned", ...counters });
+      for (let n = 0; n < 20; n += 1) {
+        await ctx.db.insert("pruning", { questionId, status: "approved", reason: "Retired in review", editorialReasons: ["awkward_wording"] });
+      }
+      await ctx.db.insert("pruning", { questionId, status: "approved", reason: "Outside the review limit", editorialReasons: ["unclear_answer"] });
+    });
+
+    expect(section((await build(t, "either-or")).userPrompt, REJECTED)).toEqual([
+      '- "Cats or dogs or something?" (awkward wording)',
+    ]);
+  });
+
+  test("examples use at most 200 style versions, preserving examples within the limit", async () => {
+    const { t, eitherOr, reflective } = await library();
+    await addQuestion(t, eitherOr, "Tea or coffee?");
+    await addQuestion(t, reflective, "What do you look back on fondly?");
+    await t.run(async (ctx) => {
+      // The library already has three style versions; fill the rest of the bounded pool.
+      for (let n = 0; n < 197; n += 1) {
+        await ctx.db.insert("styles", { id: `archived-${n}`, name: `Archived ${n}`, structure: "x", color: "#111111", icon: "sparkles", status: "archived" });
+      }
+    });
+    const outside = await addStyle(t, "outside", "Outside the style limit");
+    await addQuestion(t, outside, "Which question lies beyond the style limit?");
+
+    const { userPrompt } = await build(t, "either-or");
+
+    expect(section(userPrompt, KEPT)).toEqual(['- "Tea or coffee?"']);
+    expect(section(userPrompt, OTHER_STYLES)).toEqual(['- "What do you look back on fondly?" [Reflective]']);
+    expect(userPrompt).not.toContain("Which question lies beyond");
+  });
+
   test("other styles each give one question from the shared library, from at most six live styles, with the style's name beside it", async () => {
     const { t, eitherOr, organizationId } = await library();
     await addQuestion(t, eitherOr, "Tea or coffee?");

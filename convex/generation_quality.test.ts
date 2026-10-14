@@ -1062,6 +1062,38 @@ describe("a grid cell and the nightly pool while their questions wait for review
     expect(await s.t.run(async (ctx) => ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
   });
 
+  test.each([
+    ["style by tone with no topic", "style", "tone", "reflective", "warm", undefined, "reflective|warm|"],
+    ["tone by style with a shared topic", "tone", "style", "warm", "reflective", "weekends", "reflective|warm|weekends"],
+    ["style by topic", "style", "topic", "reflective", "weekends", "ignored", "reflective|warm|weekends"],
+    ["topic by style", "topic", "style", "weekends", "reflective", "ignored", "reflective|warm|weekends"],
+  ] as const)("a batch fill on %s respects a single-cell lock and keeps its occupancy key separate", async (_grid, axisY, axisX, ySlug, xSlug, topicSlug, cellKey) => {
+    const s = await team();
+    await s.t.run(async (ctx) => ctx.db.insert("topics", { id: "weekends", slug: "weekends", name: "Weekends", status: "active", version: 1 }));
+    const cell = { ySlug, xSlug, styleSlug: "reflective", toneSlug: "warm" };
+    const fill = () => s.t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
+      organizationId: s.organizationId,
+      axisY,
+      axisX,
+      topicSlug,
+      cells: [cell, cell],
+    });
+    await s.t.mutation(internal.internal.matrixFillLocks.claimMatrixFillCell, { organizationId: s.organizationId, cellKey });
+    writes("What made you laugh this week?");
+
+    expect(await fill()).toMatchObject({ filledCells: 0, skippedExisting: 2, skippedWaitingForReview: 0 });
+    expect(create).not.toHaveBeenCalled();
+    expect(await s.t.run(async (ctx) => ctx.db.query("matrixFillCellLocks").collect())).toEqual([
+      expect.objectContaining({ organizationId: s.organizationId, cellKey }),
+    ]);
+
+    await s.t.mutation(internal.internal.matrixFillLocks.releaseMatrixFillCell, { organizationId: s.organizationId, cellKey });
+
+    expect(await fill()).toMatchObject({ filledCells: 1, totalQuestionsGenerated: 1, skippedExisting: 1, skippedWaitingForReview: 1 });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await s.t.run(async (ctx) => ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
+  });
+
   // Pending questions that aren't the shared library's. None of them takes a grid cell.
   test.each<[string, (s: Team) => Record<string, unknown>]>([
     ["a person's own submission", (s) => ({ authorId: s.meId })],
