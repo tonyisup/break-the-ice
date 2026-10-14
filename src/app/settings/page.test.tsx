@@ -168,7 +168,8 @@ describe("SettingsPage", () => {
     const setHiddenTones = vi.fn();
     mockUseStorageContext.mockReturnValue({
       ...mockUseStorageContext(),
-      hiddenStyles: ["style-old-copy"],
+      // An id the page doesn't list beside the listed style, which is hidden too.
+      hiddenStyles: ["style-old-copy", "style-1"],
       setHiddenStyles,
       hiddenTones: ["tone-old-copy"],
       setHiddenTones,
@@ -179,10 +180,11 @@ describe("SettingsPage", () => {
 
     expect(setHiddenStyles).not.toHaveBeenCalled();
     expect(setHiddenTones).not.toHaveBeenCalled();
-    // The listed style and tone show as not hidden, and the counts take in only what the page lists.
-    expect(screen.getByRole("button", { name: "Toggle style Reflective" })).toHaveAttribute("aria-pressed", "true");
+    // The listed style shows as hidden and the listed tone as not, and the counts take in only
+    // what the page lists.
+    expect(screen.getByRole("button", { name: "Toggle style Reflective" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "Toggle tone Warm" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByTestId("counts-Manage Styles").textContent).toBe("1 shown, 0 hidden");
+    expect(screen.getByTestId("counts-Manage Styles").textContent).toBe("0 shown, 1 hidden");
     expect(screen.getByTestId("counts-Manage Tones").textContent).toBe("1 shown, 0 hidden");
   });
 });
