@@ -79,7 +79,7 @@ export const getUserInteractionStats = query({
 
 		const seenQuestions = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userId", (q) => q.eq("userId", user._id))
+			.withIndex("by_userId_status_updatedAt", (q) => q.eq("userId", user._id))
 			.filter((q) => q.neq(q.field("status"), "unseen"))
 			.take(50);
 

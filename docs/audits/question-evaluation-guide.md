@@ -48,15 +48,16 @@ before a library-wide review. No library-wide mutation is performed by this work
 
 Resolving a group keeps one question in discovery and retires the other copies
 with `status: pruned`, a timestamp, and a `duplicateOf` link. Records, original
-text, images, counters, and IDs remain intact. Collections, user history, analytics,
-and scheduled assignments keep referencing the original questions. There is no
-counter aggregation, history rewriting, or redirection to different text.
+text, images, counters, and IDs remain intact. User history and analytics keep
+referencing the original questions. There is no counter aggregation, history
+rewriting, or redirection to different text.
 
 Existing public URLs, their images, and social previews remain readable for
 retired duplicate copies that were public before resolution. Private copies do
 not gain public visibility. Ordinary editorial pruning does not gain this public
-link exception. The retained question must belong to the same group and question
-workspace; all other members must be selected, still exist, and be unretired.
+link exception. The retained question must belong to the same group and be the
+same kind (library or personal); all other members must be selected, still exist,
+and be unretired.
 The old bulk duplicate-deletion endpoint now refuses the operation.
 
 The mutation records the authenticated reviewer, reason, before/after text and
