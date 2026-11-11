@@ -693,6 +693,54 @@ describe("updating the hidden list keeps hides the user can no longer read", () 
   });
 });
 
+describe("two people's rows for the same question, style and tone stay their own", () => {
+  // Value: protects=a like, an unhide and the Settings lists touch only the signed-in person's rows when someone else has a row for the same question, style or tone;
+  // fails_when=a per-person lookup (findUserQuestion, findUserStyle, findUserTone, the hidden and liked lists, the interaction stats) is keyed by the question, style or tone alone, so one person's action changes or shows another's row;
+  // why_new=every one of these reads moved to a per-person index in this change, and no test seeds two people's rows on the same question, style or tone;
+  // seam=none; no_claim=which questions each person may read (covered by "private questions stay private").
+  test("one person's like, unhides and lists leave the other person's rows alone", async () => {
+    const { t, ownerId, otherId, publicQuestionId } = await setup();
+    const { styleId, toneId } = await t.run(async (ctx) => {
+      const styleId = await ctx.db.insert("styles", {
+        id: "open-ended", slug: "open-ended", name: "Open-ended", structure: "x", color: "#111111", icon: "sparkles", status: "active", version: 1,
+      });
+      const toneId = await ctx.db.insert("tones", {
+        id: "warm", slug: "warm", name: "Warm", promptGuidanceForAI: "x", color: "#222222", icon: "sun", status: "active", version: 1,
+      });
+      // The owner's rows come first, so a lookup that ignores the person finds them first.
+      await ctx.db.insert("userQuestions", { userId: ownerId, questionId: publicQuestionId, status: "seen", updatedAt: Date.now() });
+      return { styleId, toneId };
+    });
+    const owner = t.withIdentity(OWNER);
+    const other = t.withIdentity(OTHER);
+    for (const person of [owner, other]) {
+      await person.mutation(api.core.userSettings.addHiddenStyleId, { styleId });
+      await person.mutation(api.core.userSettings.addHiddenToneId, { toneId });
+    }
+
+    await other.mutation(api.core.userSettings.updateLikedQuestions, { likedQuestions: [publicQuestionId] });
+    await other.mutation(api.core.userSettings.removeHiddenStyleId, { styleId });
+    await other.mutation(api.core.userSettings.removeHiddenToneId, { toneId });
+
+    const rows = await t.run(async (ctx) => await ctx.db.query("userQuestions").collect());
+    expect(rows.map((row) => [row.userId, row.status]).sort()).toEqual([[ownerId, "seen"], [otherId, "liked"]].sort());
+    expect(await owner.query(api.core.userSettings.getSettings, {})).toMatchObject({
+      likedQuestions: [],
+      hiddenStyles: [styleId],
+      hiddenTones: [toneId],
+    });
+    expect(await other.query(api.core.userSettings.getSettings, {})).toMatchObject({
+      likedQuestions: [publicQuestionId],
+      hiddenStyles: [],
+      hiddenTones: [],
+    });
+    expect(await owner.query(api.core.userSettings.getHiddenStyleIds, {})).toEqual([styleId]);
+    expect(await owner.query(api.core.userSettings.getHiddenToneIds, {})).toEqual([toneId]);
+    expect(await owner.query(api.core.users.getUserInteractionStats, {})).toMatchObject({ totalSeen: 1, totalLikes: 0 });
+    expect(await other.query(api.core.users.getUserInteractionStats, {})).toMatchObject({ totalSeen: 1, totalLikes: 1 });
+  });
+});
+
 describe("user lookups follow the Clerk id, not the email", () => {
   // Same Clerk user as OWNER, but the email claim changed. Rows are seeded directly:
   // the user mutations would update the stored email and hide the mismatch.

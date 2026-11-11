@@ -623,6 +623,38 @@ describe("editorial review safeguards", () => {
     ).toHaveLength(0);
   });
 
+  // Value: protects=a duplicate group mixing a library question and a person's own question is refused whichever side is kept, and nothing is retired;
+  // fails_when=the kind check is dropped along with the workspace checks, so a library question is retired in favor of a person's own one or the other way round;
+  // why_new=the check lost its organization half in this change and no test, before or after, sends a mixed group;
+  // seam=none; no_claim=older submissions with an author but no kind, which the check treats as library questions.
+  test("a duplicate group mixing a library question and a person's own question is refused, and nothing changes", async () => {
+    const { t, admin, ids, args } = await setupGroup();
+    await t.run((ctx) => ctx.db.patch(ids.retire, { kind: "personal" }));
+    const before = await t.run(async (ctx) => ({
+      keep: await ctx.db.get(ids.keep),
+      retire: await ctx.db.get(ids.retire),
+      detection: await ctx.db.get(ids.detectionId),
+    }));
+
+    await expect(admin.mutation(api.admin.questions.deleteDuplicateQuestions, args)).rejects.toThrow(
+      "Cannot resolve duplicates across library and personal questions",
+    );
+    await expect(
+      admin.mutation(api.admin.questions.deleteDuplicateQuestions, {
+        ...args,
+        keepQuestionId: ids.retire,
+        questionIdsToDelete: [ids.keep],
+      }),
+    ).rejects.toThrow("Cannot resolve duplicates across library and personal questions");
+
+    const after = await t.run(async (ctx) => ({
+      keep: await ctx.db.get(ids.keep),
+      retire: await ctx.db.get(ids.retire),
+      detection: await ctx.db.get(ids.detectionId),
+    }));
+    expect(after).toEqual(before);
+  });
+
   test("duplicate retirement preserves history and public links; undo restores all", async () => {
     const { t, admin, ids, args } = await setupGroup();
     const refs = await t.run(async (ctx) => {
