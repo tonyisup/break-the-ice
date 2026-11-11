@@ -514,7 +514,7 @@ export async function runPersistedQuestionGeneration(
   questions: any[];
 }> {
   // Only the daily email and the admin-triggered pool are system spend. Everything
-  // else (feed generation, matrix fill, any purpose added later) is user spend.
+  // else (feed generation, any purpose added later) is user spend.
   const spendClass: SpendClass =
     args.purpose === "newsletter" || args.purpose === "nightly_pool" ? "system" : "user";
   await ensureAiBudget(ctx, spendClass);
@@ -643,10 +643,6 @@ export async function runPreviewQuestionGeneration(
      * harness gives one per seed, so a rerun asks the same thing.
      */
     sampleSeed?: number;
-    /** Leaves the owner's rejections out of the prompt. A team's preview sets it. */
-    withoutRejected?: boolean;
-    /** "system" for admin tools; team previews are user spend. */
-    spendClass?: SpendClass;
     /** An OpenRouter model to use instead of GENERATION_MODEL. Only the eval harness sets it. */
     model?: string;
     /**
@@ -665,7 +661,8 @@ export async function runPreviewQuestionGeneration(
   // Checked here, where the name reaches the provider, so no caller can pass one through
   // unchecked, and before anything is read or charged.
   if (args.model !== undefined) assertOpenRouterModel(args.model);
-  const spendClass = args.spendClass ?? "user";
+  // Only admin tools and the eval harness preview, so a preview is always system spend.
+  const spendClass: SpendClass = "system";
   await ensureAiBudget(ctx, spendClass);
 
   const model = args.model ?? GENERATION_MODEL;
@@ -682,7 +679,6 @@ export async function runPreviewQuestionGeneration(
     currentQuestion: args.currentQuestion,
     userContext: args.userContext,
     sampleSeed: args.sampleSeed ?? randomSampleSeed(),
-    withoutRejected: args.withoutRejected,
   });
   const prompt: GenerationPrompt = args.promptOverride
     ? { ...built, ...args.promptOverride, promptLabel: GIVEN_PROMPT_LABEL }

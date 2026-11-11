@@ -1,9 +1,9 @@
 import { v } from "convex/values";
 import { query, QueryCtx } from "../_generated/server";
-import { Doc, Id } from "../_generated/dataModel";
+import { Doc } from "../_generated/dataModel";
 import { defaultQualityRubric, latestActiveVersion } from "../lib/taxonomy";
 import { getActiveTakeoverTopicsHelper } from "../lib/takeover";
-import { ensurePaidOrganizationMember } from "../auth";
+import { ignoredWorkspaceArg } from "../lib/ignoredWorkspaceArg";
 
 const DEFAULT_TOPIC_LIMIT = 500;
 
@@ -84,23 +84,17 @@ async function getLatestActiveTopicBySlug(ctx: QueryCtx, slug: string) {
     .query("topics")
     .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
-  return latestActiveVersion(topics);
+  // Only the shared entries: the ones no workspace owned.
+  const shared = topics.filter((row) => !row.organizationId);
+  return latestActiveVersion(shared);
 }
 
-async function getActiveTopics(ctx: QueryCtx, organizationId?: Id<"organizations">) {
-  let topics: Doc<"topics">[];
-  if (organizationId) {
-    const [orgTopics, globalTopics] = await Promise.all([
-      ctx.db.query("topics").withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId)).take(DEFAULT_TOPIC_LIMIT),
-      ctx.db.query("topics").withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any)).take(DEFAULT_TOPIC_LIMIT),
-    ]);
-    topics = [...orgTopics, ...globalTopics];
-  } else {
-    topics = await ctx.db
-      .query("topics")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
-      .take(DEFAULT_TOPIC_LIMIT);
-  }
+async function getActiveTopics(ctx: QueryCtx) {
+  // Only the shared entries: the ones no workspace owned.
+  const topics = await ctx.db
+    .query("topics")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
+    .take(DEFAULT_TOPIC_LIMIT);
 
   const bySlug = new Map<string, Doc<"topics">[]>();
   for (const topic of topics) {
@@ -117,15 +111,10 @@ async function getActiveTopics(ctx: QueryCtx, organizationId?: Id<"organizations
 }
 
 export const getTopics = query({
-  args: {
-    organizationId: v.optional(v.id("organizations")),
-  },
+  args: { ...ignoredWorkspaceArg },
   returns: v.array(v.object(publicTopicFields)),
-  handler: async (ctx, args) => {
-    if (args.organizationId) {
-      await ensurePaidOrganizationMember(ctx, args.organizationId);
-    }
-    return await getActiveTopics(ctx, args.organizationId);
+  handler: async (ctx) => {
+    return await getActiveTopics(ctx);
   },
 });
 
@@ -158,7 +147,7 @@ export const getTopicBySystemId = query({
   returns: v.union(v.object(publicTopicFields), v.null()),
   handler: async (ctx, args) => {
     const topic = await ctx.db.get(args.id);
-    return topic ? mapTopic(topic) : null;
+    return topic && !topic.organizationId ? mapTopic(topic) : null;
   },
 });
 
@@ -170,6 +159,6 @@ export const getTopicById = query({
   handler: async (ctx, args) => {
     if (!args.id) return null;
     const topic = await ctx.db.get(args.id);
-    return topic ? mapTopic(topic) : null;
+    return topic && !topic.organizationId ? mapTopic(topic) : null;
   },
 });

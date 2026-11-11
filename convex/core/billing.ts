@@ -1,30 +1,19 @@
-import { getAiPlanLimit, AI_USAGE_CYCLE_DAYS } from "../lib/aiPlanLimits";
+import { getAiPlanLimit } from "../lib/aiPlanLimits";
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
-import { getEffectivePlanForUser } from "../auth";
+import { query } from "../_generated/server";
 import { collectUserCandidates } from "../lib/users";
-import {
-  normalizeClerkApiRole,
-  parseClerkIdentityClaims,
-  upsertClerkLinkedOrganization,
-} from "../lib/clerkOrgSync";
-/** @see ../lib/billingSubjects.ts — personal billing on users, team billing on organizations */
+import { ignoredWorkspaceArg } from "../lib/ignoredWorkspaceArg";
 
-const getActiveClerkOrganization = (identity: Record<string, unknown>) => {
-  const parsed = parseClerkIdentityClaims(identity);
-  return {
-    clerkOrganizationId: parsed.clerkOrganizationId,
-    role: normalizeClerkApiRole(parsed.roleValue),
-    organizationName: parsed.organizationName,
-  };
-};
-
+/**
+ * What the caller's account allows. Billing is per person: the subscription fields live on
+ * the `users` row, written by the Clerk webhook. There is one plan, so everyone gets its
+ * AI allowance. The app no longer calls it; apps loaded before workspaces were removed still
+ * do, on the feed and the settings page. Remove it once those tabs are gone.
+ */
 export const getEffectiveEntitlements = query({
-  args: {
-    organizationId: v.optional(v.id("organizations")),
-  },
+  args: { ...ignoredWorkspaceArg },
   returns: v.union(v.null(), v.any()),
-  handler: async (ctx, args) => {
+  handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity?.tokenIdentifier) {
       return null;
@@ -41,63 +30,13 @@ export const getEffectiveEntitlements = query({
     }
 
     const user = candidates[0];
-    const candidateIds = candidates.map(c => c._id);
-
-    const effectivePlan = await getEffectivePlanForUser(ctx, candidateIds, args.organizationId);
-    const aiLimit = getAiPlanLimit(effectivePlan.planTier);
 
     return {
       userId: user._id,
-      planTier: effectivePlan.planTier,
-      billingStatus: effectivePlan.billingStatus,
-      organizationId: effectivePlan.organizationId,
-      aiLimit,
-      canUseTeamFeatures: effectivePlan.planTier === "team",
-      /** "user" = personal Clerk subscription on users row; org plan uses organizations.billingStatus */
+      planTier: "free" as const,
+      billingStatus: user.billingStatus ?? "inactive",
+      aiLimit: getAiPlanLimit(),
       billingSubjectType: user.billingSubjectType ?? "user",
     };
   },
-});
-
-export const syncOrganizationFromClerk = mutation({
-  args: {
-    /** @deprecated Ignored; org name comes from Clerk JWT/org claims only. */
-    name: v.optional(v.string()),
-  },
-  returns: v.union(v.id("organizations"), v.null()),
-  handler: async (ctx, _args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity?.tokenIdentifier) {
-      throw new Error("Not authenticated");
-    }
-
-    const activeOrganization = getActiveClerkOrganization(identity as Record<string, unknown>);
-    if (!activeOrganization.clerkOrganizationId) {
-      return null;
-    }
-    const clerkOrganizationId = activeOrganization.clerkOrganizationId;
-    const organizationRole =
-      activeOrganization.role ?? "member";
-    const name =
-      activeOrganization.organizationName?.trim() || "Team";
-
-    return await upsertClerkLinkedOrganization(ctx, {
-      email: identity.email,
-      displayName: identity.name,
-      pictureUrl: identity.pictureUrl,
-      clerkOrganizationId,
-      organizationName: name,
-      organizationRole,
-    });
-  },
-});
-/** Public plan allowances contain no account or billing information. */
-export const getPublicPlanLimits = query({
-  args: {},
-  returns: v.object({ free: v.number(), team: v.number(), cycleDays: v.number() }),
-  handler: () => ({
-    free: getAiPlanLimit("free"),
-    team: getAiPlanLimit("team"),
-    cycleDays: AI_USAGE_CYCLE_DAYS,
-  }),
 });

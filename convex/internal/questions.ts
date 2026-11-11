@@ -8,7 +8,7 @@ import { cosineSimilarity } from "../lib/embeddings";
 import { doc } from "convex-helpers/validators";
 import schema from "../schema";
 import { duplicateGroup } from "../lib/questionReferences";
-import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isWorkspaceQuestion } from "../lib/questionAccess";
 
 export const questionByIdResultValidator = v.nullable(doc(schema, "questions"));
 
@@ -691,7 +691,6 @@ export const getRandomQuestionsInternal = internalQuery({
 		hidden: v.array(v.id("questions")),
 		hiddenStyles: v.array(v.id("styles")),
 		hiddenTones: v.array(v.id("tones")),
-		organizationId: v.optional(v.id("organizations")),
 		anchoredStyleId: v.optional(v.id("styles")),
 		anchoredToneId: v.optional(v.id("tones")),
 		anchoredTopicId: v.optional(v.id("topics")),
@@ -704,7 +703,6 @@ export const getRandomQuestionsInternal = internalQuery({
 			hidden,
 			hiddenStyles,
 			hiddenTones,
-			organizationId,
 			anchoredStyleId,
 			anchoredToneId,
 			anchoredTopicId
@@ -720,20 +718,11 @@ export const getRandomQuestionsInternal = internalQuery({
 		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
 		const applyFilters = (q: any) => {
-			const conditions = [
+			// Never a question a workspace owned.
+			return q.and(
 				q.neq(q.field("text"), undefined),
-			];
-			if (organizationId) {
-				conditions.push(
-					q.or(
-						q.eq(q.field("organizationId"), organizationId),
-						q.eq(q.field("organizationId"), undefined),
-					),
-				);
-			} else {
-				conditions.push(q.eq(q.field("organizationId"), undefined));
-			}
-			return q.and(...conditions);
+				q.eq(q.field("organizationId"), undefined),
+			);
 		};
 
 		const wasShownRecently = (question: { lastShownAt?: number }) =>
@@ -891,9 +880,13 @@ export const getRandomQuestionsInternal = internalQuery({
 		const now = Date.now();
 
 		// pull any active topics, find a question that has that topic, and inject it if there is one
+		// Only the shared topics, never one a workspace owned.
 		const activeTopics = await ctx.db.query("topics")
 			.withIndex("by_startDate_endDate_order", (q) => q.lt("startDate", now))
-			.filter((q) => q.or(q.eq(q.field("endDate"), undefined), q.gt(q.field("endDate"), now)))
+			.filter((q) => q.and(
+				q.eq(q.field("organizationId"), undefined),
+				q.or(q.eq(q.field("endDate"), undefined), q.gt(q.field("endDate"), now)),
+			))
 			.collect()
 
 		if (activeTopics.length > 0) {
@@ -930,7 +923,6 @@ export const getAnchoredQuestionsInternal = internalQuery({
 		hidden: v.array(v.id("questions")),
 		hiddenStyles: v.array(v.id("styles")),
 		hiddenTones: v.array(v.id("tones")),
-		organizationId: v.optional(v.id("organizations")),
 		anchoredStyleId: v.optional(v.id("styles")),
 		anchoredToneId: v.optional(v.id("tones")),
 		anchoredTopicId: v.optional(v.id("topics")),
@@ -972,13 +964,8 @@ export const getAnchoredQuestionsInternal = internalQuery({
 		};
 
 		const applyFilters = (q: any) => {
-			const conditions = [q.neq(q.field("text"), undefined)];
-			if (args.organizationId) {
-				conditions.push(q.or(q.eq(q.field("organizationId"), args.organizationId), q.eq(q.field("organizationId"), undefined)));
-			} else {
-				conditions.push(q.eq(q.field("organizationId"), undefined));
-			}
-			return q.and(...conditions);
+			// Never a question a workspace owned.
+			return q.and(q.neq(q.field("text"), undefined), q.eq(q.field("organizationId"), undefined));
 		};
 		// Rows older pruning marked with only prunedAt still have status "public"; dropped here so
 		// every read stays within its take() limit (see isRetiredQuestion).
@@ -1156,7 +1143,7 @@ function isQuestionEligibleForNewsletter(
 	question: Doc<"questions">,
 	filters: QuestionPreferenceFilters,
 ): boolean {
-	if (!question.text || isRetiredQuestion(question)) {
+	if (!question.text || isRetiredQuestion(question) || isWorkspaceQuestion(question)) {
 		return false;
 	}
 	if (

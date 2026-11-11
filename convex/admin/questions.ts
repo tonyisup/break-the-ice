@@ -5,7 +5,7 @@ import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 
 import { fingerprintText } from "../lib/promptArchitecture";
-import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUnlistedAiQuestion } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUnlistedAiQuestion, isWorkspaceQuestion } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { PENDING_QUEUE_LIMIT } from "../constants";
 import { recordReview, reviewReason, shownWording, syncReviewedEmbedding } from "../lib/questionReview";
@@ -49,10 +49,12 @@ export const getPendingQuestions = query({
 	returns: v.array(v.any()),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
+		// A workspace's question can't be approved (updateQuestion), so it isn't listed either.
 		return await ctx.db
 			.query("questions")
 			.withIndex("by_status", (q) => q.eq("status", "pending"))
 			.order("asc")
+			.filter((q) => q.and(q.eq(q.field("organizationId"), undefined), q.neq(q.field("kind"), "team_prompt")))
 			.take(PENDING_QUEUE_LIMIT + 1);
 	},
 });
@@ -171,6 +173,9 @@ export const updateQuestion = mutation({
 		const reviewer = await ensureAdmin(ctx);
         const before = await ctx.db.get(args.id);
         if (!before) throw new Error("Question not found");
+        if (isWorkspaceQuestion(before)) {
+            throw new Error("This question belonged to a team workspace and can no longer be changed.");
+        }
         const changesReviewedContent =
             (args.text !== undefined && args.text.trim() !== before.text) ||
             (args.status !== undefined && args.status !== before.status);
@@ -202,7 +207,7 @@ export const updateQuestion = mutation({
 		if (style !== undefined) {
 			updateData.style = style;
 			if (!styleId && (style !== before.style || !before.styleId)) {
-				const styleDoc = await resolveTaxonomySlug(ctx.db, "styles", style, before.organizationId);
+				const styleDoc = await resolveTaxonomySlug(ctx.db, "styles", style);
 				if (styleDoc) updateData.styleId = styleDoc._id;
 			}
 		}
@@ -214,7 +219,7 @@ export const updateQuestion = mutation({
 		if (tone !== undefined) {
 			updateData.tone = tone;
 			if (!toneId && (tone !== before.tone || !before.toneId)) {
-				const toneDoc = await resolveTaxonomySlug(ctx.db, "tones", tone, before.organizationId);
+				const toneDoc = await resolveTaxonomySlug(ctx.db, "tones", tone);
 				if (toneDoc) updateData.toneId = toneDoc._id;
 			}
 		}
@@ -226,7 +231,7 @@ export const updateQuestion = mutation({
 		if (topic !== undefined) {
 			updateData.topic = topic;
 			if (!topicId && (topic !== before.topic || !before.topicId)) {
-				const topicDoc = await resolveTaxonomySlug(ctx.db, "topics", topic, before.organizationId);
+				const topicDoc = await resolveTaxonomySlug(ctx.db, "topics", topic);
 				if (topicDoc) updateData.topicId = topicDoc._id;
 			}
 		}
@@ -482,16 +487,15 @@ export const updateCategories = mutation({
 		const results = [];
 		for (const update of args.updates) {
 			try {
-				// Resolve slugs in the question's own organization, as updateQuestion does.
 				const question = await ctx.db.get(update.id);
 				if (!question) throw new Error("Question not found");
 				let styleId: Id<"styles"> | undefined;
 				let toneId: Id<"tones"> | undefined;
 				if (update.style !== undefined) {
-					styleId = (await resolveTaxonomySlug(ctx.db, "styles", update.style, question.organizationId))?._id;
+					styleId = (await resolveTaxonomySlug(ctx.db, "styles", update.style))?._id;
 				}
 				if (update.tone !== undefined) {
-					toneId = (await resolveTaxonomySlug(ctx.db, "tones", update.tone, question.organizationId))?._id;
+					toneId = (await resolveTaxonomySlug(ctx.db, "tones", update.tone))?._id;
 				}
 				// The patch below writes both slugs, so one that isn't given is removed.
 				const recategorized = { ...question, style: update.style, tone: update.tone };
@@ -747,8 +751,7 @@ export const updateDuplicateDetectionStatus = mutation({
     },
 });
 
-// Retain original IDs and content for saved collections, history, schedules and
-// public links. Only discovery eligibility changes; no references are remapped.
+// Retain original IDs and content for likes, history and public links. Only discovery eligibility changes; no references are remapped.
 // Keep the old endpoint name for client compatibility, but never delete records.
 export const deleteDuplicateQuestions = mutation({
     args: {
@@ -780,7 +783,7 @@ export const deleteDuplicateQuestions = mutation({
         // keeping it over a public copy would take that content out of every shared list.
         if (questions.some(isUnlistedAiQuestion)) throw new Error("Approve or reject the question held for review before resolving these duplicates");
         const keep = questions.find(q => q._id === args.keepQuestionId)!;
-        if (questions.some(q => q.organizationId !== keep.organizationId || q.kind !== keep.kind)) throw new Error("Cannot resolve duplicates across question workspaces");
+        if (questions.some(q => q.organizationId !== keep.organizationId || q.kind !== keep.kind)) throw new Error("Cannot resolve duplicates across library, personal and team questions");
         // Retiring a public copy in favor of a hidden one would take that content out of every shared list.
         if (!isQuestionPublic(keep) && questions.some(q => retiring.has(q._id) && isQuestionPublic(q))) throw new Error("Keep a public question when retiring a public copy");
         for (const question of questions) {
@@ -843,9 +846,6 @@ export const getAdminStats = query({
 			total: v.number(),
 			admins: v.number(),
 		}),
-		organizations: v.object({
-			team: v.number(),
-		}),
 		feedback: v.object({
 			total: v.number(),
 			new: v.number(),
@@ -860,7 +860,6 @@ export const getAdminStats = query({
 
 		const questions = await ctx.db.query("questions").collect();
 		const users = await ctx.db.query("users").collect();
-		const organizations = await ctx.db.query("organizations").take(500);
 		const feedback = await ctx.db.query("feedback").collect();
 		// Use index for pending duplicates
 		const duplicates = await ctx.db.query("duplicateDetections")
@@ -885,9 +884,6 @@ export const getAdminStats = query({
 			users: {
 				total: users.length,
 				admins: users.filter(u => u.isAdmin).length,
-			},
-			organizations: {
-				team: organizations.filter(o => o.planTier === "team" && (o.billingStatus === "active" || o.billingStatus === "trialing")).length,
 			},
 			feedback: {
 				total: feedback.length,

@@ -1,6 +1,6 @@
 import { convexTest } from "convex-test";
 import { Webhook } from "svix";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import schema from "./schema";
 import { convexFunctionModules } from "../vitestConvexModules";
 
@@ -145,4 +145,76 @@ test("Clerk webhook rejects missing or invalid Svix signatures", async () => {
   await t.run(async (ctx) => {
     expect(await ctx.db.query("users").collect()).toHaveLength(0);
   });
+});
+
+// Value: protects=billing stays per person: a subscription a person pays for is recorded on their account, from either webhook route;
+// fails_when=the webhook stops handling a person's subscription, or stops writing its status and Clerk ids to the user;
+// why_new=the webhook's subscription handling had no test, and the organization half of it was removed;
+// seam=none; no_claim=what a subscription unlocks, since nothing sells one yet.
+test("a subscription a person pays for is recorded on their account", async () => {
+  const t = convexTest(schema, convexFunctionModules);
+  const userId = await t.run(async (ctx) =>
+    await ctx.db.insert("users", { email: "payer@example.com", clerkId: "user_payer", billingStatus: "inactive" }),
+  );
+
+  const response = await t.fetch(
+    "/clerk-billing-webhook",
+    signedWebhookRequest({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        status: "active",
+        payerId: "user_payer",
+        customerId: "cus_1",
+        subscriptionItems: [{ status: "active", plan: { forPayerType: "user", isDefault: false } }],
+      },
+    }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await t.run((ctx) => ctx.db.get(userId))).toMatchObject({
+    billingStatus: "active",
+    billingSubjectType: "user",
+    clerkCustomerId: "cus_1",
+    clerkSubscriptionId: "sub_1",
+  });
+});
+
+// Value: protects=a subscription or a checkout an organization pays for changes nothing (no organization row, no account touched) and is logged with its ids;
+// fails_when=the webhook writes an organization row again, or files an organization's subscription on a person;
+// why_new=Team billing was removed, and Clerk may still send these events until its dashboard is cleaned up;
+// seam=none; no_claim=that Clerk stops sending them.
+test("a subscription or a checkout an organization pays for is ignored, and logged", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const t = convexTest(schema, convexFunctionModules);
+  const userId = await t.run(async (ctx) =>
+    await ctx.db.insert("users", { email: "payer@example.com", clerkId: "user_payer", billingStatus: "inactive" }),
+  );
+
+  const events = [
+    {
+      type: "subscription.active",
+      data: {
+        id: "sub_org",
+        status: "active",
+        payerId: "org_123",
+        customerId: "cus_org",
+        subscriptionItems: [{ status: "active", plan: { forPayerType: "org", isDefault: false } }],
+      },
+    },
+    { type: "organization.checkout.confirmed", data: { organization_id: "org_123", organization_name: "Gym" } },
+  ];
+  for (const event of events) {
+    expect((await t.fetch("/clerk-billing-webhook", signedWebhookRequest(event))).status).toBe(200);
+  }
+
+  expect(await t.run((ctx) => ctx.db.query("organizations").collect())).toEqual([]);
+  expect(await t.run((ctx) => ctx.db.get(userId))).toMatchObject({ billingStatus: "inactive" });
+  expect((await t.run((ctx) => ctx.db.get(userId)))?.clerkSubscriptionId).toBeUndefined();
+  // Each one is logged with its ids, so a purchase from a stale app can be found and refunded.
+  expect(warn.mock.calls.map(([line]) => String(line))).toEqual([
+    "Ignored subscription.active for organization org_123 (subscription sub_org): the Team plan was removed",
+    "Ignored organization.checkout.confirmed for organization org_123: the Team plan was removed",
+  ]);
+  warn.mockRestore();
 });

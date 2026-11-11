@@ -111,7 +111,9 @@ export const getTopCurrentTopic = internalQuery({
       .withIndex("by_status", (q) => q.eq("status", "active"))
       .take(TOPIC_SCAN_LIMIT);
 
+    // Only the shared topics: generation refuses one a workspace owned.
     const activeCandidates = topics.filter((topic) => {
+      if (topic.organizationId) return false;
       const startsOk = topic.startDate === undefined || topic.startDate <= now;
       const endsOk = topic.endDate === undefined || topic.endDate >= now;
       return startsOk && endsOk;

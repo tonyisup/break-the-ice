@@ -705,7 +705,7 @@ describe("updating the hidden list keeps hides the user can no longer read", () 
   });
 });
 
-describe("org questions follow membership and billing", () => {
+describe("a question a workspace owned is closed to everyone", () => {
   async function addOrgQuestion(t: Awaited<ReturnType<typeof setup>>["t"]) {
     return await t.run(async (ctx) => {
       const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
@@ -737,29 +737,24 @@ describe("org questions follow membership and billing", () => {
     expect(question?.totalLikes).toBe(0);
   });
 
-  test("a member of a paid org can like it, and it leaves the list when billing lapses", async () => {
+  test("a member of the paying team that owned it can't like it or open it either", async () => {
     const { t, otherId } = await setup();
     const { orgId, orgQuestionId } = await addOrgQuestion(t);
     await t.run(async (ctx) => {
-      await ctx.db.insert("organization_members", { userId: otherId, organizationId: orgId, role: "member" });
+      await ctx.db.insert("organization_members", { userId: otherId, organizationId: orgId, role: "admin" });
     });
 
     await t.withIdentity(OTHER).mutation(api.core.userSettings.mergeKnownLikedQuestions, {
       likedQuestions: [orgQuestionId],
     });
-    expect((await likedRelations(t, otherId)).map((row) => row.questionId)).toEqual([orgQuestionId]);
-    const liked = await t.withIdentity(OTHER).query(api.core.questions.getLikedQuestions, { organizationId: orgId });
-    expect(liked.map((question: { _id: Id<"questions"> }) => question._id)).toEqual([orgQuestionId]);
-
-    await t.run(async (ctx) => {
-      await ctx.db.patch(orgId, { billingStatus: "canceled" });
-    });
+    expect(await likedRelations(t, otherId)).toEqual([]);
     expect(await t.withIdentity(OTHER).query(api.core.questions.getLikedQuestions, { organizationId: orgId })).toEqual([]);
+    expect(await t.withIdentity(OTHER).query(api.core.questions.getQuestionById, { id: orgQuestionId })).toBeNull();
   });
 });
 
 describe("remix usage accounting", () => {
-  // Public but textless: the remix charges usage, then fails before calling the model.
+  // Public, but a workspace's: nobody can read it, so a remix is refused before any charge.
   async function addOrgPublicQuestion(t: Awaited<ReturnType<typeof setup>>["t"]) {
     return await t.run(async (ctx) => {
       const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
@@ -775,29 +770,21 @@ describe("remix usage accounting", () => {
     );
   }
 
-  test("a member's failed remix of their org's question refunds the org counter it charged", async () => {
+  test("a remix of a question a workspace owned is refused before anyone is charged, member of its team or not", async () => {
     const { t, otherId } = await setup();
     const { orgId, questionId } = await addOrgPublicQuestion(t);
+
+    await expect(
+      t.withIdentity(OTHER).action(api.core.questions.remixQuestionForUser, { questionId }),
+    ).rejects.toThrow("Question not found.");
     await t.run(async (ctx) => {
       await ctx.db.insert("organization_members", { userId: otherId, organizationId: orgId, role: "member" });
     });
-
     await expect(
       t.withIdentity(OTHER).action(api.core.questions.remixQuestionForUser, { questionId }),
-    ).rejects.toThrow("Question text not found.");
+    ).rejects.toThrow("Question not found.");
 
-    expect(await usageRows(t, otherId)).toEqual([{ organizationId: orgId, count: 0 }]);
-  });
-
-  test("a non-member is charged personally, not given a fresh org allowance", async () => {
-    const { t, otherId } = await setup();
-    const { questionId } = await addOrgPublicQuestion(t);
-
-    await expect(
-      t.withIdentity(OTHER).action(api.core.questions.remixQuestionForUser, { questionId }),
-    ).rejects.toThrow("Question text not found.");
-
-    expect(await usageRows(t, otherId)).toEqual([{ organizationId: undefined, count: 0 }]);
+    expect(await usageRows(t, otherId)).toEqual([]);
   });
 });
 

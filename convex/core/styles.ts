@@ -1,8 +1,9 @@
 import { v } from "convex/values";
 import { query, QueryCtx } from "../_generated/server";
-import { Doc, Id } from "../_generated/dataModel";
+import { Doc } from "../_generated/dataModel";
 import { defaultIdealPromptLength, defaultQualityRubric, latestActiveVersion } from "../lib/taxonomy";
-import { ensurePaidOrganizationMember } from "../auth";
+import { ignoredWorkspaceArg } from "../lib/ignoredWorkspaceArg";
+import { isWorkspaceQuestion } from "../lib/questionAccess";
 
 const STYLE_EXAMPLE_LIMIT = 50;
 
@@ -86,28 +87,18 @@ async function getLatestActiveStyleBySlug(ctx: QueryCtx, slug: string) {
     .query("styles")
     .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
+  // Only the shared entries: the ones no workspace owned.
+  const shared = styles.filter((row) => !row.organizationId);
 
-  return latestActiveVersion(styles);
+  return latestActiveVersion(shared);
 }
 
-async function getActiveStyles(
-  ctx: QueryCtx,
-  organizationId?: Id<"organizations">,
-  limit = 200,
-) {
-  let styles: Doc<"styles">[];
-  if (organizationId) {
-    const [orgStyles, globalStyles] = await Promise.all([
-      ctx.db.query("styles").withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId)).take(limit),
-      ctx.db.query("styles").withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any)).take(limit),
-    ]);
-    styles = [...orgStyles, ...globalStyles];
-  } else {
-    styles = await ctx.db
-      .query("styles")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
-      .take(limit);
-  }
+async function getActiveStyles(ctx: QueryCtx, limit = 200) {
+  // Only the shared entries: the ones no workspace owned.
+  const styles = await ctx.db
+    .query("styles")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
+    .take(limit);
   const filtered = styles;
 
   const bySlug = new Map<string, Doc<"styles">[]>();
@@ -140,7 +131,7 @@ export const getStyleById = query({
   returns: v.union(v.object(publicStyleFields), v.null()),
   handler: async (ctx, args) => {
     const style = await ctx.db.get(args.id);
-    if (!style || (style.status ?? "active") !== "active") return null;
+    if (!style || style.organizationId || (style.status ?? "active") !== "active") return null;
     return mapStyle(style);
   },
 });
@@ -165,6 +156,7 @@ export const getStylesWithExamples = query({
       )
       .take(STYLE_EXAMPLE_LIMIT);
     const examples = exampleQuestions
+      .filter((question) => !isWorkspaceQuestion(question))
       .map((question) => question.text)
       .filter((text: string | undefined): text is string => text !== undefined);
 
@@ -190,29 +182,21 @@ export const getStylesWithExamples = query({
 });
 
 export const getStyles = query({
-  args: {
-    organizationId: v.optional(v.id("organizations")),
-  },
+  args: { ...ignoredWorkspaceArg },
   returns: v.array(v.object(publicStyleFields)),
-  handler: async (ctx, args) => {
-    if (args.organizationId) {
-      await ensurePaidOrganizationMember(ctx, args.organizationId);
-    }
-    return await getActiveStyles(ctx, args.organizationId);
+  handler: async (ctx) => {
+    return await getActiveStyles(ctx);
   },
 });
 
 export const getFilteredStyles = query({
   args: {
     excluded: v.array(v.string()),
-    organizationId: v.optional(v.id("organizations")),
+    ...ignoredWorkspaceArg,
   },
   returns: v.array(v.object(publicStyleFields)),
   handler: async (ctx, args) => {
-    if (args.organizationId) {
-      await ensurePaidOrganizationMember(ctx, args.organizationId);
-    }
-    const styles = await getActiveStyles(ctx, args.organizationId);
+    const styles = await getActiveStyles(ctx);
     return styles.filter((style) => !args.excluded.includes(style.slug));
   },
 });

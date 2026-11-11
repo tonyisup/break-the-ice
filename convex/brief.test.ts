@@ -612,24 +612,6 @@ describe("the owner's decisions a prompt shows, read from the library", () => {
   });
 });
 
-describe("a prompt whose answer goes back to a team", () => {
-  test("it leaves the owner's rejections out and keeps everything else", async () => {
-    const t = await setup();
-    const eitherOr = await addStyle(t, "either-or", "Either/Or", { brief: "Two options to pick between." });
-    await addQuestion(t, eitherOr, "Tea or coffee?");
-    await addRetired(t, eitherOr, "Cats or dogs or something?", { editorialReasons: ["unclear_answer"] });
-    const ask = (withoutRejected?: boolean) =>
-      t.query(internal.internal.generation.buildGenerationPrompt, { styleSlug: "either-or", toneSlug: "warm", batchSize: 1, sampleSeed: 1, withoutRejected });
-
-    const [usual, forTeam] = [await ask(), await ask(true)];
-
-    expect(section(usual.userPrompt, REJECTED)).toEqual(['- "Cats or dogs or something?" (unclear what kind of answer is wanted)']);
-    expect(forTeam.userPrompt).not.toContain(REJECTED);
-    expect(forTeam.userPrompt).not.toContain("Cats or dogs");
-    expect(section(forTeam.userPrompt, KEPT)).toEqual(['- "Tea or coffee?"']);
-  });
-});
-
 describe("the shortest question the save step keeps", () => {
   const SHORT = "Tea or coffee?";
 

@@ -3,8 +3,9 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api, internal } from "../_generated/api";
-import { Doc, Id } from "../_generated/dataModel";
+import { Doc } from "../_generated/dataModel";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
+import { ignoredWorkspaceArg } from "../lib/ignoredWorkspaceArg";
 import { clampBatchSize } from "../lib/promptArchitecture";
 import { withoutVerdict } from "../lib/questionAccess";
 import { MAX_FEED_GENERATION_COUNT } from "../constants";
@@ -12,25 +13,14 @@ import { MAX_FEED_GENERATION_COUNT } from "../constants";
 export const generateAIQuestionForFeed = action({
 	args: {
 		count: v.optional(v.number()),
-		organizationId: v.optional(v.id("organizations")),
+		...ignoredWorkspaceArg,
 		anchoredStyleId: v.optional(v.id("styles")),
 		anchoredToneId: v.optional(v.id("tones")),
 		anchoredTopicId: v.optional(v.id("topics")),
 	},
 	returns: v.array(v.nullable(v.any())),
 	handler: async (ctx, args): Promise<(Omit<Doc<"questions">, "qualityCheck" | "safetyFlags"> | null)[]> => {
-		if (args.organizationId) {
-			const organizations = await ctx.runQuery(api.core.organizations.getOrganizations, {});
-			const isMember = organizations.some((organization: { _id: Id<"organizations"> }) => organization._id === args.organizationId);
-
-			if (!isMember) {
-				throw new Error("Not a member of this organization.");
-			}
-		}
-
-		const user = await ctx.runQuery(api.core.users.getCurrentUser, {
-			organizationId: args.organizationId,
-		});
+		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
 
 		if (!user) {
 			throw new Error("You must be logged in to generate AI questions.");
@@ -54,7 +44,6 @@ export const generateAIQuestionForFeed = action({
 		const questions: (Doc<"questions"> | null)[] = await ctx.runAction(internal.internal.ai.generateAIQuestionForUser, {
 			userId: user._id,
 			count,
-			organizationId: args.organizationId,
 			topicId,
 			bypassAIUsage,
 			anchoredStyleId: args.anchoredStyleId,

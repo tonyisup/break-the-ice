@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ConvexError } from "convex/values";
 import { convexErrorData } from "./errorData";
 
-const refusal = { code: "STYLE_UNAVAILABLE", message: "That style isn't available to your workspace." };
+const refusal = { code: "QUESTION_TEXT_REQUIRED", message: "Please enter a question." };
 
 // Encodes the data the way each function boundary does, once per layer.
 function encoded(data: unknown, layers: number): unknown {

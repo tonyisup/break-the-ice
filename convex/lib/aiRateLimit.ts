@@ -12,27 +12,19 @@ import { convexErrorData } from "./errorData";
 // cap bounds the bill; these bound how much of the day's budget one caller can spend.
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
-
-// The most cells one fillEmptyCells request may ask for. The matrix bucket holds one
-// full request, so a first fill of the day never stops partway.
-export const MATRIX_FILL_MAX_CELLS = 50;
 
 export const { rateLimit, checkRateLimit } = defineRateLimits({
-  // Feed generation, remix and team previews share one bucket per person (Clerk user
-  // id): a burst of 10, then one every two minutes.
+  // Feed generation and remix share one bucket per person (Clerk user id): a burst of 10,
+  // then one every two minutes.
   aiRequest: { kind: "token bucket", rate: 30, period: HOUR, capacity: 10 },
-  // Matrix fill: one token per attempted cell, per organization. One full request at
-  // once, then 100 a day.
-  matrixFillCell: { kind: "token bucket", rate: 100, period: DAY, capacity: MATRIX_FILL_MAX_CELLS },
 });
 
 // Limits counted per spend day (spendDay in lib/aiSpend.ts), so they reset with the ledger at
 // midnight in Los Angeles all year. A fixed 24-hour window can't follow that day: anchored in
 // standard time it resets at 1am for the whole of daylight time.
 export const DAY_LIMITS = {
-  // At most 40 feed, remix and team-preview requests a day per person, to bound how much of
-  // the shared user budget one account can spend. Matrix fill is limited per organization.
+  // At most 40 feed and remix requests a day per person, to bound how much of the shared
+  // user budget one account can spend.
   aiRequestDaily: 40,
   // And at most 5 provider calls a day per person that are still running, that kept their
   // reservation without an answer (keepAiReservation in lib/aiSpendGuard.ts), or whose answer
@@ -45,9 +37,7 @@ export const DAY_LIMITS = {
 } as const;
 
 export type DayLimitName = keyof typeof DAY_LIMITS;
-export type AiRateLimitName = "aiRequest" | "matrixFillCell" | DayLimitName;
-/** The limits a count is taken from directly. An unanswered-call slot is held and given back. */
-export type AiCountedLimitName = Exclude<AiRateLimitName, "aiUnanswered">;
+export type AiRateLimitName = "aiRequest" | DayLimitName;
 
 export function isDayLimit(name: AiRateLimitName): name is DayLimitName {
   return name in DAY_LIMITS;
@@ -122,8 +112,6 @@ const LIMIT_MESSAGES: Record<AiRateLimitName, string> = {
   aiRequest: ERROR_MESSAGES.AI_RATE_LIMITED,
   aiRequestDaily: ERROR_MESSAGES.AI_DAILY_LIMITED,
   aiUnanswered: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
-  // The matrix bucket refills over a day, not minutes.
-  matrixFillCell: ERROR_MESSAGES.AI_MATRIX_FILL_LIMITED,
 };
 
 type RateLimitCtx = Pick<ActionCtx, "runMutation">;
@@ -132,17 +120,8 @@ function rateLimited(name: AiRateLimitName, retryAt: number | undefined) {
   return new ConvexError({ code: ERROR_CODES.AI_RATE_LIMITED, message: LIMIT_MESSAGES[name], retryAt });
 }
 
-/** Takes one token (or `count`) from the named limit, or throws AI_RATE_LIMITED. */
-export async function ensureAiRateLimit(
-  ctx: RateLimitCtx,
-  args: { name: AiCountedLimitName; key: string; count?: number },
-): Promise<void> {
-  const { ok, retryAt } = await ctx.runMutation(internal.internal.aiRateLimit.consumeAiRateLimit, args);
-  if (!ok) throw rateLimited(args.name, retryAt);
-}
-
 /**
- * The per-person limits for feed generation, remix and team previews. A paused budget
+ * The per-person limits for feed generation and remix. A paused budget
  * refuses first, so it doesn't use up tokens; then every limit is checked before any is
  * taken from, so a refusal by one doesn't cost a token from another.
  */

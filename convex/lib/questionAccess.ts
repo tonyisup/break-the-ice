@@ -1,6 +1,5 @@
 import { Doc, Id } from "../_generated/dataModel";
 import { MutationCtx, QueryCtx } from "../_generated/server";
-import { isOrganizationPaid } from "../auth";
 
 type RetirementFields = Pick<Doc<"questions">, "status" | "prunedAt">;
 
@@ -33,9 +32,7 @@ export function normalizedRetirement(question: RetirementFields): RetirementFiel
  * A question document as anyone but an admin gets it: without the quality check's verdict.
  * The verdict is the owner's, and someone who can read what the check thinks of their question
  * can steer it. Every function people's apps call that returns a question document passes it
- * through here. The one thing a team is shown on purpose is claudeFlag (lib/qualityCheck.ts),
- * which getPublicQuestions returns for a flagged question to a signed-in member of a team:
- * its reasons, safety flags and note, and never a keep, a confidence or wouldPublish.
+ * through here.
  */
 export function withoutVerdict<T extends { qualityCheck?: unknown; safetyFlags?: unknown }>(
 	question: T,
@@ -66,8 +63,8 @@ export function isPrivateUserQuestion(question: Doc<"questions">): boolean {
 }
 
 /**
- * An AI question held for review. It is never listed anywhere shared (feed, collections,
- * email pools and team pickers only list public questions), but it is unlisted rather than
+ * An AI question held for review. It is never listed anywhere shared (the feed and the
+ * email pools only list public questions), but it is unlisted rather than
  * private: the person it was generated for gets it straight from generation, and the daily
  * email links to it, often opened signed out. Only generation sets `heldForReview`, so a
  * question an admin moved to pending stays hidden.
@@ -82,16 +79,24 @@ export function isUnlistedAiQuestion(question: Doc<"questions">): boolean {
 	);
 }
 
+/**
+ * A team's prompt or an organization's question. Workspaces are gone, so nobody reads one, by
+ * link or otherwise, and no list or pick includes it, until removeWorkspaceData deletes it.
+ */
+export function isWorkspaceQuestion(question: Pick<Doc<"questions">, "kind" | "organizationId">): boolean {
+	return question.kind === "team_prompt" || question.organizationId !== undefined;
+}
+
 /** Anyone with the link can open it, signed in or not: public, or an AI question held for review. */
 export function isReadableByLink(question: Doc<"questions">): boolean {
+	if (isWorkspaceQuestion(question)) return false;
 	return isQuestionPublic(question) || isUnlistedAiQuestion(question);
 }
 
 /**
  * Whether `userId` (or an anonymous caller, when undefined) may see this question.
  * Used by getQuestionById, getLikedQuestions, recordAnalytics, the question history
- * and the liked/hidden update and merge mutations. Some older paths (collections.ts,
- * schedules.ts) still apply their own status checks.
+ * and the liked/hidden update and merge mutations.
  */
 export async function canReadQuestion(
 	ctx: QueryCtx | MutationCtx,
@@ -100,43 +105,8 @@ export async function canReadQuestion(
 ): Promise<boolean> {
 	if (isReadableByLink(question)) return true;
 	if (!userId) return false;
-	if (question.kind === "team_prompt") {
-		if (!question.organizationId) return false;
-		if (!(await isOrganizationPaid(ctx, question.organizationId))) return false;
-		const membership = await ctx.db
-			.query("organization_members")
-			.withIndex("by_userId_organizationId", (q) =>
-				q.eq("userId", userId).eq("organizationId", question.organizationId!),
-			)
-			.unique();
-		if (!membership) return false;
-		if (membership.role === "admin" || membership.role === "manager") return true;
-
-		const assignments = await ctx.db
-			.query("scheduledQuestions")
-			.withIndex("by_question", (q) => q.eq("questionId", question._id))
-			.take(50);
-		for (const assignment of assignments) {
-			const schedule = await ctx.db.get(assignment.scheduleId);
-			if (
-				schedule?.organizationId === question.organizationId &&
-				(schedule.status === "published" || schedule.status === "completed")
-			) {
-				return true;
-			}
-		}
-		return false;
-	}
-	if (!question.organizationId) return question.authorId === userId;
-	if (!(await isOrganizationPaid(ctx, question.organizationId))) return false;
-
-	const membership = await ctx.db
-		.query("organization_members")
-		.withIndex("by_userId_organizationId", (q) =>
-			q.eq("userId", userId).eq("organizationId", question.organizationId!),
-		)
-		.unique();
-	return membership !== null;
+	if (isWorkspaceQuestion(question)) return false;
+	return question.authorId === userId;
 }
 
 /**

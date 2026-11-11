@@ -48,12 +48,6 @@
     "convex/admin/topics.ts": [
       "convex/admin_taxonomy_versions.test.ts"
     ],
-    "convex/core/fillMatrix.ts": [
-      "convex/generation_quality.test.ts",
-      "convex/ai_spend_completion.test.ts",
-      "convex/quality_check.test.ts",
-      "convex/ai_rate_limit.test.ts"
-    ],
     "convex/internal/ai.ts": [
       "convex/generation_quality.test.ts",
       "convex/ai_spend_completion.test.ts",
@@ -76,11 +70,10 @@
       "convex/quality_check.test.ts"
     ],
     "convex/internal/migrations.ts": [
-      "convex/brief_seed.test.ts"
-    ],
-    "convex/core/teamPromptActions.ts": [
-      "convex/core/teamPromptActions.test.ts",
-      "convex/generation_quality.test.ts"
+      "convex/brief_seed.test.ts",
+      "convex/workspace_cleanup.test.ts",
+      "convex/library_reset.test.ts",
+      "convex/retired_questions.test.ts"
     ],
     "convex/lib/evalChecks.ts": [
       "convex/evals.test.ts"
@@ -95,11 +88,12 @@
       "convex/brief_seed.test.ts",
       "convex/quality_check.test.ts",
       "convex/question_access.test.ts",
-      "convex/workspace_engagement.test.ts"
+      "convex/workspace_removed.test.ts"
     ],
     "convex/internal/users.ts": [
+      "convex/generation_quality.test.ts",
       "convex/internal/users.test.ts",
-      "convex/generation_quality.test.ts"
+      "convex/workspace_removed.test.ts"
     ],
     "evals/runs/**": [],
     "**/*.md": [],
@@ -107,7 +101,101 @@
     "package.json": [],
     "package-lock.json": [],
     ".gitignore": [],
-    ".gstack/pregate.json": []
+    ".gstack/pregate.json": [],
+    "convex/auth.test.ts": [],
+    "convex/core/billingSyncAction.ts": [],
+    "convex/core/clerkAdmin.test.ts": [],
+    "convex/core/clerkAdmin.ts": [],
+    "convex/core/coachFeedback.ts": [],
+    "convex/core/collections.ts": [],
+    "convex/core/orgSettings.ts": [],
+    "convex/core/organizations.ts": [
+      "convex/workspace_removed.test.ts"
+    ],
+    "convex/core/schedules.test.ts": [],
+    "convex/core/schedules.ts": [],
+    "convex/core/teamPromptActions.test.ts": [],
+    "convex/core/teamPrompts.ts": [],
+    "convex/internal/billing.ts": [],
+    "convex/internal/matrixFillLocks.ts": [],
+    "convex/lib/aiUsageWorkspace.ts": [],
+    "convex/lib/billingSubjects.ts": [],
+    "convex/lib/clerkOrgSync.ts": [],
+    "convex/lib/deliveryDays.ts": [],
+    "convex/lib/teamPromptContract.test.ts": [],
+    "convex/lib/teamPromptContract.ts": [],
+    "convex/workspace_engagement.test.ts": [],
+    "src/app/admin/organizations/page.tsx": [],
+    "src/app/billing/cancel/page.tsx": [],
+    "src/app/billing/success/page.tsx": [],
+    "src/app/org/schedule/TeamPromptComposer.test.tsx": [],
+    "src/app/org/schedule/TeamPromptComposer.tsx": [],
+    "src/app/org/schedule/page.test.tsx": [],
+    "src/app/org/schedule/page.tsx": [],
+    "src/app/org/today/page.tsx": [],
+    "src/app/pricing/page.test.tsx": [],
+    "src/app/pricing/page.tsx": [],
+    "src/app/settings/collections/[collectionId]/page.tsx": [],
+    "src/app/settings/collections/page.tsx": [],
+    "src/app/settings/organization/WorkspaceSwitcher.tsx": [],
+    "src/app/settings/organization/page.tsx": [],
+    "src/components/add-to-collection-menu/AddToCollectionMenu.tsx": [],
+    "src/components/header/TeamWorkspaceMenu.test.tsx": [],
+    "src/components/header/TeamWorkspaceMenu.tsx": [],
+    "src/components/header/WorkspaceMenuItems.tsx": [],
+    "src/hooks/useTeamWorkspace.ts": [],
+    "src/hooks/useWorkspace.tsx": [],
+    "src/hooks/useWorkspaceSwitch.ts": [],
+    "convex/clerk.ts": [
+      "convex/clerk.test.ts"
+    ],
+    "convex/core/billing.ts": [
+      "convex/core/billing.test.ts",
+      "convex/workspace_removed.test.ts"
+    ],
+    "convex/core/styles.ts": [
+      "convex/brief_seed.test.ts",
+      "convex/workspace_removed.test.ts"
+    ],
+    "convex/core/tones.ts": [
+      "convex/brief_seed.test.ts",
+      "convex/workspace_removed.test.ts"
+    ],
+    "convex/core/topics.ts": [
+      "convex/brief_seed.test.ts",
+      "convex/workspace_removed.test.ts"
+    ],
+    "convex/internal/aiRateLimit.ts": [
+      "convex/ai_rate_limit.test.ts",
+      "convex/ai_spend_completion.test.ts"
+    ],
+    "index.html": [],
+    "public/sitemap.xml": [],
+    "vercel.json": [],
+    "src/index.css": [],
+    "src/main.tsx": [],
+    "src/lib/clerkAppearance.ts": [],
+    "src/app/about/page.tsx": [],
+    "src/app/admin/page.tsx": [],
+    "src/components/admin/AdminSidebar.tsx": [],
+    "convex/core/fillMatrix.ts": [],
+    "convex/core/teamPromptActions.ts": [],
+    "convex/lib/workspaceEngagement.ts": [],
+    "src/components/UpgradeCTA.tsx": [
+      "src/pages/InfiniteScrollPage.test.tsx"
+    ],
+    "convex/internal/styles.ts": [
+      "convex/workspace_removed.test.ts",
+      "convex/generation_quality.test.ts"
+    ],
+    "convex/internal/tones.ts": [
+      "convex/workspace_removed.test.ts",
+      "convex/generation_quality.test.ts"
+    ],
+    "convex/internal/topics.ts": [
+      "convex/workspace_removed.test.ts",
+      "convex/generation_quality.test.ts"
+    ]
   },
   "selection": {},
   "warn": [

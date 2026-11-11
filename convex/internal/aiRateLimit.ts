@@ -12,7 +12,7 @@ import {
 
 export const consumeAiRateLimit = internalMutation({
   args: {
-    name: v.union(v.literal("aiRequest"), v.literal("aiRequestDaily"), v.literal("matrixFillCell")),
+    name: v.union(v.literal("aiRequest"), v.literal("aiRequestDaily")),
     key: v.string(),
     count: v.optional(v.number()),
   },

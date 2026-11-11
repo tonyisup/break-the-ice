@@ -473,53 +473,24 @@ describe("seeding the brief's lines", () => {
     expect(after.map((question) => question?.styleId)).toEqual([ids.retired, ids.oldCopy]);
   });
 
-  test("a team's own style of the same name doesn't stop a person unhiding the shared one, and in the team's workspace the team's row is the one listed and hidden, for styles and tones", async () => {
+  test("a style a team owned, of the same name and a higher version, doesn't stop a person unhiding the shared one", async () => {
     const t = convexTest(schema, modules);
     const READER = { subject: "reader-clerk", tokenIdentifier: "test|reader-clerk", email: "reader@example.com" };
     const ids = await t.run(async (ctx) => {
       const userId = await ctx.db.insert("users", { email: READER.email, clerkId: READER.subject });
       const organizationId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId, organizationId, role: "member" });
       const shared = await ctx.db.insert("styles", style("open-ended"));
       // The team's own entry is a higher version of the same slug.
-      const teams = await ctx.db.insert("styles", style("open-ended", { organizationId, version: 2 }));
+      await ctx.db.insert("styles", style("open-ended", { organizationId, version: 2 }));
       const personal = await ctx.db.insert("userStyles", { userId, styleId: shared, status: "hidden", updatedAt: 0 });
-      const inTeam = await ctx.db.insert("userStyles", { userId, organizationId, styleId: shared, status: "hidden", updatedAt: 0 });
-      // Also hidden in the team's workspace: a shared style the team has no copy of, a shared tone
-      // the team's own higher version shadows, and a tone only the team has.
-      const sharedOnly = await ctx.db.insert("styles", style("desert-island"));
-      const sharedTone = await ctx.db.insert("tones", tone("bold"));
-      await ctx.db.insert("tones", tone("bold", { organizationId, version: 2 }));
-      const teamTone = await ctx.db.insert("tones", tone("calm", { organizationId }));
-      const inTeamSharedOnly = await ctx.db.insert("userStyles", { userId, organizationId, styleId: sharedOnly, status: "hidden", updatedAt: 0 });
-      for (const toneId of [sharedTone, teamTone]) await ctx.db.insert("userTones", { userId, organizationId, toneId, status: "hidden", updatedAt: 0 });
-      return { organizationId, shared, teams, personal, inTeam, sharedOnly, inTeamSharedOnly, sharedTone, teamTone };
+      return { shared, personal };
     });
     const reader = t.withIdentity(READER);
 
-    // Personal workspace: only shared rows count, so the shared row is the listed one and can be unhidden.
+    // Only shared rows count, so the shared row is the listed one: it is in the hidden list and can be unhidden.
+    expect(await reader.query(api.core.userSettings.getHiddenStyleIds, {})).toEqual([ids.shared]);
     await reader.mutation(api.core.userSettings.updateHiddenStyles, { hiddenStyles: [] });
     expect(await t.run((ctx) => ctx.db.get(ids.personal))).toBeNull();
-
-    // The team's workspace lists the team's row for open-ended and bold and the shared row for
-    // desert-island, so its hidden lists hold the shared style the team has no copy of and the
-    // team's own tone, and leave out the shadowed shared style and tone.
-    const team = { organizationId: ids.organizationId };
-    expect(await reader.query(api.core.userSettings.getHiddenStyleIds, team)).toEqual([ids.sharedOnly]);
-    expect(await reader.query(api.core.userSettings.getHiddenToneIds, team)).toEqual([ids.teamTone]);
-
-    // The team's workspace lists the team's row for this slug, so the shared row was never on its page: the entry stays.
-    // The shared style the team has no copy of was on the page, so leaving it out unhides it.
-    await reader.mutation(api.core.userSettings.updateHiddenStyles, { hiddenStyles: [], organizationId: ids.organizationId });
-    expect(await t.run((ctx) => ctx.db.get(ids.inTeamSharedOnly))).toBeNull();
-    expect((await t.run((ctx) => ctx.db.get(ids.inTeam)))?.styleId).toBe(ids.shared);
-    // Nor is it in the team workspace's hidden list, which holds only what that page shows.
-    expect(await reader.query(api.core.userSettings.getHiddenStyleIds, team)).toEqual([]);
-
-    // Tones the same way: the team's own tone is unhidden, the shadowed shared one's entry stays.
-    await reader.mutation(api.core.userSettings.updateHiddenTones, { hiddenTones: [], organizationId: ids.organizationId });
-    expect(await t.run(async (ctx) => (await ctx.db.query("userTones").collect()).map((row) => row.toneId))).toEqual([ids.sharedTone]);
-    expect(await reader.query(api.core.userSettings.getHiddenToneIds, team)).toEqual([]);
   });
 
   test("a copy that has only the old id, with no slug, status or version, is archived beside its rewrite", async () => {

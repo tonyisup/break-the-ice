@@ -10,7 +10,7 @@ import { ERROR_CODES, ERROR_MESSAGES, MAX_FEED_GENERATION_COUNT } from "./consta
 import { completionUsage, dailyCaps, DEFAULT_DAILY_BUDGET_USD, DEFAULT_DAILY_HARD_CAP_USD, FALLBACK_COST_PER_CALL_USD, spendDay, worstCaseCallCostUsd } from "./lib/aiSpend";
 import { billedFailure, keepAiReservation, keptAiReservation } from "./lib/aiSpendGuard";
 import * as aiRateLimitLib from "./lib/aiRateLimit";
-import { ensureAiRateLimit, ensureAiUnansweredLeft, holdAiUnanswered, isAiStopError, releaseAiUnanswered } from "./lib/aiRateLimit";
+import { ensureAiUnansweredLeft, holdAiUnanswered, isAiStopError, releaseAiUnanswered } from "./lib/aiRateLimit";
 import { convexErrorData } from "./lib/errorData";
 import { GENERATION_MODEL, maxOutputTokens, openRouterClient } from "./lib/generationRunner";
 import { clampBatchSize } from "./lib/promptArchitecture";
@@ -21,8 +21,6 @@ const ME = { subject: "me-clerk", tokenIdentifier: "test|me-clerk", email: "me@e
 const ADMIN = { subject: "admin-clerk", tokenIdentifier: "test|admin-clerk", email: "admin@example.com", metadata: { isAdmin: "true" } };
 const ENV_KEYS = ["AI_DAILY_BUDGET_USD", "AI_DAILY_HARD_CAP_USD", "OPENROUTER_MAX_ATTEMPTS"] as const;
 const PAUSED = /paused for today/;
-const RATE_LIMITED = /a lot of AI requests/;
-const MATRIX_LIMITED = /used its matrix fills/;
 const TIMED_OUT = new APIConnectionTimeoutError().message;
 const counters = { totalLikes: 0, totalShows: 0, averageViewDuration: 0 };
 
@@ -323,193 +321,6 @@ describe("which spend class a call is charged to", () => {
   });
 });
 
-describe("matrix fill", () => {
-  async function paidOrgMember() {
-    const ctx = await setup();
-    const orgId = await ctx.t.run(async (db) => {
-      const orgId = await db.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await db.db.insert("organization_members", { userId: ctx.meId, organizationId: orgId, role: "manager" });
-      return orgId;
-    });
-    return { ...ctx, orgId };
-  }
-
-  test("a single-cell fill is refused once the organization's cells are used, and frees the cell", async () => {
-    const { t, orgId } = await paidOrgMember();
-    await t.mutation(internal.internal.aiRateLimit.consumeAiRateLimit, { name: "matrixFillCell", key: orgId, count: 50 });
-
-    await expect(
-      t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, {
-        organizationId: orgId,
-        styleSlug: "reflective",
-        toneSlug: "warm",
-        topicSlug: "any-topic",
-      }),
-    ).rejects.toThrow(MATRIX_LIMITED);
-
-    expect(create).not.toHaveBeenCalled();
-    const locks = await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect());
-    expect(locks).toEqual([]);
-  });
-
-  /** A paid organization with one empty cell to fill: an active style, tone and topic. */
-  async function fillableCell() {
-    const ctx = await paidOrgMember();
-    await ctx.t.run(async (db) => {
-      await db.db.insert("styles", { id: "s1", slug: "s1", status: "active", version: 1, name: "s1", structure: "x", color: "#111111", icon: "sparkles" });
-      await db.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
-      await db.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
-    });
-    return ctx;
-  }
-  type Cell = Awaited<ReturnType<typeof fillableCell>>;
-  // Both fills, each asked for `count` questions in that cell (or given no count) and returning
-  // how many it saved.
-  const FILLS = {
-    "a single-cell fill": async ({ t, orgId }: Cell, count?: number) =>
-      (await t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic", count })).count,
-    "a batch fill": async ({ t, orgId }: Cell, count?: number) =>
-      (
-        await t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
-          organizationId: orgId,
-          axisY: "style",
-          axisX: "tone",
-          topicSlug: "any-topic",
-          cells: [{ ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" }],
-          countPerCell: count,
-        })
-      ).totalQuestionsGenerated,
-  };
-  const BOTH_FILLS = ["a single-cell fill", "a batch fill"] as const;
-
-  test.each(BOTH_FILLS.flatMap((which) => [Number.NaN, Infinity, -Infinity].map((count) => [which, count] as const)))(
-    "%s refuses a count of %s: no cell is claimed, nothing is sent and nothing is charged",
-    async (which, count) => {
-      const cell = await fillableCell();
-      // Only reached if the fill isn't refused.
-      create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
-
-      const error = await FILLS[which](cell, count).catch((e: unknown) => e);
-
-      // NaN and the infinities are numbers to the argument check, so the fill has to refuse them.
-      expect(error).toBeInstanceOf(ConvexError);
-      expect(convexErrorData(error)).toEqual({ code: ERROR_CODES.AI_COUNT_INVALID, message: ERROR_MESSAGES.AI_COUNT_INVALID });
-      expect(create).not.toHaveBeenCalled();
-      const { runs, locks, limits } = await cell.t.run(async (ctx) => ({
-        runs: await ctx.db.query("generationRuns").collect(),
-        locks: await ctx.db.query("matrixFillCellLocks").collect(),
-        limits: await ctx.db.query("rateLimits").collect(),
-      }));
-      expect(runs).toEqual([]);
-      expect(locks).toEqual([]);
-      // None of the team's fills or the person's own requests were used.
-      expect(limits).toEqual([]);
-      expect(await ledger(cell.t)).toEqual([]);
-    },
-  );
-
-  // The schedule page asks for one question per cell, and a fill generates one whatever
-  // count it is given.
-  test.each(BOTH_FILLS.flatMap((which) => [1, -3, 2.7, 10, 50].map((count) => [which, count] as const)))(
-    "%s asked for %s questions generates one, under a cap of 2500 tokens",
-    async (which, count) => {
-      const cell = await fillableCell();
-      vi.spyOn(console, "log").mockImplementation(() => {});
-      create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
-
-      const saved = await FILLS[which](cell, count);
-
-      expect(saved).toBe(1);
-      expect(askedFor()).toEqual([[2500, "1"]]);
-      expect(await ledger(cell.t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
-    },
-  );
-
-  test.each(BOTH_FILLS)("%s given no count generates one question, under a cap of 2500 tokens", async (which) => {
-    const cell = await fillableCell();
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
-
-    const saved = await FILLS[which](cell);
-
-    expect(saved).toBe(1);
-    expect(askedFor()).toEqual([[2500, "1"]]);
-    expect(await ledger(cell.t)).toEqual([[spendDay(Date.now()), "user", 0.01, 1]]);
-  });
-
-  test("a single-cell fill given no topic refuses a count that isn't a number, and with a count it can use writes the question with no topic", async () => {
-    // No topic is named, and the catalog has none: a fill no longer picks one.
-    const { t, orgId } = await paidOrgMember();
-    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
-    vi.spyOn(OpenAI.Embeddings.prototype, "create").mockRejectedValue(new Error("unexpected embedding call"));
-    const fill = (count?: number) =>
-      t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "reflective", toneSlug: "warm", count });
-
-    // Refused before a cell is claimed or anything is sent.
-    for (const count of [Number.NaN, Infinity, -Infinity]) {
-      const error = await fill(count).catch((e: unknown) => e);
-      expect(convexErrorData(error)).toMatchObject({ code: ERROR_CODES.AI_COUNT_INVALID });
-    }
-    expect(create).not.toHaveBeenCalled();
-    expect(await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
-
-    // With a count it can use, the question is written for the style and tone alone, and it
-    // waits for review like any other generated question.
-    const filled = await fill();
-    expect(filled).toMatchObject({ count: 1, waitingForReview: true });
-    expect(askedFor()).toEqual([[2500, "1"]]);
-    const { messages } = create.mock.calls[0][0] as { messages: Array<{ content: string }> };
-    expect(messages[1].content).not.toContain("Topic:");
-    expect(messages[1].content).toContain("\nWrite 1 new question for this style and tone.\n");
-    const saved = await t.run(async (ctx) => await ctx.db.get(filled.questionIds[0]));
-    expect(saved).toMatchObject({ styleSlug: "reflective", toneSlug: "warm", status: "pending", heldForReview: true });
-    expect([saved?.topicSlug, saved?.topicId, saved?.topic]).toEqual([undefined, undefined, undefined]);
-  });
-
-  test("a single-cell fill refuses a count that isn't a number while another fill holds the cell, and leaves that claim in place", async () => {
-    const { t, orgId } = await paidOrgMember();
-    await t.run(async (ctx) => {
-      await ctx.db.insert("matrixFillCellLocks", { organizationId: orgId, cellKey: "s1|t1|any-topic" });
-    });
-    // Only reached if the fill isn't refused.
-    create.mockResolvedValue(completion(TEN_QUESTIONS, { cost: 0.01 }) as never);
-    const fill = (count: number) =>
-      t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId: orgId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic", count });
-
-    // With a count it can use, a fill that finds another fill on the cell has nothing to do, and
-    // says no question is waiting for review there: none was written.
-    expect(await fill(1)).toEqual({ count: 0, questionIds: [], waitingForReview: false });
-    for (const count of [Number.NaN, Infinity, -Infinity]) {
-      const error = await fill(count).catch((e: unknown) => e);
-      expect(convexErrorData(error)).toMatchObject({ code: ERROR_CODES.AI_COUNT_INVALID });
-    }
-    expect(create).not.toHaveBeenCalled();
-    const locks = await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect());
-    expect(locks.map((lock) => lock.cellKey)).toEqual(["s1|t1|any-topic"]);
-  });
-
-  test("an ordinary per-cell failure still skips that cell and keeps filling the rest", async () => {
-    const { t, orgId } = await paidOrgMember();
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    const result = await t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
-      organizationId: orgId,
-      axisY: "style",
-      axisX: "tone",
-      topicSlug: "any-topic",
-      cells: [
-        { ySlug: "gone-1", xSlug: "warm", styleSlug: "gone-1", toneSlug: "warm" },
-        { ySlug: "gone-2", xSlug: "warm", styleSlug: "gone-2", toneSlug: "warm" },
-      ],
-    });
-
-    expect(result).toMatchObject({ totalCells: 2, filledCells: 0, skippedInvalidTaxonomy: 2 });
-    expect(create).not.toHaveBeenCalled();
-    const locks = await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect());
-    expect(locks).toEqual([]);
-  });
-});
-
 describe("a question count that isn't a whole number from one to ten", () => {
   // The count asked for, the questions generated and the output cap. A count that isn't a
   // number is one question, never the largest batch.
@@ -648,24 +459,6 @@ describe("helpers", () => {
     expect(isAiStopError(undefined)).toBe(false);
   });
 
-  test("a refused token carries the code, the readable message and when to retry", async () => {
-    const ctx = { runMutation: vi.fn().mockResolvedValue({ ok: false, retryAt: 1234 }) };
-
-    const error = await ensureAiRateLimit(ctx as never, { name: "matrixFillCell", key: "org-1" }).catch((e: unknown) => e);
-
-    expect(error).toBeInstanceOf(ConvexError);
-    // The matrix bucket refills over a day, so its message says so.
-    expect((error as ConvexError<{ code: string; message: string; retryAt: number }>).data).toEqual({
-      code: ERROR_CODES.AI_RATE_LIMITED,
-      message: ERROR_MESSAGES.AI_MATRIX_FILL_LIMITED,
-      retryAt: 1234,
-    });
-    expect(ctx.runMutation).toHaveBeenCalledWith(internal.internal.aiRateLimit.consumeAiRateLimit, {
-      name: "matrixFillCell",
-      key: "org-1",
-    });
-  });
-
   test("a free call costs nothing, an unreadable cost is charged the fallback, and bad caps fall back", () => {
     expect(completionUsage({ cost: 0 }, FALLBACK_COST_PER_CALL_USD).costUsd).toBe(0);
     expect(completionUsage({ cost: "0.01" }, FALLBACK_COST_PER_CALL_USD).costUsd).toBe(FALLBACK_COST_PER_CALL_USD);
@@ -701,70 +494,6 @@ describe("review follow-ups", () => {
     ]);
     // Paid for, so the quota isn't refunded.
     expect(usage.map((row) => row.count)).toEqual([1]);
-  });
-
-  test("team previews are user spend: refused once user AI is paused, with no model call or run", async () => {
-    const { t, meId, styleId, toneId } = await setup();
-    const orgId = await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
-      return orgId;
-    });
-    await seedSpend(t, { user: 1 });
-
-    await expect(
-      t.withIdentity(ME).action(api.core.teamPromptActions.previewTopicQuestions, {
-        organizationId: orgId,
-        name: "Recovery",
-        guidance: "Talk about rest days",
-        styleId,
-        toneId,
-      }),
-    ).rejects.toThrow(PAUSED);
-
-    expect(create).not.toHaveBeenCalled();
-    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
-    expect(runs).toEqual([]);
-  });
-
-  test("a fill that runs out of cells mid-batch keeps the cell it generated, stops calling the model and frees every cell", async () => {
-    const { t, meId } = await setup();
-    const orgId = await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
-      for (const slug of ["s1", "s2"]) {
-        await ctx.db.insert("styles", { id: slug, slug, status: "active", version: 1, name: slug, structure: "x", color: "#111111", icon: "sparkles" });
-      }
-      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
-      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
-      return orgId;
-    });
-    await t.mutation(internal.internal.aiRateLimit.consumeAiRateLimit, { name: "matrixFillCell", key: orgId, count: 49 });
-    create.mockResolvedValue(
-      completion(JSON.stringify({ questions: [{ text: "What small thing made you smile today?" }] }), { cost: 0.01 }) as never,
-    );
-
-    await expect(
-      t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
-        organizationId: orgId,
-        axisY: "style",
-        axisX: "tone",
-        topicSlug: "any-topic",
-        cells: [
-          { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
-          { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
-        ],
-      }),
-    ).rejects.toThrow(/used its matrix fills/);
-
-    expect(create).toHaveBeenCalledTimes(1);
-    const { runs, locks } = await t.run(async (ctx) => ({
-      runs: await ctx.db.query("generationRuns").collect(),
-      locks: await ctx.db.query("matrixFillCellLocks").collect(),
-    }));
-    // The first cell's generation completed and was recorded; the second never started.
-    expect(runs.map((run) => [run.status, run.costUsd])).toEqual([["succeeded", 0.01]]);
-    expect(locks).toEqual([]);
   });
 
   test("a negative, fractional or NaN count can't mint tokens or disable a bucket", async () => {
@@ -1002,36 +731,6 @@ describe("room for a thinking model's reasoning", () => {
     expect(questions).toHaveLength(5);
     // 2,000 for the reasoning, then 300 + 200 per question.
     expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 3300 });
-  });
-
-  test("a team's three-question topic preview asks for room for all three", async () => {
-    const { t, meId, styleId, toneId } = await setup();
-    const organizationId = await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
-      return orgId;
-    });
-    create.mockResolvedValue(
-      completion(
-        questionsJson(
-          "What does a good rest day look like for you?",
-          "Which recovery habit have you stuck with longest?",
-          "When did skipping a rest day cost you?",
-        ),
-        { cost: 0.01 },
-      ) as never,
-    );
-
-    const preview = await t.withIdentity(ME).action(api.core.teamPromptActions.previewTopicQuestions, {
-      organizationId,
-      name: "Recovery",
-      guidance: "Talk about rest days",
-      styleId,
-      toneId,
-    });
-
-    expect(preview.questions).toHaveLength(3);
-    expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 2900 });
   });
 
   test("the cap follows the batch size the prompt was built for, from one question up to the ten-question limit", async () => {
@@ -1612,33 +1311,6 @@ describe("calls that may have been billed without an answer", () => {
     expect(await ledger(t)).toEqual([[spendDay(Date.now()), "system", lastSetAside(), 1]]);
   });
 
-  test("a team topic preview that times out keeps its reservation on user spend and refunds the preview use", async () => {
-    const { t, meId, styleId, toneId } = await setup();
-    const organizationId = await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
-      return orgId;
-    });
-    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
-
-    await expect(
-      t.withIdentity(ME).action(api.core.teamPromptActions.previewTopicQuestions, {
-        organizationId,
-        name: "Recovery",
-        guidance: "Talk about rest days",
-        styleId,
-        toneId,
-      }),
-    ).rejects.toThrow(TIMED_OUT);
-
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(), 1]]);
-    const usage = await t.run(async (ctx) =>
-      (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === meId),
-    );
-    expect(usage.map((row) => row.count)).toEqual([0]);
-  });
-
   test("a paid-for unusable remix keeps the quota use even when its retry timed out", async () => {
     const { t, meId, questionId } = await setup();
     create
@@ -1662,58 +1334,6 @@ describe("calls that may have been billed without an answer", () => {
     ]);
     // The first answer was paid for in full, so the use counts.
     expect(usage.map((row) => row.count)).toEqual([1]);
-  });
-
-  test("a matrix cell that times out stops the fill and says how far it got: later cells aren't tried, one reservation is kept and the lock is freed", async () => {
-    const { t, meId } = await setup();
-    const orgId = await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
-      for (const slug of ["s1", "s2"]) {
-        await ctx.db.insert("styles", { id: slug, slug, status: "active", version: 1, name: slug, structure: "x", color: "#111111", icon: "sparkles" });
-      }
-      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
-      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
-      return orgId;
-    });
-    create.mockRejectedValue(new APIConnectionTimeoutError() as never);
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const stopped = await t
-      .withIdentity(ME)
-      .action(api.core.fillMatrix.fillEmptyCells, {
-        organizationId: orgId,
-        axisY: "style",
-        axisX: "tone",
-        topicSlug: "any-topic",
-        cells: [
-          { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
-          { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
-        ],
-      })
-      .catch((error: unknown) => error);
-
-    // The manager is told how far the fill got; the provider's error goes to the log.
-    expect(convexErrorData(stopped)).toEqual({
-      code: ERROR_CODES.AI_GENERATION_FAILED,
-      message: "Stopped before any question was written, because the AI didn't finish an answer. Try again later.",
-      filledCells: 0,
-      totalCells: 2,
-    });
-    expect(consoleError).toHaveBeenCalledWith(
-      expect.stringMatching(/Stopped the matrix fill at \(style=s1, tone=t1\)/),
-      expect.objectContaining({ message: TIMED_OUT }),
-    );
-
-    // The second cell would very likely time out too, and keep a reservation of its own.
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(await ledger(t)).toEqual([[spendDay(Date.now()), "user", lastSetAside(), 1]]);
-    const { runs, locks } = await t.run(async (ctx) => ({
-      runs: await ctx.db.query("generationRuns").collect(),
-      locks: await ctx.db.query("matrixFillCellLocks").collect(),
-    }));
-    expect(runs.map((run) => [run.status, run.costUsd])).toEqual([["failed", undefined]]);
-    expect(locks).toEqual([]);
   });
 
   test("the nightly pool stops at a combination that times out and reports it", async () => {
@@ -1808,25 +1428,6 @@ describe("calls a person may have unanswered in one day", () => {
     }
   }
 
-  async function matrixOrg(t: T, meId: Awaited<ReturnType<typeof setup>>["meId"]) {
-    return await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
-      for (const slug of ["s1", "s2"]) {
-        await ctx.db.insert("styles", { id: slug, slug, status: "active", version: 1, name: slug, structure: "x", color: "#111111", icon: "sparkles" });
-      }
-      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
-      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
-      return orgId;
-    });
-  }
-
-  /** What is left of an organization's matrix fills, as its row holds it. No row: none was taken. */
-  async function matrixFillsLeft(t: T, orgId: string) {
-    const rows = await t.run(async (ctx) => await ctx.db.query("rateLimits").collect());
-    return rows.filter((row) => row.name === "matrixFillCell" && row.key === orgId).map((row) => row.value);
-  }
-
   test("after five calls that got no answer the next request is refused before any model call, until the next day", async () => {
     const { t, meId, questionId } = await setup();
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -1861,56 +1462,29 @@ describe("calls a person may have unanswered in one day", () => {
     expect(create).toHaveBeenCalledTimes(6);
   });
 
-  test("a remix, feed generation, a team preview and a matrix fill count against the same five", async () => {
-    const { t, meId, styleId, toneId, questionId } = await setup();
+  test("a remix and feed generation count against the same five", async () => {
+    const { t, styleId, toneId, questionId } = await setup();
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const organizationId = await matrixOrg(t, meId);
-    const fill = () =>
-      t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, {
-        organizationId,
-        styleSlug: "s1",
-        toneSlug: "t1",
-        topicSlug: "any-topic",
-      });
+    const feed = () =>
+      t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { anchoredStyleId: styleId, anchoredToneId: toneId });
     create.mockRejectedValue(new APIConnectionTimeoutError() as never);
 
-    await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
-    await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
-    await expect(
-      t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { anchoredStyleId: styleId, anchoredToneId: toneId }),
-    ).rejects.toThrow(TIMED_OUT);
-    await expect(
-      t.withIdentity(ME).action(api.core.teamPromptActions.previewTopicQuestions, {
-        organizationId,
-        name: "Recovery",
-        guidance: "Talk about rest days",
-        styleId,
-        toneId,
-      }),
-    ).rejects.toThrow(TIMED_OUT);
-    await expect(fill()).rejects.toThrow(TIMED_OUT);
+    for (let i = 0; i < 3; i++) await expect(remix(t, questionId)).rejects.toThrow(TIMED_OUT);
+    for (let i = 0; i < 2; i++) await expect(feed()).rejects.toThrow(TIMED_OUT);
     expect(create).toHaveBeenCalledTimes(5);
     expect(await slotsLeft(t)).toBe(0);
-    // The fill that reached the provider took one of the organization's 50.
-    expect(await matrixFillsLeft(t, organizationId)).toEqual([49]);
 
     await expect(remix(t, questionId)).rejects.toThrow(UNANSWERED);
-    // A matrix fill is refused the same way, with an error a batch stops on, before it takes
-    // one of the organization's fills or starts a run, and the cell it claimed is freed.
-    const refusedFill = await fill().catch((error: unknown) => error);
-    expect(convexErrorData(refusedFill)).toMatchObject({
+    // Feed generation is refused the same way, before it starts a run.
+    const refusedFeed = await feed().catch((error: unknown) => error);
+    expect(convexErrorData(refusedFeed)).toMatchObject({
       code: ERROR_CODES.AI_RATE_LIMITED,
       message: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
     });
-    expect(isAiStopError(refusedFill)).toBe(true);
+    expect(isAiStopError(refusedFeed)).toBe(true);
     expect(create).toHaveBeenCalledTimes(5);
-    expect(await matrixFillsLeft(t, organizationId)).toEqual([49]);
-    const { runs, locks } = await t.run(async (ctx) => ({
-      runs: await ctx.db.query("generationRuns").collect(),
-      locks: await ctx.db.query("matrixFillCellLocks").collect(),
-    }));
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
     expect(runs).toHaveLength(5);
-    expect(locks).toEqual([]);
   });
 
   test("a call that is answered, or that the provider refused, gives its slot back", async () => {
@@ -2228,157 +1802,5 @@ describe("calls a person may have unanswered in one day", () => {
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(await slotsLeft(t)).toBe(4);
-  });
-
-  // Value: protects=a batch cell whose AI call is refused without stopping the fill is counted in no result field, which the planner reads as a cell that couldn't be filled;
-  // fails_when=the fill counts that cell as skipped (the planner then says every cell already has a question), or stops the whole fill on a refusal;
-  // why_new=no test reached fillEmptyCells' catch for an error that neither stops the fill nor names a missing style;
-  // seam=none; no_claim=what the planner says for these counts (src/app/org/schedule/page.test.tsx, action mocked), or real provider errors (a 400 stands in).
-  test("a matrix batch carries on past a cell whose AI call is refused, and counts that cell in no field", async () => {
-    const { t, meId } = await setup();
-    const orgId = await matrixOrg(t, meId);
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    create
-      .mockRejectedValueOnce(refused(400, "invalid request"))
-      .mockResolvedValueOnce(completion(JSON.stringify({ questions: [{ text: "What small win are you proud of this week?" }] }), { cost: 0.01 }) as never);
-
-    const result = await t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
-      organizationId: orgId,
-      axisY: "style",
-      axisX: "tone",
-      topicSlug: "any-topic",
-      cells: [
-        { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
-        { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
-      ],
-    });
-
-    expect(result).toEqual({
-      totalCells: 2,
-      filledCells: 1,
-      totalQuestionsGenerated: 1,
-      skippedExisting: 0,
-      skippedWaitingForReview: 0,
-      skippedInvalidTaxonomy: 0,
-    });
-    expect(create).toHaveBeenCalledTimes(2);
-    expect(logged.mock.calls.some(([message]) => String(message).startsWith("Failed to fill cell"))).toBe(true);
-    expect(await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect())).toEqual([]);
-  });
-
-  test("a matrix batch stops at a cell whose answer is cut off and says how far it got: later cells aren't tried, one slot is kept and the cell is freed", async () => {
-    const { t, meId } = await setup();
-    const orgId = await matrixOrg(t, meId);
-    await t.run(async (ctx) => {
-      await ctx.db.insert("styles", { id: "s3", slug: "s3", status: "active", version: 1, name: "s3", structure: "x", color: "#111111", icon: "sparkles" });
-    });
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    const truncated = completion("", { cost: 0.006 });
-    truncated.choices[0].finish_reason = "length";
-    create
-      .mockResolvedValueOnce(completion(JSON.stringify({ questions: [{ text: "What small win are you proud of this week?" }] }), { cost: 0.01 }) as never)
-      .mockResolvedValue(truncated as never);
-
-    const stopped = await t
-      .withIdentity(ME)
-      .action(api.core.fillMatrix.fillEmptyCells, {
-        organizationId: orgId,
-        axisY: "style",
-        axisX: "tone",
-        topicSlug: "any-topic",
-        cells: [
-          { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
-          { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
-          { ySlug: "s3", xSlug: "t1", styleSlug: "s3", toneSlug: "t1" },
-        ],
-      })
-      .catch((error: unknown) => error);
-
-    // A message the planner can show, not the provider's own error.
-    expect(convexErrorData(stopped)).toEqual({
-      code: ERROR_CODES.AI_GENERATION_FAILED,
-      message: "Wrote questions for 1 cell, then stopped because the AI didn't finish an answer. The questions written are saved and will show here after the Break the Ice team reviews them. Try the rest again later.",
-      filledCells: 1,
-      totalCells: 3,
-    });
-    // The third cell has the same size and cap, so it would very likely be cut off too.
-    expect(create).toHaveBeenCalledTimes(2);
-    expect(await slotsLeft(t)).toBe(4);
-    expect(await matrixFillsLeft(t, orgId)).toEqual([48]);
-    const { runs, locks } = await t.run(async (ctx) => ({
-      runs: await ctx.db.query("generationRuns").collect(),
-      locks: await ctx.db.query("matrixFillCellLocks").collect(),
-    }));
-    // The first cell's questions stay saved.
-    expect(runs.map((run) => run.status)).toEqual(["succeeded", "failed"]);
-    expect(locks).toEqual([]);
-  });
-
-  test("a matrix batch also stops when the cut-off answer follows a paid-for unusable one", async () => {
-    const { t, meId } = await setup();
-    const orgId = await matrixOrg(t, meId);
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const truncated = completion("", { cost: 0.006 });
-    truncated.choices[0].finish_reason = "length";
-    create.mockResolvedValueOnce(completion('{"questions":[]}', { cost: 0.004 }) as never).mockResolvedValue(truncated as never);
-
-    const stopped = await t
-      .withIdentity(ME)
-      .action(api.core.fillMatrix.fillEmptyCells, {
-        organizationId: orgId,
-        axisY: "style",
-        axisX: "tone",
-        topicSlug: "any-topic",
-        cells: [
-          { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
-          { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
-        ],
-      })
-      .catch((error: unknown) => error);
-
-    expect(convexErrorData(stopped)).toMatchObject({ code: ERROR_CODES.AI_GENERATION_FAILED, filledCells: 0, totalCells: 2 });
-    // Two calls for the first cell, none for the second.
-    expect(create).toHaveBeenCalledTimes(2);
-  });
-
-  test("a matrix batch is refused at its first cell once the person has no slot left: nothing is taken from the team and the cell is freed", async () => {
-    const { t, meId } = await setup();
-    const orgId = await matrixOrg(t, meId);
-    await holdEverySlot(t);
-
-    const refusal = await t
-      .withIdentity(ME)
-      .action(api.core.fillMatrix.fillEmptyCells, {
-        organizationId: orgId,
-        axisY: "style",
-        axisX: "tone",
-        topicSlug: "any-topic",
-        cells: [
-          { ySlug: "s1", xSlug: "t1", styleSlug: "s1", toneSlug: "t1" },
-          { ySlug: "s2", xSlug: "t1", styleSlug: "s2", toneSlug: "t1" },
-        ],
-      })
-      .catch((error: unknown) => error);
-
-    expect(convexErrorData(refusal)).toMatchObject({
-      code: ERROR_CODES.AI_RATE_LIMITED,
-      message: ERROR_MESSAGES.AI_UNANSWERED_LIMITED,
-    });
-    expect(create).not.toHaveBeenCalled();
-    // Refused before anything was set aside, before a run was started, and before the
-    // organization's fills were touched.
-    expect(await ledger(t)).toEqual([]);
-    expect(await matrixFillsLeft(t, orgId)).toEqual([]);
-    const { runs, locks } = await t.run(async (ctx) => ({
-      runs: await ctx.db.query("generationRuns").collect(),
-      locks: await ctx.db.query("matrixFillCellLocks").collect(),
-    }));
-    expect(runs).toEqual([]);
-    expect(locks).toEqual([]);
   });
 });
