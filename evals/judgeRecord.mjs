@@ -35,7 +35,7 @@ export function allowedRejects(count) {
  * a reject, and a card that appears twice counts once. Cards whose text was never judged, or
  * whose check failed, are counted as unjudged and left out of every rate. Each judged card is
  * either one the check would publish or one it would leave for review; `flagged` counts the
- * ones the app would also flag to a team (a hold, or any safety flag), whichever side they are on.
+ * ones the app would also flag to an admin (a hold, or any safety flag), whichever side they are on.
  */
 export function compareWithLabels(results, cards) {
   const verdicts = new Map(results.filter((result) => result.verdict).map((result) => [result.text, result]));

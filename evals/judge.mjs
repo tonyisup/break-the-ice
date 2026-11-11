@@ -214,7 +214,7 @@ save();
 const judged = questions.map((question) => byText.get(question.text)).filter(Boolean);
 const publish = judged.filter((result) => result.wouldPublish).length;
 const flag = judged.filter((result) => result.wouldFlag).length;
-// "Flag" is the app's own rule for what a team is shown: a hold, or any safety flag.
+// "Flag" is the app's own rule for what an admin's lists mark: a hold, or any safety flag.
 console.log(
   `Judged ${judged.length} of ${questions.length} by ${record.model} with instructions v${record.promptVersion}: ` +
     `the check would publish ${publish}, leave ${judged.length - publish} for review and flag ${flag}. Wrote ${outPath}.`,
