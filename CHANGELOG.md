@@ -2,6 +2,24 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.8.0.0] - 2026-11-11
+
+### Removed
+- Team workspaces are gone: organizations and their members and invitations, shared collections, the weekly schedule and its question grid (grid fill and Auto-fill), the coach's daily view and its feedback, Team prompts and their topic previews, and the Team plan with its pricing and checkout pages. Everyone now uses the app as themselves, with the same AI allowance (`MAX_FREE_AIGEN`, default 10 a cycle). The organization side of billing goes too; a subscription a person pays for is still recorded on their account.
+- The "Public question feed" banner and the "For teams" link on the landing page. "Teams" no longer appears as an audience in the page description or the share image.
+
+### Changed
+- Old links to `/pricing` open the home page.
+- When someone uses up their AI questions, the feed says how many they had and the day more become available, instead of offering the Team plan. Settings shows "AI Usage" with this cycle's count, without a plan tile.
+- A question, style, tone or topic a team owned no longer shows anywhere: not by link or share image, not in the feed, the daily email, the nightly pool, the review queue, style examples or the style and topic pickers, and the AI never writes with one. Its author can't edit, publish or delete it, and an admin can't approve it. The rows stay until the clean-up below deletes them.
+- An app that was open before this release keeps working: what it saves lands in the person's own lists, and the workspace it still sends is ignored.
+- Team-plan payments Clerk reports for an organization are logged with their ids and otherwise ignored.
+
+### Added
+- A one-time clean-up deletes what team workspaces left behind. Run it after the deploy: `npx convex run --prod internal/migrations:removeWorkspaceData '{"dryRun":true}'` lists how many rows would go from each table; the same command with `false` deletes them, and a dry run afterwards should report 0 everywhere. It deletes every organization, membership, invitation, collection, schedule, coach feedback row and team topic, the questions, styles, tones and topics a team owned, the likes, hidden entries and AI usage counted inside a workspace, and anyone's like or hidden entry of a team's question, style or tone. A person's own questions, likes, hidden entries and usage are otherwise kept, and no account is deleted.
+
+Before deploying, switch off the Team plan in Clerk and confirm no organization is still paying: an app loaded before this release can still open Clerk's Team checkout, and the clean-up deletes the organization rows that hold their Clerk ids. The database schema still declares the team tables and fields; a later release drops them once the clean-up has run on every deployment. If this release is rolled back before the clean-up runs, nothing needs restoring.
+
 ## [0.7.0.0] - 2026-10-14
 
 ### Added

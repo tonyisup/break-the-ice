@@ -1,5 +1,79 @@
 # TODOS
 
+## Teams removal
+
+### Narrow the schema once the workspace clean-up has run everywhere
+
+**What:** Drop the 11 team tables, the `organizationId` fields, `kind: "team_prompt"` and the `"organization"` billing subject from `convex/schema.ts`, read per-person rows through the `by_userId_*` indexes instead of `by_userId_organizationId_*`, and remove what kept old apps working: `convex/lib/ignoredWorkspaceArg.ts`, the `core/organizations:getOrganizations` stub and `core/billing:getEffectiveEntitlements`.
+
+**Why:** v0.8.0.0 removed team workspaces but left the schema as it was, because Convex refuses a schema that stored rows don't fit until `removeWorkspaceData` has deleted them.
+
+**Context:** Run `npx convex run internal/migrations:removeWorkspaceData '{"dryRun":true}'` on dev and prod first; every count must be 0. Old cached apps stop sending `organizationId` once their service worker updates. The privacy and data-retention pages still describe organization data and should change in the same release.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** removeWorkspaceData run with a clean dry run on every deployment
+
+### Keep the clean-up from deleting a paying organization's billing record
+
+**What:** Have `removeWorkspaceData` leave any organization whose billing is active, trialing or past due, and list its Clerk organization and subscription ids in the run's output, instead of deleting it.
+
+**Why:** An app loaded before v0.8.0.0 can still open Clerk's Team checkout, the webhook now only logs organization payments, and the organization row is the only Convex copy of its Clerk ids. Deleting it loses who to cancel or refund.
+
+**Context:** `cleanWorkspaceRow` in `convex/internal/migrations.ts` deletes every `organizations` row; `convex/clerk.ts` logs ignored organization events. Switching the Team plan off in Clerk before the deploy closes the checkout itself. On 2026-11-11 prod's only organization was free and inactive. Deferred by the owner at the v0.8.0.0 ship review.
+
+**Effort:** S
+**Priority:** P1
+**Depends on:** None
+
+### Stop a stale tab's saves from replacing a person's own lists
+
+**What:** Make `updateLikedQuestions`, `updateHiddenQuestions`, `updateHiddenStyles` and `updateHiddenTones` do nothing (or only add) when the call still carries an `organizationId`.
+
+**Why:** These replace the whole list. A tab opened before v0.8.0.0 with a workspace selected holds that workspace's list, so a save from it can demote a person's own likes and drop their hidden styles and tones.
+
+**Context:** `convex/core/userSettings.ts`; the old argument is accepted by `ignoredWorkspaceArg`. The `merge*` mutations are safe (they only add). The window lasts until the tab's settings query refreshes. Deferred by the owner at the v0.8.0.0 ship review.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** None
+
+### Repoint references to a workspace's deleted styles, tones and topics
+
+**What:** Before `removeWorkspaceData` deletes a team's style, tone or topic, count (dry run) and repoint or clear the questions, question embeddings and generation runs that still point at it. Refuse a team's style, tone or topic id on new personal questions.
+
+**Why:** Questions generated before v0.8.0.0 can carry a team's taxonomy id without belonging to the team, and an old app can still send one with a new personal question. After the clean-up those ids point at nothing, and the feed matches a question's style by id before its slug.
+
+**Context:** `cleanWorkspaceRow` in `convex/internal/migrations.ts`; `addPersonalQuestion` in `convex/core/questions.ts`. On 2026-11-11 prod had no team-owned styles, tones or topics. Deferred by the owner at the v0.8.0.0 ship review.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** None
+
+### Stop the style backfill rescheduling itself without progress
+
+**What:** Have `updateQuestionsWithMissingStyleIds` reschedule only when it patched something (or move a cursor past questions it can't resolve), as the tone backfill reports unresolved slugs.
+
+**Why:** With 100 questions missing a style id whose slug matches no shared style, each run patches nothing and schedules itself again at once. v0.8.0.0 widened this to slugs that only a team's style had.
+
+**Context:** `convex/internal/styles.ts`, run by a daily cron; compare `updateQuestionsWithMissingToneIds` in `convex/internal/tones.ts`. Deferred by the owner at the v0.8.0.0 ship review.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
+### Bound the clean-up's duplicate-group reads and stray embeddings
+
+**What:** Settle pending duplicate groups in their own paged stage of `removeWorkspaceData` instead of reading all of them in each page that deleted a question, and make `addStyleEmbedding`, `addToneEmbedding` and `addTopicEmbedding` skip a row that no longer exists.
+
+**Why:** A large pending-duplicates backlog could still push one page past a transaction's read limit, and an embedding request already waiting on the provider can insert an orphan after the clean-up deleted its row.
+
+**Context:** `removeWorkspaceDataPage` in `convex/internal/migrations.ts`; the embedding mutations in `convex/internal/styles.ts`, `tones.ts` and `topics.ts`. Deferred by the owner at the v0.8.0.0 ship review.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## AI usage
 
 ### Close a remaining AI usage accounting gap
@@ -64,7 +138,7 @@
 
 ### Stop the daily-email batch at a call that keeps its reservation
 
-**What:** Have the daily-email batch stop generating once a call times out or its response can't be parsed, the way matrix fill and the nightly pool do, then send the emails already prepared. Apply the same rule to a delivery's later attempts.
+**What:** Have the daily-email batch stop generating once a call times out or its response can't be parsed, the way the nightly pool does, then send the emails already prepared. Apply the same rule to a delivery's later attempts.
 
 **Why:** The batch generates for many readers in one job. On a slow-provider morning each reader's call waits out the 30-second timeout and is charged to the system budget, and the prepared emails wait behind them.
 
@@ -74,13 +148,13 @@
 **Priority:** P2
 **Depends on:** None
 
-### Say why a single-cell fill or pool run stopped early
+### Say why a pool run stopped early
 
-**What:** When a single-cell matrix fill stops because the AI didn't finish an answer, give the manager a readable message, as a batch fill does since v0.5.1.0. Show the reason on the admin pool page too. Give a batch that stops on a rate limit or a paused budget its count of filled cells as well.
+**What:** Show the reason a nightly pool run stopped on the admin pool page.
 
-**Why:** A single-cell fill rejects with the provider's raw error, which production shows as a bare server error, so the manager can't tell that trying again may fail the same way and use another of their five unanswered-call slots. The pool page shows only how many errors there were.
+**Why:** The pool page shows only how many errors there were.
 
-**Context:** `fillSingleCell` and `fillStoppedMessage` in `convex/core/fillMatrix.ts`, `readableError` in `src/app/org/schedule/page.tsx`, `generateNightlyQuestionPool` in `convex/internal/ai.ts` and `src/app/admin/pool/page.tsx`. The batch-fill part shipped in v0.5.1.0. Deferred during the v0.4.10.0 review; the single-cell part by the owner during the v0.5.1.0 review.
+**Context:** `generateNightlyQuestionPool` in `convex/internal/ai.ts` and `src/app/admin/pool/page.tsx`. Deferred during the v0.4.10.0 review.
 
 **Effort:** S
 **Priority:** P2
@@ -88,9 +162,9 @@
 
 ### Let the feed recover after an AI refusal, and pause after a call that gets no answer
 
-**What:** On the feed, a rate-limit refusal switches AI questions off until the page is reloaded. Clear that when the filter or workspace changes (a paused budget stays final). And stop the feed's own generation for the page session after a call that timed out or was cut off, instead of asking again on the next page.
+**What:** On the feed, a rate-limit refusal switches AI questions off until the page is reloaded. Clear that when the filter changes (a paused budget stays final). And stop the feed's own generation for the page session after a call that timed out or was cut off, instead of asking again on the next page.
 
-**Why:** Since v0.5.1.0 a person has five slots a day for AI calls that are still running or got no answer. Changing filters quickly can hold all five for a few seconds, and the refusal that follows turns AI off for the session. On a slow-provider day the feed can use up the five by itself, and remix, topic previews and matrix fill are then refused until the next day.
+**Why:** Since v0.5.1.0 a person has five slots a day for AI calls that are still running or got no answer. Changing filters quickly can hold all five for a few seconds, and the refusal that follows turns AI off for the session. On a slow-provider day the feed can use up the five by itself, and remix is then refused until the next day.
 
 **Context:** `aiPausedRef` in `src/pages/InfiniteScrollPage.tsx`. The refusal is `AI_RATE_LIMITED` with `ERROR_MESSAGES.AI_UNANSWERED_LIMITED`. A call that got no answer reaches the feed as a plain error with no code (the marks in `convex/lib/aiSpendGuard.ts` and `convex/lib/generationRunner.ts` don't cross `ctx.runAction`), so it needs one the client can read. Deferred by the owner during the v0.5.1.0 review.
 
@@ -102,9 +176,9 @@
 
 **What:** Give a running call's unanswered-call slot an expiry a little past the provider timeout, so a request the platform stops mid-call doesn't hold its slot until midnight.
 
-**Why:** A slot is given back by the request that held it. If that request is stopped first (a long matrix fill at the action time limit, a crash), the slot stays held for the rest of the day, the same way its spend reservation stays on the ledger. `internal/aiRateLimit:resetAiUnanswered` gives one person theirs back by hand.
+**Why:** A slot is given back by the request that held it. If that request is stopped first (a long action at the time limit, a crash), the slot stays held for the rest of the day, the same way its spend reservation stays on the ledger. `internal/aiRateLimit:resetAiUnanswered` gives one person theirs back by hand.
 
-**Context:** `holdAiUnanswered` and `releaseAiUnanswered` in `convex/lib/aiRateLimit.ts`, held in `createChatCompletionWithRetry` (`convex/lib/generationRunner.ts`). Running and kept slots share one count per day, so an expiry needs them told apart. Same shape as "Expire stale matrix-fill locks". Deferred by the owner during the v0.5.1.0 review.
+**Context:** `holdAiUnanswered` and `releaseAiUnanswered` in `convex/lib/aiRateLimit.ts`, held in `createChatCompletionWithRetry` (`convex/lib/generationRunner.ts`). Running and kept slots share one count per day, so an expiry needs them told apart. Deferred by the owner during the v0.5.1.0 review.
 
 **Effort:** M
 **Priority:** P3
@@ -112,9 +186,9 @@
 
 ### Stop a batch when the provider asks for a long wait
 
-**What:** Treat a call that gave up because the provider's `Retry-After` was over 20 seconds as a reason to stop a matrix fill or pool run.
+**What:** Treat a call that gave up because the provider's `Retry-After` was over 20 seconds as a reason to stop a pool run.
 
-**Why:** The batch moves straight on to the next cell and sends again to a provider that asked for a pause. Nothing is charged, but the fill uses up the organization's matrix allowance and reports no cells filled.
+**Why:** The batch moves straight on and sends again to a provider that asked for a pause. Nothing is charged.
 
 **Context:** `getOpenRouterRetryDelayMs` and `MAX_RETRY_DELAY_MS` in `convex/lib/generationRunner.ts`, `isAiStopError` in `convex/lib/aiRateLimit.ts`. Deferred during the v0.4.10.0 review.
 
@@ -257,18 +331,6 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 **Priority:** P3
 **Depends on:** Decide how AI answers cut off by the length limit are charged (for whether a refused remix gives the request back)
 
-### Expire stale matrix-fill locks
-
-**What:** Treat matrix-fill cell locks older than about 15 minutes as stale in `claimMatrixFillCell`. Stop `fillEmptyCells` at an elapsed-time budget of about 8 minutes and return partial counts.
-
-**Why:** A fill runs up to 50 generations in one action. If Convex kills it at the 10-minute limit, the `finally` that releases the lock never runs, and that cell stays locked for the organization forever.
-
-**Context:** `convex/core/fillMatrix.ts`, `convex/internal/matrixFillLocks.ts`. No team uses matrix fill yet. Found in the v0.3.2.0 adversarial review.
-
-**Effort:** S
-**Priority:** P3
-**Depends on:** None
-
 ### Don't write a second pool while one waits for review
 
 **What:** Before Generate Pool writes, check for a pool that is still waiting for review or approved and not handed out, and say so.
@@ -319,21 +381,9 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 ## Quality check
 
-### Finish the flag a team sees on its schedule grid
-
-**What:** Show the "Flagged" mark on a week's day cards as well as on the grid, let a team generate a replacement for a cell whose only question is flagged, give admins a filter and a count for flagged questions that are live, and clear the flag on an admin's approval rather than on any admin action.
-
-**Why:** A manager who assigns a flagged question by hand sees no mark on the day card afterwards. An admin sees the mark in their lists but can't ask for just the flagged ones. And an admin action that settles nothing (a tag edit, a flag for pruning) takes the mark off.
-
-**Context:** `claudeFlag` in `convex/lib/qualityCheck.ts` is the rule; `getPublicQuestions` (`convex/core/questions.ts`) returns it, and `autoSchedule` (`convex/core/schedules.ts`) and the coach-feedback suggestions (`getCurationPreview`) already leave flagged questions out. `getSchedule` returns no flag, so a question that Auto-fill placed before its check landed shows nothing if the check then holds it. A flagged question still fills its matrix cell (`pageQuestionMatrixCellKeys`), so a team can't generate another question for that cell. The flag clears when `reviewRevision` is above 0, which every `recordReview` moves. Belongs with the matrix-fill ownership issue (a fill's question belongs to its team first), where a manager's own review of a flagged question gets designed. Shipped this way by the owner's choice during the v0.6.0.0 review (decision 73fb363c).
-
-**Effort:** M
-**Priority:** P2
-**Depends on:** The matrix-fill ownership issue
-
 ### Measure the flag before leaning on it
 
-**What:** Set a bar for how often a flagged question is one the owner would have kept, and measure it on the blind set. Consider showing a hold to a team only above a confidence.
+**What:** Set a bar for how often a flagged question is one the owner would have kept, and measure it on the blind set. Consider marking a hold in the admin lists only above a confidence.
 
 **Why:** On the 60 questions the owner had labeled, the check flagged 3 and the owner had rejected 2 of them. That is too few to say how often a flag is wrong, and a wrong flag stays until an admin acts.
 
@@ -345,7 +395,7 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 ### Check published questions whose check never landed
 
-**What:** Give `checkPendingQuestions` a way to reach generated questions that were published at once and have no verdict: the ones a matrix fill or the nightly pool wrote before those were held for review.
+**What:** Give `checkPendingQuestions` a way to reach generated questions that were published at once and have no verdict: the ones the nightly pool wrote before it was held for review.
 
 **Why:** The backfill covers the review queue only. A fill's or pool's question from before, whose check failed twice or that was saved while the check was off, stays unchecked and shows no flag, which looks the same as a question the check kept. New ones are held, so the backfill reaches them.
 
@@ -369,11 +419,11 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 ### Small things from the quality check's adversarial review
 
-**What:** (1) Cut a style, tone or topic definition on whole characters, as the check's note is. (2) When Auto-fill refuses because only flagged questions are left, don't tell a manager to assign one that is already on the week. (3) Drop the verdict when a question's style, tone or topic is changed by id alone. (4) Keep two `evals/judge.mjs` runs from writing the same judged file at once.
+**What:** (1) Cut a style, tone or topic definition on whole characters, as the check's note is. (2) Drop the verdict when a question's style, tone or topic is changed by id alone. (3) Keep two `evals/judge.mjs` runs from writing the same judged file at once.
 
-**Why:** (1) A definition cut in the middle of an emoji may be refused by the database, and then no question of that style can be checked. (2) The message misleads in that one case. (3) The verdict is tied to the slugs, and `updateQuestion` accepts a `styleId` with no slug; the admin pages always send both. (4) Each run rewrites the file from its own copy, so one can drop the other's paid verdicts.
+**Why:** (1) A definition cut in the middle of an emoji may be refused by the database, and then no question of that style can be checked. (2) The verdict is tied to the slugs, and `updateQuestion` accepts a `styleId` with no slug; the admin pages always send both. (3) Each run rewrites the file from its own copy, so one can drop the other's paid verdicts.
 
-**Context:** (1) `shortDefinition` in `convex/lib/taxonomyDefinitions.ts`; text that has no such character comes out the same, so the eval baselines don't move. (2) `autoSchedule` in `convex/core/schedules.ts` works out whether flagged questions were left out before it removes the ones already assigned. (3) `sameJudgedSubject` in `convex/lib/qualityCheck.ts`. (4) `evals/generate.mjs` already takes a lock file per run name.
+**Context:** (1) `shortDefinition` in `convex/lib/taxonomyDefinitions.ts`; text that has no such character comes out the same, so the eval baselines don't move. (2) `sameJudgedSubject` in `convex/lib/qualityCheck.ts`. (3) `evals/generate.mjs` already takes a lock file per run name.
 
 **Effort:** S
 **Priority:** P3
@@ -397,25 +447,13 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 **Why:** In record mode a wrong verdict only misleads a reviewer. Once a keep publishes, the check is the only reader, so it shouldn't be the only gate, and a deployment that already has `QUALITY_CHECK_MODE=publish` set shouldn't start publishing the moment the code ships.
 
-**Context:** `wouldPublish` in `convex/lib/qualityCheck.ts` is the rule (a keep at confidence 5, no reasons, no safety flags), and the blind set's pass rule in `evals/judgeRecord.mjs` is the bar it has to clear first. Today `publish` records only. The verdict is taken off every question document people's apps get (`withoutVerdict` in `convex/lib/questionAccess.ts`; a team is shown only `claudeFlag`), which holds as long as every new query that returns a question does the same: keeping verdicts in their own table would make that structural. The question goes to the judge as a JSON string. The specifics of what a second gate should cover are in the owner's private plan doc ("Security follow-ups (private)").
+**Context:** `wouldPublish` in `convex/lib/qualityCheck.ts` is the rule (a keep at confidence 5, no reasons, no safety flags), and the blind set's pass rule in `evals/judgeRecord.mjs` is the bar it has to clear first. Today `publish` records only. The verdict is taken off every question document people's apps get (`withoutVerdict` in `convex/lib/questionAccess.ts`), which holds as long as every new query that returns a question does the same: keeping verdicts in their own table would make that structural. The question goes to the judge as a JSON string. The specifics of what a second gate should cover are in the owner's private plan doc ("Security follow-ups (private)").
 
 **Effort:** M
 **Priority:** P2
 **Depends on:** The blind set passing
 
 ## Access control
-
-### Check gym membership across duplicate user records in canReadQuestion
-
-**What:** `canReadQuestion` checks `organization_members` for one user id; `ensureOrgMember`, `getOrganizations` and `getCurrentUser` accept membership on any candidate record for the identity.
-
-**Why:** A member whose membership sits on a non-canonical duplicate record can open the gym workspace, but their likes on gym questions silently drop, history hides them, and remix says "Question not found".
-
-**Context:** `convex/lib/questionAccess.ts`. Check membership across `collectUserCandidates(identity)` (or have callers pass candidate ids). Add a test with membership on a second user record that shares the email.
-
-**Effort:** M
-**Priority:** P2
-**Depends on:** None
 
 ### Remove the uncalled public getLikedQuestions query
 
@@ -467,56 +505,6 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 **Priority:** P3
 **Depends on:** None
 
-## Team prompts
-
-### Count only a grid fill's own held questions as taking a cell
-
-**What:** A grid cell should count as taken by a question waiting for review only when a grid fill wrote that question, not when any held AI question for the cell's style and tone exists.
-
-**Why:** Since 0.7.0.0 every generated question is held for review, and the grid's check counts every held AI library question (`isUnlistedAiQuestion`), whoever it was written for. A question from someone's feed, daily email or the nightly pool blocks its style and tone cell on every team's grid, ignoring topic when none is chosen, until it is reviewed. Fill Empty Cells then writes nothing for cells that look empty and says a question is waiting.
-
-**Context:** `collectMatrixOccupiedKeys` and `cellOccupancy` in `convex/core/fillMatrix.ts` read `pageQuestionMatrixCellKeys` and `pageQuestionsMatchingSlugTriple` in `convex/core/questions.ts` with `status: "pending"`. A fill saves its questions through `runPersistedQuestionGeneration` with `purpose: "feed"`, so nothing on the question tells it apart. Give fill runs their own purpose, or mark the question when a fill saves it (and say which organization asked), and count only those. Keep the rule that a fill's own held question takes its cell, so a second fill doesn't write another. Deferred by the owner at ship review (2026-10-14).
-
-**Effort:** M
-**Priority:** P1
-**Depends on:** None
-
-### Show readable errors for library question schedule changes
-
-**What:** Give `assignQuestion`, `unassignQuestion` and the publish path in `convex/core/schedules.ts` the same readable refusals Team prompts use (`SCHEDULE_NOT_DRAFT`, `SCHEDULE_DAY_INACTIVE`), and show them on the schedule page through `readableError` instead of `e.message`.
-
-**Why:** Since v0.4.5.0 assigning a Team prompt to a published schedule explains why it was refused, but assigning a library question to the same cell still shows "Server Error" in production.
-
-**Context:** `convex/core/schedules.ts` (assignQuestion, unassignQuestion, publish); handlers in `src/app/org/schedule/page.tsx` that call `toast.error(e.message ...)`. Consider one shared helper for the draft and delivery-day checks used by both modules. Keep a missing schedule a plain error where it's checked before membership. Deferred during the v0.4.5.0 review.
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** None
-
-### Show length counters on Team topic fields
-
-**What:** Show a character counter (like `QuestionLengthCounter` on the question boxes) on the topic guidance and boundaries fields in the Team prompt composer.
-
-**Why:** The fields stop at their limit, so pasted text over 1,000 characters is cut off with no warning.
-
-**Context:** `src/app/org/schedule/TeamPromptComposer.tsx`; limits in `convex/constants.ts` (`MAX_TEAM_TOPIC_*_LENGTH`). Deferred during the v0.4.5.0 review.
-
-**Effort:** S
-**Priority:** P3
-**Depends on:** None
-
-### Show which grid cells have a question waiting for review
-
-**What:** Mark a schedule-grid cell whose AI question is waiting for review, in place of the Generate button, and keep the mark after a reload.
-
-**Why:** A question written for the grid shows only once an admin approves it. The planner says so in a toast, but after a reload the cell looks empty again, and the only way to learn it is taken is to press Generate and read "This cell already has a question waiting for review."
-
-**Context:** `fillSingleCell` returns `waitingForReview` and `fillEmptyCells` a count, `skippedWaitingForReview` (`convex/core/fillMatrix.ts`); neither names the cells, and nothing the grid reads lists held questions. It needs a query a team member may call that returns only the style, tone and topic of held library questions (`isUnlistedAiQuestion` in `convex/lib/questionAccess.ts`), never their text, and a label in the cell in `src/app/org/schedule/page.tsx`. A line under the Question Matrix heading saying new questions are approved first would help too.
-
-**Effort:** M
-**Priority:** P2
-**Depends on:** None
-
 ## Privacy
 
 ### Document the signed-out session id and regenerate it on revoke
@@ -539,21 +527,9 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 **Why:** A mistaken Reject on a question someone was emailed can only be fixed by approving it: moving it back to pending now hides it.
 
-**Context:** `convex/admin/questions.ts` `updateQuestion` (`hasOtherEdits`), `src/app/admin/questions/page.tsx` `handleApprove`, undo in `convex/admin/pruning.ts`. Also from the v0.3.0.0 review: add tests for undo restoring `heldForReview`, for the queue's "+" badge at `PENDING_QUEUE_LIMIT + 1`, and positive cases for active global and organization topic ids; and reword the `isUnlistedAiQuestion` comment (undo can also restore the marker).
+**Context:** `convex/admin/questions.ts` `updateQuestion` (`hasOtherEdits`), `src/app/admin/questions/page.tsx` `handleApprove`, undo in `convex/admin/pruning.ts`. Also from the v0.3.0.0 review: add tests for undo restoring `heldForReview`, for the queue's "+" badge at `PENDING_QUEUE_LIMIT + 1`, and positive cases for active topic ids; and reword the `isUnlistedAiQuestion` comment (undo can also restore the marker).
 
 **Effort:** S
-**Priority:** P2
-**Depends on:** None
-
-### Save organization-anchored feed questions to the organization
-
-**What:** When a team member's feed is anchored on their organization's own style or topic, the generated question is saved as a global library question (no `organizationId`). Save it to the organization instead, or show the organization in the review queue.
-
-**Why:** Approving such a question publishes content shaped by one organization's guidance to the global library.
-
-**Context:** `convex/internal/ai.ts` `generateAIQuestionForUser`, `convex/internal/generation.ts` `insertGeneratedQuestions` (no `organizationId` argument), the team feed. Held for review since v0.3.0.0, so nothing publishes without an admin approving it.
-
-**Effort:** M
 **Priority:** P2
 **Depends on:** None
 
@@ -571,11 +547,11 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 ### Decide what exact-text dedupe does with held and rejected questions
 
-**What:** `insertGeneratedQuestions` skips any candidate whose fingerprint matches an existing question, including held and rejected ones, so that text can never be saved again by matrix fill, the nightly pool or the feed. Matrix fill also counts the collision as an existing cell.
+**What:** `insertGeneratedQuestions` skips any candidate whose fingerprint matches an existing question, including held and rejected ones, so that text can never be saved again by the nightly pool or the feed.
 
-**Why:** Unreviewed and rejected rows quietly block good text and make matrix fill report cells it didn't fill.
+**Why:** Unreviewed and rejected rows quietly block good text.
 
-**Context:** `convex/internal/generation.ts` `insertGeneratedQuestions`, `convex/core/fillMatrix.ts`. Needs a product decision (reuse, promote or keep blocking) per status.
+**Context:** `convex/internal/generation.ts` `insertGeneratedQuestions`. Needs a product decision (reuse, promote or keep blocking) per status.
 
 **Effort:** M
 **Priority:** P3
@@ -603,18 +579,6 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 **Effort:** S
 **Priority:** P3
-**Depends on:** None
-
-### Scope generation's slug lookups to the caller's organization
-
-**What:** Slug lookups in generation aren't organization-scoped the way ID lookups now are. The specifics are in the owner's private plan doc ("Security follow-ups"). Also decide whether a question a grid fill writes under a team's own topic belongs to that team rather than the shared library.
-
-**Why:** Taxonomy lookups should respect organization boundaries everywhere. Since 0.7.0.0 a batch grid fill with topics along one side passes each cell's topic, so the lookup is reached from more places.
-
-**Context:** `convex/internal/generation.ts`; `resolveTaxonomySlug` in `convex/lib/taxonomyLookup.ts` already takes an organization. The grid's callers are in `convex/core/fillMatrix.ts`. Pre-existing; noticed in the v0.3.0.0 review, widened in 0.7.0.0. Every such question still waits for review before any list shows it.
-
-**Effort:** S
-**Priority:** P1
 **Depends on:** None
 
 ### Record a reason when a question is rejected in the review queue
@@ -695,18 +659,6 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 ## Performance
 
-### Resolve org access once per call when loading liked questions
-
-**What:** `canReadQuestion` re-reads the organization and membership for every org-private question in `getLikedQuestions` (and `readableQuestionIds`).
-
-**Why:** About 2 extra reads per org-private like; matters only at thousands of them.
-
-**Context:** `convex/lib/questionAccess.ts`, `convex/core/questions.ts` `getLikedQuestions`. A per-call `Map<orgId, {paid, membership}>` or hoisting the lookup (the org is fixed per call) fixes it. Revisit when gyms exist.
-
-**Effort:** S
-**Priority:** P3
-**Depends on:** Real gym usage
-
 ### Batch the cleanup when a popular question is deleted
 
 **What:** `removeQuestionReferences` deletes every `userQuestions` row for the question and reads every pending duplicate group, all in the delete's own transaction. Delete the question (and its embedding) inline, then clean the rest with a scheduled, paginated internal mutation, like `cleanDanglingQuestionReferencesPage`.
@@ -731,18 +683,6 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 **Priority:** P3
 **Depends on:** A growing review backlog
 
-### Find a taken grid cell by index, not by reading every question
-
-**What:** Give `questions` an index on the fields the grid's cell check compares, and read that range.
-
-**Why:** To learn whether a cell is taken, a fill pages through every public question and every question waiting for review, 256 at a time (`collectMatrixOccupiedKeys` and `cellOccupancy` in `convex/core/fillMatrix.ts`). An empty cell, the case that goes on to generate, never matches, so each Generate reads the whole library and the whole review queue first. It is a handful of reads at a few hundred questions and about 80 calls at 20,000.
-
-**Context:** `pageQuestionMatrixCellKeys` and `pageQuestionsMatchingSlugTriple` in `convex/core/questions.ts` read `by_status` and compare style, tone and topic in code. An index such as `["style", "tone", "status"]` lets an empty cell read no rows; the topic and held-for-review tests can stay as filters on the few rows left. For a whole grid, look up the request's cells (50 at most) through the same index.
-
-**Effort:** M
-**Priority:** P3
-**Depends on:** None
-
 ## Tests and docs
 
 ### Test saving the session id when consent arrives after page load
@@ -755,18 +695,6 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 **Effort:** S
 **Priority:** P3
-**Depends on:** None
-
-### List getQuestionsByIds in the canReadQuestion docstring
-
-**What:** The caller list in `convex/lib/questionAccess.ts` omits `getQuestionsByIds`.
-
-**Why:** A reader could group it with the older paths that apply their own status checks.
-
-**Context:** Or drop the caller list and keep only the caveat about `collections.ts` and `schedules.ts`.
-
-**Effort:** S
-**Priority:** P4
 **Depends on:** None
 
 ## Completed
