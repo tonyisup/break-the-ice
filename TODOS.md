@@ -675,6 +675,19 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 
 ## Completed
 
+### Narrow the schema once the workspace clean-up has run everywhere
+
+**What:** Drop the 11 team tables, the `organizationId` fields, `kind: "team_prompt"` and the `"organization"` billing subject from `convex/schema.ts`, read per-person rows through the `by_userId_*` indexes instead of `by_userId_organizationId_*`, and remove what kept old apps working: `convex/lib/ignoredWorkspaceArg.ts`, the `core/organizations:getOrganizations` stub and `core/billing:getEffectiveEntitlements`.
+
+**Why:** v0.8.0.0 removed team workspaces but left the schema as it was, because Convex refuses a schema that stored rows don't fit until `removeWorkspaceData` has deleted them.
+
+**Context:** Run `npx convex run internal/migrations:removeWorkspaceData '{"dryRun":true}'` on dev and prod first; every count must be 0. Old cached apps stop sending `organizationId` once their service worker updates. The privacy and data-retention pages still describe organization data, and `public/robots.txt` still disallows the removed `/org` and `/billing` paths; change both in the same release.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** removeWorkspaceData run with a clean dry run on every deployment
+**Completed:** v0.8.1.0 (2026-11-11). The old-app shims stayed; their removal is the open item "Remove what keeps old apps working".
+
 ### Harden generation input handling
 
 **What:** Close a gap in how generation requests are validated. A question count that isn't a number is treated as one question wherever a prompt is built, a matrix fill refuses it, and the admin pool trigger refuses a combination count that isn't a whole number.

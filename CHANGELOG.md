@@ -2,6 +2,18 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.8.1.0] - 2026-11-11
+
+### Removed
+- The team tables and fields are gone from the database: organizations, their members and invitations, collections and their entries, team settings, team topics, schedules and their assignments, coach feedback and grid-fill locks, along with the workspace field on questions, styles, tones, topics, likes, hidden entries and AI usage. Team prompts and an organization paying for someone are no longer possible values. The 0.8.0.0 clean-up that emptied them is removed too, now that a dry run reported nothing left on every deployment.
+- The privacy and data-retention pages no longer describe organization data, and `robots.txt` no longer lists the removed `/org` and `/billing` pages.
+
+### Changed
+- Likes, hidden entries, AI usage and the Settings lists are read straight from each person's own rows, and the feed, the AI and the admin pages read every style, tone, topic and question without skipping team ones, since none remain.
+- An app that was open before 0.8.0.0 still works: the workspace it sends is still accepted and ignored, and its account menu still gets an empty workspace list.
+
+Deploy this only after the 0.8.0.0 clean-up's dry run reports 0 for every table on the deployment: the database refuses a schema that stored rows don't fit, so the deploy fails rather than losing data if any are left. Rolling back to 0.8.0.0 needs nothing restored.
+
 ## [0.8.0.0] - 2026-11-11
 
 ### Removed
