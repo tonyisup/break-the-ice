@@ -2,8 +2,10 @@ User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /app
+Disallow: /billing
 Disallow: /history
 Disallow: /liked
+Disallow: /org
 Disallow: /settings
 Disallow: /unsubscribe
 Disallow: /verify-subscription

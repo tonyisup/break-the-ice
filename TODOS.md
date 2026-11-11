@@ -8,7 +8,7 @@
 
 **Why:** v0.8.0.0 removed team workspaces but left the schema as it was, because Convex refuses a schema that stored rows don't fit until `removeWorkspaceData` has deleted them.
 
-**Context:** Run `npx convex run internal/migrations:removeWorkspaceData '{"dryRun":true}'` on dev and prod first; every count must be 0. Old cached apps stop sending `organizationId` once their service worker updates. The privacy and data-retention pages still describe organization data and should change in the same release.
+**Context:** Run `npx convex run internal/migrations:removeWorkspaceData '{"dryRun":true}'` on dev and prod first; every count must be 0. Old cached apps stop sending `organizationId` once their service worker updates. The privacy and data-retention pages still describe organization data, and `public/robots.txt` still disallows the removed `/org` and `/billing` paths; change both in the same release.
 
 **Effort:** M
 **Priority:** P1
