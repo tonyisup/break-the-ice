@@ -2,24 +2,16 @@ import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
-import {
-	findUserQuestionInWorkspace,
-	findUserStyleInWorkspace,
-	findUserToneInWorkspace,
-	resolveWorkspaceOrganizationId,
-} from "../lib/workspaceEngagement";
+import { findUserQuestion, findUserStyle, findUserTone } from "../lib/userEngagement";
+import { ignoredWorkspaceArg } from "../lib/ignoredWorkspaceArg";
 import { getUserOrCreate } from "./users";
 import { canReadQuestion, readableQuestionIds, withoutVerdict } from "../lib/questionAccess";
 import { findCanonicalUser } from "../lib/users";
 import { latestActiveVersion } from "../lib/taxonomy";
 import { findTaxonomyVersions } from "../lib/taxonomyLookup";
 
-const workspaceOrganizationIdArg = {
-	organizationId: v.optional(v.id("organizations")),
-};
-
 export const getSettings = query({
-	args: workspaceOrganizationIdArg,
+	args: ignoredWorkspaceArg,
 	returns: v.union(
 		v.null(),
 		v.object({
@@ -31,7 +23,7 @@ export const getSettings = query({
 			defaultTone: v.optional(v.string()),
 		})
 	),
-	handler: async (ctx, args) => {
+	handler: async (ctx) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			return null;
@@ -46,17 +38,12 @@ export const getSettings = query({
 			return null;
 		}
 
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
 		const likedQuestionsDocs = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "liked"),
 			)
 			.collect();
@@ -66,7 +53,7 @@ export const getSettings = query({
 			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -76,7 +63,7 @@ export const getSettings = query({
 			.withIndex("by_userId_organizationId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -86,7 +73,7 @@ export const getSettings = query({
 			.withIndex("by_userId_organizationId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -105,7 +92,7 @@ export const getSettings = query({
 export const getQuestionHistory = query({
 	args: {
 		limit: v.optional(v.number()),
-		...workspaceOrganizationIdArg,
+		...ignoredWorkspaceArg,
 	},
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
@@ -123,15 +110,10 @@ export const getQuestionHistory = query({
 			return [];
 		}
 
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
 		const history = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
-				q.eq("userId", user._id).eq("organizationId", organizationId),
+				q.eq("userId", user._id).eq("organizationId", undefined),
 			)
 			.order("desc")
 			.take(args.limit ?? 50);
@@ -170,28 +152,23 @@ export const updateUserSettings = mutation({
 export const updateLikedQuestions = mutation({
 	args: {
 		likedQuestions: v.array(v.id("questions")),
-		...workspaceOrganizationIdArg,
+		...ignoredWorkspaceArg,
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
 		const existingLiked = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "liked"),
 			)
 			.collect();
 
 		// Demote only what the client dropped; a like on a question the user can no
-		// longer read (say, an org that lapsed) survives. Check only the new ids, since
+		// longer read (say, one made private) survives. Check only the new ids, since
 		// the client sends its whole list on every change.
 		const requestedLiked = new Set<string>(args.likedQuestions);
 		const alreadyLiked = new Set<string>(existingLiked.map((uq) => uq.questionId));
@@ -217,11 +194,10 @@ export const updateLikedQuestions = mutation({
 		const now = Date.now();
 		await Promise.all(
 			Array.from(newLikedSet).map(async (questionId) => {
-				const existing = await findUserQuestionInWorkspace(
+				const existing = await findUserQuestion(
 					ctx,
 					user._id,
 					questionId,
-					organizationId,
 				);
 
 				if (existing) {
@@ -234,7 +210,6 @@ export const updateLikedQuestions = mutation({
 				} else {
 					await ctx.db.insert("userQuestions", {
 						userId: user._id,
-						organizationId,
 						questionId,
 						status: "liked",
 						updatedAt: now,
@@ -254,22 +229,17 @@ export const updateLikedQuestions = mutation({
 export const updateHiddenQuestions = mutation({
 	args: {
 		hiddenQuestions: v.array(v.id("questions")),
-		...workspaceOrganizationIdArg,
+		...ignoredWorkspaceArg,
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
 		const existingHidden = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -297,11 +267,10 @@ export const updateHiddenQuestions = mutation({
 		const now = Date.now();
 		await Promise.all(
 			Array.from(newHiddenSet).map(async (questionId) => {
-				const existing = await findUserQuestionInWorkspace(
+				const existing = await findUserQuestion(
 					ctx,
 					user._id,
 					questionId,
-					organizationId,
 				);
 
 				if (existing) {
@@ -314,7 +283,6 @@ export const updateHiddenQuestions = mutation({
 				} else {
 					await ctx.db.insert("userQuestions", {
 						userId: user._id,
-						organizationId,
 						questionId,
 						status: "hidden",
 						updatedAt: now,
@@ -342,13 +310,12 @@ async function canBeUnhidden(
 	ctx: QueryCtx,
 	table: "styles" | "tones",
 	id: Id<"styles"> | Id<"tones">,
-	organizationId: Id<"organizations"> | undefined,
 ): Promise<boolean> {
 	const row = await ctx.db.get(id);
 	if (!row) return true;
-	// As the lists do: a workspace sees its own entries and the shared ones, one row for each slug.
+	// As the lists do: the shared entries, one row for each slug.
 	const versions = (await findTaxonomyVersions(ctx.db, table, row.slug ?? row.id)).filter(
-		(version) => version.organizationId === undefined || version.organizationId === organizationId,
+		(version) => version.organizationId === undefined,
 	);
 	return latestActiveVersion(versions)?._id === row._id;
 }
@@ -356,29 +323,24 @@ async function canBeUnhidden(
 export const updateHiddenStyles = mutation({
 	args: {
 		hiddenStyles: v.array(v.id("styles")),
-		...workspaceOrganizationIdArg,
+		...ignoredWorkspaceArg,
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
 		const existingHiddenStyles = await ctx.db
 			.query("userStyles")
 			.withIndex("by_userId_organizationId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
 
 		const newHiddenSet = new Set(args.hiddenStyles);
 		for (const us of existingHiddenStyles) {
-			if (!newHiddenSet.has(us.styleId) && (await canBeUnhidden(ctx, "styles", us.styleId, organizationId))) {
+			if (!newHiddenSet.has(us.styleId) && (await canBeUnhidden(ctx, "styles", us.styleId))) {
 				await ctx.db.delete(us._id);
 			}
 		}
@@ -387,11 +349,10 @@ export const updateHiddenStyles = mutation({
 		const now = Date.now();
 		await Promise.all(
 			Array.from(newHiddenSet).map(async (styleId) => {
-				const existing = await findUserStyleInWorkspace(
+				const existing = await findUserStyle(
 					ctx,
 					user._id,
 					styleId,
-					organizationId,
 				);
 
 				if (existing) {
@@ -404,7 +365,6 @@ export const updateHiddenStyles = mutation({
 				} else {
 					await ctx.db.insert("userStyles", {
 						userId: user._id,
-						organizationId,
 						styleId,
 						status: "hidden",
 						updatedAt: now,
@@ -420,29 +380,24 @@ export const updateHiddenStyles = mutation({
 export const updateHiddenTones = mutation({
 	args: {
 		hiddenTones: v.array(v.id("tones")),
-		...workspaceOrganizationIdArg,
+		...ignoredWorkspaceArg,
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
 		const existingHiddenTones = await ctx.db
 			.query("userTones")
 			.withIndex("by_userId_organizationId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
 
 		const newHiddenSet = new Set(args.hiddenTones);
 		for (const ut of existingHiddenTones) {
-			if (!newHiddenSet.has(ut.toneId) && (await canBeUnhidden(ctx, "tones", ut.toneId, organizationId))) {
+			if (!newHiddenSet.has(ut.toneId) && (await canBeUnhidden(ctx, "tones", ut.toneId))) {
 				await ctx.db.delete(ut._id);
 			}
 		}
@@ -451,11 +406,10 @@ export const updateHiddenTones = mutation({
 		const now = Date.now();
 		await Promise.all(
 			Array.from(newHiddenSet).map(async (toneId) => {
-				const existing = await findUserToneInWorkspace(
+				const existing = await findUserTone(
 					ctx,
 					user._id,
 					toneId,
-					organizationId,
 				);
 
 				if (existing) {
@@ -468,7 +422,6 @@ export const updateHiddenTones = mutation({
 				} else {
 					await ctx.db.insert("userTones", {
 						userId: user._id,
-						organizationId,
 						toneId,
 						status: "hidden",
 						updatedAt: now,
@@ -482,13 +435,7 @@ export const updateHiddenTones = mutation({
 });
 
 // The merge* mutations take plain strings: local storage can hold ids from another
-// deployment or a malformed entry, and one bad id must not block the rest. They
-// merge signed-out activity, which is always personal, so they take no workspace.
-const PERSONAL_WORKSPACE = undefined;
-// Still accepted, and ignored: clients cached before this change send it and clear
-// their local lists without waiting, so rejecting it (even a malformed one) would
-// lose that data.
-const ignoredWorkspaceArg = { organizationId: v.optional(v.string()) };
+// deployment or a malformed entry, and one bad id must not block the rest.
 
 export const mergeKnownLikedQuestions = mutation({
 	args: {
@@ -498,18 +445,15 @@ export const mergeKnownLikedQuestions = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-		const organizationId = PERSONAL_WORKSPACE;
-
 		const now = Date.now();
 		const newLikedSet = new Set(await readableQuestionIds(ctx, args.likedQuestions, user._id));
 
 		const existingRelations = await Promise.all(
 			Array.from(newLikedSet).map(async (questionId) => {
-				const relation = await findUserQuestionInWorkspace(
+				const relation = await findUserQuestion(
 					ctx,
 					user._id,
 					questionId,
-					organizationId,
 				);
 				return { questionId, relation };
 			})
@@ -526,7 +470,6 @@ export const mergeKnownLikedQuestions = mutation({
 			} else {
 				await ctx.db.insert("userQuestions", {
 					userId: user._id,
-					organizationId,
 					questionId,
 					status: "liked",
 					updatedAt: now,
@@ -547,18 +490,15 @@ export const mergeKnownHiddenQuestions = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-		const organizationId = PERSONAL_WORKSPACE;
-
 		const now = Date.now();
 		const newHiddenSet = new Set(await readableQuestionIds(ctx, args.hiddenQuestions, user._id));
 
 		const existingRelations = await Promise.all(
 			Array.from(newHiddenSet).map(async (questionId) => {
-				const relation = await findUserQuestionInWorkspace(
+				const relation = await findUserQuestion(
 					ctx,
 					user._id,
 					questionId,
-					organizationId,
 				);
 				return { questionId, relation };
 			})
@@ -575,7 +515,6 @@ export const mergeKnownHiddenQuestions = mutation({
 			} else {
 				await ctx.db.insert("userQuestions", {
 					userId: user._id,
-					organizationId,
 					questionId,
 					status: "hidden",
 					updatedAt: now,
@@ -612,8 +551,6 @@ export const mergeQuestionHistory = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const user = await getUserOrCreate(ctx);
-		const organizationId = PERSONAL_WORKSPACE;
-
 		const readable = new Set<string>(
 			await readableQuestionIds(ctx, args.history.map((h) => h.questionId), user._id),
 		);
@@ -646,11 +583,10 @@ export const mergeQuestionHistory = mutation({
 		const existingRelations = await Promise.all(
 			Array.from(readable).map(async (id) => {
 				const questionId = id as Id<"questions">;
-				const relation = await findUserQuestionInWorkspace(
+				const relation = await findUserQuestion(
 					ctx,
 					user._id,
 					questionId,
-					organizationId,
 				);
 				return { questionId, relation };
 			})
@@ -668,7 +604,6 @@ export const mergeQuestionHistory = mutation({
 			} else {
 				await ctx.db.insert("userQuestions", {
 					userId: user._id,
-					organizationId,
 					questionId,
 					status: "seen",
 					seenCount: Math.max(added, 1),
@@ -682,8 +617,8 @@ export const mergeQuestionHistory = mutation({
 });
 
 export const getHiddenStyleIds = query({
-	args: workspaceOrganizationIdArg,
-	handler: async (ctx, args) => {
+	args: ignoredWorkspaceArg,
+	handler: async (ctx) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			return null;
@@ -698,17 +633,12 @@ export const getHiddenStyleIds = query({
 			return null;
 		}
 
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
 		const hiddenStylesDocs = await ctx.db
 			.query("userStyles")
 			.withIndex("by_userId_organizationId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -718,7 +648,7 @@ export const getHiddenStyleIds = query({
 		// again on every render. Once the seed moves it to the live row, it shows.
 		const hiddenStyles: Id<"styles">[] = [];
 		for (const us of hiddenStylesDocs) {
-			if (await canBeUnhidden(ctx, "styles", us.styleId, organizationId)) hiddenStyles.push(us.styleId);
+			if (await canBeUnhidden(ctx, "styles", us.styleId)) hiddenStyles.push(us.styleId);
 		}
 
 		return hiddenStyles;
@@ -726,7 +656,7 @@ export const getHiddenStyleIds = query({
 });
 
 export const addHiddenStyleId = mutation({
-	args: { styleId: v.string(), ...workspaceOrganizationIdArg },
+	args: { styleId: v.string(), ...ignoredWorkspaceArg },
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) return null;
@@ -740,22 +670,15 @@ export const addHiddenStyleId = mutation({
 		const styleId = ctx.db.normalizeId("styles", args.styleId);
 		if (!styleId) return null;
 
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
-		const existing = await findUserStyleInWorkspace(
+		const existing = await findUserStyle(
 			ctx,
 			user._id,
 			styleId,
-			organizationId,
 		);
 
 		if (!existing) {
 			await ctx.db.insert("userStyles", {
 				userId: user._id,
-				organizationId,
 				styleId,
 				status: "hidden",
 				updatedAt: Date.now(),
@@ -772,7 +695,7 @@ export const addHiddenStyleId = mutation({
 			.withIndex("by_userId_organizationId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -781,7 +704,7 @@ export const addHiddenStyleId = mutation({
 });
 
 export const removeHiddenStyleId = mutation({
-	args: { styleId: v.string(), ...workspaceOrganizationIdArg },
+	args: { styleId: v.string(), ...ignoredWorkspaceArg },
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) return null;
@@ -795,16 +718,10 @@ export const removeHiddenStyleId = mutation({
 		const styleId = ctx.db.normalizeId("styles", args.styleId);
 		if (!styleId) return null;
 
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
-		const existing = await findUserStyleInWorkspace(
+		const existing = await findUserStyle(
 			ctx,
 			user._id,
 			styleId,
-			organizationId,
 		);
 
 		if (existing) {
@@ -816,7 +733,7 @@ export const removeHiddenStyleId = mutation({
 			.withIndex("by_userId_organizationId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -825,8 +742,8 @@ export const removeHiddenStyleId = mutation({
 });
 
 export const getHiddenToneIds = query({
-	args: workspaceOrganizationIdArg,
-	handler: async (ctx, args) => {
+	args: ignoredWorkspaceArg,
+	handler: async (ctx) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			return null;
@@ -841,17 +758,12 @@ export const getHiddenToneIds = query({
 			return null;
 		}
 
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
 		const hiddenTonesDocs = await ctx.db
 			.query("userTones")
 			.withIndex("by_userId_organizationId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -859,7 +771,7 @@ export const getHiddenToneIds = query({
 		// As getHiddenStyleIds: only what the Settings page can show.
 		const hiddenTones: Id<"tones">[] = [];
 		for (const ut of hiddenTonesDocs) {
-			if (await canBeUnhidden(ctx, "tones", ut.toneId, organizationId)) hiddenTones.push(ut.toneId);
+			if (await canBeUnhidden(ctx, "tones", ut.toneId)) hiddenTones.push(ut.toneId);
 		}
 
 		return hiddenTones;
@@ -867,7 +779,7 @@ export const getHiddenToneIds = query({
 });
 
 export const addHiddenToneId = mutation({
-	args: { toneId: v.string(), ...workspaceOrganizationIdArg },
+	args: { toneId: v.string(), ...ignoredWorkspaceArg },
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) return null;
@@ -881,22 +793,15 @@ export const addHiddenToneId = mutation({
 		const toneId = ctx.db.normalizeId("tones", args.toneId);
 		if (!toneId) return null;
 
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
-		const existing = await findUserToneInWorkspace(
+		const existing = await findUserTone(
 			ctx,
 			user._id,
 			toneId,
-			organizationId,
 		);
 
 		if (!existing) {
 			await ctx.db.insert("userTones", {
 				userId: user._id,
-				organizationId,
 				toneId,
 				status: "hidden",
 				updatedAt: Date.now(),
@@ -913,7 +818,7 @@ export const addHiddenToneId = mutation({
 			.withIndex("by_userId_organizationId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -922,7 +827,7 @@ export const addHiddenToneId = mutation({
 });
 
 export const removeHiddenToneId = mutation({
-	args: { toneId: v.string(), ...workspaceOrganizationIdArg },
+	args: { toneId: v.string(), ...ignoredWorkspaceArg },
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) return null;
@@ -936,16 +841,10 @@ export const removeHiddenToneId = mutation({
 		const toneId = ctx.db.normalizeId("tones", args.toneId);
 		if (!toneId) return null;
 
-		const organizationId = await resolveWorkspaceOrganizationId(
-			ctx,
-			args.organizationId,
-		);
-
-		const existing = await findUserToneInWorkspace(
+		const existing = await findUserTone(
 			ctx,
 			user._id,
 			toneId,
-			organizationId,
 		);
 
 		if (existing) {
@@ -957,7 +856,7 @@ export const removeHiddenToneId = mutation({
 			.withIndex("by_userId_organizationId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();

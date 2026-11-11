@@ -11,11 +11,6 @@ export const publicRouteMetadata: Record<string, PageMetadata> = {
     title: siteConfig.defaultTitle,
     description: siteConfig.defaultDescription,
   },
-  "/pricing": {
-    title: "Team Pricing | Break the Ice(berg)",
-    description:
-      "Give your team shared conversation starters, collections, scheduled prompts, and more room to create.",
-  },
   "/about": {
     title: "About | Break the Ice(berg)",
     description:
@@ -52,11 +47,9 @@ export const privateRoutePrefixes = [
   "/liked",
   "/settings",
   "/history",
-  "/billing",
   "/unsubscribe",
   "/verify-subscription",
   "/add-question",
-  "/org",
   "/admin",
 ] as const;
 

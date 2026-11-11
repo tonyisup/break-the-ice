@@ -29,7 +29,6 @@ import { Input } from "@/components/ui/input";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
-import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 
 type RemixState = "idle" | "remixing" | "remixed";
 
@@ -61,16 +60,9 @@ export function RemixQuestionDrawer({
 	const [tags, setTags] = useState<string[]>([]);
 	const [saveFailed, setSaveFailed] = useState(false);
 	const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
-	const { activeWorkspace, isEntitlementsLoading, teamWorkspaceId } = useTeamWorkspace();
 
-	const styles = useQuery(
-		api.core.styles.getStyles,
-		isOpen ? { organizationId: teamWorkspaceId } : "skip",
-	);
-	const tones = useQuery(
-		api.core.tones.getTones,
-		isOpen ? { organizationId: teamWorkspaceId } : "skip",
-	);
+	const styles = useQuery(api.core.styles.getStyles, isOpen ? {} : "skip");
+	const tones = useQuery(api.core.tones.getTones, isOpen ? {} : "skip");
 	const allAvailableTags = useQuery(api.core.tags.getTags, isOpen ? {} : "skip");
 
 	const filteredSuggestions = useMemo(() => {
@@ -94,10 +86,7 @@ export function RemixQuestionDrawer({
 		? tones?.find((t) => t._id === selectedToneId) ?? null
 		: questionTone;
 
-	const currentUser = useQuery(
-		api.core.users.getCurrentUser,
-		isOpen ? { organizationId: activeWorkspace ?? undefined } : "skip"
-	);
+	const currentUser = useQuery(api.core.users.getCurrentUser, isOpen ? {} : "skip");
 	const remixQuestion = useAction(api.core.questions.remixQuestionForUser);
 	const addPersonalQuestion = useMutation(api.core.questions.addPersonalQuestion);
 	const updatePersonalQuestion = useMutation(api.core.questions.updatePersonalQuestion);
@@ -194,10 +183,6 @@ export function RemixQuestionDrawer({
 
 	const handleRemix = async () => {
 		if (!question) return;
-		if (!newQuestionId && isEntitlementsLoading) {
-			toast.error("Checking workspace access. Please try again in a moment.");
-			return;
-		}
 		// Check the tags the save will send before the remix uses an AI request.
 		try {
 			normalizeQuestionTags(tags);
@@ -230,7 +215,6 @@ export function RemixQuestionDrawer({
 					toneId: selectedToneId,
 					topicId: question.topicId,
 					tags,
-					organizationId: teamWorkspaceId,
 				});
 				if (isStale()) {
 					// Cancelled while the question was being created. Nothing will show it or offer
@@ -384,15 +368,7 @@ export function RemixQuestionDrawer({
 									currentUser.aiLimit - (currentUser.aiUsage?.count ?? 0) <= 3 ? "text-yellow-500" : "",
 									currentUser.isAiLimitReached ? "text-red-500" : ""
 								)} /> 
-								{currentUser.isAiLimitReached ? <Badge 
-																			onClick={() => {
-																				window.location.href = "/pricing?source=remix_limit";
-																			}}
-																			variant="outline"
-																			className="cursor-pointer"
-																			>
-																				Start Team plan
-																			</Badge> : "AI generations"}
+								{currentUser.isAiLimitReached ? "Limit reached" : "AI generations"}
 							</span>
 						)}
 					</DrawerTitle>
@@ -642,7 +618,7 @@ export function RemixQuestionDrawer({
 								ref={remixButtonRef}
 								onClick={handleRemix} 
 								className="gap-2"
-								disabled={currentUser?.isAiLimitReached || isEntitlementsLoading}
+								disabled={currentUser?.isAiLimitReached}
 							>
 								<Sparkles className="size-4" />
 								Remix

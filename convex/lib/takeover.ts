@@ -8,6 +8,8 @@ export async function getActiveTakeoverTopicsHelper(ctx: QueryCtx) {
     .withIndex("by_takeoverStartDate_takeoverEndDate_order", (t) => t.lt("takeoverStartDate", now))
     .filter((q) =>
       q.and(
+        // Only the shared topics: generation refuses one a workspace owned.
+        q.eq(q.field("organizationId"), undefined),
         q.neq(q.field("takeoverStartDate"), undefined),
         q.or(q.eq(q.field("takeoverEndDate"), undefined), q.gt(q.field("takeoverEndDate"), now)),
       ),

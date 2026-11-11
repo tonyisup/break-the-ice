@@ -1,4 +1,4 @@
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { latestActiveVersion, latestVersion, uniqueByKey } from "./taxonomy";
 
@@ -23,18 +23,14 @@ export async function findTaxonomyVersions(
 }
 
 /**
- * The version a slug refers to for a question in `organizationId` (undefined for the global
- * library): the organization's own entry if it has one, else the global one; its active
- * version, else its newest.
+ * The version a slug refers to: its active version, else its newest. Only the shared entries
+ * count, never one a workspace owned.
  */
 export async function resolveTaxonomySlug<T extends TaxonomyTable>(
   db: QueryCtx["db"],
   table: T,
   slug: string,
-  organizationId?: Id<"organizations">,
 ): Promise<Doc<T> | null> {
-  const versions = await findTaxonomyVersions(db, table, slug);
-  const own = versions.filter((row) => row.organizationId === organizationId);
-  const candidates = own.length > 0 || !organizationId ? own : versions.filter((row) => !row.organizationId);
-  return (latestActiveVersion(candidates) ?? latestVersion(candidates)) as unknown as Doc<T> | null;
+  const versions = (await findTaxonomyVersions(db, table, slug)).filter((row) => !row.organizationId);
+  return (latestActiveVersion(versions) ?? latestVersion(versions)) as unknown as Doc<T> | null;
 }

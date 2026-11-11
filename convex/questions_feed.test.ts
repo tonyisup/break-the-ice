@@ -178,7 +178,7 @@ test("personal feed excludes organization-tagged questions", async () => {
   expect(resultIds.has(orgOnlyId)).toBe(false);
 });
 
-test("organization feed includes org-tagged and global questions", async () => {
+test("a feed request that still sends a workspace gets the same feed: organization-tagged questions stay out", async () => {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
 
   const { organizationId, globalId, orgOnlyId } = await t.run(async (ctx) => {
@@ -206,18 +206,14 @@ test("organization feed includes org-tagged and global questions", async () => {
     return { organizationId, globalId, orgOnlyId };
   });
 
-  const results = await t.query(internal.internal.questions.getRandomQuestionsInternal, {
+  const { questions } = await t.action(api.core.questions.getNextRandomQuestions, {
     count: 10,
-    seen: [],
-    hidden: [],
-    hiddenStyles: [],
-    hiddenTones: [],
     organizationId,
   });
 
-  const resultIds = new Set(results.map((q: Doc<"questions">) => q._id));
+  const resultIds = new Set(questions.map((q) => q._id as Id<"questions">));
   expect(resultIds.has(globalId)).toBe(true);
-  expect(resultIds.has(orgOnlyId)).toBe(true);
+  expect(resultIds.has(orgOnlyId)).toBe(false);
 });
 
 test("feed hides every version and legacy reference of a hidden style", async () => {

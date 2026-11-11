@@ -34,13 +34,13 @@ const readResponseMetadata = (pathname: string) => {
 };
 
 describe("initial page HTML metadata", () => {
-  it("renders pricing metadata into the initial response", () => {
-    const response = readResponseMetadata("/pricing");
+  it("renders about metadata into the initial response", () => {
+    const response = readResponseMetadata("/about");
 
     expect(response.statusCode).toBe(200);
-    expect(response.title).toBe("Team Pricing | Break the Ice(berg)");
-    expect(response.description).toContain("shared conversation starters");
-    expect(response.canonical).toBe("https://breaktheiceberg.com/pricing");
+    expect(response.title).toBe("About | Break the Ice(berg)");
+    expect(response.description).toContain("thoughtful questions");
+    expect(response.canonical).toBe("https://breaktheiceberg.com/about");
     expect(response.robots).toBe("index, follow");
     expect(response.ogTitle).toBe(response.title);
     expect(response.twitterTitle).toBe(response.title);

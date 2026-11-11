@@ -49,19 +49,14 @@ export const qualityCheckSnapshot = v.object({
   runId: v.id("generationRuns"),
   checkedAt: v.number(),
 });
-type QualityCheckSnapshot = Infer<typeof qualityCheckSnapshot>;
-
 type QualityCheckMode = "off" | "record" | "publish";
 
 /**
  * QUALITY_CHECK_MODE on this deployment: `off` (the default) schedules no checks and shows no
  * flag. `record` saves a verdict on every question the save step inserts (the feed's, the
- * daily email's, a matrix fill's and the nightly pool's; not one an admin accepts on the
- * generator page) and changes nothing about who can see a question; a hold or a safety flag on a public question is then marked on a team's schedule grid and
- * left out of Auto-fill Week and the coach-feedback suggestions until an admin acts on the
- * question (claudeFlag). Every one of those paths now saves its question held for review, and an
- * admin's review clears the mark, so it is reached only by a question published before its
- * path was held. `publish` is accepted, and behaves as `record` until publishing is built. Anything else is off, with a
+ * daily email's and the nightly pool's; not one an admin accepts on the generator page) and
+ * changes nothing about who can see a question: the verdict is for admins. `publish` is
+ * accepted, and behaves as `record` until publishing is built. Anything else is off, with a
  * warning, so a misspelled value doesn't pass for a quiet day.
  */
 export function qualityCheckMode(): QualityCheckMode {
@@ -252,26 +247,9 @@ export function sameJudgedSubject(a: JudgedSubject, b: JudgedSubject): boolean {
 /** The patch that takes a verdict off a question, for when what the check read has changed. */
 export const NO_VERDICT = { qualityCheck: undefined, safetyFlags: [] as string[] };
 
-/** Whether a verdict is a concern to put in front of a team: a hold, or any safety flag. */
+/** Whether a verdict is a concern to put in front of an admin: a hold, or any safety flag. */
 export function flagsQuestion(verdict: { verdict: "keep" | "hold"; safety: readonly string[] }): boolean {
   return verdict.verdict === "hold" || verdict.safety.length > 0;
-}
-
-/**
- * What a team's managers are shown about a question no admin has acted on: the check held it
- * or raised a safety concern. Any admin review of the question moves its review revision and
- * takes the flag off, since an admin has then looked at it. Switching the mode off hides
- * every flag.
- */
-// gstack-shortcut(dec-73fb363c-9bb6-4c12-95da-fc399eae1f70): the flag is on the schedule grid only and clears on any admin review action, upgrade when the matrix-fill ownership issue is built.
-export function claudeFlag(question: {
-  qualityCheck?: QualityCheckSnapshot;
-  reviewRevision?: number;
-}): Pick<QualityCheckSnapshot, "reasons" | "safety" | "note"> | undefined {
-  const check = question.qualityCheck;
-  if (!check || !flagsQuestion(check) || (question.reviewRevision ?? 0) > 0) return undefined;
-  if (qualityCheckMode() === "off") return undefined;
-  return { reasons: check.reasons, safety: check.safety, note: check.note };
 }
 
 /**

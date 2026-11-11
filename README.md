@@ -2,9 +2,9 @@
 
 [breaktheiceberg.com](https://www.breaktheiceberg.com/)
 
-Break the Ice helps facilitators find conversation starters for classes, team meetings,
-workshops, and social gatherings. Browse a scrolling feed, filter by style, tone, or topic,
-and save questions to use again. Team workspaces add shared collections and scheduled prompts.
+Break the Ice helps facilitators find conversation starters for classes, workshops, and
+social gatherings. Browse a scrolling feed, filter by style, tone, or topic, and save
+questions to use again.
 
 The admin tools support question editing, generation, pruning review, and duplicate review.
 AI generation is implemented in the [generation runner](./convex/lib/generationRunner.ts).
@@ -12,11 +12,9 @@ Every question is asked for with one short prompt, the [brief](./convex/lib/brie
 questions are for, one line for the style, the tone and the topic (the "Prompt Line" on each
 admin page, or the description until one is written), and questions the owner kept and
 rejected, read from the library. A rejected question is shown only when the review that retired
-it gave an editorial reason, and never in a team's topic preview, whose notes are the team's own
-words. A style with a set form, like either/or, keeps questions as short as three words; every
-other style needs six. A topic is a theme chosen on purpose: filling the schedule grid with no
-topic chosen writes questions for the style and tone alone, and on a grid with topics along one
-side each cell is written under its own topic.
+it gave an editorial reason. A style with a set form, like either/or, keeps questions as short
+as three words; every other style needs six. A topic is a theme chosen on purpose: a question
+asked for with no topic is written for the style and tone alone.
 
 The lines are in [`convex/data/briefLines.ts`](./convex/data/briefLines.ts) and reach the
 database through a one-time step, run straight after the deploy that brings the brief:
@@ -26,11 +24,17 @@ it has run, entries are read by their old description and no style has its set f
 or tone someone hid on the old copy of a doubled entry doesn't show as hidden in Settings, so its
 questions can reach them; the seed moves the hidden entry to the live row.
 
+Team workspaces (organizations, collections, schedules, the coach view and the Team plan) were
+removed. What they left in the database is deleted by a one-time step, run after the deploy
+that removes them: `npx convex run --prod internal/migrations:removeWorkspaceData '{"dryRun":true}'`
+lists how many rows would go from each table, and the same command with `false` deletes them.
+A person's own questions, likes, hidden entries and AI usage stay, apart from likes and hidden
+entries of a question, style or tone a workspace owned, and no account is deleted. The schema still declares the old tables and the
+`organizationId` fields; they can be dropped once a dry run reports nothing left on every
+deployment.
+
 ## Documentation
 
-- [Team Prompts product and engineering spec](./docs/team-prompts/product-spec.md)
-- [How to schedule a Team Prompt](./docs/team-prompts/how-to-schedule-team-prompts.md)
-- [Team Prompts reference](./docs/team-prompts/reference.md)
 - [Generation eval: test a prompt or model change against the baseline (dev only)](./evals/README.md)
 
 ## Development
@@ -106,15 +110,13 @@ run is a real failure to address, not a successful validation. Until those are f
 `npm run check` stops at lint before the tests and build run, so run
 `npm run typecheck && npm run test:run` before shipping.
 
-AI allowances come from the Convex environment: `MAX_FREE_AIGEN` (default 10) and
-`MAX_TEAM_AIGEN` (default 100; falls back to legacy `MAX_CASUAL_AIGEN`). Usage is counted
-per person within each workspace over 30-day cycles. The public pricing summary reads
-those allowances from Convex and plan prices directly from Clerk.
+The AI allowance comes from the Convex environment: `MAX_FREE_AIGEN` (default 10). Usage is
+counted per person over 30-day cycles. There is one plan; the Clerk billing webhook still
+records a subscription a person pays for on their account, and nothing sells one yet.
 
 Daily AI spend is capped from the Convex environment too, with no deploy needed to change
-it. Once the day's spend on generation a signed-in user can start (feed questions, remix,
-matrix fill, team topic previews) reaches `AI_DAILY_BUDGET_USD` (default 1), that
-generation pauses for the rest of the day. Once the day's total spend reaches
+it. Once the day's spend on generation a signed-in user can start (feed questions, remix)
+reaches `AI_DAILY_BUDGET_USD` (default 1), that generation pauses for the rest of the day. Once the day's total spend reaches
 `AI_DAILY_HARD_CAP_USD` (default 5), generation for the daily email and admin tools stops
 too. Keep the budget below the hard cap. Days run on Los
 Angeles time, and each day's totals are in the `aiSpendDays` table. Each tracked generation
@@ -122,42 +124,34 @@ call is charged what OpenRouter reports it cost. When OpenRouter reports no cost
 charged everything set aside for it: an upper estimate from its prompt length and output cap,
 at least $0.02. A call in flight counts at that estimate until it settles.
 A call that times out, or whose response can't be parsed, may still be billed: it is charged
-what was set aside for it and isn't sent again, and a matrix fill or nightly pool stops there.
+what was set aside for it and isn't sent again, and a nightly pool stops there.
 Each signed-in person has five slots a day for calls that are still running, got no answer
 this way, or were cut off by the length limit. A running call frees its slot when it is
-answered; the others keep theirs until the next day. With no slot free, that person's feed,
-remix, matrix-fill and team-preview requests are refused. Calls for the daily email and admin
-tools hold no slot. A batch matrix fill that stops at a call that got no answer or was cut off
-says how many cells it filled.
+answered; the others keep theirs until the next day. With no slot free, that person's feed
+and remix requests are refused. Calls for the daily email and admin tools hold no slot.
 `npx convex run internal/aiRateLimit:resetAiUnanswered '{"key":"<Clerk user id>"}'` gives one
 person all five back (add `--prod` after `run` for production). The people affected are the
 `rateLimits` rows named `aiUnanswered` with a value below 5 and a `ts` from today; a row's
-`key` is the Clerk user id. Each person also gets at most 40 feed, remix and team-preview
-requests a day, counted on the same Los Angeles day; matrix fill is limited per team instead.
+`key` is the Clerk user id. Each person also gets at most 40 feed and remix requests a day,
+counted on the same Los Angeles day.
 One feed request writes at most five questions (`MAX_FEED_GENERATION_COUNT` in
-[`convex/constants.ts`](./convex/constants.ts)), and a matrix fill writes one question per
-cell. A count that isn't a number is one question on the feed and in the admin preview; a
-matrix fill refuses it (`AI_COUNT_INVALID`) before it uses one of the team's fills.
+[`convex/constants.ts`](./convex/constants.ts)). A count that isn't a number is one question
+on the feed and in the admin preview.
 An empty or unreadable AI answer is retried once. The retry is a second call with its own
 generation run, charged and checked against the cap like the first; answers cut off by the
 length limit are not retried.
-Embedding calls and the admin image generator are not tracked or counted toward the cap. Per-person and
-per-team request limits are defined in
+Embedding calls and the admin image generator are not tracked or counted toward the cap. Per-person
+request limits are defined in
 [`convex/lib/aiRateLimit.ts`](./convex/lib/aiRateLimit.ts).
 
 Generated questions can be checked by Claude after they are saved. `QUALITY_CHECK_MODE` in the
 Convex environment turns this on: `off` (the default) or `record`. (`publish` is reserved for a
 later release and only records for now.) In `record`, each new question from the feed, the
-daily email, matrix fill and the nightly pool gets a verdict (keep or hold, with reasons, safety
+daily email and the nightly pool gets a verdict (keep or hold, with reasons, safety
 flags and a one-sentence note) a few seconds after it is saved. Nothing about who can see a
 question changes, and the verdict isn't part of the question documents people's apps get.
 Admins see it in the review queue and on a question's page, and a hold or a safety flag is
-marked in their lists. A signed-in member of a team sees one thing: on the schedule grid, a
-question the check held, or raised a safety concern about, is marked "Flagged", with the
-reasons and note in its details, until an admin acts on the question. Auto-fill Week and the coach-feedback
-suggestions leave a flagged question out. Every generated question is now reviewed before it
-is public, and a review clears the mark, so it only shows on a question a matrix fill or the
-pool published before they were held. Changing a question's wording, style, tone or topic
+marked in their lists. Nobody else sees it. Changing a question's wording, style, tone or topic
 drops its verdict.
 
 Each check is a small call, about 1 cent, charged to system spend whoever generated the
@@ -167,22 +161,19 @@ under the same hard cap as the daily email. One that fails is tried once more fi
 later. Questions still waiting in the review queue without a verdict can
 be checked with `npx convex run internal/qualityCheck:checkPendingQuestions '{"dryRun":true}'`,
 then with `false` (up to 50 a run; it stops early if the provider isn't answering). That
-doesn't reach a question that was published before it was checked: one a matrix fill or the
-nightly pool published at once, before those were held for review too, stays unchecked and
-shows no flag. Setting the mode back to `off` stops new checks and hides every flag, with no
-deploy.
+doesn't reach a question that was published before it was checked: one the nightly pool
+published at once, before it was held for review too, stays unchecked. Setting the mode back
+to `off` stops new checks, with no deploy.
 Reverting the code after checks have run needs the schema's additions kept, because Convex
 refuses a schema that stored rows don't fit.
 
-New AI questions from the feed, the daily email, matrix fill and the nightly pool wait for
-review in the admin queue at `/admin/questions`. The person a feed or email question was made
-for still gets it, and anyone with the link can open one, but they stay out of the shared
-feed, collections, daily-email picks, the schedule grid and team schedules until an admin
-approves them. A grid cell with a question waiting for review counts as filled, so it isn't
-written twice, and a pool question is handed out only once it is approved. Because a new
-question is public only after review, the questions the brief shows the model as kept are ones
-a person let through, apart from any a matrix fill or the pool published before they were
-held. Only the admin tools publish directly.
+New AI questions from the feed, the daily email and the nightly pool wait for review in the
+admin queue at `/admin/questions`. The person a feed or email question was made for still gets
+it, and anyone with the link can open one, but they stay out of the shared feed and the
+daily-email picks until an admin approves them. A pool question is handed out only once it is
+approved. Because a new question is public only after review, the questions the brief shows
+the model as kept are ones a person let through, apart from any the pool published before it
+was held. Only the admin tools publish directly.
 
 ## Stack
 

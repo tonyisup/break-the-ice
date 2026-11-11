@@ -37,6 +37,13 @@
       "includeFiles": "src/components/ui/icons/icons.tsx"
     }
   },
+  "redirects": [
+    {
+      "source": "/pricing",
+      "destination": "/",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/question/:id",

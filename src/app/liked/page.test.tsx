@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { useMutation, useQuery } from 'convex/react';
+import { getFunctionName } from 'convex/server';
 import { ConvexError } from 'convex/values';
 import { toast } from 'sonner';
 import { ModernQuestionCard } from '@/components/modern-question-card/modern-question-card';
@@ -14,9 +15,6 @@ vi.mock('convex/react', () => ({
 vi.mock('@clerk/clerk-react', () => ({
   useAuth: () => ({ isSignedIn: true }),
   useClerk: () => ({ openSignIn: vi.fn() }),
-}));
-vi.mock('@/hooks/useTeamWorkspace', () => ({
-  useTeamWorkspace: () => ({ activeWorkspace: null, teamWorkspaceId: undefined }),
 }));
 vi.mock('../../hooks/useStorageContext', () => ({
   useStorageContext: () => ({
@@ -41,7 +39,6 @@ vi.mock('@/components/SignInCTA', () => ({ SignInCTA: () => null }));
 vi.mock('@/components/add-personal-question-dialog/AddPersonalQuestionDialog', () => ({
   AddPersonalQuestionDialog: () => null,
 }));
-vi.mock('@/components/add-to-collection-menu/AddToCollectionMenu', () => ({ AddToCollectionMenu: () => null }));
 vi.mock('@/components/modern-question-card/modern-question-card', () => ({ ModernQuestionCard: vi.fn(() => null) }));
 
 const personalQuestion = { _id: 'q1', customText: 'What did you learn this week?', status: 'private' };
@@ -64,9 +61,9 @@ describe('LikedQuestionsPage personal stash', () => {
     vi.resetAllMocks();
     vi.spyOn(console, 'error').mockImplementation(() => {});
     (ModernQuestionCard as unknown as Mock).mockReturnValue(null);
-    // Only the personal stash query takes an organization; the rest load nothing.
-    (useQuery as Mock).mockImplementation((_query: unknown, args: Record<string, unknown> | undefined) =>
-      args && 'organizationId' in args ? [personalQuestion] : undefined,
+    // Only the personal stash query answers; the rest load nothing.
+    (useQuery as Mock).mockImplementation((query: Parameters<typeof getFunctionName>[0]) =>
+      getFunctionName(query) === 'core/questions:getCustomQuestions' ? [personalQuestion] : undefined,
     );
   });
 

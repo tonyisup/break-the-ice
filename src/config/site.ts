@@ -5,7 +5,7 @@ export const siteConfig = {
   supportEmail: "breakingthaticeberg@gmail.com",
   defaultTitle: "Break the Ice(berg) | Better Conversation Starters",
   defaultDescription:
-    "Find thoughtful conversation starters for teams, classrooms, events, and everyday connection.",
+    "Find thoughtful conversation starters for classrooms, events, and everyday connection.",
   ogImagePath: "/og-preview.png",
 } as const;
 

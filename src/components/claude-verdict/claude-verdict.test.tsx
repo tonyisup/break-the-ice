@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { ClaudeConcernBadge, ClaudeFlagDetails, ClaudeVerdict } from "./claude-verdict";
+import { ClaudeConcernBadge, ClaudeVerdict } from "./claude-verdict";
 
 const hold = {
   verdict: "hold" as const,
@@ -77,23 +77,9 @@ describe("ClaudeConcernBadge", () => {
   });
 });
 
-describe("ClaudeFlagDetails", () => {
-  it("says the question was flagged by an automated check, why, and that the choice is the reader's", () => {
-    render(<ClaudeFlagDetails flag={hold} />);
-
-    expect(screen.getByText("Flagged by AI review")).toBeInTheDocument();
-    expect(screen.getByText("Awkward wording")).toBeInTheDocument();
-    expect(screen.getByText("Targets a person")).toBeInTheDocument();
-    expect(screen.getByText("Two questions in one.")).toBeInTheDocument();
-    expect(screen.getByText("An automated check raised this. You decide whether to use it.")).toBeInTheDocument();
-  });
-
+describe("ClaudeVerdict without a note", () => {
   it("leaves no empty note line when the judge gave no note", () => {
-    const { container, rerender } = render(<ClaudeFlagDetails flag={{ reasons: ["awkward_wording"], safety: [], note: "" }} />);
-    expect(container.querySelectorAll("p")).toHaveLength(1);
-    expect(container.textContent).toBe("Flagged by AI reviewAwkward wordingAn automated check raised this. You decide whether to use it.");
-
-    rerender(<ClaudeVerdict check={{ verdict: "hold", reasons: ["awkward_wording"], safety: [], note: "", wouldPublish: false }} />);
+    const { container } = render(<ClaudeVerdict check={{ verdict: "hold", reasons: ["awkward_wording"], safety: [], note: "", wouldPublish: false }} />);
     expect(container.querySelector("p")).toBeNull();
     expect(container.textContent).toBe("Claude: holdAwkward wording");
   });

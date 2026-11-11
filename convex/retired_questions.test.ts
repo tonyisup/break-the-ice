@@ -107,14 +107,6 @@ describe("a question older pruning marked with only prunedAt is retired", () => 
     expect(ids(questions)).toEqual([live]);
   });
 
-  test("the schedule picker leaves it out", async () => {
-    const { t, live } = await setup();
-
-    const questions = await t.query(api.core.questions.getPublicQuestions, {});
-
-    expect(questions.map((question) => question._id)).toEqual([live]);
-  });
-
   test("its link no longer opens, like any pruned question", async () => {
     const { t, live, legacy } = await setup();
 

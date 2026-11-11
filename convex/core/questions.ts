@@ -1,4 +1,3 @@
-import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import {
 	mutation,
@@ -6,19 +5,14 @@ import {
 	action,
 	ActionCtx,
 	MutationCtx,
-	internalQuery,
 } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import { api, internal } from "../_generated/api";
-import {
-	ensureAdmin,
-	ensurePaidOrganizationMember,
-	isPaidTeamMember,
-} from "../auth";
+import { ensureAdmin } from "../auth";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { fingerprintText } from "../lib/promptArchitecture";
 import { findCanonicalUser } from "../lib/users";
-import { canReadQuestion, isQuestionPublic, isReadableByLink, isRetiredQuestion, isUnlistedAiQuestion, withoutVerdict } from "../lib/questionAccess";
+import { canReadQuestion, isQuestionPublic, isReadableByLink, isRetiredQuestion, withoutVerdict } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { removeQuestionReferences } from "../lib/questionReferences";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
@@ -26,8 +20,7 @@ import { wasAiCallBilled } from "../lib/aiSpendGuard";
 import { requireQuestionText } from "../lib/questionText";
 import { normalizeQuestionTags } from "../lib/questionTags";
 import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
-import { editorialReason } from "../lib/questionReviewValidators";
-import { claudeFlag } from "../lib/qualityCheck";
+import { ignoredWorkspaceArg } from "../lib/ignoredWorkspaceArg";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 
@@ -41,13 +34,10 @@ export const addPersonalQuestion = mutation({
 		toneId: v.optional(v.id("tones")),
 		topicId: v.optional(v.id("topics")),
 		tags: v.optional(v.array(v.string())),
-		organizationId: v.optional(v.id("organizations")),
+		...ignoredWorkspaceArg,
 	},
 	returns: v.union(v.id("questions"), v.null()),
 	handler: async (ctx, args) => {
-		if (args.organizationId) {
-			await ensurePaidOrganizationMember(ctx, args.organizationId);
-		}
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			throw new Error("You must be logged in to add a personal question.");
@@ -89,7 +79,6 @@ export const addPersonalQuestion = mutation({
 			topicId: args.topicId,
 			topic: topicDoc?.id,
 			tags,
-			organizationId: args.organizationId,
 		});
 	},
 });
@@ -128,7 +117,6 @@ async function getNextRandomQuestionsInternal(
 		hidden?: Id<"questions">[];
 		hiddenStyles?: Id<"styles">[];
 		hiddenTones?: Id<"tones">[];
-		organizationId?: Id<"organizations">;
 		randomSeed?: number;
 		anchoredStyleId?: Id<"styles">;
 		anchoredToneId?: Id<"tones">;
@@ -145,7 +133,6 @@ async function getNextRandomQuestionsInternal(
 		hidden = [],
 		hiddenStyles = [],
 		hiddenTones = [],
-		organizationId,
 		randomSeed = Math.random(),
 		anchoredStyleId,
 		anchoredToneId,
@@ -159,7 +146,6 @@ async function getNextRandomQuestionsInternal(
 			hidden,
 			hiddenStyles,
 			hiddenTones,
-			organizationId,
 			anchoredStyleId,
 			anchoredToneId,
 			anchoredTopicId,
@@ -175,7 +161,6 @@ async function getNextRandomQuestionsInternal(
 		hidden,
 		hiddenStyles,
 		hiddenTones,
-		organizationId,
 		anchoredStyleId,
 		anchoredToneId,
 		anchoredTopicId,
@@ -198,7 +183,7 @@ export const getNextRandomQuestions = action({
 		hidden: v.optional(v.array(v.id("questions"))),
 		hiddenStyles: v.optional(v.array(v.id("styles"))),
 		hiddenTones: v.optional(v.array(v.id("tones"))),
-		organizationId: v.optional(v.id("organizations")),
+		...ignoredWorkspaceArg,
 		randomSeed: v.optional(v.float64()),
 		anchoredStyleId: v.optional(v.id("styles")),
 		anchoredToneId: v.optional(v.id("tones")),
@@ -209,7 +194,7 @@ export const getNextRandomQuestions = action({
 		anchoredMatchCount: v.number(),
 		targetAnchoredCount: v.number(),
 	}),
-	handler: async (ctx, args) => {
+	handler: async (ctx, { organizationId: _ignored, ...args }) => {
 		const next = await getNextRandomQuestionsInternal(ctx, args);
 		return { ...next, questions: next.questions.map(withoutVerdict) };
 	},
@@ -222,17 +207,17 @@ export const getNextQuestions = query({
 		tone: v.id("tones"),
 		seen: v.optional(v.array(v.id("questions"))),
 		hidden: v.optional(v.array(v.id("questions"))),
-		organizationId: v.optional(v.id("organizations")),
+		...ignoredWorkspaceArg,
 	},
 	returns: v.array(v.any()),
 	handler: async (ctx, args): Promise<any[]> => {
-		const { count, style, tone, seen, hidden, organizationId } = args;
+		const { count, style, tone, seen, hidden } = args;
 		const seenIds = new Set(seen ?? []);
 
 		const candidates = await ctx.db
 			.query("questions")
 			.withIndex("by_style_and_tone", (q) => q.eq("styleId", style).eq("toneId", tone))
-			.filter((q) => q.eq(q.field("organizationId"), organizationId))
+			.filter((q) => q.eq(q.field("organizationId"), undefined))
 			.filter((q) => q.and(
 				q.neq(q.field("text"), undefined),
 				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined))
@@ -449,90 +434,6 @@ export const getQuestionsByIds = query({
 	},
 });
 
-/** List public/approved questions that orgs can assign to schedules */
-export const getPublicQuestions = query({
-	args: {
-		limit: v.optional(v.number()),
-		generationKey: v.optional(v.number()),
-	},
-	returns: v.array(v.object({
-		_id: v.id("questions"),
-		text: v.optional(v.string()),
-		style: v.optional(v.string()),
-		tone: v.optional(v.string()),
-		topic: v.optional(v.string()),
-		isAIGenerated: v.optional(v.boolean()),
-		totalLikes: v.number(),
-		status: v.optional(v.union(
-			v.literal("pending"),
-			v.literal("approved"),
-			v.literal("public"),
-			v.literal("private"),
-			v.literal("pruning"),
-			v.literal("pruned")
-		)),
-		// Present only when the quality check held the question or raised a safety concern,
-		// no admin has reviewed it since, and the caller is a signed-in member of a team: its
-		// reasons, safety flags and one-sentence note, for whoever is choosing questions.
-		claudeFlag: v.optional(v.object({
-			reasons: v.array(editorialReason),
-			safety: v.array(v.string()),
-			note: v.string(),
-		})),
-	})),
-	handler: async (ctx, args) => {
-		const limit = args.limit ?? 200;
-		const [pubRows, apprRows, legacyRows] = await Promise.all([
-			ctx.db
-				.query("questions")
-				.withIndex("by_status", (q) => q.eq("status", "public"))
-				.take(limit),
-			ctx.db
-				.query("questions")
-				.withIndex("by_status", (q) => q.eq("status", "approved"))
-				.take(limit),
-			ctx.db
-				.query("questions")
-				.withIndex("by_status", (q) => q.eq("status", undefined))
-				.take(limit),
-		]);
-		const byId = new Map<Id<"questions">, Doc<"questions">>();
-		for (const q of pubRows) {
-			byId.set(q._id, q);
-		}
-		for (const q of apprRows) {
-			byId.set(q._id, q);
-		}
-		for (const q of legacyRows) {
-			byId.set(q._id, q);
-		}
-		// Older pruning set only prunedAt and left the status, so retirement is checked here too
-		// (see isRetiredQuestion): assignQuestion refuses a retired library question.
-		const merged = [...byId.values()]
-			.filter((q) => !isRetiredQuestion(q))
-			.sort((a, b) => a._creationTime - b._creationTime);
-		const rows = merged.slice(0, limit);
-		// This query needs no sign-in, and the flag is the check's reasons and note: it goes to a
-		// signed-in member of a team and to nobody else. Looked up only when there is a flag.
-		const flags = new Map(rows.flatMap((q) => {
-			const flag = claudeFlag(q);
-			return flag ? [[q._id, flag] as const] : [];
-		}));
-		const forTeam = flags.size > 0 && (await isPaidTeamMember(ctx));
-		return rows.map((q) => ({
-			_id: q._id,
-			text: q.text ?? q.customText,
-			style: q.style,
-			tone: q.tone,
-			topic: q.topic,
-			isAIGenerated: q.isAIGenerated,
-			totalLikes: q.totalLikes,
-			status: q.status,
-			claudeFlag: forTeam ? flags.get(q._id) : undefined,
-		}));
-	},
-});
-
 export const getUserLikedAndPreferredEmbedding = query({
 	args: {},
 	returns: v.array(v.number()),
@@ -579,13 +480,8 @@ export const getUserLikedAndPreferredEmbedding = query({
 });
 
 export const getCustomQuestions = query({
-	args: {
-		organizationId: v.optional(v.id("organizations")),
-	},
-	handler: async (ctx, args) => {
-		if (args.organizationId) {
-			await ensurePaidOrganizationMember(ctx, args.organizationId);
-		}
+	args: { ...ignoredWorkspaceArg },
+	handler: async (ctx) => {
 		const userIdentity = await ctx.auth.getUserIdentity();
 		if (!userIdentity) {
 			return [];
@@ -600,18 +496,16 @@ export const getCustomQuestions = query({
 		const questions = await ctx.db
 		  .query("questions")
 		  .withIndex("by_author", (q) => q.eq("authorId", user._id))
-		  .filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+		  .filter((q) => q.eq(q.field("organizationId"), undefined))
 		  .collect();
 		return questions.filter((question) => question.kind !== "team_prompt").map(withoutVerdict);
 	},
 });
 
 export const getLikedQuestions = query({
-	args: {
-		organizationId: v.optional(v.id("organizations")),
-	},
+	args: { ...ignoredWorkspaceArg },
 	returns: v.array(v.any()),
-	handler: async (ctx, args) => {
+	handler: async (ctx) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			return [];
@@ -644,7 +538,7 @@ export const getLikedQuestions = query({
 
 		const liked: Doc<"questions">[] = [];
 		for (const question of questions) {
-			if (!question || question.organizationId !== args.organizationId) continue;
+			if (!question || question.organizationId !== undefined) continue;
 			if (await canReadQuestion(ctx, question, user._id)) liked.push(question);
 		}
 		return liked.map(withoutVerdict);
@@ -725,10 +619,10 @@ export const getQuestionForOgImage = query({
 		if (!isReadableByLink(question)) return null;
 
 		const styleDoc = question.style
-			? await resolveTaxonomySlug(ctx.db, "styles", question.style, question.organizationId)
+			? await resolveTaxonomySlug(ctx.db, "styles", question.style)
 			: null;
 		const toneDoc = question.tone
-			? await resolveTaxonomySlug(ctx.db, "tones", question.tone, question.organizationId)
+			? await resolveTaxonomySlug(ctx.db, "tones", question.tone)
 			: null;
 
 		const imageUrl =
@@ -843,16 +737,12 @@ export const addCustomQuestion = mutation({
 	args: {
 		customText: v.string(),
 		isPublic: v.boolean(),
-		organizationId: v.optional(v.id("organizations")),
+		...ignoredWorkspaceArg,
 	},
 	handler: async (ctx, args) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			throw new Error("You must be logged in to add a custom question.");
-		}
-
-		if (args.organizationId) {
-			await ensurePaidOrganizationMember(ctx, args.organizationId);
 		}
 
 		const user = await ctx.db
@@ -864,7 +754,7 @@ export const addCustomQuestion = mutation({
 			throw new Error("User not found.");
 		}
 
-		const { isPublic, organizationId } = args;
+		const { isPublic } = args;
 		if (args.customText.trim().length === 0) {
 			return;
 		}
@@ -877,7 +767,6 @@ export const addCustomQuestion = mutation({
 			totalThumbsDown: 0,
 			totalShows: 0,
 			averageViewDuration: 0,
-			organizationId,
 		});
 	},
 });
@@ -920,16 +809,6 @@ export const remixQuestionForUser = action({
 			throw new ConvexError({ code: ERROR_CODES.AI_PROMPT_TOO_LARGE, message: ERROR_MESSAGES.AI_REMIX_TOO_LONG });
 		}
 
-		// Bill the question's org only for its members, as generateAIQuestionForFeed does.
-		// Anyone else is charged personally, so a public gym question isn't a fresh allowance.
-		let usageOrganizationId: Id<"organizations"> | undefined;
-		if (question.organizationId) {
-			const organizations = await ctx.runQuery(api.core.organizations.getOrganizations, {});
-			if (organizations.some((organization: { _id: Id<"organizations"> }) => organization._id === question.organizationId)) {
-				usageOrganizationId = question.organizationId;
-			}
-		}
-
 		const topicIdToUse = args.topicId || question.topicId;
 		const takeoverTopics = await ctx.runQuery(api.core.topics.getActiveTakeoverTopics);
 		const isTakeover = takeoverTopics.some((t: { _id: Id<"topics"> }) => t._id === topicIdToUse);
@@ -939,7 +818,6 @@ export const remixQuestionForUser = action({
 			if (!isTakeover) {
 				await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
 					userId: user._id,
-					organizationId: usageOrganizationId,
 				});
 				usageIncremented = true;
 			}
@@ -961,10 +839,8 @@ export const remixQuestionForUser = action({
 			// Refund unless an answer was paid for. A call that timed out is refunded too: its
 			// reservation stays on the daily budget, but the person got nothing.
 			if (usageIncremented && !wasAiCallBilled(error)) {
-				// Refund the same counter the charge above used.
 				await ctx.runMutation(internal.internal.users.decrementAIUsage, {
 					userId: user._id,
-					organizationId: usageOrganizationId,
 				});
 			}
 			throw error;
@@ -972,9 +848,11 @@ export const remixQuestionForUser = action({
 	},
 });
 
+// A team's prompt or an organization's question was never a personal question. Workspaces are
+// gone, so nobody changes one.
 function assertPersonalQuestionLifecycle(question: Doc<"questions">) {
-	if (question.kind === "team_prompt") {
-		throw new Error("This is a schedule-managed Team prompt, not a personal question.");
+	if (question.kind === "team_prompt" || question.organizationId) {
+		throw new Error("This question belonged to a team workspace and can no longer be changed.");
 	}
 }
 
@@ -1031,9 +909,6 @@ export const updatePersonalQuestion = mutation({
 		const question = await ctx.db.get(args.questionId);
 		if (!question) {
 			throw new Error("Question not found.");
-		}
-		if (question.organizationId) {
-			await ensurePaidOrganizationMember(ctx, question.organizationId);
 		}
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to update this question.");
@@ -1109,9 +984,6 @@ export const deletePersonalQuestion = mutation({
 		if (!question) {
 			throw new Error("Question not found.");
 		}
-		if (question.organizationId) {
-			await ensurePaidOrganizationMember(ctx, question.organizationId);
-		}
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to delete this question.");
 		}
@@ -1143,9 +1015,6 @@ export const makeQuestionPublic = mutation({
 		if (!question) {
 			throw new Error("Question not found.");
 		}
-		if (question.organizationId) {
-			await ensurePaidOrganizationMember(ctx, question.organizationId);
-		}
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to update this question.");
 		}
@@ -1162,111 +1031,5 @@ export const makeQuestionPublic = mutation({
 		await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, {
 			questionId: args.questionId,
 		});
-	},
-});
-
-const matrixAxisValidator = v.union(
-	v.literal("style"),
-	v.literal("tone"),
-	v.literal("topic"),
-);
-
-/** Paginate questions by status and emit matrix cell keys for occupancy checks (fill matrix). */
-export const pageQuestionMatrixCellKeys = internalQuery({
-	args: {
-		/**
-		 * "pending" counts only AI questions held for review (isUnlistedAiQuestion): a grid cell
-		 * that has one is taken, though the grid doesn't list it yet.
-		 */
-		status: v.union(v.literal("public"), v.literal("approved"), v.literal("pending"), v.null()),
-		axisY: matrixAxisValidator,
-		axisX: matrixAxisValidator,
-		topicSlug: v.optional(v.string()),
-		paginationOpts: paginationOptsValidator,
-	},
-	returns: v.object({
-		keys: v.array(v.string()),
-		isDone: v.boolean(),
-		continueCursor: v.union(v.string(), v.null()),
-	}),
-	handler: async (ctx, args) => {
-		const statusFilter = args.status === null ? undefined : args.status;
-		const r = await ctx.db
-			.query("questions")
-			.withIndex("by_status", (q) => q.eq("status", statusFilter))
-			.order("asc")
-			.paginate(args.paginationOpts);
-		const keys: string[] = [];
-		for (const q of r.page) {
-			if (args.status === "pending" && !isUnlistedAiQuestion(q)) continue;
-			const y =
-				args.axisY === "style"
-					? q.style
-					: args.axisY === "tone"
-						? q.tone
-						: q.topic;
-			const x =
-				args.axisX === "style"
-					? q.style
-					: args.axisX === "tone"
-						? q.tone
-						: q.topic;
-			if (y == null || x == null || y === "" || x === "") {
-				continue;
-			}
-			if (
-				args.topicSlug !== undefined &&
-				args.topicSlug !== "" &&
-				(q.topic ?? "") !== args.topicSlug
-			) {
-				continue;
-			}
-			keys.push(`${y}|${x}`);
-		}
-		return {
-			keys,
-			isDone: r.isDone,
-			continueCursor: r.continueCursor,
-		};
-	},
-});
-
-/** Paginate until we find a question matching style/tone/topic slugs: public, approved, or held for review (isUnlistedAiQuestion). */
-export const pageQuestionsMatchingSlugTriple = internalQuery({
-	args: {
-		/**
-		 * "pending" counts only AI questions held for review (isUnlistedAiQuestion): a grid cell
-		 * that has one is taken, though the grid doesn't list it yet.
-		 */
-		status: v.union(v.literal("public"), v.literal("approved"), v.literal("pending"), v.null()),
-		styleSlug: v.string(),
-		toneSlug: v.string(),
-		topicSlug: v.optional(v.string()),
-		paginationOpts: paginationOptsValidator,
-	},
-	returns: v.object({
-		found: v.boolean(),
-		isDone: v.boolean(),
-		continueCursor: v.union(v.string(), v.null()),
-	}),
-	handler: async (ctx, args) => {
-		const statusFilter = args.status === null ? undefined : args.status;
-		const r = await ctx.db
-			.query("questions")
-			.withIndex("by_status", (q) => q.eq("status", statusFilter))
-			.order("asc")
-			.paginate(args.paginationOpts);
-		const found = r.page.some(
-			(q) =>
-				(args.status !== "pending" || isUnlistedAiQuestion(q)) &&
-				(q.style ?? "") === args.styleSlug &&
-				(q.tone ?? "") === args.toneSlug &&
-				(args.topicSlug == null || (q.topic ?? "") === args.topicSlug),
-		);
-		return {
-			found,
-			isDone: r.isDone,
-			continueCursor: r.continueCursor,
-		};
 	},
 });

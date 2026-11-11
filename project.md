@@ -10,28 +10,16 @@ In many fitness group training classes, the coach starts with a "Question of the
 
 ## Architecture
 
-### Tier 1: Consumer (Marketing Funnel)
+### Consumer app
 - Public-facing app at breaktheiceberg.com
 - Infinite scroll through AI-generated ice-breaker questions
 - Like/favorite questions, swipe/swipe-away UX
 - Gated by sign-in (Clerk)
-- Natural on-ramp to "Want this for your studio?" CTA
 
-### Tier 2: B2B — Organization Admin Portal
-- Studio/gym admins curate weekly question sets using AI suggestions
-- Select from AI-generated recommendations filtered by style, tone, topic
-- Configure 1–7 active delivery days for each studio, then set one question for every selected day
-- View aggregated coach feedback from the prior week to inform next week's curation
-- Inspect advisory feedback-informed rankings with attributable style/tone/topic evidence; recommendations never assign or publish questions
-- Treat evidence as directional only with at least 3 responses from 2 distinct coaches; show response/coach counts and mixed positive/negative feedback explicitly
-- Manage team members (coaches/operators) and their preferences
-
-### Tier 3: B2B — Coach/Operator Daily Viewer
-- Coaches see exactly one question of the day — the one their admin assigned
-- No endless scroll, no choice paralysis
-- Advanced feedback: rate quality, note relevance, flag tone mismatch, suggest adjustments
-- Feedback feeds the weekly algorithm to refine next week's suggestions
-- Simple, quick — coaches are busy before class starts
+### Removed: team workspaces
+The studio tiers built here (an organization admin portal for weekly curation and a coach's
+daily viewer, with collections and a Team plan) were removed in November 2026. The code is at
+the `pre-teams-removal` tag.
 
 ## Current State
 
@@ -39,15 +27,13 @@ In many fitness group training classes, the coach starts with a "Question of the
 - ✅ Infinite scroll interface for consumer browsing (replaced original swipe cards)
 - ✅ Like/favorite system with persistence
 - ✅ AI question generation with category/tag/style/tone control
-- ✅ Organization multi-tenancy (orgs, members, roles: admin/manager/member)
 - ✅ Admin dashboard (questions, styles/tones/topics, pool, pruning, duplicates)
-- ✅ Question collections system
-- ✅ Billing integration via Clerk (org-level)
+- ✅ Billing plumbing via Clerk (per person; nothing is sold yet)
 - ✅ Embedding-based similarity/duplicate detection (384-dim vectors)
 - ✅ Nightly generation pool system for batch AI generation
-- ✅ Daily AI spend cap, per-call cost tracking, and per-person/per-team AI rate limits
-- ✅ Admin review queue for new AI questions from the feed, daily email, matrix fill and nightly pool, held out of shared lists until approved
-- ✅ Optional AI quality check of generated questions (record-only, off by default): verdicts for admins, and a "Flagged" mark on the team schedule grid; Auto-fill and the feedback suggestions leave flagged questions out
+- ✅ Daily AI spend cap, per-call cost tracking, and per-person AI rate limits
+- ✅ Admin review queue for new AI questions from the feed, daily email and nightly pool, held out of shared lists until approved
+- ✅ Optional AI quality check of generated questions (record-only, off by default): verdicts for admins
 - ✅ Configurable pruning pipeline with settings
 - ✅ Analytics with view duration tracking
 - ✅ PostHog integration
@@ -55,11 +41,7 @@ In many fitness group training classes, the coach starts with a "Question of the
 - ✅ Dark/light mode, responsive design
 
 ### In Progress / Near-Term
-- 🔄 Weekly curation UI: admin configures 1–7 delivery days and sets one question for every selected day
-- 🔄 Coach daily viewer: single-assigned question with advanced feedback
 - 🔄 Refine feedback types beyond like/thumbs-down (relevance, tone match, suggestion)
-- 🔄 Feedback pipeline: aggregate coach feedback → weekly tuning signal for AI suggestions
-- 🔄 Consumer side as marketing funnel → B2B conversion CTAs
 
 ### Lower Priority
 - ⏸ Instagram daily post automation (blocked on Facebook API setup)
@@ -67,12 +49,7 @@ In many fitness group training classes, the coach starts with a "Question of the
 - ⏸ Admin portal separation (currently co-located with consumer app)
 - ⏸ Feature flags to gate beta features (More Like This, Style/Tone drawers)
 
-### Feedback-informed curation preview
-
-The backend exposes an admin/manager, read-only candidate preview based on up to 500 of the newest coach responses from each of the eight most recent eligible schedule weeks. It never creates schedules or assignments. Each candidate score carries its matching style, tone, or topic evidence and response count. Candidates require at least three responses from two distinct coaches for directional confidence; candidates below either threshold are labeled insufficient evidence. Questions the AI quality check has flagged are left out of the candidates.
-
 ## Design Guides
 - Consumer: infinite scroll, smooth animations, dark/light mode
-- Coach viewer: minimal, one question, fast feedback, no distractions
-- Admin curation: dense, efficient, side-by-side AI suggestions with batch select
-- Responsive across all tiers
+- Admin tools: dense, efficient
+- Responsive throughout

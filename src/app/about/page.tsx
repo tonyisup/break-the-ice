@@ -20,7 +20,7 @@ export default function AboutPage() {
           <h2 className="mb-3 text-xl font-semibold">Find something worth asking.</h2>
           <p>
             Browse the question feed, explore different styles and tones, and save the questions
-            you want to use again. Teams can share collections and schedule prompts for their sessions.
+            you want to use again.
             AI helps create new questions and remix existing ones.
           </p>
         </section>

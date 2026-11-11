@@ -142,7 +142,6 @@ export const generateEvalBatch = internalAction({
       topicSlug: args.topicSlug,
       batchSize: args.batchSize,
       temperature,
-      spendClass: "system",
       model: args.model,
       promptOverride: args.prompt,
       // One draw of examples per seed, so a rerun and a replicate run ask the same thing.

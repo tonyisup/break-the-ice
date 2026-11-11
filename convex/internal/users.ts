@@ -5,10 +5,9 @@ import { internal } from "../_generated/api";
 import { calculateAverageEmbedding } from "../lib/embeddings";
 import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
 import {
-	checkAndIncrementAiUsageForWorkspace,
-	decrementAiUsageForWorkspace,
-} from "../lib/aiUsageWorkspace";
-import { PERSONAL_BILLING_SUBJECT } from "../lib/billingSubjects";
+	checkAndIncrementAiUsage,
+	decrementAiUsage,
+} from "../lib/aiUsage";
 import { isUserWrittenQuestion } from "../lib/questionAccess";
 
 export const userValidator = v.object({
@@ -126,50 +125,6 @@ export const setNewsletterStatus = internalMutation({
 	},
 });
 
-export const syncOrganizationSubscription = internalMutation({
-	args: {
-		clerkOrganizationId: v.string(),
-		billingStatus: v.union(
-			v.literal("inactive"),
-			v.literal("active"),
-			v.literal("past_due"),
-			v.literal("canceled"),
-			v.literal("trialing")
-		),
-		planTier: v.union(v.literal("free"), v.literal("team")),
-		clerkCustomerId: v.optional(v.string()),
-		clerkSubscriptionId: v.optional(v.string()),
-	},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		let organization = await ctx.db
-			.query("organizations")
-			.withIndex("by_clerkOrganizationId", (q) => q.eq("clerkOrganizationId", args.clerkOrganizationId))
-			.unique();
-
-		if (!organization) {
-			const orgId = await ctx.db.insert("organizations", {
-				name: "Team",
-				clerkOrganizationId: args.clerkOrganizationId,
-				planTier: args.planTier,
-				billingStatus: args.billingStatus,
-				clerkCustomerId: args.clerkCustomerId,
-				clerkSubscriptionId: args.clerkSubscriptionId,
-			});
-			organization = await ctx.db.get(orgId);
-		} else {
-			await ctx.db.patch(organization._id, {
-				billingStatus: args.billingStatus,
-				planTier: args.planTier,
-				clerkCustomerId: args.clerkCustomerId,
-				clerkSubscriptionId: args.clerkSubscriptionId,
-			});
-		}
-
-		return null;
-	},
-});
-
 export const syncUserSubscription = internalMutation({
 	args: {
 		clerkUserId: v.string(),
@@ -180,7 +135,6 @@ export const syncUserSubscription = internalMutation({
 			v.literal("canceled"),
 			v.literal("trialing")
 		),
-		billingSubjectType: v.optional(v.union(v.literal("user"), v.literal("organization"))),
 		clerkCustomerId: v.optional(v.string()),
 		clerkSubscriptionId: v.optional(v.string()),
 	},
@@ -197,7 +151,7 @@ export const syncUserSubscription = internalMutation({
 
 		await ctx.db.patch(user._id, {
 			billingStatus: args.billingStatus,
-			billingSubjectType: args.billingSubjectType ?? PERSONAL_BILLING_SUBJECT,
+			billingSubjectType: "user",
 			clerkCustomerId: args.clerkCustomerId,
 			clerkSubscriptionId: args.clerkSubscriptionId,
 		});
@@ -209,28 +163,22 @@ export const syncUserSubscription = internalMutation({
 export const checkAndIncrementAIUsage = internalMutation({
 	args: {
 		userId: v.id("users"),
-		organizationId: v.optional(v.id("organizations")),
 	},
 	returns: v.number(),
 	handler: async (ctx, args) => {
 		const user = await ctx.db.get(args.userId);
 		if (!user) throw new Error("User not found");
 
-		return await checkAndIncrementAiUsageForWorkspace(
-			ctx,
-			args.userId,
-			args.organizationId,
-		);
+		return await checkAndIncrementAiUsage(ctx, args.userId);
 	},
 });
 
 export const decrementAIUsage = internalMutation({
 	args: {
 		userId: v.id("users"),
-		organizationId: v.optional(v.id("organizations")),
 	},
 	handler: async (ctx, args) => {
-		await decrementAiUsageForWorkspace(ctx, args.userId, args.organizationId);
+		await decrementAiUsage(ctx, args.userId);
 	},
 });
 
@@ -508,8 +456,10 @@ export const getUserVisibleStyles = internalQuery({
 				q.eq("userId", args.userId).eq("status", "hidden")
 			)
 			.collect();
+		// Only the shared styles: generation refuses one a workspace owned.
 		const visible = await ctx.db
 			.query("styles")
+			.withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
 			.collect();
 		return visible.filter(s => !hidden.some(h => h.styleId === s._id));
 	},
@@ -527,8 +477,10 @@ export const getUserVisibleTones = internalQuery({
 				q.eq("userId", args.userId).eq("status", "hidden")
 			)
 			.collect();
+		// Only the shared tones: generation refuses one a workspace owned.
 		const visible = await ctx.db
 			.query("tones")
+			.withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
 			.collect();
 		return visible.filter(t => !hidden.some(h => h.toneId === t._id));
 	},

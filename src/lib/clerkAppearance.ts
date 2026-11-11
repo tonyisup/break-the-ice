@@ -27,46 +27,6 @@ const billingDrawerElements = {
   drawerContent: { marginTop: "0.5rem" },
 };
 
-/** Inline OrganizationProfile on settings — layout only; colors come from provider. */
-export const embeddedOrganizationProfileAppearance: Appearance = {
-  elements: {
-    rootBox: {
-      width: "100%",
-      maxWidth: "100%",
-      minHeight: "auto",
-      height: "auto",
-    },
-    cardBox: {
-      width: "100%",
-      maxWidth: "100%",
-      minHeight: "auto",
-      height: "auto",
-      boxShadow: "none",
-    },
-    card: {
-      width: "100%",
-      maxWidth: "100%",
-      minHeight: "auto",
-      height: "auto",
-    },
-    scrollBox: {
-      width: "100%",
-      maxWidth: "100%",
-      minHeight: "auto",
-      height: "auto",
-    },
-    pageScrollBox: {
-      width: "100%",
-      maxWidth: "100%",
-      minHeight: "auto",
-      height: "auto",
-    },
-    navbar: {
-      maxWidth: "100%",
-    },
-  },
-};
-
 export function getClerkAppearance(isDark: boolean): Appearance {
   return {
     theme: shadcn,

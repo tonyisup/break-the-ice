@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 import { query, QueryCtx } from "../_generated/server";
-import { Doc, Id } from "../_generated/dataModel";
+import { Doc } from "../_generated/dataModel";
 import { defaultQualityRubric, defaultToneAxesValue, latestActiveVersion } from "../lib/taxonomy";
-import { ensurePaidOrganizationMember } from "../auth";
+import { ignoredWorkspaceArg } from "../lib/ignoredWorkspaceArg";
 
 export const DEFAULT_TONE_COLOR = "#6B7280";
 export const DEFAULT_TONE_ICON = "MessageCircle";
@@ -79,27 +79,17 @@ async function getLatestActiveToneBySlug(ctx: QueryCtx, slug: string) {
     .query("tones")
     .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
-  return latestActiveVersion(tones);
+  // Only the shared entries: the ones no workspace owned.
+  const shared = tones.filter((row) => !row.organizationId);
+  return latestActiveVersion(shared);
 }
 
-async function getActiveTones(
-  ctx: QueryCtx,
-  organizationId?: Id<"organizations">,
-  limit = 500,
-) {
-  let tones: Doc<"tones">[];
-  if (organizationId) {
-    const [orgTones, globalTones] = await Promise.all([
-      ctx.db.query("tones").withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId)).take(limit),
-      ctx.db.query("tones").withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any)).take(limit),
-    ]);
-    tones = [...orgTones, ...globalTones];
-  } else {
-    tones = await ctx.db
-      .query("tones")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
-      .take(limit);
-  }
+async function getActiveTones(ctx: QueryCtx, limit = 500) {
+  // Only the shared entries: the ones no workspace owned.
+  const tones = await ctx.db
+    .query("tones")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
+    .take(limit);
 
   const bySlug = new Map<string, Doc<"tones">[]>();
   for (const tone of tones) {
@@ -129,34 +119,26 @@ export const getToneById = query({
   returns: v.union(v.object(publicToneFields), v.null()),
   handler: async (ctx, args) => {
     const tone = await ctx.db.get(args.id);
-    return tone ? mapTone(tone) : null;
+    return tone && !tone.organizationId ? mapTone(tone) : null;
   },
 });
 
 export const getTones = query({
-  args: {
-    organizationId: v.optional(v.id("organizations")),
-  },
+  args: { ...ignoredWorkspaceArg },
   returns: v.array(v.object(publicToneFields)),
-  handler: async (ctx, args) => {
-    if (args.organizationId) {
-      await ensurePaidOrganizationMember(ctx, args.organizationId);
-    }
-    return await getActiveTones(ctx, args.organizationId);
+  handler: async (ctx) => {
+    return await getActiveTones(ctx);
   },
 });
 
 export const getFilteredTones = query({
   args: {
     excluded: v.array(v.string()),
-    organizationId: v.optional(v.id("organizations")),
+    ...ignoredWorkspaceArg,
   },
   returns: v.array(v.object(publicToneFields)),
   handler: async (ctx, args) => {
-    if (args.organizationId) {
-      await ensurePaidOrganizationMember(ctx, args.organizationId);
-    }
-    const tones = await getActiveTones(ctx, args.organizationId);
+    const tones = await getActiveTones(ctx);
     return tones.filter((tone) => !args.excluded.includes(tone.slug));
   },
 });

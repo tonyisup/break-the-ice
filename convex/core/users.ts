@@ -1,9 +1,9 @@
 import { getAiPlanLimit } from "../lib/aiPlanLimits";
 import { MutationCtx, mutation, query } from "../_generated/server";
 import { v } from "convex/values";
-import { getEffectivePlanForUser } from "../auth";
-import { getAiUsageForWorkspace } from "../lib/aiUsageWorkspace";
-import { collectUserCandidates, findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
+import { getAiUsage } from "../lib/aiUsage";
+import { ignoredWorkspaceArg } from "../lib/ignoredWorkspaceArg";
+import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
 
 // Helper to ensure user exists
 export async function getUserOrCreate(ctx: MutationCtx) {
@@ -22,11 +22,9 @@ export async function getUserOrCreate(ctx: MutationCtx) {
 }
 
 export const getCurrentUser = query({
-	args: {
-		organizationId: v.optional(v.id("organizations")),
-	},
+	args: { ...ignoredWorkspaceArg },
 	returns: v.union(v.null(), v.any()),
-	handler: async (ctx, args): Promise<any> => {
+	handler: async (ctx): Promise<any> => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			return null;
@@ -42,48 +40,13 @@ export const getCurrentUser = query({
 			return null;
 		}
 
-		const organizationId = args.organizationId;
-		const { candidates } = await collectUserCandidates(ctx, {
-			clerkId: identity.subject,
-			tokenIdentifier: identity.tokenIdentifier,
-			email: identity.email,
-		});
-		const candidateIds = candidates.map((candidate) => candidate._id);
-		let organizationRole: "admin" | "manager" | "member" | undefined;
-		let workspaceUsageUserId = user._id;
-		if (organizationId) {
-			for (const candidateId of candidateIds) {
-				const membership = await ctx.db
-					.query("organization_members")
-					.withIndex("by_userId_organizationId", (q) =>
-						q.eq("userId", candidateId).eq("organizationId", organizationId),
-					)
-					.unique();
-				if (membership?.role === "admin") {
-					organizationRole = "admin";
-					workspaceUsageUserId = candidateId;
-					break;
-				}
-				if (membership?.role === "manager") {
-					organizationRole = "manager";
-					workspaceUsageUserId = candidateId;
-					break;
-				} else if (membership?.role === "member" && !organizationRole) {
-					organizationRole = "member";
-					workspaceUsageUserId = candidateId;
-				}
-			}
-		}
-		const effectivePlan = await getEffectivePlanForUser(ctx, candidateIds, organizationId);
-		const limit = getAiPlanLimit(effectivePlan.planTier);
-		const aiUsage = await getAiUsageForWorkspace(ctx, workspaceUsageUserId, organizationId);
+		const limit = getAiPlanLimit();
+		const aiUsage = await getAiUsage(ctx, user._id);
 
 		return {
 			...user,
-			planTier: effectivePlan.planTier,
-			billingStatus: effectivePlan.billingStatus,
-			activeOrganizationId: effectivePlan.organizationId,
-			organizationRole,
+			planTier: "free" as const,
+			billingStatus: user.billingStatus ?? "inactive",
 			aiLimit: limit,
 			aiUsage: { count: aiUsage.count, cycleStart: aiUsage.cycleStart },
 			isAiLimitReached: aiUsage.count >= limit,
@@ -92,10 +55,8 @@ export const getCurrentUser = query({
 });
 
 export const getUserInteractionStats = query({
-	args: {
-		organizationId: v.optional(v.id("organizations")),
-	},
-	handler: async (ctx, args) => {
+	args: { ...ignoredWorkspaceArg },
+	handler: async (ctx) => {
 		const identity = await ctx.auth.getUserIdentity();
 		if (!identity) {
 			return { totalSeen: 0, totalLikes: 0, dismissedRefineCTA: false };
@@ -111,14 +72,12 @@ export const getUserInteractionStats = query({
 			return { totalSeen: 0, totalLikes: 0, dismissedRefineCTA: false };
 		}
 
-		const organizationId = args.organizationId;
-
 		const firstLike = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", organizationId)
+					.eq("organizationId", undefined)
 					.eq("status", "liked"),
 			)
 			.first();
@@ -126,7 +85,7 @@ export const getUserInteractionStats = query({
 		const seenQuestions = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
-				q.eq("userId", user._id).eq("organizationId", organizationId),
+				q.eq("userId", user._id).eq("organizationId", undefined),
 			)
 			.filter((q) => q.neq(q.field("status"), "unseen"))
 			.take(50);

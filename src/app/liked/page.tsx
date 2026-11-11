@@ -12,7 +12,6 @@ import { useFilter } from "@/hooks/useFilter";
 import { AddPersonalQuestionDialog } from "@/components/add-personal-question-dialog/AddPersonalQuestionDialog";
 import { ModernQuestionCard } from "@/components/modern-question-card/modern-question-card";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
-import { AddToCollectionMenu } from "@/components/add-to-collection-menu/AddToCollectionMenu";
 
 import { cn, isColorDark } from "@/lib/utils";
 
@@ -21,11 +20,9 @@ import { toast } from "sonner";
 import { SignInCTA } from "@/components/SignInCTA";
 import { Button } from "@/components/ui/button";
 import { useAuth, useClerk } from "@clerk/clerk-react";
-import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 
 function LikedQuestionsPageContent() {
   const { isSignedIn } = useAuth();
-  const { activeWorkspace, teamWorkspaceId } = useTeamWorkspace();
   const { openSignIn } = useClerk();
   const { effectiveTheme } = useTheme();
   const [searchText, setSearchText] = useState("");
@@ -40,9 +37,7 @@ function LikedQuestionsPageContent() {
   const [isLikedOpen, setIsLikedOpen] = useState(true);
 
   // Filter out invalid question IDs to prevent errors
-  const myQuestions = useQuery(api.core.questions.getCustomQuestions, {
-    organizationId: teamWorkspaceId,
-  });
+  const myQuestions = useQuery(api.core.questions.getCustomQuestions, {});
 
 
   const validLikedQuestions = useMemo(() => {
@@ -216,11 +211,6 @@ function LikedQuestionsPageContent() {
   const gradient = ["#3B2554", "#262D54"];
   const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
 
-  const showCollectionActions = isSignedIn && !!activeWorkspace;
-  // Mirrors the server's rule in convex/core/collections.ts (isPubliclyAvailableStatus).
-  const isCollectable = (question: Doc<"questions">) =>
-    question.status === "public" || question.status === "approved" || question.status === undefined;
-
   const renderCard = (question: Doc<"questions">, onDelete?: () => void) => {
     const style = stylesMap.get(question.styleId || (question.style as string) || "");
     const tone = tonesMap.get(question.toneId || (question.tone as string) || "");
@@ -230,12 +220,6 @@ function LikedQuestionsPageContent() {
 
     return (
       <div className="relative h-full">
-        {/* Collections only take public questions; a held AI question joins once approved. */}
-        {showCollectionActions && isCollectable(question) && (
-          <div className="absolute top-3 right-3 z-10">
-            <AddToCollectionMenu questionId={question._id} />
-          </div>
-        )}
         <ModernQuestionCard
           question={question}
           isGenerating={false}

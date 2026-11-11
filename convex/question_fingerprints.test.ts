@@ -823,15 +823,19 @@ describe("private questions keep no fingerprint", () => {
     expect(await t.run(async (ctx) => ctx.db.get(approved))).toMatchObject({ status: "public", fingerprint: fingerprintText(smell) });
   });
 
-  test("editing a private team prompt or organization question doesn't fingerprint it", async () => {
+  test("an admin can't edit a team prompt or organization question, so an edit never fingerprints one", async () => {
     const { t } = await setup();
     const admin = t.withIdentity(editor);
     const organizationId = await setupOrganization(t);
     const teamPrompt = await insertQuestion(t, { organizationId, authorId: "author-1", customText: smell, kind: "team_prompt", status: "private" });
-    const orgQuestion = await insertQuestion(t, { organizationId, customText: bus, status: "private", fingerprint: fingerprintText(bus) });
+    const orgQuestion = await insertQuestion(t, { organizationId, customText: bus, status: "private" });
 
-    await admin.mutation(api.admin.questions.updateQuestion, { id: teamPrompt, expectedRevision: 0, reviewReason: "Tidy", text: smell });
-    await admin.mutation(api.admin.questions.updateQuestion, { id: orgQuestion, reviewReason: "Retag", tags: ["travel"] });
+    await expect(
+      admin.mutation(api.admin.questions.updateQuestion, { id: teamPrompt, expectedRevision: 0, reviewReason: "Tidy", text: smell }),
+    ).rejects.toThrow("belonged to a team workspace");
+    await expect(
+      admin.mutation(api.admin.questions.updateQuestion, { id: orgQuestion, reviewReason: "Retag", tags: ["travel"] }),
+    ).rejects.toThrow("belonged to a team workspace");
 
     expect(await fingerprintOf(t, teamPrompt)).toBeNull();
     expect(await fingerprintOf(t, orgQuestion)).toBeNull();
@@ -965,8 +969,7 @@ describe("private questions keep no fingerprint", () => {
   test("publishing a private question with no wording to fingerprint leaves it without one", async () => {
     const { t } = await setup();
     const admin = t.withIdentity(editor);
-    const organizationId = await setupOrganization(t);
-    const blank = await insertQuestion(t, { organizationId, status: "private", fingerprint: "q_old_blank" });
+    const blank = await insertQuestion(t, { kind: "personal", status: "private", fingerprint: "q_old_blank" });
 
     await admin.mutation(api.admin.questions.updateQuestion, { id: blank, expectedRevision: 0, reviewReason: "Publish", status: "public" });
 

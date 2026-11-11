@@ -35,9 +35,9 @@ export default function AdminDashboard() {
       link: "/admin/questions"
     },
     {
-      title: "Team Workspaces",
-      value: stats.organizations.team,
-      description: `${stats.users.total} Active Users`,
+      title: "Users",
+      value: stats.users.total,
+      description: `${stats.users.admins} Admins`,
       icon: Users,
       link: "/admin/users"
     },
@@ -61,7 +61,7 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">The current state of questions, workspaces, and moderation.</p>
+        <p className="text-muted-foreground">The current state of questions, users, and moderation.</p>
       </div>
 
       <section aria-labelledby="key-metrics" className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 xl:grid-cols-4">

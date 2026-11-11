@@ -1,15 +1,12 @@
-/** Shared by enforcement, account usage, and the public pricing summary. */
+/** Shared by enforcement and account usage. */
 export const AI_USAGE_CYCLE_DAYS = 30;
 export const AI_USAGE_CYCLE_MS = AI_USAGE_CYCLE_DAYS * 24 * 60 * 60 * 1000;
 
-export function getAiPlanLimit(planTier: "free" | "team") {
-  const configured =
-    planTier === "team"
-      ? (process.env.MAX_TEAM_AIGEN ?? process.env.MAX_CASUAL_AIGEN ?? "100")
-      : (process.env.MAX_FREE_AIGEN ?? "10");
-  const limit = Number(configured);
+/** How many AI requests each person gets per cycle. */
+export function getAiPlanLimit() {
+  const limit = Number(process.env.MAX_FREE_AIGEN ?? "10");
   if (!Number.isSafeInteger(limit) || limit < 0) {
-    throw new Error(`Invalid AI allowance for ${planTier} plan`);
+    throw new Error("Invalid AI allowance");
   }
   return limit;
 }

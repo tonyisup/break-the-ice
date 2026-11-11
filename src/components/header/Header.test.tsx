@@ -7,7 +7,6 @@ vi.mock("convex/react", () => ({ useQuery: () => [] }));
 vi.mock("@clerk/clerk-react", () => ({
   useAuth: () => ({ isSignedIn: false }),
 }));
-vi.mock("@/hooks/useTeamWorkspace", () => ({ useTeamWorkspace: () => ({}) }));
 vi.mock("@/hooks/useStorageContext", () => ({
   useStorageContext: () => ({
     likedQuestions: [],
@@ -17,7 +16,6 @@ vi.mock("@/hooks/useStorageContext", () => ({
   }),
 }));
 vi.mock("./UserMenu", () => ({ UserMenu: () => null }));
-vi.mock("./TeamWorkspaceMenu", () => ({ TeamWorkspaceMenu: () => null }));
 
 it.each([
   ["/app", "Home"],

@@ -4,17 +4,15 @@ import { useAuth } from "@clerk/clerk-react";
 import { ClerkProviderWithTheme } from "./components/ClerkProviderWithTheme";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import "./index.css";
 import { StorageProvider } from "./hooks/useStorageContext";
-import { WorkspaceProvider } from "./hooks/useWorkspace.tsx";
 import App from "./App";
 import Root from "./Root";
 import LikedQuestionsPage from "./app/liked/page";
 import QuestionsPage from "./app/admin/questions/page";
 import TagsPage from "./app/admin/tags/page";
 import SettingsPage from "./app/settings/page";
-import CollectionManagePage from "./app/settings/collections/[collectionId]/page";
 import StylesPage from "./app/admin/styles/page";
 import TonesPage from "./app/admin/tones/page";
 import FeedbackPage from "./app/admin/feedback/page";
@@ -38,19 +36,13 @@ import DataRetentionPage from "./app/data-retention/page";
 import CookiePolicyPage from "./app/cookies/page";
 import AboutPage from "./app/about/page";
 import ContactPage from "./app/contact/page";
-import PricingPage from "./app/pricing/page";
-import BillingSuccessPage from "./app/billing/success/page";
-import BillingCancelPage from "./app/billing/cancel/page";
 import FeedbackButton from "./components/FeedbackButton";
 import { AnalyticsManager } from "./components/AnalyticsManager";
 import GeneratorPage from "./app/admin/generator/page.tsx";
 import { Toaster } from "sonner";
 import UserDetailsPage from "./app/admin/users/[userId]/page.tsx";
 import QuestionDetailsPage from "./app/admin/questions/[questionId]/page.tsx";
-import AdminOrganizationsPage from "./app/admin/organizations/page.tsx";
 import NewsletterPage from "./app/admin/newsletter/page.tsx";
-import OrgWeeklyCurationPage from "./app/org/schedule/page.tsx";
-import CoachDailyViewPage from "./app/org/today/page.tsx";
 import { ClerkSyncManager } from "./components/ClerkSyncManager";
 import { RouteMetadata } from "./components/RouteMetadata";
 import NotFoundPage from "./app/not-found/page";
@@ -64,66 +56,57 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ClerkProviderWithTheme>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-        <WorkspaceProvider>
-          <StorageProvider>
-            <BrowserRouter>
-              <RouteMetadata />
-              <AnalyticsManager />
-              <ClerkSyncManager />
-              <Routes>
-                <Route path="/" element={<Root />} />
-                <Route path="/app" element={<App />} />
-                <Route path="/question/:id" element={<QuestionPage />} />
-                <Route path="/liked" element={<LikedQuestionsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/settings/collections/:collectionId" element={<CollectionManagePage />} />
-                <Route path="/history" element={<HistoryPage />} />
-                <Route path="/pricing" element={<PricingPage />} />
-                <Route path="/billing/success" element={<BillingSuccessPage />} />
-                <Route path="/billing/cancel" element={<BillingCancelPage />} />
-                <Route path="/unsubscribe" element={<UnsubscribePage />} />
-                <Route path="/verify-subscription" element={<VerifySubscriptionPage />} />
-                <Route path="/add-question" element={<AddQuestionPage />} />
-                <Route path="/org" element={<OrgWeeklyCurationPage />} />
-            <Route path="/org/schedule" element={<OrgWeeklyCurationPage />} />
-                <Route path="/org/today" element={<CoachDailyViewPage />} />
-                <Route element={<AdminLayout />}>
-                  <Route path="/admin" element={<AdminPage />} />
-                  <Route path="/admin/questions" element={<QuestionsPage />} />
-                  <Route path="/admin/questions/:questionId" element={<QuestionDetailsPage />} />
-                  <Route path="/admin/tags" element={<TagsPage />} />
-                  <Route path="/admin/topics" element={<TopicsPage />} />
-                  <Route path="/admin/styles" element={<StylesPage />} />
-                  <Route path="/admin/tones" element={<TonesPage />} />
-                  <Route path="/admin/users" element={<UsersPage />} />
-                  <Route path="/admin/newsletter" element={<NewsletterPage />} />
-                  <Route path="/admin/feedback" element={<FeedbackPage />} />
-                  <Route path="/admin/duplicates" element={<DuplicatesPage />} />
-                  <Route path="/admin/duplicates/completed" element={<DuplicateHistoryPage />} />
-                  <Route path="/admin/prune" element={<PrunePage />} />
-                  <Route path="/admin/prune/settings" element={<PruneSettingsPage />} />
-                  <Route path="/admin/pool" element={<PoolPage />} />
-                  <Route path="/admin/generator" element={<GeneratorPage />} />
-                  <Route path="/admin/users/:userId" element={<UserDetailsPage />} />
-                  <Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
-                </Route>
+        <StorageProvider>
+          <BrowserRouter>
+            <RouteMetadata />
+            <AnalyticsManager />
+            <ClerkSyncManager />
+            <Routes>
+              <Route path="/" element={<Root />} />
+              <Route path="/app" element={<App />} />
+              <Route path="/question/:id" element={<QuestionPage />} />
+              <Route path="/liked" element={<LikedQuestionsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/pricing" element={<Navigate to="/" replace />} />
+              <Route path="/unsubscribe" element={<UnsubscribePage />} />
+              <Route path="/verify-subscription" element={<VerifySubscriptionPage />} />
+              <Route path="/add-question" element={<AddQuestionPage />} />
+              <Route element={<AdminLayout />}>
+                <Route path="/admin" element={<AdminPage />} />
+                <Route path="/admin/questions" element={<QuestionsPage />} />
+                <Route path="/admin/questions/:questionId" element={<QuestionDetailsPage />} />
+                <Route path="/admin/tags" element={<TagsPage />} />
+                <Route path="/admin/topics" element={<TopicsPage />} />
+                <Route path="/admin/styles" element={<StylesPage />} />
+                <Route path="/admin/tones" element={<TonesPage />} />
+                <Route path="/admin/users" element={<UsersPage />} />
+                <Route path="/admin/newsletter" element={<NewsletterPage />} />
+                <Route path="/admin/feedback" element={<FeedbackPage />} />
+                <Route path="/admin/duplicates" element={<DuplicatesPage />} />
+                <Route path="/admin/duplicates/completed" element={<DuplicateHistoryPage />} />
+                <Route path="/admin/prune" element={<PrunePage />} />
+                <Route path="/admin/prune/settings" element={<PruneSettingsPage />} />
+                <Route path="/admin/pool" element={<PoolPage />} />
+                <Route path="/admin/generator" element={<GeneratorPage />} />
+                <Route path="/admin/users/:userId" element={<UserDetailsPage />} />
+              </Route>
 
 
-                <Route path="/privacy" element={<PrivacyPolicyPage />} />
-                <Route path="/terms" element={<TermsOfServicePage />} />
-                <Route path="/data-retention" element={<DataRetentionPage />} />
-                <Route path="/cookies" element={<CookiePolicyPage />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route path="/contact" element={<ContactPage />} />
-                <Route path="/thank-you" element={<ThankYouPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-              <CookieConsentBanner />
-              <FeedbackButton />
-              <Toaster position="bottom-left" richColors />
-            </BrowserRouter>
-          </StorageProvider>
-        </WorkspaceProvider>
+              <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/terms" element={<TermsOfServicePage />} />
+              <Route path="/data-retention" element={<DataRetentionPage />} />
+              <Route path="/cookies" element={<CookiePolicyPage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/thank-you" element={<ThankYouPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+            <CookieConsentBanner />
+            <FeedbackButton />
+            <Toaster position="bottom-left" richColors />
+          </BrowserRouter>
+        </StorageProvider>
       </ConvexProviderWithClerk>
     </ClerkProviderWithTheme>
   </StrictMode>,

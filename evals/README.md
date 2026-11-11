@@ -162,7 +162,7 @@ each beside the owner's labels, for each group:
   confidence of 5.
 - Every other question it would **leave for review**.
 - It would **flag** a question it held, or raised a safety concern about. That is the app's
-  rule for the mark a team sees on its schedule grid.
+  rule for the mark an admin sees in the question lists.
 
 On 60 questions the owner had already labeled (16 of them not kept), measured on dev in
 October 2026, it would publish 21, 1 of which the owner had rejected, and flag 3, 2 of which

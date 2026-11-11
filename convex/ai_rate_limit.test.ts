@@ -10,7 +10,6 @@ import { convexErrorData } from "./lib/errorData";
 const ME = { subject: "me-clerk", tokenIdentifier: "test|me-clerk", email: "me@example.com" };
 const YOU = { subject: "you-clerk", tokenIdentifier: "test|you-clerk", email: "you@example.com" };
 const RATE_LIMITED = /a lot of AI requests/;
-const MATRIX_LIMITED = /used its matrix fills/;
 const counters = { totalLikes: 0, totalShows: 0, averageViewDuration: 0 };
 
 beforeEach(() => {
@@ -350,38 +349,6 @@ describe("per-person AI requests", () => {
     await t.mutation(internal.internal.aiRateLimit.releaseAiUnanswered, { row: before.row, day: before.day });
     expect(await left()).toBe(4);
   });
-
-  test("team previews draw from the same bucket", async () => {
-    const { t } = await setup();
-    await t.mutation(internal.internal.aiRateLimit.consumeAiRateLimit, { name: "aiRequest", key: ME.subject, count: 10 });
-    const { orgId, styleId, toneId } = await t.run(async (ctx) => ({
-      orgId: await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }),
-      styleId: await ctx.db.insert("styles", {
-        id: "reflective",
-        name: "Reflective",
-        structure: "Ask for a reflection",
-        color: "#111111",
-        icon: "sparkles",
-      }),
-      toneId: await ctx.db.insert("tones", {
-        id: "warm",
-        name: "Warm",
-        promptGuidanceForAI: "Be warm",
-        color: "#222222",
-        icon: "sun",
-      }),
-    }));
-
-    await expect(
-      t.withIdentity(ME).action(api.core.teamPromptActions.previewTopicQuestions, {
-        organizationId: orgId,
-        name: "Recovery",
-        guidance: "Talk about rest days",
-        styleId,
-        toneId,
-      }),
-    ).rejects.toThrow(RATE_LIMITED);
-  });
 });
 
 describe("takeover topics", () => {
@@ -410,48 +377,5 @@ describe("takeover topics", () => {
       await ctx.db.insert("aiSpendDays", { day: spendDay(Date.now()), spendClass: "user", costUsd: 1, calls: 1 });
     });
     await expect(remixAs(YOU)).rejects.toThrow(/paused for today/);
-  });
-});
-
-describe("matrix fill", () => {
-  async function paidOrgMember() {
-    const { t, meId } = await setup();
-    const orgId = await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId: meId, organizationId: orgId, role: "manager" });
-      return orgId;
-    });
-    const fill = () =>
-      t.withIdentity(ME).action(api.core.fillMatrix.fillEmptyCells, {
-        organizationId: orgId,
-        axisY: "style",
-        axisX: "tone",
-        topicSlug: "any-topic",
-        cells: [{ ySlug: "a", xSlug: "b", styleSlug: "a", toneSlug: "b" }],
-      });
-    return { t, orgId, fill };
-  }
-
-  test("stops with the rate-limit error once the organization's cells are used, and frees the cell", async () => {
-    const { t, orgId, fill } = await paidOrgMember();
-    await t.mutation(internal.internal.aiRateLimit.consumeAiRateLimit, {
-      name: "matrixFillCell",
-      key: orgId,
-      count: 50,
-    });
-
-    await expect(fill()).rejects.toThrow(MATRIX_LIMITED);
-
-    const locks = await t.run(async (ctx) => await ctx.db.query("matrixFillCellLocks").collect());
-    expect(locks).toEqual([]);
-  });
-
-  test("reports a paused budget instead of quietly skipping every cell", async () => {
-    const { t, fill } = await paidOrgMember();
-    await t.run(async (ctx) => {
-      await ctx.db.insert("aiSpendDays", { day: spendDay(Date.now()), spendClass: "user", costUsd: 100, calls: 1 });
-    });
-
-    await expect(fill()).rejects.toThrow(/paused for today/);
   });
 });

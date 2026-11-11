@@ -15,11 +15,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Settings, User, Moon, Sun, Computer, LogIn, LogOut } from "@/components/ui/icons/icons";
-import { CalendarDays, Users } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
-import { useWorkspace } from "@/hooks/useWorkspace";
 import { cn } from "@/lib/utils";
-import { WorkspaceMenuSub } from "./WorkspaceMenuItems";
 
 interface UserMenuProps {
 	showSettingsBadge?: boolean;
@@ -31,7 +28,6 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 	const { signOut, openSignIn } = useClerk();
 	const { user } = useUser();
 	const { theme, setTheme } = useTheme();
-	const { activeWorkspace } = useWorkspace();
 
 	return (
 		<DropdownMenu>
@@ -87,27 +83,6 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 						)}
 					</Link>
 				</DropdownMenuItem>
-
-				<Authenticated>
-					<WorkspaceMenuSub />
-					{activeWorkspace && (
-						<>
-							<DropdownMenuSeparator className="bg-white/10 sm:hidden" />
-							<DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10 sm:hidden">
-								<Link to="/org/schedule" className="w-full flex items-center">
-									<CalendarDays className="mr-2 h-4 w-4" />
-									<span>Weekly schedule</span>
-								</Link>
-							</DropdownMenuItem>
-							<DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10 sm:hidden">
-								<Link to="/org/today" className="w-full flex items-center">
-									<Users className="mr-2 h-4 w-4" />
-									<span>Coach view</span>
-								</Link>
-							</DropdownMenuItem>
-						</>
-					)}
-				</Authenticated>
 
 				<DropdownMenuSub>
 					<DropdownMenuSubTrigger className="cursor-pointer focus:bg-white/10">

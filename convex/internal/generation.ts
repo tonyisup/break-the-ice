@@ -53,7 +53,9 @@ async function getLatestActiveBySlug(
     ...new Map([...bySlug, ...byLegacyId].map((doc) => [doc._id, doc])).values(),
   ];
 
+  // Only the shared entries count, never one a workspace owned.
   const latest = docs
+    .filter((doc) => !doc.organizationId)
     .filter((doc) => (doc.status ?? "active") === "active")
     .sort(byLatestVersion)[0];
 
@@ -69,10 +71,11 @@ type TaxonomyDoc = Doc<"styles"> | Doc<"tones"> | Doc<"topics">;
 
 /**
  * The latest active version of the entry an id points to. Versions of one entry share
- * a slug (legacy rows only an `id`), so both are searched, within the same
- * organization. An id is only a way to find the entry: prompts must never be built
+ * a slug (legacy rows only an `id`), so both are searched, among the shared entries
+ * only. An id is only a way to find the entry: prompts must never be built
  * from a draft or archived version, which is why they said "Good examples: none".
- * Returns null when the id doesn't exist or the entry has no active version.
+ * Returns null when the id doesn't exist, the entry has no active version, or a
+ * workspace owned it.
  */
 async function getLatestActiveSibling(
   ctx: QueryCtx,
@@ -80,7 +83,7 @@ async function getLatestActiveSibling(
   id: Id<TaxonomyTable>,
 ): Promise<TaxonomyDoc | null> {
   const doc = (await ctx.db.get(id)) as TaxonomyDoc | null;
-  if (!doc) return null;
+  if (!doc || doc.organizationId) return null;
   const key = doc.slug ?? doc.id;
   const query = ctx.db.query(table as "styles");
   const [bySlug, byLegacyId] = await Promise.all([
@@ -91,7 +94,7 @@ async function getLatestActiveSibling(
   for (const sibling of [...bySlug, ...byLegacyId] as TaxonomyDoc[]) siblings.set(sibling._id, sibling);
   return (
     [...siblings.values()]
-      .filter((sibling) => sibling.organizationId === doc.organizationId)
+      .filter((sibling) => !sibling.organizationId)
       .filter((sibling) => (sibling.status ?? "active") === "active")
       .sort(byLatestVersion)[0] ?? null
   );
@@ -166,25 +169,24 @@ const PRUNING_REVIEW_POOL = 20;
 /**
  * The owner's decisions the brief shows for a style, read from the library: public questions
  * of the style, retired ones a reviewer gave a reason for, and one public question from each of
- * a few other live styles. Only the shared library counts, never a team's or a person's
- * questions. Which ones are shown is drawn with `sampleSeed`, so one seed gives one prompt.
+ * a few other live styles. Only the shared library counts, never a person's own questions.
+ * Which ones are shown is drawn with `sampleSeed`, so one seed gives one prompt.
  */
 async function readBriefExamples(
   ctx: QueryCtx,
   style: Doc<"styles">,
   sampleSeed: number,
-  withoutRejected = false,
 ): Promise<BriefExamples> {
   const random = seededRandom(sampleSeed);
   const slugOf = (row: Doc<"styles">) => row.slug ?? row.id;
-  // Never a team's or a person's question, and never a copy that was retired as a duplicate.
+  // Never a person's own question, and never a copy that was retired as a duplicate.
   const inSharedLibrary = (question: Doc<"questions">) =>
     Boolean(question.text) && !isUserWrittenQuestion(question) && !question.duplicateOf;
   // A question keeps the id of the style version it was written for, so every version of a
   // style is searched within the bounded pool.
   const allStyles = await ctx.db.query("styles").take(STYLE_POOL);
-  const versionsOf = (slug: string, organizationId: Doc<"styles">["organizationId"]) =>
-    allStyles.filter((row) => slugOf(row) === slug && row.organizationId === organizationId);
+  // Only the shared library's styles, as the style passed in is (getTaxonomyDoc).
+  const versionsOf = (slug: string) => allStyles.filter((row) => slugOf(row) === slug && !row.organizationId);
   const questionsOf = async (rows: Doc<"styles">[], statuses: Array<Doc<"questions">["status"]>, count: number) => {
     const pages = await Promise.all(
       rows.flatMap((row) =>
@@ -203,16 +205,14 @@ async function readBriefExamples(
   const publicOf = async (rows: Doc<"styles">[], count: number) =>
     (await questionsOf(rows, ["public", "approved", undefined], count)).filter(isQuestionPublic);
 
-  const ownVersions = versionsOf(slugOf(style), style.organizationId);
+  const ownVersions = versionsOf(slugOf(style));
   const kept = shuffled(await publicOf(ownVersions, EXAMPLE_POOL), random)
     .slice(0, BRIEF_KEPT_EXAMPLES)
     .map((question) => question.text ?? "");
 
-  const retired = withoutRejected
-    ? []
-    : (await questionsOf(ownVersions, ["pruned"], REJECTED_LOOKBACK))
-        .sort((a, b) => b._creationTime - a._creationTime)
-        .slice(0, REJECTED_LOOKBACK);
+  const retired = (await questionsOf(ownVersions, ["pruned"], REJECTED_LOOKBACK))
+    .sort((a, b) => b._creationTime - a._creationTime)
+    .slice(0, REJECTED_LOOKBACK);
   const withReasons = (
     await Promise.all(
       retired.map(async (question) => {
@@ -235,7 +235,7 @@ async function readBriefExamples(
   const otherStyles: BriefExamples["otherStyles"] = [];
   for (const slug of shuffled(otherLiveSlugs, random)) {
     if (otherStyles.length === BRIEF_OTHER_STYLE_EXAMPLES) break;
-    const versions = versionsOf(slug, undefined);
+    const versions = versionsOf(slug);
     const pool = await publicOf(versions, OTHER_STYLE_POOL);
     if (pool.length === 0) continue;
     const picked = pool[Math.floor(random() * pool.length)];
@@ -259,11 +259,6 @@ export const buildGenerationPrompt = internalQuery({
     userContext: v.optional(v.string()),
     /** Draws which of the owner's decisions the prompt shows. The calling action picks it at random. */
     sampleSeed: v.optional(v.number()),
-    /**
-     * Leaves the owner's rejections and their reasons out. A team's preview sets it: its notes
-     * are the team's own words and its answer goes straight back to the team.
-     */
-    withoutRejected: v.optional(v.boolean()),
   },
   returns: v.object({
     batchSize: v.number(),
@@ -312,7 +307,7 @@ export const buildGenerationPrompt = internalQuery({
       tone,
       topic,
       batchSize,
-      examples: await readBriefExamples(ctx, style, args.sampleSeed ?? 0, args.withoutRejected ?? false),
+      examples: await readBriefExamples(ctx, style, args.sampleSeed ?? 0),
       seen: [...(args.excludedQuestions ?? []), ...(args.currentQuestion ? [args.currentQuestion] : [])],
       notes: args.userContext,
     });

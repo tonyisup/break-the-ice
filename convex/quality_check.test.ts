@@ -375,7 +375,9 @@ describe("scheduling a check when a question is saved", () => {
 
     expect(await question(s, questionId)).toMatchObject({ status: "pending", heldForReview: true, qualityCheck: { verdict: "keep", wouldPublish: true } });
     // Still out of every shared list: publishing isn't built yet.
-    expect(await s.t.query(api.core.questions.getPublicQuestions, {})).toEqual([]);
+    expect(
+      await s.t.query(internal.internal.questions.getRandomQuestionsInternal, { count: 10, seen: [], hidden: [], hiddenStyles: [], hiddenTones: [] }),
+    ).toEqual([]);
   });
 });
 
@@ -769,7 +771,7 @@ describe("checking a question in record mode", () => {
   });
 });
 
-describe("the four ways a question is generated, in record mode", () => {
+describe("the three ways a question is generated, in record mode", () => {
   const ME = { subject: "me-clerk", tokenIdentifier: "test|me-clerk", email: "me@example.com" };
   const ADMIN = { subject: "admin-clerk", tokenIdentifier: "test|admin-clerk", email: "admin@example.com", metadata: { isAdmin: "true" } };
   const generates = (text: string) =>
@@ -803,17 +805,6 @@ describe("the four ways a question is generated, in record mode", () => {
       anchoredStyleId: s.styleId,
       anchoredToneId: s.toneId,
     });
-  async function viaFill(s: App) {
-    const organizationId = await s.t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId: s.meId, organizationId: orgId, role: "manager" });
-      await ctx.db.insert("styles", { id: "s1", slug: "s1", status: "active", version: 1, name: "s1", structure: "x", color: "#111111", icon: "sparkles" });
-      await ctx.db.insert("tones", { id: "t1", slug: "t1", status: "active", version: 1, name: "t1", promptGuidanceForAI: "x", color: "#222222", icon: "sun" });
-      await ctx.db.insert("topics", { id: "any-topic", slug: "any-topic", status: "active", version: 1, name: "Any" });
-      return orgId;
-    });
-    await s.t.withIdentity(ME).action(api.core.fillMatrix.fillSingleCell, { organizationId, styleSlug: "s1", toneSlug: "t1", topicSlug: "any-topic" });
-  }
   async function viaPool(s: App) {
     await s.t.run((ctx) => ctx.db.insert("users", { email: "reader@example.com", clerkId: "reader-clerk", newsletterSubscriptionStatus: "subscribed" }));
     await s.t.action(internal.internal.ai.generateNightlyQuestionPool, { targetCount: 1, maxCombinations: 1 });
@@ -844,32 +835,6 @@ describe("the four ways a question is generated, in record mode", () => {
     expect(checks).toEqual([[saved._id, 1, 0]]);
   });
 
-  test("a matrix fill's question is held for review like a feed question, with a check queued, and reaches the team's grid only once an admin approves it", async () => {
-    const s = await app();
-    generates("What chore do you secretly enjoy doing?");
-
-    await viaFill(s);
-
-    const { saved, checks } = await outcome(s);
-    expect(saved).toMatchObject({ status: "pending", heldForReview: true });
-    expect(checks).toEqual([[saved._id, 1, 0]]);
-    const grid = () => s.t.withIdentity(ME).query(api.core.questions.getPublicQuestions, {});
-
-    answers(HOLD);
-    await check(s, saved._id);
-
-    // Whatever the verdict, the question waits in the owner's queue and the team's grid doesn't list it.
-    expect(await question(s, saved._id)).toMatchObject({ status: "pending", heldForReview: true, qualityCheck: { verdict: "hold" } });
-    expect(await reviewQueue(s)).toEqual([saved._id]);
-    expect(await grid()).toEqual([]);
-
-    await s.t.withIdentity(ADMIN).mutation(api.admin.questions.updateQuestion, { id: saved._id, expectedRevision: 0, reviewReason: "Looks good", status: "public" });
-
-    // The owner's decision stands over the check's, so the grid lists it with no flag.
-    expect(await reviewQueue(s)).toEqual([]);
-    expect((await grid()).map((row) => [row._id, row.status, row.claudeFlag])).toEqual([[saved._id, "public", undefined]]);
-  });
-
   test("a nightly-pool question is held for review too, marked available for its pool date, with a check queued", async () => {
     const s = await app();
     generates("What habit would you keep if you moved abroad?");
@@ -886,7 +851,6 @@ describe("the four ways a question is generated, in record mode", () => {
   const PATHS = [
     ["feed", viaFeed, { status: "pending", heldForReview: true }],
     ["daily-email", viaEmail, { status: "pending", heldForReview: true }],
-    ["matrix fill", viaFill, { status: "pending", heldForReview: true }],
     ["nightly-pool", viaPool, { status: "pending", heldForReview: true, poolStatus: "available" }],
   ] as const;
   test.each((["off", "publish"] as const).flatMap((mode) => PATHS.map(([name, generate, saved]) => [mode, name, generate, saved] as const)))(
@@ -1285,87 +1249,6 @@ describe("the check for measuring against labels", () => {
     for (const result of results) expect(result.error).toMatch(/AI_BUDGET_PAUSED/);
     expect(create).not.toHaveBeenCalled();
     expect(await runs(s)).toEqual([]);
-  });
-});
-
-describe("the flag on the schedule grid", () => {
-  const MANAGER = { subject: "manager-clerk", tokenIdentifier: "test|manager-clerk", email: "manager@example.com" };
-  const VISITOR = { subject: "visitor-clerk", tokenIdentifier: "test|visitor-clerk", email: "visitor@example.com" };
-
-  beforeEach(() => {
-    process.env.QUALITY_CHECK_MODE = "record";
-  });
-
-  /** A person in a team, with the team's plan as given. */
-  async function member(s: Setup, who: typeof MANAGER, billingStatus: "active" | "canceled") {
-    await s.t.run(async (ctx) => {
-      const userId = await ctx.db.insert("users", { email: who.email, clerkId: who.subject });
-      const organizationId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus });
-      await ctx.db.insert("organization_members", { userId, organizationId, role: "manager" });
-    });
-    return s.t.withIdentity(who);
-  }
-
-  test("a question the check would hold carries its reasons and note; a keep or an unchecked question carries nothing", async () => {
-    const s = await setup();
-    const runId = await s.t.mutation(internal.internal.generation.createGenerationRun, {
-      purpose: "quality_check", batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "",
-    });
-    const stamp = { model: QUALITY_CHECK_MODEL, promptVersion: 1, runId, checkedAt: 1 };
-    const held = await generated(s, { text: "Flagged one?", status: "public", heldForReview: undefined, qualityCheck: { ...HOLD, wouldPublish: false, ...stamp } });
-    const kept = await generated(s, { text: "Kept one?", status: "public", heldForReview: undefined, qualityCheck: { ...KEEP, wouldPublish: true, ...stamp } });
-    const unchecked = await generated(s, { text: "Unchecked one?", status: "public", heldForReview: undefined });
-
-    const pool = await (await member(s, MANAGER, "active")).query(api.core.questions.getPublicQuestions, {});
-
-    expect(pool.map((row) => [row._id, row.claudeFlag])).toEqual([
-      [held, { reasons: ["awkward_wording"], safety: ["humiliation"], note: "Stiff phrasing." }],
-      [kept, undefined],
-      [unchecked, undefined],
-    ]);
-  });
-
-  test("a keep with a safety concern is flagged too, and an admin's review of a held question clears its flag", async () => {
-    const s = await setup();
-    const runId = await s.t.mutation(internal.internal.generation.createGenerationRun, {
-      purpose: "quality_check", batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "",
-    });
-    const stamp = { model: QUALITY_CHECK_MODEL, promptVersion: 1, runId, checkedAt: 1 };
-    const live = { status: "public" as const, heldForReview: undefined };
-    const risky = await generated(s, { ...live, text: "Kept, with a concern?", qualityCheck: { ...KEEP, safety: ["trauma"], wouldPublish: false, ...stamp } });
-    const approved = await generated(s, { ...live, text: "Held, then approved?", reviewRevision: 1, qualityCheck: { ...HOLD, wouldPublish: false, ...stamp } });
-
-    const manager = await member(s, MANAGER, "active");
-    const pool = await manager.query(api.core.questions.getPublicQuestions, {});
-
-    expect(pool.map((row) => [row._id, row.claudeFlag])).toEqual([
-      [risky, { reasons: [], safety: ["trauma"], note: "Clear and easy to answer." }],
-      [approved, undefined],
-    ]);
-
-    // Switching the check off takes every flag down, with no deploy.
-    process.env.QUALITY_CHECK_MODE = "off";
-    expect((await manager.query(api.core.questions.getPublicQuestions, {})).map((row) => row.claudeFlag)).toEqual([undefined, undefined]);
-  });
-
-  test("the flag goes to a signed-in member of a team with an active plan, and to nobody else who can call the query", async () => {
-    const s = await setup();
-    const runId = await s.t.mutation(internal.internal.generation.createGenerationRun, {
-      purpose: "quality_check", batchSize: 1, model: QUALITY_CHECK_MODEL, temperature: 0, assembledPrompt: "",
-    });
-    const held = await generated(s, {
-      text: "Flagged one?", status: "public", heldForReview: undefined,
-      qualityCheck: { ...HOLD, wouldPublish: false, model: QUALITY_CHECK_MODEL, promptVersion: 1, runId, checkedAt: 1 },
-    });
-    const flagOf = async (caller: { query: typeof s.t.query }) => (await caller.query(api.core.questions.getPublicQuestions, {})).map((row) => [row._id, row.claudeFlag]);
-
-    // The query needs no sign-in: the question is there for anyone, the check's reasons and note are not.
-    expect(await flagOf(s.t)).toEqual([[held, undefined]]);
-    await s.t.run((ctx) => ctx.db.insert("users", { email: VISITOR.email, clerkId: VISITOR.subject }));
-    expect(await flagOf(s.t.withIdentity(VISITOR))).toEqual([[held, undefined]]);
-    expect(await flagOf(await member(s, { ...VISITOR, subject: "lapsed-clerk", tokenIdentifier: "test|lapsed-clerk", email: "lapsed@example.com" }, "canceled"))).toEqual([[held, undefined]]);
-
-    expect(await flagOf(await member(s, MANAGER, "active"))).toEqual([[held, { reasons: ["awkward_wording"], safety: ["humiliation"], note: "Stiff phrasing." }]]);
   });
 });
 

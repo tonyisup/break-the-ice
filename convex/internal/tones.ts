@@ -126,6 +126,7 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
         const tone = await ctx.db
           .query("tones")
           .withIndex("by_slug", (q) => q.eq("slug", question.tone!))
+          .filter((q) => q.eq(q.field("organizationId"), undefined))
           .first();
         if (tone) {
           await ctx.db.patch(question._id, {
@@ -183,7 +184,8 @@ export const getRandomToneForUserId = internalQuery({
   },
   returns: v.nullable(toneFields),
   handler: async (ctx, args) => {
-    const tones = await ctx.db.query("tones").take(200);
+    // Only the shared tones: generation refuses one a workspace owned.
+    const tones = await ctx.db.query("tones").withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any)).take(200);
     const bySlug = new Map<string, Doc<"tones">[]>();
     for (const tone of tones) {
       const slug = tone.slug ?? tone.id;

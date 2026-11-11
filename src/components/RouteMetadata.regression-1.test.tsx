@@ -24,7 +24,7 @@ describe("RouteMetadata", () => {
   });
 
   it("sets unique metadata and absolute share URLs for public routes", async () => {
-    const routes = ["/", "/pricing", "/about", "/contact", "/privacy", "/terms"];
+    const routes = ["/", "/about", "/contact", "/privacy", "/terms"];
     const titles = new Set<string>();
     const descriptions = new Set<string>();
 

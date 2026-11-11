@@ -420,7 +420,7 @@ describe("deleting a question leaves everything else alone", () => {
 
     await expect(
       t.withIdentity(READER).mutation(api.core.questions.deletePersonalQuestion, { questionId: ids.target }),
-    ).rejects.toThrow("schedule-managed Team prompt");
+    ).rejects.toThrow("belonged to a team workspace");
 
     await t.run(async (ctx) => {
       for (const id of allRowIds(ids)) {

@@ -28,22 +28,6 @@ const normalizeBillingStatus = (subscription: any) => {
 	}
 };
 
-const resolvePlanTier = (subscription: any) => {
-	const activeItem = subscription?.subscriptionItems?.find((item: any) =>
-		["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
-	);
-
-	if (!activeItem) {
-		return "free" as const;
-	}
-
-	if (activeItem?.plan?.isDefault) {
-		return "free" as const;
-	}
-
-	return "team" as const;
-};
-
 export const usersWebhook = httpAction(async (ctx, request) => {
 	const payloadString = await request.text();
 	const headerPayload = request.headers;
@@ -88,49 +72,32 @@ export const usersWebhook = httpAction(async (ctx, request) => {
 			});
 		}
 
+		// Billing is per person. A subscription paid for by anything else records nothing, but is
+		// logged: an app loaded before the Team plan was removed can still start its checkout.
 		if (eventType.startsWith("subscription.")) {
 			const subscription = event.data;
 			const activeItem = subscription?.subscriptionItems?.find((item: any) =>
 				["active", "past_due", "upcoming", "incomplete"].includes(item?.status)
 			);
 
-			const planTier = resolvePlanTier(subscription);
-			const billingStatus = normalizeBillingStatus(subscription);
-			const payerType = activeItem?.plan?.forPayerType;
-
-			if (payerType === "org" && subscription?.payerId) {
-				await ctx.runMutation(internal.internal.users.syncOrganizationSubscription, {
-					clerkOrganizationId: subscription.payerId,
-					planTier,
-					billingStatus,
-					clerkCustomerId: subscription.customerId,
-					clerkSubscriptionId: subscription.id,
-				});
-			} else if (payerType === "user" && subscription?.payerId) {
+			if (activeItem?.plan?.forPayerType === "user" && subscription?.payerId) {
 				await ctx.runMutation(internal.internal.users.syncUserSubscription, {
 					clerkUserId: subscription.payerId,
-					billingStatus,
-					billingSubjectType: "user",
+					billingStatus: normalizeBillingStatus(subscription),
 					clerkCustomerId: subscription.customerId,
 					clerkSubscriptionId: subscription.id,
 				});
+			} else if (activeItem?.plan?.forPayerType === "org") {
+				console.warn(
+					`Ignored ${eventType} for organization ${subscription?.payerId} (subscription ${subscription?.id}): the Team plan was removed`,
+				);
 			}
 		}
 
 		if (eventType === "organization.checkout.confirmed") {
-			const checkout = event.data;
-			const clerkOrganizationId = checkout?.organization_id;
-			const organizationName = checkout?.organization_name;
-			if (clerkOrganizationId) {
-				await ctx.runMutation(internal.internal.users.syncOrganizationSubscription, {
-					clerkOrganizationId,
-					planTier: "team",
-					billingStatus: "active",
-					clerkCustomerId: checkout?.payment_method_id ?? undefined,
-					clerkSubscriptionId: checkout?.session_id ?? undefined,
-				});
-				console.log(`Synced org ${clerkOrganizationId} (${organizationName}) to team plan from checkout.confirmed`);
-			}
+			console.warn(
+				`Ignored organization.checkout.confirmed for organization ${event.data?.organization_id}: the Team plan was removed`,
+			);
 		}
 
 		return new Response("Webhook processed", { status: 200 });

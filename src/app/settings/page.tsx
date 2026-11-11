@@ -12,12 +12,7 @@ import { Id } from "../../../convex/_generated/dataModel";
 import DynamicIcon from "@/components/ui/dynamic-icon";
 import { ItemDetailDrawer, ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Doc } from "../../../convex/_generated/dataModel";
-import OrganizationSettings from "@/app/settings/organization/page";
-import WorkspaceSwitcher from "@/app/settings/organization/WorkspaceSwitcher";
-import CollectionsSettings from "@/app/settings/collections/page";
-import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@clerk/clerk-react";
-import { SubscriptionDetailsButton } from "@clerk/clerk-react/experimental";
 import { MAX_ANON_BLOCKED } from "../../hooks/useStorage";
 import { SignInCTA } from "@/components/SignInCTA";
 import { Link, useSearchParams } from "react-router-dom";
@@ -27,25 +22,9 @@ import { ModernQuestionCard } from "@/components/modern-question-card/modern-que
 const SettingsPage = () => {
   const { isSignedIn } = useAuth();
   const { effectiveTheme } = useTheme();
-  const { activeWorkspace } = useWorkspace();
-  const entitlements = useQuery(api.core.billing.getEffectiveEntitlements, {
-    organizationId: activeWorkspace ?? undefined,
-  });
-  const teamWorkspaceId = entitlements?.canUseTeamFeatures
-    ? activeWorkspace ?? undefined
-    : undefined;
-
-  const allStyles = useQuery(
-    api.core.styles.getStyles,
-    isSignedIn ? { organizationId: teamWorkspaceId } : "skip"
-  );
-  const allTones = useQuery(
-    api.core.tones.getTones,
-    isSignedIn ? { organizationId: teamWorkspaceId } : "skip"
-  );
-  const currentUser = useQuery(api.core.users.getCurrentUser, {
-    organizationId: activeWorkspace ?? undefined,
-  });
+  const allStyles = useQuery(api.core.styles.getStyles, isSignedIn ? {} : "skip");
+  const allTones = useQuery(api.core.tones.getTones, isSignedIn ? {} : "skip");
+  const currentUser = useQuery(api.core.users.getCurrentUser, {});
   const [searchParams] = useSearchParams();
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
@@ -188,35 +167,21 @@ const SettingsPage = () => {
 
       <div className="container mx-auto p-4 md:p-8 md:pt-24 pt-20">
 
-        <WorkspaceSwitcher />
-
         <div className="space-y-8">
-
-          <OrganizationSettings />
-
-          <CollectionsSettings />
 
           {isSignedIn && currentUser && (
             <>
               <CollapsibleSection
-                title="Subscription & AI Usage"
+                title="AI Usage"
                 isOpen={!!openSections['subscription']}
                 onOpenChange={() => toggleSection('subscription')}
               >
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-                    <div>
-                      <p className="text-sm text-gray-400">Current Plan</p>
-                      <p className="text-xl font-bold capitalize text-white">
-                        {currentUser.planTier || 'free'}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-400">Usage this cycle</p>
-                      <p className="text-xl font-bold text-white">
-                        {currentUser.aiUsage?.count ?? 0} / {currentUser.aiLimit}
-                      </p>
-                    </div>
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                    <p className="text-sm text-gray-400">Usage this cycle</p>
+                    <p className="text-xl font-bold text-white">
+                      {currentUser.aiUsage?.count ?? 0} / {currentUser.aiLimit}
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -234,28 +199,6 @@ const SettingsPage = () => {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-sm text-gray-300">
-                      {entitlements?.canUseTeamFeatures
-                        ? "Team billing is active for this workspace. Use Clerk to manage payment methods, upgrades, or cancellation."
-                        : "Free accounts can still use the personal app. Team unlocks shared workspaces, invites, collections, and higher AI limits."}
-                    </p>
-                  </div>
-
-                  {entitlements?.canUseTeamFeatures ? (
-                    <SubscriptionDetailsButton for="organization">
-                      <button className="w-full bg-gradient-to-r from-slate-100 to-white text-slate-950 rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-[1.01]">
-                        Manage Team Billing
-                      </button>
-                    </SubscriptionDetailsButton>
-                  ) : (
-                    <Link
-                      to="/pricing?source=settings"
-                      className="block w-full bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105 text-center"
-                    >
-                      Start Team Plan
-                    </Link>
-                  )}
                 </div>
               </CollapsibleSection>
 

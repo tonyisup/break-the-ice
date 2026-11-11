@@ -8,7 +8,7 @@ import type { MutationCtx } from "../_generated/server";
  * keeps returning them), per-user state (seen, liked, hidden, sent), pending pruning reviews
  * and pending duplicate groups (neither can be resolved once a member is gone), and
  * collection entries. History is kept: analytics events, approved or rejected reviews,
- * generation runs, schedules and email deliveries.
+ * generation runs and email deliveries.
  */
 
 /** A duplicate group's members in stored order and its dedupe key. */
@@ -50,8 +50,16 @@ export async function settleDuplicateGroup(
 	return "stripped";
 }
 
-/** Removes the rows that only make sense for a live question. Call it before deleting one. */
-export async function removeQuestionReferences(ctx: MutationCtx, questionId: Id<"questions">): Promise<void> {
+/**
+ * Removes the rows that only make sense for a live question. Call it before deleting one. A
+ * caller deleting many questions in one transaction passes `settleDuplicates: false` and settles
+ * the pending duplicate groups once itself, since each settle reads every pending group.
+ */
+export async function removeQuestionReferences(
+	ctx: MutationCtx,
+	questionId: Id<"questions">,
+	options: { settleDuplicates?: boolean } = {},
+): Promise<void> {
 	const embeddings = await ctx.db
 		.query("question_embeddings")
 		.withIndex("by_questionId", (q) => q.eq("questionId", questionId))
@@ -72,6 +80,7 @@ export async function removeQuestionReferences(ctx: MutationCtx, questionId: Id<
 		await ctx.db.delete(row._id);
 	}
 
+	if (options.settleDuplicates === false) return;
 	const pendingGroups = await ctx.db
 		.query("duplicateDetections")
 		.withIndex("by_status", (q) => q.eq("status", "pending"))

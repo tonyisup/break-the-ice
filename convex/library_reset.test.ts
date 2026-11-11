@@ -304,7 +304,7 @@ describe("resetting the library to a list of keepers", () => {
     expect(stillRetired).toMatchObject({ status: "pruned", reviewRevision: 3 });
   });
 
-  test("after the run the schedule picker offers every keeper and the feed those with status public, which the log says, and a retired question's link no longer opens", async () => {
+  test("after the run the feed lists the keepers with status public, which the log says, and a retired question's link no longer opens", async () => {
     const { t, ids, keepQuestionIds } = await setupLibrary();
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const outsideFeed = `1 of the questions kept have status "approved" or none, and the feed lists only status "public" (${ids.keptNoStatus})`;
@@ -321,14 +321,10 @@ describe("resetting the library to a list of keepers", () => {
     const feed = (
       await t.query(internal.internal.questions.getRandomQuestionsInternal, { count: 10, seen: [], hidden: [], hiddenStyles: [], hiddenTones: [] })
     ).map((question) => question._id);
-    const picker = (await t.query(api.core.questions.getPublicQuestions, {})).map((question) => question._id);
 
-    for (const listed of [feed, picker]) {
-      expect(listed).toContain(ids.keptPublic);
-      expect(listed).not.toContain(ids.retiredPublic);
-      expect(listed).not.toContain(ids.retiredApproved);
-    }
-    expect(picker).toEqual(expect.arrayContaining(keepQuestionIds));
+    expect(feed).toContain(ids.keptPublic);
+    expect(feed).not.toContain(ids.retiredPublic);
+    expect(feed).not.toContain(ids.retiredApproved);
     expect(feed).not.toContain(ids.keptNoStatus);
     // Left alone means still served: a public question someone wrote stays in the feed.
     expect(feed).toContain(ids.personal);
