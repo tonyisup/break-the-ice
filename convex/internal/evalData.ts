@@ -57,7 +57,7 @@ export const libraryFingerprintMatches = internalQuery({
 
 /**
  * The text of each question that is in the shared library, in the order given; null for
- * missing, personal, team and non-public questions.
+ * missing, personal and non-public questions.
  */
 export const publicLibraryTexts = internalQuery({
   args: { questionIds: v.array(v.id("questions")) },

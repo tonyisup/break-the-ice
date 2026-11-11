@@ -1344,9 +1344,9 @@ async function seedBriefLinesFor(
 }
 
 /**
- * One-time setup for the short brief: gives each shared style, tone and topic its one line
+ * One-time setup for the short brief: gives each style, tone and topic its one line
  * (convex/data/briefLines.ts), and a style its set form, where the live row or a draft has none
- * yet. A line an admin has already written is left alone, and so are teams' own entries. Where
+ * yet. A line an admin has already written is left alone. Where
  * one slug has two live rows and one of them has no version, that row is archived: it is the
  * copy from before versions existed, and it used to hide the rewrite beside it. Questions and
  * people's hidden styles and tones that point at the archived row are moved to the live one in

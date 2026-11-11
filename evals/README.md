@@ -100,7 +100,7 @@ soon as the deploy lands (`compare.mjs` flags the size change). Before generatin
 the one-time cleanup that moves those questions to `pruned`:
 `npx convex run internal/migrations:normalizeRetiredQuestions '{"dryRun":true}'`, then again with
 `false` (a second dry run should show `markedPruned` and `prunedAtCleared` at 0). It also clears
-the fingerprints that the personal, team and organization questions it changes still hold
+the fingerprints that the personal questions it changes still hold
 (`fingerprintsCleared`), which can change the library duplicate rate without changing the library
 size, as above.
 
