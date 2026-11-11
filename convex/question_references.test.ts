@@ -42,14 +42,6 @@ async function setupWithDeletedQuestion(t: TestConvex) {
       liveEmbedding: await ctx.db.insert("question_embeddings", { questionId: a, embedding: vector }),
       orphanEmbedding: await ctx.db.insert("question_embeddings", { questionId: b, embedding: vector }),
       liveSeen: await ctx.db.insert("userQuestions", { userId, questionId: a, status: "seen", updatedAt: 0 }),
-      ...(await (async () => {
-        const organizationId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-        const collectionId = await ctx.db.insert("collections", { name: "Favorites", organizationId });
-        return {
-          liveCollectionEntry: await ctx.db.insert("question_collections", { questionId: a, collectionId }),
-          orphanCollectionEntry: await ctx.db.insert("question_collections", { questionId: b, collectionId }),
-        };
-      })()),
       orphanSeen: await ctx.db.insert("userQuestions", { userId, questionId: b, status: "sent", updatedAt: 0 }),
       orphanEvent: await ctx.db.insert("analytics", { event: "seen", questionId: b, timestamp: 0, viewDuration: 0 }),
       orphanPendingPrune: await ctx.db.insert("pruning", { questionId: b, status: "pending", reason: "low likes" }),
@@ -78,18 +70,16 @@ describe("cleaning up references to deleted questions", () => {
       // A dry run reports what a real run would remove and update.
       { table: "question_embeddings", scanned: 2, dangling: 1, removed: 1, updated: 0 },
       { table: "userQuestions", scanned: 2, dangling: 1, removed: 1, updated: 0 },
-      { table: "question_collections", scanned: 2, dangling: 1, removed: 1, updated: 0 },
       { table: "pruning", scanned: 2, dangling: 1, removed: 1, updated: 0 },
       { table: "duplicateDetections", scanned: 5, dangling: 3, removed: 2, updated: 1 },
     ]);
     const counts = await t.run(async (ctx) => ({
       embeddings: (await ctx.db.query("question_embeddings").collect()).length,
       userQuestions: (await ctx.db.query("userQuestions").collect()).length,
-      collectionEntries: (await ctx.db.query("question_collections").collect()).length,
       pruning: (await ctx.db.query("pruning").collect()).length,
       detections: (await ctx.db.query("duplicateDetections").collect()).length,
     }));
-    expect(counts).toEqual({ embeddings: 2, userQuestions: 2, collectionEntries: 2, pruning: 3, detections: 6 });
+    expect(counts).toEqual({ embeddings: 2, userQuestions: 2, pruning: 3, detections: 6 });
   });
 
   test("a real run removes rows that need a live question and keeps history", async () => {
@@ -101,7 +91,6 @@ describe("cleaning up references to deleted questions", () => {
     expect(summary).toEqual([
       { table: "question_embeddings", scanned: 2, dangling: 1, removed: 1, updated: 0 },
       { table: "userQuestions", scanned: 2, dangling: 1, removed: 1, updated: 0 },
-      { table: "question_collections", scanned: 2, dangling: 1, removed: 1, updated: 0 },
       { table: "pruning", scanned: 2, dangling: 1, removed: 1, updated: 0 },
       // The pair and the trio whose reduced group already exists go; the other trio keeps its live pair.
       { table: "duplicateDetections", scanned: 5, dangling: 3, removed: 2, updated: 1 },
@@ -110,8 +99,6 @@ describe("cleaning up references to deleted questions", () => {
       expect(await ctx.db.get(ids.orphanEmbedding)).toBeNull();
       expect(await ctx.db.get(ids.orphanSeen)).toBeNull();
       expect(await ctx.db.get(ids.orphanPendingPrune)).toBeNull();
-      expect(await ctx.db.get(ids.orphanCollectionEntry)).toBeNull();
-      expect(await ctx.db.get(ids.liveCollectionEntry)).not.toBeNull();
       expect(await ctx.db.get(ids.pairWithDeleted)).toBeNull();
       expect(await ctx.db.get(ids.trioOverlappingPair)).toBeNull();
       expect(await ctx.db.get(ids.trioWithDeleted)).toMatchObject({
@@ -131,7 +118,7 @@ describe("cleaning up references to deleted questions", () => {
 
     // Running it again finds nothing left to do.
     const again = await t.action(internal.internal.migrations.cleanDanglingQuestionReferences, { dryRun: false });
-    expect(again.map((row) => row.dangling)).toEqual([0, 0, 0, 0, 0]);
+    expect(again.map((row) => row.dangling)).toEqual([0, 0, 0, 0]);
   });
 });
 
@@ -279,17 +266,14 @@ describe("deleting a question leaves everything else alone", () => {
   const READER = { subject: "reader-clerk", tokenIdentifier: "test|reader-clerk", email: "reader@example.com" };
 
   /** `target` is the reader's question; `x`, `y` stay; `gone` was hard-deleted earlier. */
-  async function setupNeighbours(t: TestConvex, options: { existingPair?: boolean; kind?: "team_prompt" } = {}) {
+  async function setupNeighbours(t: TestConvex, options: { existingPair?: boolean } = {}) {
     return await t.run(async (ctx) => {
       const userId = await ctx.db.insert("users", { email: "reader@example.com", clerkId: "reader-clerk" });
       await ctx.db.insert("users", { email: "someone@example.com", clerkId: "someone-clerk" });
-      const organizationId = await ctx.db.insert("organizations", { name: "Team" });
-      const collectionId = await ctx.db.insert("collections", { name: "Favourites", organizationId });
       const target = await ctx.db.insert("questions", {
         customText: "Which song is stuck in your head?",
         authorId: userId,
         status: "private",
-        kind: options.kind,
         ...counters,
       });
       const [x, y, gone] = await Promise.all(
@@ -308,11 +292,9 @@ describe("deleting a question leaves everything else alone", () => {
         targetPendingPrune: await ctx.db.insert("pruning", { questionId: target, status: "pending", reason: "low likes" }),
         targetApprovedPrune: await ctx.db.insert("pruning", { questionId: target, status: "approved", reason: "low likes" }),
         targetRejectedPrune: await ctx.db.insert("pruning", { questionId: target, status: "rejected", reason: "low likes" }),
-        targetCollectionEntry: await ctx.db.insert("question_collections", { questionId: target, collectionId }),
         otherEmbedding: await ctx.db.insert("question_embeddings", { questionId: x, embedding: vector }),
         otherSeen: await ctx.db.insert("userQuestions", { userId, questionId: x, status: "seen", updatedAt: 0 }),
         otherPendingPrune: await ctx.db.insert("pruning", { questionId: x, status: "pending", reason: "low likes" }),
-        otherCollectionEntry: await ctx.db.insert("question_collections", { questionId: x, collectionId }),
         trio: await group([target, x, y]),
         existingPair: options.existingPair ? await group([x, y]) : null,
         withEarlierDeleted: await group([target, x, gone]),
@@ -327,21 +309,20 @@ describe("deleting a question leaves everything else alone", () => {
   const allRowIds = (ids: Awaited<ReturnType<typeof setupNeighbours>>) =>
     Object.values(ids).filter((id): id is NonNullable<typeof id> => id !== null);
 
-  test("it removes the question's collection entries and keeps other questions' rows and review history", async () => {
+  test("it removes the question's own rows and keeps other questions' rows and review history", async () => {
     const t = convexTest(schema, import.meta.glob("./**/*.ts"));
     const ids = await setupNeighbours(t);
 
     await t.withIdentity(ADMIN).mutation(api.admin.questions.deleteQuestion, { id: ids.target });
 
     await t.run(async (ctx) => {
-      for (const id of [ids.target, ids.targetEmbedding, ids.targetSeen, ids.targetPendingPrune, ids.targetCollectionEntry]) {
+      for (const id of [ids.target, ids.targetEmbedding, ids.targetSeen, ids.targetPendingPrune]) {
         expect(await ctx.db.get(id)).toBeNull();
       }
       for (const id of [
         ids.otherEmbedding,
         ids.otherSeen,
         ids.otherPendingPrune,
-        ids.otherCollectionEntry,
         ids.targetApprovedPrune,
         ids.targetRejectedPrune,
         ids.approvedGroup,
@@ -406,21 +387,6 @@ describe("deleting a question leaves everything else alone", () => {
         .withIdentity({ subject: "someone-clerk", tokenIdentifier: "test|someone-clerk", email: "someone@example.com" })
         .mutation(api.core.questions.deletePersonalQuestion, { questionId: ids.target }),
     ).rejects.toThrow("not authorized");
-
-    await t.run(async (ctx) => {
-      for (const id of allRowIds(ids)) {
-        expect(await ctx.db.get(id)).not.toBeNull();
-      }
-    });
-  });
-
-  test("a Team prompt cannot be deleted as a personal question, and nothing is cleaned up", async () => {
-    const t = convexTest(schema, import.meta.glob("./**/*.ts"));
-    const ids = await setupNeighbours(t, { kind: "team_prompt" });
-
-    await expect(
-      t.withIdentity(READER).mutation(api.core.questions.deletePersonalQuestion, { questionId: ids.target }),
-    ).rejects.toThrow("belonged to a team workspace");
 
     await t.run(async (ctx) => {
       for (const id of allRowIds(ids)) {

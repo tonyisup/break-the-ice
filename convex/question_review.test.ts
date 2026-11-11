@@ -623,44 +623,17 @@ describe("editorial review safeguards", () => {
     ).toHaveLength(0);
   });
 
-  test("duplicate retirement preserves saved references, history, schedules and public links; undo restores all", async () => {
+  test("duplicate retirement preserves history and public links; undo restores all", async () => {
     const { t, admin, ids, args } = await setupGroup();
     const refs = await t.run(async (ctx) => {
       const userId = await ctx.db.insert("users", {
         email: "reader@example.test",
-      });
-      const organizationId = await ctx.db.insert("organizations", {
-        name: "Team",
-      });
-      const collectionId = await ctx.db.insert("collections", {
-        name: "Saved",
-        organizationId,
-      });
-      const saved = await ctx.db.insert("question_collections", {
-        collectionId,
-        questionId: ids.retire,
       });
       const history = await ctx.db.insert("userQuestions", {
         userId,
         questionId: ids.retire,
         status: "liked",
         updatedAt: 1,
-      });
-      const scheduleId = await ctx.db.insert("schedules", {
-        organizationId,
-        weekStart: "2026-09-21",
-        weekEnd: "2026-09-27",
-        weekStartDay: "monday",
-        status: "published",
-        createdAt: 1,
-        updatedAt: 1,
-      });
-      const scheduled = await ctx.db.insert("scheduledQuestions", {
-        scheduleId,
-        questionId: ids.retire,
-        dayOfWeek: "monday",
-        slotOrder: 1,
-        assignedAt: 1,
       });
       const analytics = await ctx.db.insert("analytics", {
         questionId: ids.retire,
@@ -669,7 +642,7 @@ describe("editorial review safeguards", () => {
         timestamp: 1,
         viewDuration: 0,
       });
-      return { saved, history, scheduled, analytics };
+      return { history, analytics };
     });
     const pending = await admin.query(
       api.admin.questions.getPendingDuplicateDetections,
@@ -837,16 +810,13 @@ describe("clearing embeddings private questions still hold", () => {
 
   async function setupQuestions() {
     const t = convexTest(schema, modules);
-    const organizationId = await t.run((ctx) =>
-      ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }),
-    );
     const ids: Record<string, Id<"questions">> = {
       library: await insertWithEmbedding(t, {}),
       prunedLibrary: await insertWithEmbedding(t, { status: "pruned" }),
       approved: await insertWithEmbedding(t, { text: undefined, customText: "Approved?", authorId: "author-1", status: "approved" }),
       personal: await insertWithEmbedding(t, { customText: "Personal?", authorId: "author-2", status: "private" }),
       pending: await insertWithEmbedding(t, { text: undefined, customText: "Pending?", authorId: "author-3", status: "pending" }),
-      teamPrompt: await insertWithEmbedding(t, { organizationId, customText: "Team?", kind: "team_prompt", status: "private" }),
+      personalKind: await insertWithEmbedding(t, { customText: "Marked as a person's?", kind: "personal", status: "private" }),
       withoutEmbedding: await t.run((ctx) =>
         ctx.db.insert("questions", { ...question(), text: undefined, customText: "None?", authorId: "author-4", status: "private" }),
       ),

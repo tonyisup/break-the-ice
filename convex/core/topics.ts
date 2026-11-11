@@ -17,7 +17,6 @@ const publicTopicFields = {
   promptGuidanceForAI: v.optional(v.string()),
   aiGuidance: v.string(),
   order: v.optional(v.float64()),
-  organizationId: v.optional(v.id("organizations")),
   icon: v.optional(v.string()),
   takeoverStartDate: v.optional(v.number()),
   takeoverEndDate: v.optional(v.number()),
@@ -58,7 +57,6 @@ function mapTopic(topic: Doc<"topics">) {
     promptGuidanceForAI,
     aiGuidance: topic.aiGuidance ?? promptGuidanceForAI,
     order: topic.order,
-    organizationId: topic.organizationId,
     icon: topic.icon,
     takeoverStartDate: topic.takeoverStartDate,
     takeoverEndDate: topic.takeoverEndDate,
@@ -84,16 +82,12 @@ async function getLatestActiveTopicBySlug(ctx: QueryCtx, slug: string) {
     .query("topics")
     .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
-  // Only the shared entries: the ones no workspace owned.
-  const shared = topics.filter((row) => !row.organizationId);
-  return latestActiveVersion(shared);
+  return latestActiveVersion(topics);
 }
 
 async function getActiveTopics(ctx: QueryCtx) {
-  // Only the shared entries: the ones no workspace owned.
   const topics = await ctx.db
     .query("topics")
-    .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
     .take(DEFAULT_TOPIC_LIMIT);
 
   const bySlug = new Map<string, Doc<"topics">[]>();
@@ -147,7 +141,7 @@ export const getTopicBySystemId = query({
   returns: v.union(v.object(publicTopicFields), v.null()),
   handler: async (ctx, args) => {
     const topic = await ctx.db.get(args.id);
-    return topic && !topic.organizationId ? mapTopic(topic) : null;
+    return topic ? mapTopic(topic) : null;
   },
 });
 
@@ -159,6 +153,6 @@ export const getTopicById = query({
   handler: async (ctx, args) => {
     if (!args.id) return null;
     const topic = await ctx.db.get(args.id);
-    return topic && !topic.organizationId ? mapTopic(topic) : null;
+    return topic ? mapTopic(topic) : null;
   },
 });

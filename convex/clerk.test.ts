@@ -208,7 +208,6 @@ test("a subscription or a checkout an organization pays for is ignored, and logg
     expect((await t.fetch("/clerk-billing-webhook", signedWebhookRequest(event))).status).toBe(200);
   }
 
-  expect(await t.run((ctx) => ctx.db.query("organizations").collect())).toEqual([]);
   expect(await t.run((ctx) => ctx.db.get(userId))).toMatchObject({ billingStatus: "inactive" });
   expect((await t.run((ctx) => ctx.db.get(userId)))?.clerkSubscriptionId).toBeUndefined();
   // Each one is logged with its ids, so a purchase from a stale app can be found and refunded.

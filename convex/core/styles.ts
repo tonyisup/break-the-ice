@@ -3,7 +3,6 @@ import { query, QueryCtx } from "../_generated/server";
 import { Doc } from "../_generated/dataModel";
 import { defaultIdealPromptLength, defaultQualityRubric, latestActiveVersion } from "../lib/taxonomy";
 import { ignoredWorkspaceArg } from "../lib/ignoredWorkspaceArg";
-import { isWorkspaceQuestion } from "../lib/questionAccess";
 
 const STYLE_EXAMPLE_LIMIT = 50;
 
@@ -87,17 +86,13 @@ async function getLatestActiveStyleBySlug(ctx: QueryCtx, slug: string) {
     .query("styles")
     .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
-  // Only the shared entries: the ones no workspace owned.
-  const shared = styles.filter((row) => !row.organizationId);
 
-  return latestActiveVersion(shared);
+  return latestActiveVersion(styles);
 }
 
 async function getActiveStyles(ctx: QueryCtx, limit = 200) {
-  // Only the shared entries: the ones no workspace owned.
   const styles = await ctx.db
     .query("styles")
-    .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
     .take(limit);
   const filtered = styles;
 
@@ -131,7 +126,7 @@ export const getStyleById = query({
   returns: v.union(v.object(publicStyleFields), v.null()),
   handler: async (ctx, args) => {
     const style = await ctx.db.get(args.id);
-    if (!style || style.organizationId || (style.status ?? "active") !== "active") return null;
+    if (!style || (style.status ?? "active") !== "active") return null;
     return mapStyle(style);
   },
 });
@@ -156,7 +151,6 @@ export const getStylesWithExamples = query({
       )
       .take(STYLE_EXAMPLE_LIMIT);
     const examples = exampleQuestions
-      .filter((question) => !isWorkspaceQuestion(question))
       .map((question) => question.text)
       .filter((text: string | undefined): text is string => text !== undefined);
 

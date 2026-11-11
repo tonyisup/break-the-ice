@@ -26,13 +26,6 @@ export default function DataRetentionPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mb-2">Organization Data</h2>
-          <p>
-            For teams and organizations, all associated data including custom questions and collections are retained for 30 days following the deletion of the organization. This provides a grace period should you need to reactivate your workspace. After 30 days, all data associated with the organization is permanently purged.
-          </p>
-        </section>
-
-        <section>
           <h2 className="text-xl font-semibold mb-2">Data Deletion Procedures</h2>
           <p>
             Data is deleted through automated processes and manual purges. Please note that data may persist in our secure backups for a limited period after deletion from primary systems, as part of our standard disaster recovery procedures.

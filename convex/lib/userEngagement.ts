@@ -1,9 +1,6 @@
 import { Id } from "../_generated/dataModel";
 import { MutationCtx, QueryCtx } from "../_generated/server";
 
-// These rows still carry the workspace they were written in. A person's own rows have none,
-// and those are the only ones read.
-
 export async function findUserQuestion(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
@@ -11,12 +8,7 @@ export async function findUserQuestion(
 ) {
   return await ctx.db
     .query("userQuestions")
-    .withIndex("by_userId_organizationId_and_questionId", (q) =>
-      q
-        .eq("userId", userId)
-        .eq("organizationId", undefined)
-        .eq("questionId", questionId),
-    )
+    .withIndex("by_userIdAndQuestionId", (q) => q.eq("userId", userId).eq("questionId", questionId))
     .first();
 }
 
@@ -27,12 +19,7 @@ export async function findUserStyle(
 ) {
   return await ctx.db
     .query("userStyles")
-    .withIndex("by_userId_organizationId_and_styleId", (q) =>
-      q
-        .eq("userId", userId)
-        .eq("organizationId", undefined)
-        .eq("styleId", styleId),
-    )
+    .withIndex("by_userIdAndStyleId", (q) => q.eq("userId", userId).eq("styleId", styleId))
     .first();
 }
 
@@ -43,11 +30,6 @@ export async function findUserTone(
 ) {
   return await ctx.db
     .query("userTones")
-    .withIndex("by_userId_organizationId_and_toneId", (q) =>
-      q
-        .eq("userId", userId)
-        .eq("organizationId", undefined)
-        .eq("toneId", toneId),
-    )
+    .withIndex("by_userIdAndToneId", (q) => q.eq("userId", userId).eq("toneId", toneId))
     .first();
 }

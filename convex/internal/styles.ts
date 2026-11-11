@@ -70,7 +70,6 @@ export const updateQuestionsWithMissingStyleIds = internalMutation({
         const style = await ctx.db
           .query("styles")
           .withIndex("by_slug", (q) => q.eq("slug", question.style!))
-          .filter((q) => q.eq(q.field("organizationId"), undefined))
           .first();
 
         if (style) {
@@ -108,8 +107,7 @@ export const getRandomStyleForUserId = internalQuery({
   },
   returns: v.nullable(v.object(styleFields)),
   handler: async (ctx, args) => {
-    // Only the shared styles: generation refuses one a workspace owned.
-    const styles = await ctx.db.query("styles").withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any)).take(200);
+    const styles = await ctx.db.query("styles").take(200);
     const bySlug = new Map<string, Doc<"styles">[]>();
     for (const style of styles) {
       const slug = style.slug ?? style.id;

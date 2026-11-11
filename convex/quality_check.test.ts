@@ -527,13 +527,13 @@ describe("checking a question in record mode", () => {
     await check(s, checked);
     create.mockClear();
     const personal = await generated(s, { authorId: "author-1", text: "My own question?" });
-    const team = await generated(s, { kind: "team_prompt", text: "Our team's question?" });
+    const personalKind = await generated(s, { kind: "personal", text: "Marked as a person's, with no author?" });
     const submitted = await generated(s, { isAIGenerated: undefined, text: "Sent in by a visitor?" });
     const retired = await generated(s, { status: "pruned", prunedAt: 5, text: "Retired last week?" });
     const gone = await generated(s, { text: "Deleted a moment ago?" });
     await s.t.run((ctx) => ctx.db.delete(gone));
 
-    for (const questionId of [checked, personal, team, submitted, retired, gone]) {
+    for (const questionId of [checked, personal, personalKind, submitted, retired, gone]) {
       expect(await check(s, questionId), questionId).toBe("skipped");
     }
 
@@ -680,16 +680,14 @@ describe("checking a question in record mode", () => {
     expect(await queuedChecks(s)).toEqual([]);
   });
 
-  test("a question the judge can't be shown is skipped without a call: no text, a team's own, no style or tone, or one that no longer exists", async () => {
+  test("a question the judge can't be shown is skipped without a call: no text, no style or tone, or one that no longer exists", async () => {
     const s = await setup();
-    const { organizationId, goneStyleId, goneToneId } = await s.t.run(async (ctx) => ({
-      organizationId: await ctx.db.insert("organizations", { name: "Gym" }),
+    const { goneStyleId, goneToneId } = await s.t.run(async (ctx) => ({
       goneStyleId: await ctx.db.insert("styles", { id: "gone", slug: "gone", name: "Gone", structure: "x", color: "#111111", icon: "sparkles" }),
       goneToneId: await ctx.db.insert("tones", { id: "gone", slug: "gone", name: "Gone", promptGuidanceForAI: "x", color: "#222222", icon: "sun" }),
     }));
     const skipped = [
       await generated(s, { text: undefined, customText: "Only an author's wording?" }),
-      await generated(s, { organizationId, text: "A team's own question?" }),
       await generated(s, { styleId: undefined, text: "No style on record?" }),
       await generated(s, { toneId: undefined, text: "No tone on record?" }),
       await generated(s, { styleId: goneStyleId, text: "Its style was deleted?" }),

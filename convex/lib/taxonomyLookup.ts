@@ -23,14 +23,13 @@ export async function findTaxonomyVersions(
 }
 
 /**
- * The version a slug refers to: its active version, else its newest. Only the shared entries
- * count, never one a workspace owned.
+ * The version a slug refers to: its active version, else its newest.
  */
 export async function resolveTaxonomySlug<T extends TaxonomyTable>(
   db: QueryCtx["db"],
   table: T,
   slug: string,
 ): Promise<Doc<T> | null> {
-  const versions = (await findTaxonomyVersions(db, table, slug)).filter((row) => !row.organizationId);
+  const versions = await findTaxonomyVersions(db, table, slug);
   return (latestActiveVersion(versions) ?? latestVersion(versions)) as unknown as Doc<T> | null;
 }

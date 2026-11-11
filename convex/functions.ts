@@ -3,13 +3,6 @@ import { DataModel } from "./_generated/dataModel";
 
 const triggers = new Triggers<DataModel>();
 
-export function shouldDeleteAuthoredQuestionOnUserDeletion(question: {
-	kind?: "personal" | "team_prompt";
-	status?: string;
-}): boolean {
-	return question.kind !== "team_prompt";
-}
-
 triggers.register("users", async (ctx, change) => {
 	if (change.operation === "delete") {
 		const userId = change.id;
@@ -47,9 +40,7 @@ triggers.register("users", async (ctx, change) => {
 			.withIndex("by_author", (q) => q.eq("authorId", userId).eq("status", "private"))
 			.collect();
 		for (const q of personalQuestions) {
-			if (shouldDeleteAuthoredQuestionOnUserDeletion(q)) {
-				await ctx.db.delete(q._id);
-			}
+			await ctx.db.delete(q._id);
 		}
 
 		const pendingQuestions = await ctx.db
@@ -57,20 +48,16 @@ triggers.register("users", async (ctx, change) => {
 			.withIndex("by_author", (q) => q.eq("authorId", userId).eq("status", "pending"))
 			.collect();
 		for (const q of pendingQuestions) {
-			if (shouldDeleteAuthoredQuestionOnUserDeletion(q)) {
-				await ctx.db.delete(q._id);
-			}
+			await ctx.db.delete(q._id);
 		}
 		const approvedQuestions = await ctx.db
 			.query("questions")
 			.withIndex("by_author", (q) => q.eq("authorId", userId).eq("status", "public"))
 			.collect();
 		for (const q of approvedQuestions) {
-			if (shouldDeleteAuthoredQuestionOnUserDeletion(q)) {
-				await ctx.db.patch(q._id, {
-					authorId: undefined,
-				});
-			}
+			await ctx.db.patch(q._id, {
+				authorId: undefined,
+			});
 		}
 	}
 });

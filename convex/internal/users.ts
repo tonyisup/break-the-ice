@@ -23,7 +23,7 @@ export const userValidator = v.object({
 	isAdmin: v.optional(v.boolean()),
 	defaultStyle: v.optional(v.string()),
 	defaultTone: v.optional(v.string()),
-	billingSubjectType: v.optional(v.union(v.literal("user"), v.literal("organization"))),
+	billingSubjectType: v.optional(v.literal("user")),
 	billingStatus: v.optional(v.union(
 		v.literal("inactive"),
 		v.literal("active"),
@@ -315,7 +315,7 @@ export const updateUsersWithMissingEmbeddingsAction = internalAction({
 const EXCLUSION_ROWS_PER_TEXT = 4;
 
 // The texts of the questions a user most recently gave `status`, newest first. A person's own
-// questions, a team's prompts and organization questions are left out: this list goes into the
+// questions are left out: this list goes into the
 // generator's prompt, beside the owner's decisions, and only wording the library holds belongs
 // there.
 async function recentQuestionTexts(
@@ -456,10 +456,8 @@ export const getUserVisibleStyles = internalQuery({
 				q.eq("userId", args.userId).eq("status", "hidden")
 			)
 			.collect();
-		// Only the shared styles: generation refuses one a workspace owned.
 		const visible = await ctx.db
 			.query("styles")
-			.withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
 			.collect();
 		return visible.filter(s => !hidden.some(h => h.styleId === s._id));
 	},
@@ -477,10 +475,8 @@ export const getUserVisibleTones = internalQuery({
 				q.eq("userId", args.userId).eq("status", "hidden")
 			)
 			.collect();
-		// Only the shared tones: generation refuses one a workspace owned.
 		const visible = await ctx.db
 			.query("tones")
-			.withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
 			.collect();
 		return visible.filter(t => !hidden.some(h => h.toneId === t._id));
 	},

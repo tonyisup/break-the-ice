@@ -166,15 +166,13 @@ describe("seeding the brief's lines", () => {
     expect(await rows(t)).toEqual(after);
   });
 
-  test("a line an admin wrote stays, a team's own style is left alone, and a line with no live row is reported", async () => {
+  test("a line an admin wrote stays, and a line with no live row is reported", async () => {
     const t = convexTest(schema, modules);
     vi.spyOn(console, "log").mockImplementation(() => {});
     const ids = await t.run(async (ctx) => {
-      const organizationId = await ctx.db.insert("organizations", { name: "Team" });
       return {
         written: await ctx.db.insert("styles", style("desert-island", { brief: "The owner's own line." })),
         formOnly: await ctx.db.insert("styles", style("would-you-rather", { brief: "Kept.", form: "  " })),
-        team: await ctx.db.insert("styles", style("open-ended", { organizationId })),
         // Two copies from before versions existed: neither is the rewrite, so both stay live.
         first: await ctx.db.insert("styles", style("micro-ritual", { version: undefined })),
         second: await ctx.db.insert("styles", style("micro-ritual", { version: undefined })),
@@ -196,14 +194,12 @@ describe("seeding the brief's lines", () => {
     const after = await t.run(async (ctx) => ({
       written: await ctx.db.get(ids.written),
       formOnly: await ctx.db.get(ids.formOnly),
-      team: await ctx.db.get(ids.team),
       first: await ctx.db.get(ids.first),
       second: await ctx.db.get(ids.second),
       draft: await ctx.db.get(ids.draft),
     }));
     expect(after.written).toMatchObject({ brief: "The owner's own line.", status: "active" });
     expect(after.formOnly).toMatchObject({ brief: "Kept.", form: STYLE_BRIEF_LINES["would-you-rather"].form });
-    expect(after.team?.brief).toBeUndefined();
     expect([after.first?.status, after.second?.status]).toEqual(["active", "active"]);
     expect([after.first?.brief, after.second?.brief]).toEqual([STYLE_BRIEF_LINES["micro-ritual"].brief, STYLE_BRIEF_LINES["micro-ritual"].brief]);
     // A draft gets its line too, and stays a draft: activating it later must not drop the line.
@@ -471,26 +467,6 @@ describe("seeding the brief's lines", () => {
     expect([report.styles, report.changes]).toEqual([{ lined: 0, drafts: 0, archived: 0, moved: 0 }, []]);
     const after = await t.run(async (ctx) => Promise.all(ids.questions.map((id) => ctx.db.get(id))));
     expect(after.map((question) => question?.styleId)).toEqual([ids.retired, ids.oldCopy]);
-  });
-
-  test("a style a team owned, of the same name and a higher version, doesn't stop a person unhiding the shared one", async () => {
-    const t = convexTest(schema, modules);
-    const READER = { subject: "reader-clerk", tokenIdentifier: "test|reader-clerk", email: "reader@example.com" };
-    const ids = await t.run(async (ctx) => {
-      const userId = await ctx.db.insert("users", { email: READER.email, clerkId: READER.subject });
-      const organizationId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      const shared = await ctx.db.insert("styles", style("open-ended"));
-      // The team's own entry is a higher version of the same slug.
-      await ctx.db.insert("styles", style("open-ended", { organizationId, version: 2 }));
-      const personal = await ctx.db.insert("userStyles", { userId, styleId: shared, status: "hidden", updatedAt: 0 });
-      return { shared, personal };
-    });
-    const reader = t.withIdentity(READER);
-
-    // Only shared rows count, so the shared row is the listed one: it is in the hidden list and can be unhidden.
-    expect(await reader.query(api.core.userSettings.getHiddenStyleIds, {})).toEqual([ids.shared]);
-    await reader.mutation(api.core.userSettings.updateHiddenStyles, { hiddenStyles: [] });
-    expect(await t.run((ctx) => ctx.db.get(ids.personal))).toBeNull();
   });
 
   test("a copy that has only the old id, with no slug, status or version, is archived beside its rewrite", async () => {

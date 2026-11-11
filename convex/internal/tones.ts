@@ -20,7 +20,6 @@ const toneFields = v.object({
   color: v.string(),
   icon: v.string(),
   order: v.optional(v.float64()),
-  organizationId: v.optional(v.id("organizations")),
   version: v.number(),
   status: v.union(v.literal("draft"), v.literal("active"), v.literal("archived")),
   commonFailureModes: v.array(v.string()),
@@ -63,7 +62,6 @@ function mapTone(tone: Doc<"tones">) {
     color: tone.color ?? DEFAULT_TONE_COLOR,
     icon: tone.icon ?? DEFAULT_TONE_ICON,
     order: tone.order,
-    organizationId: tone.organizationId,
     version: tone.version ?? 1,
     status: tone.status ?? "active",
     commonFailureModes: tone.commonFailureModes ?? [],
@@ -126,7 +124,6 @@ export const updateQuestionsWithMissingToneIds = internalMutation({
         const tone = await ctx.db
           .query("tones")
           .withIndex("by_slug", (q) => q.eq("slug", question.tone!))
-          .filter((q) => q.eq(q.field("organizationId"), undefined))
           .first();
         if (tone) {
           await ctx.db.patch(question._id, {
@@ -184,8 +181,7 @@ export const getRandomToneForUserId = internalQuery({
   },
   returns: v.nullable(toneFields),
   handler: async (ctx, args) => {
-    // Only the shared tones: generation refuses one a workspace owned.
-    const tones = await ctx.db.query("tones").withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any)).take(200);
+    const tones = await ctx.db.query("tones").take(200);
     const bySlug = new Map<string, Doc<"tones">[]>();
     for (const tone of tones) {
       const slug = tone.slug ?? tone.id;

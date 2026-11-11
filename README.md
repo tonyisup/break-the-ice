@@ -25,13 +25,7 @@ or tone someone hid on the old copy of a doubled entry doesn't show as hidden in
 questions can reach them; the seed moves the hidden entry to the live row.
 
 Team workspaces (organizations, collections, schedules, the coach view and the Team plan) were
-removed. What they left in the database is deleted by a one-time step, run after the deploy
-that removes them: `npx convex run --prod internal/migrations:removeWorkspaceData '{"dryRun":true}'`
-lists how many rows would go from each table, and the same command with `false` deletes them.
-A person's own questions, likes, hidden entries and AI usage stay, apart from likes and hidden
-entries of a question, style or tone a workspace owned, and no account is deleted. The schema still declares the old tables and the
-`organizationId` fields; they can be dropped once a dry run reports nothing left on every
-deployment.
+removed in v0.8.0.0, and their tables and fields left the schema in v0.8.1.0.
 
 ## Documentation
 

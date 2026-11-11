@@ -435,14 +435,13 @@ const build = (t: T, styleSlug: string, sampleSeed?: number) =>
   t.query(internal.internal.generation.buildGenerationPrompt, { styleSlug, toneSlug: "warm", batchSize: 1, sampleSeed });
 
 describe("the owner's decisions a prompt shows, read from the library", () => {
-  /** An either/or style with an older archived version, a second style, and a team. */
+  /** An either/or style with an older archived version, and a second style. */
   async function library() {
     const t = await setup();
     const olderVersion = await addStyle(t, "either-or", "Either/Or, first wording", { status: "archived" });
     const eitherOr = await addStyle(t, "either-or", "Either/Or", { version: 2, brief: "Two options to pick between.", form: '"X or Y?" and nothing else.' });
     const reflective = await addStyle(t, "reflective", "Reflective", { brief: "Looks back on something small." });
-    const organizationId = await t.run((ctx) => ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }));
-    return { t, olderVersion, eitherOr, reflective, organizationId };
+    return { t, olderVersion, eitherOr, reflective };
   }
 
   test("a style with a set form says so on its first line, and a style without one never says it", async () => {
@@ -455,16 +454,14 @@ describe("the owner's decisions a prompt shows, read from the library", () => {
     expect(without.userPrompt).not.toContain("Set form");
   });
 
-  test("kept questions are the style's public ones in the shared library, under any version of it: never a held, personal or team question", async () => {
-    const { t, olderVersion, eitherOr, reflective, organizationId } = await library();
+  test("kept questions are the style's public ones in the shared library, under any version of it: never a held or personal question", async () => {
+    const { t, olderVersion, eitherOr, reflective } = await library();
     await addQuestion(t, eitherOr, "Tea or coffee?");
     await addQuestion(t, olderVersion, "Sunrise or sunset?");
     await addQuestion(t, eitherOr, "Held for review or not?", { status: "pending", heldForReview: true, isAIGenerated: true });
     await addQuestion(t, eitherOr, "My own question or yours?", { kind: "personal" });
     // A person's submission is marked by its author; approving it makes it public, not the library's.
     await addQuestion(t, eitherOr, "A person's approved submission or not?", { authorId: "user_1" });
-    await addQuestion(t, eitherOr, "Our team's question or theirs?", { organizationId });
-    await addQuestion(t, eitherOr, "A team prompt or a plain one?", { organizationId, kind: "team_prompt" });
     await addQuestion(t, reflective, "What do you look back on fondly?");
 
     const { userPrompt } = await build(t, "either-or");
@@ -473,7 +470,7 @@ describe("the owner's decisions a prompt shows, read from the library", () => {
     // A question of another style is shown as that, and nowhere else.
     expect(section(userPrompt, OTHER_STYLES)).toEqual(['- "What do you look back on fondly?" [Reflective]']);
     expect(section(userPrompt, REJECTED)).toEqual([]);
-    for (const hidden of ["Held for review", "My own question", "A person's approved", "Our team's question", "A team prompt"]) expect(userPrompt).not.toContain(hidden);
+    for (const hidden of ["Held for review", "My own question", "A person's approved"]) expect(userPrompt).not.toContain(hidden);
   });
 
   test("a question public under an older status counts as kept, and one an old prune retired or a retired copy does not", async () => {
@@ -493,7 +490,7 @@ describe("the owner's decisions a prompt shows, read from the library", () => {
   });
 
   test("rejected questions are the style's retired ones whose approved review gave an editorial reason, with the reasons in words", async () => {
-    const { t, olderVersion, eitherOr, reflective, organizationId } = await library();
+    const { t, olderVersion, eitherOr, reflective } = await library();
     await addRetired(t, eitherOr, "Would you rather pick this or pick that or pick neither?", { editorialReasons: ["awkward_wording", "repeated_construction"] });
     await addRetired(t, olderVersion, "Cats or dogs or something?", { editorialReasons: ["unclear_answer"] });
     // Retired, but not for a reason an editor gave, or not by a review that was approved.
@@ -501,7 +498,6 @@ describe("the owner's decisions a prompt shows, read from the library", () => {
     await addRetired(t, eitherOr, "Retired with an empty list of reasons or not?", { editorialReasons: [] });
     await addRetired(t, eitherOr, "Flagged but the review is still open or not?", { status: "pending", editorialReasons: ["awkward_wording"] });
     await addRetired(t, eitherOr, "Flagged but the review was turned down or not?", { status: "rejected", editorialReasons: ["awkward_wording"] });
-    await addRetired(t, eitherOr, "A team's retired question or not?", { editorialReasons: ["awkward_wording"] }, { organizationId });
     await addRetired(t, eitherOr, "A person's retired submission or not?", { editorialReasons: ["awkward_wording"] }, { authorId: "user_1" });
     await addRetired(t, reflective, "What is a memory you have of a time?", { editorialReasons: ["awkward_wording"] });
     // Still public: a review with reasons doesn't make it a rejection until the question is retired.
@@ -519,7 +515,7 @@ describe("the owner's decisions a prompt shows, read from the library", () => {
     expect(section(userPrompt, KEPT)).toEqual(['- "Tea or coffee?"']);
     // A retired question of another style is not one of that style's kept questions.
     expect(section(userPrompt, OTHER_STYLES)).toEqual([]);
-    for (const hidden of ["low engagement", "empty list", "still open", "turned down", "A team's retired", "A person's retired"]) expect(userPrompt).not.toContain(hidden);
+    for (const hidden of ["low engagement", "empty list", "still open", "turned down", "A person's retired"]) expect(userPrompt).not.toContain(hidden);
   });
 
   test("rejected examples use at most 20 approved reviews per question", async () => {
@@ -558,17 +554,14 @@ describe("the owner's decisions a prompt shows, read from the library", () => {
   });
 
   test("other styles each give one question from the shared library, from at most six live styles, with the style's name beside it", async () => {
-    const { t, eitherOr, organizationId } = await library();
+    const { t, eitherOr } = await library();
     await addQuestion(t, eitherOr, "Tea or coffee?");
     for (let n = 1; n <= 8; n += 1) {
       const styleId = await addStyle(t, `style-${n}`, `Style ${n}`);
       await addQuestion(t, styleId, `First question of Style ${n}?`);
       await addQuestion(t, styleId, `Second question of Style ${n}?`);
-      await addQuestion(t, styleId, `A team's question of Style ${n}?`, { organizationId });
     }
-    // Not shared, not live, or with nothing public: none of these can give an example.
-    const teamStyle = await addStyle(t, "team-style", "Team style", { organizationId });
-    await addQuestion(t, teamStyle, "A question of a team's own style?");
+    // Not live, or with nothing public: neither can give an example.
     const retiredStyle = await addStyle(t, "retired-style", "Retired style", { status: "archived" });
     await addQuestion(t, retiredStyle, "A question of a retired style?");
     await addQuestion(t, await addStyle(t, "held-style", "Held style"), "A held question of a live style?", { status: "pending" });

@@ -464,19 +464,16 @@ describe("hidden lists and history merges apply the same visibility", () => {
     expect(views).toEqual([]);
   });
 
-  test("a merge from a client that still sends its workspace lands in the personal workspace", async () => {
+  test("a merge from a client that still sends its workspace lands in the person's own list", async () => {
     const { t, otherId, publicQuestionId } = await setup();
-    const orgId = await t.run(async (ctx) =>
-      ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }),
-    );
 
     await t.withIdentity(OTHER).mutation(api.core.userSettings.mergeKnownLikedQuestions, {
       likedQuestions: [publicQuestionId],
-      organizationId: orgId,
+      organizationId: "k57c3m8a9e2zq0organization",
     });
 
     const liked = await likedRelations(t, otherId);
-    expect(liked.map((row) => [row.questionId, row.organizationId])).toEqual([[publicQuestionId, undefined]]);
+    expect(liked.map((row) => row.questionId)).toEqual([publicQuestionId]);
   });
 });
 
@@ -618,20 +615,11 @@ describe("remix visibility", () => {
 });
 
 describe("liked list filtering", () => {
-  test("the liked list skips deleted questions and questions from another workspace", async () => {
+  test("the liked list skips deleted questions", async () => {
     const { t, otherId, publicQuestionId } = await setup();
     const goneId = await deletedQuestionId(t);
-    const orgQuestionId = await t.run(async (ctx) => {
-      const organizationId = await ctx.db.insert("organizations", { name: "Other team" });
-      return await ctx.db.insert("questions", {
-        text: "A team's public question?",
-        status: "public",
-        organizationId,
-        ...counters,
-      });
-    });
     await t.run(async (ctx) => {
-      for (const questionId of [goneId, orgQuestionId, publicQuestionId]) {
+      for (const questionId of [goneId, publicQuestionId]) {
         await ctx.db.insert("userQuestions", { userId: otherId, questionId, status: "liked", updatedAt: Date.now() });
       }
     });
@@ -702,89 +690,6 @@ describe("updating the hidden list keeps hides the user can no longer read", () 
     await t.withIdentity(OTHER).mutation(api.core.userSettings.updateHiddenQuestions, { hiddenQuestions: [] });
 
     expect(await hiddenRelations(t, otherId)).toEqual([]);
-  });
-});
-
-describe("a question a workspace owned is closed to everyone", () => {
-  async function addOrgQuestion(t: Awaited<ReturnType<typeof setup>>["t"]) {
-    return await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      const orgQuestionId = await ctx.db.insert("questions", {
-        customText: "What did everyone do this weekend?",
-        status: "private",
-        organizationId: orgId,
-        ...counters,
-      });
-      return { orgId, orgQuestionId };
-    });
-  }
-
-  test("a non-member can't like or merge an org's private question", async () => {
-    const { t, otherId } = await setup();
-    const { orgQuestionId } = await addOrgQuestion(t);
-
-    await t.withIdentity(OTHER).mutation(api.core.userSettings.mergeKnownLikedQuestions, {
-      likedQuestions: [orgQuestionId],
-    });
-    await t.withIdentity(OTHER).mutation(api.core.questions.recordAnalytics, {
-      questionId: orgQuestionId,
-      event: "liked",
-      viewDuration: 0,
-    });
-
-    expect(await likedRelations(t, otherId)).toEqual([]);
-    const question = await t.run(async (ctx) => await ctx.db.get(orgQuestionId));
-    expect(question?.totalLikes).toBe(0);
-  });
-
-  test("a member of the paying team that owned it can't like it or open it either", async () => {
-    const { t, otherId } = await setup();
-    const { orgId, orgQuestionId } = await addOrgQuestion(t);
-    await t.run(async (ctx) => {
-      await ctx.db.insert("organization_members", { userId: otherId, organizationId: orgId, role: "admin" });
-    });
-
-    await t.withIdentity(OTHER).mutation(api.core.userSettings.mergeKnownLikedQuestions, {
-      likedQuestions: [orgQuestionId],
-    });
-    expect(await likedRelations(t, otherId)).toEqual([]);
-    expect(await t.withIdentity(OTHER).query(api.core.questions.getLikedQuestions, { organizationId: orgId })).toEqual([]);
-    expect(await t.withIdentity(OTHER).query(api.core.questions.getQuestionById, { id: orgQuestionId })).toBeNull();
-  });
-});
-
-describe("remix usage accounting", () => {
-  // Public, but a workspace's: nobody can read it, so a remix is refused before any charge.
-  async function addOrgPublicQuestion(t: Awaited<ReturnType<typeof setup>>["t"]) {
-    return await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      const questionId = await ctx.db.insert("questions", { status: "public", organizationId: orgId, ...counters });
-      return { orgId, questionId };
-    });
-  }
-  async function usageRows(t: Awaited<ReturnType<typeof setup>>["t"], userId: Id<"users">) {
-    return await t.run(async (ctx) =>
-      (await ctx.db.query("userAiUsage").collect())
-        .filter((row) => row.userId === userId)
-        .map((row) => ({ organizationId: row.organizationId, count: row.count })),
-    );
-  }
-
-  test("a remix of a question a workspace owned is refused before anyone is charged, member of its team or not", async () => {
-    const { t, otherId } = await setup();
-    const { orgId, questionId } = await addOrgPublicQuestion(t);
-
-    await expect(
-      t.withIdentity(OTHER).action(api.core.questions.remixQuestionForUser, { questionId }),
-    ).rejects.toThrow("Question not found.");
-    await t.run(async (ctx) => {
-      await ctx.db.insert("organization_members", { userId: otherId, organizationId: orgId, role: "member" });
-    });
-    await expect(
-      t.withIdentity(OTHER).action(api.core.questions.remixQuestionForUser, { questionId }),
-    ).rejects.toThrow("Question not found.");
-
-    expect(await usageRows(t, otherId)).toEqual([]);
   });
 });
 

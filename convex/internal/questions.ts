@@ -8,7 +8,7 @@ import { cosineSimilarity } from "../lib/embeddings";
 import { doc } from "convex-helpers/validators";
 import schema from "../schema";
 import { duplicateGroup } from "../lib/questionReferences";
-import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isWorkspaceQuestion } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion } from "../lib/questionAccess";
 
 export const questionByIdResultValidator = v.nullable(doc(schema, "questions"));
 
@@ -717,13 +717,7 @@ export const getRandomQuestionsInternal = internalQuery({
 
 		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-		const applyFilters = (q: any) => {
-			// Never a question a workspace owned.
-			return q.and(
-				q.neq(q.field("text"), undefined),
-				q.eq(q.field("organizationId"), undefined),
-			);
-		};
+		const applyFilters = (q: any) => q.neq(q.field("text"), undefined);
 
 		const wasShownRecently = (question: { lastShownAt?: number }) =>
 			question.lastShownAt !== undefined && question.lastShownAt >= sevenDaysAgo;
@@ -880,13 +874,9 @@ export const getRandomQuestionsInternal = internalQuery({
 		const now = Date.now();
 
 		// pull any active topics, find a question that has that topic, and inject it if there is one
-		// Only the shared topics, never one a workspace owned.
 		const activeTopics = await ctx.db.query("topics")
 			.withIndex("by_startDate_endDate_order", (q) => q.lt("startDate", now))
-			.filter((q) => q.and(
-				q.eq(q.field("organizationId"), undefined),
-				q.or(q.eq(q.field("endDate"), undefined), q.gt(q.field("endDate"), now)),
-			))
+			.filter((q) => q.or(q.eq(q.field("endDate"), undefined), q.gt(q.field("endDate"), now)))
 			.collect()
 
 		if (activeTopics.length > 0) {
@@ -963,10 +953,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			return items;
 		};
 
-		const applyFilters = (q: any) => {
-			// Never a question a workspace owned.
-			return q.and(q.neq(q.field("text"), undefined), q.eq(q.field("organizationId"), undefined));
-		};
+		const applyFilters = (q: any) => q.neq(q.field("text"), undefined);
 		// Rows older pruning marked with only prunedAt still have status "public"; dropped here so
 		// every read stays within its take() limit (see isRetiredQuestion).
 		const isVisible = (question: Doc<"questions">) => {
@@ -976,7 +963,6 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			return true;
 		};
 		const wasShownRecently = (question: Doc<"questions">) => question.lastShownAt !== undefined && question.lastShownAt >= sevenDaysAgo;
-		const sameOrganization = (left: Id<"organizations"> | undefined, right: Id<"organizations"> | undefined) => left?.toString() === right?.toString();
 
 		const styleIds = new Set<string>(args.anchoredStyleId ? [args.anchoredStyleId.toString()] : []);
 		const toneIds = new Set<string>(args.anchoredToneId ? [args.anchoredToneId.toString()] : []);
@@ -994,9 +980,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 					.withIndex("by_slug", (q) => q.eq("slug", styleSlug))
 					.collect();
 				for (const version of versions) {
-					if (sameOrganization(version.organizationId, anchor.organizationId)) {
-						styleIds.add(version._id.toString());
-					}
+					styleIds.add(version._id.toString());
 				}
 			}
 		}
@@ -1009,9 +993,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 					.withIndex("by_slug", (q) => q.eq("slug", toneSlug))
 					.collect();
 				for (const version of versions) {
-					if (sameOrganization(version.organizationId, anchor.organizationId)) {
-						toneIds.add(version._id.toString());
-					}
+					toneIds.add(version._id.toString());
 				}
 			}
 		}
@@ -1024,9 +1006,7 @@ export const getAnchoredQuestionsInternal = internalQuery({
 					.withIndex("by_slug", (q) => q.eq("slug", topicSlug))
 					.collect();
 				for (const version of versions) {
-					if (sameOrganization(version.organizationId, anchor.organizationId)) {
-						topicIds.add(version._id.toString());
-					}
+					topicIds.add(version._id.toString());
 				}
 			}
 		}
@@ -1143,7 +1123,7 @@ function isQuestionEligibleForNewsletter(
 	question: Doc<"questions">,
 	filters: QuestionPreferenceFilters,
 ): boolean {
-	if (!question.text || isRetiredQuestion(question) || isWorkspaceQuestion(question)) {
+	if (!question.text || isRetiredQuestion(question)) {
 		return false;
 	}
 	if (

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { getZonedCalendarDate, isValidTimeZone } from "./timezone";
 
-describe("organization calendar dates", () => {
+describe("calendar dates in a time zone", () => {
   test("keeps Los Angeles on Monday after UTC has advanced to Tuesday", () => {
     const instant = new Date("2026-07-14T02:30:00.000Z");
     expect(getZonedCalendarDate(instant, "America/Los_Angeles")).toEqual({

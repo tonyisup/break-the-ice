@@ -414,9 +414,7 @@ export const reassignUserTonesBatch = internalMutation({
       // or the tone would be listed twice for them and one unhide wouldn't clear it.
       const already = await ctx.db
         .query("userTones")
-        .withIndex("by_userId_organizationId_and_toneId", (q) =>
-          q.eq("userId", userTone.userId).eq("organizationId", userTone.organizationId).eq("toneId", args.nextToneId),
-        )
+        .withIndex("by_userIdAndToneId", (q) => q.eq("userId", userTone.userId).eq("toneId", args.nextToneId))
         .first();
       if (already) {
         await ctx.db.delete(userTone._id);
