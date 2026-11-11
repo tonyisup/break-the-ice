@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Id } from "../../convex/_generated/dataModel";
-import { useWorkspace } from "./useWorkspace";
 import { HistoryEntry } from "./useQuestionHistory";
 import { useLocalStorage } from "./useLocalStorage";
 import { useMutation, useQuery } from "convex/react";
@@ -304,12 +303,6 @@ export const useLocalStorageContext = (
 export const useConvexStorageContext = (
   hasConsented: boolean,
 ): StorageContextType => {
-  const { activeWorkspace } = useWorkspace();
-  const workspaceArgs = useMemo(
-    () => ({ organizationId: activeWorkspace ?? undefined }),
-    [activeWorkspace],
-  );
-
   const sessionId = useSessionId(hasConsented);
 
   const [theme, setTheme] = useLocalStorage<Theme>(
@@ -319,9 +312,9 @@ export const useConvexStorageContext = (
   );
 
   const questionHistory =
-    useQuery(api.core.userSettings.getQuestionHistory, workspaceArgs) ?? [];
+    useQuery(api.core.userSettings.getQuestionHistory, {}) ?? [];
 
-  const settings = useQuery(api.core.userSettings.getSettings, workspaceArgs);
+  const settings = useQuery(api.core.userSettings.getSettings, {});
   const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
   const [hiddenQuestions, setHiddenQuestions] = useState<Id<"questions">[]>([]);
   const [localHiddenStyles, setLocalHiddenStyles] = useState<Id<"styles">[]>([]);
@@ -336,14 +329,8 @@ export const useConvexStorageContext = (
   const mergeKnownLikedQuestions = useMutation(api.core.userSettings.mergeKnownLikedQuestions);
   const mergeKnownHiddenQuestions = useMutation(api.core.userSettings.mergeKnownHiddenQuestions);
   const mergeQuestionHistory = useMutation(api.core.userSettings.mergeQuestionHistory);
-  const hiddenStylesQuery = useQuery(
-    api.core.userSettings.getHiddenStyleIds,
-    workspaceArgs,
-  );
-  const hiddenTonesQuery = useQuery(
-    api.core.userSettings.getHiddenToneIds,
-    workspaceArgs,
-  );
+  const hiddenStylesQuery = useQuery(api.core.userSettings.getHiddenStyleIds, {});
+  const hiddenTonesQuery = useQuery(api.core.userSettings.getHiddenToneIds, {});
   const updateHiddenStyles = useMutation(api.core.userSettings.updateHiddenStyles);
   const updateHiddenTones = useMutation(api.core.userSettings.updateHiddenTones);
   const addHiddenStyleId = useMutation(api.core.userSettings.addHiddenStyleId);
@@ -374,8 +361,6 @@ export const useConvexStorageContext = (
     // Clear each local list only after the server confirms the merge, and only if it
     // still holds what was sent: a sign-out or another tab can add entries meanwhile.
     // Otherwise it stays for the next visit; the merges are safe to retry.
-    // Signed-out activity is personal, so it always merges into the personal
-    // workspace, whichever workspace is selected.
     const mergeThenClear = async (key: string, raw: string, merge: () => Promise<unknown>) => {
       try {
         await merge();
@@ -431,7 +416,7 @@ export const useConvexStorageContext = (
       setLocalHiddenStyles([]);
       setLocalHiddenTones([]);
     }
-  }, [settings, activeWorkspace]);
+  }, [settings]);
 
   const addLikedQuestion = useCallback(
     (id: Id<"questions">) => {
@@ -439,10 +424,9 @@ export const useConvexStorageContext = (
       setLikedQuestions(newLikedQuestions);
       void updateLikedQuestions({
         likedQuestions: newLikedQuestions,
-        ...workspaceArgs,
       });
     },
-    [likedQuestions, updateLikedQuestions, workspaceArgs],
+    [likedQuestions, updateLikedQuestions],
   );
 
   const removeLikedQuestion = useCallback(
@@ -453,10 +437,9 @@ export const useConvexStorageContext = (
       setLikedQuestions(newLikedQuestions);
       void updateLikedQuestions({
         likedQuestions: newLikedQuestions,
-        ...workspaceArgs,
       });
     },
-    [likedQuestions, updateLikedQuestions, workspaceArgs],
+    [likedQuestions, updateLikedQuestions],
   );
 
   const addHiddenQuestion = useCallback(
@@ -465,10 +448,9 @@ export const useConvexStorageContext = (
       setHiddenQuestions(newHiddenQuestions);
       void updateHiddenQuestions({
         hiddenQuestions: newHiddenQuestions,
-        ...workspaceArgs,
       });
     },
-    [hiddenQuestions, updateHiddenQuestions, workspaceArgs],
+    [hiddenQuestions, updateHiddenQuestions],
   );
 
   const removeHiddenQuestion = useCallback(
@@ -479,10 +461,9 @@ export const useConvexStorageContext = (
       setHiddenQuestions(newHiddenQuestions);
       void updateHiddenQuestions({
         hiddenQuestions: newHiddenQuestions,
-        ...workspaceArgs,
       });
     },
-    [hiddenQuestions, updateHiddenQuestions, workspaceArgs],
+    [hiddenQuestions, updateHiddenQuestions],
   );
 
   // History is now managed by the backend analytics
@@ -493,13 +474,13 @@ export const useConvexStorageContext = (
 
   const clearLikedQuestions = useCallback(() => {
     setLikedQuestions([]);
-    void updateLikedQuestions({ likedQuestions: [], ...workspaceArgs });
-  }, [updateLikedQuestions, workspaceArgs]);
+    void updateLikedQuestions({ likedQuestions: [] });
+  }, [updateLikedQuestions]);
 
   const clearHiddenQuestions = useCallback(() => {
     setHiddenQuestions([]);
-    void updateHiddenQuestions({ hiddenQuestions: [], ...workspaceArgs });
-  }, [updateHiddenQuestions, workspaceArgs]);
+    void updateHiddenQuestions({ hiddenQuestions: [] });
+  }, [updateHiddenQuestions]);
 
   return {
     sessionId,
@@ -520,24 +501,24 @@ export const useConvexStorageContext = (
     hiddenStyles: hiddenStylesQuery === null ? [] : hiddenStylesQuery,
     setHiddenStyles: (ids: Id<"styles">[]) => {
       setLocalHiddenStyles(ids);
-      void updateHiddenStyles({ hiddenStyles: ids, ...workspaceArgs });
+      void updateHiddenStyles({ hiddenStyles: ids });
     },
     addHiddenStyle: (id: Id<"styles">) => {
-      addHiddenStyleId({ styleId: id, ...workspaceArgs });
+      addHiddenStyleId({ styleId: id });
     },
     removeHiddenStyle: (id: Id<"styles">) => {
-      removeHiddenStyleId({ styleId: id, ...workspaceArgs });
+      removeHiddenStyleId({ styleId: id });
     },
     hiddenTones: hiddenTonesQuery === null ? [] : hiddenTonesQuery,
     setHiddenTones: (ids: Id<"tones">[]) => {
       setLocalHiddenTones(ids);
-      void updateHiddenTones({ hiddenTones: ids, ...workspaceArgs });
+      void updateHiddenTones({ hiddenTones: ids });
     },
     addHiddenTone: (id: Id<"tones">) => {
-      addHiddenToneId({ toneId: id, ...workspaceArgs });
+      addHiddenToneId({ toneId: id });
     },
     removeHiddenTone: (id: Id<"tones">) => {
-      removeHiddenToneId({ toneId: id, ...workspaceArgs });
+      removeHiddenToneId({ toneId: id });
     },
     clearLikedQuestions,
     clearQuestionHistory,

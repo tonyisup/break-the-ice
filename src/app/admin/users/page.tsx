@@ -179,7 +179,7 @@ export default function UsersPage() {
 										variant={user.billingStatus === 'active' || user.billingStatus === 'trialing' ? 'default' : 'secondary'}
 										className={`h-5 text-[10px] uppercase tracking-wide ${(user.billingStatus === 'active' || user.billingStatus === 'trialing') ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
 									>
-										{user.billingStatus === 'active' || user.billingStatus === 'trialing' ? 'team' : 'free'}
+										{user.billingStatus === 'active' || user.billingStatus === 'trialing' ? 'paid' : 'free'}
 									</Badge>
 								</td>
 								<td className="px-6 py-4 text-right">

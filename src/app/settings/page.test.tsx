@@ -23,10 +23,6 @@ vi.mock("../../hooks/useTheme", () => ({
   useTheme: () => ({ effectiveTheme: "light" }),
 }));
 
-vi.mock("@/hooks/useWorkspace", () => ({
-  useWorkspace: () => ({ activeWorkspace: null }),
-}));
-
 vi.mock("../../hooks/useStorageContext", () => ({
   useStorageContext: () => mockUseStorageContext(),
 }));
@@ -58,18 +54,6 @@ vi.mock("@/components/ui/dynamic-icon", () => ({
 
 vi.mock("@/components/item-detail-drawer/item-detail-drawer", () => ({
   ItemDetailDrawer: () => null,
-}));
-
-vi.mock("@/app/settings/organization/page", () => ({
-  default: () => <div>Organization Settings</div>,
-}));
-
-vi.mock("@/app/settings/organization/WorkspaceSwitcher", () => ({
-  default: () => <div>Workspace Switcher</div>,
-}));
-
-vi.mock("@/app/settings/collections/page", () => ({
-  default: () => <div>Collections Settings</div>,
 }));
 
 vi.mock("@/components/SignInCTA", () => ({
@@ -104,7 +88,6 @@ vi.mock("../../../convex/_generated/api", () => ({
       styles: { getStyles: "getStyles" },
       tones: { getTones: "getTones" },
       users: { getCurrentUser: "getCurrentUser" },
-      billing: { getEffectiveEntitlements: "getEffectiveEntitlements" },
       questions: { getQuestionsByIds: "getQuestionsByIds" },
     },
   },
@@ -145,12 +128,11 @@ describe("SettingsPage", () => {
       if (queryFn === "getTones") return mockTones;
       if (queryFn === "getQuestionsByIds") return mockHiddenQuestionObjects;
       if (queryFn === "getCurrentUser") return { _id: "user-1", email: "user@example.com" };
-      if (queryFn === "getEffectiveEntitlements") return null;
       return undefined;
     });
   });
 
-  it("shows style and tone controls for users outside a team workspace", () => {
+  it("shows style and tone controls", () => {
     render(<SettingsPage />);
 
     expect(screen.getByText("Manage Styles")).toBeDefined();

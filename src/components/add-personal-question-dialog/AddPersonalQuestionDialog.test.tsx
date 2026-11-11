@@ -8,9 +8,6 @@ import { ERROR_CODES, ERROR_MESSAGES, MAX_QUESTION_TEXT_LENGTH } from "../../../
 
 vi.mock("convex/react", () => ({ useMutation: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
-vi.mock("@/hooks/useTeamWorkspace", () => ({
-  useTeamWorkspace: () => ({ teamWorkspaceId: undefined }),
-}));
 
 const addPersonalQuestion = vi.fn();
 
@@ -45,7 +42,6 @@ describe("AddPersonalQuestionDialog input validation", () => {
     expect(addPersonalQuestion).toHaveBeenCalledWith({
       customText: "What did you learn this week?",
       isPublic: false,
-      organizationId: undefined,
     });
     expect(toast.success).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);

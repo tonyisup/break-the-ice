@@ -19,9 +19,6 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
 
-vi.mock("@/hooks/useTeamWorkspace", () => ({
-  useTeamWorkspace: () => ({ activeWorkspace: null, isEntitlementsLoading: false, teamWorkspaceId: undefined }),
-}));
 
 // vaul needs layout APIs jsdom lacks; an open drawer is just its content here. A closed drawer
 // stays mounted but hidden, and its content's animation end is where the drawer resets.

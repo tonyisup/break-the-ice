@@ -8,11 +8,6 @@ vi.mock('convex/react', () => ({
   useMutation: vi.fn(),
 }));
 
-let mockActiveWorkspace: string | null = null;
-vi.mock('./useWorkspace', () => ({
-  useWorkspace: () => ({ activeWorkspace: mockActiveWorkspace }),
-}));
-
 vi.mock('../../convex/_generated/api', () => ({
   api: {
     core: {
@@ -44,7 +39,6 @@ describe('useConvexStorageContext sign-in merge', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
-    mockActiveWorkspace = null;
     for (const key of Object.keys(mutations)) delete mutations[key];
     (useQuery as Mock).mockReturnValue(undefined);
     (useMutation as Mock).mockImplementation((name: string) => {
@@ -58,8 +52,7 @@ describe('useConvexStorageContext sign-in merge', () => {
     vi.restoreAllMocks();
   });
 
-  it('merges local likes, hidden questions and history into the personal workspace, then clears them', async () => {
-    mockActiveWorkspace = 'org1';
+  it('merges local likes, hidden questions and history into the account, then clears them', async () => {
     localStorage.setItem('likedQuestions', JSON.stringify(['q1', 42, null, 'q2']));
     localStorage.setItem('hiddenQuestions', JSON.stringify(['q3']));
     localStorage.setItem('questionHistory', JSON.stringify([

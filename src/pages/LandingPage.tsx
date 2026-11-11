@@ -7,7 +7,7 @@ import { useTheme } from "@/hooks/useTheme";
 
 const rooms = [
   {
-    title: "Teams",
+    title: "Events",
     copy: "Make the first five minutes feel less like waiting for everyone to arrive.",
     className: "md:col-span-7",
   },
@@ -94,7 +94,7 @@ const LandingPage = () => {
               Never run out of somewhere to go.
             </h2>
             <p className="mt-6 text-lg leading-8 text-gray-700 dark:text-gray-300">
-              Browse by mood, save the good ones, and build collections for the people you bring together most.
+              Browse by mood and save the good ones for the people you bring together most.
             </p>
             <div className="mt-8">
               <PrimaryLink to="/app">Open a question</PrimaryLink>
@@ -162,7 +162,6 @@ const LandingHeader = () => (
       </Link>
       <nav className="hidden items-center gap-7 text-sm font-semibold md:flex" aria-label="Primary navigation">
         <Link className="transition-opacity hover:opacity-55" to="/app">Browse questions</Link>
-        <Link className="transition-opacity hover:opacity-55" to="/pricing">For teams</Link>
       </nav>
       <Button asChild className="h-10 bg-black/10 px-3 text-xs dark:bg-white/10 sm:px-4 sm:text-sm">
         <Link to="/app">Open a question <ArrowRight aria-hidden="true" className="hidden sm:block" /></Link>

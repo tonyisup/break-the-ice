@@ -20,7 +20,7 @@ const concernText = "text-amber-600 dark:text-amber-400";
 // red-300 in dark mode: red-400 on this tint falls under 4.5:1 on the review queue's grey card.
 const safetyBadge = "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300";
 
-/** A hold, or a keep with a safety flag: the app's rule for what a team is shown (flagsQuestion). */
+/** A hold, or a keep with a safety flag: the app's rule for a concern (flagsQuestion). */
 const isConcern = (check: { verdict: "keep" | "hold"; safety: string[] }) => check.verdict === "hold" || check.safety.length > 0;
 
 function ConcernBadges({ reasons, safety }: Pick<Concerns, "reasons" | "safety">) {
@@ -96,20 +96,5 @@ export function ClaudeConcernBadge({ check }: { check: { verdict: "keep" | "hold
       <CircleAlert aria-hidden="true" className="size-3" />
       {label}
     </Badge>
-  );
-}
-
-/** Why the quality check flagged a question, for someone choosing questions for their team. */
-export function ClaudeFlagDetails({ flag }: { flag: Concerns }) {
-  return (
-    <div className={cn("rounded-lg border p-3 text-sm", concernBox)}>
-      <div className="flex flex-wrap items-center gap-2">
-        <CircleAlert aria-hidden="true" className={cn("size-4 shrink-0", concernText)} />
-        <span className="font-semibold">Flagged by AI review</span>
-        <ConcernBadges reasons={flag.reasons} safety={flag.safety} />
-      </div>
-      {flag.note && <p className="mt-1 text-foreground/80">{flag.note}</p>}
-      <p className="mt-1 text-xs text-foreground/80">An automated check raised this. You decide whether to use it.</p>
-    </div>
   );
 }

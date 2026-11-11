@@ -212,7 +212,7 @@ export default function UserDetailsPage() {
                                                 variant={user.billingStatus === 'active' || user.billingStatus === 'trialing' ? 'default' : 'secondary'}
                                                 className="uppercase"
                                             >
-                                                {user.billingStatus === 'active' || user.billingStatus === 'trialing' ? 'team' : 'free'}
+                                                {user.billingStatus === 'active' || user.billingStatus === 'trialing' ? 'paid' : 'free'}
                                             </Badge>
                                         </div>
                                     </div>

@@ -10,9 +10,6 @@ import { ERROR_CODES, ERROR_MESSAGES, MAX_QUESTION_TEXT_LENGTH } from "../../../
 vi.mock("convex/react", () => ({ useMutation: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@/components/header", () => ({ Header: () => null }));
-vi.mock("@/hooks/useTeamWorkspace", () => ({
-  useTeamWorkspace: () => ({ isEntitlementsLoading: false, teamWorkspaceId: undefined }),
-}));
 vi.mock("react-router-dom", () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
 }));
@@ -61,7 +58,6 @@ describe("AddQuestionPage input validation", () => {
     expect(addCustomQuestion).toHaveBeenCalledWith({
       customText: "What is your favorite breakfast?",
       isPublic: true,
-      organizationId: undefined,
     });
     expect(toast.success).not.toHaveBeenCalled();
     expect(questionInput).toHaveValue("What is your favorite breakfast?");

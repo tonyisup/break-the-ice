@@ -7,20 +7,20 @@ import { useReducedMotion } from "framer-motion";
 import { Doc, Id } from "../../convex/_generated/dataModel";
 import { useTheme } from "@/hooks/useTheme";
 import { useStorageContext } from "@/hooks/useStorageContext";
-import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, SearchX, Sparkles, X } from "lucide-react";
+import { ArrowUp, SearchX, Sparkles } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { AnchorHeader } from "@/components/filter-controls/AnchorHeader";
 import { ItemDetails, ItemDetailDrawer } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { useAuth } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
-import { UpgradeCTA } from "@/components/UpgradeCTA";
+import { AiLimitNotice } from "@/components/AiLimitNotice";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
 import { RefineResultsCTA } from "@/components/RefineResultsCTA";
 import { ERROR_MESSAGES, ERROR_CODES, MAX_FEED_GENERATION_COUNT } from "../../convex/constants";
+import { AI_USAGE_CYCLE_MS } from "../../convex/lib/aiPlanLimits";
 import { convexErrorData } from "../../convex/lib/errorData";
 import { cn } from "@/lib/utils";
 
@@ -32,14 +32,23 @@ const sortAnchoredBatch = (questions: Doc<"questions">[], anchoredCount: number)
   ...questions.slice(anchoredCount).sort(compareByTextLength),
 ];
 
-const PUBLIC_FEED_BANNER_DISMISSED_KEY = "break-the-ice:public-feed-banner-dismissed:v1";
+
+/** What the limit notice says: the server's allowance, and the day the cycle resets when it is known. */
+function aiLimitDescription(user: { aiLimit?: number; aiUsage?: { cycleStart?: number } } | null | undefined) {
+  const used = user?.aiLimit !== undefined
+    ? `You've used all ${user.aiLimit} AI generations for this cycle.`
+    : "You've used all your AI generations for this cycle.";
+  const cycleStart = user?.aiUsage?.cycleStart;
+  if (cycleStart === undefined) return used;
+  const resetsOn = new Date(cycleStart + AI_USAGE_CYCLE_MS).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+  return `${used} More become available on ${resetsOn}.`;
+}
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
   const reduceMotion = useReducedMotion();
   const convex = useConvex();
   const user = useAuth();
-  const { activeWorkspace, teamWorkspaceId } = useTeamWorkspace();
   const generateAIQuestions = useAction(api.core.ai.generateAIQuestionForFeed);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -72,44 +81,17 @@ export default function InfiniteScrollPage() {
   const [hasMore, setHasMore] = useState(true);
   const [showTopButton, setShowTopButton] = useState(false);
   const [showAuthCTA, setShowAuthCTA] = useState(false);
-  const [showUpgradeCTA, setShowUpgradeCTA] = useState(false);
-  const [isPublicFeedBannerDismissed, setIsPublicFeedBannerDismissed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem(PUBLIC_FEED_BANNER_DISMISSED_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
+  const [showAiLimitNotice, setShowAiLimitNotice] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
-  const currentUser = useQuery(api.core.users.getCurrentUser, {
-    organizationId: activeWorkspace ?? undefined,
-  });
+  const currentUser = useQuery(api.core.users.getCurrentUser, {});
   // Fetch all styles and tones for card rendering
-  const allStyles = useQuery(api.core.styles.getStyles, {
-    organizationId: teamWorkspaceId,
-  });
-  const allTones = useQuery(api.core.tones.getTones, {
-    organizationId: teamWorkspaceId,
-  });
-  const allTopics = useQuery(api.core.topics.getTopics, {
-    organizationId: teamWorkspaceId,
-  });
+  const allStyles = useQuery(api.core.styles.getStyles, {});
+  const allTones = useQuery(api.core.tones.getTones, {});
+  const allTopics = useQuery(api.core.topics.getTopics, {});
   const activeTakeoverTopics = useQuery(api.core.topics.getActiveTakeoverTopics);
-  const interactionStats = useQuery(api.core.users.getUserInteractionStats, {
-    organizationId: activeWorkspace ?? undefined,
-  });
+  const interactionStats = useQuery(api.core.users.getUserInteractionStats, {});
   const dismissRefineCTA = useMutation(api.core.users.dismissRefineCTA);
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
-
-  const dismissPublicFeedBanner = useCallback(() => {
-    setIsPublicFeedBannerDismissed(true);
-    try {
-      window.localStorage.setItem(PUBLIC_FEED_BANNER_DISMISSED_KEY, "true");
-    } catch {
-      // The banner still stays dismissed for this page view when storage is unavailable.
-    }
-  }, []);
 
   const stylesMap = useMemo(() => {
     const map = new Map<string, Doc<"styles">>();
@@ -326,7 +308,6 @@ export default function InfiniteScrollPage() {
           hidden: hiddenQuestions,
           hiddenStyles: hiddenStyles ?? [],
           hiddenTones: hiddenTones ?? [],
-          organizationId: activeWorkspace ?? undefined,
           randomSeed: Math.random(),
           anchoredStyleId: anchoredStyleId ?? undefined,
           anchoredToneId: anchoredToneId ?? undefined,
@@ -349,7 +330,6 @@ export default function InfiniteScrollPage() {
           try {
             const generated = await generateAIQuestions({
               count: generationCount,
-              organizationId: activeWorkspace ?? undefined,
               anchoredStyleId: anchoredStyleId ?? undefined,
               anchoredToneId: anchoredToneId ?? undefined,
               anchoredTopicId: anchoredTopicId ?? undefined,
@@ -370,7 +350,7 @@ export default function InfiniteScrollPage() {
               errorMessage.includes("AI generation limit reached");
 
             if (totalShortfall > 0 && isLimitError) {
-              setShowUpgradeCTA(true);
+              setShowAiLimitNotice(true);
               setHasMore(false);
             } else if (errorCode === ERROR_CODES.AI_BUDGET_PAUSED || errorCode === ERROR_CODES.AI_RATE_LIMITED || errorCode === ERROR_CODES.AI_PROMPT_TOO_LARGE) {
               // The daily AI budget is spent or this user is rate-limited: show what's left
@@ -384,7 +364,7 @@ export default function InfiniteScrollPage() {
           }
         } else if (totalShortfall > 0) {
           if (!user.isSignedIn) setShowAuthCTA(true);
-          if (currentUser?.isAiLimitReached) setShowUpgradeCTA(true);
+          if (currentUser?.isAiLimitReached) setShowAiLimitNotice(true);
           setHasMore(false);
         }
 
@@ -427,7 +407,6 @@ export default function InfiniteScrollPage() {
         hidden: hiddenQuestions,
         hiddenStyles: hiddenStyles ?? [],
         hiddenTones: hiddenTones ?? [],
-        organizationId: activeWorkspace ?? undefined,
         randomSeed: Math.random(),
         anchoredStyleId: anchoredStyleId ?? undefined,
         anchoredToneId: anchoredToneId ?? undefined,
@@ -485,7 +464,7 @@ export default function InfiniteScrollPage() {
 
         // Proactively check for AI limit if we need more
         if (currentUser?.isAiLimitReached) {
-          setShowUpgradeCTA(true);
+          setShowAiLimitNotice(true);
           setHasMore(false);
 
           // If we have some DB questions and it was the first pull, we need to show them now
@@ -499,7 +478,6 @@ export default function InfiniteScrollPage() {
 
         try {
           const generated = await generateAIQuestions({
-            organizationId: activeWorkspace ?? undefined,
             anchoredStyleId: anchoredStyleId ?? undefined,
             anchoredToneId: anchoredToneId ?? undefined,
             anchoredTopicId: anchoredTopicId ?? undefined,
@@ -557,7 +535,7 @@ export default function InfiniteScrollPage() {
             setShowAuthCTA(true);
             setHasMore(false);
           } else if (isLimitError) {
-            setShowUpgradeCTA(true);
+            setShowAiLimitNotice(true);
             setHasMore(false);
           } else if (errorCode === ERROR_CODES.AI_BUDGET_PAUSED || errorCode === ERROR_CODES.AI_RATE_LIMITED || errorCode === ERROR_CODES.AI_PROMPT_TOO_LARGE) {
             // The daily AI budget is spent or this user is rate-limited: stop asking for
@@ -609,7 +587,7 @@ export default function InfiniteScrollPage() {
         setIsLoading(false);
       }
     }
-  }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, activeWorkspace, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded, anchoredStyleId, anchoredToneId, anchoredTopicId, anchorParamsReady]);
+  }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded, anchoredStyleId, anchoredToneId, anchoredTopicId, anchorParamsReady]);
 
   // Reset the request and its loading state together when the feed changes.
   useEffect(() => {
@@ -623,8 +601,8 @@ export default function InfiniteScrollPage() {
     setLoadError(null);
     setHasMore(true);
     setShowAuthCTA(false);
-    setShowUpgradeCTA(false);
-  }, [anchoredStyleId, anchoredToneId, anchoredTopicId, activeWorkspace]);
+    setShowAiLimitNotice(false);
+  }, [anchoredStyleId, anchoredToneId, anchoredTopicId]);
 
   // Initial load
   useEffect(() => {
@@ -639,9 +617,9 @@ export default function InfiniteScrollPage() {
       setSeenIds(new Set());
       setHasMore(true);
       setShowAuthCTA(false);
-      setShowUpgradeCTA(false);
+      setShowAiLimitNotice(false);
     }
-  }, [allStylesBlocked, allTonesBlocked, activeWorkspace]);
+  }, [allStylesBlocked, allTonesBlocked]);
 
   // Infinite scroll handler
   useEffect(() => {
@@ -740,7 +718,7 @@ export default function InfiniteScrollPage() {
     setSeenIds(new Set());
     setHasMore(true);
     setShowAuthCTA(false);
-    setShowUpgradeCTA(false);
+    setShowAiLimitNotice(false);
     // We don't manually trigger load here, the useEffect for question.length=0 or style change will handle it
   }
 
@@ -750,7 +728,7 @@ export default function InfiniteScrollPage() {
     setSeenIds(new Set());
     setHasMore(true);
     setShowAuthCTA(false);
-    setShowUpgradeCTA(false);
+    setShowAiLimitNotice(false);
   }
 
   const handleRemix = (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => {
@@ -934,36 +912,6 @@ export default function InfiniteScrollPage() {
       <Header />
 
       <main className="z-10 flex-1 flex flex-col pb-32 pt-32">
-        {currentUser !== undefined && currentUser?.planTier !== "team" && !isPublicFeedBannerDismissed && (
-          <div className="mx-auto w-full max-w-3xl px-4 pb-4">
-            <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-gray-900/75 px-4 py-3 text-white shadow-lg backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-                  Public question feed
-                </p>
-                <p className="mt-1 text-sm text-white/80">
-                  Browse icebreaker questions for coaches, workshops, and team sessions.
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button asChild variant="outline" className="h-9 shrink-0 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
-                  <Link to="/pricing?source=app_banner">Team plan</Link>
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-9 shrink-0 text-white/70 hover:bg-white/15 hover:text-white"
-                  onClick={dismissPublicFeedBanner}
-                  aria-label="Dismiss public question feed banner"
-                  title="Don't show this again"
-                >
-                  <X className="size-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
         <AnchorHeader
           styleId={anchoredStyleId}
           toneId={anchoredToneId}
@@ -1116,21 +1064,14 @@ export default function InfiniteScrollPage() {
             />
           )}
 
-          {showUpgradeCTA && (
-            <UpgradeCTA
-              bgGradient={bgGradient}
+          {showAiLimitNotice && (
+            <AiLimitNotice
               title="Generation Limit Reached"
-              description={currentUser?.planTier === 'team'
-                ? `You've reached your current Team workspace AI limit for this cycle.`
-                : `You've used all ${import.meta.env.VITE_MAX_FREE_AIGEN} free AI generations for this cycle.`
-              }
-              onUpgrade={() => {
-                window.location.href = "/pricing?source=ai_limit";
-              }}
+              description={aiLimitDescription(currentUser)}
             />
           )}
 
-          {hasMore && !showAuthCTA && !showUpgradeCTA && (questions.length > 0 || !isLoading) && (
+          {hasMore && !showAuthCTA && !showAiLimitNotice && (questions.length > 0 || !isLoading) && (
             <div className="flex justify-center py-8">
               <Button
                 onClick={() => {

@@ -3,7 +3,6 @@ import { StrictMode } from 'react';
 import { act, fireEvent, render, waitFor, screen } from '@testing-library/react';
 import InfiniteScrollPage from './InfiniteScrollPage';
 import { useQuery, useConvex, useAction, useMutation } from 'convex/react';
-import { WorkspaceProvider } from '@/hooks/useWorkspace.tsx';
 import { ModernQuestionCard } from '@/components/modern-question-card';
 import { NewsletterCard } from '@/components/newsletter-card/NewsletterCard';
 import { ConvexError } from 'convex/values';
@@ -77,7 +76,6 @@ vi.mock('../../convex/_generated/api', () => ({
       tones: { getTones: 'getTones', getTone: 'getTone' },
       questions: { getNextRandomQuestions: 'getNextRandomQuestions', recordAnalytics: 'recordAnalytics' },
       ai: { generateAIQuestionForFeed: 'generateAIQuestionForFeed' },
-      billing: { getEffectiveEntitlements: 'getEffectiveEntitlements' },
       users: { getCurrentUser: 'getCurrentUser' },
       topics: { getActiveTakeoverTopics: 'getActiveTakeoverTopics' },
     }
@@ -158,7 +156,7 @@ describe('InfiniteScrollPage', () => {
     mockReducedMotion = true;
     const observer = vi.fn(function () { return { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() }; });
     global.IntersectionObserver = observer as unknown as typeof IntersectionObserver;
-    render(<WorkspaceProvider><InfiniteScrollPage /></WorkspaceProvider>);
+    render(<InfiniteScrollPage />);
     await waitFor(() => expect(ModernQuestionCard).toHaveBeenCalled());
     expect(observer.mock.calls.some(call => (call as unknown[])[1] && ((call as unknown[])[1] as IntersectionObserverInit).rootMargin === '67% 0px')).toBe(false);
   });
@@ -166,9 +164,7 @@ describe('InfiniteScrollPage', () => {
   it('loads questions when mounted in StrictMode after auth is already ready', async () => {
     render(
       <StrictMode>
-        <WorkspaceProvider>
-          <InfiniteScrollPage />
-        </WorkspaceProvider>
+        <InfiniteScrollPage />
       </StrictMode>
     );
 
@@ -184,11 +180,11 @@ describe('InfiniteScrollPage', () => {
     const newRequest = new Promise<typeof mockQuestions>(resolve => { resolveNew = resolve; });
     const action = vi.fn().mockReturnValueOnce(oldRequest).mockReturnValueOnce(newRequest);
     vi.mocked(useConvex).mockReturnValue({ action } as unknown as ReturnType<typeof useConvex>);
-    const view = render(<WorkspaceProvider><InfiniteScrollPage /></WorkspaceProvider>);
+    const view = render(<InfiniteScrollPage />);
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
 
     mockSearchParams = new URLSearchParams('style=style2');
-    view.rerender(<WorkspaceProvider><InfiniteScrollPage /></WorkspaceProvider>);
+    view.rerender(<InfiniteScrollPage />);
     await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
     expect(action).toHaveBeenLastCalledWith('getNextRandomQuestions', expect.objectContaining({
       anchoredStyleId: 'style2',
@@ -208,9 +204,7 @@ describe('InfiniteScrollPage', () => {
 
   it('renders cards with specific styles and tones', async () => {
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => {
@@ -228,7 +222,7 @@ describe('InfiniteScrollPage', () => {
     vi.mocked(useMutation).mockImplementation(((ref: unknown) =>
       ref === 'recordAnalytics' ? recordAnalytics : vi.fn()) as unknown as typeof useMutation);
 
-    render(<WorkspaceProvider><InfiniteScrollPage /></WorkspaceProvider>);
+    render(<InfiniteScrollPage />);
     await waitFor(() => expect(ModernQuestionCard).toHaveBeenCalled());
 
     const cardProps = vi.mocked(ModernQuestionCard).mock.calls[0][0] as { onToggleFavorite: () => void };
@@ -238,68 +232,6 @@ describe('InfiniteScrollPage', () => {
       event: 'liked',
       sessionId: 'local-session-1',
     })));
-  });
-
-  it('hides the public feed banner for Team subscribers', async () => {
-    (useQuery as any).mockImplementation((queryFn: any) => {
-      if (queryFn === 'getStyles') return mockStyles;
-      if (queryFn === 'getTones') return mockTones;
-      if (queryFn === 'getStyle') return mockStyles[0];
-      if (queryFn === 'getTone') return mockTones[0];
-      if (queryFn === 'getCurrentUser') return {
-        _id: 'u1',
-        email: 'test@example.com',
-        planTier: 'team',
-      };
-      return undefined;
-    });
-
-    render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
-    );
-
-    await waitFor(() => {
-      expect(screen.queryByRole('link', { name: 'Team plan' })).toBeNull();
-      expect(screen.queryByText('Public question feed')).toBeNull();
-    });
-  });
-
-  it('shows a dismissible Team plan banner for non-Team users', async () => {
-    render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('Public question feed')).toBeDefined();
-      expect(screen.getByRole('link', { name: 'Team plan' })).toBeDefined();
-      expect(screen.getByRole('button', { name: 'Dismiss public question feed banner' })).toBeDefined();
-    });
-  });
-
-  it('keeps the public feed banner dismissed across page mounts', async () => {
-    const firstRender = render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
-    );
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss public question feed banner' }));
-    expect(screen.queryByText('Public question feed')).toBeNull();
-
-    firstRender.unmount();
-    render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
-    );
-
-    await waitFor(() => {
-      expect(screen.queryByText('Public question feed')).toBeNull();
-    });
   });
 
   it('shows NewsletterCard when not signed in', async () => {
@@ -313,9 +245,7 @@ describe('InfiniteScrollPage', () => {
     });
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => {
@@ -331,9 +261,7 @@ describe('InfiniteScrollPage', () => {
     // currentUser mocked in beforeEach as status: null
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => {
@@ -354,9 +282,7 @@ describe('InfiniteScrollPage', () => {
     });
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => {
@@ -381,9 +307,7 @@ describe('InfiniteScrollPage', () => {
     });
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => {
@@ -408,9 +332,7 @@ describe('InfiniteScrollPage', () => {
     });
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => {
@@ -426,9 +348,7 @@ describe('InfiniteScrollPage', () => {
     });
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => {
@@ -466,9 +386,7 @@ describe('InfiniteScrollPage', () => {
     (useConvex as any).mockReturnValue({ query: vi.fn(), action: actionMock });
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>,
+      <InfiniteScrollPage />,
     );
 
     await waitFor(() => {
@@ -483,9 +401,7 @@ describe('InfiniteScrollPage', () => {
 
   it('writes canonical slugs when selecting an anchor', async () => {
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>,
+      <InfiniteScrollPage />,
     );
 
     await waitFor(() => {
@@ -541,9 +457,7 @@ describe('InfiniteScrollPage', () => {
     (useAction as any).mockReturnValue(generateAction);
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>,
+      <InfiniteScrollPage />,
     );
 
     await waitFor(() => {
@@ -579,9 +493,7 @@ describe('InfiniteScrollPage', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>,
+      <InfiniteScrollPage />,
     );
 
     await waitFor(() => expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_BUDGET_PAUSED));
@@ -616,9 +528,7 @@ describe('InfiniteScrollPage', () => {
     (useAction as any).mockReturnValue(generateAction);
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>,
+      <InfiniteScrollPage />,
     );
 
     await waitFor(() => {
@@ -651,9 +561,7 @@ describe('InfiniteScrollPage', () => {
     (useAction as any).mockReturnValue(generateAction);
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>,
+      <InfiniteScrollPage />,
     );
 
     await waitFor(() => {
@@ -681,9 +589,7 @@ describe('InfiniteScrollPage', () => {
     (useAction as any).mockReturnValue(generateAction);
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>,
+      <InfiniteScrollPage />,
     );
 
     await waitFor(() => {
@@ -707,9 +613,7 @@ describe('InfiniteScrollPage', () => {
     });
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => {
@@ -751,9 +655,7 @@ describe('InfiniteScrollPage', () => {
     (useAction as any).mockReturnValue(vi.fn().mockResolvedValue(aiQuestions));
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => {
@@ -794,9 +696,7 @@ describe('InfiniteScrollPage', () => {
     });
 
     const { rerender } = render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => {
@@ -833,7 +733,7 @@ describe('InfiniteScrollPage', () => {
     expect(lastFourCalls[3][0].question.text).toBe('S2');
   });
 
-  it('shows UpgradeCTA when AI limit is reached during initial load', async () => {
+  it('shows the limit notice when AI limit is reached during initial load', async () => {
     (useConvex as any).mockReturnValue({
       query: vi.fn(),
       action: vi.fn().mockResolvedValue([]), // DB returns nothing
@@ -844,19 +744,17 @@ describe('InfiniteScrollPage', () => {
     (useAction as any).mockReturnValue(generateAction);
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
-    // Should automatically try to load first batch, fail, and show UpgradeCTA
+    // Should automatically try to load first batch, fail, and show the limit notice
     await waitFor(() => {
       expect(screen.getByText('Generation Limit Reached')).toBeDefined();
       expect(screen.queryByText('Load More')).toBeNull();
     });
   });
 
-  it('stops the feed with a notice, not an upgrade prompt, when the daily AI budget is paused', async () => {
+  it('stops the feed with a notice, not the limit notice, when the daily AI budget is paused', async () => {
     (useConvex as any).mockReturnValue({
       query: vi.fn(),
       action: vi.fn().mockResolvedValue([]), // DB returns nothing
@@ -867,9 +765,7 @@ describe('InfiniteScrollPage', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_BUDGET_PAUSED));
@@ -888,16 +784,14 @@ describe('InfiniteScrollPage', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
     await waitFor(() => expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_RATE_LIMITED));
     expect(screen.queryByText('Generation Limit Reached')).toBeNull();
   });
 
-  it('proactively shows UpgradeCTA if isAiLimitReached is true and DB is empty', async () => {
+  it('proactively shows the limit notice if isAiLimitReached is true and DB is empty', async () => {
     (useConvex as any).mockReturnValue({
       query: vi.fn(),
       action: vi.fn().mockResolvedValue([]), // DB returns nothing
@@ -909,7 +803,7 @@ describe('InfiniteScrollPage', () => {
         email: 'test@example.com',
         isAiLimitReached: true,
         aiLimit: 10,
-        aiUsage: { count: 10 }
+        aiUsage: { count: 10, cycleStart: Date.UTC(2026, 9, 1, 12) }
       };
       if (queryFn === 'getStyles') return mockStyles;
       if (queryFn === 'getTones') return mockTones;
@@ -917,16 +811,18 @@ describe('InfiniteScrollPage', () => {
     });
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>
+      <InfiniteScrollPage />
     );
 
-    // Should immediately show UpgradeCTA if it tries to load and finds no DB questions
+    // Should immediately show the limit notice if it tries to load and finds no DB questions
     await waitFor(() => {
       expect(screen.getByText('Generation Limit Reached')).toBeDefined();
       expect(screen.queryByText('Load More')).toBeNull();
     });
+    // It is a status that names the server's allowance and the day the 30-day cycle resets, not an offer.
+    const resetsOn = new Date(Date.UTC(2026, 9, 31, 12)).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+    expect(screen.getByRole('status').textContent).toContain(`You've used all 10 AI generations for this cycle. More become available on ${resetsOn}.`);
+    expect(screen.queryByRole('button', { name: /team plan/i })).toBeNull();
   });
 
   it('shows the database questions it already had when the budget pauses on the first page', async () => {
@@ -943,9 +839,7 @@ describe('InfiniteScrollPage', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>,
+      <InfiniteScrollPage />,
     );
 
     expect(await screen.findAllByTestId('modern-question-card')).toHaveLength(3);
@@ -979,9 +873,7 @@ describe('InfiniteScrollPage', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>,
+      <InfiniteScrollPage />,
     );
 
     expect(await screen.findAllByTestId('modern-question-card')).toHaveLength(10);
@@ -1013,9 +905,7 @@ describe('InfiniteScrollPage', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     render(
-      <WorkspaceProvider>
-        <InfiniteScrollPage />
-      </WorkspaceProvider>,
+      <InfiniteScrollPage />,
     );
 
     await waitFor(() => expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_RATE_LIMITED));

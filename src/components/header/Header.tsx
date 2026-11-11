@@ -6,15 +6,10 @@ import { useAuth } from "@clerk/clerk-react";
 import { Heart, History, Home } from "@/components/ui/icons/icons";
 import { useStorageContext } from "@/hooks/useStorageContext";
 import { UserMenu } from "./UserMenu";
-import { TeamWorkspaceMenu } from "./TeamWorkspaceMenu";
-import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 
 export const Header = () => {
   const { isSignedIn } = useAuth();
-  const { teamWorkspaceId } = useTeamWorkspace();
-  const customQuestions = useQuery(api.core.questions.getCustomQuestions, {
-    organizationId: teamWorkspaceId,
-  });
+  const customQuestions = useQuery(api.core.questions.getCustomQuestions, {});
   const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
 
   const { likedQuestions, likedLimit, hiddenQuestions, hiddenLimit } = useStorageContext();
@@ -57,7 +52,6 @@ export const Header = () => {
         </Button>
       </div>
       <div className="flex items-center gap-2">
-        <TeamWorkspaceMenu className="hidden sm:inline-flex" />
         <UserMenu
           showSettingsBadge={showSettingsLimitBadge || showSettingsFullBadge}
           settingsBadgeColor={showSettingsFullBadge ? "red" : "yellow"}

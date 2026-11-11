@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { useTeamWorkspace } from "@/hooks/useTeamWorkspace";
 import { QuestionLengthCounter } from "@/components/question-length-counter/QuestionLengthCounter";
 
 interface AddPersonalQuestionDialogProps {
@@ -30,7 +29,6 @@ export function AddPersonalQuestionDialog({
 }: AddPersonalQuestionDialogProps) {
   const [questionText, setQuestionText] = useState("");
   const [isPublic, setIsPublic] = useState(false);
-  const { teamWorkspaceId } = useTeamWorkspace();
   const addPersonalQuestion = useMutation(api.core.questions.addPersonalQuestion);
 
   const handleSubmit = async () => {
@@ -42,7 +40,6 @@ export function AddPersonalQuestionDialog({
       await addPersonalQuestion({
         customText: questionText,
         isPublic,
-        organizationId: teamWorkspaceId,
       });
       if (isPublic) {
         toast.success("Question submitted for review!");
@@ -64,7 +61,7 @@ export function AddPersonalQuestionDialog({
         <DialogHeader>
           <DialogTitle>Add a New Personal Question</DialogTitle>
           <DialogDescription>
-            Create a question to add to your collection.
+            Create a question to add to your stash.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
