@@ -147,7 +147,8 @@
     "src/hooks/useWorkspace.tsx": [],
     "src/hooks/useWorkspaceSwitch.ts": [],
     "convex/clerk.ts": [
-      "convex/clerk.test.ts"
+      "convex/clerk.test.ts",
+      "convex/user_deletion.test.ts"
     ],
     "convex/core/billing.ts": [
       "convex/core/billing.test.ts",
@@ -203,7 +204,14 @@
     "convex/functions.test.ts": [],
     "convex/workspace_cleanup.test.ts": [],
     "src/app/data-retention/page.tsx": [],
-    "src/app/privacy/page.tsx": []
+    "src/app/privacy/page.tsx": [],
+    "convex/internal/userDeletion.ts": [
+      "convex/user_deletion.test.ts"
+    ],
+    "convex/lib/questionReferences.ts": [
+      "convex/question_references.test.ts",
+      "convex/user_deletion.test.ts"
+    ]
   },
   "selection": {},
   "warn": [
