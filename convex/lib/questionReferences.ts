@@ -6,8 +6,7 @@ import type { MutationCtx } from "../_generated/server";
  *
  * Rows that only make sense for a live question are removed: its embeddings (vector search
  * keeps returning them), per-user state (seen, liked, hidden, sent), pending pruning reviews
- * and pending duplicate groups (neither can be resolved once a member is gone), and
- * collection entries. History is kept: analytics events, approved or rejected reviews,
+ * and pending duplicate groups (neither can be resolved once a member is gone). History is kept: analytics events, approved or rejected reviews,
  * generation runs and email deliveries.
  */
 
