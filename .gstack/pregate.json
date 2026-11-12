@@ -92,8 +92,10 @@
       "convex/workspace_removed.test.ts"
     ],
     "convex/internal/users.ts": [
+      "convex/clerk.test.ts",
       "convex/generation_quality.test.ts",
-      "convex/internal/users.test.ts"
+      "convex/internal/users.test.ts",
+      "convex/user_deletion.test.ts"
     ],
     "evals/runs/**": [],
     "**/*.md": [],
@@ -211,6 +213,20 @@
     "convex/lib/questionReferences.ts": [
       "convex/question_references.test.ts",
       "convex/user_deletion.test.ts"
+    ],
+    "convex/internal/newsletterDelivery.ts": [
+      "convex/internal/newsletterDelivery.test.ts",
+      "convex/user_deletion.test.ts"
+    ],
+    "convex/lib/users.ts": [
+      "convex/clerk.test.ts",
+      "convex/core/users.test.ts",
+      "convex/user_deletion.test.ts"
+    ],
+    "convex/schema.ts": [
+      "convex/user_deletion.test.ts",
+      "convex/clerk.test.ts",
+      "convex/core/users.test.ts"
     ]
   },
   "selection": {},
