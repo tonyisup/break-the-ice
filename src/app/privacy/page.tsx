@@ -73,7 +73,7 @@ export default function PrivacyPolicyPage() {
         <section>
           <h2 className="text-xl font-semibold mb-2">8. Data Retention</h2>
           <p>
-            We retain account data for 30 days following deactivation/deletion. Interaction analytics are retained for 90 days before being aggregated or deleted. For more details, see our <a href="/data-retention" className="text-blue-500 hover:underline">Data Retention Policy</a>.
+            We delete your account data as soon as you delete your account. Interaction analytics are retained for 90 days before being aggregated or deleted. For more details, see our <a href="/data-retention" className="text-blue-500 hover:underline">Data Retention Policy</a>.
           </p>
         </section>
       </div>
