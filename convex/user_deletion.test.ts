@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { Webhook } from "svix";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { convexFunctionModules } from "../vitestConvexModules";
@@ -298,6 +298,104 @@ describe("deleting a person when Clerk deletes their account", () => {
 			expect(await ctx.db.query("userQuestions").withIndex("by_questionId", (q) => q.eq("questionId", retired)).collect()).toEqual([]);
 		});
 		expect(await remainingFor(t, userId)).toEqual(nothingLeft);
+	});
+});
+
+describe("what happens around a deletion", () => {
+	// Regression test from the ship review (Claude Opus 5.5), Step 11 fix round; raised by Codex and the red team.
+	// Value: protects=a new sign-up with the deleted account's email gets a fresh row that the deletion leaves alone; fails_when=the row keeps its email or Clerk id while pages run, so the new account reuses it and is wiped; why_new=no test signed up again mid-deletion; seam=none; no_claim=real Clerk delivery timing
+	test("signing up again with the same email while the deletion runs keeps the new account", async () => {
+		const t = newTest();
+		const { userId } = await seedPerson(t, "user_gone");
+
+		await t.mutation(internal.internal.userDeletion.startUserDeletion, { clerkId: "user_gone" });
+		await t.fetch("/clerk-users-webhook", signedWebhookRequest({
+			type: "user.created",
+			data: { id: "user_new", email_addresses: [{ email_address: "user_gone@example.com" }], first_name: "Back", last_name: "Again", image_url: "https://example.com/a.png" },
+		}));
+		await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+		expect(await remainingFor(t, userId)).toEqual(nothingLeft);
+		const fresh = await t.run(async (ctx) => ctx.db.query("users").withIndex("by_clerkId", (q) => q.eq("clerkId", "user_new")).unique());
+		expect(fresh?._id).not.toBe(userId);
+		expect(fresh?.email).toBe("user_gone@example.com");
+	});
+
+	// Regression test from the ship review (Claude Opus 5.5), Step 11 fix round; raised by Codex, Claude and the red team.
+	// Value: protects=a user.updated delivered after user.deleted recreates nothing; fails_when=the webhook upserts the deleted Clerk id again with its email and name; why_new=no test sent an event after the deletion; seam=none; no_claim=Svix ordering in production
+	test("a Clerk update that arrives after the deletion does not bring the account back", async () => {
+		const t = newTest();
+		await seedPerson(t, "user_gone");
+		await t.fetch("/clerk-users-webhook", signedWebhookRequest({ type: "user.deleted", data: { id: "user_gone", deleted: true, object: "user" } }));
+		await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+		const response = await t.fetch("/clerk-users-webhook", signedWebhookRequest({
+			type: "user.updated",
+			data: { id: "user_gone", email_addresses: [{ email_address: "user_gone@example.com" }], first_name: "Old", last_name: "Name", image_url: "https://example.com/a.png" },
+		}));
+
+		expect(response.status).toBe(200);
+		expect(await t.run(async (ctx) => ctx.db.query("users").withIndex("email", (q) => q.eq("email", "user_gone@example.com")).collect())).toEqual([]);
+	});
+
+	// Regression test from the ship review (Claude Opus 5.5), Step 11 fix round.
+	// Value: protects=a session that outlived its deleted account cannot recreate the users row; fails_when=getOrCreateCanonicalUser inserts a row for a deleted Clerk id; why_new=no test called a mutation as a deleted account; seam=none; no_claim=Clerk's real session expiry
+	test("a session left open after the deletion cannot recreate the account", async () => {
+		const t = newTest();
+		await seedPerson(t, "user_gone");
+		await t.mutation(internal.internal.userDeletion.startUserDeletion, { clerkId: "user_gone" });
+		await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+		const stale = t.withIdentity({ subject: "user_gone", tokenIdentifier: "https://clerk.example|user_gone", email: "user_gone@example.com" });
+		await expect(stale.mutation(api.core.users.store, {})).rejects.toThrow(/deleted/);
+		expect(await t.run(async (ctx) => ctx.db.query("users").withIndex("email", (q) => q.eq("email", "user_gone@example.com")).collect())).toEqual([]);
+	});
+
+	// Regression test from the ship review (Claude Opus 5.5), Step 11 fix round; raised by Claude, Codex and the specialist.
+	// Value: protects=marking a batch sent still updates everyone else when one delivery was deleted mid-send; fails_when=the mark mutation patches the missing row, throws and rolls back the whole batch, so others are resent; why_new=no test deleted a claimed delivery; seam=none; no_claim=the Resend call
+	test("a delivery deleted mid-send does not stop the rest of the batch being marked sent or failed", async () => {
+		const t = newTest();
+		const { gone, kept, questionId } = await t.run(async (ctx) => {
+			const questionId = await ctx.db.insert("questions", { ...counters, text: "Today's question", status: "public" });
+			const other = await ctx.db.insert("users", { email: "other@example.com" });
+			const delivery = { deliveryDate: "2026-11-12", status: "processing" as const, attemptCount: 1, createdAt: 0, updatedAt: 0 };
+			const gone = await ctx.db.insert("newsletterDeliveries", { ...delivery, email: "gone@example.com", userId: other });
+			const kept = await ctx.db.insert("newsletterDeliveries", { ...delivery, email: "other@example.com", userId: other });
+			await ctx.db.delete(gone);
+			return { gone, kept, questionId };
+		});
+
+		await t.mutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesSent, {
+			deliveries: [{ deliveryId: gone, questionId }, { deliveryId: kept, questionId }],
+		});
+		expect((await t.run(async (ctx) => ctx.db.get(kept)))?.status).toBe("sent");
+
+		await t.mutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesFailed, { deliveryIds: [gone, kept], error: "boom" });
+		expect((await t.run(async (ctx) => ctx.db.get(kept)))?.status).toBe("failed");
+	});
+
+	// Regression test from the ship review (Claude Opus 5.5), Step 11 fix round; the groups are now read once per page.
+	// Value: protects=two of their questions in one pending duplicate group are both deleted on one page and the group is settled; fails_when=the once-read group list is settled stale, patching or deleting a row already settled; why_new=no test deleted two members of one pending group together; seam=none; no_claim=read limits
+	test("two of their questions in one pending duplicate group are deleted together and the group is settled", async () => {
+		const t = newTest();
+		const { userId } = await seedPerson(t, "user_gone");
+		const { group, survivor } = await t.run(async (ctx) => {
+			const a = await ctx.db.insert("questions", { ...counters, customText: "Mine A", authorId: userId, status: "private" });
+			const b = await ctx.db.insert("questions", { ...counters, customText: "Mine B", authorId: userId, status: "private" });
+			const survivor = await ctx.db.insert("questions", { ...counters, text: "Library one", status: "public" });
+			const questionIds = [a, b, survivor].sort();
+			const group = await ctx.db.insert("duplicateDetections", { questionIds, uniqueKey: questionIds.join("_"), reason: "same", confidence: 0.9, status: "pending" });
+			return { group, survivor };
+		});
+
+		await t.mutation(internal.internal.userDeletion.startUserDeletion, { clerkId: "user_gone" });
+		await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+		expect(await remainingFor(t, userId)).toEqual(nothingLeft);
+		await t.run(async (ctx) => {
+			expect(await ctx.db.get(group)).toBeNull();
+			expect(await ctx.db.get(survivor)).not.toBeNull();
+		});
 	});
 });
 

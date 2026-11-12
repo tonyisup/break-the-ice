@@ -1,9 +1,10 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import { isQuestionPublic } from "../lib/questionAccess";
 import { removeQuestionReferences } from "../lib/questionReferences";
+import { isDeletedClerkAccount } from "../lib/users";
 
 /*
  * Deleting a person when their Clerk account is deleted.
@@ -12,7 +13,9 @@ import { removeQuestionReferences } from "../lib/questionReferences";
  * preference embedding, their daily-email deliveries, and every question they wrote that isn't
  * public. A public question they wrote stays in the library without its author. History that
  * counts toward shared numbers stays without their id: analytics events, feedback and
- * generation runs. The users row goes last, once nothing else is left.
+ * generation runs. Their name, email and Clerk id are cleared when the deletion starts, and
+ * the Clerk id is recorded so the account can't come back; the users row goes last, once
+ * nothing else is left.
  */
 
 /** Rows one page writes. A question deleted counts as QUESTION_COST: it removes what points at it. */
@@ -24,13 +27,26 @@ export const startUserDeletion = internalMutation({
 	args: { clerkId: v.string() },
 	returns: v.number(),
 	handler: async (ctx, args) => {
+		if (!(await isDeletedClerkAccount(ctx, args.clerkId))) {
+			await ctx.db.insert("deletedClerkAccounts", { clerkId: args.clerkId, deletedAt: Date.now() });
+		}
 		const users = await ctx.db
 			.query("users")
 			.withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
 			.collect();
 		for (const user of users) {
-			// Stop the daily email at once; the deliveries go with the rest.
-			await ctx.db.patch(user._id, { newsletterSubscriptionStatus: "unsubscribed" });
+			// Clear who they are at once: a new sign-up with the same email must get a fresh row,
+			// not this one, and the daily email stops. The rest goes page by page.
+			await ctx.db.patch(user._id, {
+				clerkId: undefined,
+				tokenIdentifier: undefined,
+				email: undefined,
+				phone: undefined,
+				name: undefined,
+				image: undefined,
+				newsletterSubscriptionStatus: "unsubscribed",
+				newsletterUnsubscribeToken: undefined,
+			});
 			await ctx.scheduler.runAfter(0, internal.internal.userDeletion.deleteUserDataPage, { userId: user._id });
 		}
 		return users.length;
@@ -75,6 +91,8 @@ const STEPS: Step[] = [
 			.withIndex("by_author", (q) => q.eq("authorId", userId))
 			.take(limit);
 		let changed = 0;
+		// Every deleted question settles the pending duplicate groups; read them once per page.
+		let pendingGroups: Doc<"duplicateDetections">[] | undefined;
 		for (const question of questions) {
 			if (isQuestionPublic(question)) {
 				await ctx.db.patch(question._id, { authorId: undefined });
@@ -92,7 +110,11 @@ const STEPS: Step[] = [
 			for (const row of seenBy) await ctx.db.delete(row._id);
 			changed += seenBy.length;
 			if (seenBy.length === room) return { changed, more: true };
-			await removeQuestionReferences(ctx, question._id);
+			pendingGroups ??= await ctx.db
+				.query("duplicateDetections")
+				.withIndex("by_status", (q) => q.eq("status", "pending"))
+				.collect();
+			await removeQuestionReferences(ctx, question._id, pendingGroups);
 			if (question.imageStorageId) await ctx.storage.delete(question.imageStorageId);
 			await ctx.db.delete(question._id);
 			changed += QUESTION_COST;

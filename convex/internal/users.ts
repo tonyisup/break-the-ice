@@ -3,7 +3,7 @@ import { internalMutation, internalQuery, internalAction, type QueryCtx } from "
 import type { Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { calculateAverageEmbedding } from "../lib/embeddings";
-import { findCanonicalUser, getOrCreateCanonicalUser } from "../lib/users";
+import { findCanonicalUser, getOrCreateCanonicalUser, isDeletedClerkAccount } from "../lib/users";
 import {
 	checkAndIncrementAiUsage,
 	decrementAiUsage,
@@ -96,6 +96,8 @@ export const updateUserFromClerk = internalMutation({
 		image: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		// Clerk can deliver a user.updated after user.deleted; it changes nothing then.
+		if (await isDeletedClerkAccount(ctx, args.clerkId)) return;
 		await getOrCreateCanonicalUser(ctx, {
 			clerkId: args.clerkId,
 			email: args.email,
