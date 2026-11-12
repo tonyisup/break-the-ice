@@ -5,7 +5,7 @@ import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 
 import { fingerprintText } from "../lib/promptArchitecture";
-import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUnlistedAiQuestion, isWorkspaceQuestion } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUnlistedAiQuestion } from "../lib/questionAccess";
 import { resolveTaxonomySlug } from "../lib/taxonomyLookup";
 import { PENDING_QUEUE_LIMIT } from "../constants";
 import { recordReview, reviewReason, shownWording, syncReviewedEmbedding } from "../lib/questionReview";
@@ -49,12 +49,10 @@ export const getPendingQuestions = query({
 	returns: v.array(v.any()),
 	handler: async (ctx) => {
 		await ensureAdmin(ctx);
-		// A workspace's question can't be approved (updateQuestion), so it isn't listed either.
 		return await ctx.db
 			.query("questions")
 			.withIndex("by_status", (q) => q.eq("status", "pending"))
 			.order("asc")
-			.filter((q) => q.and(q.eq(q.field("organizationId"), undefined), q.neq(q.field("kind"), "team_prompt")))
 			.take(PENDING_QUEUE_LIMIT + 1);
 	},
 });
@@ -173,9 +171,6 @@ export const updateQuestion = mutation({
 		const reviewer = await ensureAdmin(ctx);
         const before = await ctx.db.get(args.id);
         if (!before) throw new Error("Question not found");
-        if (isWorkspaceQuestion(before)) {
-            throw new Error("This question belonged to a team workspace and can no longer be changed.");
-        }
         const changesReviewedContent =
             (args.text !== undefined && args.text.trim() !== before.text) ||
             (args.status !== undefined && args.status !== before.status);
@@ -783,7 +778,7 @@ export const deleteDuplicateQuestions = mutation({
         // keeping it over a public copy would take that content out of every shared list.
         if (questions.some(isUnlistedAiQuestion)) throw new Error("Approve or reject the question held for review before resolving these duplicates");
         const keep = questions.find(q => q._id === args.keepQuestionId)!;
-        if (questions.some(q => q.organizationId !== keep.organizationId || q.kind !== keep.kind)) throw new Error("Cannot resolve duplicates across library, personal and team questions");
+        if (questions.some(q => q.kind !== keep.kind)) throw new Error("Cannot resolve duplicates across library and personal questions");
         // Retiring a public copy in favor of a hidden one would take that content out of every shared list.
         if (!isQuestionPublic(keep) && questions.some(q => retiring.has(q._id) && isQuestionPublic(q))) throw new Error("Keep a public question when retiring a public copy");
         for (const question of questions) {

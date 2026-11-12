@@ -317,7 +317,7 @@ describe("recomputing stored fingerprints", () => {
     expect(await fingerprintOf(t, second)).toBe(fingerprintText(roadTrip));
   });
 
-  test("private personal, team and organization questions stay alone; an approved submission is recomputed", async () => {
+  test("private personal questions stay alone; an approved submission is recomputed", async () => {
     const { t } = await setup();
     await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip) });
     // Reviewing a submission copies its custom text into text (the admin page sends q.text || q.customText).
@@ -335,24 +335,19 @@ describe("recomputing stored fingerprints", () => {
       status: "public",
       fingerprint: "q_old_approved",
     });
-    const teamPrompt = await insertQuestion(t, {
+    const personalKind = await insertQuestion(t, {
       customText: roadTripCurly,
-      kind: "team_prompt",
+      kind: "personal",
       status: "private",
       fingerprint: fingerprintText(roadTrip),
     });
-    const organizationId = await t.run(async (ctx) =>
-      ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }),
-    );
-    const orgQuestion = await insertQuestion(t, { organizationId, text: roadTripCurly, status: "private", fingerprint: "q_old_org" });
 
     const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
 
-    expect(summary).toMatchObject({ scanned: 5, privateUserQuestions: 3, changed: 1, collisions: [] });
+    expect(summary).toMatchObject({ scanned: 4, privateUserQuestions: 2, changed: 1, collisions: [] });
     expect(await fingerprintOf(t, keptPrivate)).toBe("q_old_kept_private");
     expect(await fingerprintOf(t, approved)).toBe(fingerprintText(smell));
-    expect(await fingerprintOf(t, teamPrompt)).toBe(fingerprintText(roadTrip));
-    expect(await fingerprintOf(t, orgQuestion)).toBe("q_old_org");
+    expect(await fingerprintOf(t, personalKind)).toBe(fingerprintText(roadTrip));
   });
 
   test("collisions list public duplicates, unchanged ones and ones without text included, but not retired, private or held copies", async () => {
@@ -420,30 +415,6 @@ describe("recomputing stored fingerprints", () => {
     expect(summary).toMatchObject({ scanned: count, changed: count });
     expect(await fingerprintOf(t, ids[0])).toBe(fingerprintText("What's question number 0 on the list?"));
     expect(await fingerprintOf(t, ids[count - 1])).toBe(fingerprintText(`What's question number ${count - 1} on the list?`));
-  });
-
-  test("a public organization question is recomputed and listed with its organization", async () => {
-    const { t } = await setup();
-    const global = await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip) });
-    const organizationId = await t.run(async (ctx) =>
-      ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }),
-    );
-    const orgCopy = await insertQuestion(t, { organizationId, text: roadTripCurly, status: "public", fingerprint: "q_old_org" });
-
-    const summary = await t.action(internal.internal.migrations.recomputeQuestionFingerprints, { dryRun: false });
-
-    expect(summary).toMatchObject({ privateUserQuestions: 0, changed: 1 });
-    // The duplicates page won't merge across organizations, so the report says which side each is on.
-    expect(summary.collisions).toEqual([
-      {
-        fingerprint: fingerprintText(roadTrip),
-        size: 2,
-        questions: [
-          { questionId: global, status: "public" },
-          { questionId: orgCopy, status: "public", organizationId },
-        ],
-      },
-    ]);
   });
 
   test("a submission that is approved, has no status, or keeps its wording only in custom text is recomputed", async () => {
@@ -753,10 +724,6 @@ describe("recomputing stored fingerprints", () => {
 describe("private questions keep no fingerprint", () => {
   const editor = { subject: "editor", tokenIdentifier: "https://issuer.test|editor", metadata: { isAdmin: "true" } };
 
-  async function setupOrganization(t: TestConvex) {
-    return t.run(async (ctx) => ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }));
-  }
-
   test("Mark Personal on a submission leaves it without a fingerprint", async () => {
     const { t, insertGenerated } = await setup();
     const admin = t.withIdentity(editor);
@@ -821,24 +788,6 @@ describe("private questions keep no fingerprint", () => {
     const [review] = await admin.query(api.admin.pruning.getReviewHistory, { source: "question" });
     await admin.mutation(api.admin.pruning.undoReview, { reviewId: review._id });
     expect(await t.run(async (ctx) => ctx.db.get(approved))).toMatchObject({ status: "public", fingerprint: fingerprintText(smell) });
-  });
-
-  test("an admin can't edit a team prompt or organization question, so an edit never fingerprints one", async () => {
-    const { t } = await setup();
-    const admin = t.withIdentity(editor);
-    const organizationId = await setupOrganization(t);
-    const teamPrompt = await insertQuestion(t, { organizationId, authorId: "author-1", customText: smell, kind: "team_prompt", status: "private" });
-    const orgQuestion = await insertQuestion(t, { organizationId, customText: bus, status: "private" });
-
-    await expect(
-      admin.mutation(api.admin.questions.updateQuestion, { id: teamPrompt, expectedRevision: 0, reviewReason: "Tidy", text: smell }),
-    ).rejects.toThrow("belonged to a team workspace");
-    await expect(
-      admin.mutation(api.admin.questions.updateQuestion, { id: orgQuestion, reviewReason: "Retag", tags: ["travel"] }),
-    ).rejects.toThrow("belonged to a team workspace");
-
-    expect(await fingerprintOf(t, teamPrompt)).toBeNull();
-    expect(await fingerprintOf(t, orgQuestion)).toBeNull();
   });
 
   test("a library question keeps its fingerprint whatever its status, and an edit recomputes it", async () => {
@@ -1028,13 +977,10 @@ describe("private questions keep no fingerprint", () => {
 });
 
 describe("the prompt architecture backfill", () => {
-  test("skips private personal and team questions, and fingerprints library questions and public submissions", async () => {
+  test("skips private personal questions, and fingerprints library questions and public submissions", async () => {
     const { t } = await setup();
-    const organizationId = await t.run(async (ctx) =>
-      ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }),
-    );
     const personal = await insertQuestion(t, { authorId: "author-1", customText: smell, status: "private" });
-    const teamPrompt = await insertQuestion(t, { organizationId, customText: bus, kind: "team_prompt", status: "private" });
+    const personalKind = await insertQuestion(t, { customText: bus, kind: "personal", status: "private" });
     const approved = await insertQuestion(t, { authorId: "author-2", customText: roadTrip, status: "approved" });
     const library = await insertQuestion(t, { text: bus });
 
@@ -1042,7 +988,7 @@ describe("the prompt architecture backfill", () => {
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     const rows = await t.run(async (ctx) =>
-      Promise.all([personal, teamPrompt, approved, library].map(async (id) => {
+      Promise.all([personal, personalKind, approved, library].map(async (id) => {
         const question = await ctx.db.get(id);
         return { fingerprint: question?.fingerprint ?? null, source: question?.source ?? null };
       })),
@@ -1108,17 +1054,13 @@ describe("the prompt architecture backfill", () => {
 
 describe("clearing fingerprints private questions still hold", () => {
   async function setupQuestions(t: TestConvex) {
-    const organizationId = await t.run(async (ctx) =>
-      ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" }),
-    );
     return {
       library: await insertQuestion(t, { text: roadTrip, fingerprint: fingerprintText(roadTrip) }),
       prunedLibrary: await insertQuestion(t, { text: bus, fingerprint: fingerprintText(bus), status: "pruned" }),
       approved: await insertQuestion(t, { authorId: "author-1", customText: bus, text: bus, status: "approved", fingerprint: fingerprintText(bus) }),
       personal: await insertQuestion(t, { authorId: "author-2", customText: smell, text: smell, status: "private", fingerprint: fingerprintText(smell) }),
       pending: await insertQuestion(t, { authorId: "author-3", customText: smell, status: "pending", fingerprint: "q_old_pending" }),
-      teamPrompt: await insertQuestion(t, { organizationId, customText: roadTrip, kind: "team_prompt", status: "private", fingerprint: fingerprintText(roadTrip) }),
-      orgQuestion: await insertQuestion(t, { organizationId, text: bus, status: "private", fingerprint: fingerprintText(bus) }),
+      personalKind: await insertQuestion(t, { customText: roadTrip, kind: "personal", status: "private", fingerprint: fingerprintText(roadTrip) }),
       withoutFingerprint: await insertQuestion(t, { authorId: "author-4", customText: bus, status: "private" }),
     };
   }
@@ -1130,7 +1072,7 @@ describe("clearing fingerprints private questions still hold", () => {
 
     const summary = await t.action(internal.internal.migrations.clearPrivateQuestionFingerprints, { dryRun: true });
 
-    expect(summary).toEqual({ scanned: 8, privateUserQuestions: 5, cleared: 4 });
+    expect(summary).toEqual({ scanned: 7, privateUserQuestions: 4, cleared: 3 });
     const after = await t.run(async (ctx) => (await ctx.db.query("questions").collect()).map((q) => q.fingerprint ?? null));
     expect(after).toEqual(before);
   });
@@ -1141,15 +1083,15 @@ describe("clearing fingerprints private questions still hold", () => {
 
     const summary = await t.action(internal.internal.migrations.clearPrivateQuestionFingerprints, { dryRun: false });
 
-    expect(summary).toEqual({ scanned: 8, privateUserQuestions: 5, cleared: 4 });
-    for (const id of [ids.personal, ids.pending, ids.teamPrompt, ids.orgQuestion, ids.withoutFingerprint]) {
+    expect(summary).toEqual({ scanned: 7, privateUserQuestions: 4, cleared: 3 });
+    for (const id of [ids.personal, ids.pending, ids.personalKind, ids.withoutFingerprint]) {
       expect(await fingerprintOf(t, id)).toBeNull();
     }
     expect(await fingerprintOf(t, ids.library)).toBe(fingerprintText(roadTrip));
     expect(await fingerprintOf(t, ids.prunedLibrary)).toBe(fingerprintText(bus));
     expect(await fingerprintOf(t, ids.approved)).toBe(fingerprintText(bus));
     expect((await insertGenerated(smell)).insertedCount).toBe(1);
-    // The team prompt shared the library question's fingerprint; the library question still counts.
+    // The personal question shared the library question's fingerprint; the library question still counts.
     expect((await insertGenerated(roadTrip)).duplicates).toEqual([{ text: roadTrip, reason: "duplicate of existing question" }]);
 
     const again = await t.action(internal.internal.migrations.clearPrivateQuestionFingerprints, { dryRun: false });

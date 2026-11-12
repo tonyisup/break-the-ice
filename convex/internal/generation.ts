@@ -53,9 +53,7 @@ async function getLatestActiveBySlug(
     ...new Map([...bySlug, ...byLegacyId].map((doc) => [doc._id, doc])).values(),
   ];
 
-  // Only the shared entries count, never one a workspace owned.
   const latest = docs
-    .filter((doc) => !doc.organizationId)
     .filter((doc) => (doc.status ?? "active") === "active")
     .sort(byLatestVersion)[0];
 
@@ -71,11 +69,10 @@ type TaxonomyDoc = Doc<"styles"> | Doc<"tones"> | Doc<"topics">;
 
 /**
  * The latest active version of the entry an id points to. Versions of one entry share
- * a slug (legacy rows only an `id`), so both are searched, among the shared entries
- * only. An id is only a way to find the entry: prompts must never be built
- * from a draft or archived version, which is why they said "Good examples: none".
- * Returns null when the id doesn't exist, the entry has no active version, or a
- * workspace owned it.
+ * a slug (legacy rows only an `id`), so both are searched. An id is only a way to find the
+ * entry: prompts must never be built from a draft or archived version, which is why they said
+ * "Good examples: none". Returns null when the id doesn't exist or the entry has no active
+ * version.
  */
 async function getLatestActiveSibling(
   ctx: QueryCtx,
@@ -83,7 +80,7 @@ async function getLatestActiveSibling(
   id: Id<TaxonomyTable>,
 ): Promise<TaxonomyDoc | null> {
   const doc = (await ctx.db.get(id)) as TaxonomyDoc | null;
-  if (!doc || doc.organizationId) return null;
+  if (!doc) return null;
   const key = doc.slug ?? doc.id;
   const query = ctx.db.query(table as "styles");
   const [bySlug, byLegacyId] = await Promise.all([
@@ -94,7 +91,6 @@ async function getLatestActiveSibling(
   for (const sibling of [...bySlug, ...byLegacyId] as TaxonomyDoc[]) siblings.set(sibling._id, sibling);
   return (
     [...siblings.values()]
-      .filter((sibling) => !sibling.organizationId)
       .filter((sibling) => (sibling.status ?? "active") === "active")
       .sort(byLatestVersion)[0] ?? null
   );
@@ -185,8 +181,7 @@ async function readBriefExamples(
   // A question keeps the id of the style version it was written for, so every version of a
   // style is searched within the bounded pool.
   const allStyles = await ctx.db.query("styles").take(STYLE_POOL);
-  // Only the shared library's styles, as the style passed in is (getTaxonomyDoc).
-  const versionsOf = (slug: string) => allStyles.filter((row) => slugOf(row) === slug && !row.organizationId);
+  const versionsOf = (slug: string) => allStyles.filter((row) => slugOf(row) === slug);
   const questionsOf = async (rows: Doc<"styles">[], statuses: Array<Doc<"questions">["status"]>, count: number) => {
     const pages = await Promise.all(
       rows.flatMap((row) =>
@@ -228,7 +223,7 @@ async function readBriefExamples(
   const rejected = shuffled(withReasons, random).slice(0, BRIEF_REJECTED_EXAMPLES);
 
   const otherLiveSlugs = [
-    ...new Set(allStyles.filter((row) => !row.organizationId && (row.status ?? "active") === "active").map(slugOf)),
+    ...new Set(allStyles.filter((row) => (row.status ?? "active") === "active").map(slugOf)),
   ]
     .filter((slug) => slug !== slugOf(style))
     .sort();

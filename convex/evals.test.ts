@@ -211,7 +211,6 @@ describe("eval data", () => {
   test("library neighbours are only shared public questions", async () => {
     const t = await setup();
     const ids = await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym" });
       const userId = await ctx.db.insert("users", { email: "a@example.com", clerkId: "a" });
       const publicId = await ctx.db.insert("questions", { text: "Public?", status: "public", ...counters });
       const pruned = await ctx.db.insert("questions", { text: "Pruned?", status: "pruned", ...counters });
@@ -225,15 +224,14 @@ describe("eval data", () => {
       // Older pruning set only prunedAt and left the status public.
       const legacyPruned = await ctx.db.insert("questions", { text: "Pruned long ago?", status: "public", prunedAt: 1, ...counters });
       const personal = await ctx.db.insert("questions", { text: "Mine?", authorId: userId, status: "public", ...counters });
-      const team = await ctx.db.insert("questions", { text: "Team?", organizationId: orgId, status: "public", ...counters });
       const deleted = await ctx.db.insert("questions", { text: "Gone?", status: "public", ...counters });
       await ctx.db.delete(deleted);
-      return [publicId, pruned, retired, legacyPruned, personal, team, deleted];
+      return [publicId, pruned, retired, legacyPruned, personal, deleted];
     });
 
     const texts = await t.query(internal.internal.evalData.publicLibraryTexts, { questionIds: ids });
 
-    expect(texts).toEqual(["Public?", null, null, null, null, null, null]);
+    expect(texts).toEqual(["Public?", null, null, null, null, null]);
   });
 
   test("fingerprint matches count existing copies, up to two", async () => {

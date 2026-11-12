@@ -48,13 +48,13 @@ export function isQuestionPublic(question: Doc<"questions">): boolean {
 	return !isRetiredQuestion(question) && (status === "public" || status === "approved" || status === undefined);
 }
 
-/** A personal question, team prompt or organization question, public or not: not a library question. */
+/** A person's own question, public or not: not a library question. */
 export function isUserWrittenQuestion(question: Doc<"questions">): boolean {
-	return question.authorId !== undefined || question.kind !== undefined || question.organizationId !== undefined;
+	return question.authorId !== undefined || question.kind !== undefined;
 }
 
 /**
- * A personal question, team prompt or organization question that isn't public. It isn't a
+ * A person's own question that isn't public. It isn't a
  * library question, so it keeps no fingerprint: generation dedupes its candidates against the
  * library's fingerprints only.
  */
@@ -74,22 +74,12 @@ export function isUnlistedAiQuestion(question: Doc<"questions">): boolean {
 		question.heldForReview === true &&
 		question.status === "pending" &&
 		question.isAIGenerated === true &&
-		!question.authorId &&
-		!question.organizationId
+		!question.authorId
 	);
-}
-
-/**
- * A team's prompt or an organization's question. Workspaces are gone, so nobody reads one, by
- * link or otherwise, and no list or pick includes it, until removeWorkspaceData deletes it.
- */
-export function isWorkspaceQuestion(question: Pick<Doc<"questions">, "kind" | "organizationId">): boolean {
-	return question.kind === "team_prompt" || question.organizationId !== undefined;
 }
 
 /** Anyone with the link can open it, signed in or not: public, or an AI question held for review. */
 export function isReadableByLink(question: Doc<"questions">): boolean {
-	if (isWorkspaceQuestion(question)) return false;
 	return isQuestionPublic(question) || isUnlistedAiQuestion(question);
 }
 
@@ -105,7 +95,6 @@ export async function canReadQuestion(
 ): Promise<boolean> {
 	if (isReadableByLink(question)) return true;
 	if (!userId) return false;
-	if (isWorkspaceQuestion(question)) return false;
 	return question.authorId === userId;
 }
 

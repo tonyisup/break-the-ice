@@ -406,9 +406,7 @@ export const reassignUserStylesBatch = internalMutation({
       // or the style would be listed twice for them and one unhide wouldn't clear it.
       const already = await ctx.db
         .query("userStyles")
-        .withIndex("by_userId_organizationId_and_styleId", (q) =>
-          q.eq("userId", userStyle.userId).eq("organizationId", userStyle.organizationId).eq("styleId", args.nextStyleId),
-        )
+        .withIndex("by_userIdAndStyleId", (q) => q.eq("userId", userStyle.userId).eq("styleId", args.nextStyleId))
         .first();
       if (already) {
         await ctx.db.delete(userStyle._id);

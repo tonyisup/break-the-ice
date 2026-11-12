@@ -8,9 +8,9 @@ import { taxonomyDefinitions } from "../lib/taxonomyDefinitions";
 /** Questions read per page when measuring the library, to stay well within a query's limits. */
 const LIBRARY_PAGE_SIZE = 500;
 
-/** The shared library a duplicate check searches: public, global, non-personal questions with text. */
+/** The shared library a duplicate check searches: public, non-personal questions with text. */
 function isSharedLibraryQuestion(question: Doc<"questions">): boolean {
-  return Boolean(question.text) && !question.authorId && !question.organizationId && !question.duplicateOf && isQuestionPublic(question);
+  return Boolean(question.text) && !question.authorId && !question.duplicateOf && isQuestionPublic(question);
 }
 
 /**
@@ -57,7 +57,7 @@ export const libraryFingerprintMatches = internalQuery({
 
 /**
  * The text of each question that is in the shared library, in the order given; null for
- * missing, personal, team and non-public questions.
+ * missing, personal and non-public questions.
  */
 export const publicLibraryTexts = internalQuery({
   args: { questionIds: v.array(v.id("questions")) },

@@ -34,27 +34,20 @@ test("entitlements are the person's own: the one plan's allowance and the billin
   });
 });
 
-test("entitlements don't change with a paying team the person belonged to, or with a workspace an old app sends", async () => {
+test("entitlements don't change with a workspace an old app sends", async () => {
   vi.stubEnv("MAX_FREE_AIGEN", "7");
   const t = convexTest(schema, convexFunctionModules);
-  const organizationId = await t.run(async (ctx) => {
-    const userId = await ctx.db.insert("users", {
+  await t.run(async (ctx) => {
+    await ctx.db.insert("users", {
       email: "member@example.com",
       clerkId: "user_123",
       tokenIdentifier: "https://clerk.example|user_123",
     });
-    const organizationId = await ctx.db.insert("organizations", {
-      name: "Acme Workspace",
-      planTier: "team",
-      billingStatus: "active",
-    });
-    await ctx.db.insert("organization_members", { userId, organizationId, role: "admin" });
-    return organizationId;
   });
 
   const entitlements = await t
     .withIdentity(identity)
-    .query(api.core.billing.getEffectiveEntitlements, { organizationId });
+    .query(api.core.billing.getEffectiveEntitlements, { organizationId: "k57c3m8a9e2zq0organization" });
   expect(entitlements).toMatchObject({ planTier: "free", billingStatus: "inactive", aiLimit: 7 });
 });
 

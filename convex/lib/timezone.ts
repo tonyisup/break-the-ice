@@ -7,8 +7,6 @@ export type CalendarDay =
   | "saturday"
   | "sunday";
 
-export const DEFAULT_ORGANIZATION_TIME_ZONE = "America/Los_Angeles";
-
 export function isValidTimeZone(timeZone: string): boolean {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone }).format();

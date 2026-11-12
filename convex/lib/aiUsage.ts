@@ -11,14 +11,10 @@ type AiUsageSnapshot = {
   cycleStart: number;
 };
 
-// A usage row still carries the workspace it was counted in. A person's own row has none,
-// and it is the only one read.
 async function getAiUsageRow(ctx: QueryCtx | MutationCtx, userId: Id<"users">) {
   return await ctx.db
     .query("userAiUsage")
-    .withIndex("by_userId_organizationId", (q) =>
-      q.eq("userId", userId).eq("organizationId", undefined),
-    )
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
     .unique();
 }
 

@@ -393,7 +393,7 @@ describe("undoing a review of a question its author edited after older pruning",
   });
 });
 
-describe("normalizing team, organization and edited questions retired before the shared rule", () => {
+describe("normalizing personal and edited questions retired before the shared rule", () => {
   async function syncJobs(t: TestConvex) {
     const scheduled = await t.run(async (ctx) => ctx.db.system.query("_scheduled_functions").collect());
     return scheduled
@@ -401,12 +401,11 @@ describe("normalizing team, organization and edited questions retired before the
       .map((job) => (job.args[0] as { questionId: Id<"questions"> }).questionId);
   }
 
-  test("prunes an organization question and drops its fingerprint and embedding, un-retires private and pending edits, and syncs only changed rows", async () => {
+  test("prunes a personal question and drops its fingerprint and embedding, un-retires private and pending edits, and syncs only changed rows", async () => {
     const t = convexTest(schema, modules);
-    const organizationId = await t.run(async (ctx) => ctx.db.insert("organizations", { name: "Old Team" }));
     const live = await insertQuestion(t, { text: "Live?", fingerprint: fingerprintText("Live?") });
-    const orgQuestion = await insertQuestion(t, { organizationId, text: "Old team question?", prunedAt: 1, fingerprint: fingerprintText("Old team question?") });
-    await t.run(async (ctx) => ctx.db.insert("question_embeddings", { questionId: orgQuestion, embedding: [1, 0], status: "public" }));
+    const personalQuestion = await insertQuestion(t, { kind: "personal", text: "An old question of my own?", prunedAt: 1, fingerprint: fingerprintText("An old question of my own?") });
+    await t.run(async (ctx) => ctx.db.insert("question_embeddings", { questionId: personalQuestion, embedding: [1, 0], status: "public" }));
     const editedPrivate = await insertQuestion(t, { authorId: "author-1", customText: "Made private?", status: "private", prunedAt: 2 });
     const editedPending = await insertQuestion(t, { authorId: "author-2", customText: "Resubmitted?", status: "pending", prunedAt: 3, fingerprint: "q_stale" });
 
@@ -419,14 +418,14 @@ describe("normalizing team, organization and edited questions retired before the
       markedPruned: 1,
       prunedAtCleared: 2,
       fingerprintsCleared: 2,
-      markedPrunedIds: [orgQuestion],
+      markedPrunedIds: [personalQuestion],
       prunedAtClearedIds: [editedPrivate, editedPending],
     };
     expect(dry).toEqual(expected);
     expect(summary).toEqual(expected);
-    const org = await getQuestion(t, orgQuestion);
-    expect(org).toMatchObject({ status: "pruned", prunedAt: 1 });
-    expect(org?.fingerprint).toBeUndefined();
+    const retired = await getQuestion(t, personalQuestion);
+    expect(retired).toMatchObject({ status: "pruned", prunedAt: 1 });
+    expect(retired?.fingerprint).toBeUndefined();
     const embedded = await t.run(async (ctx) => ctx.db.query("question_embeddings").collect());
     expect(embedded.map((row) => row.questionId)).toEqual([]);
     for (const [id, status] of [[editedPrivate, "private"], [editedPending, "pending"]] as const) {
@@ -435,7 +434,7 @@ describe("normalizing team, organization and edited questions retired before the
       expect(row?.prunedAt).toBeUndefined();
       expect(row?.fingerprint).toBeUndefined();
     }
-    expect((await syncJobs(t)).sort()).toEqual([orgQuestion, editedPrivate, editedPending].sort());
+    expect((await syncJobs(t)).sort()).toEqual([personalQuestion, editedPrivate, editedPending].sort());
     expect(await syncJobs(t)).not.toContain(live);
   });
 });

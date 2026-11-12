@@ -16,7 +16,7 @@ import { MAX_BATCH_SIZE } from "../lib/promptArchitecture";
 import { embed } from "../lib/retriever";
 
 const DEFAULT_NEIGHBOURS = 5;
-// Personal, team and unpublished rows are dropped after the search, so search wider than needed,
+// Personal and unpublished rows are dropped after the search, so search wider than needed,
 // and widen to vectorSearch's maximum when held-for-review questions crowd the public ones out.
 const NEIGHBOUR_SEARCH_LIMITS = [40, 256];
 const MAX_NEIGHBOURS = NEIGHBOUR_SEARCH_LIMITS[NEIGHBOUR_SEARCH_LIMITS.length - 1];

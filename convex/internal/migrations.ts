@@ -2,9 +2,9 @@ import { v, type Infer } from "convex/values";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUserWrittenQuestion, isWorkspaceQuestion, normalizedRetirement } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic, isRetiredQuestion, isUserWrittenQuestion, normalizedRetirement } from "../lib/questionAccess";
 import { shownWording, syncReviewedEmbedding } from "../lib/questionReview";
-import { removeQuestionReferences, settleDuplicateGroup } from "../lib/questionReferences";
+import { settleDuplicateGroup } from "../lib/questionReferences";
 import { defaultIdealPromptLength, defaultQualityRubric, defaultToneAxesValue, latestActiveVersion } from "../lib/taxonomy";
 import { DEFAULT_BLUEPRINT_SLUG, fingerprintText } from "../lib/promptArchitecture";
 import { STYLE_BRIEF_LINES, TONE_BRIEF_LINES, TOPIC_BRIEF_LINES, type BriefLine } from "../data/briefLines";
@@ -225,7 +225,7 @@ export const removeOldTimestampFields = internalMutation({
  * Fills the prompt architecture fields older styles, tones, topics and questions lack (slugs,
  * versions, fingerprint, source, safety flags, quality), then adds the default blueprint. Values
  * already set are kept, apart from updatedAt on the styles, tones and topics it fills. Private
- * personal, team and organization questions are left alone (see isPrivateUserQuestion). It has
+ * personal questions are left alone (see isPrivateUserQuestion). It has
  * no dry run and schedules itself stage by stage. To fingerprint library questions that have
  * none, start at the questions stage (add --prod after `run` for production), then check that a
  * recomputeQuestionFingerprints dry run shows fewer `withoutFingerprint`:
@@ -514,7 +514,6 @@ const DANGLING_CLEANUP_PAGE_SIZE = 100;
 const DANGLING_CLEANUP_TABLES = [
 	"question_embeddings",
 	"userQuestions",
-	"question_collections",
 	"pruning",
 	"duplicateDetections",
 ] as const;
@@ -582,7 +581,7 @@ export const cleanDanglingQuestionReferencesPage = internalMutation({
 
 /**
  * Removes rows left pointing at hard-deleted questions: orphan embeddings, per-user rows,
- * collection entries, pending pruning reviews and pending duplicate groups. Run it with dryRun
+ * pending pruning reviews and pending duplicate groups. Run it with dryRun
  * first, and again after a real run (every table should then show dangling 0):
  * `npx convex run internal/migrations:cleanDanglingQuestionReferences '{"dryRun":true}'`.
  */
@@ -633,7 +632,6 @@ const fingerprintRecomputeCounts = {
 const fingerprintCollisionQuestion = v.object({
 	questionId: v.id("questions"),
 	status: v.optional(v.string()),
-	organizationId: v.optional(v.id("organizations")),
 });
 const fingerprintRecomputePageResult = v.object({
 	...fingerprintRecomputeCounts,
@@ -678,7 +676,7 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
 			// Only public, unretired questions can collide. Retired, private and held copies keep their
 			// fingerprints, so generation still won't recreate them, but aren't listed.
 			if (isQuestionPublic(question) && !isRetiredQuestion(question)) {
-				live.push({ questionId: question._id, status: question.status, organizationId: question.organizationId, fingerprint });
+				live.push({ questionId: question._id, status: question.status, fingerprint });
 			}
 		}
 		return { ...counts, live, continueCursor: page.continueCursor, isDone: page.isDone };
@@ -690,7 +688,7 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  * before curly quotes were normalized don't match a recomputation, so generation doesn't see a
  * candidate as a duplicate of a library question that differs only in quote style.
  *
- * Only library questions are recomputed. Personal, team and organization questions that aren't
+ * Only library questions are recomputed. Personal questions that aren't
  * public (`privateUserQuestions`), library questions with no stored fingerprint, and ones with no
  * text to fingerprint are counted and left alone. A pruned submission counts as private however
  * it was pruned, including by older pruning that set only `prunedAt` (see isRetiredQuestion).
@@ -702,8 +700,8 @@ export const recomputeQuestionFingerprintsPage = internalMutation({
  *
  * `collisionGroups` counts the fingerprints that two or more public, unretired library questions
  * share after the run. `collisions` lists the first FINGERPRINT_MAX_REPORTED_COLLISIONS of them,
- * each with its `size` and up to FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS questions (IDs, status
- * and organization, no text), oldest first. A fingerprint is a short hash, so compare the
+ * each with its `size` and up to FINGERPRINT_MAX_REPORTED_GROUP_MEMBERS questions (IDs and status,
+ * no text), oldest first. A fingerprint is a short hash, so compare the
  * wording before treating a group as duplicates. Generation treats any of them as the existing
  * copy, so nothing breaks if they stay. Retire copies on the admin duplicates page, which keeps
  * their links working; pruning one on the questions page breaks them.
@@ -793,7 +791,7 @@ export const clearPrivateQuestionFingerprintsPage = internalMutation({
 });
 
 /**
- * Clears the fingerprint on personal, team and organization questions that aren't public: only
+ * Clears the fingerprint on personal questions that aren't public: only
  * library questions keep one (see isPrivateUserQuestion). It reports counts only. Making one of
  * these questions public fingerprints it again.
  *
@@ -865,7 +863,7 @@ export const clearPrivateQuestionEmbeddingsPage = internalMutation({
 });
 
 /**
- * Deletes the embeddings of personal, team and organization questions that aren't public: only
+ * Deletes the embeddings of personal questions that aren't public: only
  * library and public questions keep one, of the wording they show (see syncReviewedEmbedding).
  * `cleared` counts embedding rows deleted, and it reports counts only. Making one of these
  * questions public embeds it again.
@@ -906,7 +904,7 @@ const retiredNormalizeCounts = {
 	scanned: v.number(),
 	markedPruned: v.number(),
 	prunedAtCleared: v.number(),
-	// Personal, team and organization questions that end up not public, moved to "pruned" or
+	// Personal questions that end up not public, moved to "pruned" or
 	// losing `prunedAt`, and still held a fingerprint.
 	fingerprintsCleared: v.number(),
 };
@@ -967,7 +965,7 @@ export const normalizeRetiredQuestionsPage = internalMutation({
  * and left the status as it was, so the feed and other lists that select by status kept showing
  * them; these move to status "pruned" (`markedPruned`). A question its author edited after it was
  * pruned has gone back through review as pending or private, so it loses `prunedAt` instead
- * (`prunedAtCleared`). A personal, team or organization question that ends up not public, either
+ * (`prunedAtCleared`). A personal question that ends up not public, either
  * moved to "pruned" or left pending or private without `prunedAt`, is private, so it drops any
  * fingerprint it still holds and its embeddings, as approvePruning does; `fingerprintsCleared`
  * counts the fingerprints dropped in both cases. A library question keeps its fingerprint and
@@ -1034,7 +1032,7 @@ const libraryRetirePageResult = v.object({
 	isDone: v.boolean(),
 });
 
-/** A question the shared library lists: public, and not a personal, team or organization question. */
+/** A question the shared library lists: public, and not a personal question. */
 function isPublicLibraryQuestion(question: Doc<"questions">): boolean {
 	return !isUserWrittenQuestion(question) && !isRetiredQuestion(question) && isQuestionPublic(question);
 }
@@ -1104,7 +1102,7 @@ export const retireLibraryExceptPage = internalMutation({
 // gstack-shortcut(dec-4ea8f5e8-288d-4fdf-b3d3-116cc11b58bb): the backup is the only bulk undo, upgrade when a reset needs partial reversal.
 /**
  * Resets the shared library to a list of keepers: every other public library question is retired
- * (status "pruned", one `prunedAt` for the whole run). Personal, team and organization questions,
+ * (status "pruned", one `prunedAt` for the whole run). Personal questions,
  * questions waiting for review and questions already retired are left alone. No question is
  * deleted: a retired one keeps its text, fingerprint and embedding, and leaves the feed, the
  * daily email, and the pruning and duplicate review lists.
@@ -1271,14 +1269,14 @@ async function seedBriefLinesFor(
 	const changes: BriefSeedChange[] = [];
 	const noLine: string[] = [];
 	const now = Date.now();
-	const shared = (await ctx.db.query(table as "styles").collect()).filter((row) => !row.organizationId);
-	const slugOf = (row: (typeof shared)[number]) => row.slug ?? row.id;
-	const live = shared.filter((row) => (row.status ?? "active") === "active");
+	const rows = await ctx.db.query(table as "styles").collect();
+	const slugOf = (row: (typeof rows)[number]) => row.slug ?? row.id;
+	const live = rows.filter((row) => (row.status ?? "active") === "active");
 	const bySlug = new Map<string, typeof live>();
 	for (const row of live) bySlug.set(slugOf(row), [...(bySlug.get(slugOf(row)) ?? []), row]);
 
 	/** Writes the slug's line, and a style's form, where the row has none. A line or a form an admin wrote stays. */
-	const giveLine = async (row: (typeof shared)[number], line: BriefLine, draft: boolean) => {
+	const giveLine = async (row: (typeof rows)[number], line: BriefLine, draft: boolean) => {
 		const brief = row.brief?.trim() ? undefined : line.brief;
 		const form = table === "styles" && line.form && !row.form?.trim() ? line.form : undefined;
 		if (brief === undefined && form === undefined) return;
@@ -1292,7 +1290,7 @@ async function seedBriefLinesFor(
 	};
 
 	/** Moves what points at `copy` to the live row. The question batch only moves onto a row whose status is written out. */
-	const moveTo = async (copy: (typeof shared)[number], replacement: (typeof shared)[number]) => {
+	const moveTo = async (copy: (typeof rows)[number], replacement: (typeof rows)[number]) => {
 		if (replacement.status === undefined) await ctx.db.patch(replacement._id, { status: "active" });
 		await repointTaxonomyRows(ctx, table, copy._id, replacement._id);
 	};
@@ -1324,7 +1322,7 @@ async function seedBriefLinesFor(
 	}
 	// A copy archived before this run can still have rows pointing at it: an earlier run moved
 	// nothing, or a batch stopped. This run finishes the move, and reports nothing once none is left.
-	for (const copy of shared.filter((row) => row.version === undefined && row.status === "archived")) {
+	for (const copy of rows.filter((row) => row.version === undefined && row.status === "archived")) {
 		const replacement = latestActiveVersion((bySlug.get(slugOf(copy)) ?? []).filter((row) => row.version !== undefined));
 		if (!replacement) continue;
 		const pointing = await pointingAt(ctx, table, copy._id);
@@ -1335,7 +1333,7 @@ async function seedBriefLinesFor(
 	}
 	// A draft made before this ran has no line either, and activating it would put the entry
 	// back on its description and drop a set form.
-	for (const row of shared.filter((candidate) => candidate.status === "draft")) {
+	for (const row of rows.filter((candidate) => candidate.status === "draft")) {
 		const line = lines[slugOf(row)];
 		if (line) await giveLine(row, line, true);
 	}
@@ -1346,9 +1344,9 @@ async function seedBriefLinesFor(
 }
 
 /**
- * One-time setup for the short brief: gives each shared style, tone and topic its one line
+ * One-time setup for the short brief: gives each style, tone and topic its one line
  * (convex/data/briefLines.ts), and a style its set form, where the live row or a draft has none
- * yet. A line an admin has already written is left alone, and so are teams' own entries. Where
+ * yet. A line an admin has already written is left alone. Where
  * one slug has two live rows and one of them has no version, that row is archived: it is the
  * copy from before versions existed, and it used to hide the rewrite beside it. Questions and
  * people's hidden styles and tones that point at the archived row are moved to the live one in
@@ -1408,211 +1406,5 @@ export const seedBriefLines = internalMutation({
 		}
 		console.log(`${label} total: ${JSON.stringify({ styles: result.styles, tones: result.tones, topics: result.topics })}`);
 		return result;
-	},
-});
-
-export const WORKSPACE_CLEANUP_PAGE_SIZE = 100;
-/**
- * Every table the clean-up reads, in the order it cleans them. The per-person tables come before
- * the questions, styles and tones their rows point at, so a like or a hidden entry of a
- * workspace's row is counted in its own table by a dry run and a real run alike, and deleting
- * the workspace's row later finds none left to take with it.
- */
-export const WORKSPACE_CLEANUP_TABLES = [
-	"userQuestions",
-	"userStyles",
-	"userTones",
-	"userAiUsage",
-	"users",
-	"rateLimits",
-	"question_collections",
-	"questions",
-	"styles",
-	"tones",
-	"topics",
-	"scheduledQuestions",
-	"coachFeedback",
-	"schedules",
-	"teamTopics",
-	"orgSettings",
-	"matrixFillCellLocks",
-	"collections",
-	"invitations",
-	"organization_members",
-	"organizations",
-] as const;
-type WorkspaceCleanupTable = (typeof WORKSPACE_CLEANUP_TABLES)[number];
-const workspaceCleanupTable = v.union(...WORKSPACE_CLEANUP_TABLES.map((table) => v.literal(table)));
-
-/**
- * Whether a row is a workspace's, and its removal unless `dryRun`. In the tables people share,
- * that is a row a workspace owned or counted, and a person's like or hidden entry of a
- * workspace's question, style or tone; every row of a table only workspaces used goes. A
- * question goes with its embeddings and pending pruning reviews (removeQuestionReferences; the
- * page settles pending duplicate groups once), a style, tone or topic with its embedding. A
- * person keeps their account: only a marker saying an organization paid for them is cleared.
- * Returns the id of a deleted question, so the page can settle duplicate groups.
- */
-async function cleanWorkspaceRow(
-	ctx: MutationCtx,
-	table: WorkspaceCleanupTable,
-	row: Doc<WorkspaceCleanupTable>,
-	dryRun: boolean,
-): Promise<{ cleaned: boolean; deletedQuestionId?: Id<"questions"> }> {
-	const remove = async () => {
-		if (!dryRun) await ctx.db.delete(row._id);
-		return { cleaned: true };
-	};
-	switch (table) {
-		case "userQuestions": {
-			const relation = row as Doc<"userQuestions">;
-			const question = await ctx.db.get(relation.questionId);
-			if (relation.organizationId === undefined && !(question && isWorkspaceQuestion(question))) return { cleaned: false };
-			return await remove();
-		}
-		case "userStyles": {
-			const relation = row as Doc<"userStyles">;
-			const style = await ctx.db.get(relation.styleId);
-			if (relation.organizationId === undefined && !style?.organizationId) return { cleaned: false };
-			return await remove();
-		}
-		case "userTones": {
-			const relation = row as Doc<"userTones">;
-			const tone = await ctx.db.get(relation.toneId);
-			if (relation.organizationId === undefined && !tone?.organizationId) return { cleaned: false };
-			return await remove();
-		}
-		case "userAiUsage": {
-			if ((row as Doc<"userAiUsage">).organizationId === undefined) return { cleaned: false };
-			return await remove();
-		}
-		case "users": {
-			const user = row as Doc<"users">;
-			if (user.billingSubjectType !== "organization") return { cleaned: false };
-			if (!dryRun) await ctx.db.patch(user._id, { billingSubjectType: undefined });
-			return { cleaned: true };
-		}
-		case "rateLimits": {
-			// The matrix fill's bucket, one row for each organization.
-			if ((row as Doc<"rateLimits">).name !== "matrixFillCell") return { cleaned: false };
-			return await remove();
-		}
-		case "questions": {
-			const question = row as Doc<"questions">;
-			if (!isWorkspaceQuestion(question)) return { cleaned: false };
-			if (dryRun) return { cleaned: true };
-			await removeQuestionReferences(ctx, question._id, { settleDuplicates: false });
-			await ctx.db.delete(question._id);
-			return { cleaned: true, deletedQuestionId: question._id };
-		}
-		case "styles": {
-			const style = row as Doc<"styles">;
-			if (style.organizationId === undefined) return { cleaned: false };
-			if (!dryRun) {
-				const embeddings = await ctx.db.query("style_embeddings").withIndex("by_styleId", (q) => q.eq("styleId", style._id)).collect();
-				for (const embedding of embeddings) await ctx.db.delete(embedding._id);
-			}
-			return await remove();
-		}
-		case "tones": {
-			const tone = row as Doc<"tones">;
-			if (tone.organizationId === undefined) return { cleaned: false };
-			if (!dryRun) {
-				const embeddings = await ctx.db.query("tone_embeddings").withIndex("by_toneId", (q) => q.eq("toneId", tone._id)).collect();
-				for (const embedding of embeddings) await ctx.db.delete(embedding._id);
-			}
-			return await remove();
-		}
-		case "topics": {
-			const topic = row as Doc<"topics">;
-			if (topic.organizationId === undefined) return { cleaned: false };
-			if (!dryRun) {
-				const embeddings = await ctx.db.query("topic_embeddings").withIndex("by_topicId", (q) => q.eq("topicId", topic._id)).collect();
-				for (const embedding of embeddings) await ctx.db.delete(embedding._id);
-			}
-			return await remove();
-		}
-		default:
-			return await remove();
-	}
-}
-
-/**
- * One page of one table of the workspace clean-up. With `dryRun` it writes nothing and reports
- * what a real run would clean. It pages over every row, unfiltered: a filtered paginate can read
- * most of a table to fill one page. Pending duplicate groups are read once for the page, not once
- * for each deleted question, so a page stays inside a transaction's read limit.
- */
-export const removeWorkspaceDataPage = internalMutation({
-	args: { table: workspaceCleanupTable, dryRun: v.boolean(), cursor: v.union(v.string(), v.null()) },
-	returns: v.object({ cleaned: v.number(), continueCursor: v.string(), isDone: v.boolean() }),
-	handler: async (ctx, args) => {
-		const page = await ctx.db.query(args.table).paginate({ numItems: WORKSPACE_CLEANUP_PAGE_SIZE, cursor: args.cursor });
-		let cleaned = 0;
-		const deletedQuestionIds = new Set<Id<"questions">>();
-		for (const row of page.page) {
-			const result = await cleanWorkspaceRow(ctx, args.table, row, args.dryRun);
-			if (result.cleaned) cleaned += 1;
-			if (result.deletedQuestionId) deletedQuestionIds.add(result.deletedQuestionId);
-		}
-		if (deletedQuestionIds.size > 0) {
-			const pendingGroups = await ctx.db
-				.query("duplicateDetections")
-				.withIndex("by_status", (q) => q.eq("status", "pending"))
-				.collect();
-			for (const detection of pendingGroups) {
-				if (!detection.questionIds.some((id) => deletedQuestionIds.has(id))) continue;
-				await settleDuplicateGroup(ctx, detection, async (id) => !deletedQuestionIds.has(id) && (await ctx.db.get(id)) !== null);
-			}
-		}
-		return { cleaned, continueCursor: page.continueCursor, isDone: page.isDone };
-	},
-});
-
-/**
- * Deletes what team workspaces left behind, now that the app has none: every row of the tables
- * only workspaces used (organizations and their members and invitations, collections, schedules,
- * coach feedback, team topics, settings and matrix fill locks), and, in the tables people share,
- * the rows a workspace owned: its questions and team prompts, its own styles, tones and topics,
- * the likes, hidden entries and AI usage counted inside it, and anyone's like or hidden entry of
- * one of those questions, styles or tones (the app can't show them any more). A person's own
- * questions, likes, hidden entries and usage are otherwise untouched, and no account is deleted.
- *
- * It returns how many rows it cleaned in each table. A real run reads a table again until a pass
- * finds nothing left, so a page whose rows were deleted can't end a pass early. Run it with
- * dryRun first, and again after a real run (every count should then be 0); a run that stops
- * partway is finished by running it again. The schema can drop these tables and the
- * `organizationId` fields only once a dry run on that deployment reports nothing left. Add
- * --prod after `run` for production:
- * `npx convex run internal/migrations:removeWorkspaceData '{"dryRun":true}'`.
- */
-export const removeWorkspaceData = internalAction({
-	args: { dryRun: v.boolean() },
-	returns: v.record(v.string(), v.number()),
-	handler: async (ctx, args) => {
-		const label = `removeWorkspaceData${args.dryRun ? " (dry run)" : ""}`;
-		const totals: Record<string, number> = {};
-		for (const table of WORKSPACE_CLEANUP_TABLES) {
-			let cleaned = 0;
-			for (;;) {
-				let cleanedThisPass = 0;
-				let cursor: string | null = null;
-				for (;;) {
-					const page: { cleaned: number; continueCursor: string; isDone: boolean } = await ctx.runMutation(
-						internal.internal.migrations.removeWorkspaceDataPage,
-						{ table, dryRun: args.dryRun, cursor },
-					);
-					cleanedThisPass += page.cleaned;
-					if (page.isDone) break;
-					cursor = page.continueCursor;
-				}
-				cleaned += cleanedThisPass;
-				if (args.dryRun || cleanedThisPass === 0) break;
-			}
-			totals[table] = cleaned;
-			// One line for each table, so a run that stops partway still shows how far it got.
-			console.log(`${label} ${table}: ${cleaned}`);
-		}
-		return totals;
 	},
 });

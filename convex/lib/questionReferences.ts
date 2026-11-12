@@ -50,16 +50,8 @@ export async function settleDuplicateGroup(
 	return "stripped";
 }
 
-/**
- * Removes the rows that only make sense for a live question. Call it before deleting one. A
- * caller deleting many questions in one transaction passes `settleDuplicates: false` and settles
- * the pending duplicate groups once itself, since each settle reads every pending group.
- */
-export async function removeQuestionReferences(
-	ctx: MutationCtx,
-	questionId: Id<"questions">,
-	options: { settleDuplicates?: boolean } = {},
-): Promise<void> {
+/** Removes the rows that only make sense for a live question. Call it before deleting one. */
+export async function removeQuestionReferences(ctx: MutationCtx, questionId: Id<"questions">): Promise<void> {
 	const embeddings = await ctx.db
 		.query("question_embeddings")
 		.withIndex("by_questionId", (q) => q.eq("questionId", questionId))
@@ -72,15 +64,10 @@ export async function removeQuestionReferences(
 		.query("pruning")
 		.withIndex("by_questionId_and_status", (q) => q.eq("questionId", questionId).eq("status", "pending"))
 		.collect();
-	const collectionEntries = await ctx.db
-		.query("question_collections")
-		.withIndex("by_questionId", (q) => q.eq("questionId", questionId))
-		.collect();
-	for (const row of [...embeddings, ...userQuestions, ...pendingPruning, ...collectionEntries]) {
+	for (const row of [...embeddings, ...userQuestions, ...pendingPruning]) {
 		await ctx.db.delete(row._id);
 	}
 
-	if (options.settleDuplicates === false) return;
 	const pendingGroups = await ctx.db
 		.query("duplicateDetections")
 		.withIndex("by_status", (q) => q.eq("status", "pending"))

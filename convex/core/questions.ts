@@ -217,7 +217,6 @@ export const getNextQuestions = query({
 		const candidates = await ctx.db
 			.query("questions")
 			.withIndex("by_style_and_tone", (q) => q.eq("styleId", style).eq("toneId", tone))
-			.filter((q) => q.eq(q.field("organizationId"), undefined))
 			.filter((q) => q.and(
 				q.neq(q.field("text"), undefined),
 				q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "public"), q.eq(q.field("status"), undefined))
@@ -496,9 +495,8 @@ export const getCustomQuestions = query({
 		const questions = await ctx.db
 		  .query("questions")
 		  .withIndex("by_author", (q) => q.eq("authorId", user._id))
-		  .filter((q) => q.eq(q.field("organizationId"), undefined))
 		  .collect();
-		return questions.filter((question) => question.kind !== "team_prompt").map(withoutVerdict);
+		return questions.map(withoutVerdict);
 	},
 });
 
@@ -538,7 +536,7 @@ export const getLikedQuestions = query({
 
 		const liked: Doc<"questions">[] = [];
 		for (const question of questions) {
-			if (!question || question.organizationId !== undefined) continue;
+			if (!question) continue;
 			if (await canReadQuestion(ctx, question, user._id)) liked.push(question);
 		}
 		return liked.map(withoutVerdict);
@@ -848,14 +846,6 @@ export const remixQuestionForUser = action({
 	},
 });
 
-// A team's prompt or an organization's question was never a personal question. Workspaces are
-// gone, so nobody changes one.
-function assertPersonalQuestionLifecycle(question: Doc<"questions">) {
-	if (question.kind === "team_prompt" || question.organizationId) {
-		throw new Error("This question belonged to a team workspace and can no longer be changed.");
-	}
-}
-
 // A copy retired as a duplicate stays as it was resolved: admins undo the resolution
 // before changing its status, and its author can't edit it either.
 function assertNotMergedDuplicate(question: Doc<"questions">) {
@@ -913,7 +903,6 @@ export const updatePersonalQuestion = mutation({
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to update this question.");
 		}
-		assertPersonalQuestionLifecycle(question);
 		assertNotMergedDuplicate(question);
 		await assertNoMergedCopies(ctx, question);
 		const customText = requireQuestionText(args.customText);
@@ -987,7 +976,6 @@ export const deletePersonalQuestion = mutation({
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to delete this question.");
 		}
-		assertPersonalQuestionLifecycle(question);
 		await assertNoMergedCopies(ctx, question);
 		await removeQuestionReferences(ctx, args.questionId);
 		await ctx.db.delete(args.questionId);
@@ -1018,7 +1006,6 @@ export const makeQuestionPublic = mutation({
 		if (question.authorId !== user._id) {
 			throw new Error("You are not authorized to update this question.");
 		}
-		assertPersonalQuestionLifecycle(question);
 		assertNotMergedDuplicate(question);
 		await assertNoMergedCopies(ctx, question);
 		if (question.status !== "private") {

@@ -71,7 +71,6 @@ export default defineSchema({
     promptGuidanceForAI: v.optional(v.string()),
     example: v.optional(v.string()),
     order: v.optional(v.number()),
-    organizationId: v.optional(v.id("organizations")),
     ...baseTaxonomyFields,
     ...styleVersionFields,
   }).index("by_my_id", ["id"])
@@ -80,8 +79,7 @@ export default defineSchema({
     .index("by_slug_version", ["slug", "version"])
     .index("by_status", ["status"])
     .index("by_name", ["name"])
-    .index("by_order", ["order"])
-    .index("by_organizationId", ["organizationId"]),
+    .index("by_order", ["order"]),
   tones: defineTable({
     id: v.string(),
     name: v.string(),
@@ -90,7 +88,6 @@ export default defineSchema({
     icon: v.string(),
     promptGuidanceForAI: v.string(),
     order: v.optional(v.number()),
-    organizationId: v.optional(v.id("organizations")),
     ...baseTaxonomyFields,
     ...toneVersionFields,
   }).index("by_my_id", ["id"])
@@ -99,8 +96,7 @@ export default defineSchema({
     .index("by_slug_version", ["slug", "version"])
     .index("by_status", ["status"])
     .index("by_name", ["name"])
-    .index("by_order", ["order"])
-    .index("by_organizationId", ["organizationId"]),
+    .index("by_order", ["order"]),
   topics: defineTable({
     id: v.string(), // slug
     name: v.string(),
@@ -110,7 +106,6 @@ export default defineSchema({
     example: v.optional(v.string()),
     promptGuidanceForAI: v.optional(v.string()),
     order: v.optional(v.number()),
-    organizationId: v.optional(v.id("organizations")),
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
     takeoverStartDate: v.optional(v.number()),
@@ -125,8 +120,7 @@ export default defineSchema({
     .index("by_name", ["name"])
     .index("by_order", ["order"])
     .index("by_startDate_endDate_order", ["startDate", "endDate", "order"])
-    .index("by_takeoverStartDate_takeoverEndDate_order", ["takeoverStartDate", "takeoverEndDate", "order"])
-    .index("by_organizationId", ["organizationId"]),
+    .index("by_takeoverStartDate_takeoverEndDate_order", ["takeoverStartDate", "takeoverEndDate", "order"]),
   promptBlueprints: defineTable({
     slug: v.string(),
     version: v.number(),
@@ -197,7 +191,6 @@ export default defineSchema({
     calls: v.number(),
   }).index("by_day_class", ["day", "spendClass"]),
   questions: defineTable({
-    organizationId: v.optional(v.id("organizations")),
     averageViewDuration: v.number(),
     lastShownAt: v.optional(v.number()),
     text: v.optional(v.string()),
@@ -235,7 +228,7 @@ export default defineSchema({
     qualityCheck: v.optional(qualityCheckSnapshot),
     authorId: v.optional(v.string()),
     customText: v.optional(v.string()),
-    kind: v.optional(v.union(v.literal("personal"), v.literal("team_prompt"))),
+    kind: v.optional(v.literal("personal")),
     status: v.optional(
       v.union(
         v.literal("pending"),
@@ -283,8 +276,7 @@ export default defineSchema({
     .index("by_generationRun", ["generationRunId"])
     .index("by_author", ["authorId", "status"])
     .index("by_prunedAt_status_text", ["prunedAt", "status", "text"])
-    .index("by_poolDate_and_poolStatus", ["poolDate", "poolStatus"])
-    .index("by_organizationId", ["organizationId"]),
+    .index("by_poolDate_and_poolStatus", ["poolDate", "poolStatus"]),
   tags: defineTable({
     name: v.string(),
     grouping: v.string(),
@@ -304,7 +296,7 @@ export default defineSchema({
     defaultStyle: v.optional(v.string()),
     defaultTone: v.optional(v.string()),
     dismissedRefineCTA: v.optional(v.boolean()),
-    billingSubjectType: v.optional(v.union(v.literal("user"), v.literal("organization"))),
+    billingSubjectType: v.optional(v.literal("user")),
     billingStatus: v.optional(v.union(
       v.literal("inactive"),
       v.literal("active"),
@@ -329,14 +321,12 @@ export default defineSchema({
     .index("by_newsletterSubscriptionStatus", ["newsletterSubscriptionStatus"]),
   userAiUsage: defineTable({
     userId: v.id("users"),
-    organizationId: v.optional(v.id("organizations")),
     count: v.number(),
     cycleStart: v.number(),
   })
-    .index("by_userId_organizationId", ["userId", "organizationId"]),
+    .index("by_userId", ["userId"]),
   userQuestions: defineTable({
     userId: v.id("users"),
-    organizationId: v.optional(v.id("organizations")),
     questionId: v.id("questions"),
     status: v.union(
       v.literal("unseen"),
@@ -355,21 +345,9 @@ export default defineSchema({
     .index("by_userId_status", ["userId", "status"])
     .index("by_userId_status_updatedAt", ["userId", "status", "updatedAt"])
     .index("by_questionIdAndStatus", ["questionId", "status"])
-    .index("by_userIdAndQuestionId", ["userId", "questionId"])
-    .index("by_userId_organizationId_status_updatedAt", [
-      "userId",
-      "organizationId",
-      "status",
-      "updatedAt",
-    ])
-    .index("by_userId_organizationId_and_questionId", [
-      "userId",
-      "organizationId",
-      "questionId",
-    ]),
+    .index("by_userIdAndQuestionId", ["userId", "questionId"]),
   userStyles: defineTable({
     userId: v.id("users"),
-    organizationId: v.optional(v.id("organizations")),
     styleId: v.id("styles"),
     status: v.union(
       v.literal("preferred"),
@@ -381,17 +359,10 @@ export default defineSchema({
     .index("by_styleId", ["styleId"])
     .index("by_status", ["status"])
     .index("by_userId_status", ["userId", "status"])
-    .index("by_userIdAndStyleId", ["userId", "styleId"])
-    .index("by_userId_organizationId_status", ["userId", "organizationId", "status"])
-    .index("by_userId_organizationId_and_styleId", [
-      "userId",
-      "organizationId",
-      "styleId",
-    ]),
+    .index("by_userIdAndStyleId", ["userId", "styleId"]),
 
   userTones: defineTable({
     userId: v.id("users"),
-    organizationId: v.optional(v.id("organizations")),
     toneId: v.id("tones"),
     status: v.union(
       v.literal("preferred"),
@@ -403,13 +374,7 @@ export default defineSchema({
     .index("by_toneId", ["toneId"])
     .index("by_status", ["status"])
     .index("by_userId_status", ["userId", "status"])
-    .index("by_userIdAndToneId", ["userId", "toneId"])
-    .index("by_userId_organizationId_status", ["userId", "organizationId", "status"])
-    .index("by_userId_organizationId_and_toneId", [
-      "userId",
-      "organizationId",
-      "toneId",
-    ]),
+    .index("by_userIdAndToneId", ["userId", "toneId"]),
   duplicateDetections: defineTable({
     questionIds: v.array(v.id("questions")),
     uniqueKey: v.optional(v.string()), // Combined ID of the questions (sorted) to prevent duplicate entries
@@ -488,51 +453,6 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_questionId", ["questionId"])
     .index("by_questionId_and_status", ["questionId", "status"]),
-  organizations: defineTable({
-    name: v.string(),
-    clerkOrganizationId: v.optional(v.string()),
-    clerkCustomerId: v.optional(v.string()),
-    clerkSubscriptionId: v.optional(v.string()),
-    billingStatus: v.optional(v.union(
-      v.literal("inactive"),
-      v.literal("active"),
-      v.literal("past_due"),
-      v.literal("canceled"),
-      v.literal("trialing")
-    )),
-    planTier: v.optional(v.union(v.literal("free"), v.literal("team"))),
-  }).index("by_clerkOrganizationId", ["clerkOrganizationId"]),
-  organization_members: defineTable({
-    userId: v.id("users"),
-    organizationId: v.id("organizations"),
-    role: v.union(
-      v.literal("admin"),
-      v.literal("manager"),
-      v.literal("member")
-    ),
-  })
-    .index("by_userId", ["userId"])
-    .index("by_organizationId", ["organizationId"])
-    .index("by_userId_organizationId", ["userId", "organizationId"]),
-  invitations: defineTable({
-    email: v.string(),
-    organizationId: v.id("organizations"),
-    role: v.union(
-      v.literal("admin"),
-      v.literal("manager"),
-      v.literal("member")
-    ),
-  }).index("by_email", ["email"]),
-  collections: defineTable({
-    name: v.string(),
-    organizationId: v.id("organizations"),
-  }).index("by_organizationId", ["organizationId"]),
-  question_collections: defineTable({
-    questionId: v.id("questions"),
-    collectionId: v.id("collections"),
-  })
-    .index("by_questionId", ["questionId"])
-    .index("by_collectionId", ["collectionId"]),
   feedback: defineTable({
     text: v.string(),
     pageUrl: v.string(),
@@ -627,127 +547,6 @@ export default defineSchema({
     userId: v.id("users"),
     embedding: v.array(v.float64()),
   }).index("by_userId", ["userId"]),
-
-  // ---- B2B Weekly Curation (new) ----
-  orgSettings: defineTable({
-    organizationId: v.id("organizations"),
-    weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
-    activeDeliveryDays: v.optional(v.array(v.union(
-      v.literal("monday"), v.literal("tuesday"), v.literal("wednesday"),
-      v.literal("thursday"), v.literal("friday"), v.literal("saturday"), v.literal("sunday")
-    ))),
-    timeZone: v.optional(v.string()),
-    defaultAxisY: v.optional(v.union(
-      v.literal("style"), v.literal("tone"), v.literal("topic")
-    )),
-    defaultAxisX: v.optional(v.union(
-      v.literal("style"), v.literal("tone"), v.literal("topic")
-    )),
-  })
-    .index("by_org", ["organizationId"]),
-
-  teamTopics: defineTable({
-    organizationId: v.id("organizations"),
-    name: v.string(),
-    guidance: v.string(),
-    boundaries: v.optional(v.string()),
-    createdBy: v.id("users"),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_organizationId", ["organizationId"])
-    .index("by_organizationId_and_updatedAt", ["organizationId", "updatedAt"]),
-
-  schedules: defineTable({
-    organizationId: v.id("organizations"),
-    weekStart: v.string(),       // ISO date, e.g. "2026-04-06"
-    weekEnd: v.string(),         // ISO date, computed from weekStart + 6
-    status: v.union(
-      v.literal("draft"),
-      v.literal("published"),
-      v.literal("completed")
-    ),
-    weekStartDay: v.union(v.literal("monday"), v.literal("sunday")),
-    deliveryDays: v.optional(v.array(v.union(
-      v.literal("monday"), v.literal("tuesday"), v.literal("wednesday"),
-      v.literal("thursday"), v.literal("friday"), v.literal("saturday"), v.literal("sunday")
-    ))),
-    axisY: v.optional(v.union(
-      v.literal("style"), v.literal("tone"), v.literal("topic")
-    )),
-    axisYSlugs: v.optional(v.array(v.string())),
-    axisX: v.optional(v.union(
-      v.literal("style"), v.literal("tone"), v.literal("topic")
-    )),
-    axisXSlugs: v.optional(v.array(v.string())),
-    axisOverall: v.optional(v.union(
-      v.literal("style"), v.literal("tone"), v.literal("topic"), v.literal("random")
-    )),
-    axisOverallSlug: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    publishedAt: v.optional(v.number()),
-    createdBy: v.optional(v.id("users")),
-  })
-    .index("by_organizationId", ["organizationId"])
-    .index("by_organizationId_and_weekStart", ["organizationId", "weekStart"])
-    .index("by_organizationId_and_status", ["organizationId", "status"])
-    .index("by_organizationId_status_weekStart", ["organizationId", "status", "weekStart"]),
-
-  scheduledQuestions: defineTable({
-    scheduleId: v.id("schedules"),
-    dayOfWeek: v.union(
-      v.literal("monday"), v.literal("tuesday"), v.literal("wednesday"),
-      v.literal("thursday"), v.literal("friday"), v.literal("saturday"), v.literal("sunday")
-    ),
-    questionId: v.id("questions"),
-    slotOrder: v.number(),
-    assignedAt: v.number(),
-    assignedBy: v.optional(v.id("users")),
-    generationRunId: v.optional(v.id("generationRuns")),
-    teamTopicId: v.optional(v.id("teamTopics")),
-    questionTextSnapshot: v.optional(v.string()),
-  })
-    .index("by_schedule", ["scheduleId"])
-    .index("by_schedule_day", ["scheduleId", "dayOfWeek"])
-    .index("by_question", ["questionId"])
-    .index("by_teamTopic", ["teamTopicId"])
-    .index("by_schedule_day_order", ["scheduleId", "dayOfWeek", "slotOrder"]),
-
-  coachFeedback: defineTable({
-    scheduleId: v.id("schedules"),
-    scheduledQuestionId: v.id("scheduledQuestions"),
-    questionId: v.id("questions"),
-    coachId: v.id("users"),
-    dayOfWeek: v.union(
-      v.literal("monday"), v.literal("tuesday"), v.literal("wednesday"),
-      v.literal("thursday"), v.literal("friday"), v.literal("saturday"), v.literal("sunday")
-    ),
-    landedWell: v.optional(v.boolean()),
-    fellFlat: v.optional(v.boolean()),
-    wrongVibe: v.optional(v.boolean()),
-    timingOff: v.optional(v.boolean()),
-    notes: v.optional(v.string()),
-    submittedAt: v.number(),
-    updatedAt: v.optional(v.number()),
-  })
-    .index("by_schedule", ["scheduleId"])
-    .index("by_coach", ["coachId"])
-    .index("by_question", ["questionId"])
-    .index("by_coach_schedule", ["coachId", "scheduleId"])
-    .index("by_schedule_question", ["scheduleId", "questionId"])
-    .index("by_coach_schedule_question_day", [
-      "coachId",
-      "scheduleId",
-      "questionId",
-      "dayOfWeek",
-    ]),
-
-  /** In-flight matrix fill coordination (best-effort mutex per org + cell key). */
-  matrixFillCellLocks: defineTable({
-    organizationId: v.id("organizations"),
-    cellKey: v.string(),
-  }).index("by_organizationId_and_cellKey", ["organizationId", "cellKey"]),
 
   // ---- Zombie slug reports ----
   zombieSlugReports: defineTable({

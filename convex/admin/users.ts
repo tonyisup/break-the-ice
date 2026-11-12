@@ -56,9 +56,7 @@ export const updateUser = mutation({
 
 			const personalUsage = await ctx.db
 				.query("userAiUsage")
-				.withIndex("by_userId_organizationId", (q) =>
-					q.eq("userId", userId).eq("organizationId", undefined),
-				)
+				.withIndex("by_userId", (q) => q.eq("userId", userId))
 				.unique();
 
 			if (personalUsage) {
@@ -69,7 +67,6 @@ export const updateUser = mutation({
 			} else {
 				await ctx.db.insert("userAiUsage", {
 					userId,
-					organizationId: undefined,
 					count: aiUsageCount,
 					cycleStart,
 				});

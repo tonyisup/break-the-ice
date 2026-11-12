@@ -40,40 +40,36 @@ export const getSettings = query({
 
 		const likedQuestionsDocs = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
+			.withIndex("by_userId_status_updatedAt", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "liked"),
 			)
 			.collect();
 
 		const hiddenQuestionsDocs = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
+			.withIndex("by_userId_status_updatedAt", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
 
 		const hiddenStylesDocs = await ctx.db
 			.query("userStyles")
-			.withIndex("by_userId_organizationId_status", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
 
 		const hiddenTonesDocs = await ctx.db
 			.query("userTones")
-			.withIndex("by_userId_organizationId_status", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -112,8 +108,8 @@ export const getQuestionHistory = query({
 
 		const history = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
-				q.eq("userId", user._id).eq("organizationId", undefined),
+			.withIndex("by_userId_status_updatedAt", (q) =>
+				q.eq("userId", user._id),
 			)
 			.order("desc")
 			.take(args.limit ?? 50);
@@ -159,10 +155,9 @@ export const updateLikedQuestions = mutation({
 		const user = await getUserOrCreate(ctx);
 		const existingLiked = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
+			.withIndex("by_userId_status_updatedAt", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "liked"),
 			)
 			.collect();
@@ -236,10 +231,9 @@ export const updateHiddenQuestions = mutation({
 		const user = await getUserOrCreate(ctx);
 		const existingHidden = await ctx.db
 			.query("userQuestions")
-			.withIndex("by_userId_organizationId_status_updatedAt", (q) =>
+			.withIndex("by_userId_status_updatedAt", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -313,10 +307,8 @@ async function canBeUnhidden(
 ): Promise<boolean> {
 	const row = await ctx.db.get(id);
 	if (!row) return true;
-	// As the lists do: the shared entries, one row for each slug.
-	const versions = (await findTaxonomyVersions(ctx.db, table, row.slug ?? row.id)).filter(
-		(version) => version.organizationId === undefined,
-	);
+	// As the lists do: one row for each slug.
+	const versions = await findTaxonomyVersions(ctx.db, table, row.slug ?? row.id);
 	return latestActiveVersion(versions)?._id === row._id;
 }
 
@@ -330,10 +322,9 @@ export const updateHiddenStyles = mutation({
 		const user = await getUserOrCreate(ctx);
 		const existingHiddenStyles = await ctx.db
 			.query("userStyles")
-			.withIndex("by_userId_organizationId_status", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -387,10 +378,9 @@ export const updateHiddenTones = mutation({
 		const user = await getUserOrCreate(ctx);
 		const existingHiddenTones = await ctx.db
 			.query("userTones")
-			.withIndex("by_userId_organizationId_status", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -635,10 +625,9 @@ export const getHiddenStyleIds = query({
 
 		const hiddenStylesDocs = await ctx.db
 			.query("userStyles")
-			.withIndex("by_userId_organizationId_status", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -692,10 +681,9 @@ export const addHiddenStyleId = mutation({
 
 		const hiddenStylesDocs = await ctx.db
 			.query("userStyles")
-			.withIndex("by_userId_organizationId_status", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -730,10 +718,9 @@ export const removeHiddenStyleId = mutation({
 
 		const hiddenStylesDocs = await ctx.db
 			.query("userStyles")
-			.withIndex("by_userId_organizationId_status", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -760,10 +747,9 @@ export const getHiddenToneIds = query({
 
 		const hiddenTonesDocs = await ctx.db
 			.query("userTones")
-			.withIndex("by_userId_organizationId_status", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -815,10 +801,9 @@ export const addHiddenToneId = mutation({
 
 		const hiddenTonesDocs = await ctx.db
 			.query("userTones")
-			.withIndex("by_userId_organizationId_status", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();
@@ -853,10 +838,9 @@ export const removeHiddenToneId = mutation({
 
 		const hiddenTonesDocs = await ctx.db
 			.query("userTones")
-			.withIndex("by_userId_organizationId_status", (q) =>
+			.withIndex("by_userId_status", (q) =>
 				q
 					.eq("userId", user._id)
-					.eq("organizationId", undefined)
 					.eq("status", "hidden"),
 			)
 			.collect();

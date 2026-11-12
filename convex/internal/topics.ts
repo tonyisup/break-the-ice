@@ -17,7 +17,6 @@ const topicFields = v.object({
   promptGuidanceForAI: v.optional(v.string()),
   aiGuidance: v.string(),
   order: v.optional(v.number()),
-  organizationId: v.optional(v.id("organizations")),
   startDate: v.optional(v.number()),
   endDate: v.optional(v.number()),
   takeoverStartDate: v.optional(v.number()),
@@ -58,7 +57,6 @@ function mapTopic(topic: Doc<"topics">) {
     promptGuidanceForAI,
     aiGuidance: topic.aiGuidance ?? promptGuidanceForAI,
     order: topic.order,
-    organizationId: topic.organizationId,
     startDate: topic.startDate,
     endDate: topic.endDate,
     takeoverStartDate: topic.takeoverStartDate,
@@ -111,9 +109,7 @@ export const getTopCurrentTopic = internalQuery({
       .withIndex("by_status", (q) => q.eq("status", "active"))
       .take(TOPIC_SCAN_LIMIT);
 
-    // Only the shared topics: generation refuses one a workspace owned.
     const activeCandidates = topics.filter((topic) => {
-      if (topic.organizationId) return false;
       const startsOk = topic.startDate === undefined || topic.startDate <= now;
       const endsOk = topic.endDate === undefined || topic.endDate >= now;
       return startsOk && endsOk;

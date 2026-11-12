@@ -71,9 +71,10 @@
     ],
     "convex/internal/migrations.ts": [
       "convex/brief_seed.test.ts",
-      "convex/workspace_cleanup.test.ts",
       "convex/library_reset.test.ts",
-      "convex/retired_questions.test.ts"
+      "convex/retired_questions.test.ts",
+      "convex/question_references.test.ts",
+      "convex/question_fingerprints.test.ts"
     ],
     "convex/lib/evalChecks.ts": [
       "convex/evals.test.ts"
@@ -92,8 +93,7 @@
     ],
     "convex/internal/users.ts": [
       "convex/generation_quality.test.ts",
-      "convex/internal/users.test.ts",
-      "convex/workspace_removed.test.ts"
+      "convex/internal/users.test.ts"
     ],
     "evals/runs/**": [],
     "**/*.md": [],
@@ -185,17 +185,25 @@
       "src/pages/InfiniteScrollPage.test.tsx"
     ],
     "convex/internal/styles.ts": [
-      "convex/workspace_removed.test.ts",
       "convex/generation_quality.test.ts"
     ],
     "convex/internal/tones.ts": [
-      "convex/workspace_removed.test.ts",
       "convex/generation_quality.test.ts"
     ],
     "convex/internal/topics.ts": [
-      "convex/workspace_removed.test.ts",
       "convex/generation_quality.test.ts"
-    ]
+    ],
+    "convex/admin/users.ts": [
+      "convex/admin_users.test.ts"
+    ],
+    "convex/internal/evalData.ts": [
+      "convex/evals.test.ts"
+    ],
+    "convex/functions.ts": [],
+    "convex/functions.test.ts": [],
+    "convex/workspace_cleanup.test.ts": [],
+    "src/app/data-retention/page.tsx": [],
+    "src/app/privacy/page.tsx": []
   },
   "selection": {},
   "warn": [

@@ -2,29 +2,17 @@
 
 ## Teams removal
 
-### Narrow the schema once the workspace clean-up has run everywhere
+### Remove what keeps old apps working
 
-**What:** Drop the 11 team tables, the `organizationId` fields, `kind: "team_prompt"` and the `"organization"` billing subject from `convex/schema.ts`, read per-person rows through the `by_userId_*` indexes instead of `by_userId_organizationId_*`, and remove what kept old apps working: `convex/lib/ignoredWorkspaceArg.ts`, the `core/organizations:getOrganizations` stub and `core/billing:getEffectiveEntitlements`.
+**What:** Remove `convex/lib/ignoredWorkspaceArg.ts` and the `organizationId` argument it adds, the `core/organizations:getOrganizations` stub and `core/billing:getEffectiveEntitlements`, and the tests in `convex/workspace_removed.test.ts` that cover them.
 
-**Why:** v0.8.0.0 removed team workspaces but left the schema as it was, because Convex refuses a schema that stored rows don't fit until `removeWorkspaceData` has deleted them.
+**Why:** Apps loaded before v0.8.0.0 still send a workspace and ask for these; v0.8.1.0 narrowed the schema but kept them, since that release reached users the same day.
 
-**Context:** Run `npx convex run internal/migrations:removeWorkspaceData '{"dryRun":true}'` on dev and prod first; every count must be 0. Old cached apps stop sending `organizationId` once their service worker updates. The privacy and data-retention pages still describe organization data, and `public/robots.txt` still disallows the removed `/org` and `/billing` paths; change both in the same release.
-
-**Effort:** M
-**Priority:** P1
-**Depends on:** removeWorkspaceData run with a clean dry run on every deployment
-
-### Keep the clean-up from deleting a paying organization's billing record
-
-**What:** Have `removeWorkspaceData` leave any organization whose billing is active, trialing or past due, and list its Clerk organization and subscription ids in the run's output, instead of deleting it.
-
-**Why:** An app loaded before v0.8.0.0 can still open Clerk's Team checkout, the webhook now only logs organization payments, and the organization row is the only Convex copy of its Clerk ids. Deleting it loses who to cancel or refund.
-
-**Context:** `cleanWorkspaceRow` in `convex/internal/migrations.ts` deletes every `organizations` row; `convex/clerk.ts` logs ignored organization events. Switching the Team plan off in Clerk before the deploy closes the checkout itself. On 2026-11-11 prod's only organization was free and inactive. Deferred by the owner at the v0.8.0.0 ship review.
+**Context:** The app updates itself when a page loads, but a tab left open keeps the old code until it is reloaded. Removing them makes such a tab's feed, settings and account menu fail.
 
 **Effort:** S
-**Priority:** P1
-**Depends on:** None
+**Priority:** P3
+**Depends on:** Old tabs gone (a week or two after 2026-11-11)
 
 ### Stop a stale tab's saves from replacing a person's own lists
 
@@ -32,21 +20,9 @@
 
 **Why:** These replace the whole list. A tab opened before v0.8.0.0 with a workspace selected holds that workspace's list, so a save from it can demote a person's own likes and drop their hidden styles and tones.
 
-**Context:** `convex/core/userSettings.ts`; the old argument is accepted by `ignoredWorkspaceArg`. The `merge*` mutations are safe (they only add). The window lasts until the tab's settings query refreshes. Deferred by the owner at the v0.8.0.0 ship review.
+**Context:** `convex/core/userSettings.ts`; the old argument is accepted by `ignoredWorkspaceArg`. Goes away with it (see above). The `merge*` mutations are safe (they only add). The window lasts until the tab's settings query refreshes. Deferred by the owner at the v0.8.0.0 ship review.
 
 **Effort:** S
-**Priority:** P2
-**Depends on:** None
-
-### Repoint references to a workspace's deleted styles, tones and topics
-
-**What:** Before `removeWorkspaceData` deletes a team's style, tone or topic, count (dry run) and repoint or clear the questions, question embeddings and generation runs that still point at it. Refuse a team's style, tone or topic id on new personal questions.
-
-**Why:** Questions generated before v0.8.0.0 can carry a team's taxonomy id without belonging to the team, and an old app can still send one with a new personal question. After the clean-up those ids point at nothing, and the feed matches a question's style by id before its slug.
-
-**Context:** `cleanWorkspaceRow` in `convex/internal/migrations.ts`; `addPersonalQuestion` in `convex/core/questions.ts`. On 2026-11-11 prod had no team-owned styles, tones or topics. Deferred by the owner at the v0.8.0.0 ship review.
-
-**Effort:** M
 **Priority:** P2
 **Depends on:** None
 
@@ -62,13 +38,13 @@
 **Priority:** P3
 **Depends on:** None
 
-### Bound the clean-up's duplicate-group reads and stray embeddings
+### Skip an embedding for a style, tone or topic that was deleted
 
-**What:** Settle pending duplicate groups in their own paged stage of `removeWorkspaceData` instead of reading all of them in each page that deleted a question, and make `addStyleEmbedding`, `addToneEmbedding` and `addTopicEmbedding` skip a row that no longer exists.
+**What:** Make `addStyleEmbedding`, `addToneEmbedding` and `addTopicEmbedding` skip a row that no longer exists.
 
-**Why:** A large pending-duplicates backlog could still push one page past a transaction's read limit, and an embedding request already waiting on the provider can insert an orphan after the clean-up deleted its row.
+**Why:** An embedding request already waiting on the provider can insert an orphan after its row was deleted.
 
-**Context:** `removeWorkspaceDataPage` in `convex/internal/migrations.ts`; the embedding mutations in `convex/internal/styles.ts`, `tones.ts` and `topics.ts`. Deferred by the owner at the v0.8.0.0 ship review.
+**Context:** The embedding mutations in `convex/internal/styles.ts`, `tones.ts` and `topics.ts`. Found at the v0.8.0.0 ship review.
 
 **Effort:** S
 **Priority:** P3
@@ -698,6 +674,19 @@ Smaller still: have `select.mjs` say "4 or above" from its constant where it wri
 **Depends on:** None
 
 ## Completed
+
+### Narrow the schema once the workspace clean-up has run everywhere
+
+**What:** Drop the 11 team tables, the `organizationId` fields, `kind: "team_prompt"` and the `"organization"` billing subject from `convex/schema.ts`, read per-person rows through the `by_userId_*` indexes instead of `by_userId_organizationId_*`, and remove what kept old apps working: `convex/lib/ignoredWorkspaceArg.ts`, the `core/organizations:getOrganizations` stub and `core/billing:getEffectiveEntitlements`.
+
+**Why:** v0.8.0.0 removed team workspaces but left the schema as it was, because Convex refuses a schema that stored rows don't fit until `removeWorkspaceData` has deleted them.
+
+**Context:** Run `npx convex run internal/migrations:removeWorkspaceData '{"dryRun":true}'` on dev and prod first; every count must be 0. Old cached apps stop sending `organizationId` once their service worker updates. The privacy and data-retention pages still describe organization data, and `public/robots.txt` still disallows the removed `/org` and `/billing` paths; change both in the same release.
+
+**Effort:** M
+**Priority:** P1
+**Depends on:** removeWorkspaceData run with a clean dry run on every deployment
+**Completed:** v0.8.1.0 (2026-11-11). The old-app shims stayed; their removal is the open item "Remove what keeps old apps working".
 
 ### Harden generation input handling
 

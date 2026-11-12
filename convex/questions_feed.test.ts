@@ -137,83 +137,25 @@ test("anchored candidates are capped without re-entering through the general poo
   expect(results.filter((question: Doc<"questions">) => question.styleId === styleId).length).toBeLessThanOrEqual(reasonableAnchoredCap);
 });
 
-test("personal feed excludes organization-tagged questions", async () => {
+test("a feed request that still sends a workspace gets the same feed", async () => {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
 
-  const { globalId, orgOnlyId } = await t.run(async (ctx) => {
-    const organizationId = await ctx.db.insert("organizations", {
-      name: "Test Org",
-    });
-
-    const globalId = await ctx.db.insert("questions", {
+  const globalId = await t.run(async (ctx) =>
+    ctx.db.insert("questions", {
       text: "Global pool question?",
       status: "public",
       totalLikes: 0,
       totalShows: 0,
       averageViewDuration: 0,
-    });
-
-    const orgOnlyId = await ctx.db.insert("questions", {
-      text: "Org-only question?",
-      status: "public",
-      organizationId,
-      totalLikes: 0,
-      totalShows: 0,
-      averageViewDuration: 0,
-    });
-
-    return { globalId, orgOnlyId };
-  });
-
-  const results = await t.query(internal.internal.questions.getRandomQuestionsInternal, {
-    count: 10,
-    seen: [],
-    hidden: [],
-    hiddenStyles: [],
-    hiddenTones: [],
-  });
-
-  const resultIds = new Set(results.map((q: Doc<"questions">) => q._id));
-  expect(resultIds.has(globalId)).toBe(true);
-  expect(resultIds.has(orgOnlyId)).toBe(false);
-});
-
-test("a feed request that still sends a workspace gets the same feed: organization-tagged questions stay out", async () => {
-  const t = convexTest(schema, import.meta.glob("./**/*.ts"));
-
-  const { organizationId, globalId, orgOnlyId } = await t.run(async (ctx) => {
-    const organizationId = await ctx.db.insert("organizations", {
-      name: "Test Org",
-    });
-
-    const globalId = await ctx.db.insert("questions", {
-      text: "Global pool question?",
-      status: "public",
-      totalLikes: 0,
-      totalShows: 0,
-      averageViewDuration: 0,
-    });
-
-    const orgOnlyId = await ctx.db.insert("questions", {
-      text: "Org-only question?",
-      status: "public",
-      organizationId,
-      totalLikes: 0,
-      totalShows: 0,
-      averageViewDuration: 0,
-    });
-
-    return { organizationId, globalId, orgOnlyId };
-  });
+    }),
+  );
 
   const { questions } = await t.action(api.core.questions.getNextRandomQuestions, {
     count: 10,
-    organizationId,
+    organizationId: "k57c3m8a9e2zq0organization",
   });
 
-  const resultIds = new Set(questions.map((q) => q._id as Id<"questions">));
-  expect(resultIds.has(globalId)).toBe(true);
-  expect(resultIds.has(orgOnlyId)).toBe(false);
+  expect(questions.map((q) => q._id as Id<"questions">)).toEqual([globalId]);
 });
 
 test("feed hides every version and legacy reference of a hidden style", async () => {

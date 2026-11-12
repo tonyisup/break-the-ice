@@ -79,16 +79,12 @@ async function getLatestActiveToneBySlug(ctx: QueryCtx, slug: string) {
     .query("tones")
     .withIndex("by_slug", (q) => q.eq("slug", slug))
     .collect();
-  // Only the shared entries: the ones no workspace owned.
-  const shared = tones.filter((row) => !row.organizationId);
-  return latestActiveVersion(shared);
+  return latestActiveVersion(tones);
 }
 
 async function getActiveTones(ctx: QueryCtx, limit = 500) {
-  // Only the shared entries: the ones no workspace owned.
   const tones = await ctx.db
     .query("tones")
-    .withIndex("by_organizationId", (q) => q.eq("organizationId", undefined as any))
     .take(limit);
 
   const bySlug = new Map<string, Doc<"tones">[]>();
@@ -119,7 +115,7 @@ export const getToneById = query({
   returns: v.union(v.object(publicToneFields), v.null()),
   handler: async (ctx, args) => {
     const tone = await ctx.db.get(args.id);
-    return tone && !tone.organizationId ? mapTone(tone) : null;
+    return tone ? mapTone(tone) : null;
   },
 });
 

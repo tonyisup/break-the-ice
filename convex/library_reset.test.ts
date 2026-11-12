@@ -157,13 +157,10 @@ describe("resetting the library to a list of keepers", () => {
     expect(statuses.filter((status) => status === "public")).toHaveLength(1);
   });
 
-  test("team, organization and unpublished library questions, and ones older pruning retired, are left alone and can't be kept", async () => {
+  test("personal and unpublished library questions, and ones older pruning retired, are left alone and can't be kept", async () => {
     const t = convexTest(schema, modules);
     const keeper = await insertQuestion(t, { text: "The keeper?" });
-    const organizationId = await t.run(async (ctx) => ctx.db.insert("organizations", { name: "Gym" }));
     const leftAlone = {
-      teamPrompt: await insertQuestion(t, { kind: "team_prompt", organizationId, text: "What did the team ship this week?" }),
-      organizationQuestion: await insertQuestion(t, { organizationId, text: "Which class do you never skip?" }),
       // Written by someone, though the row names no author.
       personalKind: await insertQuestion(t, { kind: "personal", text: "A question of my own?" }),
       // Older pruning set only prunedAt and left the status public.
@@ -183,7 +180,7 @@ describe("resetting the library to a list of keepers", () => {
     }
     const summary = await run([keeper]);
 
-    expect(summary).toEqual({ scanned: 8, publicLibrary: 1, kept: 1, retired: 0, retiredIds: [] });
+    expect(summary).toEqual({ scanned: 6, publicLibrary: 1, kept: 1, retired: 0, retiredIds: [] });
     expect(await allQuestions(t)).toEqual(before);
   });
 

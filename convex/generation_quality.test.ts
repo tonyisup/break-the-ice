@@ -533,34 +533,14 @@ async function insertAiQuestion(t: TestConvex, fields: Record<string, unknown> =
 }
 
 describe("active versions: scoping and lookups", () => {
-  test("an id resolves to the active shared version, never a copy a workspace owned, and such a copy's own id resolves to nothing", async () => {
+  test("an id of an older version resolves to the active version, and so does its slug", async () => {
     const { t, styleV1, styleV2, toneId } = await setup();
-    const orgStyle = await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      // Same slug, newer version, active: but it belongs to one organization.
-      return await ctx.db.insert("styles", {
-        id: "reflective",
-        slug: "reflective",
-        name: "Gym reflective",
-        structure: "Ask a gym reflection",
-        color: "#444444",
-        icon: "dumbbell",
-        status: "active",
-        version: 9,
-        organizationId: orgId,
-      });
-    });
 
     expect((await t.query(internal.internal.generation.getActiveTaxonomyById, { table: "styles", id: styleV1 }))?._id).toBe(styleV2);
-    expect(await t.query(internal.internal.generation.getActiveTaxonomyById, { table: "styles", id: orgStyle })).toBeNull();
     const prompt = await t.query(internal.internal.generation.buildGenerationPrompt, { styleId: styleV1, toneId, batchSize: 1 });
     expect(prompt.style._id).toBe(styleV2);
-    // By slug too: the workspace's copy is the newest active row of the slug, and it is passed over.
     const bySlug = await t.query(internal.internal.generation.buildGenerationPrompt, { styleSlug: "reflective", toneId, batchSize: 1 });
     expect(bySlug.style._id).toBe(styleV2);
-    await expect(
-      t.query(internal.internal.generation.buildGenerationPrompt, { styleId: orgStyle, toneId, batchSize: 1 }),
-    ).rejects.toThrow(/No active styles entry/);
   });
 
   test("remix gets no style for a malformed id, an id from another table, or a deleted row", async () => {
@@ -723,12 +703,10 @@ describe("the review queue and who can open a held question", () => {
     const { t } = await setup();
     const ids = await t.run(async (ctx) => {
       const authorId = await ctx.db.insert("users", { email: "author@example.com", clerkId: "author-clerk" });
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
       const pending = { status: "pending" as const, ...counters };
       return {
         submitted: await ctx.db.insert("questions", { text: "Submitted by a user?", authorId, ...pending }),
         aiWithAuthor: await ctx.db.insert("questions", { text: "AI but authored?", isAIGenerated: true, heldForReview: true, authorId, ...pending }),
-        aiInOrg: await ctx.db.insert("questions", { text: "AI for a team?", isAIGenerated: true, heldForReview: true, organizationId: orgId, ...pending }),
         adminDraft: await ctx.db.insert("questions", { text: "Admin draft?", ...pending }),
       };
     });
@@ -821,31 +799,23 @@ describe("the feed and the daily email end to end", () => {
   });
 
   // Value: protects=an app loaded before workspaces were removed still gets feed questions: the workspace it sends is ignored, the question is the person's, and their own quota is charged;
-  // fails_when=the feed refuses the old argument or checks membership again (the stub list is empty), or tags the question or the charge with the workspace;
+  // fails_when=the feed refuses the old argument, or stops charging the person's own quota;
   // why_new=feed generation used to check and bill the workspace; no test sends one now;
   // seam=none; no_claim=what an old app shows while it still has the workspace selected.
   test("a feed request an old app sends with its workspace is answered as the person's own and charged to them", async () => {
     const { t, styleV2, toneId } = await setup();
     const userId = await feedReader(t);
-    const orgId = await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("organization_members", { userId, organizationId: orgId, role: "admin" });
-      // The workspace's own counter, already at its old limit: it must neither block nor be charged.
-      await ctx.db.insert("userAiUsage", { userId, organizationId: orgId, count: 1_000, cycleStart: Date.now() });
-      return orgId;
-    });
     create.mockResolvedValue(completion(questionsJson("What made you laugh this week?")) as never);
 
     const questions = await t
       .withIdentity(READER)
-      .action(api.core.ai.generateAIQuestionForFeed, { organizationId: orgId, anchoredStyleId: styleV2, anchoredToneId: toneId });
+      .action(api.core.ai.generateAIQuestionForFeed, { organizationId: "k57c3m8a9e2zq0organization", anchoredStyleId: styleV2, anchoredToneId: toneId });
 
-    expect(questions.map((q) => [q?.text, q?.organizationId])).toEqual([["What made you laugh this week?", undefined]]);
+    expect(questions.map((q) => q?.text)).toEqual(["What made you laugh this week?"]);
     const usage = await t.run(async (ctx) =>
-      (await ctx.db.query("userAiUsage").collect()).map((row) => ({ organizationId: row.organizationId, count: row.count })),
+      (await ctx.db.query("userAiUsage").collect()).map((row) => ({ userId: row.userId, count: row.count })),
     );
-    expect(usage).toEqual(expect.arrayContaining([{ organizationId: orgId, count: 1_000 }, { organizationId: undefined, count: 1 }]));
-    expect(usage).toHaveLength(2);
+    expect(usage).toEqual([{ userId, count: 1 }]);
   });
 
   test("a paid-for unusable answer keeps the quota use even when its retry was cut off", async () => {
@@ -1255,29 +1225,6 @@ describe("review fixes", () => {
       (await ctx.db.query("userAiUsage").collect()).filter((row) => row.userId === userId).map((row) => row.count),
     );
     expect(usage).toEqual([1]);
-  });
-
-  test("the share image never names another organization's copy of a style", async () => {
-    const { t } = await setup();
-    await t.run(async (ctx) => {
-      const orgId = await ctx.db.insert("organizations", { name: "Gym", planTier: "team", billingStatus: "active" });
-      await ctx.db.insert("styles", {
-        id: "reflective",
-        slug: "reflective",
-        name: "Gym reflective",
-        structure: "x",
-        color: "#444444",
-        icon: "dumbbell",
-        status: "active",
-        version: 9,
-        organizationId: orgId,
-      });
-    });
-    const id = await t.run(async (ctx) =>
-      ctx.db.insert("questions", { text: "What made you laugh this week?", style: "reflective", tone: "warm", status: "public", ...counters }),
-    );
-
-    expect(await t.query(api.core.questions.getQuestionForOgImage, { id })).toMatchObject({ styleName: "Reflective v2" });
   });
 
   test("a duplicate group with a held AI question waits for that review, and the held link keeps working", async () => {
