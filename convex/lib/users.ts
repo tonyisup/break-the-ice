@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values";
 import { Doc } from "../_generated/dataModel";
 import { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -101,10 +102,23 @@ export async function findCanonicalUser(
     )[0] ?? null;
 }
 
+/** Whether a Clerk account was deleted (internal/userDeletion.ts). Clerk never reuses an id. */
+export async function isDeletedClerkAccount(ctx: QueryCtx | MutationCtx, clerkId: string) {
+  const row = await ctx.db
+    .query("deletedClerkAccounts")
+    .withIndex("by_clerkId", (q) => q.eq("clerkId", clerkId))
+    .first();
+  return row !== null;
+}
+
 export async function getOrCreateCanonicalUser(
   ctx: MutationCtx,
   userInfo: UserUpsert,
 ) {
+  // A session that outlived its account's deletion must not bring the account back.
+  if (userInfo.clerkId && (await isDeletedClerkAccount(ctx, userInfo.clerkId))) {
+    throw new ConvexError("This account was deleted.");
+  }
   const { candidates, normalizedEmail } = await collectUserCandidates(ctx, userInfo);
   const scoredLookup = {
     tokenIdentifier: userInfo.tokenIdentifier ?? "",

@@ -6,8 +6,7 @@ import type { MutationCtx } from "../_generated/server";
  *
  * Rows that only make sense for a live question are removed: its embeddings (vector search
  * keeps returning them), per-user state (seen, liked, hidden, sent), pending pruning reviews
- * and pending duplicate groups (neither can be resolved once a member is gone), and
- * collection entries. History is kept: analytics events, approved or rejected reviews,
+ * and pending duplicate groups (neither can be resolved once a member is gone). History is kept: analytics events, approved or rejected reviews,
  * generation runs and email deliveries.
  */
 
@@ -50,8 +49,16 @@ export async function settleDuplicateGroup(
 	return "stripped";
 }
 
-/** Removes the rows that only make sense for a live question. Call it before deleting one. */
-export async function removeQuestionReferences(ctx: MutationCtx, questionId: Id<"questions">): Promise<void> {
+/**
+ * Removes the rows that only make sense for a live question. Call it before deleting one.
+ * A caller deleting several questions in one transaction can read the pending duplicate groups
+ * once and pass them in; each is re-read before it is settled.
+ */
+export async function removeQuestionReferences(
+	ctx: MutationCtx,
+	questionId: Id<"questions">,
+	pendingGroups?: Doc<"duplicateDetections">[],
+): Promise<void> {
 	const embeddings = await ctx.db
 		.query("question_embeddings")
 		.withIndex("by_questionId", (q) => q.eq("questionId", questionId))
@@ -68,12 +75,16 @@ export async function removeQuestionReferences(ctx: MutationCtx, questionId: Id<
 		await ctx.db.delete(row._id);
 	}
 
-	const pendingGroups = await ctx.db
-		.query("duplicateDetections")
-		.withIndex("by_status", (q) => q.eq("status", "pending"))
-		.collect();
-	for (const detection of pendingGroups) {
-		if (!detection.questionIds.includes(questionId)) continue;
+	const groups =
+		pendingGroups ??
+		(await ctx.db
+			.query("duplicateDetections")
+			.withIndex("by_status", (q) => q.eq("status", "pending"))
+			.collect());
+	for (const listed of groups) {
+		if (!listed.questionIds.includes(questionId)) continue;
+		const detection = pendingGroups ? await ctx.db.get(listed._id) : listed;
+		if (!detection || !detection.questionIds.includes(questionId)) continue;
 		await settleDuplicateGroup(ctx, detection, async (id) => id !== questionId && (await ctx.db.get(id)) !== null);
 	}
 }

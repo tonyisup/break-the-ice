@@ -7,7 +7,7 @@ export default function DataRetentionPage() {
         <section>
           <h2 className="text-xl font-semibold mb-2">User Account Data</h2>
           <p>
-            Personal information associated with your user profile (such as name and email) is retained for as long as your account is active. Upon account deactivation, we retain this data for a maximum of 30 days to facilitate recovery if requested, after which it is permanently deleted from our primary databases.
+            Personal information associated with your user profile (such as name and email) is retained for as long as your account is active. When you delete your account, we delete your profile, your settings, your liked, seen and hidden questions, and any question you wrote that hasn't been published from our primary databases right away. A question you wrote that was published to the shared library stays there without your name, and usage records we keep for counting (such as how often a question was liked) are kept without your account linked to them. Messages you sent us through the feedback form and our records of AI requests, which can include the wording of questions, are also kept without your account linked to them. If we reviewed a question you wrote, our record of that review, including the question's wording, is kept. A deleted account can't be recovered.
           </p>
         </section>
 

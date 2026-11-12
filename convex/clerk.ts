@@ -72,6 +72,11 @@ export const usersWebhook = httpAction(async (ctx, request) => {
 			});
 		}
 
+		// Clerk sends only the id of a deleted account.
+		if (eventType === "user.deleted" && typeof event.data?.id === "string") {
+			await ctx.runMutation(internal.internal.userDeletion.startUserDeletion, { clerkId: event.data.id });
+		}
+
 		// Billing is per person. A subscription paid for by anything else records nothing, but is
 		// logged: an app loaded before the Team plan was removed can still start its checkout.
 		if (eventType.startsWith("subscription.")) {

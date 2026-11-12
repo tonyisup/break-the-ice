@@ -547,6 +547,12 @@ export default defineSchema({
     userId: v.id("users"),
     embedding: v.array(v.float64()),
   }).index("by_userId", ["userId"]),
+  // Clerk accounts that were deleted (internal/userDeletion.ts), so a late Clerk event or a
+  // still-valid session can't recreate their users row.
+  deletedClerkAccounts: defineTable({
+    clerkId: v.string(),
+    deletedAt: v.number(),
+  }).index("by_clerkId", ["clerkId"]),
 
   // ---- Zombie slug reports ----
   zombieSlugReports: defineTable({

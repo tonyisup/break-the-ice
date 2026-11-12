@@ -176,6 +176,8 @@ export const markNewsletterDeliveriesSent = internalMutation({
     const now = Date.now();
 
     for (const delivery of args.deliveries) {
+      // Deleting an account removes its deliveries, even one a batch is sending.
+      if (!(await ctx.db.get(delivery.deliveryId))) continue;
       await ctx.db.patch(delivery.deliveryId, {
         status: "sent",
         questionId: delivery.questionId,
@@ -201,6 +203,7 @@ export const markNewsletterDeliveriesFailed = internalMutation({
     const error = args.error.slice(0, 1000);
 
     for (const deliveryId of args.deliveryIds) {
+      if (!(await ctx.db.get(deliveryId))) continue;
       await ctx.db.patch(deliveryId, {
         status: "failed",
         error,

@@ -92,8 +92,10 @@
       "convex/workspace_removed.test.ts"
     ],
     "convex/internal/users.ts": [
+      "convex/clerk.test.ts",
       "convex/generation_quality.test.ts",
-      "convex/internal/users.test.ts"
+      "convex/internal/users.test.ts",
+      "convex/user_deletion.test.ts"
     ],
     "evals/runs/**": [],
     "**/*.md": [],
@@ -147,7 +149,8 @@
     "src/hooks/useWorkspace.tsx": [],
     "src/hooks/useWorkspaceSwitch.ts": [],
     "convex/clerk.ts": [
-      "convex/clerk.test.ts"
+      "convex/clerk.test.ts",
+      "convex/user_deletion.test.ts"
     ],
     "convex/core/billing.ts": [
       "convex/core/billing.test.ts",
@@ -203,7 +206,28 @@
     "convex/functions.test.ts": [],
     "convex/workspace_cleanup.test.ts": [],
     "src/app/data-retention/page.tsx": [],
-    "src/app/privacy/page.tsx": []
+    "src/app/privacy/page.tsx": [],
+    "convex/internal/userDeletion.ts": [
+      "convex/user_deletion.test.ts"
+    ],
+    "convex/lib/questionReferences.ts": [
+      "convex/question_references.test.ts",
+      "convex/user_deletion.test.ts"
+    ],
+    "convex/internal/newsletterDelivery.ts": [
+      "convex/internal/newsletterDelivery.test.ts",
+      "convex/user_deletion.test.ts"
+    ],
+    "convex/lib/users.ts": [
+      "convex/clerk.test.ts",
+      "convex/core/users.test.ts",
+      "convex/user_deletion.test.ts"
+    ],
+    "convex/schema.ts": [
+      "convex/user_deletion.test.ts",
+      "convex/clerk.test.ts",
+      "convex/core/users.test.ts"
+    ]
   },
   "selection": {},
   "warn": [
