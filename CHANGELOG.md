@@ -2,6 +2,21 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.8.2.0] - 2026-11-12
+
+### Fixed
+- Deleting an account now deletes the person's data. Before, nothing removed anyone. When Clerk deleted an account, the app kept the person's profile, likes, hidden and seen questions, settings, AI usage and their own questions indefinitely. Now Clerk's account-deleted notice clears their name, email and Clerk id at once and stops their daily email, and the rest is deleted in the background. That covers their likes and hidden lists, AI usage, preference data, daily-email records and every question they wrote that isn't public. A question of theirs that was published stays in the library without their name, and analytics events, feedback messages and AI request records stay without their account linked to them.
+- A deleted account can't come back. A late update from Clerk, or a page still open on the old session, no longer recreates it, and someone who signs up again with the same email gets a fresh account instead of the one being deleted.
+- A daily email batch no longer fails for everyone else in it when one recipient deletes their account mid-send.
+
+### Added
+- A one-time clean-up for accounts deleted in Clerk before this release. Run it after the deploy: `npx convex run --prod internal/userDeletion:deleteUsersMissingFromClerk '{"dryRun":true}'` checks every account against Clerk with `CLERK_SECRET_KEY` and lists the Clerk ids it no longer has; read that list, then run it with `false` to delete them. It refuses to delete anything when Clerk has none of the accounts, which means the key is for another Clerk instance. Accounts with no Clerk id, such as people who only signed up for the daily email, are left alone.
+
+### Changed
+- The privacy and data-retention pages say account data is deleted as soon as the account is, and name what is kept without the account linked: published questions, counting records, feedback messages, AI request records and records of reviews of a person's questions.
+
+Before deploying, check that the Clerk webhook endpoint is subscribed to `user.deleted`: Clerk only sends the events an endpoint lists, and without it nothing is deleted.
+
 ## [0.8.1.0] - 2026-11-11
 
 ### Removed
