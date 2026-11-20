@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowUp, SearchX, Sparkles } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { AnchorHeader } from "@/components/filter-controls/AnchorHeader";
-import { ItemDetails, ItemDetailDrawer } from "@/components/item-detail-drawer/item-detail-drawer";
+import type { ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { useAuth } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
@@ -56,8 +56,6 @@ export default function InfiniteScrollPage() {
   const anchoredToneParam = searchParams.get("tone");
   const anchoredTopicParam = searchParams.get("topic");
 
-  const [selectedAnchorItem, setSelectedAnchorItem] = useState<ItemDetails | null>(null);
-  const [isAnchorDrawerOpen, setIsAnchorDrawerOpen] = useState(false);
 
   const {
     likedQuestions,
@@ -921,18 +919,6 @@ export default function InfiniteScrollPage() {
           onRemoveStyle={() => removeAnchor("style")}
           onRemoveTone={() => removeAnchor("tone")}
           onRemoveTopic={() => removeAnchor("topic")}
-          onOpenItem={(type, item) => {
-            setSelectedAnchorItem({
-              id: item._id,
-              slug: item.id,
-              name: item.name,
-              type,
-              description: item.description || "",
-              icon: (item.icon || "CircleHelp") as Icon,
-              color: item.color || "#888",
-            });
-            setIsAnchorDrawerOpen(true);
-          }}
         />
         <div
           className={cn(
@@ -1090,18 +1076,6 @@ export default function InfiniteScrollPage() {
             </div>
           )}
         </div>
-        <ItemDetailDrawer
-          item={selectedAnchorItem}
-          isOpen={isAnchorDrawerOpen}
-          onOpenChange={setIsAnchorDrawerOpen}
-          onAnchorItem={handleAnchorItem}
-          isAnchored={
-            selectedAnchorItem?.type === "Style" ? anchoredStyleId === selectedAnchorItem.id :
-              selectedAnchorItem?.type === "Tone" ? anchoredToneId === selectedAnchorItem.id :
-                selectedAnchorItem?.type === "Topic" ? anchoredTopicId === selectedAnchorItem.id :
-                  false
-          }
-        />
       </main>
 
       {showTopButton && (
