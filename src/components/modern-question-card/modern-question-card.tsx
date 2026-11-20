@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Heart, Share2, ThumbsDown, TrashIcon } from '@/components/ui/icons/icons';
 import { Sparkles } from 'lucide-react';
 import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
 import { useQuery, useConvexAuth } from 'convex/react';
 import { Icon, IconComponent } from '../ui/icons/icon';
-import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer/item-detail-drawer';
+import type { ItemDetails } from '../item-detail-drawer/item-detail-drawer';
+import { ItemDetailFace } from './item-detail-face';
 import { RemixQuestionDrawer } from '../remix-question-drawer/remix-question-drawer';
 import { useStorageContext } from '@/hooks/useStorageContext';
 import { cn } from '@/lib/utils';
@@ -53,10 +54,6 @@ export function ModernQuestionCard({
   onToggleHidden,
   onHideStyle,
   onHideTone,
-  onSelectedStylesChange,
-  onSelectedTonesChange,
-  selectedStyles,
-  selectedTones,
   disabled = false,
   onRemixed,
   topic,
@@ -68,10 +65,34 @@ export function ModernQuestionCard({
   onDelete,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [detailItem, setDetailItem] = useState<ItemDetails | null>(null);
+  // The chip that turned the card over, so focus can go back to it.
+  const flipTriggerRef = useRef<HTMLElement | null>(null);
   const [isRemixDrawerOpen, setIsRemixDrawerOpen] = useState(false);
   const { isAuthenticated } = useConvexAuth();
+
+  const showDetails = (item: ItemDetails) => {
+    const active = document.activeElement;
+    flipTriggerRef.current =
+      active instanceof HTMLElement && cardRef.current?.contains(active) ? active : null;
+    setDetailItem(item);
+    setIsFlipped(true);
+  };
+  const flipBack = () => setIsFlipped(false);
+
+  // Focus can only return once the front is interactive again, so do it after the render.
+  useEffect(() => {
+    if (!isFlipped && flipTriggerRef.current) {
+      flipTriggerRef.current.focus({ preventScroll: true });
+      flipTriggerRef.current = null;
+    }
+  }, [isFlipped]);
+
+  // A new question always starts face-up.
+  useEffect(() => {
+    setIsFlipped(false);
+  }, [question?._id]);
 
   const handleHideStyle = (itemId: Id<"styles">) => {
     if (!style) return;
@@ -81,7 +102,7 @@ export function ModernQuestionCard({
       return;
     }
     onHideStyle(style._id);
-    setIsDrawerOpen(false);
+    flipBack();
   };
   const handleHideTone = (itemId: Id<"tones">) => {
     if (!tone) return;
@@ -92,7 +113,7 @@ export function ModernQuestionCard({
     }
     if (!tone) return;
     onHideTone(tone._id);
-    setIsDrawerOpen(false);
+    flipBack();
   };
   const handleHideItem = (item: ItemDetails) => {
     if (!item) return;
@@ -103,20 +124,9 @@ export function ModernQuestionCard({
     }
   };
 
-  const onAddFilter = (item: ItemDetails) => {
-    if (item.type === "Style") {
-      if (onSelectedStylesChange && selectedStyles) {
-        onSelectedStylesChange([...selectedStyles, item.slug]);
-      }
-    } else {
-      if (onSelectedTonesChange && selectedTones) {
-        onSelectedTonesChange([...selectedTones, item.slug]);
-      }
-    }
-  };
-  const handleOpenStyleDrawer = () => {
+  const handleShowStyleDetails = () => {
     if (!style) return;
-    setSelectedItemForDrawer({
+    showDetails({
       id: style._id,
       slug: style.id,
       name: style.name,
@@ -125,11 +135,10 @@ export function ModernQuestionCard({
       icon: style.icon as Icon,
       color: style.color,
     });
-    setIsDrawerOpen(true);
   };
-  const handleOpenTopicDrawer = () => {
+  const handleShowTopicDetails = () => {
     if (!topic) return;
-    setSelectedItemForDrawer({
+    showDetails({
       id: topic._id,
       slug: topic.id,
       name: topic.name,
@@ -138,11 +147,10 @@ export function ModernQuestionCard({
       icon: (topic.icon || "CircleHelp") as Icon,
       color: topic.color || "#888",
     });
-    setIsDrawerOpen(true);
   };
-  const handleOpenToneDrawer = () => {
+  const handleShowToneDetails = () => {
     if (!tone) return;
-    setSelectedItemForDrawer({
+    showDetails({
       id: tone._id,
       slug: tone.id,
       name: tone.name,
@@ -151,7 +159,6 @@ export function ModernQuestionCard({
       icon: tone.icon as Icon,
       color: tone.color,
     });
-    setIsDrawerOpen(true);
   };
   const handleShare = async () => {
     if (!question) return;
@@ -174,72 +181,103 @@ export function ModernQuestionCard({
     }
   };
 
+  const isAnchored =
+    detailItem?.type === "Style" ? anchoredStyleId === detailItem.id :
+    detailItem?.type === "Tone" ? anchoredToneId === detailItem.id :
+    detailItem?.type === "Topic" ? anchoredTopicId === detailItem.id :
+    false;
+  const handleAnchor = onAnchorItem
+    ? (item: ItemDetails) => {
+        onAnchorItem(item);
+        flipBack();
+      }
+    : undefined;
+  const showBack = isFlipped && !!question && !!detailItem;
+
   return (
     <div
       key={question?._id}
       ref={cardRef}
-      className="w-full max-w-md mx-auto"
+      className="w-full max-w-md mx-auto [perspective:1200px]"
     >
       <div
-        className="w-full h-full rounded-[30px] p-[3px]"
-        style={{
-          background: `linear-gradient(135deg, ${gradient[1]}, ${gradient[0]})`
-        }}
+        className={cn(
+          "grid w-full h-full [transform-style:preserve-3d] transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none",
+          showBack && "[transform:rotateY(180deg)]"
+        )}
       >
-        <div className="w-full h-full min-h-[300px] bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-center items-center">
-          {isGenerating && !question ? (
-            // Loading Spinner
-            <LoadingSpinner gradient={gradient} />
-          ) : (
-            // Full Card Content
-            question &&
-            <>
-              <QuestionContent
-                question={question}
-                style={style}
-                tone={tone}
-                gradient={gradient}
-                isFavorite={isFavorite}
-                isHidden={isHidden}
-                onToggleFavorite={onToggleFavorite}
-                onToggleHidden={onToggleHidden}
-                disabled={disabled}
-                handleShare={() => void handleShare()}
-                onClickStyle={handleOpenStyleDrawer}
-                onClickTone={handleOpenToneDrawer}
-                  onClickTopic={handleOpenTopicDrawer}
-                onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
-                topic={topic}
-                imageUrl={imageUrl}
-                onDelete={onDelete}
-              />
-              <ItemDetailDrawer
-                item={selectedItemForDrawer}
-                isOpen={isDrawerOpen}
-                onOpenChange={setIsDrawerOpen}
-                onHideItem={handleHideItem}
-                onAddFilter={onAddFilter}
-                  onAnchorItem={onAnchorItem}
-                  isAnchored={
-                    selectedItemForDrawer?.type === "Style" ? anchoredStyleId === selectedItemForDrawer.id :
-                    selectedItemForDrawer?.type === "Tone" ? anchoredToneId === selectedItemForDrawer.id :
-                    selectedItemForDrawer?.type === "Topic" ? anchoredTopicId === selectedItemForDrawer.id :
-                    false
-                  }
-              />
-              {isAuthenticated && style && tone && (
-                <RemixQuestionDrawer
+        {/* Front: the question */}
+        <div
+          inert={showBack}
+          className="[grid-area:1/1] w-full h-full rounded-[30px] p-[3px] [backface-visibility:hidden]"
+          style={{
+            background: `linear-gradient(135deg, ${gradient[1]}, ${gradient[0]})`
+          }}
+        >
+          <div className="w-full h-full min-h-[300px] bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-center items-center">
+            {isGenerating && !question ? (
+              // Loading Spinner
+              <LoadingSpinner gradient={gradient} />
+            ) : (
+              // Full Card Content
+              question &&
+              <>
+                <QuestionContent
                   question={question}
-                  styleId={style._id}
-                  toneId={tone._id}
-                  isOpen={isRemixDrawerOpen}
-                  onOpenChange={setIsRemixDrawerOpen}
-                  onRemixed={onRemixed}
+                  style={style}
+                  tone={tone}
+                  gradient={gradient}
+                  isFavorite={isFavorite}
+                  isHidden={isHidden}
+                  onToggleFavorite={onToggleFavorite}
+                  onToggleHidden={onToggleHidden}
+                  disabled={disabled}
+                  handleShare={() => void handleShare()}
+                  onClickStyle={handleShowStyleDetails}
+                  onClickTone={handleShowToneDetails}
+                  onClickTopic={handleShowTopicDetails}
+                  onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
+                  topic={topic}
+                  imageUrl={imageUrl}
+                  onDelete={onDelete}
                 />
-              )}
-            </>
-          )}
+                {isAuthenticated && style && tone && (
+                  <RemixQuestionDrawer
+                    question={question}
+                    styleId={style._id}
+                    toneId={tone._id}
+                    isOpen={isRemixDrawerOpen}
+                    onOpenChange={setIsRemixDrawerOpen}
+                    onRemixed={onRemixed}
+                  />
+                )}
+              </>
+            )}
+          </div>
         </div>
+
+        {/* Back: what the tapped style, tone or topic means. Both faces share one grid
+            cell, so the card is as tall as the taller face and neither side scrolls. */}
+        {question && detailItem && (
+          <div
+            inert={!showBack}
+            className="[grid-area:1/1] rounded-[30px] p-[3px] [backface-visibility:hidden] [transform:rotateY(180deg)]"
+            style={{
+              background: `linear-gradient(135deg, ${detailItem.color}, ${gradient[1]})`
+            }}
+          >
+            <div className="h-full w-full rounded-[27px] bg-white dark:bg-gray-900">
+              <ItemDetailFace
+                item={detailItem}
+                isActive={showBack}
+                isAnchored={isAnchored}
+                onBack={flipBack}
+                onAnchor={handleAnchor}
+                onHide={handleHideItem}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -371,41 +409,34 @@ const QuestionContent = ({
                 type="button"
                 aria-label={`Style: ${style?.name || styleSlug}`}
                 title={style?.name || styleSlug || "style"}
-                className="cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
+                className="group cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
                 onClick={handleClickStyle}
               >
                 {style && <IconComponent icon={style.icon as Icon} size={24} color={style.color} />}
-                <span className="text-left">
+                <span className="-ml-2 max-w-0 opacity-0 overflow-hidden whitespace-nowrap text-left transition-all duration-300 ease-out motion-reduce:transition-none group-hover:ml-0 group-hover:max-w-48 group-hover:opacity-100 group-focus-visible:ml-0 group-focus-visible:max-w-48 group-focus-visible:opacity-100">
                   {style?.name}
                 </span>
                 {!style && styleSlug}
               </button>
             </div>
           )}
-
-          {hasTone && (
-            <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
-              style={{
-                borderBottomColor: gradient[1],
-                borderRightColor: gradient[1]
-              }}
-            >
-              <button
-                type="button"
-                aria-label={`Tone: ${tone?.name || toneSlug}`}
-                title={tone?.name || toneSlug || "tone"}
-                className="cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
-                onClick={handleClickTone}
-              >
-                {tone && <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />}
-                <span className="text-left">
-                  {tone?.name}
-                </span>
-                {!tone && toneSlug}
-              </button>
-            </div>
-          )}
         </div>
+      )}
+
+{topic && (
+        <button
+          type="button"
+          className="w-full py-4 flex flex-row gap-2 justify-center items-center cursor-pointer bg-transparent border-none p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
+          onClick={onClickTopic}
+          aria-label={`Topic: ${topic.name}`}
+        >
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Topic: {topic.name}
+          </p>
+          <span aria-hidden="true">
+            <IconComponent icon={safeIcon} size={24} color={topic.color} />
+          </span>
+        </button>
       )}
 
       {/* Question Image */}
@@ -414,22 +445,23 @@ const QuestionContent = ({
       </div>)}
 
       {/* Question Text */}
-      <div className="py-8 flex-1 flex items-center justify-center text-center">
+      <div className="flex-1 flex items-center justify-center text-center">
         <h2 className={cn(questionImageUrl ? "text-xl" : "text-2xl","font-bold text-gray-900 dark:text-white leading-relaxed")}>
           {question.text ?? question.customText}
         </h2>
       </div>
 
+      
       {/* Action Buttons */}
-      <div className="flex flex-wrap items-stretch justify-center gap-2 sm:gap-3">
+      <div className="flex py-8 flex-wrap items-stretch justify-center gap-2 sm:gap-3">
         <button
           onClick={handleLike}
           disabled={disabled}
+          title="Toggle favorite"
           className={cn(
-            "flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20",
+            "p-4",
             shakeHeart && "motion-safe:animate-shake"
           )}
-          title="Toggle favorite"
           aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
           aria-pressed={isFavorite}
         >
@@ -446,10 +478,12 @@ const QuestionContent = ({
           onClick={handleHide}
           disabled={disabled}
           className={cn(
-            "flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20",
+            "p-4",
             shakeThumbsDown && "motion-safe:animate-shake"
           )}
           title={isHidden ? "Unhide question" : "Hide question"}
+          aria-label={isHidden ? "Unhide question" : "Hide question"}
+          aria-pressed={isHidden}
         >
           <ThumbsDown
             size={24}
@@ -465,9 +499,9 @@ const QuestionContent = ({
             onClick={handleShare}
             type="button"
             disabled={disabled}
-            className="flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20"
             title="Share question"
             aria-label="Share question"
+            className="p-4"
           >
             <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
             <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
@@ -481,7 +515,7 @@ const QuestionContent = ({
             type="button"
             onClick={onRemix}
             disabled={disabled}
-            className="flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20"
+            className="p-4"
             title="Remix question"
           >
             <Sparkles size={24} className="text-gray-600 dark:text-gray-400" />
@@ -506,21 +540,30 @@ const QuestionContent = ({
           </button>
         )}
       </div>
-      {topic && (
-        <button
-          type="button"
-          className="w-full mt-4 flex flex-row gap-2 justify-between items-center cursor-pointer bg-transparent border-none p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
-          onClick={onClickTopic}
-          aria-label={`Topic: ${topic.name}`}
-        >
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Topic: {topic.name}
-          </p>
-          <span aria-hidden="true">
-            <IconComponent icon={safeIcon} size={24} color={topic.color} />
-          </span>
-        </button>
-      )}
+
+
+{hasTone && (
+            <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-end flex flex-row gap-2 justify-between"
+              style={{
+                borderBottomColor: gradient[1],
+                borderRightColor: gradient[1]
+              }}
+            >
+              <button
+                type="button"
+                aria-label={`Tone: ${tone?.name || toneSlug}`}
+                title={tone?.name || toneSlug || "tone"}
+                className="group cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
+                onClick={handleClickTone}
+              >
+                {tone && <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />}
+                <span className="-ml-2 max-w-0 opacity-0 overflow-hidden whitespace-nowrap text-left transition-all duration-300 ease-out motion-reduce:transition-none group-hover:ml-0 group-hover:max-w-48 group-hover:opacity-100 group-focus-visible:ml-0 group-focus-visible:max-w-48 group-focus-visible:opacity-100">
+                  {tone?.name}
+                </span>
+                {!tone && toneSlug}
+              </button>
+            </div>
+          )}
     </div>
   );
 };

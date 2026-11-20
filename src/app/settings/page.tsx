@@ -303,7 +303,7 @@ const SettingsPage = () => {
               <p className="dark:text-white/70 text-black/70">No styles available to manage.</p>
             ) : (
               <>
-                <div className="flex space-x-2 mb-4">
+                <div className="flex space-x-2 mb-4 justify-end">
                   <button
                     onClick={() => setHiddenStyles([])}
                     className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
@@ -376,7 +376,7 @@ const SettingsPage = () => {
               <p className="dark:text-white/70 text-black/70">No tones available to manage.</p>
             ) : (
               <>
-                <div className="flex space-x-2 mb-4">
+                <div className="flex space-x-2 mb-4 justify-end">
                   <button
                     onClick={() => setHiddenTones([])}
                     className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
