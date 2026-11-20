@@ -6,6 +6,7 @@ import { useAuth } from "@clerk/clerk-react";
 import { Heart, History, Home } from "@/components/ui/icons/icons";
 import { useStorageContext } from "@/hooks/useStorageContext";
 import { UserMenu } from "./UserMenu";
+import { FileQuestionMark } from "lucide-react";
 
 export const Header = () => {
   const { isSignedIn } = useAuth();
@@ -63,7 +64,7 @@ export const Header = () => {
   );
 };
 
-export const HomeLink = ({ icon = <Home className="w-5 h-5" />, text = "Home" }: { icon?: React.ReactNode, text?: string }) => {
+export const HomeLink = ({ icon = <FileQuestionMark className="w-5 h-5" />, text = "Questions" }: { icon?: React.ReactNode, text?: string }) => {
   return (
     <Button asChild className="h-9 px-3 text-xs sm:h-10 sm:px-4 sm:text-sm">
       <NavLink to="/app" end className="aria-[current=page]:bg-white/20 aria-[current=page]:dark:bg-white/10">
