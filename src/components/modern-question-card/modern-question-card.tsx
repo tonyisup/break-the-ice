@@ -515,7 +515,7 @@ const QuestionContent = ({
             type="button"
             onClick={onRemix}
             disabled={disabled}
-            className="flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20"
+            className="p-4"
             title="Remix question"
           >
             <Sparkles size={24} className="text-gray-600 dark:text-gray-400" />
