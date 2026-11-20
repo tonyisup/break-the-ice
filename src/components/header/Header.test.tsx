@@ -18,7 +18,7 @@ vi.mock("@/hooks/useStorageContext", () => ({
 vi.mock("./UserMenu", () => ({ UserMenu: () => null }));
 
 it.each([
-  ["/app", "Home"],
+  ["/app", "Questions"],
   ["/liked", "Liked"],
   ["/history", "History"],
 ])("keeps destinations stable on %s", (path, active) => {
@@ -27,7 +27,7 @@ it.each([
       <Header />
     </MemoryRouter>,
   );
-  expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "Questions" })).toHaveAttribute(
     "href",
     "/app",
   );

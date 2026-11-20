@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { NavLink } from "react-router-dom";
 import { Button } from "../ui/button";
 import { useQuery } from "convex/react";
@@ -14,6 +15,24 @@ export const Header = () => {
   const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
 
   const { likedQuestions, likedLimit, hiddenQuestions, hiddenLimit } = useStorageContext();
+  const headerRef = useRef<HTMLElement>(null);
+
+  // Publish the header's real height as --header-h, so content under this fixed header
+  // (page padding, sticky bars) lines up exactly instead of guessing at breakpoints.
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const update = () => root.style.setProperty("--header-h", `${el.getBoundingClientRect().height}px`);
+    update();
+    if (typeof ResizeObserver === "undefined") return () => root.style.removeProperty("--header-h");
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--header-h");
+    };
+  }, []);
 
   // Show badge if we are within 3 of the limit
   const showLimitBadge = !isSignedIn && (likedLimit - likedQuestions.length <= 3) && (likedQuestions.length < likedLimit);
@@ -23,7 +42,7 @@ export const Header = () => {
   const showSettingsFullBadge = !isSignedIn && (hiddenQuestions.length >= hiddenLimit);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-white/10 bg-white/80 p-3 backdrop-blur-md dark:bg-gray-900/80 md:p-4">
+    <header ref={headerRef} className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b border-white/10 bg-white/80 p-3 backdrop-blur-md dark:bg-gray-900/80 md:p-4">
       <div className="flex gap-1.5 sm:gap-2">
         <HomeLink />
         <div className="relative">
