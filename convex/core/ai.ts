@@ -20,6 +20,7 @@ export const generateAIQuestionForFeed = action({
 	},
 	returns: v.array(v.nullable(v.any())),
 	handler: async (ctx, args): Promise<(Omit<Doc<"questions">, "qualityCheck" | "safetyFlags"> | null)[]> => {
+		const requestStartedAt = Date.now();
 		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
 
 		if (!user) {
@@ -49,6 +50,7 @@ export const generateAIQuestionForFeed = action({
 			anchoredStyleId: args.anchoredStyleId,
 			anchoredToneId: args.anchoredToneId,
 			purpose: "feed",
+			requestStartedAt,
 		});
 		return questions.map((question) => question && withoutVerdict(question));
 	}

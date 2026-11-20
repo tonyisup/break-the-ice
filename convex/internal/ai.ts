@@ -392,6 +392,8 @@ export const generateAIQuestionForUser = internalAction({
 		anchoredStyleId: v.optional(v.id("styles")),
 		anchoredToneId: v.optional(v.id("tones")),
 		seed: v.optional(v.number()),
+		// When the caller's own action began, for the run's latency record.
+		requestStartedAt: v.optional(v.number()),
 		purpose: v.optional(
 			v.union(
 				v.literal("feed"),
@@ -401,6 +403,7 @@ export const generateAIQuestionForUser = internalAction({
 	},
 	returns: v.array(v.union(v.any(), v.null())),
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
+		const requestStartedAt = args.requestStartedAt ?? Date.now();
 		const user = await ctx.runQuery(internal.internal.users.getUserById, { id: args.userId });
 
 		if (!user) {
@@ -456,6 +459,7 @@ export const generateAIQuestionForUser = internalAction({
 				topicId: topic?._id,
 				batchSize: count,
 				excludedQuestions: [...recentlySeen, ...blockedQuestions],
+				requestStartedAt,
 			});
 			return result.questions as (Doc<"questions"> | null)[];
 		} catch (error) {

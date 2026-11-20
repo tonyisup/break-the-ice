@@ -165,6 +165,12 @@ export default defineSchema({
     resultQuestionIds: v.array(v.id("questions")),
     createdAt: v.number(),
     finishedAt: v.optional(v.number()),
+    // Latency. requestStartedAt is when the action that asked for the run began, before the
+    // reads that come ahead of createdAt, so finishedAt - requestStartedAt is the server's
+    // share of the wait. providerMs is the time inside the model call, with its spend
+    // bookkeeping and any retries. Runs from before these were recorded have neither.
+    requestStartedAt: v.optional(v.number()),
+    providerMs: v.optional(v.number()),
     // What the provider reported for the completion: the model that ran, token counts and
     // the charge in USD.
     resolvedModel: v.optional(v.string()),

@@ -733,6 +733,28 @@ describe("room for a thinking model's reasoning", () => {
     expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 3300 });
   });
 
+  test("a feed run records when its request began and how long the model call took, on success and on failure", async () => {
+    const { t, styleId, toneId } = await setup();
+    const before = Date.now();
+    create.mockResolvedValueOnce(completion(questionsJson("What small win are you proud of this week?"), { cost: 0.01 }) as never);
+    await t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 1, anchoredStyleId: styleId, anchoredToneId: toneId });
+
+    create.mockResolvedValue(cutOff('{"questions":[{"text":"What small win are you pro', 0.006) as never);
+    await expect(
+      t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 1, anchoredStyleId: styleId, anchoredToneId: toneId }),
+    ).rejects.toThrow(/could not be read/);
+
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => run.status)).toEqual(["succeeded", "failed"]);
+    for (const run of runs) {
+      // The request began before the reads that come ahead of the run's own record.
+      expect(run.requestStartedAt).toBeGreaterThanOrEqual(before);
+      expect(run.requestStartedAt).toBeLessThanOrEqual(run.createdAt);
+      expect(run.providerMs).toBeGreaterThanOrEqual(0);
+      expect(run.finishedAt! - run.requestStartedAt!).toBeGreaterThanOrEqual(run.providerMs!);
+    }
+  });
+
   test("the cap follows the batch size the prompt was built for, from one question up to the ten-question limit", async () => {
     const { t, styleId, toneId } = await setup();
     create.mockResolvedValue(completion(questionsJson("What small win are you proud of?"), { cost: 0.01 }) as never);
