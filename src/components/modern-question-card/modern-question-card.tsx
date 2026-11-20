@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Heart, Share2, ThumbsDown, TrashIcon } from '@/components/ui/icons/icons';
 import { Sparkles } from 'lucide-react';
 import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
 import { useQuery, useConvexAuth } from 'convex/react';
 import { Icon, IconComponent } from '../ui/icons/icon';
-import { ItemDetailDrawer, ItemDetails } from '../item-detail-drawer/item-detail-drawer';
+import type { ItemDetails } from '../item-detail-drawer/item-detail-drawer';
+import { ItemDetailFace } from './item-detail-face';
 import { RemixQuestionDrawer } from '../remix-question-drawer/remix-question-drawer';
 import { useStorageContext } from '@/hooks/useStorageContext';
 import { cn } from '@/lib/utils';
@@ -53,10 +54,6 @@ export function ModernQuestionCard({
   onToggleHidden,
   onHideStyle,
   onHideTone,
-  onSelectedStylesChange,
-  onSelectedTonesChange,
-  selectedStyles,
-  selectedTones,
   disabled = false,
   onRemixed,
   topic,
@@ -68,10 +65,34 @@ export function ModernQuestionCard({
   onDelete,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<ItemDetails | null>(null);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [detailItem, setDetailItem] = useState<ItemDetails | null>(null);
+  // The chip that turned the card over, so focus can go back to it.
+  const flipTriggerRef = useRef<HTMLElement | null>(null);
   const [isRemixDrawerOpen, setIsRemixDrawerOpen] = useState(false);
   const { isAuthenticated } = useConvexAuth();
+
+  const showDetails = (item: ItemDetails) => {
+    const active = document.activeElement;
+    flipTriggerRef.current =
+      active instanceof HTMLElement && cardRef.current?.contains(active) ? active : null;
+    setDetailItem(item);
+    setIsFlipped(true);
+  };
+  const flipBack = () => setIsFlipped(false);
+
+  // Focus can only return once the front is interactive again, so do it after the render.
+  useEffect(() => {
+    if (!isFlipped && flipTriggerRef.current) {
+      flipTriggerRef.current.focus({ preventScroll: true });
+      flipTriggerRef.current = null;
+    }
+  }, [isFlipped]);
+
+  // A new question always starts face-up.
+  useEffect(() => {
+    setIsFlipped(false);
+  }, [question?._id]);
 
   const handleHideStyle = (itemId: Id<"styles">) => {
     if (!style) return;
@@ -81,7 +102,7 @@ export function ModernQuestionCard({
       return;
     }
     onHideStyle(style._id);
-    setIsDrawerOpen(false);
+    flipBack();
   };
   const handleHideTone = (itemId: Id<"tones">) => {
     if (!tone) return;
@@ -92,7 +113,7 @@ export function ModernQuestionCard({
     }
     if (!tone) return;
     onHideTone(tone._id);
-    setIsDrawerOpen(false);
+    flipBack();
   };
   const handleHideItem = (item: ItemDetails) => {
     if (!item) return;
@@ -103,20 +124,9 @@ export function ModernQuestionCard({
     }
   };
 
-  const onAddFilter = (item: ItemDetails) => {
-    if (item.type === "Style") {
-      if (onSelectedStylesChange && selectedStyles) {
-        onSelectedStylesChange([...selectedStyles, item.slug]);
-      }
-    } else {
-      if (onSelectedTonesChange && selectedTones) {
-        onSelectedTonesChange([...selectedTones, item.slug]);
-      }
-    }
-  };
-  const handleOpenStyleDrawer = () => {
+  const handleShowStyleDetails = () => {
     if (!style) return;
-    setSelectedItemForDrawer({
+    showDetails({
       id: style._id,
       slug: style.id,
       name: style.name,
@@ -125,11 +135,10 @@ export function ModernQuestionCard({
       icon: style.icon as Icon,
       color: style.color,
     });
-    setIsDrawerOpen(true);
   };
-  const handleOpenTopicDrawer = () => {
+  const handleShowTopicDetails = () => {
     if (!topic) return;
-    setSelectedItemForDrawer({
+    showDetails({
       id: topic._id,
       slug: topic.id,
       name: topic.name,
@@ -138,11 +147,10 @@ export function ModernQuestionCard({
       icon: (topic.icon || "CircleHelp") as Icon,
       color: topic.color || "#888",
     });
-    setIsDrawerOpen(true);
   };
-  const handleOpenToneDrawer = () => {
+  const handleShowToneDetails = () => {
     if (!tone) return;
-    setSelectedItemForDrawer({
+    showDetails({
       id: tone._id,
       slug: tone.id,
       name: tone.name,
@@ -151,7 +159,6 @@ export function ModernQuestionCard({
       icon: tone.icon as Icon,
       color: tone.color,
     });
-    setIsDrawerOpen(true);
   };
   const handleShare = async () => {
     if (!question) return;
@@ -174,72 +181,103 @@ export function ModernQuestionCard({
     }
   };
 
+  const isAnchored =
+    detailItem?.type === "Style" ? anchoredStyleId === detailItem.id :
+    detailItem?.type === "Tone" ? anchoredToneId === detailItem.id :
+    detailItem?.type === "Topic" ? anchoredTopicId === detailItem.id :
+    false;
+  const handleAnchor = onAnchorItem
+    ? (item: ItemDetails) => {
+        onAnchorItem(item);
+        flipBack();
+      }
+    : undefined;
+  const showBack = isFlipped && !!question && !!detailItem;
+
   return (
     <div
       key={question?._id}
       ref={cardRef}
-      className="w-full max-w-md mx-auto"
+      className="w-full max-w-md mx-auto [perspective:1200px]"
     >
       <div
-        className="w-full h-full rounded-[30px] p-[3px]"
-        style={{
-          background: `linear-gradient(135deg, ${gradient[1]}, ${gradient[0]})`
-        }}
+        className={cn(
+          "grid w-full h-full [transform-style:preserve-3d] transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none",
+          showBack && "[transform:rotateY(180deg)]"
+        )}
       >
-        <div className="w-full h-full min-h-[300px] bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-center items-center">
-          {isGenerating && !question ? (
-            // Loading Spinner
-            <LoadingSpinner gradient={gradient} />
-          ) : (
-            // Full Card Content
-            question &&
-            <>
-              <QuestionContent
-                question={question}
-                style={style}
-                tone={tone}
-                gradient={gradient}
-                isFavorite={isFavorite}
-                isHidden={isHidden}
-                onToggleFavorite={onToggleFavorite}
-                onToggleHidden={onToggleHidden}
-                disabled={disabled}
-                handleShare={() => void handleShare()}
-                onClickStyle={handleOpenStyleDrawer}
-                onClickTone={handleOpenToneDrawer}
-                  onClickTopic={handleOpenTopicDrawer}
-                onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
-                topic={topic}
-                imageUrl={imageUrl}
-                onDelete={onDelete}
-              />
-              <ItemDetailDrawer
-                item={selectedItemForDrawer}
-                isOpen={isDrawerOpen}
-                onOpenChange={setIsDrawerOpen}
-                onHideItem={handleHideItem}
-                onAddFilter={onAddFilter}
-                  onAnchorItem={onAnchorItem}
-                  isAnchored={
-                    selectedItemForDrawer?.type === "Style" ? anchoredStyleId === selectedItemForDrawer.id :
-                    selectedItemForDrawer?.type === "Tone" ? anchoredToneId === selectedItemForDrawer.id :
-                    selectedItemForDrawer?.type === "Topic" ? anchoredTopicId === selectedItemForDrawer.id :
-                    false
-                  }
-              />
-              {isAuthenticated && style && tone && (
-                <RemixQuestionDrawer
+        {/* Front: the question */}
+        <div
+          inert={showBack}
+          className="[grid-area:1/1] w-full h-full rounded-[30px] p-[3px] [backface-visibility:hidden]"
+          style={{
+            background: `linear-gradient(135deg, ${gradient[1]}, ${gradient[0]})`
+          }}
+        >
+          <div className="w-full h-full min-h-[300px] bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-center items-center">
+            {isGenerating && !question ? (
+              // Loading Spinner
+              <LoadingSpinner gradient={gradient} />
+            ) : (
+              // Full Card Content
+              question &&
+              <>
+                <QuestionContent
                   question={question}
-                  styleId={style._id}
-                  toneId={tone._id}
-                  isOpen={isRemixDrawerOpen}
-                  onOpenChange={setIsRemixDrawerOpen}
-                  onRemixed={onRemixed}
+                  style={style}
+                  tone={tone}
+                  gradient={gradient}
+                  isFavorite={isFavorite}
+                  isHidden={isHidden}
+                  onToggleFavorite={onToggleFavorite}
+                  onToggleHidden={onToggleHidden}
+                  disabled={disabled}
+                  handleShare={() => void handleShare()}
+                  onClickStyle={handleShowStyleDetails}
+                  onClickTone={handleShowToneDetails}
+                  onClickTopic={handleShowTopicDetails}
+                  onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
+                  topic={topic}
+                  imageUrl={imageUrl}
+                  onDelete={onDelete}
                 />
-              )}
-            </>
-          )}
+                {isAuthenticated && style && tone && (
+                  <RemixQuestionDrawer
+                    question={question}
+                    styleId={style._id}
+                    toneId={tone._id}
+                    isOpen={isRemixDrawerOpen}
+                    onOpenChange={setIsRemixDrawerOpen}
+                    onRemixed={onRemixed}
+                  />
+                )}
+              </>
+            )}
+          </div>
         </div>
+
+        {/* Back: what the tapped style, tone or topic means. Both faces share one grid
+            cell, so the card is as tall as the taller face and neither side scrolls. */}
+        {question && detailItem && (
+          <div
+            inert={!showBack}
+            className="[grid-area:1/1] rounded-[30px] p-[3px] [backface-visibility:hidden] [transform:rotateY(180deg)]"
+            style={{
+              background: `linear-gradient(135deg, ${detailItem.color}, ${gradient[1]})`
+            }}
+          >
+            <div className="h-full w-full rounded-[27px] bg-white dark:bg-gray-900">
+              <ItemDetailFace
+                item={detailItem}
+                isActive={showBack}
+                isAnchored={isAnchored}
+                onBack={flipBack}
+                onAnchor={handleAnchor}
+                onHide={handleHideItem}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
