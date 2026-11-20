@@ -385,22 +385,10 @@ const QuestionContent = ({
         </div>
       )}
 
-      {/* Question Image */}
-      {questionImageUrl && (<div className="w-full h-full flex items-center justify-center min-h-[120px]">
-        <img src={questionImageUrl} alt="Question" className="max-w-full max-h-full object-contain mt-8" />
-      </div>)}
-
-      {/* Question Text */}
-      <div className="pt-8 flex-1 flex items-center justify-center text-center">
-        <h2 className={cn(questionImageUrl ? "text-xl" : "text-2xl","font-bold text-gray-900 dark:text-white leading-relaxed")}>
-          {question.text ?? question.customText}
-        </h2>
-      </div>
-
-      {topic && (
+{topic && (
         <button
           type="button"
-          className="w-full py-4 flex flex-row gap-2 justify-between items-center cursor-pointer bg-transparent border-none p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
+          className="w-full py-4 flex flex-row gap-2 justify-center items-center cursor-pointer bg-transparent border-none p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
           onClick={onClickTopic}
           aria-label={`Topic: ${topic.name}`}
         >
@@ -412,17 +400,30 @@ const QuestionContent = ({
           </span>
         </button>
       )}
+
+      {/* Question Image */}
+      {questionImageUrl && (<div className="w-full h-full flex items-center justify-center min-h-[120px]">
+        <img src={questionImageUrl} alt="Question" className="max-w-full max-h-full object-contain mt-8" />
+      </div>)}
+
+      {/* Question Text */}
+      <div className="flex-1 flex items-center justify-center text-center">
+        <h2 className={cn(questionImageUrl ? "text-xl" : "text-2xl","font-bold text-gray-900 dark:text-white leading-relaxed")}>
+          {question.text ?? question.customText}
+        </h2>
+      </div>
+
       
       {/* Action Buttons */}
-      <div className="flex pb-8 flex-wrap items-stretch justify-center gap-2 sm:gap-3">
+      <div className="flex py-8 flex-wrap items-stretch justify-center gap-2 sm:gap-3">
         <button
           onClick={handleLike}
           disabled={disabled}
+          title="Toggle favorite"
           className={cn(
-            "flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20",
+            "p-4",
             shakeHeart && "motion-safe:animate-shake"
           )}
-          title="Toggle favorite"
           aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
           aria-pressed={isFavorite}
         >
@@ -439,10 +440,12 @@ const QuestionContent = ({
           onClick={handleHide}
           disabled={disabled}
           className={cn(
-            "flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20",
+            "p-4",
             shakeThumbsDown && "motion-safe:animate-shake"
           )}
           title={isHidden ? "Unhide question" : "Hide question"}
+          aria-label={isHidden ? "Unhide question" : "Hide question"}
+          aria-pressed={isHidden}
         >
           <ThumbsDown
             size={24}
@@ -458,9 +461,9 @@ const QuestionContent = ({
             onClick={handleShare}
             type="button"
             disabled={disabled}
-            className="flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-black/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20"
             title="Share question"
             aria-label="Share question"
+            className="p-4"
           >
             <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
             <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
