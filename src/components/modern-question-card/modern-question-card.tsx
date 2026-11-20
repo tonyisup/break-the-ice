@@ -371,37 +371,14 @@ const QuestionContent = ({
                 type="button"
                 aria-label={`Style: ${style?.name || styleSlug}`}
                 title={style?.name || styleSlug || "style"}
-                className="cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
+                className="group cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
                 onClick={handleClickStyle}
               >
                 {style && <IconComponent icon={style.icon as Icon} size={24} color={style.color} />}
-                <span className="text-left">
+                <span className="-ml-2 max-w-0 opacity-0 overflow-hidden whitespace-nowrap text-left transition-all duration-300 ease-out motion-reduce:transition-none group-hover:ml-0 group-hover:max-w-48 group-hover:opacity-100 group-focus-visible:ml-0 group-focus-visible:max-w-48 group-focus-visible:opacity-100">
                   {style?.name}
                 </span>
                 {!style && styleSlug}
-              </button>
-            </div>
-          )}
-
-          {hasTone && (
-            <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
-              style={{
-                borderBottomColor: gradient[1],
-                borderRightColor: gradient[1]
-              }}
-            >
-              <button
-                type="button"
-                aria-label={`Tone: ${tone?.name || toneSlug}`}
-                title={tone?.name || toneSlug || "tone"}
-                className="cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
-                onClick={handleClickTone}
-              >
-                {tone && <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />}
-                <span className="text-left">
-                  {tone?.name}
-                </span>
-                {!tone && toneSlug}
               </button>
             </div>
           )}
@@ -414,14 +391,30 @@ const QuestionContent = ({
       </div>)}
 
       {/* Question Text */}
-      <div className="py-8 flex-1 flex items-center justify-center text-center">
+      <div className="pt-8 flex-1 flex items-center justify-center text-center">
         <h2 className={cn(questionImageUrl ? "text-xl" : "text-2xl","font-bold text-gray-900 dark:text-white leading-relaxed")}>
           {question.text ?? question.customText}
         </h2>
       </div>
 
+      {topic && (
+        <button
+          type="button"
+          className="w-full py-4 flex flex-row gap-2 justify-between items-center cursor-pointer bg-transparent border-none p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
+          onClick={onClickTopic}
+          aria-label={`Topic: ${topic.name}`}
+        >
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Topic: {topic.name}
+          </p>
+          <span aria-hidden="true">
+            <IconComponent icon={safeIcon} size={24} color={topic.color} />
+          </span>
+        </button>
+      )}
+      
       {/* Action Buttons */}
-      <div className="flex flex-wrap items-stretch justify-center gap-2 sm:gap-3">
+      <div className="flex pb-8 flex-wrap items-stretch justify-center gap-2 sm:gap-3">
         <button
           onClick={handleLike}
           disabled={disabled}
@@ -506,21 +499,30 @@ const QuestionContent = ({
           </button>
         )}
       </div>
-      {topic && (
-        <button
-          type="button"
-          className="w-full mt-4 flex flex-row gap-2 justify-between items-center cursor-pointer bg-transparent border-none p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
-          onClick={onClickTopic}
-          aria-label={`Topic: ${topic.name}`}
-        >
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Topic: {topic.name}
-          </p>
-          <span aria-hidden="true">
-            <IconComponent icon={safeIcon} size={24} color={topic.color} />
-          </span>
-        </button>
-      )}
+
+
+{hasTone && (
+            <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-end flex flex-row gap-2 justify-between"
+              style={{
+                borderBottomColor: gradient[1],
+                borderRightColor: gradient[1]
+              }}
+            >
+              <button
+                type="button"
+                aria-label={`Tone: ${tone?.name || toneSlug}`}
+                title={tone?.name || toneSlug || "tone"}
+                className="group cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
+                onClick={handleClickTone}
+              >
+                {tone && <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />}
+                <span className="-ml-2 max-w-0 opacity-0 overflow-hidden whitespace-nowrap text-left transition-all duration-300 ease-out motion-reduce:transition-none group-hover:ml-0 group-hover:max-w-48 group-hover:opacity-100 group-focus-visible:ml-0 group-focus-visible:max-w-48 group-focus-visible:opacity-100">
+                  {tone?.name}
+                </span>
+                {!tone && toneSlug}
+              </button>
+            </div>
+          )}
     </div>
   );
 };
