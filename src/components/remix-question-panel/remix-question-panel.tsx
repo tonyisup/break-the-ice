@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useId } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { convexErrorData } from "../../../convex/lib/errorData";
 import { normalizeQuestionTags } from "../../../convex/lib/questionTags";
@@ -7,20 +7,13 @@ import {
 	ERROR_MESSAGES,
 	MAX_QUESTION_TAG_LENGTH,
 	MAX_QUESTION_TAGS,
+	MAX_QUESTION_TEXT_LENGTH,
 } from "../../../convex/constants";
 import { api } from "../../../convex/_generated/api";
+import { AI_USAGE_CYCLE_MS } from "../../../convex/lib/aiPlanLimits";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { toast } from "sonner";
 import { Loader2, Sparkles, Trash2, RotateCcw, Save, X } from "lucide-react";
-import {
-	Drawer,
-	DrawerContent,
-	DrawerHeader,
-	DrawerTitle,
-	DrawerDescription,
-	DrawerFooter,
-	DrawerClose,
-} from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -32,7 +25,7 @@ import { cn } from "@/lib/utils";
 
 type RemixState = "idle" | "remixing" | "remixed";
 
-interface RemixQuestionDrawerProps {
+interface RemixQuestionPanelProps {
 	question: Doc<"questions">;
 	styleId: Id<"styles">;
 	toneId: Id<"tones">;
@@ -41,17 +34,19 @@ interface RemixQuestionDrawerProps {
 	onRemixed?: (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => void;
 }
 
-const CLOSE_ANIMATION_DURATION_MS = 500;
-
-
-export function RemixQuestionDrawer({
+/**
+ * Remix a question in place: this is the back of the question card while it is open, and
+ * renders nothing while it is closed. Closing is refused while a remix is running or a
+ * draft is unsaved, so `onOpenChange(false)` is only called once it is safe to turn back.
+ */
+export function RemixQuestionPanel({
 	question,
 	styleId,
 	toneId,
 	isOpen,
 	onOpenChange,
 	onRemixed,
-}: RemixQuestionDrawerProps) {
+}: RemixQuestionPanelProps) {
 	const [remixState, setRemixState] = useState<RemixState>("idle");
 	const [remixedText, setRemixedText] = useState("");
 	const [newQuestionId, setNewQuestionId] = useState<Id<"questions"> | null>(null);
@@ -60,17 +55,20 @@ export function RemixQuestionDrawer({
 	const [tags, setTags] = useState<string[]>([]);
 	const [saveFailed, setSaveFailed] = useState(false);
 	const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
+	// Tags come from a fixed list, so the list opens as soon as the field is used.
+	const [showTagList, setShowTagList] = useState(false);
+	// Asked to close with a draft that would be lost: the panel asks what to do with it.
+	const [confirmingClose, setConfirmingClose] = useState(false);
 
 	const styles = useQuery(api.core.styles.getStyles, isOpen ? {} : "skip");
 	const tones = useQuery(api.core.tones.getTones, isOpen ? {} : "skip");
 	const allAvailableTags = useQuery(api.core.tags.getTags, isOpen ? {} : "skip");
 
 	const filteredSuggestions = useMemo(() => {
-		if (!tagInput.trim()) return [];
-		return allAvailableTags?.filter(t => 
-			t.name.toLowerCase().includes(tagInput.toLowerCase()) && 
-			!tags.includes(t.name)
-		).slice(0, 10) || [];
+		const query = tagInput.trim().toLowerCase();
+		return allAvailableTags?.filter(t =>
+			!tags.includes(t.name) && (!query || t.name.toLowerCase().includes(query))
+		).slice(0, 12) || [];
 	}, [allAvailableTags, tagInput, tags]);
 
 	// Style / tone selection (default to the question's current values)
@@ -92,9 +90,16 @@ export function RemixQuestionDrawer({
 	const updatePersonalQuestion = useMutation(api.core.questions.updatePersonalQuestion);
 	const deletePersonalQuestion = useMutation(api.core.questions.deletePersonalQuestion);
 
-	const isClosingRef = useRef(false);
+	const headingId = useId();
+	const styleSelectId = useId();
+	const toneSelectId = useId();
+	const tagInputId = useId();
+	const remixedTextId = useId();
+	const keepEditingRef = useRef<HTMLButtonElement>(null);
+	const beforeConfirmRef = useRef<HTMLElement | null>(null);
+	const headingRef = useRef<HTMLHeadingElement>(null);
 	// Bumped on every remix start, cancel, reset and unmount. A run whose id is no longer current
-	// was cancelled or replaced, so it must not save anything or touch the drawer's state.
+	// was cancelled or replaced, so it must not save anything or touch the panel's state.
 	const remixRequestIdRef = useRef(0);
 	useEffect(() => () => {
 		remixRequestIdRef.current += 1;
@@ -127,10 +132,8 @@ export function RemixQuestionDrawer({
 		return remixState === "remixed" || styleChanged || toneChanged || tagsChanged;
 	}, [remixState, selectedStyleId, styleId, selectedToneId, toneId, tags, question?.tags]);
 
-	// Reset state when drawer opens/closes
+	// Asked to open or close. Closing is refused while there is work that would be lost.
 	const handleOpenChange = (open: boolean) => {
-		if (isClosingRef.current) return;
-
 		if (!open && (hasChanges || remixState === "remixing") && remixState !== "idle") {
 			if (remixState === "remixing") {
 				toast.warning("Please wait for the remix to finish or cancel it.", {
@@ -138,34 +141,16 @@ export function RemixQuestionDrawer({
 				});
 				return;
 			}
-			toast.warning("Please save or discard your changes.", {
-				id: "remix-unsaved-changes",
-				description: remixState === "remixed" 
-					? "A remixed draft has been created."
-					: "You have adjusted filters or tags."
-			});
+			beforeConfirmRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+			setConfirmingClose(true);
 			return;
-		}
-
-		if (open && !isOpen) {
-			// Initialize selections from the current question
-			setSelectedStyleId(styleId);
-			setSelectedToneId(toneId);
-			setTags(question?.tags || []);
 		}
 
 		onOpenChange(open);
 	};
 
-	const forceClose = () => {
-		isClosingRef.current = true;
-		onOpenChange(false);
-		// isClosingRef.current will be reset in onClose or handleAnimationEnd
-		// We add a safety timeout just in case onClose doesn't trigger
-		setTimeout(() => {
-			isClosingRef.current = false;
-		}, CLOSE_ANIMATION_DURATION_MS);
-	};
+	// Close without the unsaved-work check: the work was just saved or discarded.
+	const forceClose = () => onOpenChange(false);
 
 	const resetState = () => {
 		remixRequestIdRef.current += 1;
@@ -179,7 +164,33 @@ export function RemixQuestionDrawer({
 		setSelectedToneId(toneId);
 		setSaveFailed(false);
 		setFocusedSuggestionIndex(-1);
+		setShowTagList(false);
+		setConfirmingClose(false);
 	};
+
+	// The discard question takes keyboard focus when it appears and gives it back when dismissed.
+	useEffect(() => {
+		if (confirmingClose) keepEditingRef.current?.focus();
+	}, [confirmingClose]);
+	const keepEditing = () => {
+		setConfirmingClose(false);
+		beforeConfirmRef.current?.focus();
+	};
+
+	// Opening starts from the question's own style, tone and tags and moves focus to the
+	// heading; closing clears everything, which also drops a remix still in flight.
+	useEffect(() => {
+		if (isOpen) {
+			setSelectedStyleId(styleId);
+			setSelectedToneId(toneId);
+			setTags(question?.tags || []);
+			headingRef.current?.focus({ preventScroll: true });
+		} else {
+			resetState();
+		}
+		// Only opening and closing should run this, not edits made while the panel is open.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isOpen]);
 
 	const handleRemix = async () => {
 		if (!question) return;
@@ -218,7 +229,7 @@ export function RemixQuestionDrawer({
 				});
 				if (isStale()) {
 					// Cancelled while the question was being created. Nothing will show it or offer
-					// Discard, so remove it rather than leave it in the person's stash.
+					// Discard, so remove it rather than leave it in My questions.
 					if (id) {
 						deletePersonalQuestion({ questionId: id }).catch(() => {});
 					}
@@ -240,7 +251,7 @@ export function RemixQuestionDrawer({
 					tags,
 				});
 				// Cancelled while the update was in flight. The question may now hold the cancelled
-				// text, but the drawer keeps showing the previous remix, and Save writes that text
+				// text, but the panel keeps showing the previous remix, and Save writes that text
 				// back (Discard deletes the question), so leave the server copy alone.
 				if (isStale()) return;
 			}
@@ -272,6 +283,10 @@ export function RemixQuestionDrawer({
 
 	const handleSave = async () => {
 		if (!newQuestionId) return;
+		if (!remixedText.trim()) {
+			toast.error(ERROR_MESSAGES.QUESTION_TEXT_REQUIRED);
+			return;
+		}
 		try {
 			const updatedQuestion = await updatePersonalQuestion({
 				questionId: newQuestionId,
@@ -285,7 +300,7 @@ export function RemixQuestionDrawer({
 			if (updatedQuestion && onRemixed) {
 				onRemixed(question, updatedQuestion as Doc<"questions">);
 			}
-			toast.success(isPublic ? "Question submitted for review!" : "Remixed question saved to your stash!");
+			toast.success(isPublic ? "Question submitted for review!" : "Remixed question saved to My questions");
 			forceClose();
 		} catch (error) {
 			const dataMessage = convexErrorData(error)?.message;
@@ -333,51 +348,45 @@ export function RemixQuestionDrawer({
 		setTags(tags.filter((t) => t !== tag));
 	};
 
-	if (!question) return null;
+	if (!question || !isOpen) return null;
 
 	const questionText = question.text ?? question.customText ?? "No question text";
 
+	const limitReached = !!currentUser?.isAiLimitReached;
+	// The same reset date the feed's limit notice gives.
+	const cycleStart = currentUser?.aiUsage?.cycleStart;
+	const resetsOn = cycleStart === undefined ? null
+		: new Date(cycleStart + AI_USAGE_CYCLE_MS).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+
 	return (
-		<Drawer 
-			open={isOpen} 
-			onOpenChange={handleOpenChange}
-			onClose={() => {
-				if (!isOpen) {
-					resetState();
-					isClosingRef.current = false;
+		<div
+			role="group"
+			aria-labelledby={headingId}
+			onKeyDown={(event) => {
+				if (event.key === "Escape") {
+					event.stopPropagation();
+					handleOpenChange(false);
 				}
 			}}
+			className="flex h-full w-full flex-col gap-4 rounded-[27px] px-5 py-5 text-left text-gray-900 dark:text-white"
 		>
-			<DrawerContent onAnimationEnd={() => {
-				// Fallback cleanup if onClose didn't fire
-				if (!isOpen) {
-					resetState();
-					isClosingRef.current = false;
-				}
-			}}>
-				<DrawerHeader>
-					<DrawerTitle className="flex items-center gap-2 justify-between">
-						<span className="flex items-center gap-2">							
-							Remix Question
-						</span>
-						{currentUser && (
-							<span className={`flex items-center gap-2 text-xs font-normal ${currentUser.isAiLimitReached ? "text-red-500" : "text-muted-foreground"}`}>
-								{currentUser.aiUsage?.count ?? 0}/{currentUser.aiLimit} 
-								<Sparkles className={cn(
-									`size-4`, 
-									currentUser.aiLimit - (currentUser.aiUsage?.count ?? 0) <= 3 ? "text-yellow-500" : "",
-									currentUser.isAiLimitReached ? "text-red-500" : ""
-								)} /> 
-								{currentUser.isAiLimitReached ? "Limit reached" : "AI generations"}
-							</span>
-						)}
-					</DrawerTitle>
-					<DrawerDescription>
-						Create your own spin on this question
-					</DrawerDescription>
-				</DrawerHeader>
+			<div className="flex items-start justify-between gap-3">
+				<div>
+					<h3 id={headingId} ref={headingRef} tabIndex={-1} className="text-lg font-bold leading-tight outline-none">
+						Remix Question
+					</h3>
+					<p className="text-sm text-muted-foreground">Create your own spin on this question</p>
+				</div>
+				{currentUser && (
+					<span className={`flex shrink-0 items-center gap-1.5 text-xs ${limitReached ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+						{currentUser.aiUsage?.count ?? 0}/{currentUser.aiLimit}
+						<Sparkles aria-hidden="true" className="size-4" />
+						<span className="sr-only">AI generations used</span>
+					</span>
+				)}
+			</div>
 
-				<div className="px-4 pb-6 space-y-6 max-h-[70vh] overflow-y-auto">
+				<div className="space-y-5">
 					{/* Original question */}
 					<div className="rounded-lg border bg-muted/50 p-3">
 						<p className="text-xs font-medium text-muted-foreground mb-1">Original</p>
@@ -415,16 +424,24 @@ export function RemixQuestionDrawer({
 
 					{remixState === "remixed" && remixedText && (
 						<div className="rounded-lg border-2 border-blue-500/30 bg-blue-500/5 p-3">
-							<p className="text-xs font-medium text-blue-500 mb-1">Remixed</p>
-							<p className="text-sm font-medium">{remixedText}</p>
+							<label htmlFor={remixedTextId} className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1 block">Remixed (you can edit it before saving)</label>
+							<textarea
+								id={remixedTextId}
+								value={remixedText}
+								onChange={(event) => setRemixedText(event.target.value)}
+								maxLength={MAX_QUESTION_TEXT_LENGTH}
+								rows={3}
+								className="w-full resize-y rounded-md border bg-background p-2 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20"
+							/>
 						</div>
 					)}
 
 					{/* Style / Tone selectors */}
 					<div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
 						<div className="space-y-2.5">
-							<Label className="text-xs font-medium">Style</Label>
+							<Label htmlFor={styleSelectId} className="text-xs font-medium">Style</Label>
 							<select
+								id={styleSelectId}
 								value={selectedStyleId ?? ""}
 								onChange={(e) => setSelectedStyleId(e.target.value === "" ? undefined : e.target.value as Id<"styles">)}
 								className="w-full h-11 rounded-lg border bg-background px-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
@@ -438,23 +455,13 @@ export function RemixQuestionDrawer({
 							</select>
 							{style && (
 								<div className="flex items-center gap-2">
-									<Badge
-										variant="outline"
-										className="gap-1 text-xs py-0.5"
-										style={{ borderColor: `${style.color}40`, color: style.color }}
-									>
-										<IconComponent icon={style.icon as Icon} size={12} color={style.color} />
-										{style.name}
-									</Badge>
+									<span className="text-xs text-muted-foreground">What this style means</span>
 									<Popover>
-										<PopoverTrigger>
-											<Badge
-												variant="outline"
-												className="gap-1 text-xs py-0.5"
-												style={{ borderColor: `${style.color}40`, color: style.color }}
-											>
-												<IconComponent icon="Info" size={12} color={style.color} />
-											</Badge>
+										<PopoverTrigger
+											aria-label={`About the ${style.name} style`}
+											className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+										>
+											<IconComponent icon="Info" size={18} color={style.color} />
 										</PopoverTrigger>
 										<PopoverContent>
 											<p className="text-xs font-medium">{style.description}</p>
@@ -464,8 +471,9 @@ export function RemixQuestionDrawer({
 							)}
 						</div>
 						<div className="space-y-2.5">
-							<Label className="text-xs font-medium">Tone</Label>
+							<Label htmlFor={toneSelectId} className="text-xs font-medium">Tone</Label>
 							<select
+								id={toneSelectId}
 								value={selectedToneId ?? ""}
 								onChange={(e) => setSelectedToneId(e.target.value === "" ? undefined : e.target.value as Id<"tones">)}
 								className="w-full h-11 rounded-lg border bg-background px-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
@@ -479,23 +487,13 @@ export function RemixQuestionDrawer({
 							</select>
 							{tone && (
 								<div className="flex items-center gap-2">
-								<Badge
-									variant="outline"
-									className="gap-1 text-xs py-0.5"
-									style={{ borderColor: `${tone.color}40`, color: tone.color }}
-								>
-									<IconComponent icon={tone.icon as Icon} size={12} color={tone.color} />
-									{tone.name}
-								</Badge>
+								<span className="text-xs text-muted-foreground">What this tone means</span>
 								<Popover>
-									<PopoverTrigger>
-										<Badge
-											variant="outline"
-											className="gap-1 text-xs py-0.5"
-											style={{ borderColor: `${tone.color}40`, color: tone.color }}
-										>
-											<IconComponent icon="Info" size={12} color={tone.color} />
-										</Badge>
+									<PopoverTrigger
+										aria-label={`About the ${tone.name} tone`}
+										className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+									>
+										<IconComponent icon="Info" size={18} color={tone.color} />
 									</PopoverTrigger>
 									<PopoverContent>
 										<p className="text-xs font-medium">{tone.description}</p>
@@ -508,29 +506,33 @@ export function RemixQuestionDrawer({
 
 					{/* Tags Section */}
 					<div className="space-y-2.5">
-						<Label className="text-xs font-medium text-muted-foreground">Tags</Label>
+						<Label htmlFor={tagInputId} className="text-xs font-medium text-muted-foreground">Tags</Label>
 						<div className="flex flex-wrap gap-1.5 p-2.5 border rounded-lg bg-background focus-within:ring-2 focus-within:ring-primary/20 min-h-[48px]">
 							{tags.map((tag) => (
-								<Badge key={tag} variant="secondary" className="gap-1 pl-2 pr-1 py-0.5 text-[10px] h-6">
+								<Badge key={tag} variant="secondary" className="gap-0 pl-3 pr-0 py-0 text-xs">
 									{tag}
-									<Button
-										variant="ghost"
-										size="icon"
-										className="h-3 w-3 p-0 hover:bg-transparent"
+									<button
+										type="button"
+										aria-label={`Remove tag ${tag}`}
+										className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
 										onClick={() => handleRemoveTag(tag)}
 									>
-										<X className="size-2" />
-									</Button>
+										<X aria-hidden="true" className="size-4" />
+									</button>
 								</Badge>
 							))}
 							<input
-								placeholder={tags.length === 0 ? "Add tags (e.g. food, travel)..." : ""}
+								id={tagInputId}
+								placeholder={tags.length === 0 ? "Choose tags from the list" : ""}
+								onFocus={() => setShowTagList(true)}
 								value={tagInput}
 								maxLength={MAX_QUESTION_TAG_LENGTH}
 								onChange={(e) => setTagInput(e.target.value)}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") {
 										e.preventDefault();
+										// Nothing typed and nothing highlighted: Enter adds nothing.
+										if (!tagInput.trim() && focusedSuggestionIndex < 0) return;
 										if (focusedSuggestionIndex >= 0 && filteredSuggestions[focusedSuggestionIndex]) {
 											handleAddTag(filteredSuggestions[focusedSuggestionIndex].name);
 										} else if (filteredSuggestions.length > 0) {
@@ -538,11 +540,13 @@ export function RemixQuestionDrawer({
 										} else {
 											handleAddTag();
 										}
-									} else if (e.key === "ArrowRight") {
+									} else if (e.key === "ArrowDown" && filteredSuggestions.length > 0) {
+										e.preventDefault();
 										setFocusedSuggestionIndex(prev => 
 											prev < filteredSuggestions.length - 1 ? prev + 1 : prev
 										);
-									} else if (e.key === "ArrowLeft") {
+									} else if (e.key === "ArrowUp" && filteredSuggestions.length > 0) {
+										e.preventDefault();
 										setFocusedSuggestionIndex(prev => 
 											prev > 0 ? prev - 1 : prev
 										);
@@ -550,13 +554,16 @@ export function RemixQuestionDrawer({
 										handleRemoveTag(tags[tags.length - 1]);
 									}
 								}}
-								className="flex-1 bg-transparent border-none outline-none text-sm min-w-[80px] h-6"
+								className="flex-1 bg-transparent border-none outline-none text-sm min-w-[80px] h-11"
 								aria-autocomplete="list"
 								aria-haspopup="listbox"
-								aria-expanded={tagInput && filteredSuggestions.length > 0 ? "true" : "false"}
+								aria-expanded={(showTagList || tagInput) && filteredSuggestions.length > 0 ? "true" : "false"}
 							/>
 						</div>
-						{tagInput && filteredSuggestions.length > 0 && (
+						{tagInput.trim() && filteredSuggestions.length === 0 && allAvailableTags && (
+							<p role="status" className="text-xs text-muted-foreground">No tags match what you typed. Tags come from a fixed list.</p>
+						)}
+						{(showTagList || tagInput) && filteredSuggestions.length > 0 && (
 							<div 
 								className="flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200 mt-2"
 								role="listbox"
@@ -570,7 +577,7 @@ export function RemixQuestionDrawer({
 										tabIndex={0}
 										aria-selected={focusedSuggestionIndex === index}
 										className={cn(
-											"cursor-pointer hover:bg-muted text-[10px] py-0.5 px-2 font-normal border-dashed",
+											"min-h-11 cursor-pointer hover:bg-muted text-xs px-3 font-normal border-dashed",
 											focusedSuggestionIndex === index ? "bg-primary/10 border-primary ring-1 ring-primary/20" : "border-primary/30"
 										)}
 										onClick={() => handleAddTag(s.name)}
@@ -601,31 +608,45 @@ export function RemixQuestionDrawer({
 								<Label htmlFor="remix-public-toggle" className="text-sm cursor-pointer">
 									{isPublic ? "Submit for review" : "Keep private"}
 								</Label>
-								<p className="text-[10px] text-gray-500 dark:text-gray-400">
+								<p className="text-xs text-gray-600 dark:text-gray-300">
 									{isPublic
 										? "Will be reviewed before being added to the public pool."
-										: "Will be saved to your personal stash only."}
+										: "Will be saved to My questions only."}
 								</p>
 							</div>
 						</div>
 					)}
 				</div>
 
-				<DrawerFooter className="gap-3 pt-4">
+
+			<div className="mt-auto flex flex-col gap-2 [&_button]:min-h-11">
+				{confirmingClose && remixState === "remixed" && (
+					<div role="alertdialog" aria-label="Discard this remix?" className="flex flex-col gap-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3">
+						<p className="text-sm font-semibold">Discard this remix?</p>
+						<p className="text-sm text-muted-foreground">It hasn't been saved. Save keeps it in My questions.</p>
+						<div className="flex gap-2">
+							<Button variant="ghost" onClick={handleDiscard} className="flex-1 text-destructive hover:text-destructive">Discard and close</Button>
+							<Button ref={keepEditingRef} variant="outline" onClick={keepEditing} className="flex-1">Keep editing</Button>
+						</div>
+					</div>
+				)}
+				{limitReached && remixState !== "remixing" && (
+					<p role="status" className="text-sm text-red-600 dark:text-red-400">
+						You've used all your AI generations for this cycle, so Remix is off until {resetsOn ? `it resets on ${resetsOn}` : "it resets"}.
+					</p>
+				)}
 					{remixState === "idle" && (
 						<>
 							<Button 
 								ref={remixButtonRef}
 								onClick={handleRemix} 
-								className="gap-2"
+								className="gap-2 bg-gradient-to-r from-blue-600 to-purple-700 text-white hover:from-blue-700 hover:to-purple-800"
 								disabled={currentUser?.isAiLimitReached}
 							>
 								<Sparkles className="size-4" />
 								Remix
 							</Button>
-							<DrawerClose asChild>
-								<Button ref={closeButtonRef} variant="ghost">Cancel</Button>
-							</DrawerClose>
+							<Button ref={closeButtonRef} variant="ghost" className="min-h-11" onClick={() => handleOpenChange(false)}>Cancel</Button>
 						</>
 					)}
 
@@ -643,7 +664,7 @@ export function RemixQuestionDrawer({
 
 					{remixState === "remixed" && (
 						<>
-							<Button ref={saveButtonRef} onClick={handleSave} className="gap-2">
+							<Button ref={saveButtonRef} onClick={handleSave} className="gap-2 bg-gradient-to-r from-blue-600 to-purple-700 text-white hover:from-blue-700 hover:to-purple-800">
 								<Save className="size-4" />
 								Save
 							</Button>
@@ -662,8 +683,7 @@ export function RemixQuestionDrawer({
 							</Button>
 						</>
 					)}
-				</DrawerFooter>
-			</DrawerContent>
-		</Drawer>
+			</div>
+		</div>
 	);
 }

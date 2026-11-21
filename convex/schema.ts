@@ -302,6 +302,9 @@ export default defineSchema({
     defaultStyle: v.optional(v.string()),
     defaultTone: v.optional(v.string()),
     dismissedRefineCTA: v.optional(v.boolean()),
+    // When the person last cleared their history. Views up to this time stay recorded for
+    // the feed and for counts, but are left out of the history they see.
+    historyClearedAt: v.optional(v.number()),
     billingSubjectType: v.optional(v.literal("user")),
     billingStatus: v.optional(v.union(
       v.literal("inactive"),

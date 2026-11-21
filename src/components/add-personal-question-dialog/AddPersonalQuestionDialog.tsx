@@ -44,7 +44,7 @@ export function AddPersonalQuestionDialog({
       if (isPublic) {
         toast.success("Question submitted for review!");
       } else {
-        toast.success("Personal question added to your stash!");
+        toast.success("Personal question added to My questions!");
       }
       setQuestionText("");
       onOpenChange(false);
@@ -61,7 +61,7 @@ export function AddPersonalQuestionDialog({
         <DialogHeader>
           <DialogTitle>Add a New Personal Question</DialogTitle>
           <DialogDescription>
-            Create a question to add to your stash.
+            Create a question to add to My questions.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -88,17 +88,17 @@ export function AddPersonalQuestionDialog({
               <Label htmlFor="dialog-public-toggle" className="text-sm cursor-pointer">
                 Available for public feed
               </Label>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-gray-600 dark:text-gray-300">
                 {isPublic
                   ? "Will be reviewed before being added to the public pool."
-                  : "Will be exclusively for your personal stash."}
+                  : "Will be saved to My questions only."}
               </p>
             </div>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSubmit}>{isPublic ? "Submit for Review" : "Add to Stash"}</Button>
+          <Button variant="outline" className="min-h-11" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="opaque" className="min-h-11" onClick={handleSubmit}>{isPublic ? "Submit for Review" : "Add to My questions"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

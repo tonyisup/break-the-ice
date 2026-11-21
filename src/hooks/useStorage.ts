@@ -4,17 +4,23 @@ import { HistoryEntry } from "./useQuestionHistory";
 import { useLocalStorage } from "./useLocalStorage";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { toast } from "sonner";
 
+// A change to a signed-in person's account did not reach the server. The page has already
+// shown it as done, so they are told plainly; one toast covers a burst of failures.
+const reportSaveFailure = (error: unknown) => {
+  console.error("Saving to the account failed:", error);
+  toast.error("That change couldn't be saved to your account. Check your connection and try again.", { id: "account-save-failed" });
+};
+const save = (request: Promise<unknown> | void) => {
+  void Promise.resolve(request).catch(reportSaveFailure);
+};
+
+// Removed when consent is declined or withdrawn. What a person saves themselves (likes,
+// hidden items, history, theme and settings) is necessary storage: the site can't do what
+// they asked without it, so it is kept whatever they choose about analytics. Only the
+// session id, which is sent with analytics events, waits for consent.
 export const NON_ESSENTIAL_STORAGE_KEYS = [
-  "likedQuestions",
-  "hiddenQuestions",
-  "hiddenStyles",
-  "hiddenTones",
-  "defaultStyle",
-  "defaultTone",
-  "storageLimitBehavior",
-  "questionHistory",
-  "theme",
   "sessionId",
 ];
 
@@ -61,6 +67,10 @@ export interface StorageContextType {
   setStorageLimitBehavior: (behavior: StorageLimitBehavior) => void;
   likedLimit: number;
   hiddenLimit: number;
+  /** True while a signed-in person's likes and hidden items are still loading. */
+  savedListsLoading?: boolean;
+  /** True while a signed-in person's history is still loading. */
+  questionHistoryLoading?: boolean;
 }
 
 export const MAX_ANON_LIKED = Number(import.meta.env.VITE_MAX_ANON_LIKED) || 100;
@@ -95,49 +105,49 @@ export const useLocalStorageContext = (
   const [theme, setTheme] = useLocalStorage<Theme>(
     "theme",
     "system",
-    hasConsented,
+    true,
   );
 
   const [likedQuestions, setLikedQuestions] = useLocalStorage<Id<"questions">[]>(
     "likedQuestions",
     [],
-    hasConsented,
+    true,
   );
 
   const [hiddenQuestions, setHiddenQuestions] = useLocalStorage<Id<"questions">[]>(
     "hiddenQuestions",
     [],
-    hasConsented,
+    true,
   );
 
   const [hiddenStyles, setHiddenStyles] = useLocalStorage<Id<"styles">[]>(
     "hiddenStyles",
     [],
-    hasConsented,
+    true,
   );
 
   const [hiddenTones, setHiddenTones] = useLocalStorage<Id<"tones">[]>(
     "hiddenTones",
     [],
-    hasConsented,
+    true,
   );
 
   const [defaultStyle, setDefaultStyle] = useLocalStorage<string | undefined>(
     "defaultStyle",
     undefined,
-    hasConsented
+    true
   );
 
   const [defaultTone, setDefaultTone] = useLocalStorage<string | undefined>(
     "defaultTone",
     undefined,
-    hasConsented
+    true
   );
 
   const [storageLimitBehavior, setStorageLimitBehavior] = useLocalStorage<StorageLimitBehavior>(
     "storageLimitBehavior",
     "block",
-    hasConsented
+    true
   );
 
   const addLikedQuestion = useCallback(
@@ -221,7 +231,7 @@ export const useLocalStorageContext = (
   const [questionHistory, setQuestionHistory] = useLocalStorage<HistoryEntry[]>(
     "questionHistory",
     [],
-    hasConsented,
+    true,
   );
 
   const addQuestionToHistory = useCallback(
@@ -308,11 +318,11 @@ export const useConvexStorageContext = (
   const [theme, setTheme] = useLocalStorage<Theme>(
     "theme",
     "system",
-    hasConsented,
+    true,
   );
 
-  const questionHistory =
-    useQuery(api.core.userSettings.getQuestionHistory, {}) ?? [];
+  const questionHistoryQuery = useQuery(api.core.userSettings.getQuestionHistory, {});
+  const questionHistory = questionHistoryQuery ?? [];
 
   const settings = useQuery(api.core.userSettings.getSettings, {});
   const [likedQuestions, setLikedQuestions] = useState<Id<"questions">[]>([]);
@@ -422,9 +432,9 @@ export const useConvexStorageContext = (
     (id: Id<"questions">) => {
       const newLikedQuestions = [...likedQuestions, id];
       setLikedQuestions(newLikedQuestions);
-      void updateLikedQuestions({
+      save(updateLikedQuestions({
         likedQuestions: newLikedQuestions,
-      });
+      }));
     },
     [likedQuestions, updateLikedQuestions],
   );
@@ -435,9 +445,9 @@ export const useConvexStorageContext = (
         (questionId) => questionId !== id,
       );
       setLikedQuestions(newLikedQuestions);
-      void updateLikedQuestions({
+      save(updateLikedQuestions({
         likedQuestions: newLikedQuestions,
-      });
+      }));
     },
     [likedQuestions, updateLikedQuestions],
   );
@@ -446,9 +456,9 @@ export const useConvexStorageContext = (
     (id: Id<"questions">) => {
       const newHiddenQuestions = [...hiddenQuestions, id];
       setHiddenQuestions(newHiddenQuestions);
-      void updateHiddenQuestions({
+      save(updateHiddenQuestions({
         hiddenQuestions: newHiddenQuestions,
-      });
+      }));
     },
     [hiddenQuestions, updateHiddenQuestions],
   );
@@ -459,9 +469,9 @@ export const useConvexStorageContext = (
         (questionId) => questionId !== id,
       );
       setHiddenQuestions(newHiddenQuestions);
-      void updateHiddenQuestions({
+      save(updateHiddenQuestions({
         hiddenQuestions: newHiddenQuestions,
-      });
+      }));
     },
     [hiddenQuestions, updateHiddenQuestions],
   );
@@ -470,16 +480,18 @@ export const useConvexStorageContext = (
   const setQuestionHistory = useCallback((_entries: HistoryEntry[]) => { }, []);
   const addQuestionToHistory = useCallback((_entry: HistoryEntry) => { }, []);
   const removeQuestionFromHistory = useCallback((_id: Id<"questions">) => { }, []);
-  const clearQuestionHistory = useCallback(() => { }, []);
+  const clearServerHistory = useMutation(api.core.userSettings.clearQuestionHistory);
+  // The server leaves out everything viewed up to now; the history query then updates itself.
+  const clearQuestionHistory = useCallback(() => { save(clearServerHistory({})); }, [clearServerHistory]);
 
   const clearLikedQuestions = useCallback(() => {
     setLikedQuestions([]);
-    void updateLikedQuestions({ likedQuestions: [] });
+    save(updateLikedQuestions({ likedQuestions: [] }));
   }, [updateLikedQuestions]);
 
   const clearHiddenQuestions = useCallback(() => {
     setHiddenQuestions([]);
-    void updateHiddenQuestions({ hiddenQuestions: [] });
+    save(updateHiddenQuestions({ hiddenQuestions: [] }));
   }, [updateHiddenQuestions]);
 
   return {
@@ -501,24 +513,24 @@ export const useConvexStorageContext = (
     hiddenStyles: hiddenStylesQuery === null ? [] : hiddenStylesQuery,
     setHiddenStyles: (ids: Id<"styles">[]) => {
       setLocalHiddenStyles(ids);
-      void updateHiddenStyles({ hiddenStyles: ids });
+      save(updateHiddenStyles({ hiddenStyles: ids }));
     },
     addHiddenStyle: (id: Id<"styles">) => {
-      addHiddenStyleId({ styleId: id });
+      save(addHiddenStyleId({ styleId: id }));
     },
     removeHiddenStyle: (id: Id<"styles">) => {
-      removeHiddenStyleId({ styleId: id });
+      save(removeHiddenStyleId({ styleId: id }));
     },
     hiddenTones: hiddenTonesQuery === null ? [] : hiddenTonesQuery,
     setHiddenTones: (ids: Id<"tones">[]) => {
       setLocalHiddenTones(ids);
-      void updateHiddenTones({ hiddenTones: ids });
+      save(updateHiddenTones({ hiddenTones: ids }));
     },
     addHiddenTone: (id: Id<"tones">) => {
-      addHiddenToneId({ toneId: id });
+      save(addHiddenToneId({ toneId: id }));
     },
     removeHiddenTone: (id: Id<"tones">) => {
-      removeHiddenToneId({ toneId: id });
+      save(removeHiddenToneId({ toneId: id }));
     },
     clearLikedQuestions,
     clearQuestionHistory,
@@ -544,15 +556,17 @@ export const useConvexStorageContext = (
     defaultStyle,
     setDefaultStyle: (style: string) => {
       setDefaultStyle(style);
-      void updateUserSettings({ defaultStyle: style });
+      save(updateUserSettings({ defaultStyle: style }));
     },
     defaultTone,
     setDefaultTone: (tone: string) => {
       setDefaultTone(tone);
-      void updateUserSettings({ defaultTone: tone });
+      save(updateUserSettings({ defaultTone: tone }));
     },
     storageLimitBehavior: "replace",
     setStorageLimitBehavior: () => { }, // No-op for authenticated users
+    savedListsLoading: settings === undefined,
+    questionHistoryLoading: questionHistoryQuery === undefined,
     likedLimit: Infinity,
     hiddenLimit: Infinity,
   };

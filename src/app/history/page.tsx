@@ -8,11 +8,12 @@ import { useTheme } from "@/hooks/useTheme";
 import { Header } from "@/components/header";
 import { useStorageContext } from "@/hooks/useStorageContext";
 import { Link } from "react-router-dom";
-import { cn, isColorDark } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { QuestionList } from "@/components/question-list/QuestionList";
-import { FilterControls } from "@/components/filter-controls/filter-controls";
+import { FeedFilterBar, useFilterBarState } from "@/components/filter-controls/FeedFilterBar";
 import { useFilter } from "@/hooks/useFilter";
+import { useHideTaxonomy } from "@/hooks/useHideTaxonomy";
 
 import { SignInCTA } from "@/components/SignInCTA";
 import { useAuth } from "@clerk/clerk-react";
@@ -20,7 +21,7 @@ import { MAX_ANON_HISTORY } from "@/hooks/useStorage";
 
 function HistoryPageContent() {
   const { isSignedIn } = useAuth();
-  const { history, removeQuestionHistoryEntry, clearHistoryEntries } = useQuestionHistory();
+  const { history, removeQuestionHistoryEntry, clearHistoryEntries, isLoading: isHistoryLoading } = useQuestionHistory();
   // ... (keep existing storage context destructuring)
   const {
     likedQuestions,
@@ -36,8 +37,6 @@ function HistoryPageContent() {
     sessionId,
   } = useStorageContext();
   const [searchText, setSearchText] = useState("");
-  const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
-  const [selectedTones, setSelectedTones] = useState<string[]>([]);
   const recordAnalytics = useMutation(api.core.questions.recordAnalytics);
   const styles = useQuery(api.core.styles.getStyles, {});
   const tones = useQuery(api.core.tones.getTones, {});
@@ -48,7 +47,9 @@ function HistoryPageContent() {
 
   const questions = useMemo(() => history.map(entry => entry.question), [history]);
   // ... (keep existing useFilter)
-  const filteredHistory = useFilter(history, searchText, selectedStyles, selectedTones);
+  const topics = useQuery(api.core.topics.getTopics, {});
+  const filterBar = useFilterBarState(styles, tones, topics);
+  const filteredHistory = useFilter(history, searchText, filterBar.choice);
 
   // ... (keep existing color memoization)
   const styleColors = useMemo(() => {
@@ -73,31 +74,24 @@ function HistoryPageContent() {
 
     if (isLiked) {
       removeLikedQuestion(questionId);
-      toast.success("Removed from favorites");
+      toast.success("Removed from Liked");
     } else {
       addLikedQuestion(questionId);
-      await recordAnalytics({
+      // Counting the like is separate from saving it; a failure there is not shown to the person.
+      void recordAnalytics({
         questionId,
         event: "liked",
         viewDuration: 0, // Not applicable in history page
         sessionId: sessionId || undefined,
-      });
-      toast.success("Added to favorites!");
+      }).catch((error) => console.error("Error recording like:", error));
+      toast.success("Added to Liked");
     }
   };
   const handleToggleLike = (questionId: Id<"questions">) => {
     void toggleLike(questionId);
   };
 
-  const handleHideStyle = (styleId: Id<"styles">) => {
-    addHiddenStyle(styleId);
-    toast.success("Style hidden. It will not appear on the main page.");
-  };
-
-  const handleHideTone = (toneId: Id<"tones">) => {
-    addHiddenTone(toneId);
-    toast.success("Tone hidden. It will not appear on the main page.");
-  };
+  const { hideStyle: handleHideStyle, hideTone: handleHideTone } = useHideTaxonomy();
 
   const toggleHide = (questionId: Id<"questions">) => {
     try {
@@ -106,8 +100,9 @@ function HistoryPageContent() {
         removeHiddenQuestion(questionId);
         toast.success("Question unhidden");
       } else {
-        // If it was liked, remove it from favorites
-        if (likedQuestions.includes(questionId)) {
+        // If it was liked, remove it from Liked. Undo puts both back.
+        const wasLiked = likedQuestions.includes(questionId);
+        if (wasLiked) {
           removeLikedQuestion(questionId);
         }
         addHiddenQuestion(questionId);
@@ -116,7 +111,15 @@ function HistoryPageContent() {
           event: "hidden",
           viewDuration: 0,
         });
-        toast.success("Question hidden");
+        toast.success(wasLiked ? "Question hidden and removed from Liked" : "Question hidden", {
+          action: {
+            label: "Undo",
+            onClick: () => {
+              removeHiddenQuestion(questionId);
+              if (wasLiked) addLikedQuestion(questionId);
+            },
+          },
+        });
       }
     } catch (error) {
       console.error("Error toggling hide:", error);
@@ -125,6 +128,8 @@ function HistoryPageContent() {
   };
 
   const handleClearHistory = () => {
+    const where = isSignedIn ? "your account's history" : "your history on this device";
+    if (!window.confirm(`Clear ${where}? This can't be undone.`)) return;
     setSearchText("");
     clearHistoryEntries();
     toast.success("History cleared");
@@ -141,19 +146,26 @@ function HistoryPageContent() {
       }}
     >
       <Header />
-      <main className="p-4 pt-24">
-        {history.length === 0 ? (
+      <main className="p-4 pt-[calc(var(--header-h,4rem)+1.5rem)]">
+        {isHistoryLoading ? (
+          <div className="flex flex-col items-center gap-3 py-12" role="status">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" aria-hidden="true"></div>
+            <span className="rounded-full bg-black/50 px-3 py-1 text-sm font-medium text-white">Loading your history…</span>
+          </div>
+        ) : history.length === 0 ? (
           <div className="flex flex-col items-center justify-center">
-            <p className="text-center text-gray-500 dark:text-gray-400">No questions viewed yet.</p>
+            <h1 className="mb-4 text-2xl font-bold text-white">History</h1>
+            <p className="rounded-xl bg-black/50 px-4 py-2 text-center text-white">No questions viewed yet.</p>
             <Link
-              to="/"
-              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "inline-block mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
+              to="/app"
+              className={cn("bg-black/50", "inline-flex min-h-11 items-center mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-black/60 transition-colors text-white")}
             >
               Start Exploring
             </Link>
           </div>
         ) : (
           <div className="container mx-auto flex flex-col gap-4">
+            <h1 className="text-2xl font-bold text-white">History</h1>
             {showLimitCTA && (
               <div className="mb-4">
                 <SignInCTA
@@ -171,28 +183,38 @@ function HistoryPageContent() {
               <input
                 type="text"
                 placeholder="Search questions"
-                className="flex-grow pl-2 rounded-md border border-gray-300 dark:border-gray-700"
+                aria-label="Search your history"
+                className="flex-grow min-w-0 h-11 px-3 rounded-md border border-gray-300 bg-white text-gray-900 placeholder:text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-400"
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
               />
-              <div className="flex gap-2">
+              {(
+                <div className="flex items-center gap-2">
+                  {!isSignedIn && <span className="rounded-full bg-black/50 px-2 py-1 text-sm text-white">{history.length} of {MAX_ANON_HISTORY}</span>}
+                  <button
+                    type="button"
+                    onClick={handleClearHistory}
+                    className="min-h-11 px-4 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
+                  >
+                    Clear history
+                  </button>
+                </div>
+              )}
+            </div>
+            {/* The same Style, Tone and Topic bar as the feed. */}
+            <FeedFilterBar {...filterBar.barProps} sticky={false} />
+            {filteredHistory.length === 0 && (
+              <div className="mx-auto rounded-xl bg-black/50 px-4 py-6 text-center">
+                <p className="text-white">Nothing in your history matches your search or filters.</p>
                 <button
-                  onClick={handleClearHistory}
-                  className="p-2 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
+                  type="button"
+                  className="mt-3 min-h-11 rounded-md bg-white/30 px-4 font-semibold text-white hover:bg-white/40"
+                  onClick={() => { setSearchText(""); filterBar.clear(); }}
                 >
-                  Clear history {history.length}/{MAX_ANON_HISTORY}
+                  Clear search and filters
                 </button>
               </div>
-            </div>
-            <FilterControls
-              questions={questions}
-              styles={styles || []}
-              tones={tones || []}
-              selectedStyles={selectedStyles}
-              onSelectedStylesChange={setSelectedStyles}
-              selectedTones={selectedTones}
-              onSelectedTonesChange={setSelectedTones}
-            />
+            )}
             <QuestionList
               questions={filteredHistory}
               styleColors={styleColors}
@@ -206,10 +228,6 @@ function HistoryPageContent() {
               isHistory
               onHideStyle={handleHideStyle}
               onHideTone={handleHideTone}
-              onSelectedStylesChange={setSelectedStyles}
-              onSelectedTonesChange={setSelectedTones}
-              selectedStyles={selectedStyles}
-              selectedTones={selectedTones}
             />
           </div>
         )}
@@ -225,7 +243,7 @@ export default function HistoryPage() {
   };
 
   return (
-    <ErrorBoundary onReset={handleResetHistory}>
+    <ErrorBoundary onReset={handleResetHistory} resetLabel="Reset History & Continue">
       <HistoryPageContent />
     </ErrorBoundary>
   );

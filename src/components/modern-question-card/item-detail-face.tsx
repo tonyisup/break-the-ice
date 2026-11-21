@@ -68,7 +68,7 @@ export function ItemDetailFace({
           type="button"
           onClick={onBack}
           aria-label="Back to question"
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-gray-300 dark:hover:bg-white/10"
+          className="flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-gray-300 dark:hover:bg-white/10"
         >
           <RotateCcw size={16} aria-hidden="true" />
           Back
@@ -103,19 +103,19 @@ export function ItemDetailFace({
               type="button"
               onClick={() => onAnchor(item)}
               className={cn(
-                "min-w-[8rem] flex-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2",
+                "min-h-11 min-w-[8rem] flex-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2",
                 isColorDark(item.color) ? "text-white" : "text-black",
               )}
               style={{ backgroundColor: item.color }}
             >
-              {isAnchored ? "Remove anchor" : `More like this ${kind}`}
+              {isAnchored ? "Remove filter" : `More like this ${kind}`}
             </button>
           )}
           {onHide && item.type !== "Topic" && (
             <button
               type="button"
               onClick={() => onHide(item)}
-              className="min-w-[8rem] flex-1 rounded-full border border-black/10 px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/15 dark:text-gray-200 dark:hover:bg-white/10"
+              className="min-h-11 min-w-[8rem] flex-1 rounded-full border border-black/10 px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/15 dark:text-gray-200 dark:hover:bg-white/10"
             >
               Hide this {kind}
             </button>

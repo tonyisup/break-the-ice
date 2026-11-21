@@ -73,7 +73,7 @@ describe('QuestionPage like analytics', () => {
     mockUseStorageContext.mockReturnValue(context);
     render(<MemoryRouter><QuestionPage /></MemoryRouter>);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add to favorites' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Like question' }));
 
     await waitFor(() => expect(recordAnalytics).toHaveBeenCalledWith({
       questionId: 'q1',
@@ -88,7 +88,7 @@ describe('QuestionPage like analytics', () => {
     mockUseStorageContext.mockReturnValue(storage(''));
     render(<MemoryRouter><QuestionPage /></MemoryRouter>);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add to favorites' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Like question' }));
 
     await waitFor(() => expect(recordAnalytics).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'liked', sessionId: undefined }),

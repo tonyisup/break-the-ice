@@ -60,7 +60,7 @@ export default function FeedbackButton() {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end" ref={containerRef}>
+    <div className="fixed bottom-[calc(var(--bottom-nav-h,0px)+1rem)] right-4 z-50 flex flex-col items-end" ref={containerRef}>
       <AnimatePresence mode="wait">
         {isOpen ? (
           <motion.div
@@ -75,7 +75,7 @@ export default function FeedbackButton() {
               <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Send Feedback</h3>
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors p-1"
+                className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors flex h-11 w-11 items-center justify-center -m-2"
                 aria-label="Close feedback"
               >
                 <X size={16} />
@@ -86,7 +86,8 @@ export default function FeedbackButton() {
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="What's on your mind?"
+                aria-label="Your feedback"
+              placeholder="What's on your mind?"
                 className="w-full h-24 p-3 text-sm bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:text-zinc-100 placeholder:text-zinc-400"
                 autoFocus
               />

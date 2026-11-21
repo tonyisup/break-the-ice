@@ -902,9 +902,10 @@ export const getRandomQuestionsInternal = internalQuery({
 });
 
 /**
- * Build an anchored feed batch with an explicit 60% matching floor.
- * Taxonomy versions sharing a slug are treated as the same user-facing
- * attribute, and questions matching more active anchors rank first.
+ * Build a filtered feed batch: only questions that match every chosen style, tone and
+ * topic. The batch may be short of `count`, or empty; the feed makes up the difference
+ * with generated questions, never with questions that do not match.
+ * Taxonomy versions sharing a slug are treated as the same user-facing attribute.
  */
 export const getAnchoredQuestionsInternal = internalQuery({
 	args: {
@@ -925,7 +926,10 @@ export const getAnchoredQuestionsInternal = internalQuery({
 		targetAnchoredCount: v.number(),
 	}),
 	handler: async (ctx, args) => {
-		const targetAnchoredCount = Math.min(args.count, args.count >= 10 ? 6 : Math.ceil(args.count * 0.6));
+		// Kept in the result for the feed page, which generates up to this many matches.
+		const targetAnchoredCount = args.count;
+		const activeAnchorCount =
+			Number(!!args.anchoredStyleId) + Number(!!args.anchoredToneId) + Number(!!args.anchoredTopicId);
 		const seenIds = new Set(args.seen);
 		const hiddenIds = new Set(args.hidden);
 		const preferenceFilters = await resolveQuestionPreferenceFilters(
@@ -1056,20 +1060,17 @@ export const getAnchoredQuestionsInternal = internalQuery({
 			for (const question of matches) anchorMatchPool.set(question._id, question);
 		}
 
-		const rankedAnchored = shuffle(Array.from(anchorMatchPool.values()).filter(isVisible)).sort((left, right) => {
-			const scoreDifference = getAnchorScore(right) - getAnchorScore(left);
-			if (scoreDifference !== 0) return scoreDifference;
-			return Number(wasShownRecently(left)) - Number(wasShownRecently(right));
-		});
-		const selectedAnchored = rankedAnchored.slice(0, targetAnchoredCount);
-		const generalVisible = allPublic.filter(isVisible);
-		const freshGeneral = shuffle(generalVisible.filter((question) => !wasShownRecently(question)));
-		const recentGeneral = shuffle(generalVisible.filter(wasShownRecently));
-		const selectedIds = new Set(selectedAnchored.map((question) => question._id));
-		const generalCandidates = [...freshGeneral, ...recentGeneral].filter((question) => !selectedIds.has(question._id));
+		// A question is in only if it matches every active filter; ones not shown in the last
+		// week come first.
+		const matching = shuffle(
+			Array.from(anchorMatchPool.values()).filter(
+				(question) => isVisible(question) && getAnchorScore(question) === activeAnchorCount,
+			),
+		).sort((left, right) => Number(wasShownRecently(left)) - Number(wasShownRecently(right)));
+		const selectedAnchored = matching.slice(0, args.count);
 
 		return {
-			questions: [...selectedAnchored, ...generalCandidates].slice(0, args.count),
+			questions: selectedAnchored,
 			anchoredMatchCount: selectedAnchored.length,
 			targetAnchoredCount,
 		};

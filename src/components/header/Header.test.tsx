@@ -6,6 +6,8 @@ import { Header } from "./Header";
 vi.mock("convex/react", () => ({ useQuery: () => [] }));
 vi.mock("@clerk/clerk-react", () => ({
   useAuth: () => ({ isSignedIn: false }),
+  // Guests get a Sign in button in the header; Clerk's wrapper is just its child here.
+  SignInButton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/hooks/useStorageContext", () => ({
   useStorageContext: () => ({

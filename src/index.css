@@ -196,3 +196,8 @@
     background-position: 0% 50%;
   }
 }
+
+/* Leave room at the end of every page for the phone tab bar (zero when there is none). */
+body {
+  padding-bottom: var(--bottom-nav-h, 0px);
+}

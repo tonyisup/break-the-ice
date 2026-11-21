@@ -4,6 +4,8 @@ interface Props {
   children: ReactNode;
   fallback?: ReactNode;
   onReset?: () => void;
+  /** What the reset button says; name the data it clears. */
+  resetLabel?: string;
 }
 
 interface State {
@@ -49,22 +51,24 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               We're sorry, but something unexpected happened. Please try refreshing the page.
             </p>
+            <p className="mb-4"><a href="/app" className="font-semibold underline underline-offset-4">Back to questions</a></p>
             <div className="flex gap-3 justify-center">
               <button
                 onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                className="min-h-11 px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 transition-colors"
               >
                 Refresh Page
               </button>
               {this.props.onReset && (
                 <button
                   onClick={() => {
+                    if (!window.confirm("This clears that saved list on this device and can't be undone. Continue?")) return;
                     this.props.onReset?.();
                     this.setState({ hasError: false, error: undefined });
                   }}
-                  className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                  className="min-h-11 px-4 py-2 border border-red-700 text-red-700 dark:text-red-300 dark:border-red-300 rounded hover:bg-red-500/10 transition-colors"
                 >
-                  Reset Likes & Continue
+                  {this.props.resetLabel ?? "Reset & Continue"}
                 </button>
               )}
             </div>

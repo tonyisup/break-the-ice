@@ -51,7 +51,7 @@ export function QuestionList({
   const toggleSection = (date: string) => {
     setOpenSections((prev) => ({
       ...prev,
-      [date]: !prev[date],
+      [date]: !(prev[date] ?? true),
     }));
   };
 
@@ -71,16 +71,6 @@ export function QuestionList({
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
-        drag="x"
-        dragConstraints={{ left: 0, right: 0 }}
-        onDragEnd={(event, info) => {
-          if (Math.abs(info.offset.x) > 100) {
-            onRemoveItem(question._id);
-          }
-        }}
-        onDoubleClick={() => {
-          onToggleLike(question._id);
-        }}
       >
         <ModernQuestionCard
           question={question}
@@ -130,7 +120,8 @@ export function QuestionList({
             key={date}
             title={date}
             count={entries.length}
-            isOpen={openSections[date] || false}
+            // Open by default, so search and filter matches are never inside a closed group.
+            isOpen={openSections[date] ?? true}
             onOpenChange={() => toggleSection(date)}
           >
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">

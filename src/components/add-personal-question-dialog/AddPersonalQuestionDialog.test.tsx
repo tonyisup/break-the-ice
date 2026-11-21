@@ -24,7 +24,7 @@ function submitQuestion(text: string) {
   render(<AddPersonalQuestionDialog isOpen onOpenChange={onOpenChange} />);
   const questionInput = screen.getByLabelText("Your Question");
   fireEvent.change(questionInput, { target: { value: text } });
-  fireEvent.click(screen.getByRole("button", { name: "Add to Stash" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add to My questions" }));
   return { onOpenChange, questionInput };
 }
 

@@ -27,9 +27,22 @@ export default function CookiePolicyPage() {
           <li><strong>__clerk_db_jwt</strong>, <strong>__client_uat</strong>: Used by Clerk for secure authentication.</li>
         </ul>
 
+        <h3 className="text-lg font-semibold mt-6 mb-2">Necessary Storage on Your Device</h3>
+        <p>
+          If you use the site without an account, the things you save are kept in your browser&apos;s local storage so they are still there when you come back.
+          They stay on your device, are not used for analytics, and are kept whichever consent option you choose.
+        </p>
+        <ul className="list-disc list-inside ml-4 mb-4 space-y-1">
+          <li><strong>likedQuestions</strong>, <strong>hiddenQuestions</strong>, <strong>hiddenStyles</strong>, <strong>hiddenTones</strong>: The questions you liked and what you chose to hide.</li>
+          <li><strong>questionHistory</strong>: The questions you have viewed.</li>
+          <li><strong>theme</strong>, <strong>storageLimitBehavior</strong>, <strong>defaultStyle</strong>, <strong>defaultTone</strong>: Your display and preference settings.</li>
+        </ul>
+        <p>You can remove these at any time by clearing your likes, history and hidden items in the app, or by clearing your browser&apos;s site data.</p>
+
         <h3 className="text-lg font-semibold mt-6 mb-2">Analytics Cookies</h3>
-        <p>We use PostHog to understand how you use our website. These cookies are only set if you consent.</p>
+        <p>We use PostHog to understand how you use our website. These are only set if you consent.</p>
         <ul className="list-disc list-inside ml-4 space-y-1">
+          <li><strong>sessionId</strong>: A random id kept in local storage and sent with analytics events. It is removed if you choose Necessary Only.</li>
           <li><strong>ph_phc_yvPURPmuOmgD7fy6Y854zBLP9sVU71T9ddHQJWVywqZ_posthog</strong>: Used by PostHog to identify unique users and track sessions.</li>
         </ul>
 

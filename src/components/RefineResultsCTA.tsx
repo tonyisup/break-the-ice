@@ -13,8 +13,9 @@ export function RefineResultsCTA({ bgGradient, onDismiss }: RefineResultsCTAProp
     <div className="relative w-full max-w-md mx-auto p-1 rounded-[30px]" style={{ background: `linear-gradient(135deg, ${bgGradient[1]}, ${bgGradient[0]})` }}>
       <button
         onClick={onDismiss}
-        className="absolute top-4 right-4 p-2 rounded-full bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20 transition-colors z-10"
-        title="Don't show again"
+        type="button"
+        className="absolute top-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20 transition-colors z-10"
+        aria-label="Don't show this again"
       >
         <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
       </button>
@@ -27,17 +28,13 @@ export function RefineResultsCTA({ bgGradient, onDismiss }: RefineResultsCTAProp
             Refine your results!
           </p>
         </div>
-        <Link
-          to="/settings?expand=manage-styles,manage-tones"
-          className="w-full"
-        >
-          <Button className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-full py-6 text-lg font-bold shadow-lg transition-all hover:scale-105 hover:shadow-xl">
-            Go to Settings
-          </Button>
-        </Link>
+        <Button asChild className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-800 hover:to-purple-800 text-white rounded-full py-6 text-lg font-bold shadow-lg transition-all hover:scale-105 hover:shadow-xl">
+          <Link to="/settings?expand=manage-styles,manage-tones">Go to Settings</Link>
+        </Button>
         <button
           onClick={onDismiss}
-          className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline underline-offset-4 transition-colors"
+          type="button"
+          className="min-h-11 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline underline-offset-4 transition-colors"
         >
           Don't show this again
         </button>

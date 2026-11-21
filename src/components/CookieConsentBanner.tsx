@@ -37,7 +37,7 @@ const CookieConsentBanner = () => {
           animate={{ y: 0, opacity: 1, scale: 1 }}
           exit={{ y: 50, opacity: 0, scale: 0.95 }}
           transition={{ type: "spring", damping: 20, stiffness: 100 }}
-          className="fixed bottom-3 left-3 right-3 z-[100] md:left-auto md:right-8 md:max-w-sm"
+          className="fixed bottom-[calc(var(--bottom-nav-h,0px)+0.75rem)] left-3 right-3 z-[100] md:left-auto md:right-8 md:max-w-sm"
         >
           <div className={cn(
             "relative overflow-hidden rounded-3xl border border-white/20 p-4 shadow-2xl backdrop-blur-2xl md:p-5",
@@ -63,7 +63,7 @@ const CookieConsentBanner = () => {
                 variant="ghost"
                 size="sm"
                 onClick={handleDecline}
-                className="h-9 px-4 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+                className="h-11 px-4 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
               >
                 <Info className="mr-2 h-4 w-4" />
                 Necessary only
@@ -72,7 +72,7 @@ const CookieConsentBanner = () => {
                 variant="default"
                 size="sm"
                 onClick={handleAccept}
-                className="h-9 px-5 font-semibold"
+                className="h-11 px-5 font-semibold"
               >
                 <ShieldCheck className="mr-2 h-4 w-4" />
                 Accept analytics
