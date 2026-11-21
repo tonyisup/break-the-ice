@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Check, ChevronDown, X } from "lucide-react";
 import { IconComponent, Icon } from "../ui/icons/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
@@ -25,6 +26,10 @@ interface FeedFilterBarProps {
   selectedTopicId?: string | null;
   /** Called with the option's slug, or null to clear that filter. */
   onChange: (key: FeedFilterKey, slug: string | null) => void;
+  /** How many styles and tones the person has hidden in Settings, and so are missing from
+   *  the lists. Each list says so and links to where they can be shown again. */
+  hiddenStyleCount?: number;
+  hiddenToneCount?: number;
   /** Clears every filter in one step. Three onChange calls in a row can each start from the
    *  same stale state (the feed keeps its filters in the URL), so this is its own callback. */
   onClearAll: () => void;
@@ -101,6 +106,8 @@ export const FeedFilterBar = ({
   selectedTopicId,
   onChange,
   onClearAll,
+  hiddenStyleCount = 0,
+  hiddenToneCount = 0,
   sticky = true,
 }: FeedFilterBarProps) => (
   <div
@@ -114,8 +121,8 @@ export const FeedFilterBar = ({
     )}
   >
     <div className="flex flex-wrap justify-center gap-2">
-    <FilterPill label="Style" options={styles} selectedId={selectedStyleId} onChange={(slug) => onChange("style", slug)} />
-    <FilterPill label="Tone" options={tones} selectedId={selectedToneId} onChange={(slug) => onChange("tone", slug)} />
+    <FilterPill label="Style" options={styles} selectedId={selectedStyleId} hiddenCount={hiddenStyleCount} onChange={(slug) => onChange("style", slug)} />
+    <FilterPill label="Tone" options={tones} selectedId={selectedToneId} hiddenCount={hiddenToneCount} onChange={(slug) => onChange("tone", slug)} />
     <FilterPill label="Topic" options={topics} selectedId={selectedTopicId} onChange={(slug) => onChange("topic", slug)} />
     {[selectedStyleId, selectedToneId, selectedTopicId].filter(Boolean).length > 1 && (
       <button
@@ -134,11 +141,13 @@ const FilterPill = ({
   label,
   options,
   selectedId,
+  hiddenCount = 0,
   onChange,
 }: {
   label: "Style" | "Tone" | "Topic";
   options: FeedFilterOption[];
   selectedId?: string | null;
+  hiddenCount?: number;
   onChange: (slug: string | null) => void;
 }) => {
   const [open, setOpen] = useState(false);
@@ -204,7 +213,18 @@ const FilterPill = ({
               </li>
             ))}
           </ul>
-
+          {/* The list leaves out what the person hid in Settings; say so, and link to it. */}
+          {hiddenCount > 0 && (
+            <p className="mt-1 border-t border-gray-200 px-3 pt-1 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-300">
+              {hiddenCount === 1 ? `1 ${kind} is hidden.` : `${hiddenCount} ${kind}s are hidden.`}{" "}
+              <Link
+                to={`/settings?expand=manage-${kind}s`}
+                className="inline-flex min-h-11 items-center font-semibold text-gray-900 underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-white"
+              >
+                Show hidden {kind}s in Settings
+              </Link>
+            </p>
+          )}
         </PopoverContent>
       </Popover>
       {selected && (

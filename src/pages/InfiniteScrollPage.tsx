@@ -1155,6 +1155,8 @@ export default function InfiniteScrollPage() {
           selectedTopicId={anchoredTopicId}
           onChange={setFilter}
           onClearAll={clearFilters}
+          hiddenStyleCount={(allStyles ?? []).length - filterStyles.length}
+          hiddenToneCount={(allTones ?? []).length - filterTones.length}
         />
         <div
           className={cn(

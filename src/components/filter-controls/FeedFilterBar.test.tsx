@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { FeedFilterBar } from "./FeedFilterBar";
 
 const styles = [
@@ -24,7 +25,11 @@ afterEach(() => vi.unstubAllGlobals());
 
 function renderBar(props: Partial<React.ComponentProps<typeof FeedFilterBar>> = {}) {
   const onChange = vi.fn();
-  render(<FeedFilterBar styles={styles} tones={tones} topics={topics} onChange={onChange} onClearAll={vi.fn()} {...props} />);
+  render(
+    <MemoryRouter>
+      <FeedFilterBar styles={styles} tones={tones} topics={topics} onChange={onChange} onClearAll={vi.fn()} {...props} />
+    </MemoryRouter>,
+  );
   return onChange;
 }
 
@@ -69,4 +74,27 @@ it("offers Clear all once two filters are set, as one step", () => {
 it("has no Clear all for a single filter, which has its own X", () => {
   renderBar({ selectedStyleId: "style1" });
   expect(screen.queryByRole("button", { name: "Clear all" })).not.toBeInTheDocument();
+});
+
+it("says how many styles are hidden and links to where they can be shown again", () => {
+  renderBar({ hiddenStyleCount: 2 });
+  fireEvent.click(screen.getByRole("button", { name: "Choose a style" }));
+  expect(screen.getByText("2 styles are hidden.")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Show hidden styles in Settings" })).toHaveAttribute(
+    "href",
+    "/settings?expand=manage-styles",
+  );
+});
+
+it("uses the singular for one hidden tone, and says nothing when none are hidden", () => {
+  renderBar({ hiddenToneCount: 1 });
+  fireEvent.click(screen.getByRole("button", { name: "Choose a tone" }));
+  expect(screen.getByText("1 tone is hidden.")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Show hidden tones in Settings" })).toHaveAttribute(
+    "href",
+    "/settings?expand=manage-tones",
+  );
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+  fireEvent.click(screen.getByRole("button", { name: "Choose a topic" }));
+  expect(screen.queryByText(/hidden/)).not.toBeInTheDocument();
 });
