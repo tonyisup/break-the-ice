@@ -169,6 +169,28 @@ approved. Because a new question is public only after review, the questions the 
 the model as kept are ones a person let through, apart from any the pool published before it
 was held. Only the admin tools publish directly.
 
+## Production deploys
+
+The frontend deploys through Vercel. The Convex backend deploys through the
+[Deploy Convex production](./.github/workflows/deploy-convex-production.yml) workflow: a merge
+to `main` that changes `convex/`, `package.json` or `package-lock.json` runs the typecheck and
+the tests, then waits for the owner to approve the `convex-production` environment before
+running `npx convex deploy`. It can also be started by hand from the Actions tab.
+
+One-time setup, in the GitHub repository settings under Environments:
+
+1. Create an environment named `convex-production`.
+2. Add yourself as a required reviewer.
+3. Under deployment branches, choose selected branches and allow only `main`.
+4. Add an environment secret `CONVEX_PRODUCTION_DEPLOY_KEY`: a production deploy key from the
+   Convex dashboard (production deployment, Settings, Deploy keys).
+
+The workflow refuses to deploy until the environment requires a reviewer and limits its
+branches, and refuses a key that is not a production key. A push that adds or changes an index
+on a large table asks for a confirmation that CI can't give: deploy that one by hand with
+`npx convex deploy`, or stage the index first. One-time data steps (`npx convex run --prod ...`)
+are still run by hand after the deploy that brings them.
+
 ## Stack
 
 *   **Frontend**: [React](https://react.dev/), [Vite](https://vitejs.dev/), [TypeScript](https://www.typescriptlang.org/)
