@@ -102,8 +102,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Uses the convex CLI locked in package-lock.json: only pass flags that
+      # version supports (1.31 has no --message).
       - name: Deploy backend
-        run: >-
-          npx convex deploy
-          --typecheck enable
-          --message "GitHub production ${GITHUB_SHA}"
+        run: npx convex deploy --typecheck enable
