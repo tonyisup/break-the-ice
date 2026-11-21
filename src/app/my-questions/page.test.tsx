@@ -6,15 +6,14 @@ import { getFunctionName } from 'convex/server';
 import { ConvexError } from 'convex/values';
 import { toast } from 'sonner';
 import { ModernQuestionCard } from '@/components/modern-question-card/modern-question-card';
-import LikedQuestionsPage from './page';
+import MyQuestionsPage from './page';
 
 vi.mock('convex/react', () => ({
   useQuery: vi.fn(),
   useMutation: vi.fn(),
 }));
 vi.mock('@clerk/clerk-react', () => ({
-  useAuth: () => ({ isSignedIn: true }),
-  useClerk: () => ({ openSignIn: vi.fn() }),
+  useAuth: () => ({ isLoaded: true, isSignedIn: true }),
 }));
 vi.mock('../../hooks/useStorageContext', () => ({
   useStorageContext: () => ({
@@ -34,7 +33,6 @@ vi.mock('../../hooks/useStorageContext', () => ({
 vi.mock('../../hooks/useTheme', () => ({ useTheme: () => ({ effectiveTheme: 'light' }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/components/header', () => ({ Header: () => <div>Header</div> }));
-vi.mock('@/components/filter-controls/filter-controls', () => ({ FilterControls: () => null }));
 vi.mock('@/components/SignInCTA', () => ({ SignInCTA: () => null }));
 vi.mock('@/components/add-personal-question-dialog/AddPersonalQuestionDialog', () => ({
   AddPersonalQuestionDialog: () => null,
@@ -43,10 +41,10 @@ vi.mock('@/components/modern-question-card/modern-question-card', () => ({ Moder
 
 const personalQuestion = { _id: 'q1', customText: 'What did you learn this week?', status: 'private' };
 
-async function deleteFromStash(failure: unknown) {
+async function deleteMyQuestion(failure: unknown) {
   const deletePersonalQuestion = vi.fn().mockRejectedValue(failure);
   (useMutation as Mock).mockReturnValue(deletePersonalQuestion);
-  render(<MemoryRouter><LikedQuestionsPage /></MemoryRouter>);
+  render(<MemoryRouter><MyQuestionsPage /></MemoryRouter>);
 
   const props = (ModernQuestionCard as unknown as Mock).mock.calls
     .map(([cardProps]) => cardProps)
@@ -56,25 +54,27 @@ async function deleteFromStash(failure: unknown) {
   expect(deletePersonalQuestion).toHaveBeenCalledWith({ questionId: 'q1' });
 }
 
-describe('LikedQuestionsPage personal stash', () => {
+describe('MyQuestionsPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Deleting a personal question asks first; the person says yes.
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     (ModernQuestionCard as unknown as Mock).mockReturnValue(null);
-    // Only the personal stash query answers; the rest load nothing.
+    // Only the person's own questions answer; the rest load nothing.
     (useQuery as Mock).mockImplementation((query: Parameters<typeof getFunctionName>[0]) =>
       getFunctionName(query) === 'core/questions:getCustomQuestions' ? [personalQuestion] : undefined,
     );
   });
 
   it('shows the reason the server gives when a delete is refused', async () => {
-    await deleteFromStash(new ConvexError({ code: 'SOME_CODE', message: 'This question is in use, so it stays.' }));
+    await deleteMyQuestion(new ConvexError({ code: 'SOME_CODE', message: 'This question is in use, so it stays.' }));
 
     expect(toast.error).toHaveBeenCalledWith('This question is in use, so it stays.');
   });
 
   it('falls back to the generic message for other errors', async () => {
-    await deleteFromStash(new Error('Network down'));
+    await deleteMyQuestion(new Error('Network down'));
 
     expect(toast.error).toHaveBeenCalledWith('Failed to delete question.');
   });

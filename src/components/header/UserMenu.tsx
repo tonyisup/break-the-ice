@@ -25,7 +25,7 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeTitle }: UserMenuProps) {
-	const { signOut, openSignIn } = useClerk();
+	const { signOut, openSignIn, openUserProfile } = useClerk();
 	const { user } = useUser();
 	const { theme, setTheme } = useTheme();
 
@@ -33,7 +33,7 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 		<DropdownMenu>
 			<div className="relative">
 				<DropdownMenuTrigger asChild>
-					<Button aria-label="Account menu" variant="ghost" size="icon" className="h-10 w-10 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center p-0 overflow-hidden">
+					<Button aria-label={showSettingsBadge && settingsBadgeTitle ? `Account menu. Hidden questions: ${settingsBadgeTitle}` : "Account menu"} variant="ghost" size="icon" className="h-11 w-11 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center p-0 overflow-hidden">
 						{user?.imageUrl ? (
 							<img src={user.imageUrl} alt={user.fullName || "User"} className="h-full w-full object-cover" />
 						) : (
@@ -63,20 +63,23 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 				<DropdownMenuSeparator className="bg-white/10" />
 
 				<Unauthenticated>
-					<DropdownMenuItem onClick={() => openSignIn()} className="cursor-pointer focus:bg-white/10">
+					<DropdownMenuItem onClick={() => openSignIn()} className="min-h-11 cursor-pointer focus:bg-black/10 dark:focus:bg-white/10">
 						<LogIn className="mr-2 h-4 w-4" />
 						<span>Sign In</span>
 					</DropdownMenuItem>
 				</Unauthenticated>
 
-				<DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
+				<DropdownMenuItem asChild className="min-h-11 cursor-pointer focus:bg-black/10 dark:focus:bg-white/10">
 					<Link to="/settings" className="w-full flex items-center">
 						<Settings className="mr-2 h-4 w-4" />
 						<span>Settings</span>
+						{showSettingsBadge && settingsBadgeTitle && (
+							<span className="ml-auto mr-2 text-xs text-muted-foreground">Hidden: {settingsBadgeTitle.toLowerCase()}</span>
+						)}
 						{showSettingsBadge && (
 							<div
 								className={cn(
-									"ml-auto w-2 h-2 rounded-full",
+									"w-2 h-2 rounded-full",
 									settingsBadgeColor === "yellow" ? "bg-yellow-500" : "bg-red-500"
 								)}
 							/>
@@ -85,7 +88,7 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 				</DropdownMenuItem>
 
 				<DropdownMenuSub>
-					<DropdownMenuSubTrigger className="cursor-pointer focus:bg-white/10">
+					<DropdownMenuSubTrigger className="min-h-11 cursor-pointer focus:bg-black/10 dark:focus:bg-white/10">
 						<div className="flex items-center">
 							{theme === "light" && <Sun className="mr-2 h-4 w-4" />}
 							{theme === "dark" && <Moon className="mr-2 h-4 w-4" />}
@@ -95,17 +98,17 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 					</DropdownMenuSubTrigger>
 					<DropdownMenuPortal>
 						<DropdownMenuSubContent className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-white/10">
-							<DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer focus:bg-white/10">
+							<DropdownMenuItem onClick={() => setTheme("light")} className="min-h-11 cursor-pointer focus:bg-black/10 dark:focus:bg-white/10">
 								<Sun className="mr-2 h-4 w-4" />
 								<span>Light</span>
 								{theme === "light" && <span className="ml-auto text-xs text-blue-500">●</span>}
 							</DropdownMenuItem>
-							<DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer focus:bg-white/10">
+							<DropdownMenuItem onClick={() => setTheme("dark")} className="min-h-11 cursor-pointer focus:bg-black/10 dark:focus:bg-white/10">
 								<Moon className="mr-2 h-4 w-4" />
 								<span>Dark</span>
 								{theme === "dark" && <span className="ml-auto text-xs text-blue-500">●</span>}
 							</DropdownMenuItem>
-							<DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer focus:bg-white/10">
+							<DropdownMenuItem onClick={() => setTheme("system")} className="min-h-11 cursor-pointer focus:bg-black/10 dark:focus:bg-white/10">
 								<Computer className="mr-2 h-4 w-4" />
 								<span>System</span>
 								{theme === "system" && <span className="ml-auto text-xs text-blue-500">●</span>}
@@ -115,8 +118,13 @@ export function UserMenu({ showSettingsBadge, settingsBadgeColor, settingsBadgeT
 				</DropdownMenuSub>
 
 				<Authenticated>
+					{/* Name, email, password and deleting the account are all in the account profile. */}
+					<DropdownMenuItem onClick={() => openUserProfile()} className="min-h-11 cursor-pointer focus:bg-black/10 dark:focus:bg-white/10">
+						<User className="mr-2 h-4 w-4" />
+						<span>Manage account</span>
+					</DropdownMenuItem>
 					<DropdownMenuSeparator className="bg-white/10" />
-					<DropdownMenuItem onClick={() => void signOut()} className="cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-500/10">
+					<DropdownMenuItem onClick={() => void signOut()} className="min-h-11 cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-500/10">
 						<LogOut className="mr-2 h-4 w-4" />
 						<span>Sign Out</span>
 					</DropdownMenuItem>

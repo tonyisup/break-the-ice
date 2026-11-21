@@ -276,12 +276,15 @@ test("feed hides every version and legacy reference of a hidden style", async ()
     anchored.questions.map((question: Doc<"questions">) => question._id),
   );
 
-  expect(anchoredIds.has(visibleQuestionId)).toBe(true);
+  // Filtering by a style the person has hidden matches nothing, and a filtered feed is
+  // never topped up with questions from other styles.
+  expect(anchoredIds.has(visibleQuestionId)).toBe(false);
   expect(anchoredIds.has(archivedVersionQuestionId)).toBe(false);
   expect(anchoredIds.has(legacyQuestionId)).toBe(false);
+  expect(anchored.questions).toHaveLength(0);
 });
 
-test("anchored feed meets its quota across taxonomy versions and legacy slugs", async () => {
+test("filtered feed returns only matches, across taxonomy versions and legacy slugs", async () => {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
   const now = Date.now();
 
@@ -374,14 +377,14 @@ test("anchored feed meets its quota across taxonomy versions and legacy slugs", 
     currentTime: now,
   });
 
-  expect(result.targetAnchoredCount).toBe(6);
-  expect(result.anchoredMatchCount).toBe(6);
-  expect(result.questions).toHaveLength(10);
-  expect(result.questions.slice(0, 6).every((question: Doc<"questions">) => matchingIds.includes(question._id))).toBe(true);
-  expect(result.questions.filter((question: Doc<"questions">) => matchingIds.includes(question._id))).toHaveLength(8);
+  // All eight matches (old version, current version and slug-only), and neither general question.
+  expect(result.targetAnchoredCount).toBe(10);
+  expect(result.anchoredMatchCount).toBe(8);
+  expect(result.questions).toHaveLength(8);
+  expect(result.questions.every((question: Doc<"questions">) => matchingIds.includes(question._id))).toBe(true);
 });
 
-test("anchored feed reports a shortfall and ranks full multi-anchor matches first", async () => {
+test("filtered feed with two filters returns only questions matching both, and reports the shortfall", async () => {
   const t = convexTest(schema, import.meta.glob("./**/*.ts"));
   const now = Date.now();
 
@@ -462,9 +465,10 @@ test("anchored feed reports a shortfall and ranks full multi-anchor matches firs
     currentTime: now,
   });
 
-  expect(result.targetAnchoredCount).toBe(3);
-  expect(result.anchoredMatchCount).toBe(3);
-  expect(new Set(result.questions.slice(0, 2).map((question: Doc<"questions">) => question._id))).toEqual(new Set(fullMatchIds));
+  // The style-only question and the general ones are left out; the feed generates the other three.
+  expect(result.targetAnchoredCount).toBe(5);
+  expect(result.anchoredMatchCount).toBe(2);
+  expect(new Set(result.questions.map((question: Doc<"questions">) => question._id))).toEqual(new Set(fullMatchIds));
 });
 
 test("an explicit anchor takes precedence over an active takeover topic", async () => {

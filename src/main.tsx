@@ -27,7 +27,7 @@ import PruneSettingsPage from "./app/admin/prune/settings/page";
 import PoolPage from "./app/admin/pool/page";
 import AdminPage from "./app/admin/page";
 import AdminLayout from "./app/admin/layout";
-import AddQuestionPage from "./app/add-question/page";
+import MyQuestionsPage from "./app/my-questions/page";
 import UnsubscribePage from "./app/unsubscribe/page";
 import VerifySubscriptionPage from "./app/verify-subscription/page";
 import PrivacyPolicyPage from "./app/privacy/page";
@@ -40,6 +40,7 @@ import FeedbackButton from "./components/FeedbackButton";
 import { AnalyticsManager } from "./components/AnalyticsManager";
 import GeneratorPage from "./app/admin/generator/page.tsx";
 import { Toaster } from "sonner";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import UserDetailsPage from "./app/admin/users/[userId]/page.tsx";
 import QuestionDetailsPage from "./app/admin/questions/[questionId]/page.tsx";
 import NewsletterPage from "./app/admin/newsletter/page.tsx";
@@ -61,6 +62,7 @@ createRoot(document.getElementById("root")!).render(
             <RouteMetadata />
             <AnalyticsManager />
             <ClerkSyncManager />
+            <ErrorBoundary>
             <Routes>
               <Route path="/" element={<Root />} />
               <Route path="/app" element={<App />} />
@@ -71,7 +73,8 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/pricing" element={<Navigate to="/" replace />} />
               <Route path="/unsubscribe" element={<UnsubscribePage />} />
               <Route path="/verify-subscription" element={<VerifySubscriptionPage />} />
-              <Route path="/add-question" element={<AddQuestionPage />} />
+              <Route path="/my-questions" element={<MyQuestionsPage />} />
+              <Route path="/add-question" element={<Navigate to="/my-questions" replace />} />
               <Route element={<AdminLayout />}>
                 <Route path="/admin" element={<AdminPage />} />
                 <Route path="/admin/questions" element={<QuestionsPage />} />
@@ -102,9 +105,10 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/thank-you" element={<ThankYouPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
+            </ErrorBoundary>
             <CookieConsentBanner />
             <FeedbackButton />
-            <Toaster position="bottom-left" richColors />
+            <Toaster position="top-center" richColors offset={76} />
           </BrowserRouter>
         </StorageProvider>
       </ConvexProviderWithClerk>

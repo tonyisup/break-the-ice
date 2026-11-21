@@ -43,6 +43,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return {
     ...actual,
     useSearchParams: () => [mockSearchParams, mockSetSearchParams],
+    useNavigate: () => vi.fn(),
     Link: ({ to, children, ...props }: any) => <a href={to} {...props}>{children}</a>,
   };
 });

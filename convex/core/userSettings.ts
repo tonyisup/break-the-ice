@@ -106,12 +106,15 @@ export const getQuestionHistory = query({
 			return [];
 		}
 
+		// Views from before the person last cleared their history are left out.
+		const clearedAt = user.historyClearedAt ?? 0;
 		const history = await ctx.db
 			.query("userQuestions")
 			.withIndex("by_userId_status_updatedAt", (q) =>
 				q.eq("userId", user._id),
 			)
 			.order("desc")
+			.filter((q) => q.gt(q.field("updatedAt"), clearedAt))
 			.take(args.limit ?? 50);
 
 		const results = [];
@@ -126,6 +129,21 @@ export const getQuestionHistory = query({
 		}
 
 		return results;
+	},
+});
+
+/**
+ * Clear the signed-in person's history. Nothing is deleted: the time is recorded and
+ * getQuestionHistory leaves out every view up to it, so likes, hidden items and the
+ * feed's record of what was already shown are unaffected.
+ */
+export const clearQuestionHistory = mutation({
+	args: {},
+	returns: v.null(),
+	handler: async (ctx) => {
+		const user = await getUserOrCreate(ctx);
+		await ctx.db.patch(user._id, { historyClearedAt: Date.now() });
+		return null;
 	},
 });
 

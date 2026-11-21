@@ -12,7 +12,7 @@ import { Id } from "../../../convex/_generated/dataModel";
 import DynamicIcon from "@/components/ui/dynamic-icon";
 import { ItemDetailDrawer, ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Doc } from "../../../convex/_generated/dataModel";
-import { useAuth } from "@clerk/clerk-react";
+import { SignInButton, useAuth } from "@clerk/clerk-react";
 import { MAX_ANON_BLOCKED } from "../../hooks/useStorage";
 import { SignInCTA } from "@/components/SignInCTA";
 import { Link, useSearchParams } from "react-router-dom";
@@ -24,9 +24,17 @@ const SettingsPage = () => {
   const { effectiveTheme } = useTheme();
   const allStyles = useQuery(api.core.styles.getStyles, isSignedIn ? {} : "skip");
   const allTones = useQuery(api.core.tones.getTones, isSignedIn ? {} : "skip");
+  // Guests only need the names of what they've hidden, so they can unhide it.
+  const allGuestStyles = useQuery(api.core.styles.getStyles, isSignedIn ? "skip" : {}) ?? [];
+  const allGuestTones = useQuery(api.core.tones.getTones, isSignedIn ? "skip" : {}) ?? [];
   const currentUser = useQuery(api.core.users.getCurrentUser, {});
   const [searchParams] = useSearchParams();
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  // The sections people come here for start open; the rest stay folded away.
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    subscription: true,
+    'manage-styles': true,
+    'hidden-questions': true,
+  });
 
   useEffect(() => {
     const expand = searchParams.get('expand');
@@ -73,6 +81,7 @@ const SettingsPage = () => {
     setHiddenQuestions,
     removeHiddenQuestion,
     clearHiddenQuestions,
+    addLikedQuestion,
     storageLimitBehavior,
     setStorageLimitBehavior,
   } = useStorageContext();
@@ -100,23 +109,21 @@ const SettingsPage = () => {
   // Build style/tone lookup maps for card rendering
   const stylesMap = useMemo(() => {
     const map = new Map<string, Doc<"styles">>();
-    if (!allStyles) return map;
-    allStyles.forEach(s => {
+    (allStyles ?? allGuestStyles).forEach(s => {
       map.set(s.id, s as unknown as Doc<"styles">);
       map.set(s._id, s as unknown as Doc<"styles">);
     });
     return map;
-  }, [allStyles]);
+  }, [allStyles, allGuestStyles]);
 
   const tonesMap = useMemo(() => {
     const map = new Map<string, Doc<"tones">>();
-    if (!allTones) return map;
-    allTones.forEach(t => {
+    (allTones ?? allGuestTones).forEach(t => {
       map.set(t.id, t as unknown as Doc<"tones">);
       map.set(t._id, t as unknown as Doc<"tones">);
     });
     return map;
-  }, [allTones]);
+  }, [allTones, allGuestTones]);
   const hiddenQuestionObjects = useQuery(api.core.questions.getQuestionsByIds, { ids: hiddenQuestions });
 
   // prevent flickering when unhiding questions
@@ -165,7 +172,8 @@ const SettingsPage = () => {
     >
       <Header />
 
-      <div className="container mx-auto p-4 md:p-8 md:pt-24 pt-20">
+      <div className="container mx-auto p-4 md:p-8 pt-[calc(var(--header-h,4rem)+1.5rem)]">
+        <h1 className="mb-6 text-2xl font-bold text-white">Settings</h1>
 
         <div className="space-y-8">
 
@@ -178,16 +186,16 @@ const SettingsPage = () => {
               >
                 <div className="space-y-6">
                   <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                    <p className="text-sm text-gray-400">Usage this cycle</p>
-                    <p className="text-xl font-bold text-white">
+                    <p className="text-sm text-gray-700 dark:text-gray-300">Usage this cycle</p>
+                    <p className="text-xl font-bold text-black dark:text-white">
                       {currentUser.aiUsage?.count ?? 0} / {currentUser.aiLimit}
                     </p>
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-400">AI Generations Progress</span>
-                      <span className="text-white font-medium">
+                      <span className="text-gray-700 dark:text-gray-300">AI Generations Progress</span>
+                      <span className="text-black dark:text-white font-medium">
                         {Math.round(((currentUser.aiUsage?.count ?? 0) / Math.max(1, Number(currentUser.aiLimit))) * 100)}%
                       </span>
                     </div>
@@ -210,14 +218,14 @@ const SettingsPage = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
                     <div>
-                      <p className="text-sm text-gray-400">Daily Questions</p>
-                      <p className="text-md font-medium text-white">
+                      <p className="text-sm text-gray-700 dark:text-gray-300">Daily Questions</p>
+                      <p className="text-md font-medium text-black dark:text-white">
                         Get personalized icebreakers every morning
                       </p>
                     </div>
                     <Link
                       to="/unsubscribe"
-                      className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-sm font-semibold transition-colors text-white border border-white/10"
+                      className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-sm font-semibold transition-colors text-black dark:text-white border border-white/10"
                     >
                       Manage / Unsubscribe
                     </Link>
@@ -229,14 +237,14 @@ const SettingsPage = () => {
 
           {!isSignedIn && (
             <CollapsibleSection
-              title="Storage Limit Behavior"
+              title="When your saved lists are full"
               isOpen={!!openSections['storage-limit']}
               onOpenChange={() => toggleSection('storage-limit')}
             >
               <div className="space-y-4">
                 <div className="flex flex-col gap-2">
                   <p className="text-sm dark:text-white/70 text-black/70 mb-2">
-                    Choose what happens when you reach the limit of history, liked, or hidden items as a guest.
+                    Choose what happens when you reach the guest limit for liked or hidden questions. History always drops its oldest entry to make room.
                   </p>
                   <label className="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-white/10 dark:hover:bg-white/5 transition-colors">
                     <input
@@ -284,16 +292,37 @@ const SettingsPage = () => {
           >
             {!isSignedIn ? (
               <div className="p-4">
-                <p className="dark:text-white/70 text-black/70 mb-4">Sign in to manage your style preferences.</p>
-                <SignInCTA
-                  bgGradient={bgGradient}
-                  title="Sign In to Customize Styles"
-                  featureHighlight={{
-                    pre: "Personalize your",
-                    highlight: "style preferences",
-                    post: "with an account."
-                  }}
-                />
+                {/* A guest can hide a style from a card, so they can always bring it back here. */}
+                {allGuestStyles.filter(item => hiddenStyles?.includes(item._id)).length > 0 && (
+                  <div className="mb-6">
+                    <p className="dark:text-white text-black font-semibold mb-2">Styles you've hidden</p>
+                    <ul className="space-y-2">
+                      {allGuestStyles.filter(item => hiddenStyles?.includes(item._id)).map(item => (
+                        <li key={item._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                          <span className="flex items-center dark:text-white text-black">
+                            <DynamicIcon name={item.icon} color={item.color} size={24} className="mr-2" />
+                            {item.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeHiddenStyle(item._id)}
+                            className="min-h-11 px-4 text-sm font-semibold bg-white/30 dark:bg-black/30 dark:text-white text-black rounded-md hover:bg-white/40 transition-colors"
+                          >
+                            Unhide
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {/* One short line: guests hide styles from a card and bring them back above. */}
+                <p className="dark:text-white text-black">
+                  You can hide a style from any question card.{" "}
+                  <SignInButton mode="modal">
+                    <button type="button" className="min-h-11 font-semibold underline underline-offset-4">Sign in</button>
+                  </SignInButton>{" "}
+                  to choose from the full list here.
+                </p>
               </div>
             ) : typeof allStyles === 'undefined' ? (
               <div className="flex items-center justify-center p-8">
@@ -306,13 +335,17 @@ const SettingsPage = () => {
                 <div className="flex space-x-2 mb-4 justify-end">
                   <button
                     onClick={() => setHiddenStyles([])}
-                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                    className="min-h-11 px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
                   >
                     Include All
                   </button>
                   <button
-                    onClick={() => setHiddenStyles(allStyles.map(s => s._id))}
-                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                    onClick={() => {
+                      const previous = hiddenStyles ?? [];
+                      setHiddenStyles(allStyles.map(s => s._id));
+                      toast.success("All styles hidden", { action: { label: "Undo", onClick: () => setHiddenStyles(previous) } });
+                    }}
+                    className="min-h-11 px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
                   >
                     Hide All
                   </button>
@@ -327,14 +360,15 @@ const SettingsPage = () => {
                           <span className="dark:text-white text-black">{style.name}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button onClick={() => handleShowInfo(style, "Style")} className="p-1" aria-label={`Show info about ${style.name}`}>
+                          <button onClick={() => handleShowInfo(style, "Style")} className="flex h-11 w-11 items-center justify-center rounded-full" aria-label={`Show info about ${style.name}`}>
                             <DynamicIcon name="info" size={18} />
                           </button>
                           <button
                             onClick={() => handleToggleStyle(style._id)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
-                            aria-pressed={isIncluded}
-                            aria-label={`Toggle style ${style.name}`}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-[''] ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
+                            role="switch"
+                            aria-checked={isIncluded}
+                            aria-label={`Show ${style.name} questions`}
                           >
                             <span
                               className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
@@ -357,16 +391,37 @@ const SettingsPage = () => {
           >
             {!isSignedIn ? (
               <div className="p-4">
-                <p className="dark:text-white/70 text-black/70 mb-4">Sign in to manage your tone preferences.</p>
-                <SignInCTA
-                  bgGradient={bgGradient}
-                  title="Sign In to Customize Tones"
-                  featureHighlight={{
-                    pre: "Personalize your",
-                    highlight: "tone preferences",
-                    post: "with an account."
-                  }}
-                />
+                {/* A guest can hide a tone from a card, so they can always bring it back here. */}
+                {allGuestTones.filter(item => hiddenTones?.includes(item._id)).length > 0 && (
+                  <div className="mb-6">
+                    <p className="dark:text-white text-black font-semibold mb-2">Tones you've hidden</p>
+                    <ul className="space-y-2">
+                      {allGuestTones.filter(item => hiddenTones?.includes(item._id)).map(item => (
+                        <li key={item._id} className="flex items-center justify-between p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+                          <span className="flex items-center dark:text-white text-black">
+                            <DynamicIcon name={item.icon} color={item.color} size={24} className="mr-2" />
+                            {item.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeHiddenTone(item._id)}
+                            className="min-h-11 px-4 text-sm font-semibold bg-white/30 dark:bg-black/30 dark:text-white text-black rounded-md hover:bg-white/40 transition-colors"
+                          >
+                            Unhide
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {/* One short line: guests hide tones from a card and bring them back above. */}
+                <p className="dark:text-white text-black">
+                  You can hide a tone from any question card.{" "}
+                  <SignInButton mode="modal">
+                    <button type="button" className="min-h-11 font-semibold underline underline-offset-4">Sign in</button>
+                  </SignInButton>{" "}
+                  to choose from the full list here.
+                </p>
               </div>
             ) : typeof allTones === 'undefined' ? (
               <div className="flex items-center justify-center p-8">
@@ -379,13 +434,17 @@ const SettingsPage = () => {
                 <div className="flex space-x-2 mb-4 justify-end">
                   <button
                     onClick={() => setHiddenTones([])}
-                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                    className="min-h-11 px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
                   >
                     Include All
                   </button>
                   <button
-                    onClick={() => setHiddenTones(allTones.map(t => t._id))}
-                    className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
+                    onClick={() => {
+                      const previous = hiddenTones ?? [];
+                      setHiddenTones(allTones.map(t => t._id));
+                      toast.success("All tones hidden", { action: { label: "Undo", onClick: () => setHiddenTones(previous) } });
+                    }}
+                    className="min-h-11 px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors"
                   >
                     Hide All
                   </button>
@@ -400,14 +459,15 @@ const SettingsPage = () => {
                           <span className="dark:text-white text-black">{tone.name}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button onClick={() => handleShowInfo(tone, "Tone")} className="p-1" aria-label={`Show info about ${tone.name}`}>
+                          <button onClick={() => handleShowInfo(tone, "Tone")} className="flex h-11 w-11 items-center justify-center rounded-full" aria-label={`Show info about ${tone.name}`}>
                             <DynamicIcon name="info" size={18} />
                           </button>
                           <button
                             onClick={() => handleToggleTone(tone._id)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
-                            aria-pressed={isIncluded}
-                            aria-label={`Toggle tone ${tone.name}`}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-[''] ${isIncluded ? 'bg-green-500' : 'bg-white/20 dark:bg-black/20'}`}
+                            role="switch"
+                            aria-checked={isIncluded}
+                            aria-label={`Show ${tone.name} questions`}
                           >
                             <span
                               className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isIncluded ? 'translate-x-6' : 'translate-x-1'}`}
@@ -445,10 +505,15 @@ const SettingsPage = () => {
             {questionsToDisplay && questionsToDisplay.length > 0 ? (
               <>
                 <button
-                  onClick={clearHiddenQuestions}
-                  className="px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
+                  type="button"
+                  onClick={() => {
+                    if (!window.confirm("Unhide all hidden questions? This can't be undone.")) return;
+                    clearHiddenQuestions();
+                    toast.success("All hidden questions are showing again");
+                  }}
+                  className="min-h-11 px-3 py-1 text-sm font-semibold bg-white/20 dark:bg-black/20 dark:text-white text-black rounded-md hover:bg-white/30 transition-colors mb-4"
                 >
-                  Clear All
+                  Unhide all
                 </button>
                 <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                   {questionsToDisplay.map(question => {
@@ -468,18 +533,25 @@ const SettingsPage = () => {
                           gradient={cardGradient}
                           style={style}
                           tone={tone}
-                          onToggleFavorite={() => {}}
+                          onToggleFavorite={() => {
+                            // Liking a hidden question brings it back, the same as in the feed.
+                            unhideQuestion(question._id);
+                            addLikedQuestion(question._id);
+                            toast.success("Unhidden and added to Liked");
+                          }}
                           onToggleHidden={() => unhideQuestion(question._id)}
-                          onHideStyle={(styleId) => handleToggleStyle(styleId)}
-                          onHideTone={(toneId) => handleToggleTone(toneId)}
+                          onHideStyle={(styleId) => { if (!hiddenStyles?.includes(styleId)) addHiddenStyle(styleId); }}
+                          onHideTone={(toneId) => { if (!hiddenTones?.includes(toneId)) addHiddenTone(toneId); }}
                         />
                       </div>
                     );
                   })}
                 </div>
               </>
+            ) : hiddenQuestions.length > 0 && questionsToDisplay === undefined ? (
+              <p role="status" className="dark:text-white text-black">Loading your hidden questions…</p>
             ) : (
-              <p className="dark:text-white/70 text-black/70">You have no hidden questions.</p>
+              <p className="dark:text-white text-black">You have no hidden questions.</p>
             )}
           </CollapsibleSection>
 

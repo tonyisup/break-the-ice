@@ -25,7 +25,7 @@ export function SignInCTA({ bgGradient, title, featureHighlight }: SignInCTAProp
           </p>
         </div>
         <SignInButton mode="modal">
-          <Button className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-full py-6 text-lg font-bold shadow-lg transition-all hover:scale-105 hover:shadow-xl">
+          <Button className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-800 hover:to-purple-800 text-white rounded-full py-6 text-lg font-bold shadow-lg transition-all hover:scale-105 hover:shadow-xl">
             Sign In for Free
           </Button>
         </SignInButton>

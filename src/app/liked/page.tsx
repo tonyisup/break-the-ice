@@ -1,43 +1,35 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { convexErrorData } from "../../../convex/lib/errorData";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
 import { useMemo, useState, useEffect } from "react";
 import { useStorageContext } from "../../hooks/useStorageContext";
+import { useHideTaxonomy } from "../../hooks/useHideTaxonomy";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
-import { FilterControls } from "@/components/filter-controls/filter-controls";
+import { FeedFilterBar, useFilterBarState } from "@/components/filter-controls/FeedFilterBar";
 import { useFilter } from "@/hooks/useFilter";
-import { AddPersonalQuestionDialog } from "@/components/add-personal-question-dialog/AddPersonalQuestionDialog";
 import { ModernQuestionCard } from "@/components/modern-question-card/modern-question-card";
 import { CollapsibleSection } from "@/components/collapsible-section/CollapsibleSection";
 
-import { cn, isColorDark } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 import { Header } from "@/components/header";
 import { toast } from "sonner";
 import { SignInCTA } from "@/components/SignInCTA";
-import { Button } from "@/components/ui/button";
 import { useAuth, useClerk } from "@clerk/clerk-react";
 
 function LikedQuestionsPageContent() {
   const { isSignedIn } = useAuth();
   const { openSignIn } = useClerk();
   const { effectiveTheme } = useTheme();
+  const { hideStyle, hideTone } = useHideTaxonomy();
   const [searchText, setSearchText] = useState("");
-  const { likedQuestions, likedLimit, addLikedQuestion, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone } = useStorageContext();
-  const makeQuestionPublic = useMutation(api.core.questions.makeQuestionPublic);
+  const { likedQuestions, likedLimit, addLikedQuestion, removeLikedQuestion, setLikedQuestions, clearLikedQuestions, hiddenQuestions, addHiddenQuestion, removeHiddenQuestion, addHiddenStyle, addHiddenTone, savedListsLoading } = useStorageContext();
   const [isCleaningUp, setIsCleaningUp] = useState(false);
-  const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
-  const [selectedTones, setSelectedTones] = useState<string[]>([]);
-  const [isAddPersonalQuestionDialogOpen, setIsAddPersonalQuestionDialogOpen] = useState(false);
 
-  const [isPersonalOpen, setIsPersonalOpen] = useState(true);
   const [isLikedOpen, setIsLikedOpen] = useState(true);
 
-  // Filter out invalid question IDs to prevent errors
-  const myQuestions = useQuery(api.core.questions.getCustomQuestions, {});
 
 
   const validLikedQuestions = useMemo(() => {
@@ -52,12 +44,9 @@ function LikedQuestionsPageContent() {
   const styles = useQuery(api.core.styles.getStyles, {});
   const tones = useQuery(api.core.tones.getTones, {});
 
-  const filteredQuestions = useFilter<Doc<"questions">>(
-    questions ?? [],
-    searchText,
-    selectedStyles,
-    selectedTones
-  );
+  const topics = useQuery(api.core.topics.getTopics, {});
+  const filterBar = useFilterBarState(styles, tones, topics);
+  const filteredQuestions = useFilter<Doc<"questions">>(questions ?? [], searchText, filterBar.choice);
 
   // Build style/tone lookup maps for card rendering
   const stylesMap = useMemo(() => {
@@ -92,7 +81,8 @@ function LikedQuestionsPageContent() {
       if (validQuestions.length !== likedQuestions.length) {
         console.log("Cleaning up invalid question IDs from localStorage");
         setIsCleaningUp(true);
-        clearLikedQuestions();
+        // Drop only the bad entries; the rest of the list is kept.
+        setLikedQuestions(validQuestions);
         // Reset cleanup flag after a short delay
         setTimeout(() => setIsCleaningUp(false), 100);
       }
@@ -100,7 +90,7 @@ function LikedQuestionsPageContent() {
       console.error("Error cleaning up invalid question IDs:", error);
       setIsCleaningUp(false);
     }
-  }, [likedQuestions, clearLikedQuestions, isCleaningUp]);
+  }, [likedQuestions, setLikedQuestions, isCleaningUp]);
 
   // Remove questions that no longer exist in the database
   useEffect(() => {
@@ -115,7 +105,7 @@ function LikedQuestionsPageContent() {
           console.log("Removing deleted questions from likes");
           setIsCleaningUp(true);
           setLikedQuestions(validIds);
-          toast.success("Cleaned up deleted questions from your favorites");
+          toast.success("Removed deleted questions from Liked");
           // Reset cleanup flag after a short delay
           setTimeout(() => setIsCleaningUp(false), 100);
         }
@@ -139,21 +129,16 @@ function LikedQuestionsPageContent() {
     const isLiked = likedQuestions.includes(questionId);
     if (isLiked) {
       removeLikedQuestion(questionId);
-      toast.success("Removed from favorites");
+      toast.success("Removed from Liked", {
+        action: { label: "Undo", onClick: () => addLikedQuestion(questionId) },
+      });
     } else {
       // If it was hidden, remove it from hidden
       if (hiddenQuestions.includes(questionId)) {
         removeHiddenQuestion(questionId);
       }
       addLikedQuestion(questionId);
-      toast.success("Added to favorites!", {
-        action: {
-          label: "Open liked",
-          onClick: () => {
-            window.location.href = "/liked";
-          },
-        },
-      });
+      toast.success("Added to Liked");
     }
   };
 
@@ -165,11 +150,20 @@ function LikedQuestionsPageContent() {
         toast.success("Question unhidden");
       } else {
         // If it was liked, remove it from favorites
-        if (likedQuestions.includes(questionId)) {
+        const wasLiked = likedQuestions.includes(questionId);
+        if (wasLiked) {
           removeLikedQuestion(questionId);
         }
         addHiddenQuestion(questionId);
-        toast.success("Question hidden");
+        toast.success(wasLiked ? "Question hidden and removed from Liked" : "Question hidden", {
+          action: {
+            label: "Undo",
+            onClick: () => {
+              removeHiddenQuestion(questionId);
+              if (wasLiked) addLikedQuestion(questionId);
+            },
+          },
+        });
       }
     } catch (error) {
       console.error("Error hiding question:", error);
@@ -177,41 +171,18 @@ function LikedQuestionsPageContent() {
     }
   };
 
-  const handleMakePublic = async (questionId: Id<"questions">) => {
-    try {
-      await makeQuestionPublic({ questionId });
-      toast.success("Question submitted for review!");
-    } catch (error) {
-      console.error("Error making question public:", error);
-      const dataMessage = convexErrorData(error)?.message;
-      toast.error(typeof dataMessage === "string" ? dataMessage : "Failed to make question public.");
-    }
-  };
-
   const handleClearLikes = () => {
+    if (!window.confirm(`Remove all ${likedQuestions.length} liked questions? This can't be undone.`)) return;
     setSearchText("");
     toast.success("Likes cleared");
     clearLikedQuestions();
-  };
-
-  const deletePersonalQuestion = useMutation(api.core.questions.deletePersonalQuestion);
-
-  const handleDeletePersonalQuestion = async (questionId: Id<"questions">) => {
-    try {
-      await deletePersonalQuestion({ questionId });
-      toast.success("Question deleted");
-    } catch (error) {
-      console.error("Error deleting question:", error);
-      const dataMessage = convexErrorData(error)?.message;
-      toast.error(typeof dataMessage === "string" ? dataMessage : "Failed to delete question.");
-    }
   };
 
   const gradientLight = ["#667EEA", "#A064DE"];
   const gradient = ["#3B2554", "#262D54"];
   const currentGradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
 
-  const renderCard = (question: Doc<"questions">, onDelete?: () => void) => {
+  const renderCard = (question: Doc<"questions">) => {
     const style = stylesMap.get(question.styleId || (question.style as string) || "");
     const tone = tonesMap.get(question.toneId || (question.tone as string) || "");
     const styleColor = style?.color || "#667EEA";
@@ -230,9 +201,8 @@ function LikedQuestionsPageContent() {
           tone={tone}
           onToggleFavorite={() => handleToggleLike(question._id)}
           onToggleHidden={() => toggleHide(question._id)}
-          onHideStyle={(styleId) => addHiddenStyle(styleId)}
-          onHideTone={(toneId) => addHiddenTone(toneId)}
-          onDelete={onDelete}
+          onHideStyle={hideStyle}
+          onHideTone={hideTone}
         />
       </div>
     );
@@ -247,55 +217,34 @@ function LikedQuestionsPageContent() {
     >
       <Header />
 
-      <AddPersonalQuestionDialog
-        isOpen={isAddPersonalQuestionDialogOpen}
-        onOpenChange={setIsAddPersonalQuestionDialogOpen}
-      />
-
-      <div className="container mx-auto p-4 pt-24 space-y-8">
-        {/* Personal Questions Section */}
-        <div>
-          <div className="flex justify-center items-center mb-4">
-            {isSignedIn ? (
-              <Button onClick={() => setIsAddPersonalQuestionDialogOpen(true)}>Add Question</Button>
-            ) : (
-              <SignInCTA
-                bgGradient={currentGradient}
-                title={likedQuestions.length >= (Number(import.meta.env.VITE_MAX_ANON_LIKED) || 20) ? "Liked limit reached" : "Want more features?"}
-                featureHighlight={{
-                  pre: "Sign in to",
-                  highlight: "add your own questions",
-                  post: "and remove the limit on likes",
-                }}
-              />
-            )}
+      <div className="container mx-auto p-4 pt-[calc(var(--header-h,4rem)+1.5rem)] space-y-8">
+        <h1 className="text-2xl font-bold text-white">Liked questions</h1>
+        {!isSignedIn && likedQuestions.length >= likedLimit && (
+          <div className="flex justify-center items-center">
+            <SignInCTA
+              bgGradient={currentGradient}
+              title="Liked limit reached"
+              featureHighlight={{
+                pre: "Sign in to",
+                highlight: "remove the limit on likes",
+                post: "and add your own questions",
+              }}
+            />
           </div>
-
-          {myQuestions && myQuestions.length > 0 && (
-            <CollapsibleSection
-              title="My Personal Stash"
-              count={myQuestions.length}
-              isOpen={isPersonalOpen}
-              onOpenChange={setIsPersonalOpen}
-            >
-              <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                {myQuestions.map((question) => (
-                  <div key={question._id}>
-                    {renderCard(question, () => { void handleDeletePersonalQuestion(question._id); })}
-                  </div>
-                ))}
-              </div>
-            </CollapsibleSection>
-          )}
-        </div>
+        )}
 
         {/* Liked Questions Section */}
-        {questions && questions.length === 0 ? (
+        {questions === undefined || savedListsLoading ? (
+          <div className="flex justify-center py-12" role="status">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" aria-hidden="true"></div>
+            <span className="sr-only">Loading liked questions…</span>
+          </div>
+        ) : questions.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-500 dark:text-gray-400 text-lg">You haven't liked any questions yet.</p>
+            <p className="inline-block rounded-xl bg-black/50 px-4 py-2 text-white text-lg">You haven't liked any questions yet.</p><br />
             <Link
-              to="/"
-              className={cn(isColorDark(gradient[0]) ? "bg-white/20 dark:bg-white/20" : "bg-black/20 dark:bg-black/20", "inline-block mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors text-white")}
+              to="/app"
+              className={cn("bg-black/50", "inline-flex min-h-11 items-center mt-4 font-bold py-2 px-4 rounded-lg backdrop-blur-sm hover:bg-black/60 transition-colors text-white")}
             >
               Start Exploring
             </Link>
@@ -307,36 +256,43 @@ function LikedQuestionsPageContent() {
                 <input
                   type="text"
                   placeholder="Search questions"
-                  className="flex-grow pl-2 rounded-md border border-gray-300 dark:border-gray-700 h-10"
+                  aria-label="Search liked questions"
+                  className="flex-grow min-w-0 h-11 px-3 rounded-md border border-gray-300 bg-white text-gray-900 placeholder:text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-400"
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                 />
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={handleClearLikes}
-                    className="px-4 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
+                    className="min-h-11 px-4 rounded-md border bg-gray-500 hover:bg-gray-600 text-white border-gray-300 dark:border-gray-700"
                   >
                     Clear likes
                   </button>
                 </div>
               </div>
             </div>
-            <FilterControls
-              questions={questions || []}
-              styles={styles || []}
-              tones={tones || []}
-              selectedStyles={selectedStyles}
-              onSelectedStylesChange={setSelectedStyles}
-              selectedTones={selectedTones}
-              onSelectedTonesChange={setSelectedTones}
-            />
+            {/* The same Style, Tone and Topic bar as the feed. */}
+            <FeedFilterBar {...filterBar.barProps} sticky={false} />
 
             <CollapsibleSection
               title="Liked Questions"
-              count={`${likedQuestions.length}/${likedLimit}`}
+              count={Number.isFinite(likedLimit) ? `${likedQuestions.length}/${likedLimit}` : likedQuestions.length}
               isOpen={isLikedOpen}
               onOpenChange={setIsLikedOpen}
             >
+              {filteredQuestions.length === 0 && (
+                <div className="py-6 text-center">
+                  <p className="dark:text-white text-black">No liked questions match your search or filters.</p>
+                  <button
+                    type="button"
+                    className="mt-3 min-h-11 rounded-md bg-white/30 px-4 font-semibold dark:text-white text-black hover:bg-white/40"
+                    onClick={() => { setSearchText(""); filterBar.clear(); }}
+                  >
+                    Clear search and filters
+                  </button>
+                </div>
+              )}
               <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 {filteredQuestions.map((question) => (
                   <div key={question._id}>
@@ -346,6 +302,15 @@ function LikedQuestionsPageContent() {
               </div>
             </CollapsibleSection>
           </div>
+        )}
+        {!isSignedIn && likedQuestions.length < likedLimit && (
+          <p className="mx-auto w-fit rounded-xl bg-black/50 px-4 py-2 text-center text-sm text-white">
+            Likes are saved on this device.{" "}
+            <button type="button" onClick={() => openSignIn()} className="min-h-11 font-semibold underline underline-offset-4">
+              Sign in
+            </button>{" "}
+            to keep them everywhere and add your own questions.
+          </p>
         )}
       </div>
     </div>
@@ -360,7 +325,7 @@ export default function LikedQuestionsPage() {
   };
 
   return (
-    <ErrorBoundary onReset={handleResetLikes}>
+    <ErrorBoundary onReset={handleResetLikes} resetLabel="Reset Likes & Continue">
       <LikedQuestionsPageContent />
     </ErrorBoundary>
   );

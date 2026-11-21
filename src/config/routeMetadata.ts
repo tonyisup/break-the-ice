@@ -45,6 +45,7 @@ export const publicRouteMetadata: Record<string, PageMetadata> = {
 export const privateRoutePrefixes = [
   "/app",
   "/liked",
+  "/my-questions",
   "/settings",
   "/history",
   "/unsubscribe",
@@ -89,8 +90,19 @@ export const getRouteMetadata = (pathname: string): PageMetadata => {
   }
 
   if (matchesPrivateRoute(pathname)) {
+    // Each app page names itself in the tab, so a row of tabs can be told apart.
+    const pageNames: Record<string, string> = {
+      "/app": "Questions",
+      "/liked": "Liked",
+      "/my-questions": "My questions",
+      "/history": "History",
+      "/settings": "Settings",
+    };
+    const pageName = Object.entries(pageNames).find(
+      ([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    )?.[1];
     return {
-      title: `App | ${siteConfig.name}`,
+      title: `${pageName ?? "App"} | ${siteConfig.name}`,
       description: "Your Break the Ice(berg) question library and settings.",
       noIndex: true,
     };

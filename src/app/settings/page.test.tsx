@@ -164,8 +164,8 @@ describe("SettingsPage", () => {
     expect(setHiddenTones).not.toHaveBeenCalled();
     // The listed style shows as hidden and the listed tone as not, and the counts take in only
     // what the page lists.
-    expect(screen.getByRole("button", { name: "Toggle style Reflective" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: "Toggle tone Warm" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("switch", { name: "Show Reflective questions" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("switch", { name: "Show Warm questions" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByTestId("counts-Manage Styles").textContent).toBe("0 shown, 1 hidden");
     expect(screen.getByTestId("counts-Manage Tones").textContent).toBe("1 shown, 0 hidden");
   });

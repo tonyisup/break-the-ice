@@ -132,7 +132,8 @@ export default function ContactPage() {
 
           <Button
             type="submit"
-            className="w-full sm:w-auto"
+            variant="opaque"
+            className="min-h-11 w-full sm:w-auto"
             disabled={isSubmitting || !message.trim()}
           >
             {isSubmitting ? (

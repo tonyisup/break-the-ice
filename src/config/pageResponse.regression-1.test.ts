@@ -50,7 +50,7 @@ describe("initial page HTML metadata", () => {
     const response = readResponseMetadata("/app");
 
     expect(response.statusCode).toBe(200);
-    expect(response.title).toBe("App | Break the Ice(berg)");
+    expect(response.title).toBe("Questions | Break the Ice(berg)");
     expect(response.canonical).toBe("https://breaktheiceberg.com/app");
     expect(response.robots).toBe("noindex, nofollow");
     expect(response.ogUrl).toBe(response.canonical);

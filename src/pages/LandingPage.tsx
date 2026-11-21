@@ -161,9 +161,9 @@ const LandingHeader = () => (
         Break the Ice
       </Link>
       <nav className="hidden items-center gap-7 text-sm font-semibold md:flex" aria-label="Primary navigation">
-        <Link className="transition-opacity hover:opacity-55" to="/app">Browse questions</Link>
+        <Link className="transition-opacity hover:opacity-55" to="/about">About</Link>
       </nav>
-      <Button asChild className="h-10 bg-black/10 px-3 text-xs dark:bg-white/10 sm:px-4 sm:text-sm">
+      <Button asChild className="h-11 bg-black/10 px-3 text-xs dark:bg-white/10 sm:px-4 sm:text-sm">
         <Link to="/app">Open a question <ArrowRight aria-hidden="true" className="hidden sm:block" /></Link>
       </Button>
     </div>

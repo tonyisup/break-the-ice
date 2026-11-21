@@ -1,5 +1,5 @@
 import { useQuery, useConvex, useMutation, useAction } from "convex/react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
@@ -9,9 +9,10 @@ import { useTheme } from "@/hooks/useTheme";
 import { useStorageContext } from "@/hooks/useStorageContext";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, SearchX, Sparkles } from "lucide-react";
+import { ArrowUp, SearchX, Sparkles, X } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
-import { AnchorHeader } from "@/components/filter-controls/AnchorHeader";
+import { HiddenCardNotice } from "@/components/hidden-card-notice/HiddenCardNotice";
+import { FeedFilterBar, type FeedFilterKey, type FeedFilterOption } from "@/components/filter-controls/FeedFilterBar";
 import type { ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { useAuth } from "@clerk/clerk-react";
@@ -64,6 +65,7 @@ export default function InfiniteScrollPage() {
   const user = useAuth();
   const generateAIQuestions = useAction(api.core.ai.generateAIQuestionForFeed);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const anchoredStyleParam = searchParams.get("style");
   const anchoredToneParam = searchParams.get("tone");
@@ -81,6 +83,8 @@ export default function InfiniteScrollPage() {
     hiddenTones,
     addHiddenStyle,
     addHiddenTone,
+    removeHiddenStyle,
+    removeHiddenTone,
     addQuestionToHistory,
     sessionId: localSessionId,
   } = useStorageContext();
@@ -93,7 +97,14 @@ export default function InfiniteScrollPage() {
   const [showTopButton, setShowTopButton] = useState(false);
   const [showAuthCTA, setShowAuthCTA] = useState(false);
   const [showAiLimitNotice, setShowAiLimitNotice] = useState(false);
+  // Why new questions stopped coming (daily budget spent, too many requests), kept on the
+  // page after the toast is gone so the end of the feed explains itself.
+  const [pausedNotice, setPausedNotice] = useState<string | null>(null);
+  const [takeoverDismissed, setTakeoverDismissed] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
+  // Questions hidden a moment ago: each shows an Undo notice in place of its card until its
+  // countdown ends, then leaves the feed. The value records whether the hide also unliked it.
+  const [pendingHides, setPendingHides] = useState<Record<string, { wasLiked: boolean }>>({});
   const currentUser = useQuery(api.core.users.getCurrentUser, {});
   // Fetch all styles and tones for card rendering
   const allStyles = useQuery(api.core.styles.getStyles, {});
@@ -457,9 +468,11 @@ export default function InfiniteScrollPage() {
               // and stop asking for more, including anchor top-ups on later pages.
               aiPausedRef.current = true;
               if (totalShortfall > 0) setHasMore(false);
+              setPausedNotice(typeof errorDataMessage === "string" ? errorDataMessage : ERROR_MESSAGES.AI_BUDGET_PAUSED);
               toast.info(typeof errorDataMessage === "string" ? errorDataMessage : ERROR_MESSAGES.AI_BUDGET_PAUSED);
             } else if (dbQuestions.length === 0) {
-              toast.error("Failed to generate more questions. Scroll to retry.");
+              if (isFirstPull) setLoadError("Couldn't load questions.");
+              else toast.error("Couldn't load more questions. Scroll to retry.");
             }
           }
         } else if (totalShortfall > 0) {
@@ -665,13 +678,15 @@ export default function InfiniteScrollPage() {
             // more. The block below still shows what the database had on the first pull.
             aiPausedRef.current = true;
             setHasMore(false);
+            setPausedNotice(typeof errorDataMessage === "string" ? errorDataMessage : ERROR_MESSAGES.AI_BUDGET_PAUSED);
             toast.info(typeof errorDataMessage === "string" ? errorDataMessage : ERROR_MESSAGES.AI_BUDGET_PAUSED);
           } else if (dbQuestions.length === 0) {
             // Generic AI failure and no DB questions — reset seen IDs so
             // the next scroll attempt can re-sample the pool instead of
             // permanently stopping.
             setSeenIds(new Set());
-            toast.error("Failed to generate more questions. Scroll to retry.");
+            if (isFirstPull) setLoadError("Couldn't load questions.");
+            else toast.error("Couldn't load more questions. Scroll to retry.");
           }
 
           // If AI failed and it was first pull, show what we have from DB
@@ -696,9 +711,21 @@ export default function InfiniteScrollPage() {
       console.error("Error fetching questions:", error);
       if (currentRequestId !== requestIdRef.current) return;
 
-      const errorMessage = error instanceof Error ? error.message : "Failed to load more questions.";
+      // The raw error is in the console; people get a plain message and a way to retry.
+      const errorMessage = "Couldn't load more questions. Check your connection and try again.";
       setLoadError(errorMessage);
-      toast.error(errorMessage);
+      toast.error(errorMessage, {
+        action: {
+          label: "Retry",
+          onClick: () => {
+            setLoadError(null);
+            // An empty feed stopped asking for more when the load failed; turning that back
+            // on starts the first load again. Otherwise ask for the next page.
+            if (questionsRef.current.length === 0) setHasMore(true);
+            else void loadMoreQuestionsRef.current("button");
+          },
+        },
+      });
 
       // Stop the infinite loop if we can't get any questions at all
       if (questionsRef.current.length === 0) {
@@ -813,33 +840,34 @@ export default function InfiniteScrollPage() {
       const isLiked = likedQuestions.includes(questionId);
       if (isLiked) {
         removeLikedQuestion(questionId);
-        toast.success("Removed from favorites");
+        toast.success("Removed from Liked");
       } else {
         // If it was hidden, remove it from hidden
         if (hiddenQuestions.includes(questionId)) {
           removeHiddenQuestion(questionId);
         }
         addLikedQuestion(questionId);
-        await recordAnalytics({
+        // Counting the like is separate from saving it: a failure there is not the person's problem.
+        void recordAnalytics({
           questionId,
           event: "liked",
           viewDuration: 0, // Not tracking duration in list view accurately
           // The local session id, not Clerk's: signed-out visitors have no Clerk session,
           // and an anonymous like only counts once per local session.
           sessionId: localSessionId || undefined,
-        });
-        toast.success("Added to favorites!", {
+        }).catch((error) => console.error("Error recording like:", error));
+        toast.success("Added to Liked", {
           action: {
             label: "Open liked",
             onClick: () => {
-              window.location.href = "/liked";
+              void navigate("/liked");
             },
           },
         });
       }
     } catch (error) {
       console.error("Error toggling like:", error);
-      toast.error("Failed to update favorites.");
+      toast.error("Couldn't update Liked. Please try again.");
     }
   };
 
@@ -851,7 +879,8 @@ export default function InfiniteScrollPage() {
         toast.success("Question unhidden");
       } else {
         // If it was liked, remove it from favorites
-        if (likedQuestions.includes(questionId)) {
+        const wasLiked = likedQuestions.includes(questionId);
+        if (wasLiked) {
           removeLikedQuestion(questionId);
         }
         addHiddenQuestion(questionId);
@@ -860,14 +889,8 @@ export default function InfiniteScrollPage() {
           event: "hidden",
           viewDuration: 0,
         });
-        toast.success("Question hidden", {
-          action: {
-            label: "Manage hidden",
-            onClick: () => {
-              window.location.href = "/settings?expand=hidden-questions";
-            },
-          },
-        });
+        // The card turns into a notice with Undo and a countdown, so no toast is needed.
+        setPendingHides((previous) => ({ ...previous, [questionId]: { wasLiked } }));
       }
     } catch (error) {
       console.error("Error hiding question:", error);
@@ -875,24 +898,40 @@ export default function InfiniteScrollPage() {
     }
   }
 
+  const forgetPendingHide = (questionId: Id<"questions">) =>
+    setPendingHides((previous) => {
+      const { [questionId]: _done, ...rest } = previous;
+      return rest;
+    });
+  // Undo puts back both changes: the question is shown again, and liked again if it was.
+  const undoHide = (questionId: Id<"questions">) => {
+    const wasLiked = pendingHides[questionId]?.wasLiked;
+    removeHiddenQuestion(questionId);
+    if (wasLiked) addLikedQuestion(questionId);
+    forgetPendingHide(questionId);
+  };
+  // The countdown ended: the question stays hidden and its card leaves the feed.
+  const finishHide = (questionId: Id<"questions">) => {
+    setQuestions((previous) => previous.filter((question) => question._id !== questionId));
+    forgetPendingHide(questionId);
+  };
+
+  // Hiding a style or tone takes its cards off the screen and leaves the rest where they
+  // are, so the reader keeps their place. Undo shows that style or tone again from here on.
   const handleHideStyle = (styleId: Id<"styles">) => {
     addHiddenStyle(styleId);
-    // Reset list as style might change or be hidden
-    setQuestions([]);
-    setSeenIds(new Set());
-    setHasMore(true);
-    setShowAuthCTA(false);
-    setShowAiLimitNotice(false);
-    // We don't manually trigger load here, the useEffect for question.length=0 or style change will handle it
+    setQuestions((previous) => previous.filter((question) => stylesMap.get(question.styleId || question.style || "")?._id !== styleId));
+    toast.success("Style hidden", {
+      action: { label: "Undo", onClick: () => removeHiddenStyle(styleId) },
+    });
   }
 
   const handleHideTone = (toneId: Id<"tones">) => {
     addHiddenTone(toneId);
-    setQuestions([]);
-    setSeenIds(new Set());
-    setHasMore(true);
-    setShowAuthCTA(false);
-    setShowAiLimitNotice(false);
+    setQuestions((previous) => previous.filter((question) => tonesMap.get(question.toneId || question.tone || "")?._id !== toneId));
+    toast.success("Tone hidden", {
+      action: { label: "Undo", onClick: () => removeHiddenTone(toneId) },
+    });
   }
 
   const handleRemix = (originalQuestion: Doc<"questions">, newQuestion: Doc<"questions">) => {
@@ -926,11 +965,39 @@ export default function InfiniteScrollPage() {
     setSearchParams(newParams);
   };
 
-  const removeAnchor = (type: "style" | "tone" | "topic") => {
+  const setFilter = (key: FeedFilterKey, slug: string | null) => {
     const newParams = new URLSearchParams(searchParams);
-    newParams.delete(type);
+    if (slug) newParams.set(key, slug);
+    else newParams.delete(key);
     setSearchParams(newParams);
   };
+
+  const clearFilters = () => {
+    const newParams = new URLSearchParams(searchParams);
+    ["style", "tone", "topic"].forEach((key) => newParams.delete(key));
+    setSearchParams(newParams);
+  };
+
+  // What the filter bar offers. A hidden style or tone is left out, unless it is the one
+  // already chosen (from a shared link, say), so the pill can still name it.
+  const filterStyles = useMemo<FeedFilterOption[]>(
+    () => (allStyles ?? [])
+      .filter((style) => !hiddenStyles?.includes(style._id) || style._id === anchoredStyleId)
+      .map((style) => ({ _id: style._id, slug: style.slug ?? style.id, name: style.name, description: style.description, icon: style.icon, color: style.color })),
+    [allStyles, hiddenStyles, anchoredStyleId],
+  );
+  const filterTones = useMemo<FeedFilterOption[]>(
+    () => (allTones ?? [])
+      .filter((tone) => !hiddenTones?.includes(tone._id) || tone._id === anchoredToneId)
+      .map((tone) => ({ _id: tone._id, slug: tone.slug ?? tone.id, name: tone.name, description: tone.description, icon: tone.icon, color: tone.color })),
+    [allTones, hiddenTones, anchoredToneId],
+  );
+  const filterTopics = useMemo<FeedFilterOption[]>(
+    () => (allTopics ?? []).map((topic) => ({ _id: topic._id, slug: topic.slug ?? topic.id, name: topic.name, description: topic.description, icon: topic.icon, color: topic.color })),
+    [allTopics],
+  );
+
+  const hasAnchorFilters = !!(anchoredStyleParam || anchoredToneParam || anchoredTopicParam);
 
   // Smooth gradient transition logic
   const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
@@ -1078,28 +1145,30 @@ export default function InfiniteScrollPage() {
       {/* Pad only by the fixed header's measured height (--header-h, set by Header) so the
           anchor bar sits right under it; the space above the first card lives on the list below. */}
       <main className="z-10 flex-1 flex flex-col pb-32 pt-[var(--header-h,4rem)]">
-        <AnchorHeader
-          styleId={anchoredStyleId}
-          toneId={anchoredToneId}
-          topicId={anchoredTopicId}
-          onRemoveStyle={() => removeAnchor("style")}
-          onRemoveTone={() => removeAnchor("tone")}
-          onRemoveTopic={() => removeAnchor("topic")}
+        <h1 className="sr-only">Questions</h1>
+        <FeedFilterBar
+          styles={filterStyles}
+          tones={filterTones}
+          topics={filterTopics}
+          selectedStyleId={anchoredStyleId}
+          selectedToneId={anchoredToneId}
+          selectedTopicId={anchoredTopicId}
+          onChange={setFilter}
+          onClearAll={clearFilters}
         />
         <div
           className={cn(
-            "flex flex-col gap-6 px-4 max-w-3xl mx-auto w-full",
-            anchoredStyleId || anchoredToneId || anchoredTopicId ? "pt-6" : "pt-16 md:pt-14"
+            "flex flex-col gap-6 px-4 pt-6 max-w-3xl mx-auto w-full"
           )}
         >
           {(allStylesBlocked || allTonesBlocked) && (
-            <div className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-4 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20">
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-4 bg-black/50 backdrop-blur-md rounded-2xl border border-white/20">
               <SearchX className="w-12 h-12 text-white/80" />
               <div className="space-y-2">
                 <h3 className="text-xl font-semibold text-white">
                   {allStylesBlocked ? "All Styles Hidden" : "All Tones Hidden"}
                 </h3>
-                <p className="text-white/70 max-w-md">
+                <p className="text-white max-w-md">
                   {allStylesBlocked
                     ? "You have hidden all available question styles. Please unhide some styles in the settings to see more questions."
                     : "You have hidden all available tones. Please unhide some tones in the settings to see more questions."}
@@ -1114,8 +1183,10 @@ export default function InfiniteScrollPage() {
             </div>
           )}
 
-          {!allStylesBlocked && !allTonesBlocked && questions.length === 0 && !hasMore && !isLoading && (
-            <div className="flex flex-col items-center justify-center py-20 px-4 text-center space-y-6 bg-white/10 backdrop-blur-md rounded-[30px] border border-white/20">
+          {/* A sign-in prompt or limit notice explains an empty feed on its own; this panel
+              would only contradict it. */}
+          {!allStylesBlocked && !allTonesBlocked && questions.length === 0 && !hasMore && !isLoading && (loadError || (!showAuthCTA && !showAiLimitNotice && !pausedNotice)) && (
+            <div className="flex flex-col items-center justify-center py-20 px-4 text-center space-y-6 bg-black/50 backdrop-blur-md rounded-[30px] border border-white/20">
               <div className="bg-white/20 p-6 rounded-full">
                 <SearchX className="w-12 h-12 text-white" />
               </div>
@@ -1123,10 +1194,12 @@ export default function InfiniteScrollPage() {
                 <h3 className="text-2xl font-bold text-white uppercase italic">
                   {loadError ? "Couldn’t load questions" : "No matching questions"}
                 </h3>
-                <p className="text-white/70 max-w-md mx-auto text-lg">
+                <p className="text-white max-w-md mx-auto text-lg">
                   {loadError
-                    ? "Please try again."
-                    : "Try changing your style, tone, or topic filters."}
+                    ? loadError
+                    : hasAnchorFilters
+                      ? "Nothing matches your style, tone, or topic filters."
+                      : "There's nothing new to show right now."}
                 </p>
               </div>
               <Button
@@ -1134,12 +1207,18 @@ export default function InfiniteScrollPage() {
                 size="lg"
                 className="rounded-full px-10 font-bold uppercase italic tracking-wider transition-all hover:scale-105"
                 onClick={() => {
+                  // Without an error, clearing the filters changes the feed, which reloads it.
+                  if (!loadError && hasAnchorFilters) {
+                    const newParams = new URLSearchParams(searchParams);
+                    ["style", "tone", "topic"].forEach((key) => newParams.delete(key));
+                    setSearchParams(newParams);
+                  }
                   setHasMore(true);
                   setLoadError(null);
                   // The Effect will trigger loadMoreQuestions automatically
                 }}
               >
-                {loadError ? "Try Again" : "Reset Filters"}
+                {!loadError && hasAnchorFilters ? "Clear Filters" : "Try Again"}
               </Button>
             </div>
           )}
@@ -1160,6 +1239,13 @@ export default function InfiniteScrollPage() {
                   data-question-id={question._id}
                   className="w-full"
                 >
+                  {pendingHides[question._id] ? (
+                    <HiddenCardNotice
+                      wasLiked={pendingHides[question._id].wasLiked}
+                      onUndo={() => undoHide(question._id)}
+                      onExpire={() => finishHide(question._id)}
+                    />
+                  ) : (
                   <ModernQuestionCard
                     isGenerating={false}
                     question={question}
@@ -1179,6 +1265,7 @@ export default function InfiniteScrollPage() {
                     anchoredToneId={anchoredToneId}
                     anchoredTopicId={anchoredTopicId}
                   />
+                  )}
                 </div>
 
                 {/* Insert Newsletter Card after the 5th question (index 4) */}
@@ -1205,22 +1292,83 @@ export default function InfiniteScrollPage() {
             );
           })}
 
-          {isLoading && (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          {(isLoading || (!user.isLoaded && questions.length === 0)) && (
+            <div className="flex flex-col items-center gap-3 py-8" role="status">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" aria-hidden="true"></div>
+              <span className="rounded-full bg-black/50 px-3 py-1 text-sm font-medium text-white">
+                {questions.length === 0
+                  ? (user.isSignedIn ? "Finding questions… new ones can take a few seconds to write." : "Finding questions…")
+                  : "Loading more questions…"}
+              </span>
+            </div>
+          )}
+
+          {loadError && questions.length > 0 && !isLoading && (
+            <div role="alert" className="mx-auto flex w-full max-w-md flex-col items-center gap-3 rounded-2xl bg-black/60 px-5 py-4 text-center text-white">
+              <p>{loadError}</p>
+              <Button
+                className="min-h-11 border border-white/50 px-6 text-white"
+                onClick={() => {
+                  setLoadError(null);
+                  void loadMoreQuestions("button");
+                }}
+              >
+                Try again
+              </Button>
             </div>
           )}
 
           {showAuthCTA && (
             <SignInCTA
               bgGradient={bgGradient}
-              title="Want more questions?"
+              title={hasAnchorFilters ? "That's every question for these filters" : "Want more questions?"}
               featureHighlight={{
                 pre: "Sign in to get",
-                highlight: `${import.meta.env.VITE_MAX_FREE_AIGEN} free AI generations`,
+                highlight: import.meta.env.VITE_MAX_FREE_AIGEN
+                  ? `${import.meta.env.VITE_MAX_FREE_AIGEN} free AI generations`
+                  : "free AI generations",
                 post: "every month!"
               }}
             />
+          )}
+
+          {pausedNotice && !hasMore && !isLoading && (
+            <AiLimitNotice title="New questions are paused" description={`${pausedNotice} The questions already here are still yours to browse.`} />
+          )}
+
+          {/* Whoever reaches the end of what can be shown (a guest, or someone whose new
+              questions have run out or are paused) can go round the library again. */}
+          {(showAuthCTA || showAiLimitNotice || (pausedNotice && !hasMore)) && !isLoading && !hasAnchorFilters && questions.length > 0 && (
+            <div className="flex justify-center">
+              <Button
+                className="min-h-11 border border-white/50 bg-black/50 px-6 text-white"
+                onClick={() => {
+                  setSeenIds(new Set());
+                  setQuestions([]);
+                  setShowAuthCTA(false);
+                  setShowAiLimitNotice(false);
+                  setHasMore(true);
+                  window.scrollTo({ top: 0 });
+                }}
+              >
+                Start again from the top
+              </Button>
+            </div>
+          )}
+
+          {(showAuthCTA || showAiLimitNotice) && hasAnchorFilters && (
+            <div className="flex justify-center">
+              <Button
+                className="min-h-11 border border-white/50 bg-black/50 px-6 text-white"
+                onClick={() => {
+                  const newParams = new URLSearchParams(searchParams);
+                  ["style", "tone", "topic"].forEach((key) => newParams.delete(key));
+                  setSearchParams(newParams);
+                }}
+              >
+                Clear filters
+              </Button>
+            </div>
           )}
 
           {showAiLimitNotice && (
@@ -1230,9 +1378,10 @@ export default function InfiniteScrollPage() {
             />
           )}
 
-          {hasMore && !showAuthCTA && !showAiLimitNotice && (questions.length > 0 || !isLoading) && (
+          {hasMore && user.isLoaded && !showAuthCTA && !showAiLimitNotice && !loadError && (questions.length > 0 || !isLoading) && (
             <div className="flex justify-center py-8">
               <Button
+                className="min-h-11 border border-white/40 bg-black/40 px-6 text-white"
                 onClick={() => {
                   void loadMoreQuestions("button");
                 }}
@@ -1248,25 +1397,26 @@ export default function InfiniteScrollPage() {
         <Button
           onClick={scrollToTop}
           data-testid="scroll-to-top-button"
+          aria-label="Back to top"
           className={cn(
-            "fixed left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50 transition-all duration-300",
-            activeTakeoverTopics && activeTakeoverTopics.length > 0 ? "bottom-20" : "bottom-6"
+            "fixed left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50 transition-all duration-300 border border-white/40 bg-gray-900/85 text-white hover:bg-gray-900",
+            activeTakeoverTopics && activeTakeoverTopics.length > 0 && !takeoverDismissed ? "bottom-[calc(var(--bottom-nav-h,0px)+5rem)]" : "bottom-[calc(var(--bottom-nav-h,0px)+1.5rem)]"
           )}
         >
-          <ArrowUp className="w-6 h-6" />
+          <ArrowUp className="w-6 h-6" aria-hidden="true" />
         </Button>
       )}
 
-      {activeTakeoverTopics && activeTakeoverTopics.length > 0 && (
+      {activeTakeoverTopics && activeTakeoverTopics.length > 0 && !takeoverDismissed && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-50 text-white py-4 px-6 shadow-[0_-8px_30px_rgba(0,0,0,0.3)] flex items-center justify-center gap-6 animate-in slide-in-from-bottom duration-700 backdrop-blur-md border-t border-white/10"
+          className="fixed bottom-[var(--bottom-nav-h,0px)] left-0 right-0 z-40 text-white py-4 px-6 shadow-[0_-8px_30px_rgba(0,0,0,0.3)] flex items-center justify-center gap-6 animate-in slide-in-from-bottom duration-700 backdrop-blur-md border-t border-white/10"
           style={{
             background: activeTakeoverTopics.length === 1
               ? `${activeTakeoverTopics[0].color || '#9333ea'}F2`
               : `linear-gradient(90deg, ${activeTakeoverTopics[0].color || '#9333ea'}F2, ${activeTakeoverTopics[activeTakeoverTopics.length - 1].color || '#7c3aed'}F2)`
           }}
         >
-          <Sparkles className="size-6 text-yellow-300 fill-yellow-300 animate-pulse" />
+          <Sparkles className="size-6 text-yellow-300 fill-yellow-300 motion-safe:animate-pulse" aria-hidden="true" />
           <div className="flex items-center gap-4 font-black tracking-tighter uppercase text-xl italic">
             <div className="flex -space-x-3">
               {activeTakeoverTopics.map((t) => (
@@ -1279,7 +1429,15 @@ export default function InfiniteScrollPage() {
               {activeTakeoverTopics.map(t => t.name).join(" & ")} Takeover!
             </span>
           </div>
-          <Sparkles className="size-6 text-yellow-300 fill-yellow-300 animate-pulse" />
+          <Sparkles className="size-6 text-yellow-300 fill-yellow-300 motion-safe:animate-pulse" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => setTakeoverDismissed(true)}
+            aria-label="Dismiss this banner"
+            className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          >
+            <X className="size-5" aria-hidden="true" />
+          </button>
         </div>
       )}
 

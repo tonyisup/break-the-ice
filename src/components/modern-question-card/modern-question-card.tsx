@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Heart, Share2, ThumbsDown, TrashIcon } from '@/components/ui/icons/icons';
-import { Sparkles } from 'lucide-react';
+import { Info, Sparkles } from 'lucide-react';
 import { Doc, Id } from '../../../convex/_generated/dataModel';
 import { api } from '../../../convex/_generated/api';
 import { useQuery, useConvexAuth } from 'convex/react';
 import { Icon, IconComponent } from '../ui/icons/icon';
 import type { ItemDetails } from '../item-detail-drawer/item-detail-drawer';
 import { ItemDetailFace } from './item-detail-face';
-import { RemixQuestionDrawer } from '../remix-question-drawer/remix-question-drawer';
+import { RemixQuestionPanel } from '../remix-question-panel/remix-question-panel';
 import { useStorageContext } from '@/hooks/useStorageContext';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -21,7 +21,8 @@ interface ModernQuestionCardProps {
   style?: Doc<"styles"> | null;
   tone?: Doc<"tones"> | null;
   onToggleFavorite: () => void;
-  onToggleHidden: () => void;
+  /** Leave out where hiding makes no sense, such as a person's own questions. */
+  onToggleHidden?: () => void;
   onShare?: () => void;
   onHideStyle: (styleId: Id<"styles">) => void;
   onHideTone: (toneId: Id<"tones">) => void;
@@ -69,17 +70,34 @@ export function ModernQuestionCard({
   const [detailItem, setDetailItem] = useState<ItemDetails | null>(null);
   // The chip that turned the card over, so focus can go back to it.
   const flipTriggerRef = useRef<HTMLElement | null>(null);
-  const [isRemixDrawerOpen, setIsRemixDrawerOpen] = useState(false);
+  // What the back of the card is showing: a style, tone or topic, or the remix panel.
+  const [backMode, setBackMode] = useState<"detail" | "remix">("detail");
   const { isAuthenticated } = useConvexAuth();
+  const canRemix = isAuthenticated && !!style && !!tone;
 
-  const showDetails = (item: ItemDetails) => {
+  const rememberFlipTrigger = () => {
     const active = document.activeElement;
     flipTriggerRef.current =
       active instanceof HTMLElement && cardRef.current?.contains(active) ? active : null;
+  };
+  const showDetails = (item: ItemDetails) => {
+    rememberFlipTrigger();
     setDetailItem(item);
+    setBackMode("detail");
+    setIsFlipped(true);
+  };
+  const showRemix = () => {
+    rememberFlipTrigger();
+    setBackMode("remix");
     setIsFlipped(true);
   };
   const flipBack = () => setIsFlipped(false);
+  const requestSignInToRemix = () => {
+    // Clerk's global is there once it has loaded; without it the toast still says what to do.
+    const clerk = (window as { Clerk?: { openSignIn?: () => void } }).Clerk;
+    toast.info("Sign in to remix this question into your own.");
+    clerk?.openSignIn?.();
+  };
 
   // Focus can only return once the front is interactive again, so do it after the render.
   useEffect(() => {
@@ -167,7 +185,7 @@ export function ModernQuestionCard({
 
     try {
       if (typeof navigator.share === "function") {
-        await navigator.share({ title: 'Ice Breaker Question', text: question.text, url: shareUrl });
+        await navigator.share({ title: 'Ice Breaker Question', text: question.text ?? question.customText, url: shareUrl });
       } else {
         await navigator.clipboard.writeText(shareUrl);
         toast.success("Question link copied");
@@ -176,7 +194,13 @@ export function ModernQuestionCard({
       // User cancelled the share dialog or an error occurred
       if (error instanceof Error && error.name !== 'AbortError') {
         console.error('Error sharing:', error);
-        toast.error("Couldn’t share the question. Please try again.");
+        // Sharing failed for a reason other than the person cancelling: copy the link instead.
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          toast.success("Sharing didn't work, so the link was copied instead");
+        } catch {
+          toast.error("Couldn’t share the question. Copy this link instead:", { description: shareUrl, duration: 15000 });
+        }
       }
     }
   };
@@ -192,7 +216,7 @@ export function ModernQuestionCard({
         flipBack();
       }
     : undefined;
-  const showBack = isFlipped && !!question && !!detailItem;
+  const showBack = isFlipped && !!question && (backMode === "remix" ? canRemix : !!detailItem);
 
   return (
     <div
@@ -236,45 +260,48 @@ export function ModernQuestionCard({
                   onClickStyle={handleShowStyleDetails}
                   onClickTone={handleShowToneDetails}
                   onClickTopic={handleShowTopicDetails}
-                  onRemix={isAuthenticated ? () => setIsRemixDrawerOpen(true) : undefined}
+                  // Guests see Remix too; tapping it asks them to sign in.
+                  onRemix={canRemix ? showRemix : !isAuthenticated && style && tone ? requestSignInToRemix : undefined}
                   topic={topic}
                   imageUrl={imageUrl}
                   onDelete={onDelete}
                 />
-                {isAuthenticated && style && tone && (
-                  <RemixQuestionDrawer
-                    question={question}
-                    styleId={style._id}
-                    toneId={tone._id}
-                    isOpen={isRemixDrawerOpen}
-                    onOpenChange={setIsRemixDrawerOpen}
-                    onRemixed={onRemixed}
-                  />
-                )}
               </>
             )}
           </div>
         </div>
 
-        {/* Back: what the tapped style, tone or topic means. Both faces share one grid
-            cell, so the card is as tall as the taller face and neither side scrolls. */}
-        {question && detailItem && (
+        {/* Back: what the tapped style, tone or topic means, or the remix panel. Both faces
+            share one grid cell, so the card is as tall as the taller face and neither side scrolls. */}
+        {question && (detailItem || canRemix) && (
           <div
             inert={!showBack}
             className="[grid-area:1/1] rounded-[30px] p-[3px] [backface-visibility:hidden] [transform:rotateY(180deg)]"
             style={{
-              background: `linear-gradient(135deg, ${detailItem.color}, ${gradient[1]})`
+              background: `linear-gradient(135deg, ${backMode === "detail" && detailItem ? detailItem.color : gradient[0]}, ${gradient[1]})`
             }}
           >
             <div className="h-full w-full rounded-[27px] bg-white dark:bg-gray-900">
-              <ItemDetailFace
-                item={detailItem}
-                isActive={showBack}
-                isAnchored={isAnchored}
-                onBack={flipBack}
-                onAnchor={handleAnchor}
-                onHide={handleHideItem}
-              />
+              {backMode === "remix" && canRemix && style && tone ? (
+                <RemixQuestionPanel
+                  question={question}
+                  styleId={style._id}
+                  toneId={tone._id}
+                  isOpen={showBack}
+                  // The panel only asks to close once nothing unsaved would be lost.
+                  onOpenChange={(open) => { if (!open) flipBack(); }}
+                  onRemixed={onRemixed}
+                />
+              ) : detailItem && (
+                <ItemDetailFace
+                  item={detailItem}
+                  isActive={showBack}
+                  isAnchored={isAnchored}
+                  onBack={flipBack}
+                  onAnchor={handleAnchor}
+                  onHide={handleHideItem}
+                />
+              )}
             </div>
           </div>
         )}
@@ -310,7 +337,8 @@ interface QuestionContentProps {
   isFavorite: boolean;
   isHidden: boolean;
   onToggleFavorite: () => void;
-  onToggleHidden: () => void;
+  /** Leave out where hiding makes no sense, such as a person's own questions. */
+  onToggleHidden?: () => void;
   disabled: boolean;
   handleShare: () => void;
   onClickStyle?: () => void;
@@ -367,6 +395,7 @@ const QuestionContent = ({
       setTimeout(() => setShakeHeart(false), 500);
 
       if (storageLimitBehavior === 'block') {
+        toast.info(`You've reached the limit of ${likedLimit} liked questions. Sign in to like more, or remove some first.`);
         return;
       }
     }
@@ -380,11 +409,16 @@ const QuestionContent = ({
       setTimeout(() => setShakeThumbsDown(false), 500);
 
       if (storageLimitBehavior === 'block') {
+        toast.info(`You've reached the limit of ${hiddenLimit} hidden questions. Sign in to hide more, or unhide some in Settings.`);
         return;
       }
     }
-    onToggleHidden();
+    onToggleHidden?.();
   };
+
+  // A private question, or one still waiting for review, opens only for its author, so a
+  // shared link would show everyone else "Question not found".
+  const isShareable = question.status !== "private" && question.status !== "pending";
 
   const styleSlug =
     typeof question.style === "string" ? question.style.trim() : "";
@@ -409,14 +443,16 @@ const QuestionContent = ({
                 type="button"
                 aria-label={`Style: ${style?.name || styleSlug}`}
                 title={style?.name || styleSlug || "style"}
-                className="group cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
+                className="group -my-2 min-h-11 cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
                 onClick={handleClickStyle}
               >
                 {style && <IconComponent icon={style.icon as Icon} size={24} color={style.color} />}
-                <span className="-ml-2 max-w-0 opacity-0 overflow-hidden whitespace-nowrap text-left transition-all duration-300 ease-out motion-reduce:transition-none group-hover:ml-0 group-hover:max-w-48 group-hover:opacity-100 group-focus-visible:ml-0 group-focus-visible:max-w-48 group-focus-visible:opacity-100">
+                <span className="max-w-40 truncate text-left">
                   {style?.name}
                 </span>
                 {!style && styleSlug}
+                {/* A small cue that the pill opens what this style means. */}
+                <Info size={14} aria-hidden="true" className="shrink-0 opacity-70" />
               </button>
             </div>
           )}
@@ -426,7 +462,7 @@ const QuestionContent = ({
 {topic && (
         <button
           type="button"
-          className="w-full py-4 flex flex-row gap-2 justify-center items-center cursor-pointer bg-transparent border-none p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
+          className="w-full min-h-11 py-2 flex flex-row gap-2 justify-center items-center cursor-pointer bg-transparent border-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
           onClick={onClickTopic}
           aria-label={`Topic: ${topic.name}`}
         >
@@ -453,32 +489,32 @@ const QuestionContent = ({
 
       
       {/* Action Buttons */}
-      <div className="flex py-8 flex-wrap items-stretch justify-center gap-2 sm:gap-3">
+      <div className="flex py-8 flex-wrap items-stretch justify-center gap-1.5 sm:gap-3">
         <button
           onClick={handleLike}
           disabled={disabled}
-          title="Toggle favorite"
+          title={isFavorite ? "Unlike question" : "Like question"}
           className={cn(
-            "p-4",
+            "flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-1 rounded-2xl p-3 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-50 dark:hover:bg-white/10",
             shakeHeart && "motion-safe:animate-shake"
           )}
-          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+          aria-label={isFavorite ? "Unlike question" : "Like question"}
           aria-pressed={isFavorite}
         >
           <Heart
             size={24}
             className={isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600 dark:text-gray-400'}
           />
-          <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
-            Favorite
+          <span className="text-[11px] font-medium leading-none text-gray-600 dark:text-gray-400">
+            {isFavorite ? "Liked" : "Like"}
           </span>
         </button>
 
-        <button
+        {onToggleHidden && <button
           onClick={handleHide}
           disabled={disabled}
           className={cn(
-            "p-4",
+            "flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-1 rounded-2xl p-3 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-50 dark:hover:bg-white/10",
             shakeThumbsDown && "motion-safe:animate-shake"
           )}
           title={isHidden ? "Unhide question" : "Hide question"}
@@ -489,25 +525,29 @@ const QuestionContent = ({
             size={24}
             className={isHidden ? 'text-blue-500 fill-blue-500' : 'text-gray-600 dark:text-gray-400'}
           />
-          <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
+          <span className="text-[11px] font-medium leading-none text-gray-600 dark:text-gray-400">
             {isHidden ? "Unhide" : "Hide"}
           </span>
-        </button>
+        </button>}
 
-        {(
+        {isShareable ? (
           <button
             onClick={handleShare}
             type="button"
             disabled={disabled}
             title="Share question"
             aria-label="Share question"
-            className="p-4"
+            className="flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-1 rounded-2xl p-3 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-50 dark:hover:bg-white/10"
           >
             <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
-            <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
+            <span className="text-[11px] font-medium leading-none text-gray-600 dark:text-gray-400">
               Share
             </span>
           </button>
+        ) : (
+          <p className="flex min-h-11 max-w-[9rem] items-center text-center text-[11px] leading-tight text-gray-600 dark:text-gray-400">
+            Only you can open this, so it can't be shared yet
+          </p>
         )}
 
         {onRemix && style && tone && (
@@ -515,11 +555,12 @@ const QuestionContent = ({
             type="button"
             onClick={onRemix}
             disabled={disabled}
-            className="p-4"
+            className="flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-1 rounded-2xl p-3 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-50 dark:hover:bg-white/10"
             title="Remix question"
+            aria-label="Remix question"
           >
             <Sparkles size={24} className="text-gray-600 dark:text-gray-400" />
-            <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
+            <span className="text-[11px] font-medium leading-none text-gray-600 dark:text-gray-400">
               Remix
             </span>
           </button>
@@ -532,9 +573,10 @@ const QuestionContent = ({
             disabled={disabled}
             className="flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-red-500/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-red-500/20"
             title="Delete question"
+            aria-label="Delete question"
           >
             <TrashIcon size={24} className="text-gray-600 dark:text-gray-400 hover:text-red-500" />
-            <span className="text-[10px] font-medium leading-none text-gray-600 dark:text-gray-400 sm:hidden">
+            <span className="text-[11px] font-medium leading-none text-gray-600 dark:text-gray-400">
               Delete
             </span>
           </button>
@@ -553,14 +595,15 @@ const QuestionContent = ({
                 type="button"
                 aria-label={`Tone: ${tone?.name || toneSlug}`}
                 title={tone?.name || toneSlug || "tone"}
-                className="group cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
+                className="group -my-2 min-h-11 cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
                 onClick={handleClickTone}
               >
                 {tone && <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />}
-                <span className="-ml-2 max-w-0 opacity-0 overflow-hidden whitespace-nowrap text-left transition-all duration-300 ease-out motion-reduce:transition-none group-hover:ml-0 group-hover:max-w-48 group-hover:opacity-100 group-focus-visible:ml-0 group-focus-visible:max-w-48 group-focus-visible:opacity-100">
+                <span className="max-w-40 truncate text-left">
                   {tone?.name}
                 </span>
                 {!tone && toneSlug}
+                <Info size={14} aria-hidden="true" className="shrink-0 opacity-70" />
               </button>
             </div>
           )}

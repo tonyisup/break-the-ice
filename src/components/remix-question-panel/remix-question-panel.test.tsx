@@ -1,11 +1,10 @@
-import type { ReactNode } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConvexError } from "convex/values";
 import { getFunctionName } from "convex/server";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
-import { RemixQuestionDrawer } from "./remix-question-drawer";
+import { RemixQuestionPanel } from "./remix-question-panel";
 import { ERROR_CODES, ERROR_MESSAGES, MAX_QUESTION_TAG_LENGTH, MAX_QUESTION_TAGS } from "../../../convex/constants";
 import { api } from "../../../convex/_generated/api";
 
@@ -20,33 +19,6 @@ vi.mock("sonner", () => ({
 }));
 
 
-// vaul needs layout APIs jsdom lacks; an open drawer is just its content here. A closed drawer
-// stays mounted but hidden, and its content's animation end is where the drawer resets.
-vi.mock("@/components/ui/drawer", () => {
-  const Pass = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
-  // The test-only button stands in for vaul asking to open, which runs the drawer's open handler.
-  const Drawer = ({ open, onOpenChange, children }: { open: boolean; onOpenChange?: (open: boolean) => void; children?: ReactNode }) => (
-    <div hidden={!open}>
-      <button type="button" data-testid="drawer-request-open" onClick={() => onOpenChange?.(true)} />
-      {children}
-    </div>
-  );
-  const DrawerContent = ({ children, onAnimationEnd }: { children?: ReactNode; onAnimationEnd?: () => void }) => (
-    <div data-testid="drawer-content" onAnimationEnd={onAnimationEnd}>
-      {children}
-    </div>
-  );
-  return {
-    Drawer,
-    DrawerContent,
-    DrawerHeader: Pass,
-    DrawerTitle: Pass,
-    DrawerDescription: Pass,
-    DrawerFooter: Pass,
-    DrawerClose: Pass,
-  };
-});
-
 const question = {
   _id: "q1",
   _creationTime: 0,
@@ -59,11 +31,11 @@ const question = {
 
 const addPersonalQuestion = vi.fn();
 
-function renderDrawer(remix: ReturnType<typeof vi.fn>) {
+function renderPanel(remix: ReturnType<typeof vi.fn>) {
   (useAction as ReturnType<typeof vi.fn>).mockReturnValue(remix);
   const onOpenChange = vi.fn();
-  const drawer = (isOpen: boolean) => (
-    <RemixQuestionDrawer
+  const panel = (isOpen: boolean) => (
+    <RemixQuestionPanel
       question={question}
       styleId={"s1" as never}
       toneId={"t1" as never}
@@ -71,8 +43,8 @@ function renderDrawer(remix: ReturnType<typeof vi.fn>) {
       onOpenChange={onOpenChange}
     />
   );
-  const { rerender, unmount } = render(drawer(true));
-  return { onOpenChange, close: () => rerender(drawer(false)), unmount };
+  const { rerender, unmount } = render(panel(true));
+  return { onOpenChange, close: () => rerender(panel(false)), unmount };
 }
 
 // A promise the test settles by hand, to finish a request after the person has cancelled it.
@@ -96,8 +68,8 @@ async function flush() {
 type MutationRef = Parameters<typeof getFunctionName>[0];
 
 // Separate mocks per mutation, for tests that need to tell a create from an update or delete.
-// A mutation the drawer calls without a mock here fails the test instead of passing silently.
-// An override replaces the returned handle too, so assertions always see what the drawer calls.
+// A mutation the panel calls without a mock here fails the test instead of passing silently.
+// An override replaces the returned handle too, so assertions always see what the panel calls.
 function mockMutations(overrides: { remove?: (args: unknown) => unknown } = {}) {
   const mutations = {
     add: vi.fn(),
@@ -127,10 +99,10 @@ beforeEach(() => {
   (useMutation as ReturnType<typeof vi.fn>).mockReturnValue(addPersonalQuestion);
 });
 
-describe("RemixQuestionDrawer remix errors", () => {
+describe("RemixQuestionPanel remix errors", () => {
   it("shows the server's readable message when the daily AI budget is paused, and lets the person try again later", async () => {
     const paused = new ConvexError({ code: ERROR_CODES.AI_BUDGET_PAUSED, message: ERROR_MESSAGES.AI_BUDGET_PAUSED });
-    renderDrawer(vi.fn().mockRejectedValue(paused));
+    renderPanel(vi.fn().mockRejectedValue(paused));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
 
@@ -142,7 +114,7 @@ describe("RemixQuestionDrawer remix errors", () => {
   });
 
   it("still shows a plain error's message", async () => {
-    renderDrawer(vi.fn().mockRejectedValue(new Error("Question not found.")));
+    renderPanel(vi.fn().mockRejectedValue(new Error("Question not found.")));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
 
@@ -153,12 +125,12 @@ describe("RemixQuestionDrawer remix errors", () => {
   });
 });
 
-describe("RemixQuestionDrawer first remix", () => {
+describe("RemixQuestionPanel first remix", () => {
   it("does not show a first remix the server refuses to save, and lets the person remix again", async () => {
     addPersonalQuestion.mockRejectedValueOnce(
       new ConvexError({ code: ERROR_CODES.QUESTION_TEXT_TOO_LONG, message: ERROR_MESSAGES.QUESTION_TEXT_TOO_LONG }),
     );
-    renderDrawer(vi.fn().mockResolvedValue("A remix the server refuses?"));
+    renderPanel(vi.fn().mockResolvedValue("A remix the server refuses?"));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
 
@@ -171,7 +143,7 @@ describe("RemixQuestionDrawer first remix", () => {
   });
 });
 
-describe("RemixQuestionDrawer remix again", () => {
+describe("RemixQuestionPanel remix again", () => {
   it("keeps showing the saved remix when the server refuses the next one", async () => {
     const saveMutation = vi
       .fn()
@@ -181,7 +153,7 @@ describe("RemixQuestionDrawer remix again", () => {
       )
       .mockResolvedValueOnce(null);
     (useMutation as ReturnType<typeof vi.fn>).mockReturnValue(saveMutation);
-    renderDrawer(
+    renderPanel(
       vi
         .fn()
         .mockResolvedValueOnce("What is your favorite late-night snack?")
@@ -194,7 +166,7 @@ describe("RemixQuestionDrawer remix again", () => {
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(`Remix failed: ${ERROR_MESSAGES.AI_REMIX_RESULT_TOO_LONG}`);
     });
-    expect(screen.getByText("What is your favorite late-night snack?")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("What is your favorite late-night snack?")).toBeInTheDocument();
     expect(screen.queryByText("A remix the server refuses?")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -206,7 +178,7 @@ describe("RemixQuestionDrawer remix again", () => {
   });
 });
 
-describe("RemixQuestionDrawer save errors", () => {
+describe("RemixQuestionPanel save errors", () => {
   it.each([
     [
       "the server's input validation message",
@@ -217,7 +189,7 @@ describe("RemixQuestionDrawer save errors", () => {
   ])("shows %s when saving the remix fails, and keeps the drawer open", async (_label, failure, expected) => {
     const saveMutation = vi.fn().mockResolvedValueOnce("q-new").mockRejectedValueOnce(failure);
     (useMutation as ReturnType<typeof vi.fn>).mockReturnValue(saveMutation);
-    const { onOpenChange } = renderDrawer(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
+    const { onOpenChange } = renderPanel(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
@@ -234,11 +206,11 @@ describe("RemixQuestionDrawer save errors", () => {
   });
 });
 
-describe("RemixQuestionDrawer cancel remix", () => {
+describe("RemixQuestionPanel cancel remix", () => {
   it("saves nothing when the person cancels a remix and closes the drawer", async () => {
     const mutations = mockMutations();
     const remix = deferred<string>();
-    const { close } = renderDrawer(vi.fn().mockReturnValue(remix.promise));
+    const { close } = renderPanel(vi.fn().mockReturnValue(remix.promise));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
@@ -256,7 +228,7 @@ describe("RemixQuestionDrawer cancel remix", () => {
     mutations.add.mockResolvedValue("q-new");
     const cancelled = deferred<string>();
     const current = deferred<string>();
-    renderDrawer(vi.fn().mockReturnValueOnce(cancelled.promise).mockReturnValueOnce(current.promise));
+    renderPanel(vi.fn().mockReturnValueOnce(cancelled.promise).mockReturnValueOnce(current.promise));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
@@ -270,7 +242,7 @@ describe("RemixQuestionDrawer cancel remix", () => {
     expect(mutations.add).not.toHaveBeenCalled();
 
     current.resolve("What is your favorite late-night snack?");
-    expect(await screen.findByText("What is your favorite late-night snack?")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("What is your favorite late-night snack?")).toBeInTheDocument();
     expect(mutations.add).toHaveBeenCalledTimes(1);
     expect(mutations.add).toHaveBeenCalledWith(
       expect.objectContaining({ customText: "What is your favorite late-night snack?" }),
@@ -282,7 +254,7 @@ describe("RemixQuestionDrawer cancel remix", () => {
     const mutations = mockMutations();
     const created = deferred<string>();
     mutations.add.mockReturnValue(created.promise);
-    renderDrawer(vi.fn().mockResolvedValue("A remix the person cancelled?"));
+    renderPanel(vi.fn().mockResolvedValue("A remix the person cancelled?"));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     await waitFor(() => {
@@ -302,7 +274,7 @@ describe("RemixQuestionDrawer cancel remix", () => {
     const mutations = mockMutations();
     mutations.add.mockResolvedValue("q-new");
     const cancelled = deferred<string>();
-    renderDrawer(
+    renderPanel(
       vi
         .fn()
         .mockResolvedValueOnce("What is your favorite late-night snack?")
@@ -316,7 +288,7 @@ describe("RemixQuestionDrawer cancel remix", () => {
     cancelled.resolve("A remix the person cancelled?");
     await cancelled.promise;
 
-    expect(await screen.findByText("What is your favorite late-night snack?")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("What is your favorite late-night snack?")).toBeInTheDocument();
     expect(screen.queryByText("A remix the person cancelled?")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toHaveFocus();
@@ -331,11 +303,11 @@ describe("RemixQuestionDrawer cancel remix", () => {
   });
 });
 
-describe("RemixQuestionDrawer cancel remix edge cases", () => {
+describe("RemixQuestionPanel cancel remix edge cases", () => {
   it("shows no error when a cancelled remix fails afterwards", async () => {
     const mutations = mockMutations();
     const remix = deferred<string>();
-    renderDrawer(vi.fn().mockReturnValue(remix.promise));
+    renderPanel(vi.fn().mockReturnValue(remix.promise));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
@@ -353,7 +325,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     mutations.add.mockResolvedValue("q-new");
     const cancelled = deferred<string>();
     const current = deferred<string>();
-    renderDrawer(vi.fn().mockReturnValueOnce(cancelled.promise).mockReturnValueOnce(current.promise));
+    renderPanel(vi.fn().mockReturnValueOnce(cancelled.promise).mockReturnValueOnce(current.promise));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel Remix" }));
@@ -366,7 +338,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     expect(screen.queryByRole("button", { name: "Remix" })).not.toBeInTheDocument();
 
     current.resolve("What is your favorite late-night snack?");
-    expect(await screen.findByText("What is your favorite late-night snack?")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("What is your favorite late-night snack?")).toBeInTheDocument();
     expect(mutations.add).toHaveBeenCalledTimes(1);
   });
 
@@ -375,7 +347,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     mutations.add.mockResolvedValue("q-new");
     const updating = deferred<null>();
     mutations.update.mockReturnValueOnce(updating.promise).mockResolvedValue(null);
-    renderDrawer(
+    renderPanel(
       vi
         .fn()
         .mockResolvedValueOnce("What is your favorite late-night snack?")
@@ -393,7 +365,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     updating.resolve(null);
     await updating.promise;
 
-    expect(await screen.findByText("What is your favorite late-night snack?")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("What is your favorite late-night snack?")).toBeInTheDocument();
     expect(screen.queryByText("A remix the person cancelled?")).not.toBeInTheDocument();
     expect(mutations.add).toHaveBeenCalledTimes(1);
     expect(mutations.remove).not.toHaveBeenCalled();
@@ -410,7 +382,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     const mutations = mockMutations();
     const created = deferred<string | null>();
     mutations.add.mockReturnValue(created.promise);
-    renderDrawer(vi.fn().mockResolvedValue("A remix the person cancelled?"));
+    renderPanel(vi.fn().mockResolvedValue("A remix the person cancelled?"));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     await waitFor(() => {
@@ -443,7 +415,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     const mutations = mockMutations({ remove: failingDelete });
     const created = deferred<string>();
     mutations.add.mockReturnValue(created.promise);
-    renderDrawer(vi.fn().mockResolvedValue("A remix the person cancelled?"));
+    renderPanel(vi.fn().mockResolvedValue("A remix the person cancelled?"));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     await waitFor(() => {
@@ -463,7 +435,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
   it("saves nothing from a remix still running when the drawer unmounts", async () => {
     const mutations = mockMutations();
     const remix = deferred<string>();
-    const { unmount } = renderDrawer(vi.fn().mockReturnValue(remix.promise));
+    const { unmount } = renderPanel(vi.fn().mockReturnValue(remix.promise));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     unmount();
@@ -478,7 +450,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     const mutations = mockMutations();
     const created = deferred<string>();
     mutations.add.mockReturnValue(created.promise);
-    const { unmount } = renderDrawer(vi.fn().mockResolvedValue("A remix from an unmounted drawer?"));
+    const { unmount } = renderPanel(vi.fn().mockResolvedValue("A remix from an unmounted drawer?"));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     await waitFor(() => {
@@ -496,7 +468,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     const mutations = mockMutations();
     const created = deferred<string>();
     mutations.add.mockReturnValue(created.promise);
-    renderDrawer(vi.fn().mockResolvedValue("A remix the person cancelled?"));
+    renderPanel(vi.fn().mockResolvedValue("A remix the person cancelled?"));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     await waitFor(() => {
@@ -511,14 +483,13 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
     expect(mutations.remove).not.toHaveBeenCalled();
   });
 
-  it("saves nothing from a remix still running when the drawer finishes closing", async () => {
+  it("saves nothing from a remix still running when the panel closes", async () => {
     const mutations = mockMutations();
     const remix = deferred<string>();
-    const { close } = renderDrawer(vi.fn().mockReturnValue(remix.promise));
+    const { close } = renderPanel(vi.fn().mockReturnValue(remix.promise));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
     close();
-    fireEvent.animationEnd(screen.getByTestId("drawer-content"));
     remix.resolve("A remix from a closed drawer?");
     await flush();
 
@@ -529,7 +500,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
   it("moves focus to Cancel when the cancelled remix used the last AI credit", async () => {
     mockMutations();
     const remix = deferred<string>();
-    renderDrawer(vi.fn().mockReturnValue(remix.promise));
+    renderPanel(vi.fn().mockReturnValue(remix.promise));
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
 
     // The cancelled run counted toward the limit, so the live user query now reports it reached.
@@ -543,7 +514,7 @@ describe("RemixQuestionDrawer cancel remix edge cases", () => {
   });
 });
 
-describe("RemixQuestionDrawer tags", () => {
+describe("RemixQuestionPanel tags", () => {
   const tagNames = Array.from({ length: MAX_QUESTION_TAGS + 1 }, (_, i) => `t${String(i).padStart(2, "0")}`);
 
   it("stops at the tag limit the server checks, and caps the tag input's length", async () => {
@@ -554,7 +525,7 @@ describe("RemixQuestionDrawer tags", () => {
         ? tagNames.map((name) => ({ _id: name, name, grouping: "test" }))
         : undefined,
     );
-    renderDrawer(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
+    renderPanel(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("maxLength", String(MAX_QUESTION_TAG_LENGTH));
 
@@ -580,7 +551,7 @@ describe("RemixQuestionDrawer tags", () => {
         ? tagNames.map((name) => ({ _id: name, name, grouping: "test" }))
         : undefined,
     );
-    renderDrawer(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
+    renderPanel(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
     const input = screen.getByRole("textbox");
 
     for (const name of tagNames.slice(0, MAX_QUESTION_TAGS)) {
@@ -608,7 +579,7 @@ describe("RemixQuestionDrawer tags", () => {
         ? [{ _id: "long", name: longName, grouping: "test" }]
         : undefined,
     );
-    renderDrawer(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
+    renderPanel(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
     const input = screen.getByRole("textbox");
 
     // A picked suggestion goes straight to the add handler, without the input's length cap.
@@ -625,13 +596,12 @@ describe("RemixQuestionDrawer tags", () => {
     (useAction as ReturnType<typeof vi.fn>).mockReturnValue(remix);
     const onOpenChange = vi.fn();
     const tagged = { ...(question as object), tags: tagNames } as never;
-    const drawer = (isOpen: boolean) => (
-      <RemixQuestionDrawer question={tagged} styleId={"s1" as never} toneId={"t1" as never} isOpen={isOpen} onOpenChange={onOpenChange} />
+    const panel = (isOpen: boolean) => (
+      <RemixQuestionPanel question={tagged} styleId={"s1" as never} toneId={"t1" as never} isOpen={isOpen} onOpenChange={onOpenChange} />
     );
-    const { rerender } = render(drawer(false));
+    const { rerender } = render(panel(false));
     // Opening copies the question's tags, which can exceed what a person's question may carry.
-    fireEvent.click(screen.getByTestId("drawer-request-open"));
-    rerender(drawer(true));
+    rerender(panel(true));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
 
@@ -644,7 +614,7 @@ describe("RemixQuestionDrawer tags", () => {
     mutations.add.mockRejectedValue(
       new ConvexError({ code: ERROR_CODES.QUESTION_TAGS_TOO_MANY, message: ERROR_MESSAGES.QUESTION_TAGS_TOO_MANY }),
     );
-    renderDrawer(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
+    renderPanel(vi.fn().mockResolvedValue("What is your favorite late-night snack?"));
 
     fireEvent.click(screen.getByRole("button", { name: "Remix" }));
 
