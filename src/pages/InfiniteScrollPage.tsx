@@ -413,11 +413,15 @@ export default function InfiniteScrollPage() {
         const generationCount = Math.min(MAX_FEED_GENERATION_COUNT, Math.max(anchorShortfall, totalShortfall));
         let generatedQuestions: Doc<"questions">[] = [];
         const canGenerate = generationCount > 0 && user.isSignedIn && !currentUser?.isAiLimitReached && !aiPausedRef.current;
-        // After the first page, the library's questions go on screen at once and the
-        // generated ones follow when they arrive. The first page still waits for both, so
-        // it can be sorted as one batch.
-        const shownEarly = !isFirstPull && dbQuestions.length > 0 && canGenerate;
-        if (shownEarly) appendQuestions(dbQuestions as Doc<"questions">[]);
+        // The library's questions go on screen at once and the generated ones follow when
+        // they arrive, on the first page too: reading starts straight away instead of after
+        // the wait for new questions. Each part of the first page is sorted shortest first.
+        const shownEarly = dbQuestions.length > 0 && canGenerate;
+        if (shownEarly) {
+          appendQuestions(isFirstPull
+            ? sortAnchoredBatch(dbQuestions as Doc<"questions">[], anchoredMatchCount)
+            : dbQuestions as Doc<"questions">[]);
+        }
 
         if (canGenerate && holdsLastRequest) {
           heldLastRequestRef.current = true;
@@ -484,7 +488,7 @@ export default function InfiniteScrollPage() {
         const existingIds = new Set(dbQuestions.map((question) => question._id));
         const uniqueGenerated = generatedQuestions.filter((question) => !existingIds.has(question._id));
         if (shownEarly) {
-          appendQuestions(uniqueGenerated);
+          appendQuestions(isFirstPull ? [...uniqueGenerated].sort(compareByTextLength) : uniqueGenerated);
           return;
         }
         const generatedAnchoredCount = Math.max(0, targetAnchoredCount - anchoredQuestions.length);
@@ -528,11 +532,12 @@ export default function InfiniteScrollPage() {
       timing.libraryMs = performance.now() - loadStartedAt;
       timing.libraryCount = dbQuestions.length;
 
-      let combinedQuestions = [...dbQuestions];
+      const combinedQuestions = [...dbQuestions];
 
-      // Update state immediately ONLY if it's NOT the first pull
-      // For the first pull, we want to collect the full batch (including AI) before sorting
-      if (!isFirstPull && combinedQuestions.length > 0) {
+      // The library's questions go on screen at once, on the first page too (sorted shortest
+      // first there), so reading never waits on new questions being written.
+      if (isFirstPull) combinedQuestions.sort(compareByTextLength);
+      if (combinedQuestions.length > 0) {
         if (addsCards(combinedQuestions)) endStall();
         setQuestions(prev => {
           const existingIds = new Set(prev.map(q => q._id));
@@ -552,25 +557,12 @@ export default function InfiniteScrollPage() {
         if (!user.isSignedIn) {
           setShowAuthCTA(true);
           setHasMore(false);
-
-          // If we have some DB questions and it was the first pull, we need to show them now
-          if (isFirstPull && combinedQuestions.length > 0) {
-            combinedQuestions.sort(compareByTextLength);
-
-            setQuestions(combinedQuestions);
-            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
-          }
           return;
         }
 
-        // AI was paused or rate-limited earlier this session: show what the database had.
+        // AI was paused or rate-limited earlier this session: what the database had is already on screen.
         if (aiPausedRef.current) {
           setHasMore(false);
-          if (isFirstPull && combinedQuestions.length > 0) {
-            combinedQuestions.sort(compareByTextLength);
-            setQuestions(combinedQuestions);
-            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
-          }
           return;
         }
 
@@ -578,13 +570,6 @@ export default function InfiniteScrollPage() {
         if (currentUser?.isAiLimitReached) {
           setShowAiLimitNotice(true);
           setHasMore(false);
-
-          // If we have some DB questions and it was the first pull, we need to show them now
-          if (isFirstPull && combinedQuestions.length > 0) {
-            combinedQuestions.sort(compareByTextLength);
-            setQuestions(combinedQuestions);
-            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
-          }
           return;
         }
 
@@ -616,16 +601,11 @@ export default function InfiniteScrollPage() {
           timing.generatedCount = validGenerated.length;
           const uniqueGenerated = validGenerated.filter(q => !combinedQuestions.some(cq => cq._id === q._id));
 
-          if (isFirstPull) {
-            combinedQuestions = [...combinedQuestions, ...uniqueGenerated];
-
-            if (combinedQuestions.length === 0) {
-              setHasMore(false);
-            } else {
-              combinedQuestions.sort(compareByTextLength);
-              setQuestions(combinedQuestions);
-              setSeenIds(new Set(combinedQuestions.map(q => q._id)));
-            }
+          // New questions go below the cards already on screen and never reorder them. On the
+          // first page they are sorted shortest first among themselves.
+          if (isFirstPull) uniqueGenerated.sort(compareByTextLength);
+          if (isFirstPull && uniqueGenerated.length === 0 && dbQuestions.length === 0) {
+            setHasMore(false);
           } else if (uniqueGenerated.length > 0) {
             if (addsCards(uniqueGenerated)) endStall();
             setQuestions(prev => {
@@ -689,22 +669,12 @@ export default function InfiniteScrollPage() {
             else toast.error("Couldn't load more questions. Scroll to retry.");
           }
 
-          // If AI failed and it was first pull, show what we have from DB
-          if (isFirstPull && combinedQuestions.length > 0) {
-            combinedQuestions.sort(compareByTextLength);
-
-            setQuestions(combinedQuestions);
-            setSeenIds(new Set(combinedQuestions.map(q => q._id)));
-          } else if (isFirstPull && combinedQuestions.length === 0) {
+          // The library's questions, if any, are already on screen; with none, the first
+          // page has nothing to show.
+          if (isFirstPull && combinedQuestions.length === 0) {
             setHasMore(false);
           }
         }
-      } else if (isFirstPull) {
-        // We have a full batch from DB, sort and show
-        combinedQuestions.sort(compareByTextLength);
-
-        setQuestions(combinedQuestions);
-        setSeenIds(new Set(combinedQuestions.map(q => q._id)));
       }
     } catch (error) {
       timing.failed = true;
@@ -999,6 +969,17 @@ export default function InfiniteScrollPage() {
 
   const hasAnchorFilters = !!(anchoredStyleParam || anchoredToneParam || anchoredTopicParam);
 
+  // When few AI generations are left, the feed says so before they run out: scrolling here
+  // is what spends them.
+  const aiLeft = user.isSignedIn && typeof currentUser?.aiLimit === "number" && Number.isFinite(currentUser.aiLimit)
+    ? Math.max(0, currentUser.aiLimit - (currentUser.aiUsage?.count ?? 0))
+    : null;
+  const aiRunningLow = aiLeft !== null && aiLeft > 0 && typeof currentUser?.aiLimit === "number"
+    && aiLeft <= Math.max(3, currentUser.aiLimit * 0.2);
+  const aiResetsOn = currentUser?.aiUsage?.cycleStart === undefined
+    ? null
+    : new Date(currentUser.aiUsage.cycleStart + AI_USAGE_CYCLE_MS).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+
   // Smooth gradient transition logic
   const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
 
@@ -1163,6 +1144,13 @@ export default function InfiniteScrollPage() {
             "flex flex-col gap-6 px-4 pt-6 max-w-3xl mx-auto w-full"
           )}
         >
+          {aiRunningLow && !showAiLimitNotice && (
+            <p role="status" className="mx-auto w-fit max-w-md rounded-2xl bg-black/60 px-4 py-2 text-center text-sm text-white">
+              {aiLeft === 1 ? "1 AI generation left" : `${aiLeft} AI generations left`} this cycle. New questions and Remix use them
+              {aiResetsOn ? `; more arrive on ${aiResetsOn}.` : "."}
+            </p>
+          )}
+
           {(allStylesBlocked || allTonesBlocked) && (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-4 bg-black/50 backdrop-blur-md rounded-2xl border border-white/20">
               <SearchX className="w-12 h-12 text-white/80" />

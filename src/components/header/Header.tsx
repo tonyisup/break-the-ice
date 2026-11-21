@@ -8,7 +8,7 @@ import { Heart, History } from "@/components/ui/icons/icons";
 import { useStorageContext } from "@/hooks/useStorageContext";
 import { UserMenu } from "./UserMenu";
 import OfflineIndicator from "../OfflineIndicator";
-import { FileQuestionMark, MessageCircle, PencilLine } from "lucide-react";
+import { FileQuestionMark, MessageCircle, PencilLine, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Below this width the four destinations move to a tab bar at the bottom of the screen,
@@ -59,6 +59,16 @@ export const Header = () => {
   const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
 
   const { likedQuestions, likedLimit, hiddenQuestions, hiddenLimit } = useStorageContext();
+
+  // How many AI generations a signed-in person has left this cycle. Scrolling the feed and
+  // Remix both use them, so the count is on every app page instead of appearing only once
+  // they have run out. Null when it isn't known, or there is no limit.
+  const currentUser = useQuery(api.core.users.getCurrentUser, {});
+  const aiLimit = isSignedIn && currentUser && typeof currentUser.aiLimit === "number" && Number.isFinite(currentUser.aiLimit)
+    ? currentUser.aiLimit
+    : null;
+  const aiLeft = aiLimit === null ? null : Math.max(0, aiLimit - (currentUser?.aiUsage?.count ?? 0));
+  const aiLow = aiLeft !== null && aiLimit !== null && aiLeft <= Math.max(3, aiLimit * 0.2);
 
   // Content under the fixed header (page padding, sticky bars) and above the phone tab bar
   // lines up with their measured heights instead of guessing at breakpoints.
@@ -134,6 +144,26 @@ export const Header = () => {
               <SignInButton mode="modal">
                 <Button className="h-11 border border-gray-900/20 px-3 text-sm font-semibold dark:border-white/30">Sign in</Button>
               </SignInButton>
+            )}
+            {aiLeft !== null && aiLimit !== null && (
+              <Link
+                to="/settings?expand=subscription"
+                aria-label={`${aiLeft} of ${aiLimit} AI generations left this cycle. Open AI usage in Settings`}
+                className={cn(
+                  "flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
+                  aiLeft === 0
+                    ? "border-red-700 bg-red-700 text-white"
+                    : aiLow
+                      ? "border-amber-500 bg-amber-400 text-gray-900"
+                      : "border-gray-900/20 text-gray-900 dark:border-white/30 dark:text-white",
+                )}
+              >
+                <Sparkles className="size-4" aria-hidden="true" />
+                <span>
+                  {aiLeft}
+                  <span className="hidden lg:inline"> AI generations</span> left
+                </span>
+              </Link>
             )}
             <UserMenu
               showSettingsBadge={showSettingsLimitBadge || showSettingsFullBadge}

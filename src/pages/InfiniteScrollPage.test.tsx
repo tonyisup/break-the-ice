@@ -431,26 +431,16 @@ describe('InfiniteScrollPage', () => {
     expect(writtenParams.get('style')).toBe('story-driven');
   });
 
-  it('generates and injects the anchored shortfall ahead of general questions', async () => {
+  it('shows the matching library question at once and adds the generated ones after it', async () => {
     mockSearchParams = new URLSearchParams('style=style1');
+    // A filtered feed gets only matches from the library; the rest of the page is generated.
     const dbQuestions = [
-      {
-        _id: 'db-anchor',
-        text: 'Existing anchor',
-        styleId: 'style1',
-        toneId: 'tone1',
-      },
-      ...Array.from({ length: 9 }, (_, index) => ({
-        _id: `general-${index}`,
-        text: `General ${index}`,
-        styleId: 'style2',
-        toneId: 'tone2',
-      })),
+      { _id: 'db-anchor', text: 'Existing anchor', styleId: 'style1', toneId: 'tone1' },
     ];
     const actionMock = vi.fn().mockResolvedValue({
       questions: dbQuestions,
       anchoredMatchCount: 1,
-      targetAnchoredCount: 6,
+      targetAnchoredCount: 10,
     });
     const generatedQuestions = Array.from({ length: 5 }, (_, index) => ({
       _id: `generated-${index}`,
@@ -458,7 +448,8 @@ describe('InfiniteScrollPage', () => {
       styleId: 'style1',
       toneId: 'tone1',
     }));
-    const generateAction = vi.fn().mockResolvedValue(generatedQuestions);
+    let finishGeneration: (questions: typeof generatedQuestions) => void = () => {};
+    const generateAction = vi.fn().mockReturnValue(new Promise((resolve) => { finishGeneration = resolve; }));
     (useConvex as any).mockReturnValue({ query: vi.fn(), action: actionMock });
     (useAction as any).mockReturnValue(generateAction);
 
@@ -466,8 +457,9 @@ describe('InfiniteScrollPage', () => {
       <InfiniteScrollPage />,
     );
 
+    // The library's match is readable while the new questions are still being written.
     await waitFor(() => {
-      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10);
+      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(1);
     });
     expect(generateAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -476,9 +468,13 @@ describe('InfiniteScrollPage', () => {
       }),
     );
 
-    const lastTenCalls = (ModernQuestionCard as any).mock.calls.slice(-10);
-    expect(lastTenCalls.slice(0, 6).every((call: any[]) => call[0].question.styleId === 'style1')).toBe(true);
-    expect(lastTenCalls.slice(6).every((call: any[]) => call[0].question.styleId === 'style2')).toBe(true);
+    await act(async () => { finishGeneration(generatedQuestions); });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('modern-question-card')).toHaveLength(6);
+    });
+    const lastSixCalls = (ModernQuestionCard as any).mock.calls.slice(-6);
+    expect(lastSixCalls[0][0].question._id).toBe('db-anchor');
+    expect(lastSixCalls.slice(1).every((call: any[]) => call[0].question._id.startsWith('generated-'))).toBe(true);
   });
 
   it('keeps the anchored database questions and posts a notice when the daily AI budget is paused', async () => {
@@ -645,7 +641,7 @@ describe('InfiniteScrollPage', () => {
     expect(lastThreeCalls[2][0].question.text).toBe('This is a long question text');
   });
 
-  it('sorts combined DB and AI questions by length in the first batch', async () => {
+  it('puts library questions first on the first page and generated ones below them, shortest first', async () => {
     const dbQuestions = [
       { _id: 'db1', text: 'Longer DB question', style: 'style1', tone: 'tone1' },
     ];
@@ -672,13 +668,10 @@ describe('InfiniteScrollPage', () => {
     const calls = (ModernQuestionCard as any).mock.calls;
     const lastThreeCalls = calls.slice(-3);
 
-    // Sorted: 'Short AI' (8), 'Medium AI question' (18), 'Longer DB question' (18)
-    // Wait, 'Longer DB question' (18) and 'Medium AI question' (18) have same length.
-    // Lengths: 8, 18, 18.
-    expect(lastThreeCalls[0][0].question.text).toBe('Short AI');
-    // Order of equal length depends on original order or stable sort.
-    // db was first, then ai.
-    expect(lastThreeCalls[1][0].question.text).toBe('Longer DB question');
+    // The library question was on screen first and stays at the top; the generated ones
+    // follow it, shortest first, and never move a card someone may already be reading.
+    expect(lastThreeCalls[0][0].question.text).toBe('Longer DB question');
+    expect(lastThreeCalls[1][0].question.text).toBe('Short AI');
     expect(lastThreeCalls[2][0].question.text).toBe('Medium AI question');
   });
 
