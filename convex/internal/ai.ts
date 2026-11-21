@@ -392,6 +392,8 @@ export const generateAIQuestionForUser = internalAction({
 		anchoredStyleId: v.optional(v.id("styles")),
 		anchoredToneId: v.optional(v.id("tones")),
 		seed: v.optional(v.number()),
+		// Refuse rather than use the person's last request (the feed asking ahead of the reader).
+		keepLastRequest: v.optional(v.boolean()),
 		// When the caller's own action began, for the run's latency record.
 		requestStartedAt: v.optional(v.number()),
 		purpose: v.optional(
@@ -445,6 +447,7 @@ export const generateAIQuestionForUser = internalAction({
 			if (!args.bypassAIUsage) {
 				await ctx.runMutation(internal.internal.users.checkAndIncrementAIUsage, {
 					userId: user._id,
+					keepLast: args.keepLastRequest,
 				});
 				usageIncremented = true;
 			}

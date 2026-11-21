@@ -307,6 +307,19 @@ function wasPaidInFull(completion: OpenAI.Chat.Completions.ChatCompletion): bool
 /** A run's latency record (see generationRuns in schema.ts). */
 type RunTiming = { requestStartedAt?: number; providerMs?: number };
 
+/**
+ * Records how long the model call took, whether it answered, was refused or timed out. Parsing
+ * and saving the answer stay outside the measured time.
+ */
+async function timeProviderCall<T>(timing: RunTiming, call: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await call();
+  } finally {
+    timing.providerMs = Date.now() - startedAt;
+  }
+}
+
 /** Records a run's failure without letting a failed write replace the original error. */
 export async function markRunFailed(
   ctx: ActionCtx,
@@ -560,19 +573,18 @@ export async function runPersistedQuestionGeneration(
 
     const timing: RunTiming = { requestStartedAt };
     try {
-      const providerStartedAt = Date.now();
-      const completion = await createChatCompletionWithRetry(ctx, { spendClass, runId }, {
-        model: GENERATION_MODEL,
-        temperature,
-        max_tokens: maxOutputTokens(prompt.batchSize),
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: prompt.systemPrompt },
-          { role: "user", content: prompt.userPrompt },
-        ],
-      });
-
-      timing.providerMs = Date.now() - providerStartedAt;
+      const completion = await timeProviderCall(timing, () =>
+        createChatCompletionWithRetry(ctx, { spendClass, runId }, {
+          model: GENERATION_MODEL,
+          temperature,
+          max_tokens: maxOutputTokens(prompt.batchSize),
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: prompt.systemPrompt },
+            { role: "user", content: prompt.userPrompt },
+          ],
+        }),
+      );
 
       if (wasPaidInFull(completion)) markBilled();
 
@@ -717,19 +729,18 @@ export async function runPreviewQuestionGeneration(
 
     const timing: RunTiming = { requestStartedAt };
     try {
-      const providerStartedAt = Date.now();
-      const completion = await createChatCompletionWithRetry(ctx, { spendClass, runId }, {
-        model,
-        temperature,
-        max_tokens: maxOutputTokens(prompt.batchSize),
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: prompt.systemPrompt },
-          { role: "user", content: prompt.userPrompt },
-        ],
-      });
-
-      timing.providerMs = Date.now() - providerStartedAt;
+      const completion = await timeProviderCall(timing, () =>
+        createChatCompletionWithRetry(ctx, { spendClass, runId }, {
+          model,
+          temperature,
+          max_tokens: maxOutputTokens(prompt.batchSize),
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: prompt.systemPrompt },
+            { role: "user", content: prompt.userPrompt },
+          ],
+        }),
+      );
 
       if (wasPaidInFull(completion)) markBilled();
 
