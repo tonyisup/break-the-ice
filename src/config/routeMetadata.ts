@@ -1,4 +1,4 @@
-import { siteConfig } from "./site";
+import { siteConfig } from "./site.js";
 
 export type PageMetadata = {
   title: string;
