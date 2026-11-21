@@ -17,6 +17,7 @@ export const MAX_FEED_GENERATION_COUNT = 5;
 
 export const ERROR_CODES = {
   AI_LIMIT_REACHED: "AI_LIMIT_REACHED",
+  AI_LAST_REQUEST_HELD: "AI_LAST_REQUEST_HELD",
   AI_BUDGET_PAUSED: "AI_BUDGET_PAUSED",
   AI_RATE_LIMITED: "AI_RATE_LIMITED",
   AI_PROMPT_TOO_LARGE: "AI_PROMPT_TOO_LARGE",
@@ -31,6 +32,7 @@ export const ERROR_CODES = {
 
 export const ERROR_MESSAGES = {
   AI_LIMIT_REACHED: "AI generation limit reached for this cycle.",
+  AI_LAST_REQUEST_HELD: "Your last AI generation is kept until you reach the end of the feed.",
   AI_BUDGET_PAUSED: "New AI questions are paused for today. Check back tomorrow.",
   AI_RATE_LIMITED: "That's a lot of AI requests in a short time. Try again in a few minutes.",
   AI_DAILY_LIMITED: "You've used today's AI requests. More are available tomorrow.",

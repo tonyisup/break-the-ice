@@ -17,9 +17,13 @@ export const generateAIQuestionForFeed = action({
 		anchoredStyleId: v.optional(v.id("styles")),
 		anchoredToneId: v.optional(v.id("tones")),
 		anchoredTopicId: v.optional(v.id("topics")),
+		// True when the feed asks before the reader has reached its end. Such a request is
+		// refused (AI_LAST_REQUEST_HELD) rather than use the person's last one.
+		ahead: v.optional(v.boolean()),
 	},
 	returns: v.array(v.nullable(v.any())),
 	handler: async (ctx, args): Promise<(Omit<Doc<"questions">, "qualityCheck" | "safetyFlags"> | null)[]> => {
+		const requestStartedAt = Date.now();
 		const user = await ctx.runQuery(api.core.users.getCurrentUser, {});
 
 		if (!user) {
@@ -49,6 +53,8 @@ export const generateAIQuestionForFeed = action({
 			anchoredStyleId: args.anchoredStyleId,
 			anchoredToneId: args.anchoredToneId,
 			purpose: "feed",
+			keepLastRequest: args.ahead,
+			requestStartedAt,
 		});
 		return questions.map((question) => question && withoutVerdict(question));
 	}

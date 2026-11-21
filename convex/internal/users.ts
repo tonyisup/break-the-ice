@@ -165,13 +165,14 @@ export const syncUserSubscription = internalMutation({
 export const checkAndIncrementAIUsage = internalMutation({
 	args: {
 		userId: v.id("users"),
+		keepLast: v.optional(v.boolean()),
 	},
 	returns: v.number(),
 	handler: async (ctx, args) => {
 		const user = await ctx.db.get(args.userId);
 		if (!user) throw new Error("User not found");
 
-		return await checkAndIncrementAiUsage(ctx, args.userId);
+		return await checkAndIncrementAiUsage(ctx, args.userId, { keepLast: args.keepLast });
 	},
 });
 

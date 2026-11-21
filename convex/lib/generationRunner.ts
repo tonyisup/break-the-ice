@@ -304,13 +304,36 @@ function wasPaidInFull(completion: OpenAI.Chat.Completions.ChatCompletion): bool
   return !wasCutOff(completion);
 }
 
+/** A run's latency record (see generationRuns in schema.ts). */
+type RunTiming = { requestStartedAt?: number; providerMs?: number };
+
+/**
+ * Records how long the model call took, whether it answered, was refused or timed out. Parsing
+ * and saving the answer stay outside the measured time.
+ */
+async function timeProviderCall<T>(timing: RunTiming, call: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await call();
+  } finally {
+    timing.providerMs = Date.now() - startedAt;
+  }
+}
+
 /** Records a run's failure without letting a failed write replace the original error. */
-export async function markRunFailed(ctx: ActionCtx, runId: Id<"generationRuns">, error: unknown, fallbackMessage: string): Promise<void> {
+export async function markRunFailed(
+  ctx: ActionCtx,
+  runId: Id<"generationRuns">,
+  error: unknown,
+  fallbackMessage: string,
+  timing: RunTiming = {},
+): Promise<void> {
   try {
     await ctx.runMutation(internal.internal.generation.failGenerationRun, {
       runId,
       error: error instanceof Error ? error.message : fallbackMessage,
       rawResponse: error instanceof UnusableOutputError ? error.rawResponse : undefined,
+      ...timing,
     });
   } catch (writeError) {
     console.error("Failed to mark generation run as failed", writeError);
@@ -498,6 +521,8 @@ export async function runPersistedQuestionGeneration(
     temperature?: number;
     poolDate?: string;
     poolStatus?: "available" | "distributed";
+    /** When the caller's own action began, for the run's latency record. Defaults to now. */
+    requestStartedAt?: number;
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -515,6 +540,7 @@ export async function runPersistedQuestionGeneration(
 }> {
   // Only the daily email and the admin-triggered pool are system spend. Everything
   // else (feed generation, any purpose added later) is user spend.
+  const requestStartedAt = args.requestStartedAt ?? Date.now();
   const spendClass: SpendClass =
     args.purpose === "newsletter" || args.purpose === "nightly_pool" ? "system" : "user";
   await ensureAiBudget(ctx, spendClass);
@@ -545,17 +571,20 @@ export async function runPersistedQuestionGeneration(
       temperature,
     });
 
+    const timing: RunTiming = { requestStartedAt };
     try {
-      const completion = await createChatCompletionWithRetry(ctx, { spendClass, runId }, {
-        model: GENERATION_MODEL,
-        temperature,
-        max_tokens: maxOutputTokens(prompt.batchSize),
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: prompt.systemPrompt },
-          { role: "user", content: prompt.userPrompt },
-        ],
-      });
+      const completion = await timeProviderCall(timing, () =>
+        createChatCompletionWithRetry(ctx, { spendClass, runId }, {
+          model: GENERATION_MODEL,
+          temperature,
+          max_tokens: maxOutputTokens(prompt.batchSize),
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: prompt.systemPrompt },
+            { role: "user", content: prompt.userPrompt },
+          ],
+        }),
+      );
 
       if (wasPaidInFull(completion)) markBilled();
 
@@ -595,6 +624,7 @@ export async function runPersistedQuestionGeneration(
           rawResponse,
           error: `No new questions saved: ${counts.duplicateCount} duplicate, ${counts.rejectedCount} rejected`,
           ...counts,
+          ...timing,
         });
       } else {
         await ctx.runMutation(internal.internal.generation.completeGenerationRun, {
@@ -602,6 +632,7 @@ export async function runPersistedQuestionGeneration(
           rawResponse,
           resultQuestionIds: saveResult.insertedQuestionIds,
           ...counts,
+          ...timing,
         });
       }
 
@@ -617,7 +648,7 @@ export async function runPersistedQuestionGeneration(
         questions,
       };
     } catch (error) {
-      await markRunFailed(ctx, runId, error, "Unknown generation error");
+      await markRunFailed(ctx, runId, error, "Unknown generation error", timing);
       throw error;
     }
   });
@@ -660,6 +691,7 @@ export async function runPreviewQuestionGeneration(
 }> {
   // Checked here, where the name reaches the provider, so no caller can pass one through
   // unchecked, and before anything is read or charged.
+  const requestStartedAt = Date.now();
   if (args.model !== undefined) assertOpenRouterModel(args.model);
   // Only admin tools and the eval harness preview, so a preview is always system spend.
   const spendClass: SpendClass = "system";
@@ -695,17 +727,20 @@ export async function runPreviewQuestionGeneration(
       temperature,
     });
 
+    const timing: RunTiming = { requestStartedAt };
     try {
-      const completion = await createChatCompletionWithRetry(ctx, { spendClass, runId }, {
-        model,
-        temperature,
-        max_tokens: maxOutputTokens(prompt.batchSize),
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: prompt.systemPrompt },
-          { role: "user", content: prompt.userPrompt },
-        ],
-      });
+      const completion = await timeProviderCall(timing, () =>
+        createChatCompletionWithRetry(ctx, { spendClass, runId }, {
+          model,
+          temperature,
+          max_tokens: maxOutputTokens(prompt.batchSize),
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: prompt.systemPrompt },
+            { role: "user", content: prompt.userPrompt },
+          ],
+        }),
+      );
 
       if (wasPaidInFull(completion)) markBilled();
 
@@ -722,6 +757,7 @@ export async function runPreviewQuestionGeneration(
         previewText,
         resultQuestionIds: [],
         parsedCount: previewTexts.length,
+        ...timing,
       });
 
       return {
@@ -732,7 +768,7 @@ export async function runPreviewQuestionGeneration(
         previewTexts,
       };
     } catch (error) {
-      await markRunFailed(ctx, runId, error, "Unknown generation error");
+      await markRunFailed(ctx, runId, error, "Unknown generation error", timing);
       throw error;
     }
   });

@@ -68,6 +68,11 @@ vi.mock('@/components/newsletter-card/NewsletterCard', () => ({
   NewsletterCard: vi.fn((props) => <div data-testid="newsletter-card" data-prefilled={props.prefilledEmail}>Newsletter</div>),
 }));
 
+const mockCaptureAnalytics = vi.fn();
+vi.mock('@/lib/analytics', () => ({
+  captureAnalytics: (...args: unknown[]) => mockCaptureAnalytics(...args),
+}));
+
 // Mock api object structure
 vi.mock('../../convex/_generated/api', () => ({
   api: {
@@ -920,5 +925,306 @@ describe('InfiniteScrollPage', () => {
     await waitFor(() => expect(dbAction).toHaveBeenCalledTimes(2));
     expect(generate).toHaveBeenCalledTimes(1);
     expect(info).toHaveBeenCalledTimes(1);
+  });
+  describe('load latency', () => {
+    const tenQuestions = Array.from({ length: 10 }, (_, index) => ({
+      _id: `db-${index}`,
+      text: `Database ${index}`,
+      style: 'style1',
+      tone: 'tone1',
+    }));
+    const generatedBatch = Array.from({ length: 5 }, (_, index) => ({
+      _id: `ai-${index}`,
+      text: `Generated ${index}`,
+      style: 'style1',
+      tone: 'tone1',
+    }));
+
+    // Stands in for the observer that tracks the card at the centre of the screen.
+    const observeViews = () => {
+      const callbacks: Array<{ callback: IntersectionObserverCallback; rootMargin?: string }> = [];
+      global.IntersectionObserver = class {
+        constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+          callbacks.push({ callback, rootMargin: options?.rootMargin });
+        }
+        observe() { }
+        unobserve() { }
+        disconnect() { }
+      } as any;
+      return (questionId: string) => {
+        const target = document.querySelector(`[data-question-id="${questionId}"]`);
+        if (!target) throw new Error(`No card for ${questionId}`);
+        act(() => {
+          callbacks
+            .filter((entry) => entry.rootMargin === '-50% 0px -50% 0px')
+            .forEach((entry) => entry.callback([{ isIntersecting: true, target } as any], {} as any));
+        });
+      };
+    };
+
+    it('asks for a full batch when the library runs short, and records how long the load took', async () => {
+      (useConvex as any).mockReturnValue({ query: vi.fn(), action: vi.fn().mockResolvedValue(mockQuestions.slice(0, 2)) });
+      const generate = vi.fn().mockResolvedValue(generatedBatch);
+      (useAction as any).mockReturnValue(generate);
+
+      render(<InfiniteScrollPage />);
+
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(7));
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ count: MAX_FEED_GENERATION_COUNT }));
+      await waitFor(() => expect(mockCaptureAnalytics).toHaveBeenCalledWith('feed_load', expect.objectContaining({
+        trigger: 'initial',
+        first_pull: true,
+        anchored: false,
+        library_count: 2,
+        generation_requested: MAX_FEED_GENERATION_COUNT,
+        generated_count: 5,
+        failed: false,
+      })));
+      const properties = mockCaptureAnalytics.mock.calls[0][1];
+      expect(properties.total_ms).toEqual(expect.any(Number));
+      expect(properties.generation_ms).toEqual(expect.any(Number));
+      expect(properties.stall_ms).toEqual(expect.any(Number));
+    });
+
+    it('shows a later anchored page\'s library questions before its generated ones arrive', async () => {
+      mockSearchParams = new URLSearchParams('style=style1');
+      const action = vi.fn()
+        .mockResolvedValueOnce({ questions: tenQuestions, anchoredMatchCount: 6, targetAnchoredCount: 6 })
+        .mockResolvedValueOnce({
+          questions: [
+            { _id: 'later-1', text: 'Later one', style: 'style2', tone: 'tone1' },
+            { _id: 'later-2', text: 'Later two', style: 'style2', tone: 'tone1' },
+          ],
+          anchoredMatchCount: 0,
+          targetAnchoredCount: 3,
+        });
+      (useConvex as any).mockReturnValue({ query: vi.fn(), action });
+      let finishGeneration: (questions: unknown[]) => void = () => {};
+      const generate = vi.fn(() => new Promise((resolve) => { finishGeneration = resolve; }));
+      (useAction as any).mockReturnValue(generate);
+
+      render(<InfiniteScrollPage />);
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10));
+      expect(generate).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByText('Load More'));
+
+      // The generation is still running, and the library's two are already on screen.
+      await waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(12));
+
+      await act(async () => { finishGeneration(generatedBatch.slice(0, 3)); });
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(15));
+    });
+
+    it('loads the next page ahead of time once few cards are left below the one being read', async () => {
+      const showCard = observeViews();
+      const action = vi.fn()
+        .mockResolvedValueOnce(tenQuestions)
+        .mockResolvedValue(mockQuestions);
+      (useConvex as any).mockReturnValue({ query: vi.fn(), action });
+
+      render(<InfiniteScrollPage />);
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10));
+
+      // Seven cards still below: too early.
+      showCard('db-2');
+      expect(action).toHaveBeenCalledTimes(1);
+
+      // Five below: the next page is fetched without any scrolling to the end.
+      showCard('db-4');
+      await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(15));
+      expect(mockCaptureAnalytics).toHaveBeenCalledWith('feed_load', expect.objectContaining({ trigger: 'prefetch' }));
+    });
+
+    it('does not send a prefetch again when it added nothing', async () => {
+      const showCard = observeViews();
+      const action = vi.fn()
+        .mockResolvedValueOnce(tenQuestions)
+        .mockResolvedValue([]);
+      (useConvex as any).mockReturnValue({ query: vi.fn(), action });
+      const generate = vi.fn().mockResolvedValue([]);
+      (useAction as any).mockReturnValue(generate);
+
+      render(<InfiniteScrollPage />);
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10));
+
+      showCard('db-6');
+      await waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockCaptureAnalytics).toHaveBeenCalledWith('feed_load', expect.objectContaining({ trigger: 'prefetch' })));
+
+      showCard('db-7');
+      showCard('db-8');
+      await act(async () => { await Promise.resolve(); });
+      expect(action).toHaveBeenCalledTimes(2);
+      expect(generate).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a person\'s last AI request for when they reach the end and ask for it', async () => {
+      const showCard = observeViews();
+      (useQuery as any).mockImplementation((queryFn: any) => {
+        if (queryFn === 'getStyles') return mockStyles;
+        if (queryFn === 'getTones') return mockTones;
+        if (queryFn === 'getCurrentUser') {
+          return { _id: 'u1', email: 'test@example.com', aiLimit: 10, aiUsage: { count: 9 }, isAiLimitReached: false };
+        }
+        return undefined;
+      });
+      const action = vi.fn()
+        .mockResolvedValueOnce(tenQuestions)
+        .mockResolvedValue([]);
+      (useConvex as any).mockReturnValue({ query: vi.fn(), action });
+      const generate = vi.fn().mockResolvedValue(generatedBatch);
+      (useAction as any).mockReturnValue(generate);
+
+      render(<InfiniteScrollPage />);
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10));
+
+      showCard('db-6');
+      await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(mockCaptureAnalytics).toHaveBeenCalledWith('feed_load', expect.objectContaining({ trigger: 'prefetch' })));
+      expect(generate).not.toHaveBeenCalled();
+      expect(screen.getByText('Load More')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('Load More'));
+      await waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(15));
+    });
+    // Lays the page out so the reader is `fromEnd` px above the end of a 5,000 px feed.
+    const scrollTo = (fromEnd: number) => {
+      Object.defineProperty(document.documentElement, 'offsetHeight', { configurable: true, value: 5000 });
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+      document.documentElement.scrollTop = 5000 - 800 - fromEnd;
+      fireEvent.scroll(window);
+    };
+    const restoreLayout = () => {
+      delete (document.documentElement as any).offsetHeight;
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
+      document.documentElement.scrollTop = 0;
+    };
+    const lastRequestUser = () => {
+      (useQuery as any).mockImplementation((queryFn: any) => {
+        if (queryFn === 'getStyles') return mockStyles;
+        if (queryFn === 'getTones') return mockTones;
+        if (queryFn === 'getCurrentUser') {
+          return { _id: 'u1', email: 'test@example.com', aiLimit: 10, aiUsage: { count: 9 }, isAiLimitReached: false };
+        }
+        return undefined;
+      });
+    };
+
+    it('holds the last AI request when scrolling loads ahead of the end, and spends it at the end', async () => {
+      lastRequestUser();
+      const action = vi.fn().mockResolvedValueOnce(tenQuestions).mockResolvedValue([]);
+      (useConvex as any).mockReturnValue({ query: vi.fn(), action });
+      const generate = vi.fn().mockResolvedValue(generatedBatch);
+      (useAction as any).mockReturnValue(generate);
+
+      try {
+        render(<InfiniteScrollPage />);
+        await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10));
+
+        // 600 px from the end: close enough to load ahead, not the end itself.
+        scrollTo(600);
+        await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(mockCaptureAnalytics).toHaveBeenCalledWith('feed_load', expect.objectContaining({ trigger: 'scroll', ahead: true })));
+        expect(generate).not.toHaveBeenCalled();
+
+        // More scrolling short of the end doesn't keep asking the library either.
+        scrollTo(500);
+        scrollTo(400);
+        await act(async () => { await Promise.resolve(); });
+        expect(action).toHaveBeenCalledTimes(2);
+
+        scrollTo(100);
+        await waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+        expect(generate.mock.calls[0][0]).not.toHaveProperty('ahead');
+        await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(15));
+      } finally {
+        restoreLayout();
+      }
+    });
+
+    it('marks a load asked ahead, and stops quietly when the server holds the last request', async () => {
+      const showCard = observeViews();
+      const action = vi.fn().mockResolvedValueOnce(tenQuestions).mockResolvedValue([]);
+      (useConvex as any).mockReturnValue({ query: vi.fn(), action });
+      const held = new ConvexError({ code: ERROR_CODES.AI_LAST_REQUEST_HELD, message: ERROR_MESSAGES.AI_LAST_REQUEST_HELD });
+      const generate = vi.fn().mockRejectedValueOnce(held).mockResolvedValue(generatedBatch);
+      (useAction as any).mockReturnValue(generate);
+      const info = vi.spyOn(toast, 'info').mockImplementation(() => 0);
+      const error = vi.spyOn(toast, 'error').mockImplementation(() => 0);
+
+      render(<InfiniteScrollPage />);
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10));
+
+      // The page's own copy of the count didn't say this was the last request; the server did.
+      showCard('db-6');
+      await waitFor(() => expect(generate).toHaveBeenCalledWith(expect.objectContaining({ ahead: true })));
+      await waitFor(() => expect(mockCaptureAnalytics).toHaveBeenCalledWith('feed_load', expect.objectContaining({ trigger: 'prefetch', failed: false })));
+      expect(info).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+      expect(screen.queryByText('Generation Limit Reached')).toBeNull();
+
+      fireEvent.click(screen.getByText('Load More'));
+      await waitFor(() => expect(generate).toHaveBeenCalledTimes(2));
+      expect(generate.mock.calls[1][0]).not.toHaveProperty('ahead');
+      await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(15));
+    });
+
+    it('counts as stalled only the time spent at the end of the feed with nothing new to read', async () => {
+      mockSearchParams = new URLSearchParams('style=style1');
+      let now = 0;
+      const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      let finishLibrary: (batch: unknown) => void = () => {};
+      const action = vi.fn()
+        .mockResolvedValueOnce({ questions: tenQuestions, anchoredMatchCount: 6, targetAnchoredCount: 6 })
+        .mockImplementationOnce(() => new Promise((resolve) => { finishLibrary = resolve; }));
+      (useConvex as any).mockReturnValue({ query: vi.fn(), action });
+      let finishGeneration: (questions: unknown[]) => void = () => {};
+      const generate = vi.fn(() => new Promise((resolve) => { finishGeneration = resolve; }));
+      (useAction as any).mockReturnValue(generate);
+
+      try {
+        render(<InfiniteScrollPage />);
+        await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(10));
+        mockCaptureAnalytics.mockClear();
+
+        // At the end of the feed when the load starts.
+        now = 1000;
+        fireEvent.click(screen.getByText('Load More'));
+        await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
+
+        // Half a second later the library's two cards arrive: there is something to read.
+        now = 1500;
+        await act(async () => {
+          finishLibrary({
+            questions: [
+              { _id: 'later-1', text: 'Later one', style: 'style2', tone: 'tone1' },
+              { _id: 'later-2', text: 'Later two', style: 'style2', tone: 'tone1' },
+            ],
+            anchoredMatchCount: 0,
+            targetAnchoredCount: 3,
+          });
+        });
+        await waitFor(() => expect(screen.getAllByTestId('modern-question-card')).toHaveLength(12));
+
+        // The reader reaches the new end at 3 s and waits there until the generation lands at 9 s.
+        now = 3000;
+        fireEvent.scroll(window);
+        now = 9000;
+        await act(async () => { finishGeneration(generatedBatch.slice(0, 3)); });
+
+        await waitFor(() => expect(mockCaptureAnalytics).toHaveBeenCalledWith('feed_load', expect.objectContaining({
+          trigger: 'button',
+          total_ms: 8000,
+          stall_ms: 500 + 6000,
+        })));
+      } finally {
+        clock.mockRestore();
+      }
+    });
   });
 });

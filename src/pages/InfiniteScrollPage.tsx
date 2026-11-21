@@ -23,6 +23,7 @@ import { ERROR_MESSAGES, ERROR_CODES, MAX_FEED_GENERATION_COUNT } from "../../co
 import { AI_USAGE_CYCLE_MS } from "../../convex/lib/aiPlanLimits";
 import { convexErrorData } from "../../convex/lib/errorData";
 import { cn } from "@/lib/utils";
+import { captureAnalytics } from "@/lib/analytics";
 
 const compareByTextLength = (a: Doc<"questions">, b: Doc<"questions">) =>
   (a.text || a.customText || "").length - (b.text || b.customText || "").length;
@@ -43,6 +44,18 @@ function aiLimitDescription(user: { aiLimit?: number; aiUsage?: { cycleStart?: n
   const resetsOn = new Date(cycleStart + AI_USAGE_CYCLE_MS).toLocaleDateString(undefined, { month: "long", day: "numeric" });
   return `${used} More become available on ${resetsOn}.`;
 }
+
+// What started a load: the page opening, the scroll reaching the end, the Load More button,
+// or the reader getting within PREFETCH_WHEN_REMAINING cards of the end.
+type FeedLoadTrigger = "initial" | "scroll" | "button" | "prefetch";
+
+// A load starts when this many cards or fewer are left below the one being read, so a
+// generated batch (about 12 s) is usually there before the reader reaches the end.
+const PREFETCH_WHEN_REMAINING = 5;
+
+// The spinner and the Load More button sit in about the last 300 px of the page.
+const isAtFeedEnd = () =>
+  window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 300;
 
 export default function InfiniteScrollPage() {
   const { effectiveTheme } = useTheme();
@@ -173,6 +186,15 @@ export default function InfiniteScrollPage() {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const isLoadingRef = useRef(false);
+  // When the reader last reached the end of the feed during the load in flight, or null while
+  // they have cards left to read. Each stretch at the end is added to the load's stall time.
+  const atFeedEndSinceRef = useRef<number | null>(null);
+  // Set when a load asked ahead of the reader was refused the person's last AI request, so the
+  // feed stops asking ahead until they reach its end or press Load More.
+  const heldLastRequestRef = useRef(false);
+  // The feed's length when the last prefetch started, so a prefetch that adds nothing isn't
+  // sent again until the feed grows.
+  const prefetchedAtLengthRef = useRef(0);
   const hasMoreRef = useRef(true);
   hasMoreRef.current = hasMore;
 
@@ -280,12 +302,19 @@ export default function InfiniteScrollPage() {
 
 
   // Function to load more questions
-  const loadMoreQuestions = useCallback(async () => {
+  const loadMoreQuestions = useCallback(async (trigger: FeedLoadTrigger = "scroll") => {
     // Check if we are already loading or missing params
     const isStorageLoaded = hiddenStyles !== undefined && hiddenTones !== undefined &&
       (!user.isSignedIn || (hiddenStyles !== null && hiddenTones !== null));
 
     if (!user.isLoaded || !anchorParamsReady || isLoadingRef.current || !hasMore || allStylesBlocked || allTonesBlocked || !isStorageLoaded) return;
+
+    // A load asked ahead of the reader (a prefetch, or the scroll handler firing before the
+    // end of the feed) never spends a person's last AI request: that one waits until they
+    // reach the end, or press Load More.
+    const ahead = trigger === "prefetch" || (trigger === "scroll" && !isAtFeedEnd());
+    if (ahead && heldLastRequestRef.current) return;
+    if (!ahead) heldLastRequestRef.current = false;
 
     // Capture current request ID
     requestIdRef.current++;
@@ -294,10 +323,57 @@ export default function InfiniteScrollPage() {
     setIsLoading(true);
     setLoadError(null);
 
+    const isFirstPull = questionsRef.current.length === 0;
+    const hasAnchors = !!(anchoredStyleId || anchoredToneId || anchoredTopicId);
+    const loadStartedAt = performance.now();
+    atFeedEndSinceRef.current = isAtFeedEnd() ? loadStartedAt : null;
+    // Time the reader spent at the end of the feed with nothing new to read. A stretch ends
+    // when cards are added below them, and another begins if they reach the new end.
+    let stalledMs = 0;
+    const endStall = () => {
+      const since = atFeedEndSinceRef.current;
+      if (since === null || currentRequestId !== requestIdRef.current) return;
+      stalledMs += performance.now() - since;
+      atFeedEndSinceRef.current = null;
+    };
+    const addsCards = (batch: { _id: Id<"questions"> }[]) => {
+      const shown = new Set(questionsRef.current.map((question) => question._id));
+      return batch.some((question) => !shown.has(question._id));
+    };
+    const timing: {
+      libraryMs?: number;
+      libraryCount?: number;
+      generationRequested: number;
+      generationMs?: number;
+      generatedCount: number;
+      failed: boolean;
+    } = { generationRequested: 0, generatedCount: 0, failed: false };
+    // The server refuses to spend the last request on a load asked ahead (AI_LAST_REQUEST_HELD),
+    // judged on the count when the request is recorded. This check on the page's own copy of
+    // the count only saves the round trip.
+    const requestsLeft =
+      typeof currentUser?.aiLimit === "number" && typeof currentUser?.aiUsage?.count === "number"
+        ? currentUser.aiLimit - currentUser.aiUsage.count
+        : null;
+    const holdsLastRequest = ahead && requestsLeft !== null && requestsLeft <= 1;
+    const isLastRequestHeld = (err: unknown) => convexErrorData(err)?.code === ERROR_CODES.AI_LAST_REQUEST_HELD;
+    const appendQuestions = (batch: Doc<"questions">[]) => {
+      if (batch.length === 0) return;
+      if (addsCards(batch)) endStall();
+      setQuestions((previous) => {
+        const previousIds = new Set(previous.map((question) => question._id));
+        const uniqueNew = batch.filter((question) => !previousIds.has(question._id));
+        return uniqueNew.length === 0 ? previous : [...previous, ...uniqueNew];
+      });
+      setSeenIds((previous) => {
+        const next = new Set(previous);
+        batch.forEach((question) => next.add(question._id));
+        return next;
+      });
+    };
+
     try {
-      const isFirstPull = questionsRef.current.length === 0;
       const BATCH_SIZE = isFirstPull ? 10 : 5;
-      const hasAnchors = !!(anchoredStyleId || anchoredToneId || anchoredTopicId);
 
       if (hasAnchors) {
         const feedBatch = await convex.action(api.core.questions.getNextRandomQuestions, {
@@ -315,6 +391,8 @@ export default function InfiniteScrollPage() {
         if (currentRequestId !== requestIdRef.current) return;
 
         const dbQuestions = Array.isArray(feedBatch) ? feedBatch : feedBatch.questions;
+        timing.libraryMs = performance.now() - loadStartedAt;
+        timing.libraryCount = dbQuestions.length;
         const anchoredMatchCount = Array.isArray(feedBatch) ? 0 : feedBatch.anchoredMatchCount;
         const targetAnchoredCount = Array.isArray(feedBatch) ? Math.min(BATCH_SIZE, BATCH_SIZE >= 10 ? 6 : Math.ceil(BATCH_SIZE * 0.6)) : feedBatch.targetAnchoredCount;
         const anchoredQuestions = dbQuestions.slice(0, anchoredMatchCount);
@@ -323,20 +401,44 @@ export default function InfiniteScrollPage() {
         const totalShortfall = Math.max(0, BATCH_SIZE - dbQuestions.length);
         const generationCount = Math.min(MAX_FEED_GENERATION_COUNT, Math.max(anchorShortfall, totalShortfall));
         let generatedQuestions: Doc<"questions">[] = [];
+        const canGenerate = generationCount > 0 && user.isSignedIn && !currentUser?.isAiLimitReached && !aiPausedRef.current;
+        // After the first page, the library's questions go on screen at once and the
+        // generated ones follow when they arrive. The first page still waits for both, so
+        // it can be sorted as one batch.
+        const shownEarly = !isFirstPull && dbQuestions.length > 0 && canGenerate;
+        if (shownEarly) appendQuestions(dbQuestions as Doc<"questions">[]);
 
-        if (generationCount > 0 && user.isSignedIn && !currentUser?.isAiLimitReached && !aiPausedRef.current) {
+        if (canGenerate && holdsLastRequest) {
+          heldLastRequestRef.current = true;
+          if (!shownEarly) appendQuestions(dbQuestions as Doc<"questions">[]);
+          return;
+        }
+
+        if (canGenerate) {
+          const generationStartedAt = performance.now();
+          timing.generationRequested = generationCount;
           try {
             const generated = await generateAIQuestions({
               count: generationCount,
               anchoredStyleId: anchoredStyleId ?? undefined,
               anchoredToneId: anchoredToneId ?? undefined,
               anchoredTopicId: anchoredTopicId ?? undefined,
+              ...(ahead ? { ahead: true } : {}),
             });
+            timing.generationMs = performance.now() - generationStartedAt;
             if (currentRequestId !== requestIdRef.current) return;
             generatedQuestions = (generated || []).filter((question): question is Doc<"questions"> => question !== null);
+            timing.generatedCount = generatedQuestions.length;
           } catch (err) {
-            console.error("Anchored AI generation failed:", err);
+            timing.generationMs = performance.now() - generationStartedAt;
             if (currentRequestId !== requestIdRef.current) return;
+            if (isLastRequestHeld(err)) {
+              heldLastRequestRef.current = true;
+              if (!shownEarly) appendQuestions(dbQuestions as Doc<"questions">[]);
+              return;
+            }
+            timing.failed = true;
+            console.error("Anchored AI generation failed:", err);
 
             const errorMessage = typeof err === "string" ? err : err instanceof Error ? err.message : JSON.stringify(err);
             const errorCode = convexErrorData(err)?.code ?? null;
@@ -368,6 +470,10 @@ export default function InfiniteScrollPage() {
 
         const existingIds = new Set(dbQuestions.map((question) => question._id));
         const uniqueGenerated = generatedQuestions.filter((question) => !existingIds.has(question._id));
+        if (shownEarly) {
+          appendQuestions(uniqueGenerated);
+          return;
+        }
         const generatedAnchoredCount = Math.max(0, targetAnchoredCount - anchoredQuestions.length);
         const finalAnchored = [...anchoredQuestions, ...uniqueGenerated.slice(0, generatedAnchoredCount)];
         const generatedFallback = uniqueGenerated.slice(generatedAnchoredCount);
@@ -384,15 +490,7 @@ export default function InfiniteScrollPage() {
           setQuestions(orderedBatch);
           setSeenIds(new Set(orderedBatch.map((question) => question._id)));
         } else {
-          setQuestions((previous) => {
-            const previousIds = new Set(previous.map((question) => question._id));
-            return [...previous, ...orderedBatch.filter((question) => !previousIds.has(question._id))];
-          });
-          setSeenIds((previous) => {
-            const next = new Set(previous);
-            orderedBatch.forEach((question) => next.add(question._id));
-            return next;
-          });
+          appendQuestions(orderedBatch);
         }
         return;
       }
@@ -414,12 +512,15 @@ export default function InfiniteScrollPage() {
 
       // Check for staleness after await
       if (currentRequestId !== requestIdRef.current) return;
+      timing.libraryMs = performance.now() - loadStartedAt;
+      timing.libraryCount = dbQuestions.length;
 
       let combinedQuestions = [...dbQuestions];
 
       // Update state immediately ONLY if it's NOT the first pull
       // For the first pull, we want to collect the full batch (including AI) before sorting
       if (!isFirstPull && combinedQuestions.length > 0) {
+        if (addsCards(combinedQuestions)) endStall();
         setQuestions(prev => {
           const existingIds = new Set(prev.map(q => q._id));
           const uniqueNew = combinedQuestions.filter(q => !existingIds.has(q._id));
@@ -474,17 +575,32 @@ export default function InfiniteScrollPage() {
           return;
         }
 
+        // The library's questions, if any, are already on screen (a prefetch is never the
+        // first page).
+        if (holdsLastRequest) {
+          heldLastRequestRef.current = true;
+          return;
+        }
+
+        const generationStartedAt = performance.now();
+        // A request costs about the same whether it asks for one question or five, and is
+        // counted once against the person's limit, so it always asks for a full batch.
+        timing.generationRequested = MAX_FEED_GENERATION_COUNT;
         try {
           const generated = await generateAIQuestions({
+            count: MAX_FEED_GENERATION_COUNT,
             anchoredStyleId: anchoredStyleId ?? undefined,
             anchoredToneId: anchoredToneId ?? undefined,
             anchoredTopicId: anchoredTopicId ?? undefined,
+            ...(ahead ? { ahead: true } : {}),
           });
+          timing.generationMs = performance.now() - generationStartedAt;
 
           // Check for staleness after generation await
           if (currentRequestId !== requestIdRef.current) return;
 
           const validGenerated = (generated || []).filter((q): q is Doc<"questions"> => q !== null);
+          timing.generatedCount = validGenerated.length;
           const uniqueGenerated = validGenerated.filter(q => !combinedQuestions.some(cq => cq._id === q._id));
 
           if (isFirstPull) {
@@ -498,6 +614,7 @@ export default function InfiniteScrollPage() {
               setSeenIds(new Set(combinedQuestions.map(q => q._id)));
             }
           } else if (uniqueGenerated.length > 0) {
+            if (addsCards(uniqueGenerated)) endStall();
             setQuestions(prev => {
               const existingIds = new Set(prev.map(q => q._id));
               const uniqueNew = uniqueGenerated.filter(q => !existingIds.has(q._id));
@@ -516,8 +633,16 @@ export default function InfiniteScrollPage() {
             setSeenIds(new Set());
           }
         } catch (err) {
-          console.error("AI Generation failed:", err);
+          timing.generationMs = performance.now() - generationStartedAt;
           if (currentRequestId !== requestIdRef.current) return;
+          // A load asked ahead is never the first page, so the library's questions, if any,
+          // are already on screen.
+          if (isLastRequestHeld(err)) {
+            heldLastRequestRef.current = true;
+            return;
+          }
+          timing.failed = true;
+          console.error("AI Generation failed:", err);
 
           const errorMessage = typeof err === 'string' ? err : (err instanceof Error ? err.message : JSON.stringify(err));
           const errorCode = convexErrorData(err)?.code ?? null;
@@ -567,6 +692,7 @@ export default function InfiniteScrollPage() {
         setSeenIds(new Set(combinedQuestions.map(q => q._id)));
       }
     } catch (error) {
+      timing.failed = true;
       console.error("Error fetching questions:", error);
       if (currentRequestId !== requestIdRef.current) return;
 
@@ -583,6 +709,27 @@ export default function InfiniteScrollPage() {
       if (currentRequestId === requestIdRef.current) {
         isLoadingRef.current = false;
         setIsLoading(false);
+
+        endStall();
+        const finishedAt = performance.now();
+        const round = (ms: number | undefined) => (ms === undefined ? undefined : Math.round(ms));
+        const properties = {
+          trigger,
+          first_pull: isFirstPull,
+          anchored: hasAnchors,
+          total_ms: round(finishedAt - loadStartedAt),
+          // How long the reader sat at the end of the feed with nothing new to read.
+          stall_ms: round(stalledMs),
+          ahead,
+          library_ms: round(timing.libraryMs),
+          library_count: timing.libraryCount,
+          generation_requested: timing.generationRequested,
+          generation_ms: round(timing.generationMs),
+          generated_count: timing.generatedCount,
+          failed: timing.failed,
+        };
+        captureAnalytics("feed_load", properties);
+        if (import.meta.env.DEV) console.debug("feed_load", properties);
       }
     }
   }, [convex, seenIds, hiddenQuestions, hiddenStyles, hiddenTones, generateAIQuestions, user.isSignedIn, allStylesBlocked, allTonesBlocked, currentUser, hasMore, user.isLoaded, anchoredStyleId, anchoredToneId, anchoredTopicId, anchorParamsReady]);
@@ -595,6 +742,9 @@ export default function InfiniteScrollPage() {
     requestIdRef.current++;
     // The discarded request cannot release this lock in its finally block.
     isLoadingRef.current = false;
+    atFeedEndSinceRef.current = null;
+    heldLastRequestRef.current = false;
+    prefetchedAtLengthRef.current = 0;
     setIsLoading(false);
     setLoadError(null);
     setHasMore(true);
@@ -605,9 +755,22 @@ export default function InfiniteScrollPage() {
   // Initial load
   useEffect(() => {
     if (questions.length === 0 && hasMore) {
-      void loadMoreQuestions();
+      void loadMoreQuestions("initial");
     }
   }, [questions.length, hasMore, loadMoreQuestions]);
+
+  // Prefetch: start the next load while the reader still has a few cards left.
+  const loadMoreQuestionsRef = useRef(loadMoreQuestions);
+  loadMoreQuestionsRef.current = loadMoreQuestions;
+  useEffect(() => {
+    if (!activeQuestion || !hasMore || isLoadingRef.current) return;
+    const index = questions.findIndex((question) => question._id === activeQuestion._id);
+    if (index < 0) return;
+    const remaining = questions.length - 1 - index;
+    if (remaining > PREFETCH_WHEN_REMAINING || prefetchedAtLengthRef.current === questions.length) return;
+    prefetchedAtLengthRef.current = questions.length;
+    void loadMoreQuestionsRef.current("prefetch");
+  }, [activeQuestion, questions, hasMore]);
 
   useEffect(() => {
     if (allStylesBlocked || allTonesBlocked) {
@@ -624,7 +787,10 @@ export default function InfiniteScrollPage() {
     const handleScroll = () => {
       // Increased threshold to 1000px for pre-emptive loading
       if (window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 1000) {
-        void loadMoreQuestions();
+        void loadMoreQuestions("scroll");
+      }
+      if (isLoadingRef.current && atFeedEndSinceRef.current === null && isAtFeedEnd()) {
+        atFeedEndSinceRef.current = performance.now();
       }
 
       if (window.scrollY > 500) {
@@ -1068,7 +1234,7 @@ export default function InfiniteScrollPage() {
             <div className="flex justify-center py-8">
               <Button
                 onClick={() => {
-                  void loadMoreQuestions();
+                  void loadMoreQuestions("button");
                 }}
               >
                 Load More

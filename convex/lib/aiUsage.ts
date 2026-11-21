@@ -71,6 +71,11 @@ async function ensureAiUsageRow(ctx: MutationCtx, userId: Id<"users">) {
 export async function checkAndIncrementAiUsage(
   ctx: MutationCtx,
   userId: Id<"users">,
+  /**
+   * keepLast: refuse a request that would use the person's last one. The feed sets it when it
+   * asks ahead of the reader, so the last request is only spent when they ask for it.
+   */
+  options: { keepLast?: boolean } = {},
 ): Promise<number> {
   const now = Date.now();
   const row = await ensureAiUsageRow(ctx, userId);
@@ -89,6 +94,12 @@ export async function checkAndIncrementAiUsage(
     throw new ConvexError({
       code: ERROR_CODES.AI_LIMIT_REACHED,
       message: ERROR_MESSAGES.AI_LIMIT_REACHED,
+    });
+  }
+  if (options.keepLast && remaining <= 1) {
+    throw new ConvexError({
+      code: ERROR_CODES.AI_LAST_REQUEST_HELD,
+      message: ERROR_MESSAGES.AI_LAST_REQUEST_HELD,
     });
   }
 

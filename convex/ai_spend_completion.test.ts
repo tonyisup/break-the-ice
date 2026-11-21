@@ -14,6 +14,7 @@ import { ensureAiUnansweredLeft, holdAiUnanswered, isAiStopError, releaseAiUnans
 import { convexErrorData } from "./lib/errorData";
 import { GENERATION_MODEL, maxOutputTokens, openRouterClient } from "./lib/generationRunner";
 import { clampBatchSize } from "./lib/promptArchitecture";
+import { getAiPlanLimit } from "./lib/aiPlanLimits";
 
 // The model call is the only network edge: stub it on the shared client so the rest
 // of the pipeline (budget check, run bookkeeping, spend ledger) runs for real.
@@ -731,6 +732,70 @@ describe("room for a thinking model's reasoning", () => {
     expect(questions).toHaveLength(5);
     // 2,000 for the reasoning, then 300 + 200 per question.
     expect(create.mock.calls[0][0]).toMatchObject({ max_tokens: 3300 });
+  });
+
+  test("a feed run records when its request began and how long the model call took, on success and on failure", async () => {
+    const { t, styleId, toneId } = await setup();
+    const before = Date.now();
+    create.mockResolvedValueOnce(completion(questionsJson("What small win are you proud of this week?"), { cost: 0.01 }) as never);
+    await t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 1, anchoredStyleId: styleId, anchoredToneId: toneId });
+
+    create.mockResolvedValue(cutOff('{"questions":[{"text":"What small win are you pro', 0.006) as never);
+    await expect(
+      t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 1, anchoredStyleId: styleId, anchoredToneId: toneId }),
+    ).rejects.toThrow(/could not be read/);
+
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs.map((run) => run.status)).toEqual(["succeeded", "failed"]);
+    for (const run of runs) {
+      // The request began before the reads that come ahead of the run's own record.
+      expect(run.requestStartedAt).toBeGreaterThanOrEqual(before);
+      expect(run.requestStartedAt).toBeLessThanOrEqual(run.createdAt);
+      expect(run.providerMs).toBeGreaterThanOrEqual(0);
+      expect(run.finishedAt! - run.requestStartedAt!).toBeGreaterThanOrEqual(run.providerMs!);
+    }
+  });
+
+  test("a run whose model call was refused still records how long the call took", async () => {
+    const { t, styleId, toneId } = await setup();
+    create.mockRejectedValue(new Error("the provider sent something unreadable"));
+
+    await expect(
+      t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 1, anchoredStyleId: styleId, anchoredToneId: toneId }),
+    ).rejects.toThrow();
+
+    const runs = await t.run(async (ctx) => await ctx.db.query("generationRuns").collect());
+    expect(runs).toHaveLength(1);
+    expect(runs[0].status).toBe("failed");
+    expect(runs[0].providerMs).toBeGreaterThanOrEqual(0);
+    expect(runs[0].requestStartedAt).toBeLessThanOrEqual(runs[0].createdAt);
+  });
+
+  test("a feed request asked ahead of the reader is refused the person's last request, which an ordinary request can still use", async () => {
+    const { t, meId, styleId, toneId } = await setup();
+    const limit = getAiPlanLimit();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("userAiUsage", { userId: meId, count: limit - 2, cycleStart: Date.now() });
+    });
+    create.mockResolvedValue(completion(questionsJson("What small win are you proud of this week?"), { cost: 0.01 }) as never);
+    const ask = (ahead: boolean, text: string) => {
+      create.mockResolvedValue(completion(questionsJson(text), { cost: 0.01 }) as never);
+      return t.withIdentity(ME).action(api.core.ai.generateAIQuestionForFeed, { count: 1, anchoredStyleId: styleId, anchoredToneId: toneId, ahead });
+    };
+    const used = async () => (await t.run(async (ctx) => await ctx.db.query("userAiUsage").collect()))[0].count;
+
+    // Two left: asking ahead may use one.
+    expect(await ask(true, "Which smell takes you straight back to childhood?")).toHaveLength(1);
+    expect(await used()).toBe(limit - 1);
+
+    // One left: asking ahead is refused before any model call, and nothing is counted.
+    const callsBefore = create.mock.calls.length;
+    await expect(ask(true, "What habit would you keep if you moved abroad?")).rejects.toThrow(ERROR_MESSAGES.AI_LAST_REQUEST_HELD);
+    expect(create.mock.calls.length).toBe(callsBefore);
+    expect(await used()).toBe(limit - 1);
+
+    expect(await ask(false, "Which song do you skip every single time?")).toHaveLength(1);
+    expect(await used()).toBe(limit);
   });
 
   test("the cap follows the batch size the prompt was built for, from one question up to the ten-question limit", async () => {

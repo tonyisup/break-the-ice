@@ -409,6 +409,11 @@ const runCounts = {
   rejectedCount: v.optional(v.number()),
 };
 
+const runTiming = {
+  requestStartedAt: v.optional(v.number()),
+  providerMs: v.optional(v.number()),
+};
+
 export const completeGenerationRun = internalMutation({
   args: {
     runId: v.id("generationRuns"),
@@ -417,6 +422,7 @@ export const completeGenerationRun = internalMutation({
     previewText: v.optional(v.string()),
     acceptedQuestionId: v.optional(v.id("questions")),
     ...runCounts,
+    ...runTiming,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -430,6 +436,8 @@ export const completeGenerationRun = internalMutation({
       insertedCount: args.insertedCount,
       duplicateCount: args.duplicateCount,
       rejectedCount: args.rejectedCount,
+      requestStartedAt: args.requestStartedAt,
+      providerMs: args.providerMs,
       finishedAt: Date.now(),
     });
     return null;
@@ -442,6 +450,7 @@ export const failGenerationRun = internalMutation({
     error: v.string(),
     rawResponse: v.optional(v.string()),
     ...runCounts,
+    ...runTiming,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -453,6 +462,8 @@ export const failGenerationRun = internalMutation({
       insertedCount: args.insertedCount,
       duplicateCount: args.duplicateCount,
       rejectedCount: args.rejectedCount,
+      requestStartedAt: args.requestStartedAt,
+      providerMs: args.providerMs,
       finishedAt: Date.now(),
     });
     return null;
