@@ -71,8 +71,8 @@ vi.mock("@/components/modern-question-card/modern-question-card", () => ({
 }));
 
 vi.mock("lucide-react", () => ({
-  Link: () => <span aria-hidden="true">link</span>,
-  ExternalLink: () => <span aria-hidden="true">external</span>,
+  ChevronRight: () => <span aria-hidden="true">chevron</span>,
+  X: () => <span aria-hidden="true">x</span>,
 }));
 
 vi.mock("sonner", () => ({

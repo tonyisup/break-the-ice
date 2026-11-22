@@ -9,7 +9,6 @@ import {
 	Tags,
 	Copy,
 	Trash2,
-	Settings,
 	ShieldCheck,
 	Box,
 	Sparkles,
@@ -31,7 +30,6 @@ import {
 } from "@/components/ui/sidebar"
 import { UserButton } from "@clerk/clerk-react"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
-import { Separator } from "@/components/ui/separator"
 
 const navGroups = [
   {
@@ -81,7 +79,7 @@ export function AdminSidebar() {
 					</div>
 					<div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
 						<span className="font-semibold text-lg">Admin Panel</span>
-						<span className="text-xs text-muted-foreground">Break the Ice</span>
+						<span className="text-xs text-muted-foreground">Break the Ice(berg)</span>
 					</div>
 				</div>
 			</SidebarHeader>
@@ -129,15 +127,6 @@ export function AdminSidebar() {
 							className="h-10 w-full justify-start gap-3 border-none bg-transparent px-2 text-sidebar-foreground hover:bg-accent max-md:h-11 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-0"
 							labelClassName="group-data-[collapsible=icon]:hidden"
 						/>
-					</SidebarMenuItem>
-					<Separator className="my-2 opacity-50" />
-					<SidebarMenuItem>
-						<SidebarMenuButton asChild tooltip="Legacy Admin" className="h-10 hover:bg-accent max-md:h-11 group-data-[collapsible=icon]:!size-10">
-							<Link to="/admin-old" className="flex items-center gap-3">
-								<Settings className="size-5 shrink-0" />
-								<span className="font-medium">Legacy Admin</span>
-							</Link>
-						</SidebarMenuButton>
 					</SidebarMenuItem>
 				</SidebarMenu>
 			</SidebarFooter>

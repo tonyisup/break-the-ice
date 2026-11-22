@@ -5,6 +5,7 @@ import { ClerkProviderWithTheme } from "./components/ClerkProviderWithTheme";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
+import "@fontsource-variable/manrope/index.css";
 import "./index.css";
 import { StorageProvider } from "./hooks/useStorageContext";
 import App from "./App";

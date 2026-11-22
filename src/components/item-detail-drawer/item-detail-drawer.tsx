@@ -6,11 +6,11 @@ import {
   DrawerDescription,
   DrawerFooter,
   DrawerClose,
-} from '@/components/ui/drawer';
-import { Button } from '@/components/ui/button';
-import { cn, isColorDark } from '@/lib/utils';
-import { Icon, IconComponent } from '@/components/ui/icons/icon';
-import { Id } from '../../../convex/_generated/dataModel';
+} from "@/components/ui/drawer";
+import { Button } from "@/components/ui/button";
+import { cn, isColorDark } from "@/lib/utils";
+import { Icon, IconComponent } from "@/components/ui/icons/icon";
+import { Id } from "../../../convex/_generated/dataModel";
 
 export interface ItemDetails {
   id: Id<"styles"> | Id<"tones"> | Id<"topics">;
@@ -39,11 +39,9 @@ export function ItemDetailDrawer({
   onOpenChange,
   onSelectItem,
   onHideItem,
-  onAddFilter,
   onAnchorItem,
   isAnchored,
 }: ItemDetailDrawerProps) {
-
   if (!item) {
     return null;
   }
@@ -58,53 +56,71 @@ export function ItemDetailDrawer({
     onOpenChange(false);
   };
 
-  const handleAddFilter = () => {
-    onAddFilter?.(item);
-    onOpenChange(false);
-  }
-
   const handleAnchor = () => {
     onAnchorItem?.(item);
     onOpenChange(false);
-  }
+  };
 
   return (
     <Drawer open={isOpen} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2">
-              <IconComponent icon={item.icon} size={24} color={item.color} />
+      <DrawerContent className="mx-auto max-w-lg">
+        <DrawerHeader className="text-left">
+          <div className="flex items-center justify-between gap-3">
+            <DrawerTitle className="flex items-center gap-3 text-xl font-bold tracking-[-0.02em]">
+              <span
+                aria-hidden="true"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                style={{
+                  backgroundColor: `color-mix(in srgb, ${item.color} 15%, transparent)`,
+                  boxShadow: `inset 0 0 0 1.5px color-mix(in srgb, ${item.color} 35%, transparent)`,
+                }}
+              >
+                <IconComponent icon={item.icon} size={20} color={item.color} />
+              </span>
               {item.name}
+            </DrawerTitle>
+            <span className="rounded-full border border-border bg-secondary px-3 py-1 text-xs font-semibold text-muted-foreground">
+              {item.type}
             </span>
-            <span
-              style={{ borderColor: item.color }}
-              className={cn(
-                "text-sm text-muted-foreground p-2 rounded-2xl",
-                item.type === "Style" ? "border-l-4 border-t-4 border-r-0 border-b-0" : "border-r-4 border-b-4 border-l-0 border-t-0"
-              )}
-            >{item.type}</span>
-          </DrawerTitle>
-          <DrawerDescription className="pt-4 text-sm text-muted-foreground">{item.description}</DrawerDescription>
+          </div>
+          <DrawerDescription className="pt-3 text-sm leading-relaxed text-muted-foreground">
+            {item.description}
+          </DrawerDescription>
         </DrawerHeader>
-        <DrawerFooter>
+        <DrawerFooter className="gap-2 pt-2">
           {onAnchorItem && (
             <Button
               onClick={handleAnchor}
-              className={isColorDark(item.color) ? "text-white" : "text-black"}
+              className={cn(
+                "min-h-11 rounded-full font-semibold",
+                isColorDark(item.color) ? "text-white" : "text-neutral-950",
+              )}
               style={{ backgroundColor: item.color }}
             >
-              {isAnchored ? "Remove Anchor" : `More Like This ${item.type}`}
+              {isAnchored ? "Remove filter" : `More like this ${item.type.toLowerCase()}`}
             </Button>
           )}
-          {onSelectItem && <Button
-            onClick={handleSelect}
-            className={isColorDark(item.color) ? "text-white" : "text-black"}
-            style={{ backgroundColor: item.color }}
-          >Select</Button>}
-          {onHideItem && item.type !== "Topic" && <Button variant="outline" onClick={handleHide}>Hide</Button>}
+          {onSelectItem && (
+            <Button
+              onClick={handleSelect}
+              className={cn(
+                "min-h-11 rounded-full font-semibold",
+                isColorDark(item.color) ? "text-white" : "text-neutral-950",
+              )}
+              style={{ backgroundColor: item.color }}
+            >
+              Select
+            </Button>
+          )}
+          {onHideItem && item.type !== "Topic" && (
+            <Button variant="outline" className="min-h-11 rounded-full" onClick={handleHide}>
+              Hide
+            </Button>
+          )}
           <DrawerClose asChild>
-            <Button variant="ghost">Close</Button>
+            <Button variant="ghost" className="min-h-11 rounded-full">
+              Close
+            </Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>

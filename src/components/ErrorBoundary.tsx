@@ -45,17 +45,17 @@ export class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return this.props.fallback || (
-        <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white flex items-center justify-center p-8">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold mb-4">Something went wrong</h1>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
+        <div className="deck-canvas min-h-screen text-foreground flex items-center justify-center p-6">
+          <div className="deck-card max-w-md w-full p-8 text-center">
+            <h1 className="text-2xl font-extrabold tracking-[-0.02em] mb-3 text-card-foreground">Something went wrong</h1>
+            <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
               We're sorry, but something unexpected happened. Please try refreshing the page.
             </p>
-            <p className="mb-4"><a href="/app" className="font-semibold underline underline-offset-4">Back to questions</a></p>
-            <div className="flex gap-3 justify-center">
+            <p className="mb-5"><a href="/app" className="text-sm font-semibold text-primary underline underline-offset-4">Back to questions</a></p>
+            <div className="flex flex-wrap gap-3 justify-center">
               <button
                 onClick={() => window.location.reload()}
-                className="min-h-11 px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 transition-colors"
+                className="min-h-11 px-5 py-2 bg-primary text-primary-foreground rounded-full font-semibold hover:bg-primary/90 transition-colors"
               >
                 Refresh Page
               </button>
@@ -66,7 +66,7 @@ export class ErrorBoundary extends Component<Props, State> {
                     this.props.onReset?.();
                     this.setState({ hasError: false, error: undefined });
                   }}
-                  className="min-h-11 px-4 py-2 border border-red-700 text-red-700 dark:text-red-300 dark:border-red-300 rounded hover:bg-red-500/10 transition-colors"
+                  className="min-h-11 px-5 py-2 border border-destructive text-destructive rounded-full font-semibold hover:bg-destructive/10 transition-colors"
                 >
                   {this.props.resetLabel ?? "Reset & Continue"}
                 </button>

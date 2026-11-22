@@ -27,7 +27,7 @@ export default function PrivacyPolicyPage() {
         <section>
           <h2 className="text-xl font-semibold mb-2">3. Third-Party Services</h2>
           <p>
-            We partner with several trusted services to run Break the Ice:
+            We partner with several trusted services to run Break the Ice(berg):
           </p>
           <ul className="list-disc ml-6 mt-2 space-y-1">
             <li><strong>Clerk:</strong> For secure authentication.</li>

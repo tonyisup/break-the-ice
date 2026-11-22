@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { useMutation, useQuery } from 'convex/react';
 import { getFunctionName } from 'convex/server';
@@ -50,6 +50,9 @@ async function deleteMyQuestion(failure: unknown) {
     .map(([cardProps]) => cardProps)
     .find((cardProps) => cardProps.question._id === 'q1' && cardProps.onDelete);
   await act(async () => { props.onDelete(); });
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  });
 
   expect(deletePersonalQuestion).toHaveBeenCalledWith({ questionId: 'q1' });
 }

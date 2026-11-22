@@ -18,7 +18,7 @@ const appColorVariables = {
   colorModalBackdrop: "hsl(var(--background) / 0.8)",
   borderRadius: "var(--radius)",
   fontFamily:
-    '"Inter Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    '"Manrope Variable", "Avenir Next", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
 };
 
 const billingDrawerElements = {

@@ -1,275 +1,283 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAction, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@clerk/clerk-react";
 import { Header } from "@/components/header";
+import { Button } from "@/components/ui/button";
 import { useTheme } from "../../hooks/useTheme";
 import { toast } from "sonner";
 import { Loader2, Mail, CheckCircle2, XCircle, ArrowRight } from "lucide-react";
 import { NewsletterSubscribeResponse } from "@/types/newsletter";
 
 const UnsubscribePage = () => {
-	const [searchParams] = useSearchParams();
-	const { isSignedIn, isLoaded } = useAuth();
-	const { effectiveTheme } = useTheme();
+  const [searchParams] = useSearchParams();
+  const { isSignedIn, isLoaded } = useAuth();
+  useTheme();
 
-	const currentUser = useQuery(api.core.users.getCurrentUser, {});
-	const unsubscribeAction = useAction(api.resend.unsubscribeContact);
-	const getStatusAction = useAction(api.resend.getContactStatus);
-	const subscribeAction = useAction(api.core.newsletter.subscribe);
+  const currentUser = useQuery(api.core.users.getCurrentUser, {});
+  const unsubscribeAction = useAction(api.resend.unsubscribeContact);
+  const getStatusAction = useAction(api.resend.getContactStatus);
+  const subscribeAction = useAction(api.core.newsletter.subscribe);
 
-	const [email, setEmail] = useState<string | null>(null);
-	const [formEmail, setFormEmail] = useState("");
-	const [status, setStatus] = useState<"loading" | "subscribed" | "unsubscribed" | "unset" | "error" | "success_subscribed" | "verification_sent">("loading");
-	const [isProcessing, setIsProcessing] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
+  const [formEmail, setFormEmail] = useState("");
+  const [status, setStatus] = useState<
+    | "loading"
+    | "subscribed"
+    | "unsubscribed"
+    | "unset"
+    | "error"
+    | "success_subscribed"
+    | "verification_sent"
+  >("loading");
+  const [isProcessing, setIsProcessing] = useState(false);
 
-	useEffect(() => {
-		const token = searchParams.get("token");
-		if (token || (isLoaded && isSignedIn && currentUser?.email)) {
-			void checkStatus(token ?? undefined);
-		} else if (isLoaded) {
-			setStatus("error");
-		}
-	}, [searchParams, isLoaded, isSignedIn, currentUser]);
+  useEffect(() => {
+    const token = searchParams.get("token");
+    if (token || (isLoaded && isSignedIn && currentUser?.email)) {
+      void checkStatus(token ?? undefined);
+    } else if (isLoaded) {
+      setStatus("error");
+    }
+  }, [searchParams, isLoaded, isSignedIn, currentUser]);
 
-	const checkStatus = async (token?: string) => {
-		setStatus("loading");
-		try {
-			const result = await getStatusAction({ token });
-			if (result.email) {
-				setEmail(result.email);
-				setFormEmail(result.email);
-			}
-			if (result.subscribed === true) {
-				setStatus("subscribed");
-			} else if (result.subscribed === false) {
-				setStatus("unsubscribed");
-			} else {
-				setStatus("unset");
-			}
-		} catch (error) {
-			console.error(error);
-			setStatus("error");
-		}
-	};
+  const checkStatus = async (token?: string) => {
+    setStatus("loading");
+    try {
+      const result = await getStatusAction({ token });
+      if (result.email) {
+        setEmail(result.email);
+        setFormEmail(result.email);
+      }
+      if (result.subscribed === true) {
+        setStatus("subscribed");
+      } else if (result.subscribed === false) {
+        setStatus("unsubscribed");
+      } else {
+        setStatus("unset");
+      }
+    } catch (error) {
+      console.error(error);
+      setStatus("error");
+    }
+  };
 
-	const handleUnsubscribe = async () => {
-		setIsProcessing(true);
-		try {
-			await unsubscribeAction({ token: searchParams.get("token") ?? undefined });
-			setStatus("unsubscribed");
-			toast.success("You have been unsubscribed from daily questions.");
-		} catch (error) {
-			console.error(error);
-			toast.error("Failed to unsubscribe. Please try again later.");
-		} finally {
-			setIsProcessing(false);
-		}
-	};
+  const handleUnsubscribe = async () => {
+    setIsProcessing(true);
+    try {
+      await unsubscribeAction({
+        token: searchParams.get("token") ?? undefined,
+      });
+      setStatus("unsubscribed");
+      toast.success("You have been unsubscribed from daily questions.");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to unsubscribe. Please try again later.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
-	const handleSubscribe = async (e?: React.FormEvent) => {
-		if (e) e.preventDefault();
+  const handleSubscribe = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
 
-		// Determine which email to use
-		const targetEmail = isSignedIn && currentUser?.email ? currentUser.email : formEmail || email;
+    const targetEmail =
+      isSignedIn && currentUser?.email ? currentUser.email : formEmail || email;
 
-		if (!targetEmail) {
-			toast.error("Please enter a valid email address.");
-			return;
-		}
+    if (!targetEmail) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
 
-		setIsProcessing(true);
-		try {
-			const result = (await subscribeAction({ email: targetEmail })) as NewsletterSubscribeResponse;
+    setIsProcessing(true);
+    try {
+      const result = (await subscribeAction({
+        email: targetEmail,
+      })) as NewsletterSubscribeResponse;
 
-			if (result.status === "verification_required") {
-				setStatus("verification_sent");
-				toast.success("Verification email sent!");
-			} else if (result.status === "error" || result.success === false) {
-				setStatus("error");
-				toast.error(result.message || "Subscription failed");
-			} else {
-				setStatus("success_subscribed");
-				toast.success("Successfully subscribed!");
-			}
-		} catch (error) {
-			console.error(error);
-			toast.error("Failed to subscribe. Please try again.");
-		} finally {
-			setIsProcessing(false);
-		}
-	};
+      if (result.status === "verification_required") {
+        setStatus("verification_sent");
+        toast.success("Verification email sent!");
+      } else if (result.status === "error" || result.success === false) {
+        setStatus("error");
+        toast.error(result.message || "Subscription failed");
+      } else {
+        setStatus("success_subscribed");
+        toast.success("Successfully subscribed!");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to subscribe. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
-	const gradientLight = ["#667EEA", "#A064DE"];
-	const gradientDark = ["#3B2554", "#262D54"];
+  return (
+    <div className="deck-canvas flex min-h-screen flex-col text-foreground">
+      <Header />
 
-	return (
-		<div
-			className="min-h-screen flex flex-col transition-colors overflow-hidden"
-			style={{
-				background: `linear-gradient(135deg, ${effectiveTheme === "dark" ? gradientDark[0] : gradientLight[0]}, ${effectiveTheme === "dark" ? gradientDark[1] : gradientLight[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})`
-			}}
-		>
-			<Header />
+      <main className="flex flex-1 items-center justify-center px-4 pb-12 pt-[calc(var(--header-h,4rem)+2rem)]">
+        <div className="deck-card w-full max-w-md space-y-6 p-7 text-center sm:p-8">
+          <div className="flex justify-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <Mail className="h-8 w-8" aria-hidden="true" />
+            </div>
+          </div>
 
-			<div className="flex-1 flex items-center justify-center p-4">
-				<div className="max-w-md w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 shadow-2xl text-center space-y-6">
-					<div className="flex justify-center">
-						<div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center">
-							<Mail className="w-10 h-10 text-blue-400" />
-						</div>
-					</div>
+          <h1 className="text-2xl font-extrabold tracking-[-0.03em] text-card-foreground sm:text-3xl">
+            Newsletter Settings
+          </h1>
 
-					<h1 className="text-3xl font-extrabold dark:text-white text-black">
-						Newsletter Settings
-					</h1>
+          {status === "loading" && (
+            <div className="flex flex-col items-center py-6" role="status">
+              <Loader2 className="mb-3 h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">
+                Checking your subscription…
+              </p>
+            </div>
+          )}
 
-					{status === "loading" && (
-						<div className="flex flex-col items-center py-8">
-							<Loader2 className="w-10 h-10 animate-spin text-blue-400 mb-4" />
-							<p className="dark:text-white/70 text-black/70">Checking your subscription...</p>
-						</div>
-					)}
+          {status === "subscribed" && (
+            <div className="space-y-6 py-2">
+              <p className="text-base text-muted-foreground">
+                You are currently subscribed with:
+                <br />
+                <span className="font-bold text-foreground">{email}</span>
+              </p>
+              <Button
+                variant="destructive"
+                onClick={handleUnsubscribe}
+                disabled={isProcessing}
+                className="min-h-12 w-full rounded-full font-semibold"
+              >
+                {isProcessing ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  "Unsubscribe from Daily Questions"
+                )}
+              </Button>
+            </div>
+          )}
 
-					{status === "subscribed" && (
-						<div className="space-y-6 py-4">
-							<p className="dark:text-white/80 text-black/80 text-lg">
-								You are currently subscribed with: <br />
-								<span className="font-bold text-blue-400">{email}</span>
-							</p>
-							<button
-								onClick={handleUnsubscribe}
-								disabled={isProcessing}
-								className="w-full bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2"
-							>
-								{isProcessing ? <Loader2 className="animate-spin" /> : "Unsubscribe from Daily Questions"}
-							</button>
-						</div>
-					)}
+          {status === "unsubscribed" && (
+            <div className="space-y-5 py-2 animate-in fade-in zoom-in-95 duration-300">
+              <div className="flex justify-center">
+                <CheckCircle2 className="h-12 w-12 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <p className="text-base text-muted-foreground">
+                You have been unsubscribed.
+                <br />
+                We're sorry to see you go!
+              </p>
+              <div className="flex flex-col gap-2.5">
+                <Button
+                  onClick={() => handleSubscribe()}
+                  disabled={isProcessing}
+                  className="min-h-11 w-full rounded-full font-semibold"
+                >
+                  {isProcessing ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    "Mistake? Re-subscribe"
+                  )}
+                </Button>
+                <Button asChild variant="outline" className="min-h-11 w-full rounded-full font-semibold">
+                  <Link to="/app">Return to Questions</Link>
+                </Button>
+              </div>
+            </div>
+          )}
 
-					{status === "unsubscribed" && (
-						<div className="space-y-6 py-4 animate-in fade-in zoom-in duration-500">
-							<div className="flex justify-center">
-								<CheckCircle2 className="w-16 h-16 text-green-400" />
-							</div>
-							<p className="dark:text-white/80 text-black/80 text-lg">
-								You have been unsubscribed. <br />
-								We're sorry to see you go!
-							</p>
+          {status === "success_subscribed" && (
+            <div className="space-y-5 py-2 animate-in fade-in zoom-in-95 duration-300">
+              <div className="flex justify-center">
+                <CheckCircle2 className="h-12 w-12 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <p className="text-base text-muted-foreground">
+                You're in! Welcome to Daily Questions.
+              </p>
+              <Button asChild className="min-h-11 w-full rounded-full font-semibold">
+                <Link to="/app">Go to App</Link>
+              </Button>
+            </div>
+          )}
 
-							<button
-								onClick={() => handleSubscribe()}
-								disabled={isProcessing}
-								className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-full py-3 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2 mb-4"
-							>
-								{isProcessing ? <Loader2 className="animate-spin" /> : "Mistake? Re-subscribe"}
-							</button>
+          {status === "verification_sent" && (
+            <div className="space-y-5 py-2 animate-in fade-in zoom-in-95 duration-300">
+              <p className="text-base text-muted-foreground">
+                Please check your email. We sent a confirmation link to{" "}
+                <strong className="text-foreground">{formEmail || email}</strong>.
+              </p>
+              <Button asChild className="min-h-11 w-full rounded-full font-semibold">
+                <Link to="/app">Go to App</Link>
+              </Button>
+            </div>
+          )}
 
-							<a
-								href="/app"
-								className="inline-block px-8 py-3 bg-white/10 hover:bg-white/20 rounded-full text-white/80 font-medium transition-colors text-sm"
-							>
-								Return Home
-							</a>
-						</div>
-					)}
+          {(status === "error" || status === "unset") && (
+            <div className="space-y-5 py-2">
+              {status === "error" && (
+                <div className="flex justify-center">
+                  <XCircle className="h-12 w-12 text-destructive" />
+                </div>
+              )}
+              <p className="text-base text-muted-foreground">
+                We couldn't find your subscription details.
+              </p>
 
-					{status === "success_subscribed" && (
-						<div className="space-y-6 py-4 animate-in fade-in zoom-in duration-500">
-							<div className="flex justify-center">
-								<CheckCircle2 className="w-16 h-16 text-green-400" />
-							</div>
-							<p className="dark:text-white/80 text-black/80 text-lg">
-								You're in! <br />
-								Welcome to the Daily Questions.
-							</p>
-							<a
-								href="/app"
-								className="inline-block w-full bg-blue-500 hover:bg-blue-600 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105"
-							>
-								Go to App
-							</a>
-						</div>
-					)}
+              <div className="rounded-2xl border border-border bg-muted/40 p-5">
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Would you like to subscribe instead?
+                </p>
 
-					{status === "verification_sent" && (
-						<div className="space-y-6 py-4 animate-in fade-in zoom-in duration-500">
-							<div className="flex justify-center">
-								<Mail className="w-16 h-16 text-blue-400" />
-							</div>
-							<p className="dark:text-white/80 text-black/80 text-lg">
-								Please check your email. <br />
-								We sent a confirmation link to <b>{formEmail || email}</b>.
-							</p>
-							<a
-								href="/app"
-								className="inline-block w-full bg-blue-500 hover:bg-blue-600 text-white rounded-full py-4 text-lg font-bold shadow-lg transition-all hover:scale-105"
-							>
-								Go to App
-							</a>
-						</div>
-					)}
+                {isSignedIn && currentUser?.email ? (
+                  <Button
+                    onClick={() => handleSubscribe()}
+                    disabled={isProcessing}
+                    className="min-h-11 w-full rounded-full font-semibold"
+                  >
+                    {isProcessing ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      `Subscribe as ${currentUser.email}`
+                    )}
+                  </Button>
+                ) : (
+                  <form onSubmit={handleSubscribe} className="space-y-3">
+                    <input
+                      type="email"
+                      placeholder="Enter your email"
+                      value={formEmail}
+                      onChange={(e) => setFormEmail(e.target.value)}
+                      className="h-11 w-full rounded-xl border border-input bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      required
+                    />
+                    <Button
+                      type="submit"
+                      disabled={isProcessing}
+                      className="min-h-11 w-full rounded-full font-semibold"
+                    >
+                      {isProcessing ? <Loader2 className="animate-spin" /> : "Subscribe"}
+                    </Button>
+                  </form>
+                )}
+              </div>
 
-
-
-					{(status === "error" || status === "unset") && (
-						<div className="space-y-6 py-4">
-							{(status === "error" && <div className="flex justify-center">
-								<XCircle className="w-16 h-16 text-red-400" />
-							</div>)}
-							<p className="dark:text-white/80 text-black/80 text-lg">
-								We couldn't find your subscription details.
-							</p>
-
-							<div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-								<p className="text-sm dark:text-white/70 text-black/70 mb-4">
-									Would you like to subscribe instead?
-								</p>
-
-								{isSignedIn && currentUser?.email ? (
-									<button
-										onClick={() => handleSubscribe()}
-										disabled={isProcessing}
-										className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-full py-3 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2"
-									>
-										{isProcessing ? <Loader2 className="animate-spin" /> : `Subscribe as ${currentUser.email}`}
-									</button>
-								) : (
-									<form onSubmit={handleSubscribe} className="space-y-3">
-										<input
-											type="email"
-											placeholder="Enter your email"
-											value={formEmail}
-											onChange={(e) => setFormEmail(e.target.value)}
-											className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-											required
-										/>
-										<button
-											type="submit"
-											disabled={isProcessing}
-											className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-full py-3 text-lg font-bold shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2"
-										>
-											{isProcessing ? <Loader2 className="animate-spin" /> : "Subscribe"}
-										</button>
-									</form>
-								)}
-							</div>
-
-							<a
-								href="/app"
-								className="inline-flex items-center gap-2 text-sm text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white transition-colors"
-							>
-								Go to App <ArrowRight size={14} />
-							</a>
-						</div>
-					)}
-				</div>
-			</div>
-		</div>
-	);
+              <Button asChild variant="ghost" className="rounded-full text-muted-foreground hover:text-foreground">
+                <Link to="/app">
+                  Go to App <ArrowRight size={14} aria-hidden="true" />
+                </Link>
+              </Button>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
 };
 
 export default UnsubscribePage;

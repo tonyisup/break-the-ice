@@ -23,8 +23,7 @@ export default function OfflineIndicator() {
 
   return (
     <div
-      className="flex w-full items-center justify-center gap-2 
-                 bg-amber-800 text-white text-sm font-medium py-2 px-4 rounded-md"
+      className="mx-auto flex w-full max-w-6xl items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white dark:bg-amber-700"
       role="alert"
       aria-live="assertive"
     >

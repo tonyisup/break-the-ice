@@ -5,6 +5,7 @@ import { MessageCircle, X, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useStorageContext } from "@/hooks/useStorageContext";
+import { Button } from "@/components/ui/button";
 
 export default function FeedbackButton() {
   const { isAuthenticated } = useConvexAuth();
@@ -29,7 +30,6 @@ export default function FeedbackButton() {
     };
   }, [isOpen, text]);
 
-
   if (!isAuthenticated) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,7 +48,8 @@ export default function FeedbackButton() {
       setIsOpen(false);
     } catch (error) {
       console.error(error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to submit feedback.";
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to submit feedback.";
       if (errorMessage.includes("recently")) {
         toast.error(errorMessage);
       } else {
@@ -60,22 +61,26 @@ export default function FeedbackButton() {
   };
 
   return (
-    <div className="fixed bottom-[calc(var(--bottom-nav-h,0px)+1rem)] right-4 z-50 flex flex-col items-end" ref={containerRef}>
+    <div
+      className="fixed bottom-[calc(var(--bottom-nav-h,0px)+1rem)] right-4 z-50 flex flex-col items-end"
+      ref={containerRef}
+    >
       <AnimatePresence mode="wait">
         {isOpen ? (
           <motion.div
             key="form"
-            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            initial={{ opacity: 0, scale: 0.92, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xl rounded-2xl p-4 w-80 flex flex-col gap-3"
+            exit={{ opacity: 0, scale: 0.92, y: 16 }}
+            transition={{ type: "spring", stiffness: 320, damping: 26 }}
+            className="flex w-80 flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-xl"
           >
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Send Feedback</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-foreground">Send Feedback</h3>
               <button
+                type="button"
                 onClick={() => setIsOpen(false)}
-                className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors flex h-11 w-11 items-center justify-center -m-2"
+                className="-m-1 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 aria-label="Close feedback"
               >
                 <X size={16} />
@@ -87,41 +92,43 @@ export default function FeedbackButton() {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 aria-label="Your feedback"
-              placeholder="What's on your mind?"
-                className="w-full h-24 p-3 text-sm bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:text-zinc-100 placeholder:text-zinc-400"
+                placeholder="What's on your mind?"
+                className="h-24 w-full resize-none rounded-xl border border-input bg-background p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 autoFocus
               />
               <div className="flex justify-end">
-                <button
+                <Button
                   type="submit"
+                  size="sm"
                   disabled={isSubmitting || !text.trim()}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-9 rounded-full px-4 font-semibold"
                 >
                   {isSubmitting ? (
-                    "Sending..."
+                    "Sending…"
                   ) : (
                     <>
                       Send <Send size={14} />
                     </>
                   )}
-                </button>
+                </Button>
               </div>
             </form>
           </motion.div>
         ) : (
           <motion.button
             key="button"
+            type="button"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             exit={{ scale: 0 }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setIsOpen(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-full shadow-lg flex items-center justify-center group relative"
+            className="group relative flex h-12 w-12 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-lg transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Open feedback form"
           >
-            <MessageCircle size={24} />
-            <span className="absolute right-full mr-3 bg-zinc-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+            <MessageCircle size={20} />
+            <span className="pointer-events-none absolute right-full mr-3 whitespace-nowrap rounded-lg border border-border bg-popover px-2.5 py-1 text-xs font-medium text-popover-foreground opacity-0 shadow-md transition-opacity group-hover:opacity-100">
               Send Feedback
             </span>
           </motion.button>

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { Button } from "../ui/button";
 import { useQuery } from "convex/react";
@@ -8,8 +8,10 @@ import { Heart, History } from "@/components/ui/icons/icons";
 import { useStorageContext } from "@/hooks/useStorageContext";
 import { UserMenu } from "./UserMenu";
 import OfflineIndicator from "../OfflineIndicator";
-import { FileQuestionMark, MessageCircle, PencilLine, Sparkles } from "lucide-react";
+import { BrandMark } from "../BrandMark";
+import { FileQuestionMark, PencilLine, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { siteConfig } from "@/config/site";
 
 // Below this width the four destinations move to a tab bar at the bottom of the screen,
 // which leaves the top bar room for the site's name.
@@ -17,7 +19,10 @@ const PHONE_QUERY = "(max-width: 639px)";
 
 function useIsPhone() {
   const [isPhone, setIsPhone] = useState(
-    () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(PHONE_QUERY).matches,
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(PHONE_QUERY).matches,
   );
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -37,9 +42,11 @@ function usePublishedHeight<T extends HTMLElement>(name: string, active = true) 
     const el = ref.current;
     if (!el || !active) return;
     const root = document.documentElement;
-    const update = () => root.style.setProperty(name, `${el.getBoundingClientRect().height}px`);
+    const update = () =>
+      root.style.setProperty(name, `${el.getBoundingClientRect().height}px`);
     update();
-    if (typeof ResizeObserver === "undefined") return () => root.style.removeProperty(name);
+    if (typeof ResizeObserver === "undefined")
+      return () => root.style.removeProperty(name);
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => {
@@ -50,28 +57,39 @@ function usePublishedHeight<T extends HTMLElement>(name: string, active = true) 
   return ref;
 }
 
-const ACTIVE = "aria-[current=page]:bg-gray-900 aria-[current=page]:text-white dark:aria-[current=page]:bg-white dark:aria-[current=page]:text-gray-900";
+const ACTIVE =
+  "aria-[current=page]:bg-foreground aria-[current=page]:text-background aria-[current=page]:hover:bg-foreground/90";
 
-export const Header = () => {
+interface HeaderProps {
+  /** Optional contextual action placed on the right (e.g. the feed's Filter button). */
+  rightSlot?: ReactNode;
+}
+
+export const Header = ({ rightSlot }: HeaderProps) => {
   const { isSignedIn } = useAuth();
   const isPhone = useIsPhone();
   const customQuestions = useQuery(api.core.questions.getCustomQuestions, {});
-  const pendingCount = customQuestions?.filter((q) => q.status === "pending").length ?? 0;
+  const pendingCount =
+    customQuestions?.filter((q) => q.status === "pending").length ?? 0;
 
-  const { likedQuestions, likedLimit, hiddenQuestions, hiddenLimit } = useStorageContext();
+  const { likedQuestions, likedLimit, hiddenQuestions, hiddenLimit } =
+    useStorageContext();
 
-  // How many AI generations a signed-in person has left this cycle. Scrolling the feed and
-  // Remix both use them, so the count is on every app page instead of appearing only once
-  // they have run out. Null when it isn't known, or there is no limit.
   const currentUser = useQuery(api.core.users.getCurrentUser, {});
-  const aiLimit = isSignedIn && currentUser && typeof currentUser.aiLimit === "number" && Number.isFinite(currentUser.aiLimit)
-    ? currentUser.aiLimit
-    : null;
-  const aiLeft = aiLimit === null ? null : Math.max(0, aiLimit - (currentUser?.aiUsage?.count ?? 0));
-  const aiLow = aiLeft !== null && aiLimit !== null && aiLeft <= Math.max(3, aiLimit * 0.2);
+  const aiLimit =
+    isSignedIn &&
+    currentUser &&
+    typeof currentUser.aiLimit === "number" &&
+    Number.isFinite(currentUser.aiLimit)
+      ? currentUser.aiLimit
+      : null;
+  const aiLeft =
+    aiLimit === null
+      ? null
+      : Math.max(0, aiLimit - (currentUser?.aiUsage?.count ?? 0));
+  const aiLow =
+    aiLeft !== null && aiLimit !== null && aiLeft <= Math.max(3, aiLimit * 0.2);
 
-  // Content under the fixed header (page padding, sticky bars) and above the phone tab bar
-  // lines up with their measured heights instead of guessing at breakpoints.
   const headerRef = usePublishedHeight<HTMLElement>("--header-h");
   const tabBarRef = usePublishedHeight<HTMLElement>("--bottom-nav-h", isPhone);
 
@@ -79,57 +97,89 @@ export const Header = () => {
   const showLimitBadge = !isSignedIn && likesLeft <= 3 && likesLeft > 0;
   const showFullBadge = !isSignedIn && likesLeft <= 0;
 
-  const showSettingsLimitBadge = !isSignedIn && (hiddenLimit - hiddenQuestions.length <= 3) && (hiddenQuestions.length < hiddenLimit);
-  const showSettingsFullBadge = !isSignedIn && (hiddenQuestions.length >= hiddenLimit);
+  const showSettingsLimitBadge =
+    !isSignedIn &&
+    hiddenLimit - hiddenQuestions.length <= 3 &&
+    hiddenQuestions.length < hiddenLimit;
+  const showSettingsFullBadge = !isSignedIn && hiddenQuestions.length >= hiddenLimit;
 
   const destinations = [
-    { to: "/app", end: true, label: "Questions", icon: <FileQuestionMark className="w-5 h-5" aria-hidden="true" />, badge: null },
+    {
+      to: "/app",
+      end: true,
+      label: "Questions",
+      icon: <FileQuestionMark className="w-[18px] h-[18px]" aria-hidden="true" />,
+      badge: null,
+    },
     {
       to: "/liked",
       label: "Liked",
-      icon: <Heart className="w-5 h-5" aria-hidden="true" />,
-      // The guest like limit in words, so it does not depend on colour or hover.
+      icon: <Heart className="w-[18px] h-[18px]" aria-hidden="true" />,
       badge: showFullBadge ? (
-        <span className="rounded-full bg-red-600 px-1.5 text-[10px] font-bold leading-4 text-white">Full<span className="sr-only">: guest like limit reached</span></span>
+        <span className="rounded-full bg-destructive px-1.5 text-[10px] font-bold leading-4 text-destructive-foreground">
+          Full<span className="sr-only">: guest like limit reached</span>
+        </span>
       ) : showLimitBadge ? (
-        <span className="rounded-full bg-yellow-400 px-1.5 text-[10px] font-bold leading-4 text-gray-900">{likesLeft} left<span className="sr-only"> before the guest like limit</span></span>
+        <span className="rounded-full bg-amber-400 px-1.5 text-[10px] font-bold leading-4 text-neutral-950">
+          {likesLeft} left<span className="sr-only"> before the guest like limit</span>
+        </span>
       ) : null,
     },
     {
       to: "/my-questions",
       label: "My questions",
-      icon: <PencilLine className="w-5 h-5" aria-hidden="true" />,
-      badge: pendingCount > 0 ? (
-        <span className="rounded-full bg-blue-600 px-1.5 text-[10px] font-bold leading-4 text-white">
-          {pendingCount}<span className="sr-only"> waiting for review</span>
-        </span>
-      ) : null,
+      icon: <PencilLine className="w-[18px] h-[18px]" aria-hidden="true" />,
+      badge:
+        pendingCount > 0 ? (
+          <span className="rounded-full bg-primary px-1.5 text-[10px] font-bold leading-4 text-primary-foreground">
+            {pendingCount}
+            <span className="sr-only"> waiting for review</span>
+          </span>
+        ) : null,
     },
-    { to: "/history", label: "History", icon: <History className="w-5 h-5" aria-hidden="true" />, badge: null },
+    {
+      to: "/history",
+      label: "History",
+      icon: <History className="w-[18px] h-[18px]" aria-hidden="true" />,
+      badge: null,
+    },
   ];
 
   return (
     <>
-      <header ref={headerRef} className="fixed top-0 left-0 right-0 z-50 flex flex-col gap-2 border-b border-white/10 bg-white/80 px-3 py-3 backdrop-blur-md dark:bg-gray-900/80 md:p-4">
-        <div className="flex w-full items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1 sm:gap-2">
-            {/* The site's name, on every app page. On a phone the destinations are in the tab
-                bar, so the name always fits; on a tablet it gives way to them. */}
+      <header
+        ref={headerRef}
+        className="fixed top-0 left-0 right-0 z-50 flex flex-col gap-2 border-b border-border/80 bg-background/85 px-3 py-2.5 backdrop-blur-md md:px-6 md:py-3"
+      >
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
             <Link
               to="/"
-              aria-label="Break the Ice home"
-              className="flex h-11 shrink-0 items-center gap-2 rounded-lg pr-2 text-sm font-bold tracking-tight text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-white sm:text-base"
+              aria-label={`${siteConfig.name} home`}
+              className="flex h-11 shrink-0 items-center rounded-xl pr-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <span className="flex size-9 items-center justify-center rounded-full bg-black/10 dark:bg-white/10" aria-hidden="true">
-                <MessageCircle className="size-4" />
-              </span>
-              <span className={cn(!isPhone && "hidden lg:inline")}>Break the Ice</span>
+              <BrandMark
+                size="sm"
+                labelClassName={cn(
+                  "text-sm sm:text-[15px]",
+                  !isPhone && "hidden lg:inline",
+                )}
+              />
             </Link>
             {!isPhone && (
-              <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
+              <nav aria-label="Main" className="flex items-center gap-1">
                 {destinations.map((destination) => (
-                  <Button key={destination.to} asChild className="h-11 px-3 text-sm">
-                    <NavLink to={destination.to} end={destination.end} className={ACTIVE}>
+                  <Button
+                    key={destination.to}
+                    asChild
+                    variant="ghost"
+                    className="h-10 rounded-full px-3.5 text-sm font-semibold text-muted-foreground hover:text-foreground"
+                  >
+                    <NavLink
+                      to={destination.to}
+                      end={destination.end}
+                      className={ACTIVE}
+                    >
                       {destination.icon}
                       <span>{destination.label}</span>
                       {destination.badge}
@@ -139,60 +189,75 @@ export const Header = () => {
               </nav>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+
+          <div className="flex shrink-0 items-center gap-2">
+            {rightSlot}
+
             {isSignedIn === false && (
               <SignInButton mode="modal">
-                <Button className="h-11 border border-gray-900/20 px-3 text-sm font-semibold dark:border-white/30">Sign in</Button>
+                <Button
+                  variant="outline"
+                  className="h-10 rounded-full border-border bg-card px-4 text-sm font-semibold"
+                >
+                  Sign in
+                </Button>
               </SignInButton>
             )}
+
             {aiLeft !== null && aiLimit !== null && (
               <Link
                 to="/settings?expand=subscription"
                 aria-label={`${aiLeft} of ${aiLimit} AI generations left this cycle. Open AI usage in Settings`}
                 className={cn(
-                  "flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
+                  "flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   aiLeft === 0
-                    ? "border-red-700 bg-red-700 text-white"
+                    ? "border-destructive bg-destructive text-destructive-foreground"
                     : aiLow
-                      ? "border-amber-500 bg-amber-400 text-gray-900"
-                      : "border-gray-900/20 text-gray-900 dark:border-white/30 dark:text-white",
+                      ? "border-amber-500/70 bg-amber-400/20 text-amber-900 dark:text-amber-200"
+                      : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
               >
-                <Sparkles className="size-4" aria-hidden="true" />
+                <Sparkles className="size-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {aiLeft}
-                  <span className="hidden lg:inline"> AI generations</span> left
+                  <span className="hidden xl:inline"> AI generations</span> left
                 </span>
               </Link>
             )}
+
             <UserMenu
               showSettingsBadge={showSettingsLimitBadge || showSettingsFullBadge}
               settingsBadgeColor={showSettingsFullBadge ? "red" : "yellow"}
-              settingsBadgeTitle={showSettingsFullBadge ? "Limit reached" : `${hiddenLimit - hiddenQuestions.length} left`}
+              settingsBadgeTitle={
+                showSettingsFullBadge
+                  ? "Limit reached"
+                  : `${hiddenLimit - hiddenQuestions.length} left`
+              }
             />
           </div>
         </div>
         <OfflineIndicator />
       </header>
 
-      {/* On a phone the destinations are a tab bar within thumb reach. It sits outside the
-          header because the header's blur would otherwise anchor it to the top. */}
+      {/* Mobile bottom tab bar */}
       {isPhone && (
         <nav
           ref={tabBarRef}
           aria-label="Main"
-          className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-4 border-t border-black/10 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md dark:border-white/10 dark:bg-gray-900/95"
+          className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-4 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md"
         >
           {destinations.map((destination) => (
             <NavLink
               key={destination.to}
               to={destination.to}
               end={destination.end}
-              className="relative flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-semibold text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 aria-[current=page]:text-indigo-700 dark:text-gray-300 dark:aria-[current=page]:text-indigo-300"
+              className="relative flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-[11px] font-semibold text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-[current=page]:text-primary"
             >
               {destination.icon}
-              <span>{destination.label}</span>
-              {destination.badge && <span className="absolute right-2 top-1">{destination.badge}</span>}
+              <span className="truncate max-w-full">{destination.label}</span>
+              {destination.badge && (
+                <span className="absolute right-2.5 top-1.5">{destination.badge}</span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -201,9 +266,15 @@ export const Header = () => {
   );
 };
 
-export const HomeLink = ({ icon = <FileQuestionMark className="w-5 h-5" aria-hidden="true" />, text = "Questions" }: { icon?: React.ReactNode, text?: string }) => {
+export const HomeLink = ({
+  icon = <FileQuestionMark className="w-5 h-5" aria-hidden="true" />,
+  text = "Questions",
+}: {
+  icon?: ReactNode;
+  text?: string;
+}) => {
   return (
-    <Button asChild className="h-11 px-3 text-sm">
+    <Button asChild variant="ghost" className="h-10 rounded-full px-3.5 text-sm">
       <NavLink to="/app" end className={ACTIVE}>
         {icon}
         <span>{text}</span>

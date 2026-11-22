@@ -11,29 +11,42 @@ import { useStorageContext } from "../../hooks/useStorageContext";
 import { useHideTaxonomy } from "../../hooks/useHideTaxonomy";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SignInCTA } from "@/components/SignInCTA";
 import { AddPersonalQuestionDialog } from "@/components/add-personal-question-dialog/AddPersonalQuestionDialog";
 import { ModernQuestionCard } from "@/components/modern-question-card/modern-question-card";
+import { Plus } from "lucide-react";
 
-/** What a person's own question is to everyone else, in the words shown on its card. */
 const statusLabel = (status: Doc<"questions">["status"]) =>
-  status === "pending" ? "Waiting for review"
-    : status === "public" || status === "approved" ? "Public"
-    : "Private";
+  status === "pending"
+    ? "Waiting for review"
+    : status === "public" || status === "approved"
+      ? "Public"
+      : "Private";
 
 /** The questions a person wrote or remixed: where each stands, and where new ones are added. */
 export default function MyQuestionsPage() {
   const { isLoaded, isSignedIn } = useAuth();
-  const { effectiveTheme } = useTheme();
+  useTheme();
   const { hideStyle, hideTone } = useHideTaxonomy();
-  const { likedQuestions, addLikedQuestion, removeLikedQuestion, hiddenQuestions, addHiddenStyle, addHiddenTone } = useStorageContext();
+  const {
+    likedQuestions,
+    addLikedQuestion,
+    removeLikedQuestion,
+    hiddenQuestions,
+  } = useStorageContext();
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<Id<"questions"> | null>(
+    null,
+  );
 
   const myQuestions = useQuery(api.core.questions.getCustomQuestions, {});
   const styles = useQuery(api.core.styles.getStyles, {});
   const tones = useQuery(api.core.tones.getTones, {});
   const makeQuestionPublic = useMutation(api.core.questions.makeQuestionPublic);
-  const deletePersonalQuestion = useMutation(api.core.questions.deletePersonalQuestion);
+  const deletePersonalQuestion = useMutation(
+    api.core.questions.deletePersonalQuestion,
+  );
 
   const stylesMap = useMemo(() => {
     const map = new Map<string, Doc<"styles">>();
@@ -43,6 +56,7 @@ export default function MyQuestionsPage() {
     });
     return map;
   }, [styles]);
+
   const tonesMap = useMemo(() => {
     const map = new Map<string, Doc<"tones">>();
     (tones ?? []).forEach((tone) => {
@@ -59,91 +73,133 @@ export default function MyQuestionsPage() {
     } catch (error) {
       console.error("Error making question public:", error);
       const dataMessage = convexErrorData(error)?.message;
-      toast.error(typeof dataMessage === "string" ? dataMessage : "Couldn't submit the question. Please try again.");
+      toast.error(
+        typeof dataMessage === "string"
+          ? dataMessage
+          : "Couldn't submit the question. Please try again.",
+      );
     }
   };
 
-  const handleDelete = async (questionId: Id<"questions">) => {
-    if (!window.confirm("Delete this question? This can't be undone.")) return;
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    const targetId = pendingDeleteId;
+    setPendingDeleteId(null);
     try {
-      await deletePersonalQuestion({ questionId });
+      await deletePersonalQuestion({ questionId: targetId });
       toast.success("Question deleted");
     } catch (error) {
       console.error("Error deleting question:", error);
       const dataMessage = convexErrorData(error)?.message;
-      toast.error(typeof dataMessage === "string" ? dataMessage : "Failed to delete question.");
+      toast.error(
+        typeof dataMessage === "string"
+          ? dataMessage
+          : "Failed to delete question.",
+      );
     }
   };
 
   const handleToggleLike = (questionId: Id<"questions">) => {
     if (likedQuestions.includes(questionId)) {
       removeLikedQuestion(questionId);
-      toast.success("Removed from Liked", { action: { label: "Undo", onClick: () => addLikedQuestion(questionId) } });
+      toast.success("Removed from Liked", {
+        action: { label: "Undo", onClick: () => addLikedQuestion(questionId) },
+      });
     } else {
       addLikedQuestion(questionId);
       toast.success("Added to Liked");
     }
   };
 
-  const gradient: [string, string] = effectiveTheme === "dark" ? ["#3B2554", "#262D54"] : ["#667EEA", "#A064DE"];
-
   return (
-    <div
-      className="min-h-screen overflow-hidden"
-      style={{ background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${effectiveTheme === "dark" ? "#000" : "#fff"})` }}
-    >
+    <div className="deck-canvas min-h-screen text-foreground">
       <Header />
       <AddPersonalQuestionDialog isOpen={isAddOpen} onOpenChange={setIsAddOpen} />
 
-      <main className="container mx-auto p-4 pt-[calc(var(--header-h,4rem)+1.5rem)] space-y-6">
+      <main className="mx-auto max-w-6xl space-y-6 px-4 pb-16 pt-[calc(var(--header-h,4rem)+1.75rem)] sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold text-white">My questions</h1>
+          <h1 className="text-2xl font-extrabold tracking-[-0.03em] text-foreground sm:text-3xl">
+            My questions
+          </h1>
           {isSignedIn && (
-            <Button variant="opaque" className="min-h-11" onClick={() => setIsAddOpen(true)}>Add question</Button>
+            <Button
+              className="min-h-11 rounded-full px-5 font-semibold"
+              onClick={() => setIsAddOpen(true)}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              Add question
+            </Button>
           )}
         </div>
 
         {!isLoaded || (isSignedIn && myQuestions === undefined) ? (
           <div className="flex flex-col items-center gap-3 py-12" role="status">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" aria-hidden="true"></div>
-            <span className="rounded-full bg-black/50 px-3 py-1 text-sm font-medium text-white">Loading your questions…</span>
+            <div
+              className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary"
+              aria-hidden="true"
+            />
+            <span className="text-sm font-medium text-muted-foreground">
+              Loading your questions…
+            </span>
           </div>
         ) : !isSignedIn ? (
           <SignInCTA
-            bgGradient={gradient}
             title="Sign in to write your own"
-            featureHighlight={{ pre: "Add questions and", highlight: "remix the ones you like", post: "and keep them here." }}
+            featureHighlight={{
+              pre: "Add questions and",
+              highlight: "remix the ones you like",
+              post: "and keep them here.",
+            }}
           />
         ) : !myQuestions || myQuestions.length === 0 ? (
-          <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl bg-black/50 px-6 py-8 text-center text-white">
-            <p>You haven't added any questions yet. Write one, or use Remix on a question in the feed.</p>
+          <div className="deck-card mx-auto flex max-w-md flex-col items-center gap-4 px-6 py-10 text-center">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              You haven't added any questions yet. Write one, or use Remix on a
+              question in the feed.
+            </p>
             <div className="flex flex-wrap justify-center gap-3">
-              <Button variant="opaque" className="min-h-11" onClick={() => setIsAddOpen(true)}>Add question</Button>
-              <Link to="/app" className="inline-flex min-h-11 items-center rounded-lg border border-white/50 px-4 font-semibold hover:bg-white/10">
-                Browse questions
-              </Link>
+              <Button
+                className="min-h-11 rounded-full px-5 font-semibold"
+                onClick={() => setIsAddOpen(true)}
+              >
+                Add question
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="min-h-11 rounded-full px-5 font-semibold"
+              >
+                <Link to="/app">Browse questions</Link>
+              </Button>
             </div>
           </div>
         ) : (
-          <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {myQuestions.map((question) => {
-              const style = stylesMap.get(question.styleId || (question.style as string) || "");
-              const tone = tonesMap.get(question.toneId || (question.tone as string) || "");
+              const style = stylesMap.get(
+                question.styleId || (question.style as string) || "",
+              );
+              const tone = tonesMap.get(
+                question.toneId || (question.tone as string) || "",
+              );
               return (
-                <div key={question._id} className="flex flex-col gap-2">
-                  {/* Where this question stands, which is what the number on the nav tab counts. */}
-                  <div className="flex min-h-11 items-center justify-between gap-2">
-                    <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white">
+                <div key={question._id} className="flex flex-col gap-2.5">
+                  <div className="flex min-h-10 items-center justify-between gap-2 px-1">
+                    <span className="rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground">
                       {statusLabel(question.status)}
                     </span>
                     {question.status === "private" && (
-                      <button
+                      <Button
                         type="button"
-                        onClick={() => { void handleSubmitForReview(question._id); }}
-                        className="min-h-11 rounded-full border border-white/50 bg-black/40 px-4 text-xs font-semibold text-white hover:bg-black/60"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          void handleSubmitForReview(question._id);
+                        }}
+                        className="h-9 rounded-full border-border bg-card px-3.5 text-xs font-semibold"
                       >
                         Submit for review
-                      </button>
+                      </Button>
                     )}
                   </div>
                   <ModernQuestionCard
@@ -151,13 +207,16 @@ export default function MyQuestionsPage() {
                     isGenerating={false}
                     isFavorite={likedQuestions.includes(question._id)}
                     isHidden={hiddenQuestions.includes(question._id)}
-                    gradient={[style?.color || "#667EEA", tone?.color || "#764BA2"]}
+                    gradient={[
+                      style?.color || "#0E7490",
+                      tone?.color || "#6366F1",
+                    ]}
                     style={style}
                     tone={tone}
                     onToggleFavorite={() => handleToggleLike(question._id)}
                     onHideStyle={hideStyle}
                     onHideTone={hideTone}
-                    onDelete={() => { void handleDelete(question._id); }}
+                    onDelete={() => setPendingDeleteId(question._id)}
                   />
                 </div>
               );
@@ -165,6 +224,17 @@ export default function MyQuestionsPage() {
           </div>
         )}
       </main>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+        title="Delete this question?"
+        description="This permanently removes your question and can't be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
