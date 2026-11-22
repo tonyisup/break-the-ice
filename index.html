@@ -3,7 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0a0f1e" />
+    <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#101114" media="(prefers-color-scheme: dark)" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("theme");
+          var stored = raw ? JSON.parse(raw) : "system";
+          var dark =
+            stored === "dark" ||
+            (stored !== "light" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
     <meta name="description" content="Find thoughtful conversation starters for classrooms, events, and everyday connection." />
     <meta name="robots" content="index, follow" />
     <link rel="icon" type="image/png" href="/break-the-iceberg.png" />

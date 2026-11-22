@@ -11,7 +11,6 @@ const tones = [{ _id: "tone1", slug: "playful", name: "Playful", icon: "CircleHe
 const topics = [{ _id: "topic1", slug: "food", name: "Food" }];
 
 beforeEach(() => {
-  // The popover measures its trigger; jsdom has no ResizeObserver.
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -33,31 +32,31 @@ function renderBar(props: Partial<React.ComponentProps<typeof FeedFilterBar>> = 
   return onChange;
 }
 
-it("shows a pill for each filter before any is chosen", () => {
+it("stays tucked behind a single Filter button before any filter is chosen", () => {
   renderBar();
-  expect(screen.getByRole("button", { name: "Choose a style" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Choose a tone" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Choose a topic" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Filter questions" })).toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "Active filters" })).not.toBeInTheDocument();
 });
 
-it("lists the choices with their descriptions and reports the chosen slug", () => {
+it("lists the choices with their descriptions inside the filter popover and reports the chosen slug", () => {
   const onChange = renderBar();
-  fireEvent.click(screen.getByRole("button", { name: "Choose a style" }));
+  fireEvent.click(screen.getByRole("button", { name: "Filter questions" }));
   expect(screen.getByText("Questions that invite a short story.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Would you rather/ }));
   expect(onChange).toHaveBeenCalledWith("style", "would-you-rather");
 });
 
-it("names the chosen filter on its pill and clears it from the X", () => {
+it("shows an active chip for a chosen filter and clears it from the X", () => {
   const onChange = renderBar({ selectedStyleId: "style1" });
-  expect(screen.getByRole("button", { name: "Style: Story driven. Change style" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Filter questions (1 active)" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Remove Story driven filter" }));
   expect(onChange).toHaveBeenCalledWith("style", null);
 });
 
 it("clears a filter from the list with the Any choice", () => {
   const onChange = renderBar({ selectedToneId: "tone1" });
-  fireEvent.click(screen.getByRole("button", { name: "Tone: Playful. Change tone" }));
+  fireEvent.click(screen.getByRole("button", { name: "Filter questions (1 active)" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Tone" }));
   fireEvent.click(screen.getByRole("button", { name: "Any tone" }));
   expect(onChange).toHaveBeenCalledWith("tone", null);
 });
@@ -67,18 +66,17 @@ it("offers Clear all once two filters are set, as one step", () => {
   const onChange = renderBar({ selectedStyleId: "style1", selectedToneId: "tone1", onClearAll });
   fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
   expect(onClearAll).toHaveBeenCalledOnce();
-  // Not three separate changes, which on the feed would each start from the same URL.
   expect(onChange).not.toHaveBeenCalled();
 });
 
-it("has no Clear all for a single filter, which has its own X", () => {
+it("has no Clear all chip for a single filter, which has its own X", () => {
   renderBar({ selectedStyleId: "style1" });
   expect(screen.queryByRole("button", { name: "Clear all" })).not.toBeInTheDocument();
 });
 
 it("says how many styles are hidden and links to where they can be shown again", () => {
   renderBar({ hiddenStyleCount: 2 });
-  fireEvent.click(screen.getByRole("button", { name: "Choose a style" }));
+  fireEvent.click(screen.getByRole("button", { name: "Filter questions" }));
   expect(screen.getByText("2 styles are hidden.")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Show hidden styles in Settings" })).toHaveAttribute(
     "href",
@@ -86,15 +84,15 @@ it("says how many styles are hidden and links to where they can be shown again",
   );
 });
 
-it("uses the singular for one hidden tone, and says nothing when none are hidden", () => {
+it("uses the singular for one hidden tone, and says nothing on Topic", () => {
   renderBar({ hiddenToneCount: 1 });
-  fireEvent.click(screen.getByRole("button", { name: "Choose a tone" }));
+  fireEvent.click(screen.getByRole("button", { name: "Filter questions" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Tone" }));
   expect(screen.getByText("1 tone is hidden.")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Show hidden tones in Settings" })).toHaveAttribute(
     "href",
     "/settings?expand=manage-tones",
   );
-  fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
-  fireEvent.click(screen.getByRole("button", { name: "Choose a topic" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Topic" }));
   expect(screen.queryByText(/hidden/)).not.toBeInTheDocument();
 });

@@ -1,9 +1,12 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowRight, MessageCircle } from "lucide-react";
+import { ArrowRight, RefreshCw, Sparkles, Compass, Sun, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { BrandMark } from "@/components/BrandMark";
 import { useTheme } from "@/hooks/useTheme";
+import { siteConfig } from "@/config/site";
 
 const rooms = [
   {
@@ -28,92 +31,213 @@ const rooms = [
   },
 ];
 
+const sampleCards = [
+  {
+    style: "Story driven",
+    styleColor: "#0E7490",
+    tone: "Warm",
+    toneColor: "#D97706",
+    topic: "Everyday joy",
+    text: "What small, ordinary routine in your week quietly makes everything else better?",
+  },
+  {
+    style: "Would you rather",
+    styleColor: "#7C3AED",
+    tone: "Playful",
+    toneColor: "#059669",
+    topic: "Imagination",
+    text: "Would you rather always know the best restaurant in any city or always get the best seat on every flight?",
+  },
+  {
+    style: "Hot take",
+    styleColor: "#E11D48",
+    tone: "Curious",
+    toneColor: "#2563EB",
+    topic: "Culture",
+    text: "What’s an everyday convenience you think people actually enjoyed more before it was automated?",
+  },
+  {
+    style: "Reflective",
+    styleColor: "#0F766E",
+    tone: "Thoughtful",
+    toneColor: "#4F46E5",
+    topic: "Perspective",
+    text: "What piece of advice sounded like a cliché until you lived through it yourself?",
+  },
+];
+
 const reveal = {
-  hidden: { opacity: 0, y: 24 },
+  hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0 },
 };
 
 const LandingPage = () => {
   useTheme();
   const reduceMotion = useReducedMotion();
+  const [sampleIndex, setSampleIndex] = useState(0);
+  const sample = sampleCards[sampleIndex];
 
   return (
-    <div className="landing-page relative isolate min-h-[100dvh] text-gray-900 dark:text-white">
-      <div aria-hidden="true" className="landing-backdrop pointer-events-none fixed inset-0 -z-10" />
+    <div className="landing-page deck-canvas relative isolate min-h-[100dvh] text-foreground">
       <LandingHeader />
 
       <main>
-        <section className="mx-auto grid min-h-[calc(100dvh-4rem)] w-full max-w-[1400px] items-center gap-8 px-5 py-10 md:grid-cols-[1.04fr_0.96fr] md:px-10 lg:gap-14 lg:px-14 lg:py-12">
+        {/* Hero */}
+        <section className="mx-auto grid min-h-[calc(100dvh-4.5rem)] w-full max-w-6xl items-center gap-10 px-5 py-12 md:grid-cols-[1.08fr_0.92fr] md:px-10 lg:gap-14 lg:py-16">
           <motion.div
             initial={reduceMotion ? false : "hidden"}
             animate="visible"
             variants={reveal}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="max-w-[760px]"
+            transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+            className="max-w-xl"
           >
-            <h1 className="text-[clamp(2.75rem,4.8vw,5.5rem)] font-bold leading-[1.08] tracking-[-0.04em]">
-              <span className="block lg:whitespace-nowrap">Good questions</span>
-              <span className="block lg:whitespace-nowrap">change the room.</span>
-            </h1>
-            <p className="mt-7 max-w-[520px] text-lg leading-8 text-gray-700 dark:text-gray-300 md:text-xl">
-              Find the question that gets everyone talking, thinking, and laughing together.
+            <p className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-primary shadow-sm">
+              <Sparkles className="size-3.5" aria-hidden="true" />
+              A deck for better conversations
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <PrimaryLink to="/app">Open a question</PrimaryLink>
+            <h1 className="mt-5 text-[clamp(2.6rem,4.8vw,4.75rem)] font-extrabold leading-[1.06] tracking-[-0.04em] text-balance text-foreground">
+              Good questions change the room.
+            </h1>
+            <p className="mt-6 max-w-[490px] text-lg leading-relaxed text-muted-foreground md:text-xl">
+              Find the question that gets everyone talking, thinking, and laughing together—without scrambling five minutes before people arrive.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <PrimaryLink to="/app">Open the deck</PrimaryLink>
+              <Button
+                asChild
+                variant="outline"
+                className="min-h-12 rounded-full border-border bg-card px-6 text-base font-semibold"
+              >
+                <a href="#sample-deck">Try a sample card</a>
+              </Button>
             </div>
           </motion.div>
 
           <motion.div
-            initial={reduceMotion ? false : { opacity: 0, scale: 0.96, rotate: 1.5 }}
-            animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            transition={{ duration: 0.85, delay: reduceMotion ? 0 : 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="relative mx-auto w-full max-w-[540px] md:justify-self-end"
+            initial={reduceMotion ? false : { opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.75, delay: reduceMotion ? 0 : 0.08, ease: [0.16, 1, 0.3, 1] }}
+            className="relative mx-auto w-full max-w-[480px] md:justify-self-end"
           >
-            <div className="landing-card-frame overflow-hidden rounded-[30px] p-[3px]">
+            <div className="deck-card overflow-hidden p-2.5">
               <img
                 src="/bti-dinner-party.webp"
                 alt="Friends laughing together around a dinner table"
-                className="aspect-[4/5] h-full w-full rounded-[27px] object-cover"
+                className="aspect-[4/5] h-full w-full rounded-[20px] object-cover"
                 fetchPriority="high"
               />
             </div>
           </motion.div>
         </section>
 
-        <RevealSection className="mx-auto grid w-full max-w-[1400px] gap-8 px-5 py-20 md:grid-cols-[1.15fr_0.85fr] md:items-center md:px-10 md:py-28 lg:gap-16 lg:px-14">
-          <div className="landing-card-frame overflow-hidden rounded-[30px] p-[3px]">
+        {/* Interactive Sample Playing Card Section */}
+        <section id="sample-deck" className="border-y border-border/70 bg-card/50 py-20 md:py-24">
+          <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-5 md:grid-cols-[0.95fr_1.05fr] md:px-10 lg:gap-16">
+            <RevealSection className="max-w-md">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
+                See what’s inside
+              </p>
+              <h2 className="mt-3 text-3xl font-extrabold leading-[1.12] tracking-[-0.03em] text-balance md:text-4xl">
+                Every card shows its style and tone at a glance.
+              </h2>
+              <p className="mt-4 text-base leading-relaxed text-muted-foreground md:text-lg">
+                Like a playing card, the corners tell you what kind of prompt you’re about to ask. Filter by mood, save favorites, or remix any question to fit your group.
+              </p>
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSampleIndex((i) => (i + 1) % sampleCards.length)}
+                  className="min-h-11 rounded-full border-border bg-card px-5 font-semibold"
+                >
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                  Draw another
+                </Button>
+                <Button
+                  asChild
+                  variant="ghost"
+                  className="min-h-11 rounded-full px-4 font-semibold text-primary hover:text-primary"
+                >
+                  <Link to="/app">
+                    Browse full feed <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </Button>
+              </div>
+            </RevealSection>
+
+            <RevealSection className="w-full">
+              <div className="deck-card mx-auto w-full max-w-md overflow-hidden">
+                <div
+                  aria-hidden="true"
+                  className="h-1.5 w-full"
+                  style={{
+                    background: `linear-gradient(90deg, ${sample.styleColor}, ${sample.toneColor})`,
+                  }}
+                />
+                <div className="flex flex-col justify-between p-5 sm:p-6">
+                  <div className="flex justify-start">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-secondary/55 px-3 py-1.5 text-xs font-semibold text-foreground">
+                      <Compass className="size-3.5" style={{ color: sample.styleColor }} aria-hidden="true" />
+                      {sample.style}
+                    </span>
+                  </div>
+                  <div className="flex min-h-[175px] flex-col items-center justify-center px-3 py-8 text-center">
+                    <span className="mb-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tracking-wide text-muted-foreground">
+                      <Flame className="size-3.5 text-primary" aria-hidden="true" />
+                      {sample.topic}
+                    </span>
+                    <p className="text-xl font-bold leading-[1.32] tracking-[-0.02em] text-balance text-card-foreground sm:text-2xl">
+                      {sample.text}
+                    </p>
+                  </div>
+                  <div className="flex justify-end">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-secondary/55 px-3 py-1.5 text-xs font-semibold text-foreground">
+                      <Sun className="size-3.5" style={{ color: sample.toneColor }} aria-hidden="true" />
+                      {sample.tone}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </RevealSection>
+          </div>
+        </section>
+
+        {/* Feature section */}
+        <RevealSection className="mx-auto grid w-full max-w-6xl gap-10 px-5 py-20 md:grid-cols-[1.1fr_0.9fr] md:items-center md:px-10 md:py-28 lg:gap-16">
+          <div className="deck-card overflow-hidden p-2.5">
             <img
               src="/bti-table-cards.webp"
               alt="Friends choosing a conversation card around a table"
-              className="aspect-[3/2] h-full w-full rounded-[27px] object-cover"
+              className="aspect-[3/2] h-full w-full rounded-[20px] object-cover"
               loading="lazy"
             />
           </div>
-          <div className="max-w-[520px] md:pl-2">
-            <h2 className="text-4xl font-bold leading-[1.12] tracking-[-0.03em] text-balance md:text-5xl">
+          <div className="max-w-lg">
+            <h2 className="text-3xl font-extrabold leading-[1.12] tracking-[-0.03em] text-balance md:text-5xl">
               Never run out of somewhere to go.
             </h2>
-            <p className="mt-6 text-lg leading-8 text-gray-700 dark:text-gray-300">
-              Browse by mood and save the good ones for the people you bring together most.
+            <p className="mt-5 text-base leading-relaxed text-muted-foreground md:text-lg">
+              Browse by style, tone, or topic, hide what doesn’t fit your crowd, and save the keepers for the people you bring together most.
             </p>
-            <div className="mt-8">
-              <PrimaryLink to="/app">Open a question</PrimaryLink>
+            <div className="mt-7">
+              <PrimaryLink to="/app">Explore questions</PrimaryLink>
             </div>
           </div>
         </RevealSection>
 
-        <section className="border-y border-white/20 bg-white/10 backdrop-blur-md dark:border-white/10 dark:bg-black/10">
-          <div className="mx-auto w-full max-w-[1400px] px-5 py-20 md:px-10 md:py-28 lg:px-14">
-            <RevealSection className="max-w-[760px]">
-              <h2 className="text-4xl font-bold leading-[1.12] tracking-[-0.03em] text-balance md:text-5xl">
+        {/* Rooms grid */}
+        <section className="border-y border-border/70 bg-card/40">
+          <div className="mx-auto w-full max-w-6xl px-5 py-20 md:px-10 md:py-28">
+            <RevealSection className="max-w-2xl">
+              <h2 className="text-3xl font-extrabold leading-[1.12] tracking-[-0.03em] text-balance md:text-5xl">
                 For every kind of room.
               </h2>
-              <p className="mt-5 max-w-[600px] text-lg leading-8 text-gray-700 dark:text-gray-300">
+              <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
                 Pick a tone that fits the people, then let the conversation find its own shape.
               </p>
             </RevealSection>
 
-            <div className="mt-14 grid gap-4 md:grid-cols-12">
+            <div className="mt-12 grid gap-4 md:grid-cols-12">
               {rooms.map((room, index) => (
                 <motion.article
                   key={room.title}
@@ -121,27 +245,33 @@ const LandingPage = () => {
                   whileInView="visible"
                   viewport={{ once: true, amount: 0.25 }}
                   variants={reveal}
-                  transition={{ duration: 0.55, delay: reduceMotion ? 0 : index * 0.06 }}
-                  className={`${room.className} landing-card-frame rounded-[30px] p-[3px]`}
+                  transition={{ duration: 0.5, delay: reduceMotion ? 0 : index * 0.05 }}
+                  className={`${room.className} deck-card flex min-h-48 flex-col justify-end p-6 md:min-h-56 md:p-8`}
                 >
-                  <div className="flex h-full min-h-52 flex-col justify-end rounded-[27px] bg-white/95 p-6 dark:bg-gray-900/95 md:min-h-60 md:p-8">
-                    <h3 className="text-2xl font-bold tracking-tight md:text-3xl">{room.title}</h3>
-                    <p className="mt-3 max-w-[480px] text-base leading-7 text-gray-600 dark:text-gray-400">
-                      {room.copy}
-                    </p>
-                  </div>
+                  <h3 className="text-2xl font-bold tracking-[-0.02em] text-card-foreground md:text-3xl">
+                    {room.title}
+                  </h3>
+                  <p className="mt-2.5 max-w-md text-base leading-relaxed text-muted-foreground">
+                    {room.copy}
+                  </p>
                 </motion.article>
               ))}
             </div>
           </div>
         </section>
 
-        <RevealSection className="mx-auto w-full max-w-[1400px] px-5 py-24 md:px-10 md:py-32 lg:px-14">
-          <div className="grid gap-8 rounded-[30px] border border-white/20 bg-white/10 px-6 py-10 backdrop-blur-md md:grid-cols-[1fr_auto] md:items-center md:px-10 md:py-12 lg:px-14 lg:py-16">
-            <h2 className="max-w-[820px] text-4xl font-bold leading-[1.12] tracking-[-0.03em] text-balance md:text-6xl">
-              Skip the small talk.
-            </h2>
-            <PrimaryLink to="/app">Open a question</PrimaryLink>
+        {/* Final CTA */}
+        <RevealSection className="mx-auto w-full max-w-6xl px-5 py-20 md:px-10 md:py-28">
+          <div className="deck-card grid gap-8 px-6 py-10 md:grid-cols-[1fr_auto] md:items-center md:px-12 md:py-14">
+            <div>
+              <h2 className="max-w-2xl text-3xl font-extrabold leading-[1.12] tracking-[-0.03em] text-balance md:text-5xl">
+                Skip the small talk.
+              </h2>
+              <p className="mt-3 text-base text-muted-foreground md:text-lg">
+                No account required to start browsing.
+              </p>
+            </div>
+            <PrimaryLink to="/app">Draw a question</PrimaryLink>
           </div>
         </RevealSection>
       </main>
@@ -152,20 +282,24 @@ const LandingPage = () => {
 };
 
 const LandingHeader = () => (
-  <header className="sticky top-0 z-40 h-16 border-b border-white/10 bg-white/80 backdrop-blur-md dark:bg-gray-900/80 md:h-[72px]">
-    <div className="mx-auto flex h-full max-w-[1400px] items-center justify-between gap-3 px-4 sm:gap-5 sm:px-5 md:px-10 lg:px-14">
-      <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-md text-sm font-bold tracking-tight sm:text-base">
-        <span className="flex size-8 items-center justify-center rounded-full bg-black/10 dark:bg-white/10" aria-hidden="true">
-          <MessageCircle className="size-4" />
-        </span>
-        Break the Ice
+  <header className="sticky top-0 z-40 h-16 border-b border-border/80 bg-background/85 backdrop-blur-md md:h-[72px]">
+    <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-5 md:px-10">
+      <Link to="/" className="flex shrink-0 items-center rounded-xl">
+        <BrandMark size="sm" labelClassName="text-sm sm:text-base" />
       </Link>
-      <nav className="hidden items-center gap-7 text-sm font-semibold md:flex" aria-label="Primary navigation">
-        <Link className="transition-opacity hover:opacity-55" to="/about">About</Link>
-      </nav>
-      <Button asChild className="h-11 bg-black/10 px-3 text-xs dark:bg-white/10 sm:px-4 sm:text-sm">
-        <Link to="/app">Open a question <ArrowRight aria-hidden="true" className="hidden sm:block" /></Link>
-      </Button>
+      <div className="flex items-center gap-2 sm:gap-4">
+        <nav className="flex items-center gap-2 sm:gap-5 text-sm font-semibold" aria-label="Primary navigation">
+          <Link className="rounded-full px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" to="/about">
+            About
+          </Link>
+        </nav>
+        <ThemeToggle className="h-10 w-10 rounded-full border-border bg-card p-0" labelClassName="sr-only" />
+        <Button asChild className="h-10 rounded-full px-4 text-xs font-semibold sm:px-5 sm:text-sm">
+          <Link to="/app">
+            Open deck <ArrowRight aria-hidden="true" className="hidden sm:block" />
+          </Link>
+        </Button>
+      </div>
     </div>
   </header>
 );
@@ -179,7 +313,7 @@ const RevealSection = ({ className = "", children }: { className?: string; child
       whileInView="visible"
       viewport={{ once: true, amount: 0.2 }}
       variants={reveal}
-      transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
       className={className}
     >
       {children}
@@ -188,22 +322,27 @@ const RevealSection = ({ className = "", children }: { className?: string; child
 };
 
 const PrimaryLink = ({ to, children }: { to: string; children: ReactNode }) => (
-  <Button asChild className="min-h-14 rounded-full bg-gradient-to-r from-blue-600 to-purple-700 px-6 text-base font-bold text-white shadow-lg transition-transform hover:scale-[1.02] hover:from-blue-700 hover:to-purple-800 active:scale-[0.98] motion-reduce:transform-none">
-    <Link to={to}>{children} <ArrowRight aria-hidden="true" /></Link>
+  <Button
+    asChild
+    className="min-h-12 rounded-full px-7 text-base font-bold shadow-sm transition-transform hover:scale-[1.01] active:scale-[0.99] motion-reduce:transform-none"
+  >
+    <Link to={to}>
+      {children} <ArrowRight aria-hidden="true" />
+    </Link>
   </Button>
 );
 
 const LandingFooter = () => (
-  <footer className="border-t border-white/10 bg-white/5 backdrop-blur-md dark:bg-black/20">
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-6 px-5 py-8 text-sm md:flex-row md:items-center md:justify-between md:px-10 lg:px-14">
-      <p className="font-bold">Break the Ice</p>
-      <div className="flex flex-wrap gap-x-6 gap-y-3 text-gray-700 dark:text-gray-300">
-        <Link className="hover:text-current" to="/about">About</Link>
-        <Link className="hover:text-current" to="/contact">Contact</Link>
-        <Link className="hover:text-current" to="/privacy">Privacy</Link>
-        <Link className="hover:text-current" to="/terms">Terms</Link>
+  <footer className="border-t border-border/80 bg-card/60">
+    <div className="mx-auto flex max-w-6xl flex-col gap-5 px-5 py-8 text-sm md:flex-row md:items-center md:justify-between md:px-10">
+      <BrandMark size="sm" labelClassName="text-sm" />
+      <div className="flex flex-wrap gap-x-6 gap-y-2 text-muted-foreground">
+        <Link className="transition-colors hover:text-foreground" to="/about">About</Link>
+        <Link className="transition-colors hover:text-foreground" to="/contact">Contact</Link>
+        <Link className="transition-colors hover:text-foreground" to="/privacy">Privacy</Link>
+        <Link className="transition-colors hover:text-foreground" to="/terms">Terms</Link>
       </div>
-      <p className="text-gray-700 dark:text-gray-300">Questions worth asking.</p>
+      <p className="text-muted-foreground">Questions worth asking.</p>
     </div>
   </footer>
 );

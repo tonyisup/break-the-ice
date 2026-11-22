@@ -48,19 +48,18 @@ export function ItemDetailFace({
   };
 
   return (
-    // Keyboard users have the Back button and Escape; the click-anywhere is a touch nicety.
     <div
       role="group"
       aria-labelledby={headingId}
       onKeyDown={handleKeyDown}
       onClick={handleClick}
-      className="flex h-full w-full cursor-pointer flex-col gap-3 rounded-[27px] px-6 py-5"
+      className="flex h-full w-full cursor-pointer flex-col gap-4 rounded-[28px] px-6 py-5"
       style={{
-        backgroundImage: `radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, ${item.color} 22%, transparent), transparent 70%)`,
+        backgroundImage: `radial-gradient(110% 70% at 50% 0%, color-mix(in srgb, ${item.color} 16%, transparent), transparent 72%)`,
       }}
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
           {item.type}
         </span>
         <button
@@ -68,43 +67,43 @@ export function ItemDetailFace({
           type="button"
           onClick={onBack}
           aria-label="Back to question"
-          className="flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-gray-300 dark:hover:bg-white/10"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <RotateCcw size={16} aria-hidden="true" />
+          <RotateCcw size={15} aria-hidden="true" />
           Back
         </button>
       </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-2 py-2 text-center">
         <span
           aria-hidden="true"
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full"
+          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl"
           style={{
-            backgroundColor: `color-mix(in srgb, ${item.color} 15%, transparent)`,
-            boxShadow: `inset 0 0 0 2px color-mix(in srgb, ${item.color} 40%, transparent)`,
+            backgroundColor: `color-mix(in srgb, ${item.color} 14%, transparent)`,
+            boxShadow: `inset 0 0 0 1.5px color-mix(in srgb, ${item.color} 35%, transparent)`,
           }}
         >
           <IconComponent icon={item.icon} size={28} color={item.color} />
         </span>
-        <h3 id={headingId} className="text-xl font-bold leading-tight text-gray-900 dark:text-white">
+        <h3 id={headingId} className="text-xl font-bold leading-tight tracking-[-0.02em] text-card-foreground">
           {item.name}
         </h3>
         {item.description && (
-          <p className="max-w-xs text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+          <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
             {item.description}
           </p>
         )}
       </div>
 
       {(onAnchor || (onHide && item.type !== "Topic")) && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 pt-1">
           {onAnchor && (
             <button
               type="button"
               onClick={() => onAnchor(item)}
               className={cn(
-                "min-h-11 min-w-[8rem] flex-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2",
-                isColorDark(item.color) ? "text-white" : "text-black",
+                "min-h-11 min-w-[8rem] flex-1 rounded-full px-4 py-2.5 text-sm font-semibold shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                isColorDark(item.color) ? "text-white" : "text-neutral-950",
               )}
               style={{ backgroundColor: item.color }}
             >
@@ -115,7 +114,7 @@ export function ItemDetailFace({
             <button
               type="button"
               onClick={() => onHide(item)}
-              className="min-h-11 min-w-[8rem] flex-1 rounded-full border border-black/10 px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/15 dark:text-gray-200 dark:hover:bg-white/10"
+              className="min-h-11 min-w-[8rem] flex-1 rounded-full border border-border bg-secondary/50 px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Hide this {kind}
             </button>

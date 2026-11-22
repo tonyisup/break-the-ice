@@ -2,19 +2,17 @@ import React, { useState, useEffect, useId, useRef } from "react";
 import { useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { Mail, Loader2, Check } from "lucide-react";
 import { NewsletterSubscribeResponse } from "@/types/newsletter";
+import { Button } from "@/components/ui/button";
 
 interface NewsletterCardProps {
-  variant: "blend" | "standout";
+  /** Retained for backwards compatibility; all cards now use the unified deck aesthetic. */
+  variant?: "blend" | "standout";
   prefilledEmail?: string;
 }
 
-export function NewsletterCard({
-  variant,
-  prefilledEmail,
-}: NewsletterCardProps) {
+export function NewsletterCard({ prefilledEmail }: NewsletterCardProps) {
   const [email, setEmail] = useState(prefilledEmail || "");
   const [status, setStatus] = useState<
     "idle" | "submitting" | "success" | "verification_required"
@@ -62,70 +60,34 @@ export function NewsletterCard({
     }
   };
 
-  // Common inner content styles
-  const innerContentClass =
-    "w-full h-full min-h-[300px] flex flex-col justify-center items-center p-8 transition-all duration-500 relative overflow-hidden";
-
-  // Variant-specific styles
-  const containerClass =
-    variant === "blend"
-      ? "w-full h-full rounded-[30px] p-[3px] bg-gradient-to-br from-[#667EEA] to-[#764BA2]"
-      : "w-full h-full rounded-[30px] p-[3px] bg-[#FF6B6B]"; // Standout solid color (e.g., coral red)
-
-  const cardBgClass =
-    variant === "blend"
-      ? "bg-white/95 dark:bg-gray-900/95 rounded-[27px]"
-      : "bg-[#FF6B6B] text-gray-900 rounded-[27px]";
-
-  const inputClass =
-    variant === "blend"
-      ? "w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
-      : "w-full px-4 py-3 rounded-xl border-2 border-gray-900/30 bg-white/30 text-gray-900 placeholder:text-gray-700 focus:ring-2 focus:ring-gray-900 focus:outline-none transition-all";
-
-  const buttonClass =
-    variant === "blend"
-      ? "w-full py-3 rounded-xl font-bold text-white bg-gradient-to-r from-blue-600 to-purple-700 hover:opacity-90 transition-opacity disabled:opacity-70 flex justify-center items-center gap-2"
-      : "w-full py-3 rounded-xl font-bold text-white bg-gray-900 hover:bg-gray-800 transition-colors disabled:opacity-70 flex justify-center items-center gap-2 shadow-lg";
-
-  const textColor =
-    variant === "blend" ? "text-gray-900 dark:text-white" : "text-gray-900";
-  const subTextColor =
-    variant === "blend" ? "text-gray-500 dark:text-gray-400" : "text-gray-800";
-
   return (
-    <div className="w-full max-w-md mx-auto relative group">
-      <div className={containerClass}>
-        <div className={cn(innerContentClass, cardBgClass)}>
+    <div className="w-full max-w-md mx-auto">
+      <div className="deck-card overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="h-1.5 w-full bg-primary/70"
+        />
+        <div className="flex min-h-[280px] flex-col items-center justify-center p-7 sm:p-8">
           <div role="status" aria-live="polite">
             {isComplete && (
-              <div className="flex flex-col items-center justify-center px-2">
-                <div
-                  className={cn(
-                    "w-16 h-16 rounded-full flex items-center justify-center mb-4",
-                    variant === "blend"
-                      ? "bg-green-100 text-green-600"
-                      : "bg-white/30 text-gray-900",
-                  )}
-                >
+              <div className="flex flex-col items-center justify-center px-2 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   {status === "verification_required" ? (
-                    <Mail className="w-8 h-8" />
+                    <Mail className="h-7 w-7" />
                   ) : (
-                    <Check className="w-8 h-8" />
+                    <Check className="h-7 w-7" />
                   )}
                 </div>
                 <h3
                   ref={resultRef}
                   tabIndex={-1}
-                  className={cn(
-                    "text-2xl font-bold mb-2 text-center",
-                    textColor,
-                  )}
+                  className="mb-2 text-xl font-bold tracking-[-0.02em] text-card-foreground outline-none"
                 >
                   {status === "verification_required"
                     ? "Check your email"
                     : "You’re subscribed"}
                 </h3>
-                <p className={cn("text-center", subTextColor)}>
+                <p className="text-sm leading-relaxed text-muted-foreground">
                   {status === "verification_required"
                     ? "We've sent you a link to confirm your subscription."
                     : "Your daily questions will arrive by email."}
@@ -135,25 +97,16 @@ export function NewsletterCard({
           </div>
 
           {!isComplete && (
-            <div className="w-full flex flex-col items-center">
-              <div
-                className={cn(
-                  "mb-6 p-4 rounded-full",
-                  variant === "blend"
-                    ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500"
-                    : "bg-white/30 text-gray-900",
-                )}
-              >
-                <Mail size={32} />
+            <div className="flex w-full flex-col items-center text-center">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Mail className="h-6 w-6" aria-hidden="true" />
               </div>
 
-              <h2
-                className={cn("text-2xl font-bold text-center mb-2", textColor)}
-              >
+              <h2 className="mb-1.5 text-xl font-bold tracking-[-0.02em] text-card-foreground">
                 Daily Questions?
               </h2>
 
-              <p className={cn("text-center mb-8 px-4", subTextColor)}>
+              <p className="mb-6 max-w-xs text-sm leading-relaxed text-muted-foreground">
                 Get a fresh question delivered to your inbox every morning.
               </p>
 
@@ -161,7 +114,7 @@ export function NewsletterCard({
                 onSubmit={(event) => {
                   void handleSubmit(event);
                 }}
-                className="w-full space-y-4"
+                className="w-full space-y-3"
               >
                 {!prefilledEmail && (
                   <div>
@@ -177,23 +130,23 @@ export function NewsletterCard({
                       onChange={(e) => setEmail(e.target.value)}
                       required
                       disabled={status === "submitting"}
-                      className={inputClass}
+                      className="h-11 w-full rounded-xl border border-input bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
                 )}
                 {errorMessage && (
-                  <p role="alert" className={cn("text-sm", textColor)}>
+                  <p role="alert" className="text-sm font-medium text-destructive">
                     {errorMessage}
                   </p>
                 )}
-                <button
+                <Button
                   type="submit"
                   disabled={status === "submitting"}
-                  className={buttonClass}
+                  className="min-h-11 w-full rounded-full font-semibold"
                 >
                   {status === "submitting" ? (
                     <>
-                      <Loader2 className="animate-spin w-5 h-5" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                       Subscribing...
                     </>
                   ) : prefilledEmail ? (
@@ -201,7 +154,7 @@ export function NewsletterCard({
                   ) : (
                     "Subscribe Now"
                   )}
-                </button>
+                </Button>
               </form>
             </div>
           )}

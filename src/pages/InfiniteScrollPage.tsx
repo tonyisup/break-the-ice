@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowUp, SearchX, Sparkles, X } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { HiddenCardNotice } from "@/components/hidden-card-notice/HiddenCardNotice";
-import { FeedFilterBar, type FeedFilterKey, type FeedFilterOption } from "@/components/filter-controls/FeedFilterBar";
+import { ActiveFilterChips, FeedFilterBar, type FeedFilterKey, type FeedFilterOption } from "@/components/filter-controls/FeedFilterBar";
 import type { ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { useAuth } from "@clerk/clerk-react";
@@ -307,8 +307,7 @@ export default function InfiniteScrollPage() {
     return allTones.every(t => hiddenTones.includes(t._id));
   }, [allTones, hiddenTones]);
 
-  // Used for styling and gradient
-  const gradientTarget = effectiveTheme === "dark" ? "#000" : "#bbb";
+  const isDarkTheme = effectiveTheme === "dark";
 
 
 
@@ -980,17 +979,13 @@ export default function InfiniteScrollPage() {
     ? null
     : new Date(currentUser.aiUsage.cycleStart + AI_USAGE_CYCLE_MS).toLocaleDateString(undefined, { month: "long", day: "numeric" });
 
-  // Smooth gradient transition logic
-  const [bgGradient, setBgGradient] = useState<[string, string]>(['#667EEA', '#764BA2']);
+  // Smooth ambient aura transition logic
+  const [bgGradient, setBgGradient] = useState<[string, string]>(["#0E7490", "#6366F1"]);
 
   const showRefineCTA = interactionStats &&
     interactionStats.totalSeen >= 50 &&
     interactionStats.totalLikes === 0 &&
     !interactionStats.dismissedRefineCTA;
-
-  // Determine variant for A/B testing (randomized on mount)
-  // We use a ref to keep it consistent across re-renders
-  const newsletterVariantRef = useRef(Math.random() > 0.5 ? 'blend' as const : 'standout' as const);
 
   // Refs for data needed in scroll handler to avoid frequent re-attachments
   const stylesMapRef = useRef(stylesMap);
@@ -1109,65 +1104,84 @@ export default function InfiniteScrollPage() {
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [reduceMotion]);
-  return (
-    <div
-      className="min-h-screen overflow-x-clip flex flex-col"
-    >
-      <div
-        className="h-screen fixed top-0 left-0 right-0 z-0"
-        style={{
-          background: `linear-gradient(135deg, ${bgGradient[0]}, ${gradientTarget}, ${bgGradient[1]})`,
-          transition: reduceMotion ? "none" : "background 0.2s ease-out"
-        }}
-      >
-      </div>
-      <Header />
+  const filterButton = (
+    <FeedFilterBar
+      styles={filterStyles}
+      tones={filterTones}
+      topics={filterTopics}
+      selectedStyleId={anchoredStyleId}
+      selectedToneId={anchoredToneId}
+      selectedTopicId={anchoredTopicId}
+      onChange={setFilter}
+      onClearAll={clearFilters}
+      hiddenStyleCount={(allStyles ?? []).length - filterStyles.length}
+      hiddenToneCount={(allTones ?? []).length - filterTones.length}
+      hideActiveChips
+      compact
+    />
+  );
 
-      {/* Pad only by the fixed header's measured height (--header-h, set by Header) so the
-          anchor bar sits right under it; the space above the first card lives on the list below. */}
-      <main className="z-10 flex-1 flex flex-col pb-32 pt-[var(--header-h,4rem)]">
+  return (
+    <div className="deck-canvas relative min-h-screen overflow-x-clip flex flex-col">
+      {/* Subtle scroll-reactive ambient tint from the active card's style & tone */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          background: isDarkTheme
+            ? `radial-gradient(55% 45% at 18% 12%, color-mix(in srgb, ${bgGradient[0]} 20%, transparent), transparent 72%), radial-gradient(55% 45% at 84% 80%, color-mix(in srgb, ${bgGradient[1]} 18%, transparent), transparent 72%)`
+            : `radial-gradient(55% 45% at 18% 12%, color-mix(in srgb, ${bgGradient[0]} 15%, transparent), transparent 72%), radial-gradient(55% 45% at 84% 80%, color-mix(in srgb, ${bgGradient[1]} 14%, transparent), transparent 72%)`,
+          transition: reduceMotion ? "none" : "background 0.25s ease-out",
+        }}
+      />
+
+      <Header rightSlot={filterButton} />
+
+      <main className="relative z-10 flex-1 flex flex-col pb-32 pt-[var(--header-h,4rem)]">
         <h1 className="sr-only">Questions</h1>
-        <FeedFilterBar
-          styles={filterStyles}
-          tones={filterTones}
-          topics={filterTopics}
-          selectedStyleId={anchoredStyleId}
-          selectedToneId={anchoredToneId}
-          selectedTopicId={anchoredTopicId}
-          onChange={setFilter}
-          onClearAll={clearFilters}
-          hiddenStyleCount={(allStyles ?? []).length - filterStyles.length}
-          hiddenToneCount={(allTones ?? []).length - filterTones.length}
-        />
         <div
           className={cn(
-            "flex flex-col gap-6 px-4 pt-6 max-w-3xl mx-auto w-full"
+            "flex flex-col gap-6 px-4 pt-6 sm:pt-8 max-w-3xl mx-auto w-full"
           )}
         >
+          {/* Active filter chips only appear when at least one filter is active */}
+          <ActiveFilterChips
+            styles={filterStyles}
+            tones={filterTones}
+            topics={filterTopics}
+            selectedStyleId={anchoredStyleId}
+            selectedToneId={anchoredToneId}
+            selectedTopicId={anchoredTopicId}
+            onChange={setFilter}
+            onClearAll={clearFilters}
+          />
+
           {aiRunningLow && !showAiLimitNotice && (
-            <p role="status" className="mx-auto w-fit max-w-md rounded-2xl bg-black/60 px-4 py-2 text-center text-sm text-white">
+            <p
+              role="status"
+              className="mx-auto w-fit max-w-md rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-center text-sm font-medium text-foreground"
+            >
               {aiLeft === 1 ? "1 AI generation left" : `${aiLeft} AI generations left`} this cycle. New questions and Remix use them
               {aiResetsOn ? `; more arrive on ${aiResetsOn}.` : "."}
             </p>
           )}
 
           {(allStylesBlocked || allTonesBlocked) && (
-            <div className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-4 bg-black/50 backdrop-blur-md rounded-2xl border border-white/20">
-              <SearchX className="w-12 h-12 text-white/80" />
-              <div className="space-y-2">
-                <h3 className="text-xl font-semibold text-white">
+            <div className="deck-card mx-auto flex w-full max-w-md flex-col items-center justify-center space-y-4 px-6 py-12 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                <SearchX className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-xl font-bold tracking-[-0.02em] text-card-foreground">
                   {allStylesBlocked ? "All Styles Hidden" : "All Tones Hidden"}
                 </h3>
-                <p className="text-white max-w-md">
+                <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
                   {allStylesBlocked
-                    ? "You have hidden all available question styles. Please unhide some styles in the settings to see more questions."
-                    : "You have hidden all available tones. Please unhide some tones in the settings to see more questions."}
+                    ? "You have hidden all available question styles. Unhide some styles in Settings to see more questions."
+                    : "You have hidden all available tones. Unhide some tones in Settings to see more questions."}
                 </p>
               </div>
-              <Button
-                variant="default"
-                asChild
-              >
+              <Button variant="default" className="min-h-11 rounded-full px-6" asChild>
                 <Link to="/settings">Manage preferences</Link>
               </Button>
             </div>
@@ -1176,28 +1190,26 @@ export default function InfiniteScrollPage() {
           {/* A sign-in prompt or limit notice explains an empty feed on its own; this panel
               would only contradict it. */}
           {!allStylesBlocked && !allTonesBlocked && questions.length === 0 && !hasMore && !isLoading && (loadError || (!showAuthCTA && !showAiLimitNotice && !pausedNotice)) && (
-            <div className="flex flex-col items-center justify-center py-20 px-4 text-center space-y-6 bg-black/50 backdrop-blur-md rounded-[30px] border border-white/20">
-              <div className="bg-white/20 p-6 rounded-full">
-                <SearchX className="w-12 h-12 text-white" />
+            <div className="deck-card mx-auto flex w-full max-w-md flex-col items-center justify-center space-y-5 px-6 py-14 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                <SearchX className="h-7 w-7" aria-hidden="true" />
               </div>
-              <div className="space-y-2">
-                <h3 className="text-2xl font-bold text-white uppercase italic">
+              <div className="space-y-1.5">
+                <h3 className="text-xl font-bold tracking-[-0.02em] text-card-foreground">
                   {loadError ? "Couldn’t load questions" : "No matching questions"}
                 </h3>
-                <p className="text-white max-w-md mx-auto text-lg">
+                <p className="mx-auto max-w-sm text-sm leading-relaxed text-muted-foreground">
                   {loadError
                     ? loadError
                     : hasAnchorFilters
-                      ? "Nothing matches your style, tone, or topic filters."
+                      ? "Nothing matches your current style, tone, or topic filters."
                       : "There's nothing new to show right now."}
                 </p>
               </div>
               <Button
                 variant="default"
-                size="lg"
-                className="rounded-full px-10 font-bold uppercase italic tracking-wider transition-all hover:scale-105"
+                className="min-h-11 rounded-full px-7 font-semibold"
                 onClick={() => {
-                  // Without an error, clearing the filters changes the feed, which reloads it.
                   if (!loadError && hasAnchorFilters) {
                     const newParams = new URLSearchParams(searchParams);
                     ["style", "tone", "topic"].forEach((key) => newParams.delete(key));
@@ -1205,7 +1217,6 @@ export default function InfiniteScrollPage() {
                   }
                   setHasMore(true);
                   setLoadError(null);
-                  // The Effect will trigger loadMoreQuestions automatically
                 }}
               >
                 {!loadError && hasAnchorFilters ? "Clear Filters" : "Try Again"}
@@ -1214,12 +1225,11 @@ export default function InfiniteScrollPage() {
           )}
 
           {!allStylesBlocked && !allTonesBlocked && questions.map((question, index) => {
-            // Derive specific style/tone/gradient for this card
             const cardStyle = stylesMap.get(question.styleId || (question.style as string) || "");
             const cardTone = tonesMap.get(question.toneId || (question.tone as string) || "");
             const cardGradient = (cardStyle?.color && cardTone?.color)
               ? [cardStyle.color, cardTone.color]
-              : ['#667EEA', '#764BA2'];
+              : ["#0E7490", "#6366F1"];
 
             return (
               <div key={`container-${question._id}`} className="flex flex-col gap-6 w-full">
@@ -1264,7 +1274,7 @@ export default function InfiniteScrollPage() {
                   (currentUser && !currentUser.newsletterSubscriptionStatus)
                 ) && (
                     <NewsletterCard
-                      variant={newsletterVariantRef.current}
+                      variant="blend"
                       prefilledEmail={user.isSignedIn ? currentUser?.email : undefined}
                     />
                   )}
@@ -1284,8 +1294,8 @@ export default function InfiniteScrollPage() {
 
           {(isLoading || (!user.isLoaded && questions.length === 0)) && (
             <div className="flex flex-col items-center gap-3 py-8" role="status">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" aria-hidden="true"></div>
-              <span className="rounded-full bg-black/50 px-3 py-1 text-sm font-medium text-white">
+              <div className="h-7 w-7 animate-spin rounded-full border-2 border-border border-t-primary" aria-hidden="true" />
+              <span className="text-sm font-medium text-muted-foreground">
                 {questions.length === 0
                   ? (user.isSignedIn ? "Finding questions… new ones can take a few seconds to write." : "Finding questions…")
                   : "Loading more questions…"}
@@ -1294,10 +1304,11 @@ export default function InfiniteScrollPage() {
           )}
 
           {loadError && questions.length > 0 && !isLoading && (
-            <div role="alert" className="mx-auto flex w-full max-w-md flex-col items-center gap-3 rounded-2xl bg-black/60 px-5 py-4 text-center text-white">
-              <p>{loadError}</p>
+            <div role="alert" className="deck-card mx-auto flex w-full max-w-md flex-col items-center gap-3 px-5 py-5 text-center">
+              <p className="text-sm font-medium text-foreground">{loadError}</p>
               <Button
-                className="min-h-11 border border-white/50 px-6 text-white"
+                variant="outline"
+                className="min-h-11 rounded-full px-6"
                 onClick={() => {
                   setLoadError(null);
                   void loadMoreQuestions("button");
@@ -1326,12 +1337,11 @@ export default function InfiniteScrollPage() {
             <AiLimitNotice title="New questions are paused" description={`${pausedNotice} The questions already here are still yours to browse.`} />
           )}
 
-          {/* Whoever reaches the end of what can be shown (a guest, or someone whose new
-              questions have run out or are paused) can go round the library again. */}
           {(showAuthCTA || showAiLimitNotice || (pausedNotice && !hasMore)) && !isLoading && !hasAnchorFilters && questions.length > 0 && (
             <div className="flex justify-center">
               <Button
-                className="min-h-11 border border-white/50 bg-black/50 px-6 text-white"
+                variant="outline"
+                className="min-h-11 rounded-full bg-card px-6 font-semibold"
                 onClick={() => {
                   setSeenIds(new Set());
                   setQuestions([]);
@@ -1349,7 +1359,8 @@ export default function InfiniteScrollPage() {
           {(showAuthCTA || showAiLimitNotice) && hasAnchorFilters && (
             <div className="flex justify-center">
               <Button
-                className="min-h-11 border border-white/50 bg-black/50 px-6 text-white"
+                variant="outline"
+                className="min-h-11 rounded-full bg-card px-6 font-semibold"
                 onClick={() => {
                   const newParams = new URLSearchParams(searchParams);
                   ["style", "tone", "topic"].forEach((key) => newParams.delete(key));
@@ -1369,9 +1380,10 @@ export default function InfiniteScrollPage() {
           )}
 
           {hasMore && user.isLoaded && !showAuthCTA && !showAiLimitNotice && !loadError && (questions.length > 0 || !isLoading) && (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center py-6">
               <Button
-                className="min-h-11 border border-white/40 bg-black/40 px-6 text-white"
+                variant="outline"
+                className="min-h-11 rounded-full bg-card px-6 font-semibold shadow-sm"
                 onClick={() => {
                   void loadMoreQuestions("button");
                 }}
@@ -1386,51 +1398,64 @@ export default function InfiniteScrollPage() {
       {showTopButton && (
         <Button
           onClick={scrollToTop}
+          variant="outline"
+          size="icon"
           data-testid="scroll-to-top-button"
           aria-label="Back to top"
           className={cn(
-            "fixed left-6 rounded-full w-12 h-12 p-0 shadow-lg z-50 transition-all duration-300 border border-white/40 bg-gray-900/85 text-white hover:bg-gray-900",
-            activeTakeoverTopics && activeTakeoverTopics.length > 0 && !takeoverDismissed ? "bottom-[calc(var(--bottom-nav-h,0px)+5rem)]" : "bottom-[calc(var(--bottom-nav-h,0px)+1.5rem)]"
+            "fixed left-4 sm:left-6 z-40 h-11 w-11 rounded-full border-border bg-card/95 text-foreground shadow-lg backdrop-blur-md transition-all duration-200 hover:bg-accent",
+            activeTakeoverTopics && activeTakeoverTopics.length > 0 && !takeoverDismissed
+              ? "bottom-[calc(var(--bottom-nav-h,0px)+5.25rem)]"
+              : "bottom-[calc(var(--bottom-nav-h,0px)+1rem)]"
           )}
         >
-          <ArrowUp className="w-6 h-6" aria-hidden="true" />
+          <ArrowUp className="h-5 w-5" aria-hidden="true" />
         </Button>
       )}
 
       {activeTakeoverTopics && activeTakeoverTopics.length > 0 && !takeoverDismissed && (
         <div
-          className="fixed bottom-[var(--bottom-nav-h,0px)] left-0 right-0 z-40 text-white py-4 px-6 shadow-[0_-8px_30px_rgba(0,0,0,0.3)] flex items-center justify-center gap-6 animate-in slide-in-from-bottom duration-700 backdrop-blur-md border-t border-white/10"
+          className="fixed bottom-[calc(var(--bottom-nav-h,0px)+0.75rem)] left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 text-card-foreground shadow-xl backdrop-blur-md animate-in slide-in-from-bottom duration-300"
           style={{
-            background: activeTakeoverTopics.length === 1
-              ? `${activeTakeoverTopics[0].color || '#9333ea'}F2`
-              : `linear-gradient(90deg, ${activeTakeoverTopics[0].color || '#9333ea'}F2, ${activeTakeoverTopics[activeTakeoverTopics.length - 1].color || '#7c3aed'}F2)`
+            borderColor: `color-mix(in srgb, ${activeTakeoverTopics[0].color || "#0E7490"} 45%, hsl(var(--border)))`,
           }}
         >
-          <Sparkles className="size-6 text-yellow-300 fill-yellow-300 motion-safe:animate-pulse" aria-hidden="true" />
-          <div className="flex items-center gap-4 font-black tracking-tighter uppercase text-xl italic">
-            <div className="flex -space-x-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex -space-x-2 shrink-0">
               {activeTakeoverTopics.map((t) => (
-                <div key={t._id} className="bg-white/20 p-2 rounded-full border-2 border-white/40 shadow-xl backdrop-blur-sm" title={t.name}>
-                  <IconComponent icon={(t.icon || "CircleQuestionMark") as Icon} size={28} />
+                <div
+                  key={t._id}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-secondary"
+                  title={t.name}
+                >
+                  <IconComponent
+                    icon={(t.icon || "CircleQuestionMark") as Icon}
+                    size={18}
+                    color={t.color}
+                  />
                 </div>
               ))}
             </div>
-            <span className="drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
-              {activeTakeoverTopics.map(t => t.name).join(" & ")} Takeover!
-            </span>
+            <div className="min-w-0">
+              <p className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.14em] text-primary">
+                <Sparkles className="size-3" aria-hidden="true" />
+                Featured Topic
+              </p>
+              <p className="truncate text-sm font-bold text-foreground">
+                {activeTakeoverTopics.map((t) => t.name).join(" & ")} Takeover
+              </p>
+            </div>
           </div>
-          <Sparkles className="size-6 text-yellow-300 fill-yellow-300 motion-safe:animate-pulse" aria-hidden="true" />
           <button
             type="button"
             onClick={() => setTakeoverDismissed(true)}
             aria-label="Dismiss this banner"
-            className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <X className="size-5" aria-hidden="true" />
+            <X className="size-4" aria-hidden="true" />
           </button>
         </div>
       )}
-
     </div>
   );
 }

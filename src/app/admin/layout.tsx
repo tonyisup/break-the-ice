@@ -86,10 +86,10 @@ function AdminContent({ children }: { children: React.ReactNode }) {
               <div className="h-4 w-px bg-border" aria-hidden="true" />
               <div
                 className="flex items-center gap-2"
-                aria-label="Break the Ice administration"
+                aria-label="Break the Ice(berg) administration"
               >
                 <span className="text-sm font-semibold text-foreground">
-                  Break the Ice
+                  Break the Ice(berg)
                 </span>
                 <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
                   Admin

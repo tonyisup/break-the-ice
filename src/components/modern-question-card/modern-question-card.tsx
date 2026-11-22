@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
-import { Heart, Share2, ThumbsDown, TrashIcon } from '@/components/ui/icons/icons';
-import { Info, Sparkles } from 'lucide-react';
-import { Doc, Id } from '../../../convex/_generated/dataModel';
-import { api } from '../../../convex/_generated/api';
-import { useQuery, useConvexAuth } from 'convex/react';
-import { Icon, IconComponent } from '../ui/icons/icon';
-import type { ItemDetails } from '../item-detail-drawer/item-detail-drawer';
-import { ItemDetailFace } from './item-detail-face';
-import { RemixQuestionPanel } from '../remix-question-panel/remix-question-panel';
-import { useStorageContext } from '@/hooks/useStorageContext';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import { useEffect, useRef, useState } from "react";
+import { Heart, Share2, ThumbsDown, TrashIcon } from "@/components/ui/icons/icons";
+import { Lock, Sparkles } from "lucide-react";
+import { Doc, Id } from "../../../convex/_generated/dataModel";
+import { api } from "../../../convex/_generated/api";
+import { useQuery, useConvexAuth } from "convex/react";
+import { Icon, IconComponent } from "../ui/icons/icon";
+import type { ItemDetails } from "../item-detail-drawer/item-detail-drawer";
+import { ItemDetailFace } from "./item-detail-face";
+import { RemixQuestionPanel } from "../remix-question-panel/remix-question-panel";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { useStorageContext } from "@/hooks/useStorageContext";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface ModernQuestionCardProps {
   question: Doc<"questions"> | null;
@@ -68,10 +69,9 @@ export function ModernQuestionCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const [isFlipped, setIsFlipped] = useState(false);
   const [detailItem, setDetailItem] = useState<ItemDetails | null>(null);
+  const [isRemixOpen, setIsRemixOpen] = useState(false);
   // The chip that turned the card over, so focus can go back to it.
   const flipTriggerRef = useRef<HTMLElement | null>(null);
-  // What the back of the card is showing: a style, tone or topic, or the remix panel.
-  const [backMode, setBackMode] = useState<"detail" | "remix">("detail");
   const { isAuthenticated } = useConvexAuth();
   const canRemix = isAuthenticated && !!style && !!tone;
 
@@ -83,17 +83,10 @@ export function ModernQuestionCard({
   const showDetails = (item: ItemDetails) => {
     rememberFlipTrigger();
     setDetailItem(item);
-    setBackMode("detail");
-    setIsFlipped(true);
-  };
-  const showRemix = () => {
-    rememberFlipTrigger();
-    setBackMode("remix");
     setIsFlipped(true);
   };
   const flipBack = () => setIsFlipped(false);
   const requestSignInToRemix = () => {
-    // Clerk's global is there once it has loaded; without it the toast still says what to do.
     const clerk = (window as { Clerk?: { openSignIn?: () => void } }).Clerk;
     toast.info("Sign in to remix this question into your own.");
     clerk?.openSignIn?.();
@@ -107,29 +100,19 @@ export function ModernQuestionCard({
     }
   }, [isFlipped]);
 
-  // A new question always starts face-up.
+  // A new question always starts face-up with remix closed.
   useEffect(() => {
     setIsFlipped(false);
+    setIsRemixOpen(false);
   }, [question?._id]);
 
   const handleHideStyle = (itemId: Id<"styles">) => {
-    if (!style) return;
-    if (!itemId) return;
-    if (itemId !== style._id) {
-      console.log("Item ID does not match style ID", itemId, style._id);
-      return;
-    }
+    if (!style || !itemId || itemId !== style._id) return;
     onHideStyle(style._id);
     flipBack();
   };
   const handleHideTone = (itemId: Id<"tones">) => {
-    if (!tone) return;
-    if (!itemId) return;
-    if (itemId !== tone._id) {
-      console.log("Item ID does not match tone ID", itemId, tone._id);
-      return;
-    }
-    if (!tone) return;
+    if (!tone || !itemId || itemId !== tone._id) return;
     onHideTone(tone._id);
     flipBack();
   };
@@ -163,7 +146,7 @@ export function ModernQuestionCard({
       type: "Topic",
       description: topic.description || "",
       icon: (topic.icon || "CircleHelp") as Icon,
-      color: topic.color || "#888",
+      color: topic.color || "#0E7490",
     });
   };
   const handleShowToneDetails = () => {
@@ -185,72 +168,81 @@ export function ModernQuestionCard({
 
     try {
       if (typeof navigator.share === "function") {
-        await navigator.share({ title: 'Ice Breaker Question', text: question.text ?? question.customText, url: shareUrl });
+        await navigator.share({
+          title: "Break the Ice(berg)",
+          text: question.text ?? question.customText,
+          url: shareUrl,
+        });
       } else {
         await navigator.clipboard.writeText(shareUrl);
         toast.success("Question link copied");
       }
     } catch (error) {
-      // User cancelled the share dialog or an error occurred
-      if (error instanceof Error && error.name !== 'AbortError') {
-        console.error('Error sharing:', error);
-        // Sharing failed for a reason other than the person cancelling: copy the link instead.
+      if (error instanceof Error && error.name !== "AbortError") {
+        console.error("Error sharing:", error);
         try {
           await navigator.clipboard.writeText(shareUrl);
           toast.success("Sharing didn't work, so the link was copied instead");
         } catch {
-          toast.error("Couldn’t share the question. Copy this link instead:", { description: shareUrl, duration: 15000 });
+          toast.error("Couldn’t share the question. Copy this link instead:", {
+            description: shareUrl,
+            duration: 15000,
+          });
         }
       }
     }
   };
 
   const isAnchored =
-    detailItem?.type === "Style" ? anchoredStyleId === detailItem.id :
-    detailItem?.type === "Tone" ? anchoredToneId === detailItem.id :
-    detailItem?.type === "Topic" ? anchoredTopicId === detailItem.id :
-    false;
+    detailItem?.type === "Style"
+      ? anchoredStyleId === detailItem.id
+      : detailItem?.type === "Tone"
+        ? anchoredToneId === detailItem.id
+        : detailItem?.type === "Topic"
+          ? anchoredTopicId === detailItem.id
+          : false;
   const handleAnchor = onAnchorItem
     ? (item: ItemDetails) => {
         onAnchorItem(item);
         flipBack();
       }
     : undefined;
-  const showBack = isFlipped && !!question && (backMode === "remix" ? canRemix : !!detailItem);
+  const showBack = isFlipped && !!question && !!detailItem;
 
   return (
-    <div
-      key={question?._id}
-      ref={cardRef}
-      className="w-full max-w-md mx-auto [perspective:1200px]"
-    >
+    <>
       <div
-        className={cn(
-          "grid w-full h-full [transform-style:preserve-3d] transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none",
-          showBack && "[transform:rotateY(180deg)]"
-        )}
+        key={question?._id}
+        ref={cardRef}
+        className="w-full max-w-md mx-auto [perspective:1200px]"
       >
-        {/* Front: the question */}
         <div
-          inert={showBack}
-          className="[grid-area:1/1] w-full h-full rounded-[30px] p-[3px] [backface-visibility:hidden]"
-          style={{
-            background: `linear-gradient(135deg, ${gradient[1]}, ${gradient[0]})`
-          }}
+          className={cn(
+            "grid w-full h-full [transform-style:preserve-3d] transition-transform duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none",
+            showBack && "[transform:rotateY(180deg)]",
+          )}
         >
-          <div className="w-full h-full min-h-[300px] bg-white/95 dark:bg-gray-900/95 rounded-[27px] p-8 flex flex-col justify-center items-center">
+          {/* Front: Tactile playing-card face + dedicated footer action dock */}
+          <div
+            inert={showBack}
+            className="[grid-area:1/1] deck-card flex w-full h-full flex-col overflow-hidden [backface-visibility:hidden]"
+          >
+            {/* Subtle two-tone card accent edge */}
+            <div
+              aria-hidden="true"
+              className="h-1.5 w-full shrink-0"
+              style={{
+                background: `linear-gradient(90deg, ${gradient[0]}, ${gradient[1]})`,
+              }}
+            />
             {isGenerating && !question ? (
-              // Loading Spinner
               <LoadingSpinner gradient={gradient} />
             ) : (
-              // Full Card Content
-              question &&
-              <>
+              question && (
                 <QuestionContent
                   question={question}
                   style={style}
                   tone={tone}
-                  gradient={gradient}
                   isFavorite={isFavorite}
                   isHidden={isHidden}
                   onToggleFavorite={onToggleFavorite}
@@ -260,70 +252,82 @@ export function ModernQuestionCard({
                   onClickStyle={handleShowStyleDetails}
                   onClickTone={handleShowToneDetails}
                   onClickTopic={handleShowTopicDetails}
-                  // Guests see Remix too; tapping it asks them to sign in.
-                  onRemix={canRemix ? showRemix : !isAuthenticated && style && tone ? requestSignInToRemix : undefined}
+                  onRemix={
+                    canRemix
+                      ? () => setIsRemixOpen(true)
+                      : !isAuthenticated && style && tone
+                        ? requestSignInToRemix
+                        : undefined
+                  }
                   topic={topic}
                   imageUrl={imageUrl}
                   onDelete={onDelete}
                 />
-              </>
+              )
             )}
           </div>
-        </div>
 
-        {/* Back: what the tapped style, tone or topic means, or the remix panel. Both faces
-            share one grid cell, so the card is as tall as the taller face and neither side scrolls. */}
-        {question && (detailItem || canRemix) && (
-          <div
-            inert={!showBack}
-            className="[grid-area:1/1] rounded-[30px] p-[3px] [backface-visibility:hidden] [transform:rotateY(180deg)]"
-            style={{
-              background: `linear-gradient(135deg, ${backMode === "detail" && detailItem ? detailItem.color : gradient[0]}, ${gradient[1]})`
+          {/* Back: Compact style / tone / topic detail face */}
+          {question && detailItem && (
+            <div
+              inert={!showBack}
+              className="[grid-area:1/1] deck-card overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)]"
+            >
+              <ItemDetailFace
+                item={detailItem}
+                isActive={showBack}
+                isAnchored={isAnchored}
+                onBack={flipBack}
+                onAnchor={handleAnchor}
+                onHide={handleHideItem}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Remix opens in a dedicated modal so the card never stretches mid-flip */}
+      {question && canRemix && style && tone && (
+        <Dialog open={isRemixOpen} onOpenChange={setIsRemixOpen}>
+          <DialogContent
+            className="max-h-[90dvh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto rounded-3xl p-0 [&>button]:hidden"
+            onEscapeKeyDown={(event) => {
+              // Let RemixQuestionPanel guard unsaved drafts on Escape.
+              event.preventDefault();
+            }}
+            onInteractOutside={(event) => {
+              // Prevent accidentally losing an unsaved remix by tapping the backdrop.
+              event.preventDefault();
             }}
           >
-            <div className="h-full w-full rounded-[27px] bg-white dark:bg-gray-900">
-              {backMode === "remix" && canRemix && style && tone ? (
-                <RemixQuestionPanel
-                  question={question}
-                  styleId={style._id}
-                  toneId={tone._id}
-                  isOpen={showBack}
-                  // The panel only asks to close once nothing unsaved would be lost.
-                  onOpenChange={(open) => { if (!open) flipBack(); }}
-                  onRemixed={onRemixed}
-                />
-              ) : detailItem && (
-                <ItemDetailFace
-                  item={detailItem}
-                  isActive={showBack}
-                  isAnchored={isAnchored}
-                  onBack={flipBack}
-                  onAnchor={handleAnchor}
-                  onHide={handleHideItem}
-                />
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+            <DialogTitle className="sr-only">Remix Question</DialogTitle>
+            <RemixQuestionPanel
+              question={question}
+              styleId={style._id}
+              toneId={tone._id}
+              isOpen={isRemixOpen}
+              onOpenChange={setIsRemixOpen}
+              onRemixed={onRemixed}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
 
 const LoadingSpinner = ({ gradient }: { gradient: string[] }) => {
   return (
-    <div className="flex flex-col items-center justify-center space-y-4 min-h-[300px]">
+    <div className="flex flex-col items-center justify-center space-y-4 min-h-[320px] p-8">
       <div
-        className="w-12 h-12 border-4 border-gray-200 dark:border-gray-700 rounded-full animate-spin"
+        className="w-10 h-10 border-[3px] border-muted rounded-full animate-spin"
         style={{
           borderTopColor: gradient[0],
-          borderBottomColor: gradient[1]
+          borderBottomColor: gradient[1],
         }}
       />
-      <p
-        className="text-gray-600 dark:text-gray-400 font-medium"
-      >
-        Generating question...
+      <p className="text-sm font-medium text-muted-foreground">
+        Generating question…
       </p>
     </div>
   );
@@ -333,11 +337,9 @@ interface QuestionContentProps {
   question: Doc<"questions">;
   style?: Doc<"styles"> | null;
   tone?: Doc<"tones"> | null;
-  gradient: string[];
   isFavorite: boolean;
   isHidden: boolean;
   onToggleFavorite: () => void;
-  /** Leave out where hiding makes no sense, such as a person's own questions. */
   onToggleHidden?: () => void;
   disabled: boolean;
   handleShare: () => void;
@@ -346,7 +348,6 @@ interface QuestionContentProps {
   onClickTopic?: () => void;
   onRemix?: () => void;
   topic?: any;
-  /** When provided, used for the question image and getQuestionImageUrl is not called. */
   imageUrl?: string | null;
   onDelete?: () => void;
 }
@@ -355,7 +356,6 @@ const QuestionContent = ({
   question,
   style,
   tone,
-  gradient,
   isFavorite,
   isHidden,
   onToggleFavorite,
@@ -370,32 +370,40 @@ const QuestionContent = ({
   imageUrl,
   onDelete,
 }: QuestionContentProps) => {
-  const { likedQuestions, likedLimit, storageLimitBehavior, hiddenQuestions, hiddenLimit } = useStorageContext();
+  const {
+    likedQuestions,
+    likedLimit,
+    storageLimitBehavior,
+    hiddenQuestions,
+    hiddenLimit,
+  } = useStorageContext();
   const [shakeHeart, setShakeHeart] = useState(false);
   const [shakeThumbsDown, setShakeThumbsDown] = useState(false);
-  const fetchedTopic = useQuery(api.core.topics.getTopicById, (!providedTopic && question?.topicId) ? { id: question.topicId } : "skip");
+  const fetchedTopic = useQuery(
+    api.core.topics.getTopicById,
+    !providedTopic && question?.topicId ? { id: question.topicId } : "skip",
+  );
   const questionImageUrlFromQuery = useQuery(
     api.core.questions.getQuestionImageUrl,
-    (imageUrl === undefined || imageUrl === null) && question?._id && question?.imageStorageId ? { questionId: question._id } : "skip"
+    (imageUrl === undefined || imageUrl === null) &&
+      question?._id &&
+      question?.imageStorageId
+      ? { questionId: question._id }
+      : "skip",
   );
   const questionImageUrl = imageUrl ?? questionImageUrlFromQuery ?? null;
   const topic = providedTopic || fetchedTopic;
   const safeIcon = (topic?.icon ? topic.icon : "CircleHelp") as Icon;
-
-  const handleClickStyle = () => {
-    onClickStyle?.();
-  };
-  const handleClickTone = () => {
-    onClickTone?.();
-  };
 
   const handleLike = () => {
     if (!isFavorite && likedQuestions.length >= likedLimit) {
       setShakeHeart(true);
       setTimeout(() => setShakeHeart(false), 500);
 
-      if (storageLimitBehavior === 'block') {
-        toast.info(`You've reached the limit of ${likedLimit} liked questions. Sign in to like more, or remove some first.`);
+      if (storageLimitBehavior === "block") {
+        toast.info(
+          `You've reached the limit of ${likedLimit} liked questions. Sign in to like more, or remove some first.`,
+        );
         return;
       }
     }
@@ -403,151 +411,191 @@ const QuestionContent = ({
   };
 
   const handleHide = () => {
-    // Check if current question is already hidden
     if (!isHidden && hiddenQuestions.length >= hiddenLimit) {
       setShakeThumbsDown(true);
       setTimeout(() => setShakeThumbsDown(false), 500);
 
-      if (storageLimitBehavior === 'block') {
-        toast.info(`You've reached the limit of ${hiddenLimit} hidden questions. Sign in to hide more, or unhide some in Settings.`);
+      if (storageLimitBehavior === "block") {
+        toast.info(
+          `You've reached the limit of ${hiddenLimit} hidden questions. Sign in to hide more, or unhide some in Settings.`,
+        );
         return;
       }
     }
     onToggleHidden?.();
   };
 
-  // A private question, or one still waiting for review, opens only for its author, so a
-  // shared link would show everyone else "Question not found".
   const isShareable = question.status !== "private" && question.status !== "pending";
-
-  const styleSlug =
-    typeof question.style === "string" ? question.style.trim() : "";
-  const toneSlug =
-    typeof question.tone === "string" ? question.tone.trim() : "";
+  const styleSlug = typeof question.style === "string" ? question.style.trim() : "";
+  const toneSlug = typeof question.tone === "string" ? question.tone.trim() : "";
   const hasStyle = !!style || styleSlug.length > 0;
   const hasTone = !!tone || toneSlug.length > 0;
+  const questionText = question.text ?? question.customText ?? "";
+
+  // Scale typography gently so short prompts feel bold and long ones breathe comfortably.
+  const questionSizeClass = questionImageUrl
+    ? "text-lg sm:text-xl"
+    : questionText.length <= 75
+      ? "text-2xl sm:text-[1.65rem]"
+      : questionText.length <= 140
+        ? "text-xl sm:text-[1.4rem]"
+        : "text-lg sm:text-xl";
 
   return (
-    <div className="w-full h-full flex flex-col justify-between min-h-[300px]">
-      {/* Category Badge */}
-      {(hasStyle || hasTone) && (
-        <div className="flex flex-wrap gap-2 justify-between">
-          {hasStyle && (
-            <div className="border-t-2 border-l-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-start flex flex-row gap-2 justify-between"
-              style={{
-                borderTopColor: gradient[0],
-                borderLeftColor: gradient[0]
-              }}
-            >
+    <div className="flex flex-1 flex-col justify-between">
+      {/* Playing-card face: diagonal corner indices + generous centered question stage */}
+      <div className="flex flex-1 flex-col justify-between px-5 pt-4 pb-4 sm:px-6 sm:pt-5 sm:pb-5">
+        {/* Top corner row: Style index (top-left) + optional private indicator (top-right) */}
+        {(hasStyle || !isShareable) && (
+          <div className="flex items-center justify-between gap-2">
+            {hasStyle ? (
               <button
                 type="button"
                 aria-label={`Style: ${style?.name || styleSlug}`}
-                title={style?.name || styleSlug || "style"}
-                className="group -my-2 min-h-11 cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
-                onClick={handleClickStyle}
+                title={style?.name || styleSlug || "Style"}
+                onClick={() => onClickStyle?.()}
+                className="inline-flex min-h-11 max-w-[75%] items-center gap-2 rounded-full border border-border/80 bg-secondary/55 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {style && <IconComponent icon={style.icon as Icon} size={24} color={style.color} />}
-                <span className="max-w-40 truncate text-left">
-                  {style?.name}
-                </span>
-                {!style && styleSlug}
-                {/* A small cue that the pill opens what this style means. */}
-                <Info size={14} aria-hidden="true" className="shrink-0 opacity-70" />
+                {style && (
+                  <span aria-hidden="true" className="shrink-0">
+                    <IconComponent icon={style.icon as Icon} size={16} color={style.color} />
+                  </span>
+                )}
+                <span className="truncate">{style?.name || styleSlug}</span>
               </button>
+            ) : (
+              <span />
+            )}
+
+            {!isShareable && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                title="Only you can open this question, so it can't be shared yet"
+              >
+                <Lock className="size-3" aria-hidden="true" />
+                {question.status === "pending" ? "In review" : "Private"}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Center stage: Topic eyebrow, optional image, and balanced question text */}
+        <div className="flex flex-1 flex-col items-center justify-center px-2 py-7 text-center sm:px-4 sm:py-9 min-h-[180px]">
+          {topic && (
+            <button
+              type="button"
+              onClick={onClickTopic}
+              aria-label={`Topic: ${topic.name}`}
+              className="mb-3 inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tracking-wide text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span aria-hidden="true">
+                <IconComponent icon={safeIcon} size={14} color={topic.color} />
+              </span>
+              <span>{topic.name}</span>
+            </button>
+          )}
+
+          {questionImageUrl && (
+            <div className="mb-5 flex w-full items-center justify-center">
+              <img
+                src={questionImageUrl}
+                alt="Question illustration"
+                className="max-h-52 max-w-full rounded-2xl object-contain"
+              />
             </div>
           )}
+
+          <h2
+            className={cn(
+              questionSizeClass,
+              "font-bold tracking-[-0.02em] leading-[1.32] text-balance text-card-foreground",
+            )}
+          >
+            {questionText}
+          </h2>
         </div>
-      )}
 
-{topic && (
-        <button
-          type="button"
-          className="w-full min-h-11 py-2 flex flex-row gap-2 justify-center items-center cursor-pointer bg-transparent border-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 rounded-lg"
-          onClick={onClickTopic}
-          aria-label={`Topic: ${topic.name}`}
-        >
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Topic: {topic.name}
-          </p>
-          <span aria-hidden="true">
-            <IconComponent icon={safeIcon} size={24} color={topic.color} />
-          </span>
-        </button>
-      )}
-
-      {/* Question Image */}
-      {questionImageUrl && (<div className="w-full h-full flex items-center justify-center min-h-[120px]">
-        <img src={questionImageUrl} alt="Question" className="max-w-full max-h-full object-contain mt-8" />
-      </div>)}
-
-      {/* Question Text */}
-      <div className="flex-1 flex items-center justify-center text-center">
-        <h2 className={cn(questionImageUrl ? "text-xl" : "text-2xl","font-bold text-gray-900 dark:text-white leading-relaxed")}>
-          {question.text ?? question.customText}
-        </h2>
+        {/* Bottom-right corner index: Tone (completes the diagonal playing-card symmetry) */}
+        {hasTone && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              aria-label={`Tone: ${tone?.name || toneSlug}`}
+              title={tone?.name || toneSlug || "Tone"}
+              onClick={() => onClickTone?.()}
+              className="inline-flex min-h-11 max-w-[75%] items-center gap-2 rounded-full border border-border/80 bg-secondary/55 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {tone && (
+                <span aria-hidden="true" className="shrink-0">
+                  <IconComponent icon={tone.icon as Icon} size={16} color={tone.color} />
+                </span>
+              )}
+              <span className="truncate">{tone?.name || toneSlug}</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      
-      {/* Action Buttons */}
-      <div className="flex py-8 flex-wrap items-stretch justify-center gap-1.5 sm:gap-3">
+      {/* Dedicated footer action dock: uniform buttons cleanly separated from the card face */}
+      <div className="flex items-stretch justify-around gap-1 border-t border-border/70 bg-muted/35 px-2.5 py-2">
         <button
+          type="button"
           onClick={handleLike}
           disabled={disabled}
           title={isFavorite ? "Unlike question" : "Like question"}
           className={cn(
-            "flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-1 rounded-2xl p-3 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-50 dark:hover:bg-white/10",
-            shakeHeart && "motion-safe:animate-shake"
+            "flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+            isFavorite ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground hover:text-foreground",
+            shakeHeart && "motion-safe:animate-shake",
           )}
           aria-label={isFavorite ? "Unlike question" : "Like question"}
           aria-pressed={isFavorite}
         >
           <Heart
-            size={24}
-            className={isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-600 dark:text-gray-400'}
+            size={20}
+            className={isFavorite ? "fill-current" : undefined}
           />
-          <span className="text-[11px] font-medium leading-none text-gray-600 dark:text-gray-400">
+          <span className="text-[11px] font-semibold leading-none">
             {isFavorite ? "Liked" : "Like"}
           </span>
         </button>
 
-        {onToggleHidden && <button
-          onClick={handleHide}
-          disabled={disabled}
-          className={cn(
-            "flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-1 rounded-2xl p-3 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-50 dark:hover:bg-white/10",
-            shakeThumbsDown && "motion-safe:animate-shake"
-          )}
-          title={isHidden ? "Unhide question" : "Hide question"}
-          aria-label={isHidden ? "Unhide question" : "Hide question"}
-          aria-pressed={isHidden}
-        >
-          <ThumbsDown
-            size={24}
-            className={isHidden ? 'text-blue-500 fill-blue-500' : 'text-gray-600 dark:text-gray-400'}
-          />
-          <span className="text-[11px] font-medium leading-none text-gray-600 dark:text-gray-400">
-            {isHidden ? "Unhide" : "Hide"}
-          </span>
-        </button>}
+        {onToggleHidden && (
+          <button
+            type="button"
+            onClick={handleHide}
+            disabled={disabled}
+            className={cn(
+              "flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+              isHidden ? "text-primary" : "text-muted-foreground hover:text-foreground",
+              shakeThumbsDown && "motion-safe:animate-shake",
+            )}
+            title={isHidden ? "Unhide question" : "Hide question"}
+            aria-label={isHidden ? "Unhide question" : "Hide question"}
+            aria-pressed={isHidden}
+          >
+            <ThumbsDown
+              size={20}
+              className={isHidden ? "fill-current" : undefined}
+            />
+            <span className="text-[11px] font-semibold leading-none">
+              {isHidden ? "Unhide" : "Hide"}
+            </span>
+          </button>
+        )}
 
-        {isShareable ? (
+        {isShareable && (
           <button
             onClick={handleShare}
             type="button"
             disabled={disabled}
             title="Share question"
             aria-label="Share question"
-            className="flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-1 rounded-2xl p-3 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-50 dark:hover:bg-white/10"
+            className="flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
-            <Share2 size={24} className="text-gray-600 dark:text-gray-400" />
-            <span className="text-[11px] font-medium leading-none text-gray-600 dark:text-gray-400">
-              Share
-            </span>
+            <Share2 size={20} />
+            <span className="text-[11px] font-semibold leading-none">Share</span>
           </button>
-        ) : (
-          <p className="flex min-h-11 max-w-[9rem] items-center text-center text-[11px] leading-tight text-gray-600 dark:text-gray-400">
-            Only you can open this, so it can't be shared yet
-          </p>
         )}
 
         {onRemix && style && tone && (
@@ -555,14 +603,12 @@ const QuestionContent = ({
             type="button"
             onClick={onRemix}
             disabled={disabled}
-            className="flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-1 rounded-2xl p-3 transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-50 dark:hover:bg-white/10"
+            className="flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             title="Remix question"
             aria-label="Remix question"
           >
-            <Sparkles size={24} className="text-gray-600 dark:text-gray-400" />
-            <span className="text-[11px] font-medium leading-none text-gray-600 dark:text-gray-400">
-              Remix
-            </span>
+            <Sparkles size={20} />
+            <span className="text-[11px] font-semibold leading-none">Remix</span>
           </button>
         )}
 
@@ -571,42 +617,15 @@ const QuestionContent = ({
             type="button"
             onClick={onDelete}
             disabled={disabled}
-            className="flex min-w-[72px] flex-col items-center justify-center gap-1 rounded-full bg-black/10 p-3 transition-colors hover:bg-red-500/20 disabled:opacity-50 dark:bg-white/10 dark:hover:bg-red-500/20"
+            className="flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             title="Delete question"
             aria-label="Delete question"
           >
-            <TrashIcon size={24} className="text-gray-600 dark:text-gray-400 hover:text-red-500" />
-            <span className="text-[11px] font-medium leading-none text-gray-600 dark:text-gray-400">
-              Delete
-            </span>
+            <TrashIcon size={20} />
+            <span className="text-[11px] font-semibold leading-none">Delete</span>
           </button>
         )}
       </div>
-
-
-{hasTone && (
-            <div className="border-b-2 border-r-2 bg-black/10 dark:bg-white/10 px-4 py-2 rounded-full self-end flex flex-row gap-2 justify-between"
-              style={{
-                borderBottomColor: gradient[1],
-                borderRightColor: gradient[1]
-              }}
-            >
-              <button
-                type="button"
-                aria-label={`Tone: ${tone?.name || toneSlug}`}
-                title={tone?.name || toneSlug || "tone"}
-                className="group -my-2 min-h-11 cursor-pointer flex gap-2 items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200"
-                onClick={handleClickTone}
-              >
-                {tone && <IconComponent icon={tone.icon as Icon} size={24} color={tone.color} />}
-                <span className="max-w-40 truncate text-left">
-                  {tone?.name}
-                </span>
-                {!tone && toneSlug}
-                <Info size={14} aria-hidden="true" className="shrink-0 opacity-70" />
-              </button>
-            </div>
-          )}
     </div>
   );
 };

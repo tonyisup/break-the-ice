@@ -4,86 +4,85 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Tactile Tabletop Deck — Light (Warm Alabaster Paper & Deep Glacial Teal) */
+    --background: 40 24% 96%;
+    --foreground: 24 10% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 24 10% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 24 10% 10%;
 
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 192 82% 31%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 38 18% 91%;
+    --secondary-foreground: 24 10% 15%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 38 18% 91%;
+    --muted-foreground: 25 8% 40%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 38 22% 89%;
+    --accent-foreground: 24 10% 10%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --border: 36 16% 85%;
+    --input: 36 16% 82%;
+    --ring: 192 82% 31%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-
-    --color-light: blue;
-    --color-dark: green;
+    --sidebar-background: 40 20% 97%;
+    --sidebar-foreground: 24 10% 22%;
+    --sidebar-primary: 192 82% 31%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 38 18% 91%;
+    --sidebar-accent-foreground: 24 10% 10%;
+    --sidebar-border: 36 16% 86%;
+    --sidebar-ring: 192 82% 31%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    /* Tactile Tabletop Deck — Dark (Warm Slate-Charcoal & Glacier Cyan) */
+    --background: 225 10% 7%;
+    --foreground: 40 20% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 225 9% 11%;
+    --card-foreground: 40 20% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 225 9% 12%;
+    --popover-foreground: 40 20% 95%;
 
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 190 78% 46%;
+    --primary-foreground: 225 15% 8%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 225 8% 17%;
+    --secondary-foreground: 40 20% 95%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 225 8% 17%;
+    --muted-foreground: 30 6% 66%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 225 8% 19%;
+    --accent-foreground: 40 20% 95%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 65% 46%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --border: 225 8% 20%;
+    --input: 225 8% 22%;
+    --ring: 190 78% 46%;
 
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 225 10% 9%;
+    --sidebar-foreground: 40 16% 90%;
+    --sidebar-primary: 190 78% 46%;
+    --sidebar-primary-foreground: 225 15% 8%;
+    --sidebar-accent: 225 8% 16%;
+    --sidebar-accent-foreground: 40 20% 95%;
+    --sidebar-border: 225 8% 18%;
+    --sidebar-ring: 190 78% 46%;
   }
 }
 
@@ -93,9 +92,10 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
     font-family:
-      "Inter Variable",
+      "Manrope Variable",
+      "Avenir Next",
       ui-sans-serif,
       system-ui,
       -apple-system,
@@ -104,12 +104,12 @@
       Roboto,
       "Helvetica Neue",
       Arial,
-      "Noto Sans",
       sans-serif,
       "Apple Color Emoji",
       "Segoe UI Emoji",
       "Segoe UI Symbol",
       "Noto Color Emoji";
+    font-optical-sizing: auto;
   }
 }
 
@@ -130,25 +130,38 @@
 }
 
 @layer components {
-  .landing-backdrop,
-  .pricing-backdrop {
-    background: linear-gradient(135deg, #667eea, #bbb, #764ba2);
+  /* Subtle warm tabletop canvas with a soft glacial ambient wash */
+  .deck-canvas {
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(60% 45% at 15% 0%, hsl(192 82% 45% / 0.08), transparent 70%),
+      radial-gradient(50% 40% at 85% 15%, hsl(36 60% 60% / 0.08), transparent 70%);
   }
 
-  .dark .landing-backdrop,
-  .dark .pricing-backdrop {
-    background: linear-gradient(135deg, #667eea, #000, #764ba2);
+  .dark .deck-canvas {
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(60% 45% at 15% 0%, hsl(190 78% 46% / 0.1), transparent 70%),
+      radial-gradient(50% 40% at 85% 15%, hsl(220 40% 40% / 0.12), transparent 70%);
   }
 
-  .landing-card-frame,
-  .pricing-card-frame {
-    background: linear-gradient(135deg, #764ba2, #667eea);
+  /* Tactile card stock shadow + border */
+  .deck-card {
+    @apply bg-card text-card-foreground border border-border rounded-[28px];
+    box-shadow:
+      0 1px 2px rgba(24, 24, 27, 0.04),
+      0 12px 32px -12px rgba(24, 24, 27, 0.09);
   }
 
-  .landing-page :is(a, button):focus-visible,
-  .pricing-page :is(a, button):focus-visible {
-    outline: 2px solid currentColor;
-    outline-offset: 4px;
+  .dark .deck-card {
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.04) inset,
+      0 16px 36px -14px rgba(0, 0, 0, 0.55);
+  }
+
+  .landing-page :is(a, button):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 3px;
   }
 
   .admin-shell {
@@ -160,16 +173,6 @@
   .admin-shell :is(h1, h2, h3) {
     letter-spacing: -0.025em;
     text-wrap: balance;
-  }
-
-  .card {
-    @apply relative w-full h-full bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6;
-    transform-style: preserve-3d;
-    transition: transform 0.6s;
-  }
-
-  .card-content {
-    @apply absolute inset-0 backface-hidden;
   }
 }
 

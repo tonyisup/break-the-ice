@@ -11,12 +11,16 @@ export function AiLimitNotice({ title, description }: AiLimitNoticeProps) {
     <div
       role="status"
       aria-live="polite"
-      className="w-full max-w-md mx-auto rounded-2xl border border-white/15 bg-white/90 dark:bg-gray-900/90 p-6 flex gap-4 items-start backdrop-blur-sm"
+      className="deck-card mx-auto flex w-full max-w-md items-start gap-4 p-6"
     >
-      <Clock aria-hidden="true" className="w-6 h-6 mt-0.5 shrink-0 text-gray-500 dark:text-gray-400" />
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+        <Clock aria-hidden="true" className="h-5 w-5" />
+      </div>
       <div className="flex flex-col gap-1">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
-        <p className="text-gray-600 dark:text-gray-400 leading-relaxed">{description}</p>
+        <h3 className="text-base font-bold tracking-[-0.01em] text-card-foreground">
+          {title}
+        </h3>
+        <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
       </div>
     </div>
   );
