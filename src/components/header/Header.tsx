@@ -15,7 +15,7 @@ import { siteConfig } from "@/config/site";
 
 // Below this width the four destinations move to a tab bar at the bottom of the screen,
 // which leaves the top bar room for the site's name.
-const PHONE_QUERY = "(max-width: 639px)";
+const PHONE_QUERY = "(max-width: 800px)";
 
 function useIsPhone() {
   const [isPhone, setIsPhone] = useState(
@@ -154,7 +154,7 @@ export const Header = ({ rightSlot }: HeaderProps) => {
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
             <Link
-              to="/"
+              to="/app"
               aria-label={`${siteConfig.name} home`}
               className="flex h-11 shrink-0 items-center rounded-xl pr-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
