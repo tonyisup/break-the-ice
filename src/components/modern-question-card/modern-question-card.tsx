@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Heart, Share2, ThumbsDown, TrashIcon } from "@/components/ui/icons/icons";
 import { Lock, Sparkles } from "lucide-react";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
@@ -6,6 +6,7 @@ import { api } from "../../../convex/_generated/api";
 import { useQuery, useConvexAuth } from "convex/react";
 import { Icon, IconComponent } from "../ui/icons/icon";
 import type { ItemDetails } from "../item-detail-drawer/item-detail-drawer";
+import { CardBodyMorph } from "./card-body-morph";
 import { ItemDetailFace } from "./item-detail-face";
 import { RemixQuestionPanel } from "../remix-question-panel/remix-question-panel";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -42,6 +43,8 @@ interface ModernQuestionCardProps {
   imageUrl?: string | null;
   /** When provided, renders a delete button on the card. */
   onDelete?: () => void;
+  /** When set, the card morphs into this notice, keeping its border and accent edge. */
+  hiddenNotice?: ReactNode;
 }
 
 export function ModernQuestionCard({
@@ -65,6 +68,7 @@ export function ModernQuestionCard({
   anchoredTopicId,
   imageUrl,
   onDelete,
+  hiddenNotice,
 }: ModernQuestionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -106,7 +110,16 @@ export function ModernQuestionCard({
     setIsRemixOpen(false);
   }, [question?._id]);
 
-  const handleHideStyle = (itemId: Id<"styles">) => {
+  // The back face shares the card's grid cell, so it would hold the card open. CardBodyMorph's
+  // layout effect runs first and has already read the full height by the time this clears it.
+  const isShowingNotice = hiddenNotice !== undefined && hiddenNotice !== null;
+  useLayoutEffect(() => {
+    if (!isShowingNotice) return;
+    setIsFlipped(false);
+    setDetailItem(null);
+  }, [isShowingNotice]);
+
+  const handleHideStyle =(itemId: Id<"styles">) => {
     if (!style || !itemId || itemId !== style._id) return;
     onHideStyle(style._id);
     flipBack();
@@ -239,30 +252,32 @@ export function ModernQuestionCard({
               <LoadingSpinner gradient={gradient} />
             ) : (
               question && (
-                <QuestionContent
-                  question={question}
-                  style={style}
-                  tone={tone}
-                  isFavorite={isFavorite}
-                  isHidden={isHidden}
-                  onToggleFavorite={onToggleFavorite}
-                  onToggleHidden={onToggleHidden}
-                  disabled={disabled}
-                  handleShare={() => void handleShare()}
-                  onClickStyle={handleShowStyleDetails}
-                  onClickTone={handleShowToneDetails}
-                  onClickTopic={handleShowTopicDetails}
-                  onRemix={
-                    canRemix
-                      ? () => setIsRemixOpen(true)
-                      : !isAuthenticated && style && tone
-                        ? requestSignInToRemix
-                        : undefined
-                  }
-                  topic={topic}
-                  imageUrl={imageUrl}
-                  onDelete={onDelete}
-                />
+                <CardBodyMorph notice={hiddenNotice}>
+                  <QuestionContent
+                    question={question}
+                    style={style}
+                    tone={tone}
+                    isFavorite={isFavorite}
+                    isHidden={isHidden}
+                    onToggleFavorite={onToggleFavorite}
+                    onToggleHidden={onToggleHidden}
+                    disabled={disabled}
+                    handleShare={() => void handleShare()}
+                    onClickStyle={handleShowStyleDetails}
+                    onClickTone={handleShowToneDetails}
+                    onClickTopic={handleShowTopicDetails}
+                    onRemix={
+                      canRemix
+                        ? () => setIsRemixOpen(true)
+                        : !isAuthenticated && style && tone
+                          ? requestSignInToRemix
+                          : undefined
+                    }
+                    topic={topic}
+                    imageUrl={imageUrl}
+                    onDelete={onDelete}
+                  />
+                </CardBodyMorph>
               )
             )}
           </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useIsPresent } from "framer-motion";
 
 interface HiddenCardNoticeProps {
   /** How long the notice stays before the card is taken out of the feed. */
@@ -16,46 +17,53 @@ if (typeof window !== "undefined") {
 }
 
 /**
- * Stands in for a question card that was just hidden: says what happened, offers Undo, and
- * counts down to the card leaving the feed.
+ * Fills a question card that was just hidden: says what happened, offers Undo, and counts down
+ * to the card leaving the feed. The card supplies the border and accent edge.
  */
 export function HiddenCardNotice({ seconds = 6, wasLiked, onUndo, onExpire }: HiddenCardNoticeProps) {
   const [remaining, setRemaining] = useState(seconds);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const paused = hovered || focused;
+  // After Undo the notice is still on screen while it fades, and must not expire or act again.
+  const isPresent = useIsPresent();
   const undoRef = useRef<HTMLButtonElement>(null);
   const onExpireRef = useRef(onExpire);
   onExpireRef.current = onExpire;
+  // The card stays on screen while it collapses, so focus or hover changes can re-run the timer.
+  const hasExpired = useRef(false);
 
   useEffect(() => {
     if (lastInputWasKeyboard) undoRef.current?.focus({ preventScroll: true });
   }, []);
 
   useEffect(() => {
-    if (paused) return;
+    if (paused || !isPresent) return;
     if (remaining <= 0) {
+      if (hasExpired.current) return;
+      hasExpired.current = true;
       onExpireRef.current();
       return;
     }
     const timer = setTimeout(() => setRemaining((value) => value - 1), 1000);
     return () => clearTimeout(timer);
-  }, [remaining, paused]);
+  }, [remaining, paused, isPresent]);
 
   return (
     <div
+      inert={!isPresent}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
-      className="deck-card mx-auto flex w-full max-w-md items-center justify-between gap-3 px-5 py-4"
+      className="flex w-full items-center justify-between gap-3 px-5 py-4"
     >
       <div>
         <p role="status" className="text-sm font-semibold text-card-foreground">
           {wasLiked ? "Question hidden and removed from Liked" : "Question hidden"}
         </p>
         <p aria-hidden="true" className="text-xs text-muted-foreground">
-          {paused ? "Paused" : `Leaving the feed in ${remaining}s`}
+          {paused ? "Paused" : remaining > 0 ? `Leaving the feed in ${remaining}s` : "Leaving the feed"}
         </p>
       </div>
       <button

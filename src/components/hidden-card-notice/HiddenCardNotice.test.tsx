@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { AnimatePresence, motion } from "framer-motion";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { HiddenCardNotice } from "./HiddenCardNotice";
 
@@ -45,4 +46,37 @@ it("waits while the pointer is over it", () => {
   fireEvent.mouseLeave(container.firstChild as Element);
   tick(1000);
   expect(onExpire).toHaveBeenCalledOnce();
+});
+
+it("expires only once if the pointer crosses it while the card collapses", () => {
+  const onExpire = vi.fn();
+  fireEvent.pointerDown(window);
+  const { container } = render(<HiddenCardNotice seconds={1} wasLiked={false} onUndo={vi.fn()} onExpire={onExpire} />);
+  tick(1000);
+  expect(onExpire).toHaveBeenCalledOnce();
+  fireEvent.mouseEnter(container.firstChild as Element);
+  fireEvent.mouseLeave(container.firstChild as Element);
+  tick(1000);
+  expect(onExpire).toHaveBeenCalledOnce();
+  expect(screen.getByText("Leaving the feed")).toBeInTheDocument();
+});
+
+it("does not expire or accept input while it fades out after Undo", () => {
+  const onExpire = vi.fn();
+  fireEvent.pointerDown(window);
+  const notice = (show: boolean) => (
+    <AnimatePresence>
+      {show && (
+        <motion.div key="notice" exit={{ opacity: 0 }} transition={{ duration: 60 }}>
+          <HiddenCardNotice seconds={1} wasLiked={false} onUndo={vi.fn()} onExpire={onExpire} />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+  const { rerender } = render(notice(true));
+  rerender(notice(false));
+  const fading = screen.getByText("Question hidden").closest("[inert]");
+  expect(fading).not.toBeNull();
+  tick(5000);
+  expect(onExpire).not.toHaveBeenCalled();
 });
