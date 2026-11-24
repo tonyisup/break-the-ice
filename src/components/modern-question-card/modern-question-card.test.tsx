@@ -97,6 +97,61 @@ it("hides the style from the back of the card and turns face-up", () => {
   expect(styleChip.closest("[inert]")).toBeNull();
 });
 
+it("morphs into a notice inside the same card and comes back on undo", () => {
+  const { rerender } = renderCard();
+  const card = (hiddenNotice?: string) => (
+    <ModernQuestionCard
+      question={question}
+      style={style}
+      tone={tone}
+      gradient={["#667eea", "#764ba2"]}
+      isGenerating={false}
+      isFavorite={false}
+      onToggleFavorite={vi.fn()}
+      onToggleHidden={vi.fn()}
+      onHideStyle={vi.fn()}
+      onHideTone={vi.fn()}
+      hiddenNotice={hiddenNotice}
+    />
+  );
+  const heading = screen.getByRole("heading", { name: question.text });
+  const face = heading.closest(".deck-card");
+  const accentEdge = face?.firstElementChild;
+
+  rerender(card("Question hidden"));
+  expect(screen.getByText("Question hidden").closest(".deck-card")).toBe(face);
+  expect(face?.firstElementChild).toBe(accentEdge);
+  expect(heading.closest("[inert]")).not.toBeNull();
+
+  rerender(card());
+  expect(heading.isConnected).toBe(true);
+  expect(heading.closest("[inert]")).toBeNull();
+});
+
+it("drops the back face when the notice appears so it cannot hold the card open", () => {
+  const { rerender } = renderCard();
+  fireEvent.click(screen.getByRole("button", { name: "Style: Story driven" }));
+  fireEvent.click(screen.getByRole("button", { name: "Back to question" }));
+  expect(screen.getByRole("heading", { name: "Story driven", hidden: true })).toBeInTheDocument();
+
+  rerender(
+    <ModernQuestionCard
+      question={question}
+      style={style}
+      tone={tone}
+      gradient={["#667eea", "#764ba2"]}
+      isGenerating={false}
+      isFavorite={false}
+      onToggleFavorite={vi.fn()}
+      onToggleHidden={vi.fn()}
+      onHideStyle={vi.fn()}
+      onHideTone={vi.fn()}
+      hiddenNotice="Question hidden"
+    />,
+  );
+  expect(screen.queryByRole("heading", { name: "Story driven", hidden: true })).toBeNull();
+});
+
 it("anchors the tone from the back of the card", () => {
   const onAnchorItem = vi.fn();
   renderCard({ onAnchorItem });

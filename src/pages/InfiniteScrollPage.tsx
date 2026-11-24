@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowUp, SearchX, Sparkles, X } from "lucide-react";
 import { ModernQuestionCard } from "@/components/modern-question-card";
 import { HiddenCardNotice } from "@/components/hidden-card-notice/HiddenCardNotice";
+import { collapseFeedCard } from "@/components/hidden-card-notice/collapseFeedCard";
+import { ctaHolderId, keepCtasInPlace, type CtaAnchors } from "./feedCtaAnchors";
 import { ActiveFilterChips, FeedFilterBar, type FeedFilterKey, type FeedFilterOption } from "@/components/filter-controls/FeedFilterBar";
 import type { ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
@@ -123,6 +125,8 @@ export default function InfiniteScrollPage() {
   // Questions hidden a moment ago: each shows an Undo notice in place of its card until its
   // countdown ends, then leaves the feed. The value records whether the hide also unliked it.
   const [pendingHides, setPendingHides] = useState<Record<string, { wasLiked: boolean }>>({});
+  const [ctaAnchors, setCtaAnchors] = useState<CtaAnchors>({});
+  const collapsingCards = useRef(new Set<() => void>());
   const currentUser = useQuery(api.core.users.getCurrentUser, {});
   // Fetch all styles and tones for card rendering
   const allStyles = useQuery(api.core.styles.getStyles, {});
@@ -241,6 +245,14 @@ export default function InfiniteScrollPage() {
         cardRefs.current.delete(questionId);
       }
     }
+  }, []);
+
+  useEffect(() => {
+    const collapsing = collapsingCards.current;
+    return () => {
+      collapsing.forEach((stop) => stop());
+      collapsing.clear();
+    };
   }, []);
 
   // Track the card at the center of the viewport for view analytics.
@@ -908,8 +920,21 @@ export default function InfiniteScrollPage() {
   };
   // The countdown ended: the question stays hidden and its card leaves the feed.
   const finishHide = (questionId: Id<"questions">) => {
-    setQuestions((previous) => previous.filter((question) => question._id !== questionId));
-    forgetPendingHide(questionId);
+    const removeCard = () => {
+      const feed = questionsRef.current;
+      setCtaAnchors((anchors) => keepCtasInPlace(feed, anchors, questionId));
+      setQuestions((previous) => previous.filter((question) => question._id !== questionId));
+      forgetPendingHide(questionId);
+    };
+    const card = cardRefs.current.get(questionId);
+    const stopCollapse = card && !reduceMotion
+      ? collapseFeedCard(card, () => {
+          if (stopCollapse) collapsingCards.current.delete(stopCollapse);
+          removeCard();
+        })
+      : null;
+    if (stopCollapse) collapsingCards.current.add(stopCollapse);
+    else removeCard();
   };
 
   // Hiding a style or tone takes its cards off the screen and leaves the rest where they
@@ -1131,6 +1156,8 @@ export default function InfiniteScrollPage() {
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [reduceMotion]);
+  const newsletterHolderId = ctaHolderId(questions, ctaAnchors, "newsletter");
+  const refineHolderId = ctaHolderId(questions, ctaAnchors, "refine");
   const filterButton = (
     <FeedFilterBar
       styles={filterStyles}
@@ -1266,18 +1293,21 @@ export default function InfiniteScrollPage() {
                   data-question-id={question._id}
                   className="w-full"
                 >
-                  {pendingHides[question._id] ? (
-                    <HiddenCardNotice
-                      wasLiked={pendingHides[question._id].wasLiked}
-                      onUndo={() => undoHide(question._id)}
-                      onExpire={() => finishHide(question._id)}
-                    />
-                  ) : (
                   <ModernQuestionCard
                     isGenerating={false}
                     question={question}
                     isFavorite={likedQuestions.includes(question._id)}
-                    isHidden={hiddenQuestions.includes(question._id)}
+                    // Keeps the Hide label steady while the card fades into its notice.
+                    isHidden={hiddenQuestions.includes(question._id) && !pendingHides[question._id]}
+                    hiddenNotice={
+                      pendingHides[question._id] ? (
+                        <HiddenCardNotice
+                          wasLiked={pendingHides[question._id].wasLiked}
+                          onUndo={() => undoHide(question._id)}
+                          onExpire={() => finishHide(question._id)}
+                        />
+                      ) : undefined
+                    }
                     gradient={cardGradient}
                     style={cardStyle}
                     tone={cardTone}
@@ -1292,11 +1322,10 @@ export default function InfiniteScrollPage() {
                     anchoredToneId={anchoredToneId}
                     anchoredTopicId={anchoredTopicId}
                   />
-                  )}
                 </div>
 
-                {/* Insert Newsletter Card after the 5th question (index 4) */}
-                {index === 4 && user.isLoaded && (
+                {/* Newsletter Card: after the 5th question, and stays put when cards leave */}
+                {question._id === newsletterHolderId && user.isLoaded && (
                   !user.isSignedIn ||
                   (currentUser && !currentUser.newsletterSubscriptionStatus)
                 ) && (
@@ -1306,8 +1335,8 @@ export default function InfiniteScrollPage() {
                     />
                   )}
 
-                {/* Insert Refine Results CTA after the 10th question (index 9) */}
-                {index === 9 && showRefineCTA && (
+                {/* Refine Results CTA: after the 10th question, and stays put when cards leave */}
+                {question._id === refineHolderId && showRefineCTA && (
                   <RefineResultsCTA
                     bgGradient={bgGradient}
                     onDismiss={() => {
