@@ -127,18 +127,48 @@ describe("streaming a model call", () => {
     await expect(streamChatCompletion(PARAMS, () => {})).rejects.toBeInstanceOf(InterruptedStreamError);
   });
 
-  test("a stream that goes quiet stops at the time limit, though the SDK ends the loop quietly", async () => {
+  test("a stream still sending chunks can run past 30 seconds", async () => {
     create.mockImplementation(((_params: unknown, options: { signal: AbortSignal }) =>
       Promise.resolve(
         (async function* () {
-          yield chunk({ reasoning: "..." });
-          await new Promise((resolve) => options.signal.addEventListener("abort", resolve));
+          for (const item of fullStream()) {
+            // Ends quietly on abort, as the SDK does.
+            if (options.signal.aborted) return;
+            yield item;
+            await new Promise((resolve) => setTimeout(resolve, 20_000));
+          }
         })(),
       )) as never);
 
     const call = streamChatCompletion(PARAMS, () => {});
+    await vi.advanceTimersByTimeAsync(100_000);
+
+    await expect(call).resolves.toMatchObject({
+      choices: [{ finish_reason: "stop", message: { content: ANSWER } }],
+    });
+  });
+
+  test("an accepted stream that goes silent stops 30 seconds after its last chunk", async () => {
+    create.mockImplementation(((_params: unknown, options: { signal: AbortSignal }) =>
+      Promise.resolve(
+        (async function* () {
+          yield chunk({ reasoning: "..." });
+          await new Promise((resolve) => setTimeout(resolve, 20_000));
+          yield chunk({ content: "{" });
+          // Goes silent, then ends quietly on abort, as the SDK does.
+          await new Promise((resolve) => options.signal.addEventListener("abort", resolve));
+        })(),
+      )) as never);
+
+    let settled = false;
+    const call = streamChatCompletion(PARAMS, () => {}).finally(() => {
+      settled = true;
+    });
     const outcome = expect(call).rejects.toBeInstanceOf(InterruptedStreamError);
-    await vi.advanceTimersByTimeAsync(30_000);
+
+    await vi.advanceTimersByTimeAsync(49_999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
     await outcome;
   });
 });

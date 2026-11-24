@@ -286,9 +286,9 @@ export async function createChatCompletionWithRetry(
   throw lastError ?? new Error("OpenRouter chat completion failed");
 }
 
-// The same limit a call that doesn't stream has. The SDK's own timeout stops once the response
-// starts, so a stream that goes quiet needs this one.
-const STREAM_TIMEOUT_MS = 30_000;
+// How long a stream may go without a chunk. The SDK's own timeout stops once the response starts,
+// so a stream that goes quiet needs this one. A stream still sending chunks can run longer.
+const STREAM_IDLE_TIMEOUT_MS = 30_000;
 
 /**
  * A stream that ended without a full answer after the provider accepted the call. The provider
@@ -307,7 +307,12 @@ export async function streamChatCompletion(
   onStage: (stage: GenerationRunnerStage) => void,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   const abort = new AbortController();
-  const deadline = setTimeout(() => abort.abort(), STREAM_TIMEOUT_MS);
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const restartIdleTimer = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => abort.abort(), STREAM_IDLE_TIMEOUT_MS);
+  };
+  restartIdleTimer();
   let accepted = false;
   try {
     onStage("connecting");
@@ -324,6 +329,7 @@ export async function streamChatCompletion(
     let finishReason: string | null = null;
     let usage: OpenAI.Completions.CompletionUsage | undefined;
     for await (const chunk of stream) {
+      restartIdleTimer();
       id = chunk.id || id;
       created = chunk.created || created;
       model = chunk.model || model;
@@ -366,7 +372,7 @@ export async function streamChatCompletion(
     }
     throw error;
   } finally {
-    clearTimeout(deadline);
+    clearTimeout(idleTimer);
   }
 }
 
