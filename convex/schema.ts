@@ -13,6 +13,7 @@ import {
 
 import { editorialReason, reviewSnapshot } from "./lib/questionReviewValidators";
 import { qualityCheckSnapshot } from "./lib/qualityCheck";
+import { generationProgressStage } from "./lib/generationProgress";
 import { rateLimitTables } from "convex-helpers/server/rateLimit";
 
 const questionSource = v.union(
@@ -188,6 +189,17 @@ export default defineSchema({
     .index("by_purpose", ["purpose"])
     .index("by_style_tone_topic", ["styleSlug", "toneSlug", "topicSlug"])
     .index("by_requestedByUserId", ["requestedByUserId"]),
+  // How far one person's feed generation has got, for the page waiting on it. It holds no
+  // prompt or model text, and old rows are cleared hourly.
+  generationProgress: defineTable({
+    userId: v.id("users"),
+    // The page's own id for the request, since a retry can use more than one generation run.
+    requestKey: v.string(),
+    stage: generationProgressStage,
+    updatedAt: v.number(),
+  })
+    .index("by_userId_requestKey", ["userId", "requestKey"])
+    .index("by_updatedAt", ["updatedAt"]),
   // Daily AI spend (Los Angeles days) for the spend cap. "user" is anything a user
   // can trigger; "system" is the daily email and admin tools.
   aiSpendDays: defineTable({

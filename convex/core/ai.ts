@@ -1,10 +1,12 @@
 "use node";
 
 import { v } from "convex/values";
-import { action } from "../_generated/server";
+import { action, type ActionCtx } from "../_generated/server";
 import { api, internal } from "../_generated/api";
-import { Doc } from "../_generated/dataModel";
+import { Doc, type Id } from "../_generated/dataModel";
 import { ensureAiRequestAllowed } from "../lib/aiRateLimit";
+import { isProgressKey } from "../lib/generationProgress";
+import { createProgressReporter } from "../lib/generationProgressReporter";
 import { ignoredWorkspaceArg } from "../lib/ignoredWorkspaceArg";
 import { clampBatchSize } from "../lib/promptArchitecture";
 import { withoutVerdict } from "../lib/questionAccess";
@@ -20,6 +22,8 @@ export const generateAIQuestionForFeed = action({
 		// True when the feed asks before the reader has reached its end. Such a request is
 		// refused (AI_LAST_REQUEST_HELD) rather than use the person's last one.
 		ahead: v.optional(v.boolean()),
+		// The page's id for this request, to follow its progress (core/generationProgress.ts).
+		progressKey: v.optional(v.string()),
 	},
 	returns: v.array(v.nullable(v.any())),
 	handler: async (ctx, args): Promise<(Omit<Doc<"questions">, "qualityCheck" | "safetyFlags"> | null)[]> => {
@@ -45,17 +49,45 @@ export const generateAIQuestionForFeed = action({
 			bypassAIUsage = true;
 		}
 
-		const questions: (Doc<"questions"> | null)[] = await ctx.runAction(internal.internal.ai.generateAIQuestionForUser, {
-			userId: user._id,
-			count,
-			topicId,
-			bypassAIUsage,
-			anchoredStyleId: args.anchoredStyleId,
-			anchoredToneId: args.anchoredToneId,
-			purpose: "feed",
-			keepLastRequest: args.ahead,
-			requestStartedAt,
-		});
-		return questions.map((question) => question && withoutVerdict(question));
+		const progressId = args.progressKey && isProgressKey(args.progressKey)
+			? await startProgress(ctx, user._id, args.progressKey)
+			: undefined;
+		const progress = progressId ? createProgressReporter(ctx, progressId) : null;
+
+		try {
+			const questions: (Doc<"questions"> | null)[] = await ctx.runAction(internal.internal.ai.generateAIQuestionForUser, {
+				userId: user._id,
+				count,
+				topicId,
+				bypassAIUsage,
+				anchoredStyleId: args.anchoredStyleId,
+				anchoredToneId: args.anchoredToneId,
+				purpose: "feed",
+				keepLastRequest: args.ahead,
+				requestStartedAt,
+				progressId,
+			});
+			progress?.stage("done");
+			return questions.map((question) => question && withoutVerdict(question));
+		} catch (error) {
+			progress?.stage("failed");
+			throw error;
+		} finally {
+			await progress?.flush();
+		}
 	}
 });
+
+/** Progress is only for display, so a failed write never stops the generation. */
+async function startProgress(
+	ctx: ActionCtx,
+	userId: Id<"users">,
+	requestKey: string,
+): Promise<Id<"generationProgress"> | undefined> {
+	try {
+		return await ctx.runMutation(internal.internal.generationProgress.startProgress, { userId, requestKey });
+	} catch (error) {
+		console.warn("Could not start generation progress", error);
+		return undefined;
+	}
+}

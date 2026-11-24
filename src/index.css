@@ -200,6 +200,41 @@
   }
 }
 
+/* The moving highlight on a Trace step that is running. */
+@keyframes trace-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@layer utilities {
+  .trace-shimmer {
+    color: transparent;
+    background-image: linear-gradient(
+      90deg,
+      hsl(var(--muted-foreground)) 35%,
+      hsl(var(--foreground)) 50%,
+      hsl(var(--muted-foreground)) 65%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: trace-shimmer 2.4s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .trace-shimmer {
+      color: hsl(var(--foreground));
+      background-image: none;
+      animation: none;
+    }
+  }
+}
+
 /* Leave room at the end of every page for the phone tab bar (zero when there is none). */
 body {
   padding-bottom: var(--bottom-nav-h, 0px);

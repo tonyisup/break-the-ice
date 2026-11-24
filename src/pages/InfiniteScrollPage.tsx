@@ -19,6 +19,7 @@ import { useAuth } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
 import { AiLimitNotice } from "@/components/AiLimitNotice";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
+import { GenerationTrace } from "@/components/generation-trace";
 import { RefineResultsCTA } from "@/components/RefineResultsCTA";
 import { ERROR_MESSAGES, ERROR_CODES, MAX_FEED_GENERATION_COUNT } from "../../convex/constants";
 import { AI_USAGE_CYCLE_MS } from "../../convex/lib/aiPlanLimits";
@@ -53,6 +54,17 @@ type FeedLoadTrigger = "initial" | "scroll" | "button" | "prefetch";
 // A load starts when this many cards or fewer are left below the one being read, so a
 // generated batch (about 12 s) is usually there before the reader reaches the end.
 const PREFETCH_WHEN_REMAINING = 5;
+
+/** The page's id for one generation request, so it can follow that request's progress. */
+function newProgressKey(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  // randomUUID needs a secure context, which a phone testing over the local network isn't.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 // The spinner and the Load More button sit in about the last 300 px of the page.
 const isAtFeedEnd = () =>
@@ -100,6 +112,12 @@ export default function InfiniteScrollPage() {
   // Why new questions stopped coming (daily budget spent, too many requests), kept on the
   // page after the toast is gone so the end of the feed explains itself.
   const [pausedNotice, setPausedNotice] = useState<string | null>(null);
+  // The generation request the page is waiting on, whose live steps replace the spinner.
+  const [progressKey, setProgressKey] = useState<string | null>(null);
+  const generationProgress = useQuery(
+    api.core.generationProgress.getGenerationProgress,
+    progressKey ? { requestKey: progressKey } : "skip",
+  );
   const [takeoverDismissed, setTakeoverDismissed] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<Doc<"questions"> | null>(null);
   // Questions hidden a moment ago: each shows an Undo notice in place of its card until its
@@ -367,6 +385,11 @@ export default function InfiniteScrollPage() {
         : null;
     const holdsLastRequest = ahead && requestsLeft !== null && requestsLeft <= 1;
     const isLastRequestHeld = (err: unknown) => convexErrorData(err)?.code === ERROR_CODES.AI_LAST_REQUEST_HELD;
+    const followProgress = () => {
+      const key = newProgressKey();
+      setProgressKey(key);
+      return key;
+    };
     const appendQuestions = (batch: Doc<"questions">[]) => {
       if (batch.length === 0) return;
       if (addsCards(batch)) endStall();
@@ -438,6 +461,7 @@ export default function InfiniteScrollPage() {
               anchoredToneId: anchoredToneId ?? undefined,
               anchoredTopicId: anchoredTopicId ?? undefined,
               ...(ahead ? { ahead: true } : {}),
+              progressKey: followProgress(),
             });
             timing.generationMs = performance.now() - generationStartedAt;
             if (currentRequestId !== requestIdRef.current) return;
@@ -590,6 +614,7 @@ export default function InfiniteScrollPage() {
             anchoredToneId: anchoredToneId ?? undefined,
             anchoredTopicId: anchoredTopicId ?? undefined,
             ...(ahead ? { ahead: true } : {}),
+            progressKey: followProgress(),
           });
           timing.generationMs = performance.now() - generationStartedAt;
 
@@ -705,6 +730,7 @@ export default function InfiniteScrollPage() {
       if (currentRequestId === requestIdRef.current) {
         isLoadingRef.current = false;
         setIsLoading(false);
+        setProgressKey(null);
 
         endStall();
         const finishedAt = performance.now();
@@ -742,6 +768,7 @@ export default function InfiniteScrollPage() {
     heldLastRequestRef.current = false;
     prefetchedAtLengthRef.current = 0;
     setIsLoading(false);
+    setProgressKey(null);
     setLoadError(null);
     setHasMore(true);
     setShowAuthCTA(false);
@@ -1292,7 +1319,9 @@ export default function InfiniteScrollPage() {
             );
           })}
 
-          {(isLoading || (!user.isLoaded && questions.length === 0)) && (
+          {isLoading && progressKey && <GenerationTrace key={progressKey} stage={generationProgress?.stage} />}
+
+          {((isLoading && !progressKey) || (!user.isLoaded && questions.length === 0)) && (
             <div className="flex flex-col items-center gap-3 py-8" role="status">
               <div className="h-7 w-7 animate-spin rounded-full border-2 border-border border-t-primary" aria-hidden="true" />
               <span className="text-sm font-medium text-muted-foreground">
