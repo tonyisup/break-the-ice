@@ -2,6 +2,28 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.9.0.0] - 2026-11-23
+
+### Added
+- Admins can choose the hour each subscriber gets the daily email, in Pacific time. A reader whose hour is skipped by the spring clock change gets that day's email in the next hour.
+- The admin Newsletter page now lists every user, including people who never subscribed, so you can manage anyone from one place.
+- The Newsletter page shows pending sign-ups, which you can remove, and each person's last 14 emails with the reason any of them failed.
+- One command clears production sign-in identities and newsletter subscriptions from dev after a production copy. Signing in to dev with the same email links back to that person's data.
+
+### Changed
+- Only a deployment with `NEWSLETTER_SENDING_ENABLED=true` sends the scheduled newsletter. Dev can still test real sends from the admin page to the addresses in `NEWSLETTER_TEST_RECIPIENTS`.
+- The daily email now goes out on the hour, so the default arrives at 10:00 AM Pacific.
+- Subscribing someone who opted out now asks for confirmation first.
+
+### Fixed
+- Copying production data into dev no longer sends every subscriber a second daily email.
+- A failed send is retried only when Resend definitely refused it, so a send with an unknown result can't reach a reader twice. A retry keeps the same question instead of using up a new one.
+- A batch that dies partway through no longer leaves its deliveries stuck, and it stops after three attempts.
+- Saving a user who never chose a newsletter setting no longer records them as unsubscribed.
+- The daily job that fills in missing user embeddings no longer fails because of fields on a user's record.
+
+Before deploying, run `npx convex env set NEWSLETTER_SENDING_ENABLED true --prod`. Without it, production stops sending the newsletter.
+
 ## [0.8.2.0] - 2026-11-12
 
 ### Fixed
