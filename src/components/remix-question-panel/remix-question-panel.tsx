@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
+import { PackOffer } from "@/components/PackOffer";
 
 type RemixState = "idle" | "remixing" | "remixed";
 
@@ -829,6 +830,7 @@ export function RemixQuestionPanel({
             {resetsOn ? `it resets on ${resetsOn}` : "it resets"}.
           </p>
         )}
+        {limitReached && remixState !== "remixing" && <PackOffer surface="remix" />}
         {remixState === "idle" && (
           <>
             <Button

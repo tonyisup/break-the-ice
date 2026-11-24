@@ -514,6 +514,39 @@ describe("RemixQuestionPanel cancel remix edge cases", () => {
   });
 });
 
+describe("RemixQuestionPanel pack offer", () => {
+  // Added by the ship coverage audit (Claude Fable 5.2), pass 1.
+  // Value: protects=the Remix panel offers the pack only once the AI limit is reached, and a request from it is recorded as "remix";
+  // fails_when=the offer shows before the limit, is dropped from the panel, or records the wrong surface;
+  // why_new=PackOffer.test.tsx renders the offer alone and no panel test looked for it; seam=none;
+  // no_claim=the saved row (convex/react is mocked; convex/core/packInterest.test.ts covers the mutation)
+  it("offers the pack only at the AI limit, and records the request as coming from Remix", () => {
+    const record = vi.fn().mockResolvedValue(null);
+    (useMutation as ReturnType<typeof vi.fn>).mockImplementation((ref: MutationRef) =>
+      getFunctionName(ref) === getFunctionName(api.core.packInterest.record) ? record : addPersonalQuestion,
+    );
+
+    const underLimit = renderPanel(vi.fn());
+    expect(screen.getByRole("button", { name: "Remix" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /^Get \d+ more for \$\d+$/ })).toBeNull();
+    underLimit.unmount();
+
+    (useQuery as ReturnType<typeof vi.fn>).mockImplementation((ref: MutationRef) => {
+      const name = getFunctionName(ref);
+      if (name === getFunctionName(api.core.users.getCurrentUser)) return { isAiLimitReached: true };
+      if (name === getFunctionName(api.core.packInterest.getMine)) return { shown: true, clicked: false, notify: false };
+      return undefined;
+    });
+    renderPanel(vi.fn());
+    expect(screen.getByRole("button", { name: "Remix" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Get \d+ more for \$\d+$/ }));
+
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record).toHaveBeenCalledWith({ offer: "pack-50-usd-5", surface: "remix", step: "asked" });
+    expect(screen.getByText(/aren't on sale yet, and\s+nothing was charged/)).toBeInTheDocument();
+  });
+});
+
 describe("RemixQuestionPanel tags", () => {
   const tagNames = Array.from({ length: MAX_QUESTION_TAGS + 1 }, (_, i) => `t${String(i).padStart(2, "0")}`);
 
