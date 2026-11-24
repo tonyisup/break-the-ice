@@ -5,6 +5,7 @@ import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { Doc, Id } from "../_generated/dataModel";
 import * as crypto from "crypto";
+import { isRetiredQuestion } from "../lib/questionAccess";
 
 const TRAILING_SLASHES_PATTERN = /\/{2,}$/;
 const NEWSLETTER_PICK_ATTEMPTS = 3;
@@ -108,7 +109,11 @@ export async function pickUntilMarked<T>(
 }
 
 export const getQuestionForUser = internalAction({
-	args: { email: v.string() },
+	args: {
+		email: v.string(),
+		// A retry of a refused send keeps its question, already marked sent to this reader.
+		reuseQuestionId: v.optional(v.id("questions")),
+	},
 	returns: v.object({
 		success: v.boolean(),
 		questionId: v.id("questions"),
@@ -134,15 +139,20 @@ export const getQuestionForUser = internalAction({
 			throw new Error("User not found.");
 		}
 
-		const question = await pickUntilMarked(
-			() => pickNewsletterQuestion(ctx, user._id),
-			(picked) =>
-				ctx.runMutation(internal.internal.questions.markUserQuestionAsSent, {
-					userId: user._id,
-					questionId: picked._id,
-				}),
-			NEWSLETTER_PICK_ATTEMPTS,
-		);
+		const reused: Doc<"questions"> | null = args.reuseQuestionId
+			? await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.reuseQuestionId })
+			: null;
+		const question = reused && (reused.text || reused.customText) && !isRetiredQuestion(reused)
+			? reused
+			: await pickUntilMarked(
+				() => pickNewsletterQuestion(ctx, user._id),
+				(picked) =>
+					ctx.runMutation(internal.internal.questions.markUserQuestionAsSent, {
+						userId: user._id,
+						questionId: picked._id,
+					}),
+				NEWSLETTER_PICK_ATTEMPTS,
+			);
 
 		const baseUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://breaktheiceberg.com"}/`
 			.replace(TRAILING_SLASHES_PATTERN, "/");

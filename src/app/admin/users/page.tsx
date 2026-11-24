@@ -78,12 +78,15 @@ export default function UsersPage() {
 
 	const handleSave = async () => {
 		if (!editingUserId) return
+		const isResubscribe = editNewsletter && editingUser?.newsletterSubscriptionStatus === "unsubscribed"
+		if (isResubscribe && !confirm(`${editingUser?.email ?? "This person"} unsubscribed earlier. Subscribe them again anyway?`)) return
 		setIsSaving(true)
 		try {
 			await updateUserMutation({
 				userId: editingUserId,
 				aiUsageCount: editAiUsage,
 				newsletterSubscriptionStatus: editNewsletter ? "subscribed" : "unsubscribed",
+				confirmResubscribe: isResubscribe || undefined,
 			})
 			toast.success("User updated successfully")
 			setEditingUserId(null)

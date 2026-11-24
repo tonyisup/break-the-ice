@@ -1,8 +1,16 @@
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { internal } from "../_generated/api";
 import schema from "../schema";
 import { convexFunctionModules } from "../../vitestConvexModules";
+
+beforeEach(() => {
+  vi.stubEnv("NEWSLETTER_SENDING_ENABLED", "true");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 test("newsletter deliveries are created once per email per date and claimed once", async () => {
   const t = convexTest(schema, convexFunctionModules);

@@ -112,4 +112,40 @@ describe('UserDetailsPage', () => {
       });
     });
   });
+
+  // Value: protects=the user form asks before re-subscribing someone who opted out;
+  // fails_when=the confirm or confirmResubscribe is dropped; why_new=only the newsletter page covered it;
+  // seam=none; no_claim=none beyond protects.
+  it('only re-subscribes someone who opted out after confirmation', async () => {
+    const updateUserMock = vi.fn().mockResolvedValue(null);
+    const leftUser = { ...mockUser, newsletterSubscriptionStatus: 'unsubscribed' };
+    (useQuery as any).mockImplementation((queryFn: any) => {
+      if (queryFn === 'getUser') return leftUser;
+      if (queryFn === 'getUserStyles') return mockStyles;
+      if (queryFn === 'getUserTones') return mockTones;
+      if (queryFn === 'getUserQuestions') return mockQuestions;
+      return undefined;
+    });
+    (useMutation as any).mockImplementation((mutationFn: any) =>
+      mutationFn === 'updateUser' ? updateUserMock : vi.fn(),
+    );
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<UserDetailsPage />);
+    fireEvent.click(screen.getByRole('switch'));
+    fireEvent.click(screen.getByText('Save Changes'));
+    expect(updateUserMock).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByText('Save Changes'));
+    await waitFor(() => {
+      expect(updateUserMock).toHaveBeenCalledWith({
+        userId: 'user123',
+        aiUsageCount: 5,
+        newsletterSubscriptionStatus: 'subscribed',
+        confirmResubscribe: true,
+      });
+    });
+    confirm.mockRestore();
+  });
 });

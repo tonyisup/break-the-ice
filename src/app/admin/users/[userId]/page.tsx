@@ -104,12 +104,15 @@ export default function UserDetailsPage() {
 
     const handleSave = async () => {
         if (!userIdTyped) return;
+        const isResubscribe = isSubscribed && user?.newsletterSubscriptionStatus === "unsubscribed"
+        if (isResubscribe && !confirm(`${user?.email ?? "This person"} unsubscribed earlier. Subscribe them again anyway?`)) return
         setIsSaving(true)
         try {
             await updateUser({
                 userId: userIdTyped,
                 aiUsageCount: aiUsage,
-                newsletterSubscriptionStatus: isSubscribed ? "subscribed" : "unsubscribed"
+                newsletterSubscriptionStatus: isSubscribed ? "subscribed" : "unsubscribed",
+                confirmResubscribe: isResubscribe || undefined,
             })
             toast.success("User updated")
         } catch (e) {

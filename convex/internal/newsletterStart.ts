@@ -3,10 +3,15 @@ import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { Doc } from "../_generated/dataModel";
 import { getResendApiKey } from "../lib/resend";
+import {
+	NEWSLETTER_TIME_ZONE,
+	canEmailNewsletterTo,
+	isLiveNewsletterDeployment,
+	newsletterSendHourFor,
+} from "../lib/newsletterSending";
+import { PROCESSING_STALE_MS } from "./newsletterDelivery";
 
 const DEFAULT_BATCH_SIZE = 100;
-const NEWSLETTER_TIME_ZONE = "America/Los_Angeles";
-const NEWSLETTER_SEND_HOUR = 10;
 
 type StartNewsletterDeliveryResult = {
 	success: boolean;
@@ -37,18 +42,25 @@ function getLosAngelesDateParts(now: Date) {
 	};
 }
 
+/** Due in its own hour, or in the first hour after it when the clocks skip it in spring. */
+function isDueThisHour(sendHour: number, hour: number, previousHour: number) {
+	return sendHour === hour || (previousHour < sendHour && sendHour < hour);
+}
+
 async function startNewsletterDelivery(
 	ctx: ActionCtx,
 	args: { deliveryDate?: string; force?: boolean; batchSize?: number },
 ): Promise<StartNewsletterDeliveryResult> {
-	const { deliveryDate: localDeliveryDate, hour } = getLosAngelesDateParts(new Date());
+	const now = new Date();
+	const { deliveryDate: localDeliveryDate, hour } = getLosAngelesDateParts(now);
+	const { hour: previousHour } = getLosAngelesDateParts(new Date(now.getTime() - 60 * 60 * 1000));
 	const deliveryDate = args.deliveryDate ?? localDeliveryDate;
 
-	if (!args.force && hour !== NEWSLETTER_SEND_HOUR) {
+	if (!args.force && !isLiveNewsletterDeployment()) {
 		return {
 			success: true,
 			skipped: true,
-			message: `Not newsletter hour in ${NEWSLETTER_TIME_ZONE}`,
+			message: "Scheduled newsletter sending is off on this deployment.",
 			deliveryDate,
 			targetCount: 0,
 			createdCount: 0,
@@ -79,10 +91,26 @@ async function startNewsletterDelivery(
 	);
 	const subscriberTargets = subscribers
 		.filter((subscriber) => Boolean(subscriber.email))
+		.filter((subscriber) => args.force || isDueThisHour(newsletterSendHourFor(subscriber), hour, previousHour))
+		.filter((subscriber) => canEmailNewsletterTo(subscriber.email!))
 		.map((subscriber) => ({
 			userId: subscriber._id,
 			email: subscriber.email!.trim().toLowerCase(),
 		}));
+
+	if (!isLiveNewsletterDeployment() && subscriberTargets.length === 0) {
+		return {
+			success: true,
+			skipped: true,
+			message: "No subscribed test recipients. Add them to NEWSLETTER_TEST_RECIPIENTS on this deployment.",
+			deliveryDate,
+			targetCount: 0,
+			createdCount: 0,
+			existingCount: 0,
+			pendingCount: 0,
+			scheduledBatchCount: 0,
+		};
+	}
 
 	const deliveryPlan: {
 		targetCount: number;
@@ -91,7 +119,11 @@ async function startNewsletterDelivery(
 		pendingCount: number;
 	} = await ctx.runMutation(
 		internal.internal.newsletterDelivery.createPendingDeliveries,
-		{ deliveryDate, subscribers: subscriberTargets },
+		{
+			deliveryDate,
+			subscribers: subscriberTargets,
+			staleProcessingBefore: now.getTime() - PROCESSING_STALE_MS,
+		},
 	);
 
 	if (deliveryPlan.pendingCount === 0) {

@@ -73,6 +73,18 @@ The following variables need to be set in your [Convex Dashboard](https://dashbo
 *   `CLERK_JWT_ISSUER_DOMAIN`: You can find this in your [Clerk Dashboard](https://dashboard.clerk.com) under **API Keys**. It should be the "JWT Issuer URL".
 *   `OPEN_ROUTER_API_KEY`: Your API key from [OpenRouter](https://openrouter.ai/settings/keys). AI question generation and remix call OpenRouter with this key.
 *   `RESEND_API_KEY` or `RESEND_API_TOKEN`: A Resend API key with email-sending permission, required for newsletter verification and delivery.
+*   `NEWSLETTER_SENDING_ENABLED`: Set to `true` on production only. Without it, a deployment never sends the scheduled newsletter.
+*   `NEWSLETTER_TEST_RECIPIENTS`: Optional, for dev. Comma-separated addresses that **Send Daily Newsletter** in the admin may email from a deployment without `NEWSLETTER_SENDING_ENABLED`.
+*   `DEV_DATA_CLEANUP_ENABLED`: Set to `true` on dev only. Never set it on production. It allows the clean-up below.
+
+#### After copying production data into dev
+
+The copy brings production Clerk identities and real subscribers with it. This clears both from dev. Emails stay, so signing in to dev with the same email links back to that person's data, and subscriptions for addresses in `NEWSLETTER_TEST_RECIPIENTS` are kept:
+
+```bash
+npx convex run internal/devDataCleanup:resetCopiedProductionData          # dry run
+npx convex run internal/devDataCleanup:resetCopiedProductionData '{"dryRun": false}'
+```
 
 ### 3. Running the Application
 
@@ -190,6 +202,10 @@ branches, and refuses a key that is not a production key. A push that adds or ch
 on a large table asks for a confirmation that CI can't give: deploy that one by hand with
 `npx convex deploy`, or stage the index first. One-time data steps (`npx convex run --prod ...`)
 are still run by hand after the deploy that brings them.
+
+The daily newsletter only sends where `NEWSLETTER_SENDING_ENABLED=true`, so set it on production
+before the first deploy that includes this check, or production stops sending:
+`npx convex env set NEWSLETTER_SENDING_ENABLED true --prod`.
 
 ## Stack
 

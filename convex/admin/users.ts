@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
 import { ensureAdmin } from "../auth";
+import { assertResubscribeConfirmed } from "../lib/newsletterSending";
 
 export const makeAdmin = mutation({
 	args: {
@@ -31,6 +32,7 @@ export const updateUser = mutation({
 		newsletterSubscriptionStatus: v.optional(
 			v.union(v.literal("subscribed"), v.literal("unsubscribed"))
 		),
+		confirmResubscribe: v.optional(v.boolean()),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
@@ -39,6 +41,9 @@ export const updateUser = mutation({
 
 		const user = await ctx.db.get(userId);
 		if (!user) throw new Error("User not found");
+		if (newsletterSubscriptionStatus !== undefined) {
+			assertResubscribeConfirmed(user, newsletterSubscriptionStatus, args.confirmResubscribe);
+		}
 
 		const updates: {
 			aiUsage?: { count: number; cycleStart: number };
@@ -73,7 +78,13 @@ export const updateUser = mutation({
 			}
 		}
 
-		if (newsletterSubscriptionStatus !== undefined) {
+		// The edit forms always send a status. Saving one for someone who never chose must not
+		// record them as having opted out.
+		const neverChose = user.newsletterSubscriptionStatus === undefined;
+		if (
+			newsletterSubscriptionStatus !== undefined &&
+			!(neverChose && newsletterSubscriptionStatus === "unsubscribed")
+		) {
 			updates.newsletterSubscriptionStatus = newsletterSubscriptionStatus;
 		}
 

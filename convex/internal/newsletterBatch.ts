@@ -4,10 +4,9 @@ import { v } from "convex/values";
 import { Id } from "../_generated/dataModel";
 import { createDailyQuestionEmail } from "../lib/emails";
 import { getResendApiKey } from "../lib/resend";
-import { MAX_DELIVERY_ATTEMPTS } from "./newsletterDelivery";
+import { MAX_DELIVERY_ATTEMPTS, PROCESSING_STALE_MS } from "./newsletterDelivery";
 
 const DEFAULT_BATCH_SIZE = 100;
-const PROCESSING_STALE_MS = 15 * 60 * 1000;
 
 type BatchResult = {
 	success: boolean;
@@ -21,6 +20,7 @@ type ClaimedDelivery = {
 	email: string;
 	userId: Id<"users">;
 	attemptCount: number;
+	questionId?: Id<"questions">;
 };
 
 type PreparedDelivery = {
@@ -34,6 +34,23 @@ type PreparedDelivery = {
 		headers: Record<string, string>;
 	};
 };
+
+/** A 4xx means Resend refused the batch, except a timeout or a clash with an earlier request. */
+function isDefiniteRejection(status: number) {
+	return status >= 400 && status < 500 && status !== 408 && status !== 409;
+}
+
+/** Hashed so the key stays short for a full batch. A retry is a new attempt, so a new key. */
+async function batchIdempotencyKey(deliveryDate: string, claimed: ClaimedDelivery[], sentIds: Set<string>) {
+	const parts = claimed
+		.filter((delivery) => sentIds.has(delivery._id))
+		.map((delivery) => `${delivery._id}:${delivery.attemptCount}`)
+		.sort()
+		.join(",");
+	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(parts));
+	const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+	return `newsletter-${deliveryDate}-${hash}`;
+}
 
 export const processNewsletterBatch = internalAction({
 	args: {
@@ -78,7 +95,7 @@ export const processNewsletterBatch = internalAction({
 					unsubscribeUrl: string;
 				} = await ctx.runAction(
 					internal.internal.newsletter.getQuestionForUser,
-					{ email: delivery.email },
+					{ email: delivery.email, reuseQuestionId: delivery.questionId },
 				);
 				const email = createDailyQuestionEmail({
 					question: question.question,
@@ -124,13 +141,21 @@ export const processNewsletterBatch = internalAction({
 			};
 		}
 
+		let sendRejected = false;
 		try {
+			const batchPayload = prepared.map((item) => item.payload);
+			const idempotencyKey = await batchIdempotencyKey(
+				args.deliveryDate,
+				claimed,
+				new Set(prepared.map((item) => item.deliveryId)),
+			);
+
+			await ctx.runMutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesSending, {
+				deliveries: prepared.map(({ deliveryId, questionId }) => ({ deliveryId, questionId })),
+			});
+
 			const abortController = new AbortController();
 			const timeoutId = setTimeout(() => abortController.abort(), 30000);
-
-			const batchPayload = prepared.map((item) => item.payload);
-			const deliveryIds = prepared.map((item) => item.deliveryId).sort().join(",");
-			const idempotencyKey = `newsletter-${args.deliveryDate}-${deliveryIds}`;
 
 			const response = await fetch("https://api.resend.com/emails/batch", {
 				method: "POST",
@@ -152,6 +177,7 @@ export const processNewsletterBatch = internalAction({
 			}
 
 			if (!response.ok) {
+				sendRejected = isDefiniteRejection(response.status);
 				throw new Error(result.message || result.body || `Resend batch failed with status ${response.status}`);
 			}
 
@@ -181,6 +207,7 @@ export const processNewsletterBatch = internalAction({
 				{
 					deliveryIds: prepared.map((item) => item.deliveryId),
 					error: message,
+					sendRejected,
 				},
 			);
 			return {
