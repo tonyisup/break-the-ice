@@ -5,7 +5,7 @@ import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { Doc, Id } from "../_generated/dataModel";
 import * as crypto from "crypto";
-import { isRetiredQuestion } from "../lib/questionAccess";
+import { isReadableByLink, isRetiredQuestion } from "../lib/questionAccess";
 
 const TRAILING_SLASHES_PATTERN = /\/{2,}$/;
 const NEWSLETTER_PICK_ATTEMPTS = 3;
@@ -142,7 +142,10 @@ export const getQuestionForUser = internalAction({
 		const reused: Doc<"questions"> | null = args.reuseQuestionId
 			? await ctx.runQuery(internal.internal.questions.getQuestionById, { id: args.reuseQuestionId })
 			: null;
-		const question = reused && (reused.text || reused.customText) && !isRetiredQuestion(reused)
+		// The email links to the question, so a retry reuses it only while that link still opens.
+		// One made private or retired since the failed attempt is replaced with a fresh pick.
+		const question = reused && (reused.text || reused.customText) && isReadableByLink(reused) &&
+			!isRetiredQuestion(reused)
 			? reused
 			: await pickUntilMarked(
 				() => pickNewsletterQuestion(ctx, user._id),

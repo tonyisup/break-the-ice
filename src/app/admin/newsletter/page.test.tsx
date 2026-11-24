@@ -41,6 +41,7 @@ const queryResults: Record<string, unknown> = {
   getSubscribers: [
     { _id: "u1", _creationTime: 1, name: "Reader", email: "reader@example.com", newsletterSubscriptionStatus: "subscribed" },
     { _id: "u2", _creationTime: 2, name: "Left", email: "left@example.com", newsletterSubscriptionStatus: "unsubscribed" },
+    { _id: "u3", _creationTime: 3, name: "Never", email: "never@example.com" },
   ],
   getStats: {
     subscribedCount: 1,
@@ -93,9 +94,33 @@ describe("NewsletterPage", () => {
       expect(mutations.setSubscriptionStatus).toHaveBeenCalledWith({
         userId: "u2",
         status: "subscribed",
-        confirmResubscribe: true,
+        confirmSubscribe: true,
       }),
     );
+    confirm.mockRestore();
+  });
+
+  it("asks before subscribing someone who never signed up", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderPage();
+
+    fireEvent.click(screen.getByLabelText("Newsletter subscription for never@example.com"));
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("never signed up"));
+    expect(mutations.setSubscriptionStatus).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it("unsubscribes without asking", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    renderPage();
+
+    fireEvent.click(screen.getByLabelText("Newsletter subscription for reader@example.com"));
+
+    await waitFor(() =>
+      expect(mutations.setSubscriptionStatus).toHaveBeenCalledWith({ userId: "u1", status: "unsubscribed" }),
+    );
+    expect(confirm).not.toHaveBeenCalled();
     confirm.mockRestore();
   });
 

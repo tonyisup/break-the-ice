@@ -42,13 +42,37 @@ export function assertValidNewsletterSendHour(hour: number) {
 	}
 }
 
-/** Someone who opted out is only subscribed again on an explicit admin confirmation. */
-export function assertResubscribeConfirmed(
-	user: { newsletterSubscriptionStatus?: "subscribed" | "unsubscribed" },
-	status: "subscribed" | "unsubscribed",
+type SubscriptionStatus = "subscribed" | "unsubscribed";
+type SubscriptionTarget = { email?: string; newsletterSubscriptionStatus?: SubscriptionStatus };
+
+/**
+ * What an admin must confirm before subscribing this person, or null when nothing needs
+ * confirming. Anyone not already subscribed didn't ask for the email: they opted out, or
+ * never chose.
+ */
+export function subscribeConfirmationPrompt(user: SubscriptionTarget, status: SubscriptionStatus) {
+	if (status !== "subscribed" || user.newsletterSubscriptionStatus === "subscribed") return null;
+	const who = user.email ?? "This person";
+	return user.newsletterSubscriptionStatus === "unsubscribed"
+		? `${who} unsubscribed earlier. Subscribe them again anyway?`
+		: `${who} never signed up for the newsletter. Subscribe them anyway?`;
+}
+
+/** An admin subscribes someone only with an email to send to, and only once confirmed. */
+export function assertSubscribeAllowed(
+	user: SubscriptionTarget,
+	status: SubscriptionStatus,
 	confirmed: boolean | undefined,
 ) {
-	if (status === "subscribed" && user.newsletterSubscriptionStatus === "unsubscribed" && !confirmed) {
-		throw new Error("This person unsubscribed. Confirm before subscribing them again.");
+	if (!subscribeConfirmationPrompt(user, status)) return;
+	if (!user.email) {
+		throw new Error("This user has no email address.");
+	}
+	if (!confirmed) {
+		throw new Error(
+			user.newsletterSubscriptionStatus === "unsubscribed"
+				? "This person unsubscribed. Confirm before subscribing them again."
+				: "This person never signed up. Confirm before subscribing them.",
+		);
 	}
 }

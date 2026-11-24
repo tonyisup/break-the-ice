@@ -114,7 +114,7 @@ describe('UserDetailsPage', () => {
   });
 
   // Value: protects=the user form asks before re-subscribing someone who opted out;
-  // fails_when=the confirm or confirmResubscribe is dropped; why_new=only the newsletter page covered it;
+  // fails_when=the confirm or confirmSubscribe is dropped; why_new=only the newsletter page covered it;
   // seam=none; no_claim=none beyond protects.
   it('only re-subscribes someone who opted out after confirmation', async () => {
     const updateUserMock = vi.fn().mockResolvedValue(null);
@@ -143,7 +143,7 @@ describe('UserDetailsPage', () => {
         userId: 'user123',
         aiUsageCount: 5,
         newsletterSubscriptionStatus: 'subscribed',
-        confirmResubscribe: true,
+        confirmSubscribe: true,
       });
     });
     confirm.mockRestore();

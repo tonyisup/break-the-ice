@@ -5,6 +5,7 @@ import { useQuery, useMutation, useAction } from "convex/react";
 import { Link } from "react-router-dom";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
+import { subscribeConfirmationPrompt } from "../../../../convex/lib/newsletterSending";
 import {
   Mail,
   Search,
@@ -234,14 +235,11 @@ export default function NewsletterPage() {
     },
     subscribed: boolean,
   ) => {
-    const isResubscribe =
-      subscribed && user.newsletterSubscriptionStatus === "unsubscribed";
-    if (
-      isResubscribe &&
-      !confirm(
-        `${user.email ?? "This person"} unsubscribed earlier. Subscribe them again anyway?`,
-      )
-    ) {
+    const prompt = subscribeConfirmationPrompt(
+      user,
+      subscribed ? "subscribed" : "unsubscribed",
+    );
+    if (prompt && !confirm(prompt)) {
       return;
     }
 
@@ -250,7 +248,7 @@ export default function NewsletterPage() {
       await setSubscriptionStatus({
         userId: user._id,
         status: subscribed ? "subscribed" : "unsubscribed",
-        confirmResubscribe: isResubscribe || undefined,
+        confirmSubscribe: prompt ? true : undefined,
       });
       toast.success(
         subscribed

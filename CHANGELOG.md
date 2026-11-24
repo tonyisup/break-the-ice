@@ -13,11 +13,12 @@ All notable changes to Break the Ice are recorded here.
 ### Changed
 - Only a deployment with `NEWSLETTER_SENDING_ENABLED=true` sends the scheduled newsletter. Dev can still test real sends from the admin page to the addresses in `NEWSLETTER_TEST_RECIPIENTS`.
 - The daily email now goes out on the hour, so the default arrives at 10:00 AM Pacific.
-- Subscribing someone who opted out now asks for confirmation first.
+- Subscribing anyone who isn't already subscribed, whether they opted out or never signed up, now asks for confirmation first. A user with no email can't be subscribed.
 
 ### Fixed
 - Copying production data into dev no longer sends every subscriber a second daily email.
-- A failed send is retried only when Resend definitely refused it, so a send with an unknown result can't reach a reader twice. A retry keeps the same question instead of using up a new one.
+- A failed send is retried only when Resend definitely refused it, so a send with an unknown result can't reach a reader twice. A retry keeps the same question instead of using up a new one, unless that question was made private or retired in the meantime.
+- A send that fails late in the evening is still retried after midnight Pacific.
 - A batch that dies partway through no longer leaves its deliveries stuck, and it stops after three attempts.
 - Saving a user who never chose a newsletter setting no longer records them as unsubscribed.
 - The daily job that fills in missing user embeddings no longer fails because of fields on a user's record.

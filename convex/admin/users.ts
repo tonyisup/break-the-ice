@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
 import { ensureAdmin } from "../auth";
-import { assertResubscribeConfirmed } from "../lib/newsletterSending";
+import { assertSubscribeAllowed } from "../lib/newsletterSending";
 
 export const makeAdmin = mutation({
 	args: {
@@ -32,7 +32,7 @@ export const updateUser = mutation({
 		newsletterSubscriptionStatus: v.optional(
 			v.union(v.literal("subscribed"), v.literal("unsubscribed"))
 		),
-		confirmResubscribe: v.optional(v.boolean()),
+		confirmSubscribe: v.optional(v.boolean()),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
@@ -42,7 +42,7 @@ export const updateUser = mutation({
 		const user = await ctx.db.get(userId);
 		if (!user) throw new Error("User not found");
 		if (newsletterSubscriptionStatus !== undefined) {
-			assertResubscribeConfirmed(user, newsletterSubscriptionStatus, args.confirmResubscribe);
+			assertSubscribeAllowed(user, newsletterSubscriptionStatus, args.confirmSubscribe);
 		}
 
 		const updates: {

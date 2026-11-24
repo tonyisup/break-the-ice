@@ -22,7 +22,7 @@ describe("Admin users", () => {
       userId,
       aiUsageCount: 10,
       newsletterSubscriptionStatus: "subscribed",
-      confirmResubscribe: true,
+      confirmSubscribe: true,
     });
 
     // 3. Verify updates

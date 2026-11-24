@@ -3,6 +3,7 @@
 import { useQuery, useMutation } from "convex/react"
 import { api } from "../../../../../convex/_generated/api"
 import { Id } from "../../../../../convex/_generated/dataModel"
+import { subscribeConfirmationPrompt } from "../../../../../convex/lib/newsletterSending"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -104,15 +105,15 @@ export default function UserDetailsPage() {
 
     const handleSave = async () => {
         if (!userIdTyped) return;
-        const isResubscribe = isSubscribed && user?.newsletterSubscriptionStatus === "unsubscribed"
-        if (isResubscribe && !confirm(`${user?.email ?? "This person"} unsubscribed earlier. Subscribe them again anyway?`)) return
+        const prompt = user && subscribeConfirmationPrompt(user, isSubscribed ? "subscribed" : "unsubscribed")
+        if (prompt && !confirm(prompt)) return
         setIsSaving(true)
         try {
             await updateUser({
                 userId: userIdTyped,
                 aiUsageCount: aiUsage,
                 newsletterSubscriptionStatus: isSubscribed ? "subscribed" : "unsubscribed",
-                confirmResubscribe: isResubscribe || undefined,
+                confirmSubscribe: prompt ? true : undefined,
             })
             toast.success("User updated")
         } catch (e) {

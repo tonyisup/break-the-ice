@@ -4,7 +4,7 @@ import { ensureAdmin } from "../auth";
 import { internal } from "../_generated/api";
 import { Doc } from "../_generated/dataModel";
 import {
-	assertResubscribeConfirmed,
+	assertSubscribeAllowed,
 	assertValidNewsletterSendHour,
 } from "../lib/newsletterSending";
 
@@ -259,7 +259,7 @@ export const setSubscriptionStatus = mutation({
 	args: {
 		userId: v.id("users"),
 		status: v.union(v.literal("subscribed"), v.literal("unsubscribed")),
-		confirmResubscribe: v.optional(v.boolean()),
+		confirmSubscribe: v.optional(v.boolean()),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
@@ -269,10 +269,7 @@ export const setSubscriptionStatus = mutation({
 		if (!user) {
 			throw new Error("User not found");
 		}
-		if (args.status === "subscribed" && !user.email) {
-			throw new Error("This user has no email address.");
-		}
-		assertResubscribeConfirmed(user, args.status, args.confirmResubscribe);
+		assertSubscribeAllowed(user, args.status, args.confirmSubscribe);
 
 		await ctx.db.patch(args.userId, {
 			newsletterSubscriptionStatus: args.status,

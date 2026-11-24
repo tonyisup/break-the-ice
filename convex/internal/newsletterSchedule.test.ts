@@ -242,6 +242,27 @@ describe("retries never send twice", () => {
     expect((await t.run((ctx) => ctx.db.get(id)))?.status).toBe("failed");
   });
 
+  // Value: protects=an 11 PM send that Resend refused still gets its retries after midnight;
+  // fails_when=the hourly run only looks at today's Pacific date; why_new=every other test runs mid-day;
+  // seam=none; no_claim=real scheduler timing (fake timers).
+  test("a late-evening send refused by Resend is retried after midnight", async () => {
+    const t = setup();
+    const userId = await addUser(t, "night@example.com", { newsletterSubscriptionStatus: "subscribed", newsletterSendHour: 23 });
+    await addDelivery(t, userId, "night@example.com", { status: "failed", safeToRetry: true });
+
+    // 12:00 AM Pacific on the next day.
+    vi.setSystemTime(new Date("2026-11-25T08:00:00Z"));
+    const result = await t.action(internal.internal.newsletterStart.startDailyNewsletterIfDue, {});
+    expect(result.scheduledBatchCount).toBe(1);
+    const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    expect(scheduled.map((job) => (job.args[0] as { deliveryDate: string }).deliveryDate)).toEqual([DATE]);
+
+    // By 3:00 AM every late send has used its attempts, so the run stops looking back.
+    vi.setSystemTime(new Date("2026-11-25T11:00:00Z"));
+    const later = await t.action(internal.internal.newsletterStart.startDailyNewsletterIfDue, {});
+    expect(later.scheduledBatchCount).toBe(0);
+  });
+
   test("a retry skips someone who unsubscribed after the failure", async () => {
     const t = setup();
     const userId = await addUser(t, "reader@example.com", { newsletterSubscriptionStatus: "unsubscribed" });
@@ -388,6 +409,32 @@ describe("sending a batch through Resend", () => {
     const marked = await t.run((ctx) => ctx.db.query("userQuestions").collect());
     expect(marked.filter((row) => row.status === "sent")).toHaveLength(1);
   });
+
+  // Value: protects=a retry never emails a link to a question that went private after the failed attempt;
+  // fails_when=the reuse check only tests for retired questions; why_new=the reuse test kept the question public;
+  // seam=none; no_claim=Resend's real responses (fetch stubbed).
+  test("a retry picks a new question when the first one went private", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) =>
+      new Response(JSON.stringify({ message: "rate limited" }), { status: 429 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const t = setup();
+    await addPendingDelivery(t);
+
+    await sendBatch(t);
+    await t.run(async (ctx) => {
+      const first = await ctx.db
+        .query("questions")
+        .filter((q) => q.eq(q.field("text"), "First question?"))
+        .unique();
+      await ctx.db.patch(first!._id, { status: "private" });
+    });
+    await sendBatch(t);
+
+    const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body as string)[0].html as string);
+    expect(bodies[0]).toContain("First question?");
+    expect(bodies[1]).toContain("Second question?");
+  });
 });
 
 // Value: protects=a custom send hour can't abort the daily embedding refresh for every user;
@@ -434,10 +481,46 @@ describe("admin subscription management", () => {
     await asAdmin.mutation(api.admin.newsletter.setSubscriptionStatus, {
       userId,
       status: "subscribed",
-      confirmResubscribe: true,
+      confirmSubscribe: true,
     });
     const user = await t.run((ctx) => ctx.db.get(userId));
     expect(user?.newsletterSubscriptionStatus).toBe("subscribed");
+  });
+
+  // Value: protects=an admin can't sign someone up for email they never asked for by accident;
+  // fails_when=the confirmation only covers people who unsubscribed; why_new=the opt-out test seeded "unsubscribed";
+  // seam=none; no_claim=none beyond protects.
+  test("subscribing someone who never signed up needs confirmation", async () => {
+    const t = setup();
+    const userId = await addUser(t, "never@example.com", {});
+    const asAdmin = t.withIdentity(admin);
+
+    await expect(
+      asAdmin.mutation(api.admin.newsletter.setSubscriptionStatus, { userId, status: "subscribed" }),
+    ).rejects.toThrow("never signed up");
+    await expect(
+      asAdmin.mutation(api.admin.users.updateUser, { userId, newsletterSubscriptionStatus: "subscribed" }),
+    ).rejects.toThrow("never signed up");
+
+    await asAdmin.mutation(api.admin.users.updateUser, {
+      userId,
+      newsletterSubscriptionStatus: "subscribed",
+      confirmSubscribe: true,
+    });
+    expect((await t.run((ctx) => ctx.db.get(userId)))?.newsletterSubscriptionStatus).toBe("subscribed");
+  });
+
+  test("a user with no email can't be subscribed from either admin page", async () => {
+    const t = setup();
+    const userId = await addUser(t, undefined, {});
+    const asAdmin = t.withIdentity(admin);
+
+    for (const subscribe of [
+      () => asAdmin.mutation(api.admin.newsletter.setSubscriptionStatus, { userId, status: "subscribed", confirmSubscribe: true }),
+      () => asAdmin.mutation(api.admin.users.updateUser, { userId, newsletterSubscriptionStatus: "subscribed", confirmSubscribe: true }),
+    ]) {
+      await expect(subscribe()).rejects.toThrow("no email");
+    }
   });
 
   test("saving a user who never chose doesn't record an opt-out", async () => {

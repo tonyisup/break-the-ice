@@ -12,6 +12,10 @@ import {
 import { PROCESSING_STALE_MS } from "./newsletterDelivery";
 
 const DEFAULT_BATCH_SIZE = 100;
+// A send that fails late in the evening still has retries left after midnight Pacific, when the
+// date has moved on. Each failed row retries once an hour, at most MAX_DELIVERY_ATTEMPTS times,
+// so only sends from the last hours of the day can still be retryable this early.
+const RETRY_PREVIOUS_DAY_BEFORE_HOUR = 3;
 
 type StartNewsletterDeliveryResult = {
 	success: boolean;
@@ -40,6 +44,11 @@ function getLosAngelesDateParts(now: Date) {
 		deliveryDate: `${values.year}-${values.month}-${values.day}`,
 		hour: Number(values.hour),
 	};
+}
+
+function previousDate(deliveryDate: string) {
+	const [year, month, day] = deliveryDate.split("-").map(Number);
+	return new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10);
 }
 
 /** Due in its own hour, or in the first hour after it when the clocks skip it in spring. */
@@ -85,6 +94,30 @@ async function startNewsletterDelivery(
 		};
 	}
 
+	const batchSize = Math.max(1, Math.min(args.batchSize ?? DEFAULT_BATCH_SIZE, DEFAULT_BATCH_SIZE));
+
+	// Only the scheduled run looks back a day: a manual send names the date it means.
+	let previousDayBatchCount = 0;
+	if (!args.force && !args.deliveryDate && hour < RETRY_PREVIOUS_DAY_BEFORE_HOUR) {
+		const retryDate = previousDate(localDeliveryDate);
+		const retryPlan: { pendingCount: number } = await ctx.runMutation(
+			internal.internal.newsletterDelivery.createPendingDeliveries,
+			{
+				deliveryDate: retryDate,
+				subscribers: [],
+				staleProcessingBefore: now.getTime() - PROCESSING_STALE_MS,
+			},
+		);
+		previousDayBatchCount = Math.ceil(retryPlan.pendingCount / batchSize);
+		for (let i = 0; i < previousDayBatchCount; i++) {
+			await ctx.scheduler.runAfter(
+				i * 5000,
+				internal.internal.newsletterBatch.processNewsletterBatch,
+				{ deliveryDate: retryDate, limit: batchSize },
+			);
+		}
+	}
+
 	const subscribers: Array<Doc<"users">> = await ctx.runQuery(
 		internal.internal.users.getNewsletterSubscribers,
 		{},
@@ -126,23 +159,26 @@ async function startNewsletterDelivery(
 		},
 	);
 
+	const previousDayNote = previousDayBatchCount > 0
+		? ` Also scheduled ${previousDayBatchCount} retry batch(es) for yesterday.`
+		: "";
+
 	if (deliveryPlan.pendingCount === 0) {
 		return {
 			success: true,
-			skipped: true,
-			message: "No pending newsletter deliveries.",
+			skipped: previousDayBatchCount === 0,
+			message: `No pending newsletter deliveries.${previousDayNote}`,
 			deliveryDate,
 			...deliveryPlan,
-			scheduledBatchCount: 0,
+			scheduledBatchCount: previousDayBatchCount,
 		};
 	}
 
-	const batchSize = Math.max(1, Math.min(args.batchSize ?? DEFAULT_BATCH_SIZE, DEFAULT_BATCH_SIZE));
-	const scheduledBatchCount = Math.ceil(deliveryPlan.pendingCount / batchSize);
+	const todayBatchCount = Math.ceil(deliveryPlan.pendingCount / batchSize);
 
-	for (let i = 0; i < scheduledBatchCount; i++) {
+	for (let i = 0; i < todayBatchCount; i++) {
 		await ctx.scheduler.runAfter(
-			i * 5000,
+			(previousDayBatchCount + i) * 5000,
 			internal.internal.newsletterBatch.processNewsletterBatch,
 			{ deliveryDate, limit: batchSize },
 		);
@@ -151,10 +187,10 @@ async function startNewsletterDelivery(
 	return {
 		success: true,
 		skipped: false,
-		message: `Scheduled ${scheduledBatchCount} newsletter delivery batch(es).`,
+		message: `Scheduled ${todayBatchCount} newsletter delivery batch(es).${previousDayNote}`,
 		deliveryDate,
 		...deliveryPlan,
-		scheduledBatchCount,
+		scheduledBatchCount: previousDayBatchCount + todayBatchCount,
 	};
 }
 
