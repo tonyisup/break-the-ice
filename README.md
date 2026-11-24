@@ -120,6 +120,14 @@ The AI allowance comes from the Convex environment: `MAX_FREE_AIGEN` (default 10
 counted per person over 30-day cycles. There is one plan; the Clerk billing webhook still
 records a subscription a person pays for on their account, and nothing sells one yet.
 
+A person who has used up the allowance sees a "Get 50 more for $5" button on the feed's limit
+card and in the Remix panel ([`src/components/PackOffer.tsx`](./src/components/PackOffer.tsx)).
+Nothing is on sale: pressing it says so, charges nothing, and offers to tell them when packs are
+ready. Each step is recorded once per person in the `packInterest` table, and
+`npx convex run internal/packInterest:summary` prints the counts (add `--prod` after `run` for
+production). The offer's terms are `PACK_OFFER` in
+[`convex/lib/packOffer.ts`](./convex/lib/packOffer.ts).
+
 Daily AI spend is capped from the Convex environment too, with no deploy needed to change
 it. Once the day's spend on generation a signed-in user can start (feed questions, remix)
 reaches `AI_DAILY_BUDGET_USD` (default 1), that generation pauses for the rest of the day. Once the day's total spend reaches

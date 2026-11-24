@@ -29,6 +29,7 @@ the `pre-teams-removal` tag.
 - ✅ AI question generation with category/tag/style/tone control
 - ✅ Admin dashboard (questions, styles/tones/topics, pool, pruning, duplicates)
 - ✅ Billing plumbing via Clerk (per person; nothing is sold yet)
+- ✅ Demand test for a paid pack of AI generations: an offer shown where the allowance runs out, recorded per person; nothing is charged
 - ✅ Embedding-based similarity/duplicate detection (384-dim vectors)
 - ✅ Nightly generation pool system for batch AI generation
 - ✅ Daily AI spend cap, per-call cost tracking, and per-person AI rate limits
