@@ -2,6 +2,15 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.10.0.0] - 2026-11-24
+
+### Added
+- People who use up their AI generations now see a "Get 50 more for $5" button on the feed's limit card and in the Remix panel. Nothing is on sale yet. Pressing it says so, charges nothing, and offers to tell them when packs are ready.
+- You can see how many people were shown the offer, how many asked for it, and how many want to hear when it is on sale. Run `npx convex run internal/packInterest:summary`. The counts are kept in the database, so people who declined analytics cookies are included.
+- A person's answers to the offer are deleted with their account.
+
+Deploy Convex before the frontend. If the frontend goes out first, the offer stays hidden until the backend catches up; the rest of the page works as before.
+
 ## [0.9.0.0] - 2026-11-23
 
 ### Added

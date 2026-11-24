@@ -65,6 +65,10 @@ vi.mock('@/components/SignInCTA', () => ({
   SignInCTA: vi.fn(() => <div data-testid="sign-in-cta">Sign In CTA</div>),
 }));
 
+vi.mock('@/components/PackOffer', () => ({
+  PackOffer: vi.fn((props) => <div data-testid="pack-offer" data-surface={props.surface}>Pack offer</div>),
+}));
+
 vi.mock('@/components/newsletter-card/NewsletterCard', () => ({
   NewsletterCard: vi.fn((props) => <div data-testid="newsletter-card" data-prefilled={props.prefilledEmail}>Newsletter</div>),
 }));
@@ -752,6 +756,10 @@ describe('InfiniteScrollPage', () => {
       expect(screen.getByText('Generation Limit Reached')).toBeDefined();
       expect(screen.queryByText('Load More')).toBeNull();
     });
+    // The limit card carries the pack offer.
+    // Extended by the ship coverage audit (Claude Fable 5.2), pass 1.
+    // Value: protects=a request made from the feed's limit card is counted as "feed"; fails_when=the feed passes "remix" or no surface, so the summary's per-surface counts are wrong; why_new=the mock dropped the surface prop; seam=none; no_claim=the real PackOffer (mocked here; PackOffer.test.tsx covers it)
+    expect(screen.getByTestId('pack-offer').getAttribute('data-surface')).toBe('feed');
   });
 
   it('stops the feed with a notice, not the limit notice, when the daily AI budget is paused', async () => {
@@ -770,6 +778,10 @@ describe('InfiniteScrollPage', () => {
 
     await waitFor(() => expect(info).toHaveBeenCalledWith(ERROR_MESSAGES.AI_BUDGET_PAUSED));
     expect(screen.queryByText('Generation Limit Reached')).toBeNull();
+    // Extended by the ship coverage audit (Claude Fable 5.2), pass 1.
+    // Value: protects=the paused notice shows without the pack offer, since a pack would not lift the daily pause; fails_when=the offer moves into AiLimitNotice itself or is rendered for the paused state; why_new=only the limit card's offer was asserted; seam=none; no_claim=the real PackOffer (mocked here)
+    expect(screen.getByText('New questions are paused')).toBeDefined();
+    expect(screen.queryByTestId('pack-offer')).toBeNull();
     expect(screen.queryByText('Load More')).toBeNull();
   });
 

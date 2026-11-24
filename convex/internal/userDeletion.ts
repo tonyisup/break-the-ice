@@ -58,7 +58,7 @@ type StepResult = { changed: number; more: boolean };
 type Step = (ctx: MutationCtx, userId: Id<"users">, budget: number) => Promise<StepResult>;
 
 function deleteAll(
-	table: "userQuestions" | "userStyles" | "userTones" | "userAiUsage" | "user_embeddings",
+	table: "userQuestions" | "userStyles" | "userTones" | "userAiUsage" | "packInterest" | "user_embeddings",
 ): Step {
 	return async (ctx, userId, budget) => {
 		const rows = await ctx.db
@@ -75,6 +75,7 @@ const STEPS: Step[] = [
 	deleteAll("userStyles"),
 	deleteAll("userTones"),
 	deleteAll("userAiUsage"),
+	deleteAll("packInterest"),
 	deleteAll("user_embeddings"),
 	async (ctx, userId, budget) => {
 		const rows = await ctx.db

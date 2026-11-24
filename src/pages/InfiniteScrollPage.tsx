@@ -20,6 +20,7 @@ import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { useAuth } from "@clerk/clerk-react";
 import { SignInCTA } from "@/components/SignInCTA";
 import { AiLimitNotice } from "@/components/AiLimitNotice";
+import { PackOffer } from "@/components/PackOffer";
 import { NewsletterCard } from "@/components/newsletter-card/NewsletterCard";
 import { GenerationTrace } from "@/components/generation-trace";
 import { RefineResultsCTA } from "@/components/RefineResultsCTA";
@@ -1434,7 +1435,9 @@ export default function InfiniteScrollPage() {
             <AiLimitNotice
               title="Generation Limit Reached"
               description={aiLimitDescription(currentUser)}
-            />
+            >
+              <PackOffer surface="feed" />
+            </AiLimitNotice>
           )}
 
           {hasMore && user.isLoaded && !showAuthCTA && !showAiLimitNotice && !loadError && (questions.length > 0 || !isLoading) && (

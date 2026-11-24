@@ -1,12 +1,15 @@
+import type { ReactNode } from "react";
 import { Clock } from "lucide-react";
 
 interface AiLimitNoticeProps {
   title: string;
   description: string;
+  /** What the person can do about it, shown under the description. */
+  children?: ReactNode;
 }
 
-/** A status, not an offer: the feed stopped making new questions until the cycle resets. */
-export function AiLimitNotice({ title, description }: AiLimitNoticeProps) {
+/** The feed stopped making new questions until the cycle resets (or, when paused, until tomorrow). */
+export function AiLimitNotice({ title, description, children }: AiLimitNoticeProps) {
   return (
     <div
       role="status"
@@ -21,6 +24,7 @@ export function AiLimitNotice({ title, description }: AiLimitNoticeProps) {
           {title}
         </h3>
         <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+        {children && <div className="mt-3">{children}</div>}
       </div>
     </div>
   );
