@@ -6,6 +6,7 @@ import { api, internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { createPopulateMissingEmbeddingsEmail, createPopulateMissingStyleEmbeddingsEmail, createPopulateMissingToneEmbeddingsEmail } from "../lib/emails";
 import { runPersistedQuestionGeneration, runRemixQuestion } from "../lib/generationRunner";
+import { createProgressReporter } from "../lib/generationProgressReporter";
 import type { SpendClass } from "../lib/aiSpend";
 import { keptAiReservation, wasAiCallBilled } from "../lib/aiSpendGuard";
 import { normalizeSelectionSeed } from "../lib/random";
@@ -396,6 +397,8 @@ export const generateAIQuestionForUser = internalAction({
 		keepLastRequest: v.optional(v.boolean()),
 		// When the caller's own action began, for the run's latency record.
 		requestStartedAt: v.optional(v.number()),
+		// Set when a page is following this generation: the model call then streams its stages.
+		progressId: v.optional(v.id("generationProgress")),
 		purpose: v.optional(
 			v.union(
 				v.literal("feed"),
@@ -406,6 +409,7 @@ export const generateAIQuestionForUser = internalAction({
 	returns: v.array(v.union(v.any(), v.null())),
 	handler: async (ctx, args): Promise<(Doc<"questions"> | null)[]> => {
 		const requestStartedAt = args.requestStartedAt ?? Date.now();
+		const progress = args.progressId ? createProgressReporter(ctx, args.progressId) : null;
 		const user = await ctx.runQuery(internal.internal.users.getUserById, { id: args.userId });
 
 		if (!user) {
@@ -463,6 +467,7 @@ export const generateAIQuestionForUser = internalAction({
 				batchSize: count,
 				excludedQuestions: [...recentlySeen, ...blockedQuestions],
 				requestStartedAt,
+				onStage: progress?.stage,
 			});
 			return result.questions as (Doc<"questions"> | null)[];
 		} catch (error) {
@@ -474,6 +479,8 @@ export const generateAIQuestionForUser = internalAction({
 				});
 			}
 			throw error;
+		} finally {
+			await progress?.flush();
 		}
 	}
 });

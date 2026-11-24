@@ -52,6 +52,13 @@ crons.interval(
   {}
 );
 
+crons.interval(
+  "clear old generation progress",
+  { hours: 1 },
+  internal.internal.generationProgress.clearOldProgress,
+  {},
+);
+
 // Nightly zombie slug scan: finds style/tone/topic slugs on questions
 // that no longer resolve to active taxonomy entries
 crons.interval(

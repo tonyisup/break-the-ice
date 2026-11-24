@@ -82,6 +82,7 @@ vi.mock('../../convex/_generated/api', () => ({
       tones: { getTones: 'getTones', getTone: 'getTone' },
       questions: { getNextRandomQuestions: 'getNextRandomQuestions', recordAnalytics: 'recordAnalytics' },
       ai: { generateAIQuestionForFeed: 'generateAIQuestionForFeed' },
+      generationProgress: { getGenerationProgress: 'getGenerationProgress' },
       users: { getCurrentUser: 'getCurrentUser' },
       topics: { getActiveTakeoverTopics: 'getActiveTakeoverTopics' },
     }

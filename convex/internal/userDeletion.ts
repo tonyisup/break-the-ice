@@ -78,6 +78,14 @@ const STEPS: Step[] = [
 	deleteAll("user_embeddings"),
 	async (ctx, userId, budget) => {
 		const rows = await ctx.db
+			.query("generationProgress")
+			.withIndex("by_userId_requestKey", (q) => q.eq("userId", userId))
+			.take(budget);
+		for (const row of rows) await ctx.db.delete(row._id);
+		return { changed: rows.length, more: rows.length === budget };
+	},
+	async (ctx, userId, budget) => {
+		const rows = await ctx.db
 			.query("newsletterDeliveries")
 			.withIndex("by_userId_deliveryDate", (q) => q.eq("userId", userId))
 			.take(budget);

@@ -13,6 +13,7 @@ import { callReserveUsd, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 import { type AiUnansweredSlot, holdAiUnanswered, releaseAiUnanswered } from "./aiRateLimit";
+import type { GenerationRunnerStage } from "./generationProgress";
 import {
   type AiReservation,
   billedFailure,
@@ -214,6 +215,9 @@ export async function createChatCompletionWithRetry(
   ctx: ActionCtx,
   spend: { spendClass: SpendClass; runId: Id<"generationRuns"> },
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  send: (
+    params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  ) => Promise<OpenAI.Chat.Completions.ChatCompletion> = (request) => openRouterClient.chat.completions.create(request),
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   let promptChars = 0;
   let promptBytes = 0;
@@ -242,7 +246,7 @@ export async function createChatCompletionWithRetry(
     }
     let completion: OpenAI.Chat.Completions.ChatCompletion;
     try {
-      completion = await openRouterClient.chat.completions.create(params);
+      completion = await send(params);
       // A reply that isn't a completion object at all (a 204 or `null`, or a body the SDK hands
       // back as text because it wasn't JSON) is handled below like any other response that
       // couldn't be parsed.
@@ -280,6 +284,90 @@ export async function createChatCompletionWithRetry(
   }
 
   throw lastError ?? new Error("OpenRouter chat completion failed");
+}
+
+// The same limit a call that doesn't stream has. The SDK's own timeout stops once the response
+// starts, so a stream that goes quiet needs this one.
+const STREAM_TIMEOUT_MS = 30_000;
+
+/**
+ * A stream that ended without a full answer after the provider accepted the call. The provider
+ * may bill it, so it isn't one of the SDK's errors: it keeps its reservation as its charge and
+ * isn't sent again (keepsItsReservation).
+ */
+export class InterruptedStreamError extends Error {}
+
+/**
+ * Sends one call as a stream, reporting when the model starts thinking and writing, and returns
+ * the whole answer as an ordinary completion. The reasoning is only a signal: its text is never
+ * kept or passed on.
+ */
+export async function streamChatCompletion(
+  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  onStage: (stage: GenerationRunnerStage) => void,
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  const abort = new AbortController();
+  const deadline = setTimeout(() => abort.abort(), STREAM_TIMEOUT_MS);
+  let accepted = false;
+  try {
+    onStage("connecting");
+    const stream = await openRouterClient.chat.completions.create(
+      { ...params, stream: true, stream_options: { include_usage: true } },
+      { signal: abort.signal },
+    );
+    accepted = true;
+
+    let id = "";
+    let created = 0;
+    let model = params.model;
+    let content = "";
+    let finishReason: string | null = null;
+    let usage: OpenAI.Completions.CompletionUsage | undefined;
+    for await (const chunk of stream) {
+      id = chunk.id || id;
+      created = chunk.created || created;
+      model = chunk.model || model;
+      usage = chunk.usage ?? usage;
+      const choice = chunk.choices?.[0];
+      const delta = choice?.delta as { content?: string | null; reasoning?: string | null } | undefined;
+      if (delta?.reasoning && !content) onStage("thinking");
+      if (delta?.content) {
+        content += delta.content;
+        onStage("writing");
+      }
+      finishReason = choice?.finish_reason ?? finishReason;
+    }
+
+    // The SDK ends the loop quietly when the call is aborted, and a provider can report a failure
+    // as a finish reason, so only a real finish counts as an answer.
+    if (abort.signal.aborted || finishReason === null || finishReason === "error") {
+      throw new InterruptedStreamError("The AI provider's stream ended before the answer finished");
+    }
+    return {
+      id,
+      object: "chat.completion",
+      created,
+      model,
+      choices: [
+        {
+          index: 0,
+          finish_reason: finishReason as OpenAI.Chat.Completions.ChatCompletion.Choice["finish_reason"],
+          logprobs: null,
+          message: { role: "assistant", content, refusal: null },
+        },
+      ],
+      usage,
+    };
+  } catch (error) {
+    if (error instanceof InterruptedStreamError) throw error;
+    if (accepted || abort.signal.aborted) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new InterruptedStreamError(`The AI provider's stream failed: ${reason}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(deadline);
+  }
 }
 
 /**
@@ -523,6 +611,8 @@ export async function runPersistedQuestionGeneration(
     poolStatus?: "available" | "distributed";
     /** When the caller's own action began, for the run's latency record. Defaults to now. */
     requestStartedAt?: number;
+    /** Given when someone is watching: the model call then streams and reports its stages. */
+    onStage?: (stage: GenerationRunnerStage) => void;
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -545,6 +635,10 @@ export async function runPersistedQuestionGeneration(
     args.purpose === "newsletter" || args.purpose === "nightly_pool" ? "system" : "user";
   await ensureAiBudget(ctx, spendClass);
 
+  const { onStage } = args;
+  const send = onStage
+    ? (params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming) => streamChatCompletion(params, onStage)
+    : undefined;
   const temperature = args.temperature ?? DEFAULT_GENERATION_TEMPERATURE;
   const prompt = await ctx.runQuery(internal.internal.generation.buildGenerationPrompt, {
     styleId: args.styleId,
@@ -583,10 +677,11 @@ export async function runPersistedQuestionGeneration(
             { role: "system", content: prompt.systemPrompt },
             { role: "user", content: prompt.userPrompt },
           ],
-        }),
+        }, send),
       );
 
       if (wasPaidInFull(completion)) markBilled();
+      onStage?.("saving");
 
       const rawResponse = getChatCompletionContent(completion);
       const parsedQuestions = parseCandidates(completion, rawResponse, prompt.batchSize);
