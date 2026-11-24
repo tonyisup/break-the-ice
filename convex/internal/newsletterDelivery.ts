@@ -215,21 +215,29 @@ export const claimNewsletterDeliveries = internalMutation({
   },
 });
 
+/**
+ * Records that a batch is about to send, and returns the rows it may send. A row a later claim
+ * took over (a new attempt) or closed belongs to someone else, so this batch must not send it.
+ */
 export const markNewsletterDeliveriesSending = internalMutation({
   args: {
     deliveries: v.array(v.object({
       deliveryId: v.id("newsletterDeliveries"),
       questionId: v.id("questions"),
+      attemptCount: v.number(),
     })),
   },
-  returns: v.null(),
+  returns: v.array(v.id("newsletterDeliveries")),
   handler: async (ctx, args) => {
     const now = Date.now();
-    for (const { deliveryId, questionId } of args.deliveries) {
-      if (!(await ctx.db.get(deliveryId))) continue;
+    const owned = [];
+    for (const { deliveryId, questionId, attemptCount } of args.deliveries) {
+      const row = await ctx.db.get(deliveryId);
+      if (!row || row.status !== "processing" || row.attemptCount !== attemptCount) continue;
       await ctx.db.patch(deliveryId, { safeToRetry: false, questionId, updatedAt: now });
+      owned.push(deliveryId);
     }
-    return null;
+    return owned;
   },
 });
 

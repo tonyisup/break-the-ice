@@ -26,6 +26,7 @@ type ClaimedDelivery = {
 type PreparedDelivery = {
 	deliveryId: Id<"newsletterDeliveries">;
 	questionId: Id<"questions">;
+	attemptCount: number;
 	payload: {
 		from: string;
 		to: string;
@@ -106,6 +107,7 @@ export const processNewsletterBatch = internalAction({
 				prepared.push({
 					deliveryId: delivery._id,
 					questionId: question.questionId,
+					attemptCount: delivery.attemptCount,
 					payload: {
 						from: "Daily Ice(berg) Breaker <newsletter@breaktheiceberg.com>",
 						to: delivery.email,
@@ -141,18 +143,32 @@ export const processNewsletterBatch = internalAction({
 			};
 		}
 
+		const owned: Id<"newsletterDeliveries">[] = await ctx.runMutation(
+			internal.internal.newsletterDelivery.markNewsletterDeliveriesSending,
+			{
+				deliveries: prepared.map(({ deliveryId, questionId, attemptCount }) => ({
+					deliveryId,
+					questionId,
+					attemptCount,
+				})),
+			},
+		);
+		// Only rows this batch still owns are sent; a row reclaimed meanwhile is another batch's.
+		const ownedIds = new Set<string>(owned);
+		const sending = prepared.filter((item) => ownedIds.has(item.deliveryId));
+		if (sending.length === 0) {
+			return {
+				success: questionFailures.length === 0,
+				processedCount: claimed.length,
+				sentCount: 0,
+				failedCount: questionFailures.length,
+			};
+		}
+
 		let sendRejected = false;
 		try {
-			const batchPayload = prepared.map((item) => item.payload);
-			const idempotencyKey = await batchIdempotencyKey(
-				args.deliveryDate,
-				claimed,
-				new Set(prepared.map((item) => item.deliveryId)),
-			);
-
-			await ctx.runMutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesSending, {
-				deliveries: prepared.map(({ deliveryId, questionId }) => ({ deliveryId, questionId })),
-			});
+			const batchPayload = sending.map((item) => item.payload);
+			const idempotencyKey = await batchIdempotencyKey(args.deliveryDate, claimed, ownedIds);
 
 			const abortController = new AbortController();
 			const timeoutId = setTimeout(() => abortController.abort(), 30000);
@@ -185,7 +201,7 @@ export const processNewsletterBatch = internalAction({
 			await ctx.runMutation(
 				internal.internal.newsletterDelivery.markNewsletterDeliveriesSent,
 				{
-					deliveries: prepared.map((item, index) => ({
+					deliveries: sending.map((item, index) => ({
 						deliveryId: item.deliveryId,
 						questionId: item.questionId,
 						resendEmailId: resendResults[index]?.id,
@@ -196,7 +212,7 @@ export const processNewsletterBatch = internalAction({
 			return {
 				success: questionFailures.length === 0,
 				processedCount: claimed.length,
-				sentCount: prepared.length,
+				sentCount: sending.length,
 				failedCount: questionFailures.length,
 			};
 		} catch (error) {
@@ -205,7 +221,7 @@ export const processNewsletterBatch = internalAction({
 			await ctx.runMutation(
 				internal.internal.newsletterDelivery.markNewsletterDeliveriesFailed,
 				{
-					deliveryIds: prepared.map((item) => item.deliveryId),
+					deliveryIds: sending.map((item) => item.deliveryId),
 					error: message,
 					sendRejected,
 				},

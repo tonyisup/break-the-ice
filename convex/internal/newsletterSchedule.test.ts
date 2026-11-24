@@ -263,6 +263,28 @@ describe("retries never send twice", () => {
     expect(later.scheduledBatchCount).toBe(0);
   });
 
+  // Value: protects=a slow batch never sends a row a later claim took over, so the reader gets one email;
+  // fails_when=marking a send skips the attempt check; why_new=no test raced two claims for one row;
+  // seam=none; no_claim=Convex's action time limit, which today also prevents the race.
+  test("a batch only sends rows it still owns", async () => {
+    const t = setup();
+    const userId = await addUser(t, "reader@example.com");
+    const id = await addDelivery(t, userId, "reader@example.com", { status: "pending", attemptCount: 0 });
+    const questionId = await t.run((ctx) =>
+      ctx.db.insert("questions", { text: "Q?", status: "public", averageViewDuration: 0, totalLikes: 0, totalShows: 0 }),
+    );
+    const [first] = await claim(t);
+    // A later claim reclaimed it as a new attempt.
+    await t.run((ctx) => ctx.db.patch(id, { attemptCount: first.attemptCount + 1 }));
+
+    const owned = await t.mutation(internal.internal.newsletterDelivery.markNewsletterDeliveriesSending, {
+      deliveries: [{ deliveryId: id, questionId, attemptCount: first.attemptCount }],
+    });
+
+    expect(owned).toEqual([]);
+    expect((await t.run((ctx) => ctx.db.get(id)))?.safeToRetry).toBe(true);
+  });
+
   test("a retry skips someone who unsubscribed after the failure", async () => {
     const t = setup();
     const userId = await addUser(t, "reader@example.com", { newsletterSubscriptionStatus: "unsubscribed" });

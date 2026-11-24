@@ -46,9 +46,9 @@ crons.interval(
 );
 
 // On the hour, so a person's chosen send time is the time their email arrives.
-crons.hourly(
+crons.cron(
   "send daily newsletter questions",
-  { minuteUTC: 0 },
+  "0 * * * *",
   internal.internal.newsletterStart.startDailyNewsletterIfDue,
   {}
 );
