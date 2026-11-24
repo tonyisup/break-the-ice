@@ -17,12 +17,21 @@ import {
   Clock,
   Filter,
   ArrowRight,
+  History,
+  Trash2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +42,18 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 const NEWSLETTER_TIME_ZONE = "America/Los_Angeles";
+const DEFAULT_SEND_HOUR = 10;
+const PENDING_SIGNUP_LIFETIME_MS = 24 * 60 * 60 * 1000;
+const SEND_HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+
+const STATUS_FILTERS = {
+  subscribed: "Subscribed",
+  unsubscribed: "Unsubscribed",
+  never: "Never subscribed",
+  all: "All users",
+} as const;
+
+type StatusFilter = keyof typeof STATUS_FILTERS;
 
 function getLosAngelesDeliveryDate(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -48,7 +69,83 @@ function getLosAngelesDeliveryDate(now = new Date()) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-type StatusFilter = "subscribed" | "unsubscribed" | "all";
+function formatSendHour(hour: number) {
+  const period = hour < 12 ? "AM" : "PM";
+  return `${hour % 12 || 12}:00 ${period} PT`;
+}
+
+function formatPacificTime(timestamp: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: NEWSLETTER_TIME_ZONE,
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(timestamp);
+}
+
+function DeliveryHistoryDialog({
+  user,
+  onClose,
+}: {
+  user: { _id: Id<"users">; name?: string; email?: string };
+  onClose: () => void;
+}) {
+  const history = useQuery(api.admin.newsletter.getDeliveryHistory, {
+    userId: user._id,
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Delivery history</DialogTitle>
+          <DialogDescription>
+            Last 14 daily emails for {user.email ?? user.name ?? "this user"}.
+          </DialogDescription>
+        </DialogHeader>
+        {history === undefined ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : history.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No emails have been sent to this user.
+          </p>
+        ) : (
+          <ul className="divide-y">
+            {history.map((delivery) => (
+              <li key={delivery._id} className="space-y-1 py-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium tabular-nums">
+                    {delivery.sentAt
+                      ? formatPacificTime(delivery.sentAt)
+                      : delivery.deliveryDate}
+                  </span>
+                  <Badge
+                    variant={
+                      delivery.status === "failed" ? "destructive" : "secondary"
+                    }
+                  >
+                    {delivery.status}
+                  </Badge>
+                </div>
+                {delivery.questionText && (
+                  <p className="text-muted-foreground">
+                    {delivery.questionText}
+                  </p>
+                )}
+                {delivery.error && (
+                  <p className="text-xs text-destructive">{delivery.error}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function NewsletterPage() {
   const [deliveryDate, setDeliveryDate] = React.useState(() =>
@@ -82,8 +179,16 @@ export default function NewsletterPage() {
     status: statusFilter,
   });
   const stats = useQuery(api.admin.newsletter.getStats, { deliveryDate });
+  const pendingSignups = useQuery(
+    api.admin.newsletter.getPendingSubscriptions,
+    {},
+  );
   const setSubscriptionStatus = useMutation(
     api.admin.newsletter.setSubscriptionStatus,
+  );
+  const setSendHour = useMutation(api.admin.newsletter.setSendHour);
+  const removePendingSubscription = useMutation(
+    api.admin.newsletter.removePendingSubscription,
   );
   const triggerDailyNewsletter = useAction(
     api.admin.newsletter.triggerDailyNewsletter,
@@ -99,10 +204,16 @@ export default function NewsletterPage() {
   } | null>(null);
   const [updatingUserId, setUpdatingUserId] =
     React.useState<Id<"users"> | null>(null);
+  const [historyUser, setHistoryUser] = React.useState<{
+    _id: Id<"users">;
+    name?: string;
+    email?: string;
+  } | null>(null);
 
   const filteredSubscribers =
     subscribers?.filter((user) => {
-      const query = search.toLowerCase();
+      const query = search.trim().toLowerCase();
+      if (!query) return true;
       return (
         user.name?.toLowerCase().includes(query) ||
         user.email?.toLowerCase().includes(query)
@@ -116,14 +227,30 @@ export default function NewsletterPage() {
     : false;
 
   const handleToggleSubscription = async (
-    user: { _id: Id<"users">; email?: string },
+    user: {
+      _id: Id<"users">;
+      email?: string;
+      newsletterSubscriptionStatus?: "subscribed" | "unsubscribed";
+    },
     subscribed: boolean,
   ) => {
+    const isResubscribe =
+      subscribed && user.newsletterSubscriptionStatus === "unsubscribed";
+    if (
+      isResubscribe &&
+      !confirm(
+        `${user.email ?? "This person"} unsubscribed earlier. Subscribe them again anyway?`,
+      )
+    ) {
+      return;
+    }
+
     setUpdatingUserId(user._id);
     try {
       await setSubscriptionStatus({
         userId: user._id,
         status: subscribed ? "subscribed" : "unsubscribed",
+        confirmResubscribe: isResubscribe || undefined,
       });
       toast.success(
         subscribed
@@ -141,10 +268,55 @@ export default function NewsletterPage() {
     }
   };
 
+  const handleSendHourChange = async (
+    user: { _id: Id<"users">; email?: string },
+    hour: number,
+  ) => {
+    setUpdatingUserId(user._id);
+    try {
+      await setSendHour({
+        userId: user._id,
+        hour: hour === DEFAULT_SEND_HOUR ? null : hour,
+      });
+      toast.success(
+        `${user.email ?? "User"} will get the email at ${formatSendHour(hour)}`,
+      );
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update send time",
+      );
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
+  const handleRemovePending = async (signup: {
+    _id: Id<"pendingSubscriptions">;
+    email: string;
+  }) => {
+    if (
+      !confirm(
+        `Remove the pending sign-up for ${signup.email}? Their confirmation link will stop working.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await removePendingSubscription({ pendingId: signup._id });
+      toast.success(`Removed pending sign-up for ${signup.email}`);
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to remove pending sign-up",
+      );
+    }
+  };
+
   const handleTriggerNewsletter = async () => {
     if (
       !confirm(
-        `Send today's daily newsletter (${deliveryDate}, ${NEWSLETTER_TIME_ZONE}) to all subscribed users?`,
+        `Send today's newsletter (${deliveryDate}) now to every subscriber who hasn't received it, regardless of their send time? Outside production, only test recipients are emailed.`,
       )
     ) {
       return;
@@ -171,7 +343,7 @@ export default function NewsletterPage() {
     }
   };
 
-  if (!subscribers || !stats) {
+  if (!subscribers || !stats || !pendingSignups) {
     return (
       <div className="flex flex-col gap-4 animate-pulse">
         <div className="h-10 bg-muted rounded w-1/4" />
@@ -191,8 +363,8 @@ export default function NewsletterPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Newsletter</h1>
           <p className="text-muted-foreground">
-            Manage subscriptions and manually trigger the daily icebreaker
-            email.
+            Manage subscriptions and send times, and manually trigger the daily
+            icebreaker email.
           </p>
         </div>
         <Button
@@ -284,7 +456,7 @@ export default function NewsletterPage() {
         </Card>
       )}
 
-      {hasSubscriberRecords ? (
+      {hasSubscriberRecords || statusFilter !== "subscribed" ? (
         <>
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex items-center gap-2 flex-1 max-w-md bg-white dark:bg-gray-800 rounded-lg px-3 border shadow-sm focus-within:ring-2 focus-within:ring-primary/20 transition-all">
@@ -300,34 +472,32 @@ export default function NewsletterPage() {
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
                   <Filter className="size-4" />
-                  {statusFilter === "all"
-                    ? "All"
-                    : statusFilter.charAt(0).toUpperCase() +
-                      statusFilter.slice(1)}
+                  {STATUS_FILTERS[statusFilter]}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setStatusFilter("subscribed")}>
-                  Subscribed
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setStatusFilter("unsubscribed")}
-                >
-                  Unsubscribed
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setStatusFilter("all")}>
-                  All
-                </DropdownMenuItem>
+                {(Object.keys(STATUS_FILTERS) as StatusFilter[]).map(
+                  (filter) => (
+                    <DropdownMenuItem
+                      key={filter}
+                      onClick={() => setStatusFilter(filter)}
+                    >
+                      {STATUS_FILTERS[filter]}
+                    </DropdownMenuItem>
+                  ),
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
 
-          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-            <table className="w-full text-sm text-left">
+          <div className="rounded-xl border bg-card shadow-sm overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm text-left">
               <thead className="bg-muted/50 border-b text-muted-foreground font-medium uppercase text-xs tracking-wider">
                 <tr>
                   <th className="px-6 py-4">User</th>
                   <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4">Send time</th>
+                  <th className="px-6 py-4">History</th>
                   <th className="px-6 py-4 text-right">Subscribed</th>
                 </tr>
               </thead>
@@ -335,6 +505,7 @@ export default function NewsletterPage() {
                 {filteredSubscribers.map((user) => {
                   const isSubscribed =
                     user.newsletterSubscriptionStatus === "subscribed";
+                  const label = user.email ?? user.name ?? "user";
                   return (
                     <tr
                       key={user._id}
@@ -368,11 +539,48 @@ export default function NewsletterPage() {
                               : ""
                           }
                         >
-                          {user.newsletterSubscriptionStatus ?? "unknown"}
+                          {user.newsletterSubscriptionStatus ??
+                            "never subscribed"}
                         </Badge>
+                      </td>
+                      <td className="px-6 py-4">
+                        <select
+                          aria-label={`Send time for ${label}`}
+                          value={user.newsletterSendHour ?? DEFAULT_SEND_HOUR}
+                          disabled={
+                            updatingUserId === user._id || !isSubscribed
+                          }
+                          onChange={(event) =>
+                            handleSendHourChange(
+                              user,
+                              Number(event.target.value),
+                            )
+                          }
+                          className="h-9 rounded-md border bg-background px-2 text-sm tabular-nums disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {SEND_HOURS.map((hour) => (
+                            <option key={hour} value={hour}>
+                              {formatSendHour(hour)}
+                              {hour === DEFAULT_SEND_HOUR ? " (default)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5"
+                          aria-label={`Delivery history for ${label}`}
+                          onClick={() => setHistoryUser(user)}
+                        >
+                          <History className="size-4" />
+                          View
+                        </Button>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Switch
+                          aria-label={`Newsletter subscription for ${label}`}
                           checked={isSubscribed}
                           disabled={updatingUserId === user._id || !user.email}
                           onCheckedChange={(checked) =>
@@ -388,13 +596,17 @@ export default function NewsletterPage() {
             {filteredSubscribers.length === 0 && (
               <div className="py-20 text-center space-y-2">
                 <Mail className="size-12 text-muted-foreground/20 mx-auto" />
-                <p className="text-lg font-medium">No subscribers found</p>
+                <p className="text-lg font-medium">No users found</p>
                 <p className="text-muted-foreground">
                   Try a different search or filter.
                 </p>
               </div>
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            A new send time applies from the next send. Nobody gets more than
+            one email a day.
+          </p>
         </>
       ) : (
         <section className="rounded-xl border bg-card px-6 py-10 sm:px-10 sm:py-12">
@@ -404,17 +616,72 @@ export default function NewsletterPage() {
               Build your newsletter audience
             </h2>
             <p className="mt-2 text-muted-foreground">
-              Subscribers appear here after users opt in. You can also manage a
-              user&apos;s newsletter preference from their profile.
+              Subscribers appear here after users opt in. You can also manage
+              any user&apos;s newsletter preference from the full list.
             </p>
-						<Button asChild variant="outline" className="mt-6 h-11 gap-2 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary">
-              <Link to="/admin/users">
-                Manage user subscriptions
-                <ArrowRight className="size-4" aria-hidden="true" />
-              </Link>
+            <Button
+              variant="outline"
+              className="mt-6 h-11 gap-2 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
+              onClick={() => setStatusFilter("all")}
+            >
+              Manage user subscriptions
+              <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
           </div>
         </section>
+      )}
+
+      {pendingSignups.length > 0 && (
+        <section aria-labelledby="pending-signups" className="space-y-3">
+          <div>
+            <h2 id="pending-signups" className="text-lg font-semibold">
+              Pending verification
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              These people asked to subscribe and haven&apos;t confirmed by
+              email. Links expire after 24 hours.
+            </p>
+          </div>
+          <ul className="divide-y rounded-xl border bg-card">
+            {pendingSignups.map((signup) => {
+              const expired =
+                Date.now() - signup._creationTime > PENDING_SIGNUP_LIFETIME_MS;
+              return (
+                <li
+                  key={signup._id}
+                  className="flex items-center justify-between gap-3 px-4 py-3 text-sm sm:px-6"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{signup.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Requested {formatPacificTime(signup._creationTime)} PT
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {expired && <Badge variant="secondary">expired</Badge>}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5"
+                      aria-label={`Remove pending sign-up for ${signup.email}`}
+                      onClick={() => handleRemovePending(signup)}
+                    >
+                      <Trash2 className="size-4" />
+                      Remove
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {historyUser && (
+        <DeliveryHistoryDialog
+          user={historyUser}
+          onClose={() => setHistoryUser(null)}
+        />
       )}
     </div>
   );
