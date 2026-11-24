@@ -348,6 +348,21 @@ export default defineSchema({
     cycleStart: v.number(),
   })
     .index("by_userId", ["userId"]),
+  // Who was shown, and who asked for, a paid pack of AI generations before one is on sale
+  // (core/packInterest.ts). One row per person and offer.
+  packInterest: defineTable({
+    userId: v.id("users"),
+    offer: v.string(),
+    // Where they first saw the offer: the feed's limit card or the Remix panel.
+    surface: v.union(v.literal("feed"), v.literal("remix")),
+    shownAt: v.number(),
+    // Set when they pressed the button, with where they were.
+    clickedAt: v.optional(v.number()),
+    clickedSurface: v.optional(v.union(v.literal("feed"), v.literal("remix"))),
+    // Set when they also asked to be told once packs are on sale.
+    notifyRequestedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"]),
   userQuestions: defineTable({
     userId: v.id("users"),
     questionId: v.id("questions"),

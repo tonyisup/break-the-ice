@@ -59,6 +59,7 @@ async function seedPerson(t: Test, clerkId: string) {
 		await ctx.db.insert("userStyles", { userId, styleId, status: "hidden", updatedAt: 1 });
 		await ctx.db.insert("userTones", { userId, toneId, status: "hidden", updatedAt: 1 });
 		await ctx.db.insert("userAiUsage", { userId, count: 3, cycleStart: 0 });
+		await ctx.db.insert("packInterest", { userId, offer: "pack-50-usd-5", surface: "feed", shownAt: 0 });
 		await ctx.db.insert("user_embeddings", { userId, embedding: [0.1] });
 		await ctx.db.insert("question_embeddings", { questionId: privateOwn, embedding: [0.2] });
 		await ctx.db.insert("newsletterDeliveries", { deliveryDate: "2026-11-11", email: `${clerkId}@example.com`, userId, status: "sent", attemptCount: 1, createdAt: 0, updatedAt: 0 });
@@ -81,7 +82,7 @@ async function seedPerson(t: Test, clerkId: string) {
 
 async function remainingFor(t: Test, userId: Id<"users">) {
 	return await t.run(async (ctx) => {
-		const byUser = async (table: "userQuestions" | "userStyles" | "userTones" | "userAiUsage" | "user_embeddings") =>
+		const byUser = async (table: "userQuestions" | "userStyles" | "userTones" | "userAiUsage" | "packInterest" | "user_embeddings") =>
 			(await ctx.db.query(table).withIndex("by_userId", (q) => q.eq("userId", userId)).collect()).length;
 		return {
 			user: await ctx.db.get(userId),
@@ -89,6 +90,7 @@ async function remainingFor(t: Test, userId: Id<"users">) {
 			userStyles: await byUser("userStyles"),
 			userTones: await byUser("userTones"),
 			userAiUsage: await byUser("userAiUsage"),
+			packInterest: await byUser("packInterest"),
 			user_embeddings: await byUser("user_embeddings"),
 			deliveries: (await ctx.db.query("newsletterDeliveries").withIndex("by_userId_deliveryDate", (q) => q.eq("userId", userId)).collect()).length,
 			authored: (await ctx.db.query("questions").withIndex("by_author", (q) => q.eq("authorId", userId)).collect()).length,
@@ -102,6 +104,7 @@ const nothingLeft = {
 	userStyles: 0,
 	userTones: 0,
 	userAiUsage: 0,
+	packInterest: 0,
 	user_embeddings: 0,
 	deliveries: 0,
 	authored: 0,
