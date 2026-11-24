@@ -2,6 +2,18 @@
   "$schema": "https://github.com/garrytan/gstack/docs/pregate.md#pregate-v1",
   "runner": "npx vitest run {files}",
   "dependencies": {
+    "convex/admin/newsletter.ts": [
+      "convex/internal/newsletterSchedule.test.ts"
+    ],
+    "convex/internal/devDataCleanup.ts": [
+      "convex/internal/newsletterSchedule.test.ts"
+    ],
+    "convex/internal/newsletterBatch.ts": [
+      "convex/internal/newsletterSchedule.test.ts"
+    ],
+    "convex/internal/newsletterStart.ts": [
+      "convex/internal/newsletterSchedule.test.ts"
+    ],
     "convex/internal/evals.ts": [
       "convex/evals.test.ts"
     ],

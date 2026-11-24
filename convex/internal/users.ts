@@ -10,37 +10,6 @@ import {
 } from "../lib/aiUsage";
 import { isUserWrittenQuestion } from "../lib/questionAccess";
 
-export const userValidator = v.object({
-	_id: v.id("users"),
-	_creationTime: v.number(),
-	clerkId: v.optional(v.string()),
-	email: v.optional(v.string()),
-	emailVerificationTime: v.optional(v.number()),
-	image: v.optional(v.string()),
-	name: v.optional(v.string()),
-	phone: v.optional(v.string()),
-	phoneVerificationTime: v.optional(v.number()),
-	isAdmin: v.optional(v.boolean()),
-	defaultStyle: v.optional(v.string()),
-	defaultTone: v.optional(v.string()),
-	billingSubjectType: v.optional(v.literal("user")),
-	billingStatus: v.optional(v.union(
-		v.literal("inactive"),
-		v.literal("active"),
-		v.literal("past_due"),
-		v.literal("canceled"),
-		v.literal("trialing")
-	)),
-	clerkCustomerId: v.optional(v.string()),
-	clerkSubscriptionId: v.optional(v.string()),
-	aiUsage: v.optional(v.object({
-		count: v.number(),
-		cycleStart: v.number(),
-	})),
-	newsletterSubscriptionStatus: v.optional(v.union(v.literal("subscribed"), v.literal("unsubscribed"))),
-	newsletterUnsubscribeToken: v.optional(v.string()),
-});
-
 export const getUserById = internalQuery({
 	args: { id: v.id("users") },
 	returns: v.union(v.null(), v.any()),
@@ -292,13 +261,15 @@ export const updateUserPreferenceEmbeddingAction = internalAction({
 
 export const getUsersWithMissingEmbeddings = internalQuery({
 	args: {},
-	returns: v.array(userValidator),
+	returns: v.array(v.object({ _id: v.id("users") })),
 	handler: async (ctx) => {
 		const withEmbeddingUserIds = new Set(
 			(await ctx.db.query("user_embeddings").collect()).map((e) => e.userId)
 		);
 		const allUsers = await ctx.db.query("users").collect();
-		return allUsers.filter((u) => !withEmbeddingUserIds.has(u._id));
+		return allUsers
+			.filter((u) => !withEmbeddingUserIds.has(u._id))
+			.map((u) => ({ _id: u._id }));
 	},
 });
 

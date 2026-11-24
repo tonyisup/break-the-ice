@@ -45,9 +45,10 @@ crons.interval(
   internal.internal.tones.updateQuestionsWithMissingToneIds
 );
 
-crons.interval(
+// On the hour, so a person's chosen send time is the time their email arrives.
+crons.cron(
   "send daily newsletter questions",
-  { hours: 1 },
+  "0 * * * *",
   internal.internal.newsletterStart.startDailyNewsletterIfDue,
   {}
 );

@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react"
 import { Link } from "react-router-dom"
 import { api } from "../../../../convex/_generated/api"
 import { Doc, Id } from "../../../../convex/_generated/dataModel"
+import { subscribeConfirmationPrompt } from "../../../../convex/lib/newsletterSending"
 import {
 	UserCircle,
 	ShieldAlert,
@@ -78,12 +79,15 @@ export default function UsersPage() {
 
 	const handleSave = async () => {
 		if (!editingUserId) return
+		const prompt = editingUser && subscribeConfirmationPrompt(editingUser, editNewsletter ? "subscribed" : "unsubscribed")
+		if (prompt && !confirm(prompt)) return
 		setIsSaving(true)
 		try {
 			await updateUserMutation({
 				userId: editingUserId,
 				aiUsageCount: editAiUsage,
 				newsletterSubscriptionStatus: editNewsletter ? "subscribed" : "unsubscribed",
+				confirmSubscribe: prompt ? true : undefined,
 			})
 			toast.success("User updated successfully")
 			setEditingUserId(null)

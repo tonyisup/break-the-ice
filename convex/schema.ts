@@ -333,6 +333,8 @@ export default defineSchema({
     })),
     newsletterSubscriptionStatus: v.optional(v.union(v.literal("subscribed"), v.literal("unsubscribed"))),
     newsletterUnsubscribeToken: v.optional(v.string()),
+    // Pacific hour (0-23) their daily email goes out. Unset means the default hour.
+    newsletterSendHour: v.optional(v.number()),
   })
     .index("by_clerkId", ["clerkId"])
     .index("by_tokenIdentifier", ["tokenIdentifier"])
@@ -507,6 +509,9 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     claimedAt: v.optional(v.number()),
+    // True only while nothing has reached Resend, or Resend definitely refused the send. Any other
+    // row may already be in the reader's inbox, so it is never sent again.
+    safeToRetry: v.optional(v.boolean()),
     sentAt: v.optional(v.number()),
   })
     .index("by_deliveryDate", ["deliveryDate"])
