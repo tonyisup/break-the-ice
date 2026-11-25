@@ -1,0 +1,549 @@
+"use client"
+
+import * as React from "react"
+import { useQuery, useAction, useMutation } from "convex/react"
+import { api } from "@convex/_generated/api"
+import { Id } from "@convex/_generated/dataModel"
+import {
+    Calendar,
+    RefreshCw,
+    Send,
+    CheckCircle,
+    Clock,
+    Loader2,
+    ChevronLeft,
+    ChevronRight,
+    Trash2,
+    Pencil,
+    Save,
+    X,
+    Sparkles,
+} from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { IconComponent, Icon } from "@/components/ui/icons/icon"
+import { iconMap } from "@/components/ui/icons/icons"
+import { toast } from "sonner"
+import { Textarea } from "@/components/ui/textarea"
+import { Slider } from "@/components/ui/slider"
+import { Link } from "react-router-dom"
+
+type PoolStats = {
+    totalQuestions: number
+    availableQuestions: number
+    awaitingReviewQuestions: number
+    distributedQuestions: number
+    byStyleTone: Array<{
+        style: string
+        styleName: string
+        tone: string
+        toneName: string
+        count: number
+    }>
+}
+
+type PoolQuestion = {
+    _id: Id<"questions">
+    _creationTime: number
+    reviewRevision?: number
+    text?: string
+    poolStatus?: "available" | "distributed"
+    awaitingReview: boolean
+    readyToAssign: boolean
+    style?: {
+        _id: string
+        name: string
+        icon: string
+        color: string
+    }
+    tone?: {
+        _id: string
+        name: string
+        icon: string
+        color: string
+    }
+}
+
+type RowStatus = "distributed" | "waiting" | "available" | "notApproved"
+
+/** Where a pool question stands. Only an approved one that hasn't been handed out is available. */
+function rowStatus(question: PoolQuestion): RowStatus {
+    if (question.poolStatus === "distributed") return "distributed"
+    if (question.awaitingReview) return "waiting"
+    return question.readyToAssign ? "available" : "notApproved"
+}
+
+const ROW_BADGES: Record<RowStatus, { label: string; variant: "default" | "secondary" | "outline"; className: string }> = {
+    distributed: { label: "Distributed", variant: "default", className: "bg-purple-500 hover:bg-purple-500" },
+    waiting: {
+        label: "Waiting for review",
+        variant: "outline",
+        className: "border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-400",
+    },
+    available: { label: "Available", variant: "secondary", className: "" },
+    // Rejected or retired in review, so it is never handed out.
+    notApproved: { label: "Not approved", variant: "outline", className: "text-muted-foreground" },
+}
+
+/** A row's status, with a link to the question's own page while it waits for review. */
+function RowStatusBadge({ question }: { question: PoolQuestion }) {
+    const status = rowStatus(question)
+    const badge = ROW_BADGES[status]
+    return (
+        <>
+            <Badge variant={badge.variant} className={badge.className}>
+                {badge.label}
+            </Badge>
+            {status === "waiting" && (
+                <Link
+                    to={`/admin/questions/${question._id}`}
+                    className="text-xs font-medium text-primary hover:underline"
+                >
+                    Review
+                </Link>
+            )}
+        </>
+    )
+}
+
+export default function PoolPage() {
+    const [selectedDate, setSelectedDate] = React.useState(() => {
+        return new Date().toISOString().split('T')[0]
+    })
+    const [statusFilter, setStatusFilter] = React.useState<"all" | "available" | "distributed">("all")
+    const [isGenerating, setIsGenerating] = React.useState(false)
+    const [isAssigning, setIsAssigning] = React.useState(false)
+    const [editingQuestionId, setEditingQuestionId] = React.useState<Id<"questions"> | null>(null)
+    const [editedText, setEditedText] = React.useState("")
+    const [editRevision, setEditRevision] = React.useState(0)
+    const [targetCountPerStyleTone, setTargetCountPerStyleTone] = React.useState(5)
+    const [remixingIds, setRemixingIds] = React.useState<Set<Id<"questions">>>(new Set())
+
+    const stats = useQuery(api.admin.questions.getPoolStats, { poolDate: selectedDate }) as PoolStats | undefined
+    const questions = useQuery(api.admin.questions.getPoolQuestions, {
+        poolDate: selectedDate,
+        status: statusFilter,
+        limit: 100,
+    }) as PoolQuestion[] | undefined
+
+    const triggerGeneration = useAction(api.admin.questions.triggerPoolGeneration)
+    const triggerAssignment = useAction(api.admin.questions.triggerPoolAssignment)
+    const deleteQuestion = useMutation(api.admin.questions.deleteQuestion)
+    const updateQuestion = useMutation(api.admin.questions.updateQuestion)
+    const remixQuestion = useAction(api.admin.questions.remixQuestion)
+
+    const getSafeIcon = (iconName: string): Icon => {
+        return (iconName in iconMap ? iconName : "HelpCircle") as Icon
+    }
+
+    const navigateDate = (direction: "prev" | "next") => {
+        const [year, month, day] = selectedDate.split('-').map(Number)
+        const date = new Date(year, month - 1, day)
+        date.setDate(date.getDate() + (direction === "next" ? 1 : -1))
+
+        const newYear = date.getFullYear()
+        const newMonth = String(date.getMonth() + 1).padStart(2, '0')
+        const newDay = String(date.getDate()).padStart(2, '0')
+
+        setSelectedDate(`${newYear}-${newMonth}-${newDay}`)
+    }
+
+    const handleGenerate = async () => {
+        setIsGenerating(true)
+        try {
+            const result = await triggerGeneration({ targetCount: targetCountPerStyleTone })
+            const summary = `Generated ${result.questionsGenerated} questions across ${result.combinationsProcessed} style/tone combinations.`
+            toast.success(
+                result.questionsGenerated > 0
+                    ? `${summary} Approve them under Pending Review on the Questions page before assigning.`
+                    : summary,
+            )
+            if (result.errors.length > 0) {
+                toast.warning(`${result.errors.length} errors occurred during generation`)
+            }
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Unknown error"
+            toast.error(`Generation failed: ${message}`)
+        } finally {
+            setIsGenerating(false)
+        }
+    }
+
+    const handleAssign = async () => {
+        setIsAssigning(true)
+        try {
+            // The pool on screen: a pool is reviewed first, so it is often handed out on a later day.
+            const result = await triggerAssignment({ poolDate: selectedDate })
+            toast.success(`Assigned ${result.totalAssigned} questions from the ${selectedDate} pool to ${result.usersProcessed} users`)
+            if (result.errors.length > 0) {
+                toast.warning(`${result.errors.length} errors occurred during assignment`)
+            }
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Unknown error"
+            toast.error(`Assignment failed: ${message}`)
+        } finally {
+            setIsAssigning(false)
+        }
+    }
+
+    const handleDelete = async (id: Id<"questions">) => {
+        try {
+            await deleteQuestion({ id })
+            toast.success("Question removed from pool")
+        } catch (error) {
+            toast.error("Failed to remove question")
+        }
+    }
+
+    const handleSaveEdit = async (id: Id<"questions">) => {
+        const reason = window.prompt("Why are you changing this question?")?.trim()
+        if (!reason) return
+        try {
+            await updateQuestion({ id, text: editedText, expectedRevision: editRevision, reviewReason: reason })
+            toast.success("Question updated")
+            setEditingQuestionId(null)
+        } catch (error) {
+            toast.error("Failed to update question")
+        }
+    }
+
+    const handleRemix = async (id: Id<"questions">) => {
+        const question = questions?.find(q => q._id === id)
+        if (!question) return
+        const expectedRevision = question.reviewRevision ?? 0
+        setRemixingIds(prev => {
+            const next = new Set(prev)
+            next.add(id)
+            return next
+        })
+        try {
+            const newText = await remixQuestion({ id })
+            const reason = window.prompt(`Remix draft: ${newText}\n\nWhy are you applying this remix?`)?.trim()
+            if (!reason) return
+            await updateQuestion({ id, text: newText, expectedRevision, reviewReason: reason, reviewOutcome: "remix" })
+            toast.success("Question remixed!")
+        } catch (error: any) {
+            toast.error(`Remix failed: ${error.message}`)
+        } finally {
+            setRemixingIds(prev => {
+                const next = new Set(prev)
+                next.delete(id)
+                return next
+            })
+        }
+    }
+
+    const isToday = selectedDate === new Date().toISOString().split('T')[0]
+    const formattedDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    })
+
+    return (
+        <div className="space-y-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Question Pool</h1>
+                    <p className="text-muted-foreground">Manage nightly AI-generated questions for user distribution.</p>
+                </div>
+                <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                        <p>Target Count: {targetCountPerStyleTone}</p>
+                        <Slider
+                            value={[targetCountPerStyleTone]}
+                            onValueChange={(value) => setTargetCountPerStyleTone(value[0])}
+                            min={1}
+                            max={10}
+                            step={1}
+                            disabled={!isToday || isGenerating}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            onClick={handleGenerate}
+                            disabled={!isToday || isGenerating}
+                            variant="outline"
+                            className="gap-2"
+                        >
+                            {isGenerating ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                                <RefreshCw className="size-4" />
+                            )}
+                            Generate Pool
+                        </Button>
+                        <Button
+                            onClick={handleAssign}
+                            disabled={isAssigning || (stats?.availableQuestions ?? 0) === 0}
+                            className="gap-2"
+                        >
+                            {isAssigning ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                                <Send className="size-4" />
+                            )}
+                            Assign to Users
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Date Navigator */}
+            <div className="flex items-center justify-center gap-4 py-4">
+                <Button variant="ghost" size="icon" onClick={() => navigateDate("prev")}>
+                    <ChevronLeft className="size-5" />
+                </Button>
+                <div className="flex items-center gap-3 min-w-[280px] justify-center">
+                    <Calendar className="size-5 text-muted-foreground" />
+                    <span className="text-lg font-medium">{formattedDate}</span>
+                    {isToday && <Badge variant="secondary">Today</Badge>}
+                </div>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => navigateDate("next")}
+                    disabled={isToday}
+                >
+                    <ChevronRight className="size-5" />
+                </Button>
+            </div>
+
+            {/* Stats Cards */}
+            {stats ? (
+                <div className="grid gap-4 md:grid-cols-3">
+                    <Card className="rounded-2xl border-muted/60">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium text-muted-foreground">Total Questions</p>
+                                <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600">
+                                    <Calendar className="size-4" />
+                                </div>
+                            </div>
+                            <p className="text-3xl font-bold mt-2">{stats.totalQuestions}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Generated for this date</p>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="rounded-2xl border-muted/60">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium text-muted-foreground">Available</p>
+                                <div className="p-2 rounded-lg bg-green-500/10 text-green-600">
+                                    <Clock className="size-4" />
+                                </div>
+                            </div>
+                            <p className="text-3xl font-bold mt-2">{stats.availableQuestions}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Ready for assignment
+                                {stats.awaitingReviewQuestions > 0 && (
+                                    <>
+                                        {" · "}
+                                        <Link to="/admin/questions" className="underline underline-offset-2 hover:text-foreground">
+                                            {stats.awaitingReviewQuestions} waiting for review
+                                        </Link>
+                                    </>
+                                )}
+                            </p>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="rounded-2xl border-muted/60">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium text-muted-foreground">Distributed</p>
+                                <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600">
+                                    <CheckCircle className="size-4" />
+                                </div>
+                            </div>
+                            <p className="text-3xl font-bold mt-2">{stats.distributedQuestions}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Sent to users</p>
+                        </CardContent>
+                    </Card>
+                </div>
+            ) : (
+                <div className="grid gap-4 md:grid-cols-3 animate-pulse">
+                    {[1, 2, 3].map(i => <div key={i} className="h-32 bg-muted rounded-2xl" />)}
+                </div>
+            )}
+
+            {/* Style/Tone Breakdown */}
+            {stats && stats.byStyleTone.length > 0 && (
+                <Card className="rounded-2xl border-muted/60">
+                    <CardHeader>
+                        <CardTitle className="text-lg">Distribution by Style & Tone</CardTitle>
+                        <CardDescription>Breakdown of questions by their style and tone combinations</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {stats.byStyleTone.map((item) => (
+                                <div
+                                    key={`${item.style}-${item.tone}`}
+                                    className="flex items-center justify-between p-3 rounded-xl border bg-muted/30"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium">{item.styleName}</span>
+                                        <span className="text-muted-foreground">×</span>
+                                        <span className="text-sm">{item.toneName}</span>
+                                    </div>
+                                    <Badge variant="secondary">{item.count}</Badge>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Questions Table */}
+            <Card className="rounded-2xl border-muted/60">
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle className="text-lg">Pool Questions</CardTitle>
+                            <CardDescription>Questions generated for {formattedDate}</CardDescription>
+                        </div>
+                        <div className="flex items-center gap-1 border rounded-lg p-1 bg-muted/50">
+                            <Button
+                                variant={statusFilter === "all" ? "secondary" : "ghost"}
+                                size="sm"
+                                className="h-7 px-3"
+                                onClick={() => setStatusFilter("all")}
+                            >
+                                All
+                            </Button>
+                            <Button
+                                variant={statusFilter === "available" ? "secondary" : "ghost"}
+                                size="sm"
+                                className="h-7 px-3"
+                                onClick={() => setStatusFilter("available")}
+                            >
+                                Not distributed
+                            </Button>
+                            <Button
+                                variant={statusFilter === "distributed" ? "secondary" : "ghost"}
+                                size="sm"
+                                className="h-7 px-3"
+                                onClick={() => setStatusFilter("distributed")}
+                            >
+                                Distributed
+                            </Button>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {questions === undefined ? (
+                        <div className="space-y-3">
+                            {[1, 2, 3, 4, 5].map(i => (
+                                <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />
+                            ))}
+                        </div>
+                    ) : questions.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                            <Calendar className="size-12 mx-auto mb-4 opacity-50" />
+                            <p className="text-lg font-medium">No questions in pool</p>
+                            <p className="text-sm">Generate questions using the button above</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {questions.map((question) => (
+                                <div
+                                    key={question._id}
+                                    className="flex items-start gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors"
+                                >
+                                    <div className="flex-1 min-w-0">
+                                        {editingQuestionId === question._id ? (
+                                            <div className="flex gap-2 items-start w-full">
+                                                <Textarea
+                                                    value={editedText}
+                                                    onChange={(e) => setEditedText(e.target.value)}
+                                                    className="min-h-[60px]"
+                                                />
+                                                <div className="flex flex-col gap-1">
+                                                    <Button size="icon" className="size-8 bg-green-600 hover:bg-green-700" onClick={() => handleSaveEdit(question._id)}>
+                                                        <Save className="size-3.5" />
+                                                    </Button>
+                                                    <Button size="icon" variant="ghost" className="size-8" onClick={() => setEditingQuestionId(null)}>
+                                                        <X className="size-3.5" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-between group/text w-full">
+                                                <p className="text-sm font-medium leading-relaxed">
+                                                    {question.text || <span className="italic text-muted-foreground">No text</span>}
+                                                </p>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="size-6 opacity-0 group-hover/text:opacity-100 transition-opacity"
+                                                    onClick={() => {
+                                                        setEditingQuestionId(question._id);
+                                                        setEditedText(question.text || "");
+                                                        setEditRevision(question.reviewRevision ?? 0);
+                                                    }}
+                                                >
+                                                    <Pencil className="size-3" />
+                                                </Button>
+                                            </div>
+                                        )}
+                                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                            {question.style && (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="gap-1.5 text-xs"
+                                                    style={{ borderColor: question.style.color + '40', color: question.style.color }}
+                                                >
+                                                    <IconComponent icon={getSafeIcon(question.style.icon)} size={12} />
+                                                    {question.style.name}
+                                                </Badge>
+                                            )}
+                                            {question.tone && (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="gap-1.5 text-xs"
+                                                    style={{ borderColor: question.tone.color + '40', color: question.tone.color }}
+                                                >
+                                                    <IconComponent icon={getSafeIcon(question.tone.icon)} size={12} />
+                                                    {question.tone.name}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-2">
+                                        <RowStatusBadge question={question} />
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                                                onClick={() => handleRemix(question._id)}
+                                                disabled={remixingIds.has(question._id)}
+                                            >
+                                                {remixingIds.has(question._id) ? (
+                                                    <Loader2 className="size-4 animate-spin" />
+                                                ) : (
+                                                    <Sparkles className="size-4" />
+                                                )}
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                onClick={() => handleDelete(question._id as Id<"questions">)}
+                                            >
+                                                <Trash2 className="size-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
