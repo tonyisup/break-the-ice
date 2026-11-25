@@ -7,6 +7,7 @@ import AdminLayout from "./layout";
 import AdminPage from "./pages/page";
 import QuestionsPage from "./pages/questions/page";
 import ReviewQueuePage from "./pages/review/page";
+import ReportsPage from "./pages/reports/page";
 import QuestionDetailsPage from "./pages/questions/[questionId]/page";
 import TagsPage from "./pages/tags/page";
 import TopicsPage from "./pages/topics/page";
@@ -31,6 +32,7 @@ export default function AdminApp() {
       <Route element={<AdminLayout />}>
         <Route index element={<AdminPage />} />
         <Route path="review" element={<ReviewQueuePage />} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="questions" element={<QuestionsPage />} />
         <Route path="questions/:questionId" element={<QuestionDetailsPage />} />
         <Route path="tags" element={<TagsPage />} />

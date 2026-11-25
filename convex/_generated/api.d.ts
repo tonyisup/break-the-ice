@@ -16,6 +16,7 @@ import type * as admin_newsletter from "../admin/newsletter.js";
 import type * as admin_promptBlueprints from "../admin/promptBlueprints.js";
 import type * as admin_pruning from "../admin/pruning.js";
 import type * as admin_questions from "../admin/questions.js";
+import type * as admin_reports from "../admin/reports.js";
 import type * as admin_review from "../admin/review.js";
 import type * as admin_styles from "../admin/styles.js";
 import type * as admin_tags from "../admin/tags.js";
@@ -125,6 +126,7 @@ declare const fullApi: ApiFromModules<{
   "admin/promptBlueprints": typeof admin_promptBlueprints;
   "admin/pruning": typeof admin_pruning;
   "admin/questions": typeof admin_questions;
+  "admin/reports": typeof admin_reports;
   "admin/review": typeof admin_review;
   "admin/styles": typeof admin_styles;
   "admin/tags": typeof admin_tags;

@@ -3,6 +3,7 @@ import {
 	LayoutDashboard,
 	MessageSquare,
 	Inbox,
+	ChartColumn,
 	Hash,
 	Palette,
 	Music,
@@ -40,6 +41,7 @@ const navGroups = [
       { title: "AI Generator", url: "/admin/generator", icon: Sparkles },
       { title: "Review queue", url: "/admin/review", icon: Inbox },
       { title: "Questions", url: "/admin/questions", icon: MessageSquare },
+      { title: "Reports", url: "/admin/reports", icon: ChartColumn },
     ],
   },
   {

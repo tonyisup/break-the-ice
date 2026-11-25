@@ -4,7 +4,7 @@ import type { Doc } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { ensureAdmin } from "../auth";
 import { fingerprintText } from "../lib/promptArchitecture";
-import { isPrivateUserQuestion } from "../lib/questionAccess";
+import { isPrivateUserQuestion, isQuestionPublic } from "../lib/questionAccess";
 import { recordReview, reviewReason, shownWording, syncReviewedEmbedding } from "../lib/questionReview";
 import { editorialReason, editorialReasonLabels } from "../lib/questionReviewValidators";
 import { NO_VERDICT, sameJudgedSubject } from "../lib/qualityCheck";
@@ -84,6 +84,65 @@ export const reviewPendingQuestions = mutation({
       source: "question",
       undoable: true,
       ...(reasons.length > 0 ? { reasons } : {}),
+    });
+    return { reviewId };
+  },
+});
+
+/**
+ * Prune library questions picked on the reports page, as one undoable review.
+ *
+ * The same change the prune queue's approve makes, without a pruning target first: the
+ * question leaves the library, and a person's public question loses its fingerprint and
+ * embedding. A note is optional. All or nothing, like reviewPendingQuestions.
+ */
+export const pruneQuestions = mutation({
+  args: {
+    questions: v.array(v.object({ id: v.id("questions"), expectedRevision: v.number() })),
+    note: v.optional(v.string()),
+  },
+  returns: v.object({ reviewId: v.id("questionReviews") }),
+  handler: async (ctx, args) => {
+    const reviewer = await ensureAdmin(ctx);
+    const count = args.questions.length;
+    if (count === 0) throw new Error("Select at least one question to prune");
+    if (count > MAX_REVIEW_BATCH) throw new Error(`Prune at most ${MAX_REVIEW_BATCH} questions at a time`);
+    if (new Set(args.questions.map((q) => q.id)).size !== count) throw new Error("A question is listed twice");
+
+    const befores: Doc<"questions">[] = [];
+    for (const { id, expectedRevision } of args.questions) {
+      const question = await ctx.db.get(id);
+      if (!question) throw new Error("A selected question no longer exists");
+      if (question.duplicateOf || !isQuestionPublic(question)) {
+        throw new Error("A selected question is no longer in the library. Reload and try again.");
+      }
+      if (expectedRevision !== (question.reviewRevision ?? 0)) {
+        throw new Error("A selected question changed since the report loaded. Reload before pruning.");
+      }
+      befores.push(question);
+    }
+
+    const prunedAt = Date.now();
+    for (const before of befores) {
+      const after = { ...before, status: "pruned" as const, prunedAt };
+      await ctx.db.patch(before._id, {
+        status: "pruned",
+        prunedAt,
+        // A pruned submission is no longer public, so it loses its fingerprint (see isPrivateUserQuestion).
+        fingerprint: isPrivateUserQuestion(after) ? undefined : before.fingerprint,
+      });
+      await syncReviewedEmbedding(ctx, (await ctx.db.get(before._id))!, shownWording(before));
+      await ctx.scheduler.runAfter(0, internal.internal.questions.syncQuestionEmbeddingFilters, { questionId: before._id });
+    }
+
+    const summary = `Pruned ${count === 1 ? "1 question" : `${count} questions`} from reports`;
+    const note = args.note?.trim();
+    const reviewId = await recordReview(ctx, befores, {
+      reviewer: reviewer.tokenIdentifier,
+      reason: reviewReason(note ? `${summary}: ${note}` : summary),
+      outcome: "prune",
+      source: "pruning",
+      undoable: true,
     });
     return { reviewId };
   },
