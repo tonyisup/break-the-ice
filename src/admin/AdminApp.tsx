@@ -6,6 +6,7 @@ import NotFoundPage from "@/app/not-found/page";
 import AdminLayout from "./layout";
 import AdminPage from "./pages/page";
 import QuestionsPage from "./pages/questions/page";
+import ReviewQueuePage from "./pages/review/page";
 import QuestionDetailsPage from "./pages/questions/[questionId]/page";
 import TagsPage from "./pages/tags/page";
 import TopicsPage from "./pages/topics/page";
@@ -29,6 +30,7 @@ export default function AdminApp() {
     <Routes>
       <Route element={<AdminLayout />}>
         <Route index element={<AdminPage />} />
+        <Route path="review" element={<ReviewQueuePage />} />
         <Route path="questions" element={<QuestionsPage />} />
         <Route path="questions/:questionId" element={<QuestionDetailsPage />} />
         <Route path="tags" element={<TagsPage />} />

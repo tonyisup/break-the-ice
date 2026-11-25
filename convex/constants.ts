@@ -1,6 +1,9 @@
 /** How many pending questions the admin review queue shows at once, oldest first. */
 export const PENDING_QUEUE_LIMIT = 200;
 
+/** The most pending questions one review decides; the queue sends a larger selection in parts. */
+export const MAX_REVIEW_BATCH = 100;
+
 /** The longest question a person can write, in characters. */
 export const MAX_QUESTION_TEXT_LENGTH = 500;
 

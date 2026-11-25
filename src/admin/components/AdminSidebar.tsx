@@ -2,6 +2,7 @@ import * as React from "react"
 import {
 	LayoutDashboard,
 	MessageSquare,
+	Inbox,
 	Hash,
 	Palette,
 	Music,
@@ -37,6 +38,7 @@ const navGroups = [
     items: [
       { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
       { title: "AI Generator", url: "/admin/generator", icon: Sparkles },
+      { title: "Review queue", url: "/admin/review", icon: Inbox },
       { title: "Questions", url: "/admin/questions", icon: MessageSquare },
     ],
   },

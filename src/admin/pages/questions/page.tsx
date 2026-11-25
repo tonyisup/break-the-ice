@@ -13,8 +13,6 @@ import {
   Trash2,
   Check,
   X,
-  CheckCircle2,
-  UserCircle,
   Share2,
   LayoutGrid,
   List,
@@ -49,7 +47,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { getAdminQuestionPageSize, paginateQuestions } from "./pagination";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ClaudeConcernBadge, ClaudeVerdict } from "@/admin/components/claude-verdict/claude-verdict";
+import { ClaudeConcernBadge } from "@/admin/components/claude-verdict/claude-verdict";
 
 export default function QuestionsPage() {
   const isMobile = useIsMobile();
@@ -135,25 +133,6 @@ export default function QuestionsPage() {
     }
   };
 
-  const handleUpdateField = async (id: Id<"questions">, updates: any, editRevision?: number) => {
-    const question = findQuestion(id);
-    if (!question) return;
-    const reason = updates.text !== undefined || updates.status !== undefined
-      ? window.prompt("Why are you changing this question?")?.trim()
-      : undefined;
-    if ((updates.text !== undefined || updates.status !== undefined) && !reason) return;
-    try {
-      await updateQuestion({
-        id,
-        expectedRevision: editRevision ?? question.reviewRevision ?? 0,
-        reviewReason: reason,
-        ...updates,
-      });
-    } catch (error) {
-      toast.error("Failed to update question");
-    }
-  };
-
   const handleUpdate = async (q: Doc<"questions">) => {
     const reason = window.prompt("Why are you changing this question?")?.trim();
     if (!reason) return;
@@ -181,40 +160,6 @@ export default function QuestionsPage() {
       toast.success("Question deleted");
     } catch (error) {
       toast.error("Failed to delete question");
-    }
-  };
-
-  const handleApprove = async (
-    q: Doc<"questions">,
-    status: "public" | "personal",
-  ) => {
-    const reason = window
-      .prompt(
-        status === "personal" && q.isAIGenerated
-          ? "Reject this AI question? It will be hidden from everyone, including anyone it was sent to. Why?"
-          : "Why are you changing this question’s status?",
-      )
-      ?.trim();
-    if (!reason) return;
-    try {
-      await updateQuestion({
-        id: q._id,
-        expectedRevision: q.reviewRevision ?? 0,
-        reviewReason: reason,
-        text: q.text || q.customText!,
-        style: q.style || undefined,
-        tone: q.tone || undefined,
-        status: status === "public" ? "public" : "private",
-      });
-      toast.success(
-        status === "public"
-          ? "Question marked as public"
-          : q.isAIGenerated
-            ? "Question rejected and made private"
-            : "Question marked as personal",
-      );
-    } catch (error) {
-      toast.error("Failed to process question");
     }
   };
 
@@ -378,130 +323,16 @@ export default function QuestionsPage() {
       </div>
 
       {pendingQuestions.length > 0 && (
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <h3 className="text-xl font-semibold">Pending Review</h3>
-            <Badge variant="secondary" className="rounded-full">
-              {pendingQuestions.length}
-              {morePending ? "+" : ""}
-            </Badge>
-          </div>
-          <div className="grid gap-4">
-            {pendingQuestions.map((q) => (
-              <div
-                key={q._id}
-                className="p-4 md:p-6 bg-white dark:bg-gray-800 rounded-xl border-2 border-primary/20 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 transition-all hover:border-primary/40"
-              >
-                <div className="space-y-4 flex-1 w-full">
-                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-widest">
-                    {q.isAIGenerated ? <Sparkles className="size-3" /> : <UserCircle className="size-3" />}
-                    {q.isAIGenerated ? "AI generated" : "User Submitted"}
-                  </div>
-                  {q.qualityCheck && <ClaudeVerdict check={q.qualityCheck} />}
-                  <textarea
-                    // A new revision (an author edit) remounts the box with the current wording, and
-                    // the save carries the revision the edit started from, so stale text is refused.
-                    key={`${q._id}:${q.reviewRevision ?? 0}`}
-                    className="w-full min-h-[80px] p-3 rounded-md border bg-background text-base font-medium focus:ring-2 focus:ring-primary/20 outline-none resize-none"
-                    defaultValue={q.text || q.customText || ""}
-                    onFocus={(e) => {
-                      e.currentTarget.dataset.editRevision = String(q.reviewRevision ?? 0);
-                    }}
-                    onBlur={(e) => {
-                      if (e.target.value !== (q.text || q.customText)) {
-                        const editRevision = e.currentTarget.dataset.editRevision;
-                        handleUpdateField(
-                          q._id,
-                          { text: e.target.value },
-                          editRevision === undefined ? undefined : Number(editRevision),
-                        );
-                      }
-                    }}
-                    placeholder="Question text..."
-                  />
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1 space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                        Style
-                      </label>
-                      <select
-                        value={q.style || ""}
-                        onChange={(e) =>
-                          handleUpdateField(q._id, { style: e.target.value })
-                        }
-                        className="h-11 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 sm:h-9"
-                      >
-                        <option value="">Select Style...</option>
-                        {styles.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                        Tone
-                      </label>
-                      <select
-                        value={q.tone || ""}
-                        onChange={(e) =>
-                          handleUpdateField(q._id, { tone: e.target.value })
-                        }
-                        className="h-11 w-full rounded-md border bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 sm:h-9"
-                      >
-                        <option value="">Select Tone...</option>
-                        {tones.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="!h-11 w-full shrink-0 justify-center gap-2 text-blue-500 hover:bg-blue-50 hover:text-blue-600 sm:!h-9 sm:w-auto"
-                    onClick={() => handleRemix(q._id)}
-                    disabled={remixingIds.has(q._id)}
-                  >
-                    {remixingIds.has(q._id) ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="size-4" />
-                    )}
-                    Remix
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "!h-11 w-full shrink-0 justify-center sm:!h-9 sm:w-auto",
-                      q.isAIGenerated
-                        ? "border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        : "text-blue-400 hover:bg-blue-50 hover:text-blue-500",
-                    )}
-                    onClick={() => handleApprove(q, "personal")}
-                  >
-                    {/* An AI question has no author, so making it private removes it for everyone. */}
-                    {q.isAIGenerated ? "Reject" : "Mark Personal"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="!h-11 w-full shrink-0 justify-center gap-2 bg-green-600 text-white hover:bg-green-700 sm:!h-9 sm:w-auto"
-                    onClick={() => handleApprove(q, "public")}
-                  >
-                    <CheckCircle2 className="size-4" />
-                    Approve Public
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+        <Link
+          to="/admin/review"
+          className="flex items-center justify-between gap-4 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 transition-colors hover:bg-primary/10"
+        >
+          <span className="font-medium">
+            {pendingQuestions.length}
+            {morePending ? "+" : ""} {pendingQuestions.length === 1 && !morePending ? "question is" : "questions are"} waiting for review
+          </span>
+          <span className="text-sm font-semibold text-primary">Open review queue →</span>
+        </Link>
       )}
 
       <div className="space-y-4">

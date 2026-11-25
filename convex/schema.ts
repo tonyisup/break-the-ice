@@ -449,7 +449,10 @@ export default defineSchema({
   questionReviews: defineTable({
     reviewer: v.string(),
     reason: v.string(),
-    outcome: v.union(v.literal("flag"), v.literal("keep"), v.literal("prune"), v.literal("edit"), v.literal("remix"), v.literal("duplicates"), v.literal("reject_duplicates")),
+    outcome: v.union(v.literal("flag"), v.literal("keep"), v.literal("prune"), v.literal("edit"), v.literal("remix"), v.literal("duplicates"), v.literal("reject_duplicates"), v.literal("approve"), v.literal("reject")),
+    // Why a pending question was rejected, in the quality check's own reason codes, so these
+    // decisions can calibrate it later (qualityCheckContext). Optional: a reject needs none.
+    reasons: v.optional(v.array(editorialReason)),
     source: v.union(v.literal("pruning"), v.literal("duplicates"), v.literal("question")),
     pruningId: v.optional(v.id("pruning")),
     detectionId: v.optional(v.id("duplicateDetections")),
