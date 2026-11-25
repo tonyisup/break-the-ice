@@ -294,8 +294,11 @@ export default function ReviewQueuePage() {
   const onlyPeople = target.length > 0 && target.every((q) => !q.isAIGenerated);
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+    // The page fills the window below the admin header (h-16) and main's padding, so the list
+    // and the focused question scroll inside it and the decision bar stays on screen. A sticky
+    // bar can't do this: main's overflow makes it the sticky container, and main never scrolls.
+    <div className="flex h-[calc(100dvh-6rem)] min-h-[32rem] flex-col gap-4 sm:h-[calc(100dvh-7rem)] lg:h-[calc(100dvh-8rem)]">
+      <header className="flex shrink-0 flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
             Review queue
@@ -325,10 +328,11 @@ export default function ReviewQueuePage() {
           <p className="text-sm text-muted-foreground">New questions land here as they are generated or submitted.</p>
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+        // Below lg the two panes stack and scroll together; from lg each scrolls on its own.
+        <div className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:content-stretch lg:overflow-hidden">
           {/* The list. Below lg it follows the focused question. */}
-          <section aria-label="Pending questions" className="order-2 overflow-hidden rounded-xl border bg-card lg:order-1">
-            <div className="flex items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <section aria-label="Pending questions" className="order-2 flex flex-col overflow-hidden rounded-xl border bg-card lg:order-1 lg:min-h-0">
+            <div className="flex shrink-0 items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
               <Checkbox
                 aria-label="Select all shown"
                 checked={allVisibleSelected}
@@ -346,7 +350,7 @@ export default function ReviewQueuePage() {
                 </Button>
               </div>
             ) : (
-              <ol className="max-h-[calc(100vh-16rem)] divide-y overflow-y-auto">
+              <ol className="divide-y lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 {visible.map((q) => {
                   const isFocused = q._id === focusedId;
                   return (
@@ -402,7 +406,7 @@ export default function ReviewQueuePage() {
           </section>
 
           {/* The focused question, to read closely, fix and remix. */}
-          <section aria-label="Focused question" className="order-1 lg:order-2">
+          <section aria-label="Focused question" className="order-1 lg:order-2 lg:min-h-0 lg:overflow-y-auto">
             {focused ? (
               <div className="space-y-4 rounded-xl border bg-card p-4 md:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
@@ -493,7 +497,7 @@ export default function ReviewQueuePage() {
 
       {pending.length > 0 && (
         // One place to decide, for the focused question or the whole selection.
-        <div className="sticky bottom-3 z-20">
+        <div className="shrink-0">
           <div
             role="region"
             aria-label="Decision"
