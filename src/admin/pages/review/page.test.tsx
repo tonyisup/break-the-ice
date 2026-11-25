@@ -6,8 +6,8 @@ import ReviewQueuePage from "./page";
 
 vi.mock("convex/react", () => ({ useQuery: vi.fn(), useMutation: vi.fn(), useAction: vi.fn() }));
 vi.mock("react-router-dom", () => ({
-  Link: ({ children, to, className }: { children: React.ReactNode; to: string; className?: string }) => (
-    <a href={to} className={className}>{children}</a>
+  Link: ({ children, to, ...props }: { children: React.ReactNode; to: string }) => (
+    <a href={to} {...props}>{children}</a>
   ),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -68,6 +68,11 @@ describe("review queue", () => {
     expect(focusedPane().getByDisplayValue("What made you laugh this week?")).toBeInTheDocument();
     expect(focusedPane().getByText("Claude: hold")).toBeInTheDocument();
     expect(focusedPane().getByText("Stiff phrasing.")).toBeInTheDocument();
+  });
+
+  it("links each row to the question's details, for screens too narrow for the focused pane", () => {
+    render(<ReviewQueuePage />);
+    expect(list().getByRole("link", { name: "Details: What is your go-to karaoke song?" })).toHaveAttribute("href", "/admin/questions/q-user");
   });
 
   it("approves the focused question with A, asking for nothing, and offers undo", async () => {

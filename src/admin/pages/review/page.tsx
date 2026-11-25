@@ -5,7 +5,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { PENDING_QUEUE_LIMIT } from "@convex/constants";
 import { editorialReasonLabels } from "@convex/lib/questionReviewValidators";
-import { Check, CircleAlert, ExternalLink, Keyboard, Loader2, Sparkles, UserCircle, X } from "lucide-react";
+import { Check, ChevronRight, CircleAlert, ExternalLink, Keyboard, Loader2, Sparkles, UserCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -328,10 +328,9 @@ export default function ReviewQueuePage() {
           <p className="text-sm text-muted-foreground">New questions land here as they are generated or submitted.</p>
         </div>
       ) : (
-        // Below lg the two panes stack and scroll together; from lg each scrolls on its own.
-        <div className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:content-stretch lg:overflow-hidden">
-          {/* The list. Below lg it follows the focused question. */}
-          <section aria-label="Pending questions" className="order-2 flex flex-col overflow-hidden rounded-xl border bg-card lg:order-1 lg:min-h-0">
+        // Each pane scrolls on its own. Below lg only the list shows, and each row links to its details.
+        <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+          <section aria-label="Pending questions" className="flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
             <div className="flex shrink-0 items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
               <Checkbox
                 aria-label="Select all shown"
@@ -350,7 +349,7 @@ export default function ReviewQueuePage() {
                 </Button>
               </div>
             ) : (
-              <ol className="divide-y lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+              <ol className="min-h-0 flex-1 divide-y overflow-y-auto">
                 {visible.map((q) => {
                   const isFocused = q._id === focusedId;
                   return (
@@ -378,7 +377,8 @@ export default function ReviewQueuePage() {
                         onClick={() => setFocusedId(q._id)}
                         className="min-w-0 flex-1 text-left focus-visible:outline-none"
                       >
-                        <span className="line-clamp-2 text-sm font-medium">{shownText(q)}</span>
+                        {/* Below lg there's no focused pane, so the focused row shows its full wording. */}
+                        <span className={cn("line-clamp-2 text-sm font-medium", isFocused && "max-lg:line-clamp-none")}>{shownText(q)}</span>
                         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                           {q.isAIGenerated ? <Sparkles aria-label="AI generated" className="size-3" /> : <UserCircle aria-label="Written by a person" className="size-3" />}
                           <span>{styleName(q.style)}</span>
@@ -398,6 +398,13 @@ export default function ReviewQueuePage() {
                           )}
                         </span>
                       </button>
+                      <Link
+                        to={`/admin/questions/${q._id}`}
+                        aria-label={`Details: ${shownText(q)}`}
+                        className="-my-1 -mr-1 grid size-9 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+                      >
+                        <ChevronRight aria-hidden="true" className="size-4" />
+                      </Link>
                     </li>
                   );
                 })}
@@ -405,8 +412,8 @@ export default function ReviewQueuePage() {
             )}
           </section>
 
-          {/* The focused question, to read closely, fix and remix. */}
-          <section aria-label="Focused question" className="order-1 lg:order-2 lg:min-h-0 lg:overflow-y-auto">
+          {/* The focused question, to read closely, fix and remix. Wide screens only. */}
+          <section aria-label="Focused question" className="hidden min-h-0 overflow-y-auto lg:block">
             {focused ? (
               <div className="space-y-4 rounded-xl border bg-card p-4 md:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
