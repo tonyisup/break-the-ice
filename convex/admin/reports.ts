@@ -29,6 +29,8 @@ const reportRow = v.object({
   style: v.optional(v.string()),
   tone: v.optional(v.string()),
   topic: v.optional(v.string()),
+  /** The model that generated it (an OpenRouter id), for questions generated since that was recorded. */
+  model: v.optional(v.string()),
   claude: v.optional(v.union(v.literal("keep"), v.literal("hold"))),
   seen: v.number(),
   liked: v.number(),
@@ -38,7 +40,7 @@ const reportRow = v.object({
   avgViewMs: v.number(),
 });
 
-function statusOf(question: Doc<"questions">): ReportStatus {
+export function statusOf(question: Doc<"questions">): ReportStatus {
   if (isRetiredQuestion(question)) return "retired";
   if (question.status === "pending") return "pending";
   if (isQuestionPublic(question)) return "live";
@@ -107,6 +109,7 @@ export const getPerformanceReport = query({
         style: question.style ?? question.styleSlug,
         tone: question.tone ?? question.toneSlug,
         topic: question.topic ?? question.topicSlug,
+        model: question.generatedByModel,
         claude: question.qualityCheck?.verdict,
         seen: tally?.seen ?? 0,
         liked: tally?.liked ?? 0,

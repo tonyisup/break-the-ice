@@ -17,6 +17,7 @@ vi.mock("@convex/_generated/api", () => ({
       questions: { getPendingQuestions: "getPendingQuestions", updateQuestion: "updateQuestion", remixQuestion: "remixQuestion" },
       review: { reviewPendingQuestions: "reviewPendingQuestions" },
       pruning: { undoReview: "undoReview" },
+      generator: { listModels: "listModels" },
     },
     core: { styles: { getStyles: "getStyles" }, tones: { getTones: "getTones" } },
   },
@@ -45,6 +46,7 @@ beforeEach(() => {
     if (name === "getPendingQuestions") return pending;
     if (name === "getStyles") return [{ id: "would-you-rather", name: "Would you rather" }];
     if (name === "getTones") return [{ id: "playful", name: "Playful" }];
+    if (name === "listModels") return [{ _id: "m1", model: "anthropic/claude-haiku-5.5", label: "Haiku", createdAt: 0 }];
     return undefined;
   }) as never);
   const mutations: Record<string, unknown> = { reviewPendingQuestions, updateQuestion, undoReview };
@@ -197,6 +199,17 @@ describe("review queue", () => {
     press("a");
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("A selected question changed during review. Reload before saving."));
     expect(list().getByRole("checkbox", { name: /karaoke/ })).toBeChecked();
+  });
+
+  it("hides which model wrote a question until models are revealed", () => {
+    window.localStorage.clear();
+    pending = [{ ...aiQuestion, generatedByModel: "anthropic/claude-haiku-5.5" }, personQuestion];
+    render(<ReviewQueuePage />);
+    expect(list().queryByText("Haiku")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "Reveal models" }));
+    expect(list().getByText("Haiku")).toBeInTheDocument();
+    expect(focusedPane().getByText(/AI generated · Haiku/)).toBeInTheDocument();
+    window.localStorage.clear();
   });
 
   it("says when the queue is empty", () => {

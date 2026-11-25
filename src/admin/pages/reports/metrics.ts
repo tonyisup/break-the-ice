@@ -59,6 +59,7 @@ export type QuestionFilter = {
   style?: string;
   tone?: string;
   topic?: string;
+  model?: string;
 };
 
 /**
@@ -74,7 +75,8 @@ export function questionList(rows: RatedRow[], filter: QuestionFilter, sort: Sor
       (!search || row.text.toLowerCase().includes(search)) &&
       (filter.style === undefined || (row.style ?? "") === filter.style) &&
       (filter.tone === undefined || (row.tone ?? "") === filter.tone) &&
-      (filter.topic === undefined || (row.topic ?? "") === filter.topic),
+      (filter.topic === undefined || (row.topic ?? "") === filter.topic) &&
+      (filter.model === undefined || (row.model ?? "") === filter.model),
   );
   const sign = sort.direction === "asc" ? 1 : -1;
   const value = (row: RatedRow): number | string => {
@@ -91,10 +93,10 @@ export function questionList(rows: RatedRow[], filter: QuestionFilter, sort: Sor
   });
 }
 
-export type Dimension = "style" | "tone" | "topic";
+export type Dimension = "style" | "tone" | "topic" | "model";
 
 export type GroupSummary = {
-  /** The style, tone or topic slug; "" for questions without one. */
+  /** The style, tone or topic slug, or the model id; "" for questions without one. */
   key: string;
   questions: number;
   live: number;
@@ -120,7 +122,7 @@ export type GroupSummary = {
 };
 
 /**
- * One row per style, tone or topic: engagement across all its questions (retired ones too, as
+ * One row per style, tone, topic or model: engagement across all its questions (retired ones too, as
  * their views happened), your review decisions on its AI questions, and Claude's verdicts.
  */
 export function summarize(rows: RatedRow[], dimension: Dimension): GroupSummary[] {
@@ -178,12 +180,13 @@ export function toCsv(header: string[], rows: (string | number)[][]): string {
 
 export function questionsCsv(rows: RatedRow[], name: (dimension: Dimension, slug?: string) => string): string {
   return toCsv(
-    ["Question", "Style", "Tone", "Topic", "Views", "Likes", "Like rate", "Shares", "Hides", "Hide rate", "Avg seconds", "Written by", "ID"],
+    ["Question", "Style", "Tone", "Topic", "Model", "Views", "Likes", "Like rate", "Shares", "Hides", "Hide rate", "Avg seconds", "Written by", "ID"],
     rows.map((row) => [
       row.text,
       name("style", row.style),
       name("tone", row.tone),
       name("topic", row.topic),
+      name("model", row.model),
       row.views,
       row.liked,
       row.likeRate.toFixed(3),

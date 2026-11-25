@@ -30,7 +30,7 @@ import {
   type SortKey,
 } from "./metrics";
 
-type Tab = "questions" | "style" | "tone" | "topic";
+type Tab = "questions" | "style" | "tone" | "topic" | "model";
 type Period = "all" | "90" | "30" | "7";
 type GroupSortKey = "name" | "live" | "views" | "likeRate" | "hideRate" | "shared" | "avgViewMs" | "approval" | "claude" | "agreement";
 
@@ -39,6 +39,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "style", label: "Styles" },
   { value: "tone", label: "Tones" },
   { value: "topic", label: "Topics" },
+  { value: "model", label: "Models" },
 ];
 const PERIODS: { value: Period; label: string }[] = [
   { value: "all", label: "All time" },
@@ -51,7 +52,7 @@ const VIEWS: { value: QuestionView; label: string }[] = [
   { value: "poor", label: "Needs attention" },
   { value: "all", label: "All" },
 ];
-const DIMENSION_LABEL: Record<Dimension, string> = { style: "Style", tone: "Tone", topic: "Topic" };
+const DIMENSION_LABEL: Record<Dimension, string> = { style: "Style", tone: "Tone", topic: "Topic", model: "Model" };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const isTab = (value: string | null): value is Tab => TABS.some((tab) => tab.value === value);
@@ -140,14 +141,21 @@ export default function ReportsPage() {
   const styles = useQuery(api.core.styles.getStyles, {});
   const tones = useQuery(api.core.tones.getTones, {});
   const topics = useQuery(api.core.topics.getTopics, {});
+  const models = useQuery(api.admin.generator.listModels, {});
 
   const names = React.useMemo(() => {
     const map = (list?: { id: string; slug?: string; name: string }[]) =>
       new Map((list ?? []).flatMap((item) => [[item.id, item.name] as const, ...(item.slug ? [[item.slug, item.name] as const] : [])]));
-    return { style: map(styles), tone: map(tones), topic: map(topics) };
-  }, [styles, tones, topics]);
+    return {
+      style: map(styles),
+      tone: map(tones),
+      topic: map(topics),
+      model: new Map((models ?? []).map((m) => [m.model, m.label] as const)),
+    };
+  }, [styles, tones, topics, models]);
   const nameOf = React.useCallback(
-    (dimension: Dimension, slug?: string) => (slug ? (names[dimension].get(slug) ?? slug) : `No ${dimension}`),
+    (dimension: Dimension, slug?: string) =>
+      slug ? (names[dimension].get(slug) ?? slug) : dimension === "model" ? "Not recorded" : `No ${dimension}`,
     [names],
   );
 
@@ -156,7 +164,8 @@ export default function ReportsPage() {
   const style = params.get("style") ?? undefined;
   const tone = params.get("tone") ?? undefined;
   const topic = params.get("topic") ?? undefined;
-  const filter = React.useMemo(() => ({ style, tone, topic }), [style, tone, topic]);
+  const model = params.get("model") ?? undefined;
+  const filter = React.useMemo(() => ({ style, tone, topic, model }), [style, tone, topic, model]);
   const live = rows.filter((row) => row.status === "live");
   const views = rows.reduce((sum, row) => sum + row.views, 0);
   const likes = rows.reduce((sum, row) => sum + row.liked, 0);
@@ -183,7 +192,7 @@ export default function ReportsPage() {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
-          <p className="text-sm text-muted-foreground">How questions do with people, and how styles, tones and topics compare.</p>
+          <p className="text-sm text-muted-foreground">How questions do with people, and how styles, tones, topics and models compare.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Segmented label="Period" value={period} options={PERIODS} onChange={setPeriod} />
@@ -271,6 +280,10 @@ export default function ReportsPage() {
             <strong>Claude keep</strong> is the share Claude&rsquo;s check would keep. <strong>Agreed</strong> is how often your decision matched
             Claude&rsquo;s verdict. Editing a question clears Claude&rsquo;s verdict, so edited questions aren&rsquo;t compared.
           </li>
+          <li>
+            <strong>Models</strong> groups questions by the model that generated them. Questions from before the generator recorded it show as
+            &ldquo;Not recorded&rdquo;.
+          </li>
         </ul>
       </details>
     </div>
@@ -286,7 +299,7 @@ function QuestionsReport({
 }: {
   rows: RatedRow[];
   minViews: number;
-  filter: { style?: string; tone?: string; topic?: string };
+  filter: { style?: string; tone?: string; topic?: string; model?: string };
   clearFilter: () => void;
   nameOf: (dimension: Dimension, slug?: string) => string;
 }) {

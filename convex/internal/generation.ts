@@ -347,6 +347,7 @@ export const createGenerationRun = internalMutation({
       v.literal("newsletter"),
       v.literal("remix"),
       v.literal("quality_check"),
+      v.literal("admin_experiment"),
     ),
     requestedByUserId: v.optional(v.string()),
     // No caller sends one since the short brief. Still accepted, for an action that started
@@ -529,6 +530,10 @@ export const insertGeneratedQuestions = internalMutation({
     ),
     poolDate: v.optional(v.string()),
     poolStatus: v.optional(v.union(v.literal("available"), v.literal("distributed"))),
+    /** The model the run asked for, recorded on each question for reports. */
+    model: v.optional(v.string()),
+    /** Check every question whatever QUALITY_CHECK_MODE says: a generator experiment compares Claude's verdicts. */
+    forceQualityCheck: v.optional(v.boolean()),
   },
   returns: v.object({
     insertedQuestionIds: v.array(v.id("questions")),
@@ -540,7 +545,8 @@ export const insertGeneratedQuestions = internalMutation({
   }),
   handler: async (ctx, args) => {
     const now = Date.now();
-    const checksQuality = qualityCheckMode() !== "off";
+    const force = args.forceQualityCheck === true;
+    const checksQuality = force || qualityCheckMode() !== "off";
     const insertedQuestionIds: Id<"questions">[] = [];
     const duplicates: Array<{ text: string; reason: string }> = [];
     const rejected: Array<{ text: string; reasons: string[] }> = [];
@@ -595,6 +601,7 @@ export const insertGeneratedQuestions = internalMutation({
         toneVersion: args.toneVersion,
         topicVersion: args.topicVersion,
         generationRunId: args.runId,
+        generatedByModel: args.model,
         safetyFlags: [],
         quality: {},
         status: args.status,
@@ -613,7 +620,7 @@ export const insertGeneratedQuestions = internalMutation({
       });
       // Scheduled, not awaited, so whoever is waiting for this question waits no longer.
       if (checksQuality) {
-        await ctx.scheduler.runAfter(0, internal.internal.qualityCheck.checkQuestion, { questionId });
+        await ctx.scheduler.runAfter(0, internal.internal.qualityCheck.checkQuestion, { questionId, ...(force ? { force } : {}) });
       }
     }
 
@@ -666,6 +673,7 @@ export const getGenerationRun = internalQuery({
         v.literal("newsletter"),
         v.literal("remix"),
         v.literal("quality_check"),
+        v.literal("admin_experiment"),
       ),
       previewText: v.optional(v.string()),
       acceptedQuestionId: v.optional(v.id("questions")),

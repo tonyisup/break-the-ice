@@ -70,10 +70,12 @@ export const saveQualityCheck = internalMutation({
     model: v.string(),
     promptVersion: v.number(),
     runId: v.id("generationRuns"),
+    /** Save even with QUALITY_CHECK_MODE off: the check was asked for regardless (a generator experiment). */
+    force: v.optional(v.boolean()),
   },
   returns: v.object({ saved: v.boolean() }),
   handler: async (ctx, args) => {
-    if (qualityCheckMode() === "off") return { saved: false };
+    if (!args.force && qualityCheckMode() === "off") return { saved: false };
     const question = await ctx.db.get(args.questionId);
     if (!question || question.qualityCheck || !sameJudgedSubject(question, args.read)) return { saved: false };
     await ctx.db.patch(args.questionId, {

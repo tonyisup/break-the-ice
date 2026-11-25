@@ -13,6 +13,7 @@ vi.mock("@convex/_generated/api", () => ({
       reports: { getPerformanceReport: "getPerformanceReport" },
       review: { pruneQuestions: "pruneQuestions" },
       pruning: { undoReview: "undoReview" },
+      generator: { listModels: "listModels" },
     },
     core: { styles: { getStyles: "getStyles" }, tones: { getTones: "getTones" }, topics: { getTopics: "getTopics" } },
   },
@@ -25,7 +26,7 @@ const row = (id: string, text: string, extra: Record<string, unknown> = {}) => (
 const rows = [
   row("q-proven", "What made you laugh this week?", { seen: 100, liked: 30, shared: 4, avgViewMs: 5200, claude: "keep" }),
   row("q-flat", "What is your favourite spreadsheet?", { seen: 40, liked: 0, hidden: 6, reviewRevision: 2 }),
-  row("q-lucky", "Would you rather fly or swim?", { seen: 1, liked: 1, style: "would-you-rather" }),
+  row("q-lucky", "Would you rather fly or swim?", { seen: 1, liked: 1, style: "would-you-rather", model: "anthropic/claude-haiku-5.5" }),
   row("q-rejected", "What tax form do you love?", { status: "rejected", style: "would-you-rather", claude: "keep" }),
   row("q-pending", "What is on your desk?", { status: "pending", style: "would-you-rather", claude: "hold" }),
 ];
@@ -47,6 +48,7 @@ beforeEach(() => {
     if (name === "getStyles") return [{ id: "open-ended", slug: "open-ended", name: "Open-ended" }, { id: "would-you-rather", slug: "would-you-rather", name: "Would you rather" }];
     if (name === "getTones") return [{ id: "playful", slug: "playful", name: "Playful" }];
     if (name === "getTopics") return [];
+    if (name === "listModels") return [{ _id: "m1", model: "anthropic/claude-haiku-5.5", label: "Haiku", createdAt: 0 }];
     return undefined;
   }) as never);
   const mutations: Record<string, unknown> = { pruneQuestions, undoReview };
@@ -141,6 +143,16 @@ describe("reports", () => {
     expect(questionLinks()).toEqual(["Would you rather fly or swim?"]);
     fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
     expect(questionLinks()).toHaveLength(3);
+  });
+
+  it("compares models, with questions from before the model was recorded kept apart", () => {
+    renderAt("/admin/reports?tab=model");
+    expect(panel().getByRole("row", { name: /Haiku/ })).toBeInTheDocument();
+    expect(panel().getByRole("row", { name: /Not recorded/ })).toBeInTheDocument();
+    fireEvent.click(panel().getByRole("button", { name: "Haiku" }));
+    expect(screen.getByText(/Model: Haiku/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(questionLinks()).toEqual(["Would you rather fly or swim?"]);
   });
 
   it("exports the listed questions as CSV", async () => {

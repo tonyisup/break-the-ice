@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ClaudeVerdict } from "@/admin/components/claude-verdict/claude-verdict";
 import { Segmented } from "@/admin/components/Segmented";
+import { useRevealModels } from "@/admin/components/useRevealModels";
+import { Switch } from "@/components/ui/switch";
 import {
   QUEUE_SHORTCUTS,
   REJECT_REASONS,
@@ -53,6 +55,8 @@ export default function ReviewQueuePage() {
   const pendingQueue = useQuery(api.admin.questions.getPendingQuestions);
   const styles = useQuery(api.core.styles.getStyles, {});
   const tones = useQuery(api.core.tones.getTones, {});
+  const savedModels = useQuery(api.admin.generator.listModels, {});
+  const [revealModels, setRevealModels] = useRevealModels();
   const reviewQuestions = useMutation(api.admin.review.reviewPendingQuestions);
   const updateQuestion = useMutation(api.admin.questions.updateQuestion);
   const undoReview = useMutation(api.admin.pruning.undoReview);
@@ -272,6 +276,9 @@ export default function ReviewQueuePage() {
   const styleName = (slug?: string) => styles.find((s) => s.id === slug)?.name ?? slug ?? "No style";
   const toneName = (slug?: string) => tones.find((t) => t.id === slug)?.name ?? slug ?? "No tone";
   const onlyPeople = target.length > 0 && target.every((q) => !q.isAIGenerated);
+  // Blind by default: which model wrote a question shows only once models are revealed.
+  const modelLabel = (model?: string) =>
+    revealModels && model ? (savedModels?.find((m) => m.model === model)?.label ?? model) : null;
 
   return (
     // The page fills the window below the admin header (h-16) and main's padding, so the list
@@ -295,6 +302,10 @@ export default function ReviewQueuePage() {
         <div className="flex flex-wrap items-center gap-2">
           <Segmented label="Claude's verdict" value={claudeFilter} options={CLAUDE_FILTERS} onChange={setClaudeFilter} />
           <Segmented label="Written by" value={sourceFilter} options={SOURCE_FILTERS} onChange={setSourceFilter} />
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Switch checked={revealModels} onCheckedChange={setRevealModels} aria-label="Reveal models" />
+            Models
+          </label>
           <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setHelpOpen(true)}>
             <Keyboard className="size-4" />
             <span className="max-sm:sr-only">Shortcuts</span>
@@ -361,6 +372,7 @@ export default function ReviewQueuePage() {
                         <span className={cn("line-clamp-2 text-sm font-medium", isFocused && "max-lg:line-clamp-none")}>{shownText(q)}</span>
                         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                           {q.isAIGenerated ? <Sparkles aria-label="AI generated" className="size-3" /> : <UserCircle aria-label="Written by a person" className="size-3" />}
+                          {modelLabel(q.generatedByModel) && <span className="font-medium text-foreground/80">{modelLabel(q.generatedByModel)}</span>}
                           <span>{styleName(q.style)}</span>
                           <span aria-hidden="true">·</span>
                           <span>{toneName(q.tone)}</span>
@@ -400,6 +412,7 @@ export default function ReviewQueuePage() {
                   <span className="inline-flex items-center gap-1.5">
                     {focused.isAIGenerated ? <Sparkles className="size-3" /> : <UserCircle className="size-3" />}
                     {focused.isAIGenerated ? "AI generated" : "Written by a person"}
+                    {modelLabel(focused.generatedByModel) && ` · ${modelLabel(focused.generatedByModel)}`}
                   </span>
                   <Link to={`/admin/questions/${focused._id}`} className="inline-flex items-center gap-1 normal-case tracking-normal hover:text-foreground">
                     Details <ExternalLink className="size-3" />

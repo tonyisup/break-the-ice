@@ -23,7 +23,7 @@ async function setup() {
       status: "succeeded", purpose: "quality_check", batchSize: 1, model: "m", temperature: 0, assembledPrompt: "", resultQuestionIds: [], createdAt: 0,
     });
     const check = (verdict: "keep" | "hold") => ({ verdict, reasons: [], safety: [], confidence: 5, note: "", wouldPublish: verdict === "keep", model: "m", promptVersion: 2, runId, checkedAt: 0 });
-    const live = await ctx.db.insert("questions", { ...base, text: "What made you laugh this week?", status: "public", isAIGenerated: true, style: "open-ended", tone: "playful", topic: "everyday", qualityCheck: check("keep"), fingerprint: "fp-live" });
+    const live = await ctx.db.insert("questions", { ...base, text: "What made you laugh this week?", status: "public", isAIGenerated: true, style: "open-ended", tone: "playful", topic: "everyday", qualityCheck: check("keep"), fingerprint: "fp-live", generatedByModel: "anthropic/claude-haiku-5.5" });
     const library = await ctx.db.insert("questions", { ...base, text: "Which smell takes you back?", status: "approved", styleSlug: "open-ended", toneSlug: "warm" });
     const pending = await ctx.db.insert("questions", { ...base, text: "Would you rather fly or swim?", status: "pending", isAIGenerated: true, style: "would-you-rather", tone: "playful", qualityCheck: check("hold") });
     const rejected = await ctx.db.insert("questions", { ...base, text: "What is a tax form you love?", status: "private", isAIGenerated: true, style: "would-you-rather", tone: "playful" });
@@ -57,6 +57,7 @@ describe("getPerformanceReport", () => {
 
     expect(byId.get(s.ids.live)).toMatchObject({
       status: "live", isAIGenerated: true, byPerson: false, style: "open-ended", tone: "playful", topic: "everyday", claude: "keep",
+      model: "anthropic/claude-haiku-5.5",
       // The untimed view counts as a view but not toward the average time.
       seen: 3, liked: 1, shared: 1, hidden: 0, avgViewMs: 3000,
     });

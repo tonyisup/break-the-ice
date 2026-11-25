@@ -112,7 +112,7 @@ type CheckResult = { outcome: CheckOutcome; unanswered: boolean };
  * when the verdict wasn't saved because the question changed, was deleted or got a verdict
  * while the judge was reading it. A failure leaves the question exactly as it was.
  */
-async function checkOne(ctx: ActionCtx, questionId: Id<"questions">): Promise<CheckResult> {
+async function checkOne(ctx: ActionCtx, questionId: Id<"questions">, force = false): Promise<CheckResult> {
   const found = await ctx.runQuery(internal.internal.qualityCheckData.questionForCheck, { questionId });
   if (!found) return { outcome: "skipped", unanswered: false };
   try {
@@ -124,6 +124,7 @@ async function checkOne(ctx: ActionCtx, questionId: Id<"questions">): Promise<Ch
       model: judged.model,
       promptVersion: QUALITY_CHECK_PROMPT_VERSION,
       runId: judged.runId,
+      ...(force ? { force } : {}),
     });
     return { outcome: saved ? "checked" : "skipped", unanswered: false };
   } catch (error) {
@@ -140,16 +141,19 @@ async function checkOne(ctx: ActionCtx, questionId: Id<"questions">): Promise<Ch
  * matrix fill's or the nightly pool's, from before) stays unchecked.
  */
 export const checkQuestion = internalAction({
-  args: { questionId: v.id("questions"), attempt: v.optional(v.number()) },
+  // force: check even with QUALITY_CHECK_MODE off. A generator experiment's questions set it.
+  args: { questionId: v.id("questions"), attempt: v.optional(v.number()), force: v.optional(v.boolean()) },
   returns: v.union(v.literal("checked"), v.literal("skipped"), v.literal("failed")),
   handler: async (ctx, args): Promise<CheckOutcome> => {
-    if (qualityCheckMode() === "off") return "skipped";
-    const { outcome } = await checkOne(ctx, args.questionId);
+    const force = args.force === true;
+    if (!force && qualityCheckMode() === "off") return "skipped";
+    const { outcome } = await checkOne(ctx, args.questionId, force);
     const attempt = args.attempt ?? 1;
     if (outcome === "failed" && attempt < MAX_ATTEMPTS) {
       await ctx.scheduler.runAfter(QUALITY_CHECK_RETRY_DELAY_MS, internal.internal.qualityCheck.checkQuestion, {
         questionId: args.questionId,
         attempt: attempt + 1,
+        ...(force ? { force } : {}),
       });
     } else if (outcome === "failed") {
       console.warn(`Quality check gave up on question ${args.questionId} after ${MAX_ATTEMPTS} attempts.`);
