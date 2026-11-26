@@ -10,6 +10,7 @@ import {
   REMIX_PROMPT_LABEL,
 } from "./promptArchitecture";
 import { callReserveUsd, MAX_PROMPT_CHARS, type SpendClass } from "./aiSpend";
+import { assertOpenRouterModel } from "./openRouterModel";
 import { ConvexError } from "convex/values";
 import { ERROR_CODES, ERROR_MESSAGES } from "../constants";
 import { type AiUnansweredSlot, holdAiUnanswered, releaseAiUnanswered } from "./aiRateLimit";
@@ -32,11 +33,6 @@ export const GENERATION_MODEL = "anthropic/claude-opus-5.5";
 // reports, which is higher if the call was routed to a dearer endpoint.
 const GENERATION_PRICE_USD_PER_MTOK = { input: 4, output: 20 };
 const utf8 = new TextEncoder();
-/**
- * An OpenRouter preset or model name, like "anthropic/claude-sonnet-5.5", with an optional variant
- * like ":nitro".
- */
-const OPENROUTER_MODEL = /^(@preset\/[a-z0-9-]+|[a-z0-9-]+\/[a-z0-9.-]+(:[a-z0-9-]+)?)$/;
 /** Temperature for saved questions (feed, daily email) unless a caller sets one. */
 export const DEFAULT_GENERATION_TEMPERATURE = 0.9;
 export const GENERATION_PROVIDER = "openrouter";
@@ -185,15 +181,9 @@ const REMIX_ANSWER_TOKENS = 150;
 const JSON_BASE_TOKENS = 300;
 const TOKENS_PER_QUESTION = 200;
 
-/** Refuses a model name that isn't an OpenRouter one, before it can reach the provider. */
-export function assertOpenRouterModel(model: string): void {
-  if (!OPENROUTER_MODEL.test(model)) {
-    throw new ConvexError({
-      code: "AI_MODEL_NAME",
-      message: `"${model}" isn't an OpenRouter model name like "anthropic/claude-sonnet-5.5".`,
-    });
-  }
-}
+// The model-name check lives in openRouterModel.ts, so mutations can use it without this
+// module's OpenAI client.
+export { assertOpenRouterModel };
 
 export function maxOutputTokens(batchSize: number): number {
   return REASONING_ALLOWANCE_TOKENS + JSON_BASE_TOKENS + TOKENS_PER_QUESTION * batchSize;
@@ -527,7 +517,7 @@ function parseCandidates(
   return parsed.slice(0, batchSize);
 }
 
-type GenerationPurpose = "feed" | "admin_preview" | "admin_accept" | "nightly_pool" | "newsletter" | "remix";
+type GenerationPurpose = "feed" | "admin_preview" | "admin_accept" | "nightly_pool" | "newsletter" | "remix" | "admin_experiment";
 
 /** What a run records when the eval harness gave the prompt, in place of the brief's label. */
 export const GIVEN_PROMPT_LABEL = "given";
@@ -619,6 +609,10 @@ export async function runPersistedQuestionGeneration(
     requestStartedAt?: number;
     /** Given when someone is watching: the model call then streams and reports its stages. */
     onStage?: (stage: GenerationRunnerStage) => void;
+    /** An OpenRouter model id. Only a generator experiment picks one; everything else uses GENERATION_MODEL. */
+    model?: string;
+    /** Check every saved question with Claude whatever QUALITY_CHECK_MODE says. */
+    forceQualityCheck?: boolean;
   },
 ): Promise<{
   runId: Id<"generationRuns">;
@@ -634,11 +628,13 @@ export async function runPersistedQuestionGeneration(
   };
   questions: any[];
 }> {
-  // Only the daily email and the admin-triggered pool are system spend. Everything
-  // else (feed generation, any purpose added later) is user spend.
+  // Only the daily email, the admin-triggered pool and the admin's generator experiments are
+  // system spend. Everything else (feed generation, any purpose added later) is user spend.
   const requestStartedAt = args.requestStartedAt ?? Date.now();
   const spendClass: SpendClass =
-    args.purpose === "newsletter" || args.purpose === "nightly_pool" ? "system" : "user";
+    args.purpose === "newsletter" || args.purpose === "nightly_pool" || args.purpose === "admin_experiment" ? "system" : "user";
+  const model = args.model ?? GENERATION_MODEL;
+  assertOpenRouterModel(model);
   await ensureAiBudget(ctx, spendClass);
 
   const { onStage } = args;
@@ -667,7 +663,7 @@ export async function runPersistedQuestionGeneration(
       purpose: args.purpose,
       requestedByUserId: args.requestedByUserId,
       prompt,
-      model: GENERATION_MODEL,
+      model,
       temperature,
     });
 
@@ -675,7 +671,7 @@ export async function runPersistedQuestionGeneration(
     try {
       const completion = await timeProviderCall(timing, () =>
         createChatCompletionWithRetry(ctx, { spendClass, runId }, {
-          model: GENERATION_MODEL,
+          model,
           temperature,
           max_tokens: maxOutputTokens(prompt.batchSize),
           response_format: { type: "json_object" },
@@ -709,6 +705,8 @@ export async function runPersistedQuestionGeneration(
         status: "pending",
         poolDate: args.poolDate,
         poolStatus: args.poolStatus,
+        model,
+        ...(args.forceQualityCheck ? { forceQualityCheck: true } : {}),
       });
 
       const counts = {

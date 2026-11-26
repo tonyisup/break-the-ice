@@ -75,4 +75,24 @@ export default tseslint.config(
       "@typescript-eslint/require-await": "off",
     },
   },
+  {
+    // The admin portal ships as its own lazy chunk (see src/main.tsx). A static
+    // import from public code would pull it into every visitor's bundle.
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/admin/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/admin", "@/admin/*", "**/admin", "**/admin/*", "!**/convex/**"],
+              message:
+                "Admin code loads lazily from src/main.tsx. Move shared code out of src/admin instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

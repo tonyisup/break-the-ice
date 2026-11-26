@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { useAuth } from "@clerk/clerk-react";
 import { ClerkProviderWithTheme } from "./components/ClerkProviderWithTheme";
@@ -11,23 +11,9 @@ import { StorageProvider } from "./hooks/useStorageContext";
 import App from "./App";
 import Root from "./Root";
 import LikedQuestionsPage from "./app/liked/page";
-import QuestionsPage from "./app/admin/questions/page";
-import TagsPage from "./app/admin/tags/page";
 import SettingsPage from "./app/settings/page";
-import StylesPage from "./app/admin/styles/page";
-import TonesPage from "./app/admin/tones/page";
-import FeedbackPage from "./app/admin/feedback/page";
-import UsersPage from "./app/admin/users/page";
-import TopicsPage from "./app/admin/topics/page";
 import HistoryPage from "./app/history/page";
 import QuestionPage from "./app/question/page";
-import DuplicatesPage from "./app/admin/duplicates/page";
-import DuplicateHistoryPage from "./app/admin/duplicates/completed/page";
-import PrunePage from "./app/admin/prune/page";
-import PruneSettingsPage from "./app/admin/prune/settings/page";
-import PoolPage from "./app/admin/pool/page";
-import AdminPage from "./app/admin/page";
-import AdminLayout from "./app/admin/layout";
 import MyQuestionsPage from "./app/my-questions/page";
 import UnsubscribePage from "./app/unsubscribe/page";
 import VerifySubscriptionPage from "./app/verify-subscription/page";
@@ -39,20 +25,27 @@ import AboutPage from "./app/about/page";
 import ContactPage from "./app/contact/page";
 import FeedbackButton from "./components/FeedbackButton";
 import { AnalyticsManager } from "./components/AnalyticsManager";
-import GeneratorPage from "./app/admin/generator/page.tsx";
 import { Toaster } from "sonner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import UserDetailsPage from "./app/admin/users/[userId]/page.tsx";
-import QuestionDetailsPage from "./app/admin/questions/[questionId]/page.tsx";
-import NewsletterPage from "./app/admin/newsletter/page.tsx";
 import { ClerkSyncManager } from "./components/ClerkSyncManager";
 import { RouteMetadata } from "./components/RouteMetadata";
 import NotFoundPage from "./app/not-found/page";
 import ThankYouPage from "./app/thank-you/page";
 import CookieConsentBanner from "./components/CookieConsentBanner";
 
+// Admin portal loads on demand so its code stays out of the public bundle.
+const AdminApp = lazy(() => import("./admin/AdminApp"));
+
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
+function AdminLoading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center" role="status">
+      <div className="size-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+      <span className="sr-only">Loading admin</span>
+    </div>
+  );
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -76,25 +69,14 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/verify-subscription" element={<VerifySubscriptionPage />} />
               <Route path="/my-questions" element={<MyQuestionsPage />} />
               <Route path="/add-question" element={<Navigate to="/my-questions" replace />} />
-              <Route element={<AdminLayout />}>
-                <Route path="/admin" element={<AdminPage />} />
-                <Route path="/admin/questions" element={<QuestionsPage />} />
-                <Route path="/admin/questions/:questionId" element={<QuestionDetailsPage />} />
-                <Route path="/admin/tags" element={<TagsPage />} />
-                <Route path="/admin/topics" element={<TopicsPage />} />
-                <Route path="/admin/styles" element={<StylesPage />} />
-                <Route path="/admin/tones" element={<TonesPage />} />
-                <Route path="/admin/users" element={<UsersPage />} />
-                <Route path="/admin/newsletter" element={<NewsletterPage />} />
-                <Route path="/admin/feedback" element={<FeedbackPage />} />
-                <Route path="/admin/duplicates" element={<DuplicatesPage />} />
-                <Route path="/admin/duplicates/completed" element={<DuplicateHistoryPage />} />
-                <Route path="/admin/prune" element={<PrunePage />} />
-                <Route path="/admin/prune/settings" element={<PruneSettingsPage />} />
-                <Route path="/admin/pool" element={<PoolPage />} />
-                <Route path="/admin/generator" element={<GeneratorPage />} />
-                <Route path="/admin/users/:userId" element={<UserDetailsPage />} />
-              </Route>
+              <Route
+                path="/admin/*"
+                element={
+                  <Suspense fallback={<AdminLoading />}>
+                    <AdminApp />
+                  </Suspense>
+                }
+              />
 
 
               <Route path="/privacy" element={<PrivacyPolicyPage />} />

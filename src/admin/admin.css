@@ -1,0 +1,11 @@
+/* Admin-only styles. Loaded with the admin chunk, not the public app. */
+.admin-shell {
+  font-family:
+    "Manrope Variable", "Avenir Next", ui-sans-serif, system-ui, sans-serif;
+  font-optical-sizing: auto;
+}
+
+.admin-shell :is(h1, h2, h3) {
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}

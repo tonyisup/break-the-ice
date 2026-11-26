@@ -39,6 +39,8 @@ const generationRunPurpose = v.union(
   // One call that judges a generated question (internal/qualityCheck.ts). Its run has no
   // prompt label, and names the question it judged as sourceQuestionId.
   v.literal("quality_check"),
+  // One cell and model of a generator experiment (admin/generator.ts).
+  v.literal("admin_experiment"),
 );
 
 export default defineSchema({
@@ -189,6 +191,47 @@ export default defineSchema({
     .index("by_purpose", ["purpose"])
     .index("by_style_tone_topic", ["styleSlug", "toneSlug", "topicSlug"])
     .index("by_requestedByUserId", ["requestedByUserId"]),
+  // Models saved on the generator page for reuse: any OpenRouter id, with the owner's label.
+  generatorModels: defineTable({
+    model: v.string(),
+    label: v.string(),
+    createdAt: v.number(),
+  }).index("by_model", ["model"]),
+  // One click of Generate on the generator page: a set of style × tone cells, each generated
+  // by every chosen model. Its calls (generatorCalls) run on the server, at most
+  // GENERATOR_MAX_RUNNING at a time across all experiments.
+  generatorExperiments: defineTable({
+    name: v.string(),
+    note: v.optional(v.string()),
+    createdBy: v.string(),
+    createdAt: v.number(),
+    topicSlug: v.optional(v.string()),
+    direction: v.optional(v.string()),
+    questionsPerCall: v.number(),
+    cells: v.array(v.object({ style: v.string(), tone: v.string() })),
+    // Each model with its blind label ("Model A"), assigned in a shuffled order per experiment.
+    models: v.array(v.object({ model: v.string(), label: v.string(), blindLabel: v.string() })),
+    estimatedCostUsd: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
+  generatorCalls: defineTable({
+    experimentId: v.id("generatorExperiments"),
+    style: v.string(),
+    tone: v.string(),
+    model: v.string(),
+    status: v.union(v.literal("queued"), v.literal("running"), v.literal("done"), v.literal("failed")),
+    attempts: v.number(),
+    runId: v.optional(v.id("generationRuns")),
+    questionIds: v.array(v.id("questions")),
+    // What the model returned that wasn't saved, for the cell's summary.
+    duplicateCount: v.optional(v.number()),
+    rejectedCount: v.optional(v.number()),
+    error: v.optional(v.string()),
+    queuedAt: v.number(),
+    startedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+  })
+    .index("by_experiment", ["experimentId"])
+    .index("by_status_queuedAt", ["status", "queuedAt"]),
   // How far one person's feed generation has got, for the page waiting on it. It holds no
   // prompt or model text, and old rows are cleared hourly.
   generationProgress: defineTable({
@@ -238,6 +281,9 @@ export default defineSchema({
     toneVersion: v.optional(v.number()),
     topicVersion: v.optional(v.number()),
     generationRunId: v.optional(v.id("generationRuns")),
+    // The model the run asked for (an OpenRouter id), copied from the run so reports can group
+    // by it without reading runs. Questions generated before it was recorded have none.
+    generatedByModel: v.optional(v.string()),
     safetyFlags: v.optional(v.array(v.string())),
     moderationNotes: v.optional(v.string()),
     quality: v.optional(questionQualitySnapshot),
@@ -449,7 +495,10 @@ export default defineSchema({
   questionReviews: defineTable({
     reviewer: v.string(),
     reason: v.string(),
-    outcome: v.union(v.literal("flag"), v.literal("keep"), v.literal("prune"), v.literal("edit"), v.literal("remix"), v.literal("duplicates"), v.literal("reject_duplicates")),
+    outcome: v.union(v.literal("flag"), v.literal("keep"), v.literal("prune"), v.literal("edit"), v.literal("remix"), v.literal("duplicates"), v.literal("reject_duplicates"), v.literal("approve"), v.literal("reject")),
+    // Why a pending question was rejected, in the quality check's own reason codes, so these
+    // decisions can calibrate it later (qualityCheckContext). Optional: a reject needs none.
+    reasons: v.optional(v.array(editorialReason)),
     source: v.union(v.literal("pruning"), v.literal("duplicates"), v.literal("question")),
     pruningId: v.optional(v.id("pruning")),
     detectionId: v.optional(v.id("duplicateDetections")),
