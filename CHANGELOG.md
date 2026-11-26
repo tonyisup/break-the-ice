@@ -2,6 +2,21 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.11.0.0] - 2026-11-25
+
+### Added
+- A review queue for pending questions at Admin → Review queue. Approve or reject one question or a whole selection at once. Neither asks for a note: a reject can carry optional reasons (awkward wording, unclear answer, style/tone mismatch, repeated construction) and a note. Every decision can be undone. Filter by Claude's verdict or by who wrote the question, and use keyboard shortcuts (J/K, X, A, R, 1–4, ? for the list).
+- A Reports page. Questions ranks library questions as top performers or ones that need attention, adjusted for how many views they have. Select questions to copy them with their links for an email, export them as CSV, or prune them (with undo). Styles, Tones, Topics and Models compare likes, hides and time on screen with your approval rate, Claude's keep rate and how often you agreed with Claude.
+- A new generator. Pick style × tone cells, one or more AI models (any OpenRouter model id, saved for reuse), an optional topic and direction, and how many questions each call asks for. It shows the call count, an estimated cost at Opus prices and today's budget before you start. Runs continue on the server, at most four calls at a time. Cells fill in as calls finish, and you can review each cell's questions beside the grid. Models show as "Model A", "Model B" and so on until you reveal them, here and in the review queue. Past experiments can be reopened, renamed and given a note.
+
+### Changed
+- The admin portal loads as its own bundle, so the public app's JavaScript went from 463 KB to 222 KB (59 KB gzipped).
+- Generated questions now record which model wrote them. Questions from before this release show as "Not recorded" in Reports.
+- Questions from the generator wait in the review queue and always get Claude's quality check. The old generator published accepted questions straight away, unchecked. It has been removed.
+- The Questions page links to the review queue instead of listing pending questions itself.
+
+Deploy Convex before the frontend. The database changes only add tables and fields, so the current site keeps working on the new backend. Until the backend is deployed, the new admin pages fail to load. Production starts with no saved models: add them on the generator page.
+
 ## [0.10.0.0] - 2026-11-24
 
 ### Added

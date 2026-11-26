@@ -1,5 +1,55 @@
 # TODOS
 
+## Admin portal
+
+### Remove the old generator's backend
+
+**What:** Delete `admin/ai:generateAIQuestions` and `core/questions:saveAIQuestion`, and their tests.
+
+**Why:** The v0.11.0.0 generator replaced the page that called them. `saveAIQuestion` saves a question as public with no review and no quality check, so nothing should keep calling it.
+
+**Context:** Nothing in `src/` calls either. A tab open on the old generator page from before v0.11.0.0 still could, until it is reloaded.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** Old tabs gone (a week after v0.11.0.0 ships)
+
+### Give Claude's quality check the owner's reject reasons
+
+**What:** Pass recent review decisions (`questionReviews` with outcome `approve`/`reject` and their `reasons`) to `qualityCheckContext` in `convex/lib/qualityCheck.ts`.
+
+**Why:** The check already accepts the owner's keep/reject decisions with reasons as calibration, and the app passes none. Since v0.11.0.0 the review queue stores reject reasons in the check's own codes.
+
+**Context:** An earlier experiment with the owner's decisions as context lowered rejects but missed the bar, so measure before publishing on it.
+
+**Effort:** M
+**Priority:** P2
+**Depends on:** Enough reviewed questions with reasons
+
+### Rework the Duplicates page
+
+**What:** Bring the Duplicates page in line with the review queue: a list with a preview, bulk decisions and keyboard keys.
+
+**Why:** The owner can't use it while the review backlog is large.
+
+**Context:** Deferred by the owner during the v0.11.0.0 admin rebuild.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** Review backlog cleared
+
+### Roll engagement up by day for Reports
+
+**What:** Add a daily per-question rollup of analytics events and have `admin/reports:getPerformanceReport` read it.
+
+**Why:** The report reads at most 3,000 questions and the latest 10,000 events at once, and says so when it hits either limit.
+
+**Context:** `convex/admin/reports.ts` (`REPORT_QUESTION_LIMIT`, `REPORT_EVENT_LIMIT`). Fine while there are few users.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** Real usage
+
 ## Teams removal
 
 ### Remove what keeps old apps working
