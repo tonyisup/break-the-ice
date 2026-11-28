@@ -1,12 +1,10 @@
 # Break the Ice
 
 ## Goal
-Help fitness studios and group training coaches build community through curated ice-breaker questions — with minimal effort.
+A free icebreaker app for everyday social moments (first dates, dinner parties, road trips, family dinners, group chats) that gives people a question worth asking in one tap.
 
 ## Background
-In many fitness group training classes, the coach starts with a "Question of the Day" to welcome new participants and mentally wake up the room. Coaches don't have time to invent these on the fly, and studio owners want consistent, brand-aligned prompts across locations.
-
-**The insight:** This started as a consumer swiping app but is pivoting to B2B. Fitness studios are the primary customers — coaches get one daily question; studio admins use AI-powered curation to set the week's lineup. The consumer-facing scroll interface becomes a marketing funnel into the B2B product.
+This started as a consumer swiping app, then pivoted for a while to a B2B product for fitness studios and group-training coaches. In November 2026 team and gym use moved to a separate app, and Break the Ice went back to being a generic consumer icebreaker. Occasion decks (v0.12.0.0) are its main entry point from search and the landing page.
 
 ## Architecture
 
@@ -25,6 +23,7 @@ the `pre-teams-removal` tag.
 
 ### Completed
 - ✅ Infinite scroll interface for consumer browsing (replaced original swipe cards)
+- ✅ Occasion decks: /occasions pages and an occasion picker on the feed (v0.12.0.0)
 - ✅ Like/favorite system with persistence
 - ✅ AI question generation with category/tag/style/tone control
 - ✅ Admin dashboard (questions, styles/tones/topics, pool, pruning, duplicates)
