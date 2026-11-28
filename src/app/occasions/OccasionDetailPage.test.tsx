@@ -32,6 +32,13 @@ describe("OccasionDetailPage", () => {
     expect(screen.queryByRole("button", { name: /draw another/i })).toBeNull();
   });
 
+  it("names each sample card's copy button after its question", () => {
+    renderAt("/occasions/road-trip");
+    for (const card of getOccasionBySlug("road-trip")!.sampleCards) {
+      expect(screen.getByRole("button", { name: `Copy: ${card.text}` })).toBeInTheDocument();
+    }
+  });
+
   it("starts the next occasion at its first card and the top of the page", () => {
     const firstDate = getOccasionBySlug("first-date")!;
     const dinnerParty = getOccasionBySlug("dinner-party")!;

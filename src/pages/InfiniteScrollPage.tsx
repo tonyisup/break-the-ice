@@ -401,6 +401,8 @@ export default function InfiniteScrollPage() {
 
     const isFirstPull = questionsRef.current.length === 0;
     const hasAnchors = !!(anchoredStyleId || anchoredToneId || anchoredTopicId);
+    // The occasion this load was started for; the URL may change before it finishes.
+    const loadOccasion = occasionSlugRef.current;
     const loadStartedAt = performance.now();
     atFeedEndSinceRef.current = isAtFeedEnd() ? loadStartedAt : null;
     // Time the reader spent at the end of the feed with nothing new to read. A stretch ends
@@ -787,7 +789,7 @@ export default function InfiniteScrollPage() {
           trigger,
           first_pull: isFirstPull,
           anchored: hasAnchors,
-          occasion: occasionSlugRef.current,
+          occasion: loadOccasion,
           total_ms: round(finishedAt - loadStartedAt),
           // How long the reader sat at the end of the feed with nothing new to read.
           stall_ms: round(stalledMs),

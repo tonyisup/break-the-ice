@@ -252,6 +252,7 @@ function OccasionDetail({ occasion }: { occasion: OccasionConfig }) {
                         <button
                           type="button"
                           onClick={() => void handleCopy(card.text)}
+                          aria-label={`Copy: ${card.text}`}
                           className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-secondary/50 px-3 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
                         >
                           {copiedText === card.text ? (
