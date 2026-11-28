@@ -16,7 +16,7 @@ import { collapseFeedCard } from "@/components/hidden-card-notice/collapseFeedCa
 import { ctaHolderId, keepCtasInPlace, type CtaAnchors } from "./feedCtaAnchors";
 import { ActiveFilterChips, FeedFilterBar, type FeedFilterKey, type FeedFilterOption } from "@/components/filter-controls/FeedFilterBar";
 import { OccasionPickerBar } from "@/components/filter-controls/OccasionPickerBar";
-import { getOccasionBySlug, type OccasionConfig } from "@/config/occasions";
+import { applyOccasionFilters, getOccasionBySlug, type OccasionConfig } from "@/config/occasions";
 import type { ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { useAuth } from "@clerk/clerk-react";
@@ -89,9 +89,13 @@ export default function InfiniteScrollPage() {
   const anchoredTopicParam = searchParams.get("topic");
   const occasionParam = searchParams.get("occasion");
   const activeOccasion = getOccasionBySlug(occasionParam);
-  const effectiveStyleParam = anchoredStyleParam ?? activeOccasion?.filters.style ?? null;
-  const effectiveToneParam = anchoredToneParam ?? activeOccasion?.filters.tone ?? null;
-  const effectiveTopicParam = anchoredTopicParam ?? activeOccasion?.filters.topic ?? null;
+  // Read by feed_load; a ref so the load callback isn't rebuilt when the URL is tidied.
+  const occasionSlugRef = useRef<string | null>(null);
+  occasionSlugRef.current = activeOccasion?.slug ?? null;
+  // `||`, not `??`: an empty ?style= is no filter, so the occasion's own one still applies.
+  const effectiveStyleParam = anchoredStyleParam || activeOccasion?.filters.style || null;
+  const effectiveToneParam = anchoredToneParam || activeOccasion?.filters.tone || null;
+  const effectiveTopicParam = anchoredTopicParam || activeOccasion?.filters.topic || null;
 
 
   const {
@@ -178,9 +182,13 @@ export default function InfiniteScrollPage() {
     return map;
   }, [allTopics]);
 
-  const anchoredStyle = effectiveStyleParam ? stylesMap.get(effectiveStyleParam) : undefined;
-  const anchoredTone = effectiveToneParam ? tonesMap.get(effectiveToneParam) : undefined;
-  const anchoredTopic = effectiveTopicParam ? topicsMap.get(effectiveTopicParam) : undefined;
+  // An explicit filter wins; one that doesn't resolve falls back to the occasion's, so the
+  // first load already uses the filter the URL clean-up below will settle on.
+  const resolveAnchor = <T,>(map: Map<string, T>, explicit: string | null, fromOccasion: string | undefined) =>
+    (explicit ? map.get(explicit) : undefined) ?? (fromOccasion ? map.get(fromOccasion) : undefined);
+  const anchoredStyle = resolveAnchor(stylesMap, anchoredStyleParam, activeOccasion?.filters.style);
+  const anchoredTone = resolveAnchor(tonesMap, anchoredToneParam, activeOccasion?.filters.tone);
+  const anchoredTopic = resolveAnchor(topicsMap, anchoredTopicParam, activeOccasion?.filters.topic);
   const anchoredStyleId = anchoredStyle?._id ?? null;
   const anchoredToneId = anchoredTone?._id ?? null;
   const anchoredTopicId = anchoredTopic?._id ?? null;
@@ -213,6 +221,22 @@ export default function InfiniteScrollPage() {
     if (occasionParam && !activeOccasion) {
       newParams.delete("occasion");
       changed = true;
+    } else if (activeOccasion) {
+      const maps = { style: stylesMap, tone: tonesMap, topic: topicsMap };
+      // A style, tone or topic the occasion names may since have been retired.
+      const retired = (["style", "tone", "topic"] as const).filter((key) => {
+        const slug = activeOccasion.filters[key];
+        return slug && !maps[key].has(slug);
+      });
+      // When an explicit filter overrides the occasion, or part of it no longer exists, the
+      // deck is not that occasion: keep the filters that apply as plain params, drop it.
+      if (anchoredStyleParam || anchoredToneParam || anchoredTopicParam || retired.length) {
+        applyOccasionFilters(newParams, activeOccasion);
+        for (const key of retired) {
+          if (newParams.get(key) === activeOccasion.filters[key]) newParams.delete(key);
+        }
+        changed = true;
+      }
     }
     if (changed) setSearchParams(newParams, { replace: true });
   }, [anchorParamsReady, anchoredStyleParam, anchoredToneParam, anchoredTopicParam, occasionParam, activeOccasion, stylesMap, tonesMap, topicsMap, searchParams, setSearchParams]);
@@ -763,6 +787,7 @@ export default function InfiniteScrollPage() {
           trigger,
           first_pull: isFirstPull,
           anchored: hasAnchors,
+          occasion: occasionSlugRef.current,
           total_ms: round(finishedAt - loadStartedAt),
           // How long the reader sat at the end of the feed with nothing new to read.
           stall_ms: round(stalledMs),
@@ -990,39 +1015,25 @@ export default function InfiniteScrollPage() {
     ["style", "tone", "topic", "occasion"].forEach((key) => newParams.delete(key));
     if (occasion) {
       newParams.set("occasion", occasion.slug);
+      captureAnalytics("occasion_selected", { occasion: occasion.slug });
     }
     setSearchParams(newParams);
   };
 
   const handleAnchorItem = (item: ItemDetails) => {
-    const newParams = new URLSearchParams(searchParams);
-    const paramKey = item.type.toLowerCase();
-    const currentVal = newParams.get(paramKey);
-
-    newParams.delete("occasion");
-    if (currentVal === item.slug || currentVal === item.id) {
-      newParams.delete(paramKey);
-    } else {
-      newParams.set(paramKey, item.slug);
-    }
-    setSearchParams(newParams);
+    const key = item.type.toLowerCase() as FeedFilterKey;
+    // Compare against what the feed is filtered by, which may come from an occasion
+    // rather than the URL's own style/tone/topic.
+    const anchoredId = key === "style" ? anchoredStyleId : key === "tone" ? anchoredToneId : anchoredTopicId;
+    const currentVal = searchParams.get(key);
+    const isAnchored = anchoredId === item.id || currentVal === item.slug || currentVal === item.id;
+    setFilter(key, isAnchored ? null : item.slug);
   };
 
   const setFilter = (key: FeedFilterKey, slug: string | null) => {
     const newParams = new URLSearchParams(searchParams);
-    if (activeOccasion) {
-      // Materialize the occasion's remaining filters when the person customizes one.
-      if (activeOccasion.filters.style && !newParams.get("style")) {
-        newParams.set("style", activeOccasion.filters.style);
-      }
-      if (activeOccasion.filters.tone && !newParams.get("tone")) {
-        newParams.set("tone", activeOccasion.filters.tone);
-      }
-      if (activeOccasion.filters.topic && !newParams.get("topic")) {
-        newParams.set("topic", activeOccasion.filters.topic);
-      }
-      newParams.delete("occasion");
-    }
+    // Customizing one filter keeps the occasion's other filters as plain ones.
+    if (activeOccasion) applyOccasionFilters(newParams, activeOccasion);
     if (slug) newParams.set(key, slug);
     else newParams.delete(key);
     setSearchParams(newParams);
@@ -1462,7 +1473,7 @@ export default function InfiniteScrollPage() {
                 className="min-h-11 rounded-full bg-card px-6 font-semibold"
                 onClick={() => {
                   const newParams = new URLSearchParams(searchParams);
-                  ["style", "tone", "topic"].forEach((key) => newParams.delete(key));
+                  ["style", "tone", "topic", "occasion"].forEach((key) => newParams.delete(key));
                   setSearchParams(newParams);
                 }}
               >
