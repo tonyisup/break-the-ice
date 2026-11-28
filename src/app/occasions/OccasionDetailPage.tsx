@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -16,8 +16,10 @@ import { PublicFooter, PublicHeader } from "@/components/PublicChrome";
 import { OccasionIcon } from "@/components/OccasionIcon";
 import {
   OCCASIONS,
+  describeSampleCard,
   getOccasionAppUrl,
   getOccasionBySlug,
+  type OccasionConfig,
 } from "@/config/occasions";
 import { useTheme } from "@/hooks/useTheme";
 import NotFoundPage from "@/app/not-found/page";
@@ -26,17 +28,31 @@ export default function OccasionDetailPage() {
   useTheme();
   const { slug } = useParams<{ slug: string }>();
   const occasion = getOccasionBySlug(slug);
-  const [featuredIndex, setFeaturedIndex] = useState(0);
-  const [copiedText, setCopiedText] = useState<string | null>(null);
 
   if (!occasion) {
     return <NotFoundPage />;
   }
 
+  // Keyed by slug: moving to another occasion starts it fresh, at its first card.
+  return <OccasionDetail key={occasion.slug} occasion={occasion} />;
+}
+
+function OccasionDetail({ occasion }: { occasion: OccasionConfig }) {
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
+
+  // "Try another occasion" sits at the bottom of the page; open the next one at the top.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const appUrl = getOccasionAppUrl(occasion);
   const featured =
     occasion.sampleCards[featuredIndex % occasion.sampleCards.length];
-  const relatedOccasions = OCCASIONS.filter((item) => item.slug !== occasion.slug).slice(0, 4);
+  const featuredLabels = featured ? describeSampleCard(featured) : undefined;
+  const relatedOccasions = OCCASIONS.filter(
+    (item) => item.slug !== occasion.slug,
+  ).slice(0, 4);
 
   const handleCopy = async (text: string) => {
     try {
@@ -68,11 +84,13 @@ export default function OccasionDetailPage() {
 
           <div className="mt-6 grid items-center gap-10 md:grid-cols-[1.08fr_0.92fr] lg:gap-14">
             <div>
-              <p
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em] shadow-sm"
-                style={{ color: occasion.accentColor }}
-              >
-                <OccasionIcon name={occasion.icon} className="size-3.5" aria-hidden="true" />
+              <p className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground shadow-sm">
+                <OccasionIcon
+                  name={occasion.icon}
+                  className="size-3.5"
+                  style={{ color: occasion.accentColor }}
+                  aria-hidden="true"
+                />
                 {occasion.name} deck
               </p>
               <h1 className="mt-5 text-[clamp(2.2rem,4.4vw,3.75rem)] font-extrabold leading-[1.08] tracking-[-0.035em] text-balance text-foreground">
@@ -88,14 +106,17 @@ export default function OccasionDetailPage() {
                   className="min-h-12 rounded-full px-7 text-base font-bold shadow-sm"
                 >
                   <Link to={appUrl}>
-                    Open {occasion.shortName} deck <ArrowRight aria-hidden="true" />
+                    Open {occasion.shortName} deck{" "}
+                    <ArrowRight aria-hidden="true" />
                   </Link>
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() =>
-                    setFeaturedIndex((current) => (current + 1) % occasion.sampleCards.length)
+                    setFeaturedIndex(
+                      (current) => (current + 1) % occasion.sampleCards.length,
+                    )
                   }
                   className="min-h-12 rounded-full border-border bg-card px-5 text-base font-semibold"
                 >
@@ -105,13 +126,13 @@ export default function OccasionDetailPage() {
               </div>
             </div>
 
-            {featured && (
+            {featured && featuredLabels && (
               <div className="deck-card mx-auto w-full max-w-md overflow-hidden">
                 <div
                   aria-hidden="true"
                   className="h-1.5 w-full"
                   style={{
-                    background: `linear-gradient(90deg, ${featured.styleColor}, ${featured.toneColor})`,
+                    background: `linear-gradient(90deg, ${featuredLabels.style.color}, ${featuredLabels.tone.color})`,
                   }}
                 />
                 <div className="flex flex-col justify-between p-5 sm:p-6">
@@ -119,10 +140,10 @@ export default function OccasionDetailPage() {
                     <span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-secondary/55 px-3 py-1.5 text-xs font-semibold text-foreground">
                       <Compass
                         className="size-3.5"
-                        style={{ color: featured.styleColor }}
+                        style={{ color: featuredLabels.style.color }}
                         aria-hidden="true"
                       />
-                      {featured.style}
+                      {featuredLabels.style.name}
                     </span>
                     <button
                       type="button"
@@ -132,7 +153,10 @@ export default function OccasionDetailPage() {
                     >
                       {copiedText === featured.text ? (
                         <>
-                          <Check className="size-3.5 text-emerald-500" aria-hidden="true" />
+                          <Check
+                            className="size-3.5 text-emerald-500"
+                            aria-hidden="true"
+                          />
                           Copied
                         </>
                       ) : (
@@ -146,8 +170,11 @@ export default function OccasionDetailPage() {
 
                   <div className="flex min-h-[175px] flex-col items-center justify-center px-3 py-8 text-center">
                     <span className="mb-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tracking-wide text-muted-foreground">
-                      <Flame className="size-3.5 text-primary" aria-hidden="true" />
-                      {featured.topic}
+                      <Flame
+                        className="size-3.5 text-primary"
+                        aria-hidden="true"
+                      />
+                      {featuredLabels.topic.name}
                     </span>
                     <p className="text-xl font-bold leading-[1.32] tracking-[-0.02em] text-balance text-card-foreground sm:text-2xl">
                       {featured.text}
@@ -158,10 +185,10 @@ export default function OccasionDetailPage() {
                     <span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-secondary/55 px-3 py-1.5 text-xs font-semibold text-foreground">
                       <Sun
                         className="size-3.5"
-                        style={{ color: featured.toneColor }}
+                        style={{ color: featuredLabels.tone.color }}
                         aria-hidden="true"
                       />
-                      {featured.tone}
+                      {featuredLabels.tone.name}
                     </span>
                   </div>
                 </div>
@@ -179,62 +206,74 @@ export default function OccasionDetailPage() {
                   Sample {occasion.shortName} cards
                 </h2>
                 <p className="mt-2 text-sm text-muted-foreground md:text-base">
-                  Steal one right now, or open the full deck for unlimited scrolling and Remix.
+                  Steal one right now, or open the full deck for unlimited
+                  scrolling and Remix.
                 </p>
               </div>
-              <Button asChild variant="outline" className="w-fit rounded-full border-border bg-card font-semibold">
+              <Button
+                asChild
+                variant="outline"
+                className="w-fit rounded-full border-border bg-card font-semibold"
+              >
                 <Link to={appUrl}>
-                  See more in the deck <ArrowRight className="size-4" aria-hidden="true" />
+                  See more in the deck{" "}
+                  <ArrowRight className="size-4" aria-hidden="true" />
                 </Link>
               </Button>
             </div>
 
             <div className="mt-8 grid gap-5 md:grid-cols-2">
-              {occasion.sampleCards.map((card) => (
-                <article
-                  key={card.text}
-                  className="deck-card flex flex-col justify-between overflow-hidden"
-                >
-                  <div
-                    aria-hidden="true"
-                    className="h-1 w-full"
-                    style={{
-                      background: `linear-gradient(90deg, ${card.styleColor}, ${card.toneColor})`,
-                    }}
-                  />
-                  <div className="flex flex-1 flex-col justify-between p-6">
-                    <div className="flex items-center justify-between gap-2 text-xs font-semibold text-muted-foreground">
-                      <span>{card.style}</span>
-                      <span>{card.tone}</span>
+              {occasion.sampleCards.map((card) => {
+                const labels = describeSampleCard(card);
+                return (
+                  <article
+                    key={card.text}
+                    className="deck-card flex flex-col justify-between overflow-hidden"
+                  >
+                    <div
+                      aria-hidden="true"
+                      className="h-1 w-full"
+                      style={{
+                        background: `linear-gradient(90deg, ${labels.style.color}, ${labels.tone.color})`,
+                      }}
+                    />
+                    <div className="flex flex-1 flex-col justify-between p-6">
+                      <div className="flex items-center justify-between gap-2 text-xs font-semibold text-muted-foreground">
+                        <span>{labels.style.name}</span>
+                        <span>{labels.tone.name}</span>
+                      </div>
+                      <p className="my-5 text-lg font-bold leading-snug tracking-[-0.015em] text-card-foreground">
+                        {card.text}
+                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          {labels.topic.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void handleCopy(card.text)}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-secondary/50 px-3 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
+                        >
+                          {copiedText === card.text ? (
+                            <>
+                              <Check
+                                className="size-3.5 text-emerald-500"
+                                aria-hidden="true"
+                              />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="size-3.5" aria-hidden="true" />
+                              Copy
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
-                    <p className="my-5 text-lg font-bold leading-snug tracking-[-0.015em] text-card-foreground">
-                      {card.text}
-                    </p>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        {card.topic}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => void handleCopy(card.text)}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-secondary/50 px-3 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-secondary"
-                      >
-                        {copiedText === card.text ? (
-                          <>
-                            <Check className="size-3.5 text-emerald-500" aria-hidden="true" />
-                            Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="size-3.5" aria-hidden="true" />
-                            Copy
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -285,9 +324,13 @@ export default function OccasionDetailPage() {
               </div>
 
               <div className="mt-6">
-                <Button asChild className="w-full rounded-full min-h-11 font-bold sm:w-auto sm:px-6">
+                <Button
+                  asChild
+                  className="w-full rounded-full min-h-11 font-bold sm:w-auto sm:px-6"
+                >
                   <Link to={appUrl}>
-                    Start scrolling {occasion.shortName} <ArrowRight aria-hidden="true" />
+                    Start scrolling {occasion.shortName}{" "}
+                    <ArrowRight aria-hidden="true" />
                   </Link>
                 </Button>
               </div>

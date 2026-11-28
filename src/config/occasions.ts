@@ -8,14 +8,61 @@ export type OccasionIconName =
   | "message-circle"
   | "users";
 
+type TaxonomyLabel = { name: string; color: string };
+
+// Names and colors as the live deck shows them, so sample cards look like real ones.
+// occasions.test.ts checks every slug against convex/data/briefLines.ts.
+export const SAMPLE_STYLES = {
+  "desert-island": { name: "Desert Island", color: "#0F766E" },
+  "formative-moment": { name: "Formative Moment", color: "#4338CA" },
+  "future-chapter": { name: "Future Chapter", color: "#B45309" },
+  "gratitude-lightning": { name: "Lightning Round", color: "#81ECEC" },
+  "how-to-know-me": { name: "How to Know Me", color: "#BE185D" },
+  "if-this-but-that": { name: "If This But That", color: "#7C3AED" },
+  "micro-ritual": { name: "Micro-Ritual", color: "#318505" },
+  "one-word-whip-around": { name: "One-Word Whip-Around", color: "#7C3AED" },
+  "open-ended": { name: "Open Ended", color: "#0F766E" },
+  "rapid-fire-either": { name: "Either/Or", color: "#AA96DA" },
+  "super-power-caveats": { name: "Super-Power Caveats", color: "#1D4ED8" },
+  "time-capsule-snapshot": { name: "Time-Capsule Snapshot", color: "#7C3AED" },
+  "values-in-practice": { name: "Values in Practice", color: "#0F766E" },
+  "would-you-rather": { name: "Would You Rather", color: "#D97706" },
+} satisfies Record<string, TaxonomyLabel>;
+
+export const SAMPLE_TONES = {
+  candid: { name: "Candid", color: "#334155" },
+  cozy: { name: "Cozy", color: "#0891B2" },
+  "deep-thoughtful": { name: "Thoughtful", color: "#6A67CE" },
+  "fun-silly": { name: "Fun & Silly", color: "#FFAB91" },
+  nostalgic: { name: "Nostalgic", color: "#F97316" },
+  playful: { name: "Playful", color: "#EA580C" },
+  "wholesome-uplifting": { name: "Wholesome", color: "#81C784" },
+  witty: { name: "Witty", color: "#EA580C" },
+} satisfies Record<string, TaxonomyLabel>;
+
+export const SAMPLE_TOPICS = {
+  "childhood-nostalgia": { name: "Childhood Nostalgia", color: "#EC4899" },
+  food: { name: "Food", color: "#14B8A6" },
+  "home-life": { name: "Home Life", color: "#22C55E" },
+  "internet-habits": { name: "Internet Habits", color: "#F59E0B" },
+  music: { name: "Music", color: "#EC4899" },
+  technology: { name: "Technology", color: "#8B5CF6" },
+  travel: { name: "Travel", color: "#22C55E" },
+} satisfies Record<string, TaxonomyLabel>;
+
 export type OccasionSampleCard = {
-  style: string;
-  styleColor: string;
-  tone: string;
-  toneColor: string;
-  topic: string;
+  style: keyof typeof SAMPLE_STYLES;
+  tone: keyof typeof SAMPLE_TONES;
+  topic: keyof typeof SAMPLE_TOPICS;
   text: string;
 };
+
+/** The display names and colors for a sample card's style, tone and topic. */
+export const describeSampleCard = (card: OccasionSampleCard) => ({
+  style: SAMPLE_STYLES[card.style],
+  tone: SAMPLE_TONES[card.tone],
+  topic: SAMPLE_TOPICS[card.topic],
+});
 
 export type OccasionFilters = {
   style?: string;
@@ -54,45 +101,36 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     accentColor: "#E11D48",
     icon: "sparkles",
     filters: {
-      style: "open-ended",
       tone: "playful",
     },
     tips: [
-      "Keep it light early on—pick a Playful or Witty card before going deeper.",
+      "Keep it light early on: this deck stays Playful, so nobody feels put on the spot.",
       "Answer the question yourself too so it feels like a conversation, not a quiz.",
       "Use the Remix button if you want a slightly bolder or cozier spin on any prompt.",
     ],
     sampleCards: [
       {
-        style: "Open-ended",
-        styleColor: "#0E7490",
-        tone: "Playful",
-        toneColor: "#059669",
-        topic: "Everyday joy",
+        style: "open-ended",
+        tone: "playful",
+        topic: "home-life",
         text: "What’s a completely harmless hill you’re willing to die on?",
       },
       {
-        style: "Micro-ritual",
-        styleColor: "#D97706",
-        tone: "Candid",
-        toneColor: "#2563EB",
-        topic: "Home life",
+        style: "micro-ritual",
+        tone: "playful",
+        topic: "home-life",
         text: "What tiny, unnecessary step do you always take when making coffee, getting ready, or winding down?",
       },
       {
-        style: "Would you rather",
-        styleColor: "#7C3AED",
-        tone: "Playful",
-        toneColor: "#059669",
-        topic: "Travel",
+        style: "would-you-rather",
+        tone: "playful",
+        topic: "travel",
         text: "Would you rather always know the best restaurant in any city or always get the best seat on every flight?",
       },
       {
-        style: "Desert island",
-        styleColor: "#0F766E",
-        tone: "Witty",
-        toneColor: "#E11D48",
-        topic: "Music",
+        style: "desert-island",
+        tone: "playful",
+        topic: "music",
         text: "You can only keep three albums for the rest of the year—which ones survive?",
       },
     ],
@@ -101,7 +139,8 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     slug: "dinner-party",
     name: "Dinner Party",
     shortName: "Dinner party",
-    tagline: "Warm, lively questions that pull the whole table into one conversation.",
+    tagline:
+      "Warm, lively questions that pull the whole table into one conversation.",
     seoTitle: "Dinner Party Conversation Starters | Break the Ice(berg)",
     seoDescription:
       "Thoughtful and lively dinner party questions to keep the whole table talking, laughing, and sharing stories.",
@@ -112,44 +151,35 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     icon: "utensils",
     filters: {
       tone: "cozy",
-      topic: "food",
     },
     tips: [
       "Wait until everyone has a drink or plate in front of them, then toss one card into the middle.",
-      "Mix one Food or Travel prompt with one Hot Take to keep the energy moving.",
-      "Save your favorites before guests arrive so you have 3–4 backups ready.",
+      "Want a livelier round? Switch the tone to Bold once everyone has settled in.",
+      "Like a few cards before guests arrive so you have 3–4 backups ready.",
     ],
     sampleCards: [
       {
-        style: "Open-ended",
-        styleColor: "#0E7490",
-        tone: "Cozy",
-        toneColor: "#D97706",
-        topic: "Food",
+        style: "open-ended",
+        tone: "cozy",
+        topic: "food",
         text: "What meal from someone else’s kitchen do you still think about years later?",
       },
       {
-        style: "Hot take",
-        styleColor: "#E11D48",
-        tone: "Bold",
-        toneColor: "#7C3AED",
-        topic: "Food",
-        text: "What’s an overrated restaurant trend everyone politely pretends to enjoy?",
+        style: "open-ended",
+        tone: "cozy",
+        topic: "food",
+        text: "What dish would you happily eat every Sunday for the rest of your life?",
       },
       {
-        style: "Time capsule",
-        styleColor: "#0F766E",
-        tone: "Nostalgic",
-        toneColor: "#D97706",
-        topic: "Everyday joy",
+        style: "time-capsule-snapshot",
+        tone: "cozy",
+        topic: "childhood-nostalgia",
         text: "What smell immediately drops you back into a specific season of your life?",
       },
       {
-        style: "Open-ended",
-        styleColor: "#0E7490",
-        tone: "Witty",
-        toneColor: "#2563EB",
-        topic: "Culture",
+        style: "open-ended",
+        tone: "cozy",
+        topic: "food",
         text: "If you had to host a last-minute dinner for six people in 30 minutes, what’s on the table?",
       },
     ],
@@ -158,7 +188,8 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     slug: "road-trip",
     name: "Road Trip",
     shortName: "Road trip",
-    tagline: "Pass the miles with debates, hypotheticals, and stories you haven’t heard yet.",
+    tagline:
+      "Pass the miles with debates, hypotheticals, and stories you haven’t heard yet.",
     seoTitle: "Road Trip Questions for Friends & Couples | Break the Ice(berg)",
     seoDescription:
       "Fun, debate-worthy road trip questions, would-you-rathers, and stories to make long drives fly by.",
@@ -168,45 +199,36 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     accentColor: "#0E7490",
     icon: "car",
     filters: {
-      style: "would-you-rather",
       topic: "travel",
     },
     tips: [
       "Hand the phone to the co-pilot and draw a new card every time the playlist ends.",
-      "Would You Rather and Superpower Caveats work best when everyone has to defend their pick.",
-      "Switch to Nostalgic or Music tones once the sun goes down.",
+      "Would You Rather and Super-Power Caveats work best when everyone has to defend their pick.",
+      "Switch to the Nostalgic tone or the Music topic once the sun goes down.",
     ],
     sampleCards: [
       {
-        style: "Would you rather",
-        styleColor: "#7C3AED",
-        tone: "Fun & silly",
-        toneColor: "#059669",
-        topic: "Travel",
+        style: "would-you-rather",
+        tone: "fun-silly",
+        topic: "travel",
         text: "Would you rather teleport anywhere instantly but always arrive 20 minutes late, or fly first class anywhere for free?",
       },
       {
-        style: "Superpower caveats",
-        styleColor: "#E11D48",
-        tone: "Playful",
-        toneColor: "#D97706",
-        topic: "Imagination",
+        style: "super-power-caveats",
+        tone: "playful",
+        topic: "travel",
         text: "You can speak every language fluently, but only when whispering—do you take it?",
       },
       {
-        style: "Open-ended",
-        styleColor: "#0E7490",
-        tone: "Nostalgic",
-        toneColor: "#4F46E5",
-        topic: "Travel",
+        style: "open-ended",
+        tone: "nostalgic",
+        topic: "travel",
         text: "What’s the best detour or wrong turn you’ve ever taken on a trip?",
       },
       {
-        style: "If this, but that",
-        styleColor: "#0F766E",
-        tone: "Witty",
-        toneColor: "#2563EB",
-        topic: "Music",
+        style: "if-this-but-that",
+        tone: "witty",
+        topic: "travel",
         text: "You get free concert tickets for life, but you can never listen to recorded music in the car again. Deal or no deal?",
       },
     ],
@@ -216,7 +238,8 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     name: "Date Night",
     shortName: "Date night",
     tagline: "Go deeper than logistics and reconnect over what’s next.",
-    seoTitle: "Date Night & Couples Conversation Starters | Break the Ice(berg)",
+    seoTitle:
+      "Date Night & Couples Conversation Starters | Break the Ice(berg)",
     seoDescription:
       "Thoughtful, warm date night questions for couples to reconnect, laugh, and talk about more than the weekly calendar.",
     heroHeading: "Talk about more than this week’s errands.",
@@ -225,45 +248,36 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     accentColor: "#9333EA",
     icon: "heart",
     filters: {
-      style: "future-chapter",
       tone: "deep-thoughtful",
     },
     tips: [
       "Put phones face down after drawing a card and give each question a few minutes to breathe.",
-      "Alternate between one Deep/Reflective card and one Cozy or Playful card.",
-      "Save favorites to revisit on an anniversary or weekend away.",
+      "If a card lands heavy, switch the tone to Cozy for a round, then come back.",
+      "Like the ones you want to revisit on an anniversary or weekend away.",
     ],
     sampleCards: [
       {
-        style: "Future chapter",
-        styleColor: "#4F46E5",
-        tone: "Tender",
-        toneColor: "#E11D48",
-        topic: "Perspective",
+        style: "future-chapter",
+        tone: "deep-thoughtful",
+        topic: "home-life",
         text: "What’s one small tradition you hope we’re still doing five years from now?",
       },
       {
-        style: "How to know me",
-        styleColor: "#0E7490",
-        tone: "Candid",
-        toneColor: "#059669",
-        topic: "Home life",
+        style: "how-to-know-me",
+        tone: "deep-thoughtful",
+        topic: "home-life",
         text: "When you’ve had a rough day, what’s the quickest way someone can actually help without saying much?",
       },
       {
-        style: "Formative moment",
-        styleColor: "#0F766E",
-        tone: "Reflective",
-        toneColor: "#4F46E5",
-        topic: "Perspective",
+        style: "formative-moment",
+        tone: "deep-thoughtful",
+        topic: "home-life",
         text: "What piece of advice sounded like a cliché until you lived through it yourself?",
       },
       {
-        style: "Open-ended",
-        styleColor: "#0E7490",
-        tone: "Cozy",
-        toneColor: "#D97706",
-        topic: "Everyday joy",
+        style: "open-ended",
+        tone: "deep-thoughtful",
+        topic: "home-life",
         text: "What small, ordinary routine in your week quietly makes everything else better?",
       },
     ],
@@ -273,7 +287,8 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     name: "Family Dinner",
     shortName: "Family dinner",
     tagline: "All-ages prompts for weeknight tables, holidays, and reunions.",
-    seoTitle: "Family Dinner & Holiday Conversation Starters | Break the Ice(berg)",
+    seoTitle:
+      "Family Dinner & Holiday Conversation Starters | Break the Ice(berg)",
     seoDescription:
       "Wholesome, nostalgic conversation starters for family dinners, Thanksgiving tables, and multi-generational gatherings.",
     heroHeading: "Questions everyone at the table can actually answer.",
@@ -283,44 +298,35 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     icon: "home",
     filters: {
       tone: "wholesome-uplifting",
-      topic: "childhood-nostalgia",
     },
     tips: [
       "Let the youngest or quietest person at the table go first—or pick the card.",
-      "Nostalgic and Time Capsule prompts are gold when grandparents and kids are at the same table.",
-      "Keep Gratitude Lightning handy for a quick, warm round before dessert.",
+      "Time-Capsule Snapshot cards are gold when grandparents and kids are at the same table.",
+      "Keep a Lightning Round card handy for a quick, warm round before dessert.",
     ],
     sampleCards: [
       {
-        style: "Time capsule",
-        styleColor: "#0F766E",
-        tone: "Nostalgic",
-        toneColor: "#D97706",
-        topic: "Childhood",
+        style: "time-capsule-snapshot",
+        tone: "wholesome-uplifting",
+        topic: "childhood-nostalgia",
         text: "What object from your childhood bedroom would instantly take you back if you held it today?",
       },
       {
-        style: "Gratitude lightning",
-        styleColor: "#059669",
-        tone: "Wholesome",
-        toneColor: "#0E7490",
-        topic: "Everyday joy",
+        style: "gratitude-lightning",
+        tone: "wholesome-uplifting",
+        topic: "home-life",
         text: "First thing that comes to mind: one small win from this week, in five words or fewer.",
       },
       {
-        style: "Open-ended",
-        styleColor: "#0E7490",
-        tone: "Cozy",
-        toneColor: "#D97706",
-        topic: "Food",
+        style: "open-ended",
+        tone: "wholesome-uplifting",
+        topic: "food",
         text: "What snack or treat from growing up do you still secretly crave?",
       },
       {
-        style: "One-word whip-around",
-        styleColor: "#7C3AED",
-        tone: "Playful",
-        toneColor: "#059669",
-        topic: "Home life",
+        style: "one-word-whip-around",
+        tone: "wholesome-uplifting",
+        topic: "home-life",
         text: "In one word, what’s been the mood of your week so far?",
       },
     ],
@@ -339,45 +345,36 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     accentColor: "#7C3AED",
     icon: "dice",
     filters: {
-      style: "super-power-caveats",
       tone: "fun-silly",
     },
     tips: [
-      "Use Rapid-Fire Either/Or as a quick show-of-hands round to wake up a big group.",
-      "Superpower Caveats and If This, But That spark instant friendly arguments.",
-      "Mix in Bold or Edgy tones once everyone’s loosened up.",
+      "Use an Either/Or card as a quick show-of-hands round to wake up a big group.",
+      "Super-Power Caveats and If This But That spark instant friendly arguments.",
+      "Once everyone’s loosened up, switch the tone to Bold or Edgy & Provocative.",
     ],
     sampleCards: [
       {
-        style: "Superpower caveats",
-        styleColor: "#E11D48",
-        tone: "Fun & silly",
-        toneColor: "#059669",
-        topic: "Imagination",
+        style: "super-power-caveats",
+        tone: "fun-silly",
+        topic: "travel",
         text: "You can fly, but only at brisk walking speed and two feet off the ground—how are you using it?",
       },
       {
-        style: "Rapid-fire either/or",
-        styleColor: "#7C3AED",
-        tone: "Quick energizer",
-        toneColor: "#D97706",
-        topic: "Everyday",
+        style: "rapid-fire-either",
+        tone: "fun-silly",
+        topic: "travel",
         text: "Always hit green lights or always find front-row parking?",
       },
       {
-        style: "If this, but that",
-        styleColor: "#0F766E",
-        tone: "Bold",
-        toneColor: "#E11D48",
-        topic: "Culture",
+        style: "if-this-but-that",
+        tone: "fun-silly",
+        topic: "music",
         text: "You win $100,000, but every time you enter a room a dramatic movie soundtrack plays out loud. In or out?",
       },
       {
-        style: "One-word whip-around",
-        styleColor: "#2563EB",
-        tone: "Playful",
-        toneColor: "#059669",
-        topic: "Food",
+        style: "one-word-whip-around",
+        tone: "fun-silly",
+        topic: "food",
         text: "One word: the single best late-night snack.",
       },
     ],
@@ -397,44 +394,35 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     icon: "message-circle",
     filters: {
       tone: "witty",
-      topic: "internet-habits",
     },
     tips: [
-      "Pick a card with a clean either/or or hot take so people can reply in two seconds.",
-      "Copy the link or text straight from any card to start a thread.",
+      "Pick an Either/Or card so people can reply in two seconds.",
+      "Tap Share on any card to send it straight into the thread.",
       "Save a few in your Liked list for slow Tuesday afternoons.",
     ],
     sampleCards: [
       {
-        style: "Open-ended",
-        styleColor: "#0E7490",
-        tone: "Witty",
-        toneColor: "#2563EB",
-        topic: "Internet habits",
+        style: "open-ended",
+        tone: "witty",
+        topic: "internet-habits",
         text: "How many browser tabs do you have open right now, and what’s the oldest one about?",
       },
       {
-        style: "If this, but that",
-        styleColor: "#0F766E",
-        tone: "Bold",
-        toneColor: "#E11D48",
-        topic: "Technology",
+        style: "if-this-but-that",
+        tone: "witty",
+        topic: "technology",
         text: "Your phone battery never dies again, but autocorrect is permanently turned off. Taking it?",
       },
       {
-        style: "Rapid-fire either/or",
-        styleColor: "#7C3AED",
-        tone: "Playful",
-        toneColor: "#059669",
-        topic: "Internet habits",
+        style: "rapid-fire-either",
+        tone: "witty",
+        topic: "internet-habits",
         text: "Voice notes or three-paragraph texts?",
       },
       {
-        style: "Micro-ritual",
-        styleColor: "#D97706",
-        tone: "Candid",
-        toneColor: "#2563EB",
-        topic: "Technology",
+        style: "micro-ritual",
+        tone: "witty",
+        topic: "technology",
         text: "What app do you close only to immediately reopen two seconds later?",
       },
     ],
@@ -444,7 +432,8 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     name: "Meeting New People",
     shortName: "New friends",
     tagline: "Easy, low-pressure openers for mixers, hangouts, and new faces.",
-    seoTitle: "Icebreaker Questions for Meeting New People | Break the Ice(berg)",
+    seoTitle:
+      "Icebreaker Questions for Meeting New People | Break the Ice(berg)",
     seoDescription:
       "Low-pressure, natural icebreaker questions for parties, meetups, and getting past small talk with new people.",
     heroHeading: "Get past small talk without making it weird.",
@@ -453,7 +442,6 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     accentColor: "#0F766E",
     icon: "users",
     filters: {
-      style: "micro-ritual",
       tone: "candid",
     },
     tips: [
@@ -463,49 +451,61 @@ export const OCCASIONS: readonly OccasionConfig[] = [
     ],
     sampleCards: [
       {
-        style: "Micro-ritual",
-        styleColor: "#D97706",
-        tone: "Candid",
-        toneColor: "#2563EB",
-        topic: "Everyday joy",
+        style: "micro-ritual",
+        tone: "candid",
+        topic: "home-life",
         text: "What’s a tiny routine you have that nobody asked for, yet you refuse to skip?",
       },
       {
-        style: "Open-ended",
-        styleColor: "#0E7490",
-        tone: "Grounded",
-        toneColor: "#059669",
-        topic: "Culture",
+        style: "open-ended",
+        tone: "candid",
+        topic: "music",
         text: "What’s something you got into recently that you’d happily recommend to a stranger?",
       },
       {
-        style: "One-word whip-around",
-        styleColor: "#7C3AED",
-        tone: "Quick energizer",
-        toneColor: "#D97706",
-        topic: "Travel",
+        style: "one-word-whip-around",
+        tone: "candid",
+        topic: "travel",
         text: "One word: the best city or town you’ve ever visited.",
       },
       {
-        style: "Values in practice",
-        styleColor: "#0F766E",
-        tone: "Warm",
-        toneColor: "#D97706",
-        topic: "Everyday joy",
+        style: "values-in-practice",
+        tone: "candid",
+        topic: "home-life",
         text: "What’s a small kindness someone did for you that you still try to pass on?",
       },
     ],
   },
 ] as const;
 
-export const OCCASIONS_BY_SLUG: Readonly<Record<string, OccasionConfig>> =
-  Object.fromEntries(OCCASIONS.map((occasion) => [occasion.slug, occasion]));
+// A Map, not a plain object: slugs come from the URL, and a plain object would also
+// answer for built-in keys such as "constructor" or "__proto__".
+const OCCASIONS_BY_SLUG: ReadonlyMap<string, OccasionConfig> = new Map(
+  OCCASIONS.map((occasion) => [occasion.slug, occasion]),
+);
 
 export const getOccasionBySlug = (
   slug: string | null | undefined,
 ): OccasionConfig | undefined => {
   if (!slug) return undefined;
-  return OCCASIONS_BY_SLUG[slug];
+  return OCCASIONS_BY_SLUG.get(slug);
+};
+
+const OCCASION_FILTER_KEYS = ["style", "tone", "topic"] as const;
+
+/**
+ * Writes the occasion's filters into `params` as plain style/tone/topic filters, keeping
+ * any filter the params already set, and removes `occasion`.
+ */
+export const applyOccasionFilters = (
+  params: URLSearchParams,
+  occasion: Pick<OccasionConfig, "filters">,
+) => {
+  for (const key of OCCASION_FILTER_KEYS) {
+    const value = occasion.filters[key];
+    if (value && !params.get(key)) params.set(key, value);
+  }
+  params.delete("occasion");
 };
 
 export const getOccasionAppUrl = (occasion: Pick<OccasionConfig, "slug">) =>

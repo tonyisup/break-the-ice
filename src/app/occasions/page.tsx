@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,11 @@ import { useTheme } from "@/hooks/useTheme";
 
 export default function OccasionsPage() {
   useTheme();
+
+  // Links to this page sit mid-page and in the footer; open it at the top.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   return (
     <div className="landing-page deck-canvas relative isolate min-h-[100dvh] text-foreground flex flex-col">
