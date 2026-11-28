@@ -81,4 +81,30 @@ describe("OccasionDetailPage", () => {
     await act(async () => { fireEvent.click(copy); });
     expect(toast.error).toHaveBeenCalledWith("Couldn’t copy to clipboard");
   });
+  it("keeps Copied on a card copied again until its own two seconds end", async () => {
+    vi.useFakeTimers();
+    try {
+      const [first, second] = getOccasionBySlug("road-trip")!.sampleCards;
+      Object.defineProperty(navigator, "clipboard", {
+        value: { writeText: vi.fn().mockResolvedValue(undefined) },
+        configurable: true,
+      });
+      renderAt("/occasions/road-trip");
+      const copyFirst = screen.getByRole("button", { name: `Copy: ${first.text}` });
+      const copySecond = screen.getByRole("button", { name: `Copy: ${second.text}` });
+
+      await act(async () => { fireEvent.click(copyFirst); });
+      await act(async () => { vi.advanceTimersByTime(500); fireEvent.click(copySecond); });
+      await act(async () => { vi.advanceTimersByTime(500); fireEvent.click(copyFirst); });
+      // The first copy's timer would fire now; the latest copy should still read Copied.
+      await act(async () => { vi.advanceTimersByTime(1100); });
+      expect(copyFirst).toHaveTextContent("Copied");
+
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(copyFirst).toHaveTextContent("Copy");
+      expect(copyFirst).not.toHaveTextContent("Copied");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -40,6 +40,9 @@ export default function OccasionDetailPage() {
 function OccasionDetail({ occasion }: { occasion: OccasionConfig }) {
   const [featuredIndex, setFeaturedIndex] = useState(0);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  // One reset timer at a time, so an earlier copy can't clear a newer "Copied".
+  const copiedTimerRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(copiedTimerRef.current), []);
 
   // "Try another occasion" sits at the bottom of the page; open the next one at the top.
   useEffect(() => {
@@ -59,9 +62,8 @@ function OccasionDetail({ occasion }: { occasion: OccasionConfig }) {
       await navigator.clipboard.writeText(text);
       setCopiedText(text);
       toast.success("Copied question to clipboard");
-      window.setTimeout(() => {
-        setCopiedText((current) => (current === text ? null : current));
-      }, 2000);
+      window.clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = window.setTimeout(() => setCopiedText(null), 2000);
     } catch {
       toast.error("Couldn’t copy to clipboard");
     }
