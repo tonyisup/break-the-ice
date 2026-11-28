@@ -15,6 +15,8 @@ import { HiddenCardNotice } from "@/components/hidden-card-notice/HiddenCardNoti
 import { collapseFeedCard } from "@/components/hidden-card-notice/collapseFeedCard";
 import { ctaHolderId, keepCtasInPlace, type CtaAnchors } from "./feedCtaAnchors";
 import { ActiveFilterChips, FeedFilterBar, type FeedFilterKey, type FeedFilterOption } from "@/components/filter-controls/FeedFilterBar";
+import { OccasionPickerBar } from "@/components/filter-controls/OccasionPickerBar";
+import { getOccasionBySlug, type OccasionConfig } from "@/config/occasions";
 import type { ItemDetails } from "@/components/item-detail-drawer/item-detail-drawer";
 import { Icon, IconComponent } from "@/components/ui/icons/icon";
 import { useAuth } from "@clerk/clerk-react";
@@ -85,6 +87,11 @@ export default function InfiniteScrollPage() {
   const anchoredStyleParam = searchParams.get("style");
   const anchoredToneParam = searchParams.get("tone");
   const anchoredTopicParam = searchParams.get("topic");
+  const occasionParam = searchParams.get("occasion");
+  const activeOccasion = getOccasionBySlug(occasionParam);
+  const effectiveStyleParam = anchoredStyleParam ?? activeOccasion?.filters.style ?? null;
+  const effectiveToneParam = anchoredToneParam ?? activeOccasion?.filters.tone ?? null;
+  const effectiveTopicParam = anchoredTopicParam ?? activeOccasion?.filters.topic ?? null;
 
 
   const {
@@ -171,16 +178,16 @@ export default function InfiniteScrollPage() {
     return map;
   }, [allTopics]);
 
-  const anchoredStyle = anchoredStyleParam ? stylesMap.get(anchoredStyleParam) : undefined;
-  const anchoredTone = anchoredToneParam ? tonesMap.get(anchoredToneParam) : undefined;
-  const anchoredTopic = anchoredTopicParam ? topicsMap.get(anchoredTopicParam) : undefined;
+  const anchoredStyle = effectiveStyleParam ? stylesMap.get(effectiveStyleParam) : undefined;
+  const anchoredTone = effectiveToneParam ? tonesMap.get(effectiveToneParam) : undefined;
+  const anchoredTopic = effectiveTopicParam ? topicsMap.get(effectiveTopicParam) : undefined;
   const anchoredStyleId = anchoredStyle?._id ?? null;
   const anchoredToneId = anchoredTone?._id ?? null;
   const anchoredTopicId = anchoredTopic?._id ?? null;
   const anchorParamsReady =
-    (!anchoredStyleParam || allStyles !== undefined) &&
-    (!anchoredToneParam || allTones !== undefined) &&
-    (!anchoredTopicParam || allTopics !== undefined);
+    (!effectiveStyleParam || allStyles !== undefined) &&
+    (!effectiveToneParam || allTones !== undefined) &&
+    (!effectiveTopicParam || allTopics !== undefined);
 
   // Keep old ID-based links working, then replace them with canonical slugs.
   useEffect(() => {
@@ -200,11 +207,15 @@ export default function InfiniteScrollPage() {
       }
     };
 
-    normalizeParam("style", anchoredStyleParam, anchoredStyle);
-    normalizeParam("tone", anchoredToneParam, anchoredTone);
-    normalizeParam("topic", anchoredTopicParam, anchoredTopic);
+    normalizeParam("style", anchoredStyleParam, anchoredStyleParam ? stylesMap.get(anchoredStyleParam) : undefined);
+    normalizeParam("tone", anchoredToneParam, anchoredToneParam ? tonesMap.get(anchoredToneParam) : undefined);
+    normalizeParam("topic", anchoredTopicParam, anchoredTopicParam ? topicsMap.get(anchoredTopicParam) : undefined);
+    if (occasionParam && !activeOccasion) {
+      newParams.delete("occasion");
+      changed = true;
+    }
     if (changed) setSearchParams(newParams, { replace: true });
-  }, [anchorParamsReady, anchoredStyleParam, anchoredToneParam, anchoredTopicParam, anchoredStyle, anchoredTone, anchoredTopic, searchParams, setSearchParams]);
+  }, [anchorParamsReady, anchoredStyleParam, anchoredToneParam, anchoredTopicParam, occasionParam, activeOccasion, stylesMap, tonesMap, topicsMap, searchParams, setSearchParams]);
 
   // Request ID to handle race conditions
   const requestIdRef = useRef(0);
@@ -974,11 +985,21 @@ export default function InfiniteScrollPage() {
     });
   };
 
+  const handleSelectOccasion = (occasion: OccasionConfig | null) => {
+    const newParams = new URLSearchParams(searchParams);
+    ["style", "tone", "topic", "occasion"].forEach((key) => newParams.delete(key));
+    if (occasion) {
+      newParams.set("occasion", occasion.slug);
+    }
+    setSearchParams(newParams);
+  };
+
   const handleAnchorItem = (item: ItemDetails) => {
     const newParams = new URLSearchParams(searchParams);
     const paramKey = item.type.toLowerCase();
     const currentVal = newParams.get(paramKey);
 
+    newParams.delete("occasion");
     if (currentVal === item.slug || currentVal === item.id) {
       newParams.delete(paramKey);
     } else {
@@ -989,6 +1010,19 @@ export default function InfiniteScrollPage() {
 
   const setFilter = (key: FeedFilterKey, slug: string | null) => {
     const newParams = new URLSearchParams(searchParams);
+    if (activeOccasion) {
+      // Materialize the occasion's remaining filters when the person customizes one.
+      if (activeOccasion.filters.style && !newParams.get("style")) {
+        newParams.set("style", activeOccasion.filters.style);
+      }
+      if (activeOccasion.filters.tone && !newParams.get("tone")) {
+        newParams.set("tone", activeOccasion.filters.tone);
+      }
+      if (activeOccasion.filters.topic && !newParams.get("topic")) {
+        newParams.set("topic", activeOccasion.filters.topic);
+      }
+      newParams.delete("occasion");
+    }
     if (slug) newParams.set(key, slug);
     else newParams.delete(key);
     setSearchParams(newParams);
@@ -996,7 +1030,7 @@ export default function InfiniteScrollPage() {
 
   const clearFilters = () => {
     const newParams = new URLSearchParams(searchParams);
-    ["style", "tone", "topic"].forEach((key) => newParams.delete(key));
+    ["style", "tone", "topic", "occasion"].forEach((key) => newParams.delete(key));
     setSearchParams(newParams);
   };
 
@@ -1019,7 +1053,7 @@ export default function InfiniteScrollPage() {
     [allTopics],
   );
 
-  const hasAnchorFilters = !!(anchoredStyleParam || anchoredToneParam || anchoredTopicParam);
+  const hasAnchorFilters = !!(effectiveStyleParam || effectiveToneParam || effectiveTopicParam);
 
   // When few AI generations are left, the feed says so before they run out: scrolling here
   // is what spends them.
@@ -1199,6 +1233,12 @@ export default function InfiniteScrollPage() {
             "flex flex-col gap-6 px-4 pt-6 sm:pt-8 max-w-3xl mx-auto w-full"
           )}
         >
+          {/* Quick-pick occasion presets */}
+          <OccasionPickerBar
+            activeSlug={activeOccasion?.slug ?? null}
+            onSelect={handleSelectOccasion}
+          />
+
           {/* Active filter chips only appear when at least one filter is active */}
           <ActiveFilterChips
             styles={filterStyles}
@@ -1267,7 +1307,7 @@ export default function InfiniteScrollPage() {
                 onClick={() => {
                   if (!loadError && hasAnchorFilters) {
                     const newParams = new URLSearchParams(searchParams);
-                    ["style", "tone", "topic"].forEach((key) => newParams.delete(key));
+                    ["style", "tone", "topic", "occasion"].forEach((key) => newParams.delete(key));
                     setSearchParams(newParams);
                   }
                   setHasMore(true);

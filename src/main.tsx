@@ -23,6 +23,8 @@ import DataRetentionPage from "./app/data-retention/page";
 import CookiePolicyPage from "./app/cookies/page";
 import AboutPage from "./app/about/page";
 import ContactPage from "./app/contact/page";
+import OccasionsPage from "./app/occasions/page";
+import OccasionDetailPage from "./app/occasions/OccasionDetailPage";
 import FeedbackButton from "./components/FeedbackButton";
 import { AnalyticsManager } from "./components/AnalyticsManager";
 import { Toaster } from "sonner";
@@ -59,6 +61,8 @@ createRoot(document.getElementById("root")!).render(
             <ErrorBoundary>
             <Routes>
               <Route path="/" element={<Root />} />
+              <Route path="/occasions" element={<OccasionsPage />} />
+              <Route path="/occasions/:slug" element={<OccasionDetailPage />} />
               <Route path="/app" element={<App />} />
               <Route path="/question/:id" element={<QuestionPage />} />
               <Route path="/liked" element={<LikedQuestionsPage />} />
