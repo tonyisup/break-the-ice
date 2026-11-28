@@ -2,6 +2,18 @@
 
 All notable changes to Break the Ice are recorded here.
 
+## [0.12.0.0] - 2026-11-28
+
+### Added
+- Decks for everyday occasions: first date, dinner party, road trip, date night, family dinner, game night, group chat and meeting new people. Each has its own page at /occasions/<name> with sample questions you can copy, tips, and a button that opens the deck with the right filter already set. /occasions lists them all, and search engines get a title, description and sitemap entry for each page.
+- Occasion buttons above the feed. Tap one to filter the deck for that moment, tap it again to clear it, or change any filter to keep the rest of the occasion's settings as ordinary filters.
+- Analytics now say which occasion a feed load was for, and send an `occasion_selected` event when someone picks one.
+
+### Changed
+- The landing page shows the occasion decks in place of the old "for every kind of room" section, and the header and footer link to /occasions.
+
+This release changes only the frontend; there is no Convex deploy.
+
 ## [0.11.0.0] - 2026-11-25
 
 ### Added

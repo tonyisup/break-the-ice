@@ -1,3 +1,4 @@
+import { OCCASIONS } from "./occasions.js";
 import { siteConfig } from "./site.js";
 
 export type PageMetadata = {
@@ -6,11 +7,27 @@ export type PageMetadata = {
   noIndex?: boolean;
 };
 
+const occasionRouteMetadata: Record<string, PageMetadata> = Object.fromEntries(
+  OCCASIONS.map((occasion) => [
+    `/occasions/${occasion.slug}`,
+    {
+      title: occasion.seoTitle,
+      description: occasion.seoDescription,
+    },
+  ]),
+);
+
 export const publicRouteMetadata: Record<string, PageMetadata> = {
   "/": {
     title: siteConfig.defaultTitle,
     description: siteConfig.defaultDescription,
   },
+  "/occasions": {
+    title: "Icebreaker Questions by Occasion | Break the Ice(berg)",
+    description:
+      "Browse conversation starters for first dates, dinner parties, road trips, family dinners, game nights, and more.",
+  },
+  ...occasionRouteMetadata,
   "/about": {
     title: "About | Break the Ice(berg)",
     description:

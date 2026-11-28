@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StrictMode } from 'react';
-import { act, fireEvent, render, waitFor, screen } from '@testing-library/react';
+import { act, fireEvent, render, waitFor, screen, within } from '@testing-library/react';
 import InfiniteScrollPage from './InfiniteScrollPage';
 import { useQuery, useConvex, useAction, useMutation } from 'convex/react';
 import { ModernQuestionCard } from '@/components/modern-question-card';
@@ -88,7 +88,7 @@ vi.mock('../../convex/_generated/api', () => ({
       ai: { generateAIQuestionForFeed: 'generateAIQuestionForFeed' },
       generationProgress: { getGenerationProgress: 'getGenerationProgress' },
       users: { getCurrentUser: 'getCurrentUser' },
-      topics: { getActiveTakeoverTopics: 'getActiveTakeoverTopics' },
+      topics: { getTopics: 'getTopics', getActiveTakeoverTopics: 'getActiveTakeoverTopics' },
     }
   },
 }));
@@ -1233,5 +1233,178 @@ describe('InfiniteScrollPage', () => {
         clock.mockRestore();
       }
     });
+  });
+  describe('occasion presets', () => {
+    // first-date filters by the Playful tone; road-trip by the Travel topic.
+    const occasionStyles = [
+      { _id: 'style-open', id: 'open-ended', slug: 'open-ended', color: '#111111', name: 'Open-ended' },
+      { _id: 'style-wyr', id: 'would-you-rather', slug: 'would-you-rather', color: '#222222', name: 'Would you rather' },
+    ];
+    const occasionTones = [
+      { _id: 'tone-playful', id: 'playful', slug: 'playful', color: '#AAAAAA', name: 'Playful' },
+      { _id: 'tone-cozy', id: 'cozy', slug: 'cozy', color: '#BBBBBB', name: 'Cozy' },
+    ];
+    const occasionTopics = [
+      { _id: 'topic-travel', id: 'travel', slug: 'travel', color: '#CCCCCC', name: 'Travel' },
+      { _id: 'topic-food', id: 'food', slug: 'food', color: '#DDDDDD', name: 'Food' },
+    ];
+    const item = (type: 'Style' | 'Tone' | 'Topic', id: string, slug: string) => ({
+      id, slug, name: slug, type, description: '', icon: 'book', color: '#111111',
+    });
+    const mockTaxonomy = (tones = occasionTones) => {
+      (useQuery as any).mockImplementation((queryFn: any) => {
+        if (queryFn === 'getStyles') return occasionStyles;
+        if (queryFn === 'getTones') return tones;
+        if (queryFn === 'getTopics') return occasionTopics;
+        if (queryFn === 'getCurrentUser') return { _id: 'u1', email: 'test@example.com', newsletterSubscriptionStatus: null };
+        return undefined;
+      });
+    };
+
+    beforeEach(() => mockTaxonomy());
+
+    const latestCardProps = async () => {
+      await waitFor(() => expect(ModernQuestionCard).toHaveBeenCalled());
+      return (ModernQuestionCard as any).mock.calls.at(-1)[0];
+    };
+    const lastWrittenParams = () => {
+      const lastCall = mockSetSearchParams.mock.calls.at(-1);
+      if (!lastCall) throw new Error('Expected a URL change');
+      return lastCall[0] as URLSearchParams;
+    };
+    const normalizedParams = async () => {
+      await waitFor(() => {
+        expect(mockSetSearchParams.mock.calls.some((call) => call[1]?.replace === true)).toBe(true);
+      });
+      return mockSetSearchParams.mock.calls.find((call) => call[1]?.replace === true)![0] as URLSearchParams;
+    };
+
+    it("filters the feed by the occasion's tone", async () => {
+      mockSearchParams = new URLSearchParams('occasion=first-date');
+      render(<InfiniteScrollPage />);
+      const props = await latestCardProps();
+      expect(props.anchoredToneId).toBe('tone-playful');
+      expect(props.anchoredStyleId).toBeNull();
+    });
+
+    it('removing the filter the occasion set clears the deck', async () => {
+      mockSearchParams = new URLSearchParams('occasion=first-date');
+      render(<InfiniteScrollPage />);
+      const props = await latestCardProps();
+
+      props.onAnchorItem(item('Tone', 'tone-playful', 'playful'));
+
+      const params = lastWrittenParams();
+      expect(params.get('tone')).toBeNull();
+      expect(params.get('occasion')).toBeNull();
+    });
+
+    it("anchoring a topic from a card keeps the occasion's filter", async () => {
+      mockSearchParams = new URLSearchParams('occasion=first-date');
+      render(<InfiniteScrollPage />);
+      const props = await latestCardProps();
+
+      props.onAnchorItem(item('Topic', 'topic-food', 'food'));
+
+      const params = lastWrittenParams();
+      expect(params.get('tone')).toBe('playful');
+      expect(params.get('topic')).toBe('food');
+      expect(params.get('occasion')).toBeNull();
+    });
+
+    it('turns an occasion overridden by an explicit filter into plain filters', async () => {
+      mockSearchParams = new URLSearchParams('occasion=first-date&style=would-you-rather');
+      render(<InfiniteScrollPage />);
+
+      const normalized = await normalizedParams();
+      expect(normalized.get('style')).toBe('would-you-rather');
+      expect(normalized.get('tone')).toBe('playful');
+      expect(normalized.get('occasion')).toBeNull();
+    });
+
+    it("keeps the occasion's filter when the URL has an empty one", async () => {
+      mockSearchParams = new URLSearchParams('occasion=first-date&tone=');
+      render(<InfiniteScrollPage />);
+      const props = await latestCardProps();
+      expect(props.anchoredToneId).toBe('tone-playful');
+    });
+
+    it("uses the occasion's filter, not an unknown one from the URL, from the first load", async () => {
+      mockSearchParams = new URLSearchParams('occasion=first-date&tone=not-a-tone');
+      const actionMock = vi.fn().mockResolvedValue({ questions: [], anchoredMatchCount: 0, targetAnchoredCount: 6 });
+      (useConvex as any).mockReturnValue({ query: vi.fn().mockResolvedValue([]), action: actionMock });
+      render(<InfiniteScrollPage />);
+
+      await waitFor(() => expect(actionMock).toHaveBeenCalledWith('getNextRandomQuestions', expect.anything()));
+      const firstLoad = actionMock.mock.calls.find((call) => call[0] === 'getNextRandomQuestions')![1];
+      expect(firstLoad.anchoredToneId).toBe('tone-playful');
+    });
+
+    it('drops an occasion whose filter no longer exists instead of showing it as selected', async () => {
+      mockTaxonomy([occasionTones[1]]);
+      mockSearchParams = new URLSearchParams('occasion=first-date');
+      render(<InfiniteScrollPage />);
+
+      const normalized = await normalizedParams();
+      expect(normalized.get('occasion')).toBeNull();
+      expect(normalized.get('tone')).toBeNull();
+    });
+
+    it('keeps the explicit filters when the occasion it overrides names a retired one', async () => {
+      mockTaxonomy([occasionTones[1]]);
+      mockSearchParams = new URLSearchParams('occasion=first-date&topic=food');
+      render(<InfiniteScrollPage />);
+
+      const normalized = await normalizedParams();
+      expect(normalized.get('occasion')).toBeNull();
+      expect(normalized.get('tone')).toBeNull();
+      expect(normalized.get('topic')).toBe('food');
+    });
+
+    it('picking an occasion replaces the current filters and reports it', async () => {
+      mockSearchParams = new URLSearchParams('style=open-ended');
+      render(<InfiniteScrollPage />);
+      const group = await screen.findByRole('group', { name: /filter by occasion/i });
+
+      fireEvent.click(within(group).getByRole('button', { name: /road trip/i }));
+
+      const params = lastWrittenParams();
+      expect(params.get('occasion')).toBe('road-trip');
+      expect(params.get('style')).toBeNull();
+      expect(mockCaptureAnalytics).toHaveBeenCalledWith('occasion_selected', { occasion: 'road-trip' });
+    });
+
+    it('tapping the active occasion turns it off', async () => {
+      mockSearchParams = new URLSearchParams('occasion=first-date');
+      render(<InfiniteScrollPage />);
+      const group = await screen.findByRole('group', { name: /filter by occasion/i });
+
+      fireEvent.click(within(group).getByRole('button', { pressed: true }));
+
+      const params = lastWrittenParams();
+      expect(params.get('occasion')).toBeNull();
+      expect(params.get('tone')).toBeNull();
+    });
+
+    it('says which occasion a feed load was for', async () => {
+      mockSearchParams = new URLSearchParams('occasion=first-date');
+      render(<InfiniteScrollPage />);
+
+      await waitFor(() => expect(mockCaptureAnalytics).toHaveBeenCalledWith(
+        'feed_load',
+        expect.objectContaining({ occasion: 'first-date' }),
+      ));
+    });
+
+    it.each(['constructor', 'toString', 'hasOwnProperty'])(
+      'treats ?occasion=%s as unknown instead of crashing',
+      async (slug) => {
+        mockSearchParams = new URLSearchParams(`occasion=${slug}`);
+        render(<InfiniteScrollPage />);
+
+        const normalized = await normalizedParams();
+        expect(normalized.get('occasion')).toBeNull();
+      },
+    );
   });
 });

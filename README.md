@@ -2,9 +2,12 @@
 
 [breaktheiceberg.com](https://www.breaktheiceberg.com/)
 
-Break the Ice helps facilitators find conversation starters for classes, workshops, and
-social gatherings. Browse a scrolling feed, filter by style, tone, or topic, and save
-questions to use again.
+Break the Ice is an icebreaker app: conversation starters for friends, dates, families and
+parties. Browse a scrolling feed, filter by style, tone, or topic, and save questions to use
+again. Occasion decks (first date, dinner party, road trip, date night, family dinner, game
+night, group chat and meeting new people) are listed at `/occasions`, each with its own page
+at `/occasions/<slug>`; opening one sets the feed's filters through `/app?occasion=<slug>`.
+The occasions are defined in [`src/config/occasions.ts`](./src/config/occasions.ts).
 
 The admin tools support question editing, generation, pruning review, and duplicate review.
 AI generation is implemented in the [generation runner](./convex/lib/generationRunner.ts).

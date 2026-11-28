@@ -3,33 +3,12 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowRight, RefreshCw, Sparkles, Compass, Sun, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { BrandMark } from "@/components/BrandMark";
+import { PublicFooter, PublicHeader } from "@/components/PublicChrome";
+import { OccasionIcon } from "@/components/OccasionIcon";
+import { OCCASIONS } from "@/config/occasions";
 import { useTheme } from "@/hooks/useTheme";
-import { siteConfig } from "@/config/site";
 
-const rooms = [
-  {
-    title: "Events",
-    copy: "Make the first five minutes feel less like waiting for everyone to arrive.",
-    className: "md:col-span-7",
-  },
-  {
-    title: "Classrooms",
-    copy: "Start with a question every student can answer in their own way.",
-    className: "md:col-span-5",
-  },
-  {
-    title: "Dinner tables",
-    copy: "Give the group somewhere better to go than the usual small talk.",
-    className: "md:col-span-5",
-  },
-  {
-    title: "Workshops",
-    copy: "Set the tone before the agenda asks everyone to get serious.",
-    className: "md:col-span-7",
-  },
-];
+const featuredOccasions = OCCASIONS.slice(0, 6);
 
 const sampleCards = [
   {
@@ -79,7 +58,7 @@ const LandingPage = () => {
 
   return (
     <div className="landing-page deck-canvas relative isolate min-h-[100dvh] text-foreground">
-      <LandingHeader />
+      <PublicHeader />
 
       <main>
         {/* Hero */}
@@ -225,36 +204,69 @@ const LandingPage = () => {
           </div>
         </RevealSection>
 
-        {/* Rooms grid */}
+        {/* Occasions grid */}
         <section className="border-y border-border/70 bg-card/40">
           <div className="mx-auto w-full max-w-6xl px-5 py-20 md:px-10 md:py-28">
-            <RevealSection className="max-w-2xl">
-              <h2 className="text-3xl font-extrabold leading-[1.12] tracking-[-0.03em] text-balance md:text-5xl">
-                For every kind of room.
-              </h2>
-              <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
-                Pick a tone that fits the people, then let the conversation find its own shape.
-              </p>
+            <RevealSection className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="max-w-2xl">
+                <h2 className="text-3xl font-extrabold leading-[1.12] tracking-[-0.03em] text-balance md:text-5xl">
+                  A deck for every occasion.
+                </h2>
+                <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
+                  Jump straight into prompts matched to the moment—from first dates to long drives and dinner tables.
+                </p>
+              </div>
+              <Button
+                asChild
+                variant="outline"
+                className="w-fit rounded-full border-border bg-card px-5 font-semibold"
+              >
+                <Link to="/occasions">
+                  All occasions <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </Button>
             </RevealSection>
 
-            <div className="mt-12 grid gap-4 md:grid-cols-12">
-              {rooms.map((room, index) => (
-                <motion.article
-                  key={room.title}
+            <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {featuredOccasions.map((occasion, index) => (
+                <motion.div
+                  key={occasion.slug}
                   initial={reduceMotion ? false : "hidden"}
                   whileInView="visible"
                   viewport={{ once: true, amount: 0.25 }}
                   variants={reveal}
                   transition={{ duration: 0.5, delay: reduceMotion ? 0 : index * 0.05 }}
-                  className={`${room.className} deck-card flex min-h-48 flex-col justify-end p-6 md:min-h-56 md:p-8`}
                 >
-                  <h3 className="text-2xl font-bold tracking-[-0.02em] text-card-foreground md:text-3xl">
-                    {room.title}
-                  </h3>
-                  <p className="mt-2.5 max-w-md text-base leading-relaxed text-muted-foreground">
-                    {room.copy}
-                  </p>
-                </motion.article>
+                  <Link
+                    to={`/occasions/${occasion.slug}`}
+                    className="deck-card group flex h-full min-h-48 flex-col justify-between p-6 transition-transform duration-200 hover:-translate-y-0.5 md:min-h-52 md:p-7"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        className="inline-flex size-10 items-center justify-center rounded-2xl border border-border/80 bg-secondary/60"
+                        style={{ color: occasion.accentColor }}
+                      >
+                        <OccasionIcon
+                          name={occasion.icon}
+                          className="size-5"
+                          aria-hidden="true"
+                        />
+                      </span>
+                      <ArrowRight
+                        className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <div className="mt-6">
+                      <h3 className="text-2xl font-bold tracking-[-0.02em] text-card-foreground">
+                        {occasion.name}
+                      </h3>
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground md:text-base">
+                        {occasion.tagline}
+                      </p>
+                    </div>
+                  </Link>
+                </motion.div>
               ))}
             </div>
           </div>
@@ -276,33 +288,10 @@ const LandingPage = () => {
         </RevealSection>
       </main>
 
-      <LandingFooter />
+      <PublicFooter />
     </div>
   );
 };
-
-const LandingHeader = () => (
-  <header className="sticky top-0 z-40 h-16 border-b border-border/80 bg-background/85 backdrop-blur-md md:h-[72px]">
-    <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-5 md:px-10">
-      <Link to="/" className="flex shrink-0 items-center rounded-xl">
-        <BrandMark size="sm" labelClassName="text-sm sm:text-base" />
-      </Link>
-      <div className="flex items-center gap-2 sm:gap-4">
-        <nav className="flex items-center gap-2 sm:gap-5 text-sm font-semibold" aria-label="Primary navigation">
-          <Link className="rounded-full px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" to="/about">
-            About
-          </Link>
-        </nav>
-        <ThemeToggle className="h-10 w-10 rounded-full border-border bg-card p-0" labelClassName="sr-only" />
-        <Button asChild className="h-10 rounded-full px-4 text-xs font-semibold sm:px-5 sm:text-sm">
-          <Link to="/app">
-            Open deck <ArrowRight aria-hidden="true" className="hidden sm:block" />
-          </Link>
-        </Button>
-      </div>
-    </div>
-  </header>
-);
 
 const RevealSection = ({ className = "", children }: { className?: string; children: ReactNode }) => {
   const reduceMotion = useReducedMotion();
@@ -330,21 +319,6 @@ const PrimaryLink = ({ to, children }: { to: string; children: ReactNode }) => (
       {children} <ArrowRight aria-hidden="true" />
     </Link>
   </Button>
-);
-
-const LandingFooter = () => (
-  <footer className="border-t border-border/80 bg-card/60">
-    <div className="mx-auto flex max-w-6xl flex-col gap-5 px-5 py-8 text-sm md:flex-row md:items-center md:justify-between md:px-10">
-      <BrandMark size="sm" labelClassName="text-sm" />
-      <div className="flex flex-wrap gap-x-6 gap-y-2 text-muted-foreground">
-        <Link className="transition-colors hover:text-foreground" to="/about">About</Link>
-        <Link className="transition-colors hover:text-foreground" to="/contact">Contact</Link>
-        <Link className="transition-colors hover:text-foreground" to="/privacy">Privacy</Link>
-        <Link className="transition-colors hover:text-foreground" to="/terms">Terms</Link>
-      </div>
-      <p className="text-muted-foreground">Questions worth asking.</p>
-    </div>
-  </footer>
 );
 
 export default LandingPage;
