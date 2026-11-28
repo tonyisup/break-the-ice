@@ -242,6 +242,9 @@
     ]
   },
   "selection": {},
+  "local": [
+    "deploy-convex-production.yml/verify"
+  ],
   "warn": [
     "literals"
   ],
